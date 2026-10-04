@@ -71,7 +71,7 @@ fun LocalSongDropdownMenu(
     ) {
         if (!showingSubMenu) {
             DropdownMenuItem(
-                text = { Text("Queue next") },
+                text = { Text(stringResource(R.string.queue_next)) },
                 leadingIcon = {
                     Icon(
                         Icons.Rounded.PlaylistPlay,
@@ -86,7 +86,7 @@ fun LocalSongDropdownMenu(
             )
 
             DropdownMenuItem(
-                text = { Text("Add to queue") },
+                text = { Text(stringResource(R.string.add_to_queue)) },
                 leadingIcon = {
                     Icon(
                         Icons.AutoMirrored.Rounded.QueueMusic,
@@ -101,7 +101,7 @@ fun LocalSongDropdownMenu(
             )
 
             DropdownMenuItem(
-                text = { Text("Add to playlist") },
+                text = { Text(stringResource(R.string.add_to_playlist)) },
                 leadingIcon = {
                     Icon(
                         Icons.Rounded.PlaylistAdd,
@@ -118,7 +118,7 @@ fun LocalSongDropdownMenu(
             val hasGoTo = onGoToAlbum != null || onGoToArtist != null || onGoToFolder != null
             if (hasGoTo) {
                 DropdownMenuItem(
-                    text = { Text("Go to") },
+                    text = { Text(stringResource(R.string.go_to)) },
                     trailingIcon = {
                         Icon(
                             Icons.AutoMirrored.Rounded.KeyboardArrowRight,
@@ -133,7 +133,7 @@ fun LocalSongDropdownMenu(
             }
 
             DropdownMenuItem(
-                text = { Text("Tag editor") },
+                text = { Text(stringResource(R.string.tag_editor)) },
                 leadingIcon = {
                     Icon(
                         Icons.Rounded.Edit,
@@ -148,7 +148,7 @@ fun LocalSongDropdownMenu(
             )
 
             DropdownMenuItem(
-                text = { Text("Share") },
+                text = { Text(stringResource(R.string.share)) },
                 leadingIcon = {
                     Icon(
                         Icons.Rounded.Share,
@@ -163,7 +163,7 @@ fun LocalSongDropdownMenu(
             )
 
             DropdownMenuItem(
-                text = { Text("Delete from device") },
+                text = { Text(stringResource(R.string.delete_from_device)) },
                 leadingIcon = {
                     Icon(
                         Icons.Rounded.DeleteOutline,
@@ -179,7 +179,7 @@ fun LocalSongDropdownMenu(
             )
 
             DropdownMenuItem(
-                text = { Text("Details") },
+                text = { Text(stringResource(R.string.details)) },
                 leadingIcon = {
                     Icon(
                         Icons.Rounded.Info,
@@ -195,11 +195,11 @@ fun LocalSongDropdownMenu(
         } else {
             // "Go to" submenu
             DropdownMenuItem(
-                text = { Text("Go to", style = MaterialTheme.typography.titleSmall) },
+                text = { Text(stringResource(R.string.go_to), style = MaterialTheme.typography.titleSmall) },
                 leadingIcon = {
                     Icon(
                         Icons.AutoMirrored.Rounded.ArrowBack,
-                        contentDescription = "Back",
+                        contentDescription = stringResource(R.string.back),
                         modifier = Modifier.size(20.dp),
                     )
                 },

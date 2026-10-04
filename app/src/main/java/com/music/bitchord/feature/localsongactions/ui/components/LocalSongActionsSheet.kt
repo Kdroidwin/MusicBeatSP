@@ -136,14 +136,14 @@ fun LocalSongActionsSheet(
                     // 1. Go to Album
                     LocalSongActionItem(
                         icon = Icons.Rounded.Album,
-                        label = "Go to Album",
+                        label = stringResource(R.string.go_to_album),
                         onClick = onGoToAlbum,
                     )
 
                     // 2. Go to Artist
                     LocalSongActionItem(
                         icon = Icons.Rounded.Person,
-                        label = "Go to Artist",
+                        label = stringResource(R.string.go_to_artist),
                         trailingIcon = if (artists.size > 1) Icons.AutoMirrored.Rounded.KeyboardArrowRight else null,
                         onClick = onGoToArtist,
                     )
@@ -151,14 +151,14 @@ fun LocalSongActionsSheet(
                     // 3. Add to playlist
                     LocalSongActionItem(
                         icon = Icons.AutoMirrored.Rounded.PlaylistAdd,
-                        label = "Add to playlist",
+                        label = stringResource(R.string.add_to_playlist),
                         onClick = onAddToPlaylist,
                     )
 
                     // 4. Equalizer
-                    LocalSongActionItem(
-                        icon = Icons.Rounded.GraphicEq,
-                        label = "Equalizer",
+                        LocalSongActionItem(
+                            icon = Icons.Rounded.GraphicEq,
+                            label = stringResource(R.string.equalizer),
                         onClick = onEqualizer,
                     )
 
@@ -175,7 +175,7 @@ fun LocalSongActionsSheet(
                     // 5. Sleep timer
                     LocalSongActionItem(
                         icon = Icons.Rounded.Bedtime,
-                        label = "Sleep timer",
+                        label = stringResource(R.string.sleep_timer),
                         value = sleepTimerStatus,
                         onClick = { pickingSleepTimer = true },
                     )
@@ -183,28 +183,28 @@ fun LocalSongActionsSheet(
                     // 6. Tag editor
                     LocalSongActionItem(
                         icon = Icons.Rounded.Edit,
-                        label = "Tag editor",
+                        label = stringResource(R.string.tag_editor),
                         onClick = onTagEditor,
                     )
 
                     // 7. Edit lyrics
                     LocalSongActionItem(
                         icon = Icons.AutoMirrored.Rounded.Notes,
-                        label = "Edit lyrics",
+                        label = stringResource(R.string.edit_lyrics),
                         onClick = onEditLyrics,
                     )
 
                     // 8. Details
                     LocalSongActionItem(
                         icon = Icons.Rounded.Info,
-                        label = "Details",
+                        label = stringResource(R.string.details),
                         onClick = onDetails,
                     )
 
                     // 9. Share file
                     LocalSongActionItem(
                         icon = Icons.Rounded.Share,
-                        label = "Share file",
+                        label = stringResource(R.string.share_file),
                         onClick = onShareFile,
                     )
 

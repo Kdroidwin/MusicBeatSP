@@ -8,12 +8,16 @@ import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.launch
+import com.music.bitchord.data.settings.AppSettings
 import java.io.File
 import java.io.FileOutputStream
 import java.security.MessageDigest
 
 /** Shares local cover extraction/decode work between the player, mesh, and palette requests. */
 internal object LocalArtworkCache {
+
+    private var lastPersistentMode: Boolean? = null
+    private var persistentCacheMigrated = false
 
     private val embeddedBytes = SingleFlightLru<String, ByteArray>(
         maxWeight = 8L * 1024 * 1024,
@@ -28,8 +32,10 @@ internal object LocalArtworkCache {
 
     suspend fun embeddedBytes(context: Context, key: String, load: () -> ByteArray?): ByteArray? =
         embeddedBytes.getOrLoad(key) {
-            readDisk(context.applicationContext, key) ?: load()?.also { bytes ->
-                writeDisk(context.applicationContext, key, bytes)
+            val appContext = context.applicationContext
+            preparePersistentCache(appContext)
+            readDisk(appContext, key) ?: load()?.also { bytes ->
+                writeDisk(appContext, key, bytes)
             }
         }
 
@@ -85,7 +91,8 @@ internal object LocalArtworkCache {
     private fun diskFile(context: Context, key: String): File {
         val digest = MessageDigest.getInstance("SHA-256").digest(key.toByteArray(Charsets.UTF_8))
         val filename = digest.joinToString("") { byte -> "%02x".format(byte.toInt() and 0xff) }
-        return File(File(context.cacheDir, DISK_CACHE_DIRECTORY), "$filename.cover")
+        val root = if (AppSettings.persistentLocalArtwork.value) context.filesDir else context.cacheDir
+        return File(File(root, DISK_CACHE_DIRECTORY), "$filename.cover")
     }
 
     private fun pruneDiskCache(directory: File) {
@@ -99,6 +106,47 @@ internal object LocalArtworkCache {
             file.delete()
         }
     }
+
+    /** Promote already-extracted covers before a persistent-cache lookup. */
+    private fun preparePersistentCache(context: Context) {
+        synchronized(this) {
+            val enabled = AppSettings.persistentLocalArtwork.value
+            if (lastPersistentMode != enabled) {
+                lastPersistentMode = enabled
+                if (!enabled) persistentCacheMigrated = false
+            }
+            if (!enabled || persistentCacheMigrated) return
+            persistentCacheMigrated = migrateExistingCache(context)
+        }
+    }
+
+    private fun migrateExistingCache(context: Context): Boolean = runCatching {
+            val source = File(context.cacheDir, DISK_CACHE_DIRECTORY)
+            val destination = File(context.filesDir, DISK_CACHE_DIRECTORY)
+            if (!source.isDirectory) return@runCatching true
+            if (!destination.isDirectory && !destination.mkdirs()) return@runCatching false
+            source.listFiles()
+                ?.asSequence()
+                ?.filter { it.isFile && it.extension == "cover" && it.length() in 1..MAX_SINGLE_ARTWORK_BYTES }
+                ?.sortedBy(File::lastModified)
+                ?.forEach { oldFile ->
+                    val newFile = File(destination, oldFile.name)
+                    if (!newFile.exists()) {
+                        val temp = File.createTempFile("cover-migrate-", ".tmp", destination)
+                        try {
+                            oldFile.copyTo(temp, overwrite = true)
+                            if (!temp.renameTo(newFile) && !newFile.exists()) {
+                                temp.copyTo(newFile, overwrite = true)
+                            }
+                            if (newFile.exists()) newFile.setLastModified(oldFile.lastModified())
+                        } finally {
+                            temp.delete()
+                        }
+                    }
+                }
+            pruneDiskCache(destination)
+            true
+        }.getOrDefault(false)
 
     /** A small weighted cache with single-flight loads and short negative caching. */
     private class SingleFlightLru<K : Any, V : Any>(

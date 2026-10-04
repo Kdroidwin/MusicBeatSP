@@ -71,6 +71,8 @@ import androidx.compose.foundation.layout.statusBarsPadding
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.layout.widthIn
 import androidx.compose.foundation.layout.wrapContentWidth
+import androidx.compose.foundation.horizontalScroll
+import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.LazyListItemInfo
 import androidx.compose.foundation.lazy.LazyListState
@@ -87,21 +89,33 @@ import androidx.compose.material.icons.automirrored.rounded.Undo
 import androidx.compose.material.icons.automirrored.rounded.VolumeDown
 import androidx.compose.material.icons.automirrored.rounded.VolumeUp
 import androidx.compose.material.icons.rounded.Cast
+import androidx.compose.material.icons.rounded.Album
+import androidx.compose.material.icons.rounded.Bedtime
 import androidx.compose.material.icons.rounded.Close
 import androidx.compose.material.icons.rounded.DragHandle
+import androidx.compose.material.icons.rounded.Edit
 import androidx.compose.material.icons.rounded.FastForward
 import androidx.compose.material.icons.rounded.FastRewind
 import androidx.compose.material.icons.rounded.GraphicEq
 import androidx.compose.material.icons.rounded.Headphones
 import androidx.compose.material.icons.rounded.History
+import androidx.compose.material.icons.rounded.Info
 import androidx.compose.material.icons.rounded.MoreHoriz
+import androidx.compose.material.icons.rounded.Person
+import androidx.compose.material.icons.rounded.PlaylistAdd
+import androidx.compose.material.icons.rounded.Share
+import androidx.compose.material.icons.rounded.Speed
+import androidx.compose.material.icons.automirrored.rounded.Notes
 import androidx.compose.material.icons.rounded.Pause
 import androidx.compose.material.icons.rounded.PlayArrow
 import androidx.compose.material.icons.rounded.Videocam
 import androidx.compose.material3.CircularProgressIndicator
+import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.Icon
+import androidx.compose.material3.ModalBottomSheet
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
+import androidx.compose.material3.rememberModalBottomSheetState
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.LaunchedEffect
@@ -209,11 +223,17 @@ import com.music.bitchord.ui.components.LyricsLogConsole
 import com.music.bitchord.ui.player.components.DoubleTapSeekArea
 import com.music.bitchord.data.settings.AppSettings
 import com.music.bitchord.data.settings.PlayerControl
+import com.music.bitchord.data.settings.PlayerQuickAction
 import com.music.bitchord.data.settings.AudioQuality
 import com.music.bitchord.data.model.LikeStatus
 import com.music.bitchord.data.model.PLAYER_ART_PX
 import com.music.bitchord.data.model.Song
 import com.music.bitchord.data.model.artworkAt
+import com.music.bitchord.playback.SavedQueue
+import com.music.bitchord.playback.SavedQueueStore
+import com.music.bitchord.playback.cast.CastQuickActionButton
+import com.music.bitchord.feature.localsongactions.ui.components.LocalSleepTimerPicker
+import com.music.bitchord.playback.toMediaItem
 import com.music.bitchord.data.model.durationMillis
 import com.music.bitchord.playback.BACK_RESTARTS_AFTER_MS
 import com.music.bitchord.playback.autoplaySectionStart
@@ -601,6 +621,7 @@ private fun Bitmap.topAreaLuminance(): Float {
  * glyphs, a volume capsule flanked by speaker icons, and lyrics / AirPlay /
  * queue along the bottom.
  */
+@OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun NowPlayingScreen(
     song: Song,
@@ -649,6 +670,10 @@ fun NowPlayingScreen(
     onMoveInQueue: (Int, Int) -> Unit,
     onClearQueue: () -> Unit,
     onOpenMenu: () -> Unit,
+    onQuickAddToPlaylist: () -> Unit,
+    onQuickPlaybackTuning: () -> Unit,
+    onQuickMenuAction: (PlayerQuickAction) -> Unit,
+    onLoadSavedQueue: (SavedQueue) -> Unit,
     onOpenPlaylists: () -> Unit,
     onOpenSearch: () -> Unit,
     onOpenAlbum: (String) -> Unit,
@@ -691,7 +716,9 @@ fun NowPlayingScreen(
     val syncedLyricsEnabled by AppSettings.syncedLyrics.collectAsStateWithLifecycle()
     val hideLyricsStatusText by AppSettings.hideLyricsStatusText.collectAsStateWithLifecycle()
     val hideLyricsSavedMessage by AppSettings.hideLyricsSavedMessage.collectAsStateWithLifecycle()
-    val favoriteBesideTrackMenu by AppSettings.favoriteBesideTrackMenu.collectAsStateWithLifecycle()
+    val favoriteUsesStar by AppSettings.favoriteUsesStar.collectAsStateWithLifecycle()
+    val playerQuickActions by AppSettings.playerQuickActions.collectAsStateWithLifecycle()
+    val keepScreenOn by AppSettings.keepScreenOn.collectAsStateWithLifecycle()
     val artworkTapOpensLyrics by AppSettings.artworkTapOpensLyrics.collectAsStateWithLifecycle()
     val showPlayerLyricsStrip by AppSettings.showPlayerLyricsStrip.collectAsStateWithLifecycle()
     val offlineMode by AppSettings.offlineMode.collectAsStateWithLifecycle()
@@ -720,7 +747,12 @@ fun NowPlayingScreen(
         likeStatus == LikeStatus.LIKE
     }
     val likeAvailable = localUri != null || signedIn
-    val likeIcon = if (liked) BitChordIcons.HeartFilled else BitChordIcons.Heart
+    val likeIcon = when {
+        favoriteUsesStar && liked -> BitChordIcons.StarFilled
+        favoriteUsesStar -> BitChordIcons.Star
+        liked -> BitChordIcons.HeartFilled
+        else -> BitChordIcons.Heart
+    }
     val likeDescription = stringResource(if (liked) R.string.remove_from_liked else R.string.like)
     val toggleLike: () -> Unit = {
         if (localUri != null) LocalFavoritesStore.toggleFavorite(localUri) else onToggleLike()
@@ -800,6 +832,9 @@ fun NowPlayingScreen(
     var scrubValue by remember { mutableFloatStateOf(0f) }
     // The queue lives inside the player, Apple-style, rather than in a sheet.
     var queueOpen by remember { mutableStateOf(false) }
+    val savedQueues by SavedQueueStore.queues.collectAsStateWithLifecycle()
+    var savedQueueManagerOpen by remember { mutableStateOf(false) }
+    var quickSleepTimerOpen by remember { mutableStateOf(false) }
     var lyricsOpen by remember { mutableStateOf(false) }
     var lyricsLogsOpen by remember { mutableStateOf(false) }
     val showLyricsLogsEnabled by AppSettings.showLyricsLogs.collectAsStateWithLifecycle()
@@ -825,9 +860,32 @@ fun NowPlayingScreen(
     // normal screen timeout only while this panel is visible. SideEffect keeps
     // the view in sync when a new track closes the lyrics panel as well.
     val playerView = LocalView.current
-    SideEffect { playerView.keepScreenOn = lyricsOpen }
-    DisposableEffect(playerView) {
-        onDispose { playerView.keepScreenOn = false }
+    SideEffect { playerView.keepScreenOn = lyricsOpen || keepScreenOn }
+    DisposableEffect(playerView, keepScreenOn) {
+        onDispose { playerView.keepScreenOn = keepScreenOn }
+    }
+
+    if (savedQueueManagerOpen) {
+        SavedQueuesDialog(
+            queues = savedQueues,
+            currentSongs = queue,
+            currentIndex = queueIndex,
+            positionMs = positionMs,
+            onSave = SavedQueueStore::saveAs,
+            onReplace = SavedQueueStore::replace,
+            onLoad = onLoadSavedQueue,
+            onDelete = { SavedQueueStore.delete(it.id) },
+            onDismiss = { savedQueueManagerOpen = false },
+        )
+    }
+
+    if (quickSleepTimerOpen) {
+        ModalBottomSheet(
+            onDismissRequest = { quickSleepTimerOpen = false },
+            sheetState = rememberModalBottomSheetState(skipPartiallyExpanded = true),
+        ) {
+            LocalSleepTimerPicker(onBack = { quickSleepTimerOpen = false })
+        }
     }
 
     // Back out of the lyrics panel to the player, and only from the player
@@ -2058,17 +2116,95 @@ fun NowPlayingScreen(
                     }
                     Spacer(Modifier.width(10.dp))
 
-                    if (favoriteBesideTrackMenu && PlayerControl.LIKE in visiblePlayerControls) {
-                        CircleGlyph(
-                            icon = likeIcon,
-                            contentDescription = likeDescription,
-                            onClick = toggleLike,
-                            active = liked,
-                            enabled = likeAvailable,
-                            haptic = if (liked) Haptic.ToggleOff else Haptic.ToggleOn,
-                        )
-                        Spacer(Modifier.width(8.dp))
+                    Row(
+                        modifier = Modifier
+                            .widthIn(max = 264.dp)
+                            .horizontalScroll(rememberScrollState()),
+                        verticalAlignment = Alignment.CenterVertically,
+                    ) {
+                        playerQuickActions.forEach { action ->
+                            val titleRes = when (action) {
+                                PlayerQuickAction.LYRICS -> R.string.quick_action_lyrics
+                                PlayerQuickAction.ADD_TO_PLAYLIST -> R.string.quick_action_add_to_playlist
+                                PlayerQuickAction.PLAYBACK_TUNING -> R.string.quick_action_playback_tuning
+                                PlayerQuickAction.QUEUE -> R.string.quick_action_queue
+                                PlayerQuickAction.PLAYLISTS -> R.string.quick_action_playlists
+                                PlayerQuickAction.SEARCH -> R.string.quick_action_search
+                                PlayerQuickAction.ALBUM -> R.string.go_to_album
+                                PlayerQuickAction.ARTIST -> R.string.go_to_artist
+                                PlayerQuickAction.EQUALIZER -> R.string.equalizer
+                                PlayerQuickAction.CHROMECAST -> R.string.chromecast
+                                PlayerQuickAction.SLEEP_TIMER -> R.string.sleep_timer
+                                PlayerQuickAction.TAG_EDITOR -> R.string.tag_editor
+                                PlayerQuickAction.EDIT_LYRICS -> R.string.edit_lyrics
+                                PlayerQuickAction.DETAILS -> R.string.details
+                                PlayerQuickAction.SHARE_FILE -> R.string.share_file
+                                PlayerQuickAction.FAVORITE -> R.string.quick_action_favorite
+                            }
+                            val title = stringResource(titleRes)
+                            if (action == PlayerQuickAction.CHROMECAST) {
+                                CastQuickActionButton(
+                                    onUnavailable = { onQuickMenuAction(action) },
+                                )
+                            } else {
+                                val actionIcon = when (action) {
+                                    PlayerQuickAction.LYRICS, PlayerQuickAction.EDIT_LYRICS -> Icons.AutoMirrored.Rounded.Notes
+                                    PlayerQuickAction.ADD_TO_PLAYLIST -> Icons.Rounded.PlaylistAdd
+                                    PlayerQuickAction.PLAYBACK_TUNING -> Icons.Rounded.Speed
+                                    PlayerQuickAction.QUEUE -> Icons.AutoMirrored.Rounded.QueueMusic
+                                    PlayerQuickAction.PLAYLISTS -> Icons.Rounded.LibraryMusic
+                                    PlayerQuickAction.SEARCH -> BitChordIcons.Search
+                                    PlayerQuickAction.ALBUM -> Icons.Rounded.Album
+                                    PlayerQuickAction.ARTIST -> Icons.Rounded.Person
+                                    PlayerQuickAction.EQUALIZER -> Icons.Rounded.GraphicEq
+                                    PlayerQuickAction.CHROMECAST -> Icons.Rounded.Cast
+                                    PlayerQuickAction.SLEEP_TIMER -> Icons.Rounded.Bedtime
+                                    PlayerQuickAction.TAG_EDITOR -> Icons.Rounded.Edit
+                                    PlayerQuickAction.DETAILS -> Icons.Rounded.Info
+                                    PlayerQuickAction.SHARE_FILE -> Icons.Rounded.Share
+                                    PlayerQuickAction.FAVORITE -> likeIcon
+                                }
+                                CircleGlyph(
+                                    icon = actionIcon,
+                                    contentDescription = title,
+                                    active = when (action) {
+                                        PlayerQuickAction.LYRICS -> lyricsOpen
+                                        PlayerQuickAction.QUEUE -> queueOpen
+                                        PlayerQuickAction.FAVORITE -> liked
+                                        else -> false
+                                    },
+                                    enabled = action != PlayerQuickAction.FAVORITE || likeAvailable,
+                                    haptic = if (action == PlayerQuickAction.FAVORITE) {
+                                        if (liked) Haptic.ToggleOff else Haptic.ToggleOn
+                                    } else Haptic.Tap,
+                                    onClick = {
+                                        when (action) {
+                                            PlayerQuickAction.LYRICS -> { lyricsOpen = true; queueOpen = false }
+                                            PlayerQuickAction.QUEUE -> { queueOpen = true; lyricsOpen = false }
+                                            PlayerQuickAction.ADD_TO_PLAYLIST -> onQuickAddToPlaylist()
+                                            PlayerQuickAction.PLAYBACK_TUNING -> onQuickPlaybackTuning()
+                                            PlayerQuickAction.PLAYLISTS -> onOpenPlaylists()
+                                            PlayerQuickAction.SEARCH -> onOpenSearch()
+                                            PlayerQuickAction.ALBUM -> song.albumId?.takeIf(String::isNotBlank)?.let(onOpenAlbum)
+                                                ?: onQuickMenuAction(action)
+                                            PlayerQuickAction.ARTIST -> song.artistId?.takeIf(String::isNotBlank)?.let(onOpenArtist)
+                                                ?: onQuickMenuAction(action)
+                                            PlayerQuickAction.SLEEP_TIMER -> quickSleepTimerOpen = true
+                                            PlayerQuickAction.FAVORITE -> toggleLike()
+                                            PlayerQuickAction.EQUALIZER,
+                                            PlayerQuickAction.TAG_EDITOR,
+                                            PlayerQuickAction.EDIT_LYRICS,
+                                            PlayerQuickAction.DETAILS,
+                                            PlayerQuickAction.SHARE_FILE -> onQuickMenuAction(action)
+                                            PlayerQuickAction.CHROMECAST -> Unit
+                                        }
+                                    },
+                                )
+                            }
+                            Spacer(Modifier.width(4.dp))
+                        }
                     }
+                    Spacer(Modifier.width(4.dp))
 
                     CircleGlyph(
                         icon = if (showRevertCue) Icons.AutoMirrored.Rounded.Undo else Icons.Rounded.MoreHoriz,
@@ -2133,6 +2269,7 @@ fun NowPlayingScreen(
                             onRemove = onRemoveFromQueue,
                             onMove = onMoveInQueue,
                             onClear = onClearQueue,
+                            onManageQueues = { savedQueueManagerOpen = true },
                             modifier = Modifier.weight(1f),
                         )
                     }
@@ -2505,7 +2642,17 @@ fun NowPlayingScreen(
                                     else -> Haptic.Select
                                 },
                             )
-                            PlayerControl.LIKE -> if (!favoriteBesideTrackMenu) BottomGlyph(
+                            PlayerControl.LYRICS -> BottomGlyph(
+                                icon = Icons.AutoMirrored.Rounded.Notes,
+                                contentDescription = stringResource(R.string.quick_action_lyrics),
+                                onClick = {
+                                    lyricsOpen = !lyricsOpen
+                                    if (lyricsOpen) queueOpen = false
+                                },
+                                highlighted = lyricsOpen,
+                                haptic = if (lyricsOpen) Haptic.Tap else Haptic.Select,
+                            )
+                            PlayerControl.LIKE -> if (PlayerQuickAction.FAVORITE !in playerQuickActions) BottomGlyph(
                                 icon = likeIcon,
                                 contentDescription = likeDescription,
                                 onClick = toggleLike,
@@ -3950,6 +4097,7 @@ private fun InlineQueue(
     onRemove: (Int) -> Unit,
     onMove: (Int, Int) -> Unit,
     onClear: () -> Unit,
+    onManageQueues: () -> Unit,
     modifier: Modifier = Modifier,
 ) {
     val listState = rememberLazyListState()
@@ -4034,6 +4182,15 @@ private fun InlineQueue(
                 style = MaterialTheme.typography.titleLarge,
                 color = Color.White,
                 modifier = Modifier.weight(1f),
+            )
+            Text(
+                text = stringResource(R.string.manage_queues),
+                style = MaterialTheme.typography.labelLarge,
+                color = Color.White.copy(alpha = 0.75f),
+                modifier = Modifier
+                    .clip(RoundedCornerShape(percent = 50))
+                    .clickable(onClick = onManageQueues)
+                    .padding(horizontal = 8.dp, vertical = 4.dp),
             )
             Text(
                 text = stringResource(R.string.clear),

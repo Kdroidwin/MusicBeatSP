@@ -16,6 +16,7 @@ import com.music.bitchord.data.canvas.SpotifyToken
 import com.music.bitchord.playback.AudioCache
 import com.music.bitchord.playback.LastPlayed
 import com.music.bitchord.playback.OriginalVersion
+import com.music.bitchord.playback.SavedQueueStore
 import com.music.bitchord.data.innertube.Innertube
 import com.music.bitchord.data.scrobbling.LastFM
 import com.music.bitchord.data.settings.AppSettings
@@ -71,6 +72,7 @@ class BitChordApplication : Application(), SingletonImageLoader.Factory {
         SourceRegistry.init(this)
         SearchHistory.init(this)
         LastPlayed.init(this)
+        SavedQueueStore.init(this)
         // Which tracks the listener has reverted to YouTube's own upload. Read
         // by [Song.toMediaItem], so it has to be open before the restart
         // snapshot below is turned back into queue items.

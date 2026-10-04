@@ -13,6 +13,7 @@ import androidx.compose.foundation.layout.width
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.rounded.Cast
 import androidx.compose.material3.Icon
+import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
@@ -267,6 +268,34 @@ fun CastActionItem(onUnavailable: () -> Unit) {
                 }
             },
             modifier = Modifier.size(48.dp),
+        )
+    }
+}
+
+/** Compact native Cast route button for the configurable player shortcut row. */
+@Composable
+fun CastQuickActionButton(onUnavailable: () -> Unit, modifier: Modifier = Modifier) {
+    val context = LocalContext.current
+    val castContext = remember(context) {
+        runCatching { CastContext.getSharedInstance(context) }.getOrNull()
+    }
+    if (castContext == null) {
+        IconButton(onClick = onUnavailable, modifier = modifier.size(48.dp)) {
+            Icon(
+                Icons.Rounded.Cast,
+                contentDescription = stringResource(R.string.chromecast),
+                tint = MaterialTheme.colorScheme.onSurface,
+            )
+        }
+    } else {
+        AndroidView(
+            factory = { viewContext ->
+                MediaRouteButton(viewContext).also { button ->
+                    button.contentDescription = viewContext.getString(R.string.chromecast)
+                    CastButtonFactory.setUpMediaRouteButton(viewContext, button)
+                }
+            },
+            modifier = modifier.size(48.dp),
         )
     }
 }

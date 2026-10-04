@@ -30,6 +30,7 @@ import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.rounded.Notes
+import androidx.compose.material.icons.automirrored.rounded.PlaylistAdd
 import androidx.compose.material.icons.automirrored.rounded.VolumeOff
 import androidx.compose.material.icons.rounded.Album
 import androidx.compose.material.icons.rounded.ArrowDownward
@@ -39,12 +40,15 @@ import androidx.compose.material.icons.rounded.AutoAwesome
 import androidx.compose.material.icons.rounded.BlurOff
 import androidx.compose.material.icons.rounded.BlurOn
 import androidx.compose.material.icons.rounded.Brightness4
+import androidx.compose.material.icons.rounded.Bedtime
+import androidx.compose.material.icons.rounded.Cast
 import androidx.compose.material.icons.rounded.Check
 import androidx.compose.material.icons.rounded.CheckCircle
 import androidx.compose.material.icons.rounded.ChevronRight
 import androidx.compose.material.icons.rounded.FolderSpecial
 import androidx.compose.material.icons.rounded.Cloud
 import androidx.compose.material.icons.rounded.DeleteSweep
+import androidx.compose.material.icons.rounded.Edit
 import androidx.compose.material.icons.rounded.Dns
 import androidx.compose.material.icons.rounded.FastForward
 import androidx.compose.material.icons.rounded.FileDownload
@@ -56,6 +60,7 @@ import androidx.compose.material.icons.rounded.Gradient
 import androidx.compose.material.icons.rounded.GraphicEq
 import androidx.compose.material.icons.rounded.History
 import androidx.compose.material.icons.rounded.Headphones
+import androidx.compose.material.icons.rounded.Info
 import androidx.compose.material.icons.rounded.Language
 import androidx.compose.material.icons.rounded.LibraryMusic
 import androidx.compose.material.icons.rounded.LocalOffer
@@ -65,6 +70,9 @@ import androidx.compose.material.icons.rounded.MotionPhotosOff
 import androidx.compose.material.icons.rounded.Person
 import androidx.compose.material.icons.rounded.PlaylistPlay
 import androidx.compose.material.icons.rounded.SmartDisplay
+import androidx.compose.material.icons.rounded.Share
+import androidx.compose.material.icons.rounded.ScreenRotation
+import androidx.compose.material.icons.rounded.Speed
 import androidx.compose.material.icons.rounded.SurroundSound
 import androidx.compose.material.icons.rounded.Tune
 import androidx.compose.material.icons.rounded.ViewStream
@@ -76,6 +84,7 @@ import androidx.appcompat.app.AppCompatDelegate
 import androidx.core.content.ContextCompat
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Checkbox
+import androidx.compose.material3.RadioButton
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
@@ -147,6 +156,8 @@ import com.music.bitchord.data.scrobbling.LastFM
 import com.music.bitchord.data.settings.AppSettings
 import com.music.bitchord.data.settings.PlayerControl
 import com.music.bitchord.data.settings.MainNavigationTab
+import com.music.bitchord.data.settings.PlayerQuickAction
+import com.music.bitchord.data.settings.ScreenOrientationMode
 import com.music.bitchord.data.settings.OutputPcmMode
 import com.music.bitchord.playback.AudioOutputStatus
 import com.music.bitchord.R
@@ -197,6 +208,14 @@ fun SettingsScreen(
     val hideNavBarLabels by AppSettings.hideNavigationBarLabels.collectAsStateWithLifecycle()
     val visibleMainTabs by AppSettings.visibleMainNavigationTabs.collectAsStateWithLifecycle()
     val mainTabOrder by AppSettings.mainNavigationTabOrder.collectAsStateWithLifecycle()
+    val startupTab by AppSettings.startupTab.collectAsStateWithLifecycle()
+    val quickActions by AppSettings.playerQuickActions.collectAsStateWithLifecycle()
+    val keepScreenOn by AppSettings.keepScreenOn.collectAsStateWithLifecycle()
+    val showStatusBar by AppSettings.showStatusBar.collectAsStateWithLifecycle()
+    val showNavigationBar by AppSettings.showNavigationBar.collectAsStateWithLifecycle()
+    val orientationMode by AppSettings.screenOrientationMode.collectAsStateWithLifecycle()
+    val favoriteUsesStar by AppSettings.favoriteUsesStar.collectAsStateWithLifecycle()
+    val persistentLocalArtwork by AppSettings.persistentLocalArtwork.collectAsStateWithLifecycle()
     val liquidGlassSupported = isGlassSupported()
     val lyricsBlur by AppSettings.lyricsBlur.collectAsStateWithLifecycle()
     val hideLyricsStatusText by AppSettings.hideLyricsStatusText.collectAsStateWithLifecycle()
@@ -205,7 +224,6 @@ fun SettingsScreen(
     val showPlayerLyricsStrip by AppSettings.showPlayerLyricsStrip.collectAsStateWithLifecycle()
     val offlineMode by AppSettings.offlineMode.collectAsStateWithLifecycle()
     val hideLosslessLabel by AppSettings.hideLosslessLabel.collectAsStateWithLifecycle()
-    val favoriteBesideTrackMenu by AppSettings.favoriteBesideTrackMenu.collectAsStateWithLifecycle()
     val preventPlayAtZeroVolume by AppSettings.preventPlayAtZeroVolume.collectAsStateWithLifecycle()
     val useLibraryIconForPlaylistControl by AppSettings.useLibraryIconForPlaylistControl.collectAsStateWithLifecycle()
     val visiblePlayerControls by AppSettings.visiblePlayerControls.collectAsStateWithLifecycle()
@@ -282,6 +300,7 @@ fun SettingsScreen(
     var preparedMusicoletBackup by remember { mutableStateOf<PreparedMusicoletBackup?>(null) }
     var selectedMusicoletPlaylistIds by remember { mutableStateOf<Set<String>>(emptySet()) }
     var pendingMusicoletBackupUri by rememberSaveable { mutableStateOf<String?>(null) }
+    var showStartupTabPicker by remember { mutableStateOf(false) }
     val manageFoldersSheetState = rememberModalBottomSheetState()
     var discoveredFolders by remember { mutableStateOf<List<LocalFolder>>(emptyList()) }
     val lifecycleOwner = LocalLifecycleOwner.current
@@ -338,6 +357,7 @@ fun SettingsScreen(
                         if (summary.playlists > 0) parts += "${summary.playlists} ${if (summary.playlists == 1) "playlist" else "playlists"}"
                         if (summary.favorites > 0) parts += "${summary.favorites} ${if (summary.favorites == 1) "favorite" else "favorites"}"
                         if (summary.hasEqualizer) parts += "equalizer"
+                        if (summary.queues > 0) parts += context.getString(R.string.saved_queue_count, summary.queues)
                         parts += "settings"
                         if (summary.months > 0) parts += context.countOfMonths(summary.months)
                         append(parts.joinToString(", "))
@@ -362,6 +382,7 @@ fun SettingsScreen(
                         if (summary.playlists > 0) parts += "${summary.playlists} ${if (summary.playlists == 1) "playlist" else "playlists"}"
                         if (summary.favorites > 0) parts += "${summary.favorites} ${if (summary.favorites == 1) "favorite" else "favorites"}"
                         if (summary.hasEqualizer) parts += "equalizer"
+                        if (summary.queues > 0) parts += context.getString(R.string.saved_queue_count, summary.queues)
                         parts += "settings"
                         if (summary.months > 0) parts += context.countOfMonths(summary.months)
                         append(parts.joinToString(", "))
@@ -499,6 +520,7 @@ fun SettingsScreen(
             .verticalScroll(rememberScrollState())
             .padding(contentPadding),
     ) {
+        val originalDeveloperLabel = stringResource(R.string.original_developer)
         Text(
             text = stringResource(R.string.settings),
             style = MaterialTheme.typography.displayLarge,
@@ -511,7 +533,7 @@ fun SettingsScreen(
         SettingsGroup(header = stringResource(R.string.playback)) {
             SettingsRow(
                 icon = Icons.Rounded.GraphicEq,
-                title = "Output precision",
+                title = stringResource(R.string.output_precision),
                 subtitle = buildString {
                     append(outputStatus.sink)
                     append(" · ")
@@ -530,10 +552,10 @@ fun SettingsScreen(
             )
             RowDivider()
             SettingsSubRow(
-                title = "Prefer USB DAC",
+                title = stringResource(R.string.prefer_usb_dac),
                 checked = preferUsbDac,
                 onCheckedChange = AppSettings::setPreferUsbDac,
-                badge = "Connected".takeIf { outputStatus.isUsb },
+                badge = stringResource(R.string.connected).takeIf { outputStatus.isUsb },
             )
             RowDivider()
             SettingsRow(
@@ -638,6 +660,7 @@ fun SettingsScreen(
                 val title = when (control) {
                     PlayerControl.SHUFFLE -> stringResource(R.string.player_control_shuffle)
                     PlayerControl.REPEAT -> stringResource(R.string.player_control_repeat)
+                    PlayerControl.LYRICS -> stringResource(R.string.player_control_lyrics)
                     PlayerControl.LIKE -> stringResource(R.string.player_control_like)
                     PlayerControl.QUEUE -> stringResource(R.string.player_control_queue)
                     PlayerControl.PLAYLIST -> stringResource(R.string.player_control_playlist)
@@ -702,20 +725,16 @@ fun SettingsScreen(
             )
             RowDivider()
             SettingsRow(
-                icon = BitChordIcons.Heart,
-                title = stringResource(R.string.favorite_beside_track_menu),
-                subtitle = stringResource(R.string.favorite_beside_track_menu_subtitle),
+                icon = BitChordIcons.Star,
+                title = stringResource(R.string.favorite_icon_star),
+                subtitle = stringResource(R.string.favorite_icon_star_subtitle),
                 trailing = {
                     Switch(
-                        checked = favoriteBesideTrackMenu,
-                        onCheckedChange = AppSettings::setFavoriteBesideTrackMenu,
-                        colors = SwitchDefaults.colors(
-                            checkedTrackColor = MaterialTheme.colorScheme.primary,
-                            checkedBorderColor = MaterialTheme.colorScheme.primary,
-                        ),
+                        checked = favoriteUsesStar,
+                        onCheckedChange = AppSettings::setFavoriteUsesStar,
                     )
                 },
-                onClick = { AppSettings.setFavoriteBesideTrackMenu(!favoriteBesideTrackMenu) },
+                onClick = { AppSettings.setFavoriteUsesStar(!favoriteUsesStar) },
             )
             RowDivider()
             SettingsRow(
@@ -775,12 +794,141 @@ fun SettingsScreen(
             )
         }
 
+        SettingsGroup(
+            header = stringResource(R.string.player_quick_actions),
+            footer = stringResource(R.string.player_quick_actions_subtitle),
+        ) {
+            PlayerQuickAction.entries.forEachIndexed { actionIndex, action ->
+                if (actionIndex > 0) RowDivider()
+                val titleRes = when (action) {
+                    PlayerQuickAction.LYRICS -> R.string.quick_action_lyrics
+                    PlayerQuickAction.ADD_TO_PLAYLIST -> R.string.quick_action_add_to_playlist
+                    PlayerQuickAction.PLAYBACK_TUNING -> R.string.quick_action_playback_tuning
+                    PlayerQuickAction.QUEUE -> R.string.quick_action_queue
+                    PlayerQuickAction.PLAYLISTS -> R.string.quick_action_playlists
+                    PlayerQuickAction.SEARCH -> R.string.quick_action_search
+                    PlayerQuickAction.ALBUM -> R.string.go_to_album
+                    PlayerQuickAction.ARTIST -> R.string.go_to_artist
+                    PlayerQuickAction.EQUALIZER -> R.string.equalizer
+                    PlayerQuickAction.CHROMECAST -> R.string.chromecast
+                    PlayerQuickAction.SLEEP_TIMER -> R.string.sleep_timer
+                    PlayerQuickAction.TAG_EDITOR -> R.string.tag_editor
+                    PlayerQuickAction.EDIT_LYRICS -> R.string.edit_lyrics
+                    PlayerQuickAction.DETAILS -> R.string.details
+                    PlayerQuickAction.SHARE_FILE -> R.string.share_file
+                    PlayerQuickAction.FAVORITE -> R.string.quick_action_favorite
+                }
+                val selectedIndex = quickActions.indexOf(action)
+                SettingsRow(
+                    icon = when (action) {
+                        PlayerQuickAction.LYRICS, PlayerQuickAction.EDIT_LYRICS -> Icons.AutoMirrored.Rounded.Notes
+                        PlayerQuickAction.ADD_TO_PLAYLIST -> Icons.AutoMirrored.Rounded.PlaylistAdd
+                        PlayerQuickAction.PLAYBACK_TUNING -> Icons.Rounded.Speed
+                        PlayerQuickAction.QUEUE -> Icons.Rounded.PlaylistPlay
+                        PlayerQuickAction.PLAYLISTS -> Icons.Rounded.LibraryMusic
+                        PlayerQuickAction.SEARCH -> Icons.Rounded.FilterAlt
+                        PlayerQuickAction.ALBUM -> Icons.Rounded.Album
+                        PlayerQuickAction.ARTIST -> Icons.Rounded.Person
+                        PlayerQuickAction.EQUALIZER -> Icons.Rounded.GraphicEq
+                        PlayerQuickAction.CHROMECAST -> Icons.Rounded.Cast
+                        PlayerQuickAction.SLEEP_TIMER -> Icons.Rounded.Bedtime
+                        PlayerQuickAction.TAG_EDITOR -> Icons.Rounded.Edit
+                        PlayerQuickAction.DETAILS -> Icons.Rounded.Info
+                        PlayerQuickAction.SHARE_FILE -> Icons.Rounded.Share
+                        PlayerQuickAction.FAVORITE -> BitChordIcons.Heart
+                    },
+                    title = stringResource(titleRes),
+                    subtitle = if (selectedIndex >= 0) stringResource(R.string.player_quick_action_order_subtitle) else null,
+                    trailing = {
+                        Row(verticalAlignment = Alignment.CenterVertically) {
+                            if (selectedIndex >= 0) {
+                                IconButton(
+                                    enabled = selectedIndex > 0,
+                                    onClick = { AppSettings.movePlayerQuickAction(action, -1) },
+                                ) {
+                                    Icon(
+                                        Icons.Rounded.ArrowUpward,
+                                        stringResource(R.string.move_up),
+                                        tint = if (selectedIndex > 0) MaterialTheme.colorScheme.onSurfaceVariant else MaterialTheme.colorScheme.outlineVariant,
+                                    )
+                                }
+                                IconButton(
+                                    enabled = selectedIndex < quickActions.lastIndex,
+                                    onClick = { AppSettings.movePlayerQuickAction(action, 1) },
+                                ) {
+                                    Icon(
+                                        Icons.Rounded.ArrowDownward,
+                                        stringResource(R.string.move_down),
+                                        tint = if (selectedIndex < quickActions.lastIndex) MaterialTheme.colorScheme.onSurfaceVariant else MaterialTheme.colorScheme.outlineVariant,
+                                    )
+                                }
+                            }
+                            Switch(
+                                checked = selectedIndex >= 0,
+                                onCheckedChange = { checked ->
+                                    AppSettings.setPlayerQuickActions(
+                                        if (checked) quickActions + action else quickActions - action,
+                                    )
+                                },
+                            )
+                        }
+                    },
+                )
+            }
+        }
+
         SettingsGroup(header = stringResource(R.string.appearance)) {
             SettingsRow(icon = Icons.Rounded.Brightness4, title = stringResource(R.string.theme))
             SegmentedControl(
                 options = ThemeMode.entries.map { it.localizedLabel() },
                 selectedIndex = ThemeMode.entries.indexOf(theme),
                 onSelect = { AppSettings.setThemeMode(ThemeMode.entries[it]) },
+                modifier = Modifier.padding(start = ROW_INSET, end = ROW_INSET, bottom = 14.dp),
+            )
+            RowDivider()
+            SettingsRow(
+                icon = Icons.Rounded.Fullscreen,
+                title = stringResource(R.string.keep_screen_on),
+                subtitle = stringResource(R.string.keep_screen_on_subtitle),
+                trailing = {
+                    Switch(checked = keepScreenOn, onCheckedChange = AppSettings::setKeepScreenOn)
+                },
+                onClick = { AppSettings.setKeepScreenOn(!keepScreenOn) },
+            )
+            RowDivider()
+            SettingsRow(
+                icon = Icons.Rounded.Fullscreen,
+                title = stringResource(R.string.show_status_bar),
+                subtitle = stringResource(R.string.system_bar_visibility_subtitle),
+                trailing = {
+                    Switch(checked = showStatusBar, onCheckedChange = AppSettings::setShowStatusBar)
+                },
+                onClick = { AppSettings.setShowStatusBar(!showStatusBar) },
+            )
+            RowDivider()
+            SettingsRow(
+                icon = Icons.Rounded.Fullscreen,
+                title = stringResource(R.string.show_navigation_bar),
+                subtitle = stringResource(R.string.system_bar_visibility_subtitle),
+                trailing = {
+                    Switch(checked = showNavigationBar, onCheckedChange = AppSettings::setShowNavigationBar)
+                },
+                onClick = { AppSettings.setShowNavigationBar(!showNavigationBar) },
+            )
+            RowDivider()
+            SettingsRow(
+                icon = Icons.Rounded.ScreenRotation,
+                title = stringResource(R.string.screen_orientation),
+                subtitle = stringResource(R.string.screen_orientation_subtitle),
+            )
+            SegmentedControl(
+                options = listOf(
+                    stringResource(R.string.orientation_system),
+                    stringResource(R.string.orientation_portrait),
+                    stringResource(R.string.orientation_landscape),
+                ),
+                selectedIndex = ScreenOrientationMode.entries.indexOf(orientationMode),
+                onSelect = { AppSettings.setScreenOrientationMode(ScreenOrientationMode.entries[it]) },
                 modifier = Modifier.padding(start = ROW_INSET, end = ROW_INSET, bottom = 14.dp),
             )
             RowDivider()
@@ -794,6 +942,19 @@ fun SettingsScreen(
                         onCheckedChange = AppSettings::setPreloadAlbumArtOnStartup,
                     )
                 },
+            )
+            RowDivider()
+            SettingsRow(
+                icon = Icons.Rounded.Album,
+                title = stringResource(R.string.persistent_local_artwork),
+                subtitle = stringResource(R.string.persistent_local_artwork_subtitle),
+                trailing = {
+                    Switch(
+                        checked = persistentLocalArtwork,
+                        onCheckedChange = AppSettings::setPersistentLocalArtwork,
+                    )
+                },
+                onClick = { AppSettings.setPersistentLocalArtwork(!persistentLocalArtwork) },
             )
             RowDivider()
             SettingsRow(
@@ -1043,8 +1204,8 @@ fun SettingsScreen(
                 RowDivider()
             SettingsRow(
                 icon = Icons.Rounded.BlurOn,
-                title = "Blur unfocused lyrics",
-                subtitle = "Keeps the spotlight on the current line",
+                title = stringResource(R.string.blur_unfocused_lyrics),
+                subtitle = stringResource(R.string.blur_unfocused_lyrics_subtitle),
                     trailing = {
                         Switch(
                             checked = lyricsBlur,
@@ -1060,8 +1221,8 @@ fun SettingsScreen(
                 RowDivider()
                 SettingsRow(
                     icon = Icons.Rounded.FileDownload,
-                    title = "Auto-embed lyrics into audio files",
-                    subtitle = "Automatically writes online lyrics into local music files when played",
+                    title = stringResource(R.string.auto_embed_lyrics),
+                    subtitle = stringResource(R.string.auto_embed_lyrics_subtitle),
                     trailing = {
                         Switch(
                             checked = autoEmbedLyrics,
@@ -1089,6 +1250,21 @@ fun SettingsScreen(
         }
 
         SettingsGroup(header = stringResource(R.string.main_navigation_tabs)) {
+            val startupTitle = stringResource(when (startupTab) {
+                MainNavigationTab.SONGS -> R.string.songs
+                MainNavigationTab.ALBUMS -> R.string.albums
+                MainNavigationTab.ARTISTS -> R.string.artists
+                MainNavigationTab.LIBRARY -> R.string.library
+                MainNavigationTab.SEARCH -> R.string.search
+            })
+            SettingsRow(
+                icon = Icons.Rounded.MusicNote,
+                title = stringResource(R.string.startup_tab),
+                subtitle = stringResource(R.string.startup_tab_subtitle),
+                value = startupTitle,
+                onClick = { showStartupTabPicker = true },
+            )
+            RowDivider()
             mainTabOrder.forEachIndexed { index, tab ->
                 if (index > 0) RowDivider()
                 val titleRes = when (tab) {
@@ -1215,7 +1391,7 @@ fun SettingsScreen(
             if (android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.R) {
                 SettingsRow(
                     icon = Icons.Rounded.FolderSpecial,
-                    title = "All files access",
+                    title = stringResource(R.string.all_files_access),
                     subtitle = if (hasAllFiles) {
                         "Granted — tags and lyrics are edited directly without prompts"
                     } else {
@@ -1462,7 +1638,7 @@ fun SettingsScreen(
             )
         }
 
-        SettingsGroup(header = "Advanced Options") {
+        SettingsGroup(header = stringResource(R.string.advanced_options)) {
             SettingsRow(
                 icon = Icons.Rounded.Cloud,
                 title = stringResource(R.string.offline_mode),
@@ -1499,8 +1675,8 @@ fun SettingsScreen(
             RowDivider()
             SettingsRow(
                 icon = Icons.Rounded.History,
-                title = "Lyrics Debug Logs",
-                subtitle = "Show live API queries and scraper activity in the lyrics panel",
+                title = stringResource(R.string.lyrics_debug_logs),
+                subtitle = stringResource(R.string.lyrics_debug_logs_subtitle),
                 trailing = {
                     Switch(
                         checked = showLyricsLogs,
@@ -1515,21 +1691,65 @@ fun SettingsScreen(
             )
         }
 
+        if (showStartupTabPicker) {
+            AlertDialog(
+                onDismissRequest = { showStartupTabPicker = false },
+                title = { Text(stringResource(R.string.startup_tab)) },
+                text = {
+                    Column {
+                        mainTabOrder.filter { it in visibleMainTabs }.forEach { tab ->
+                            val label = when (tab) {
+                                MainNavigationTab.SONGS -> stringResource(R.string.songs)
+                                MainNavigationTab.ALBUMS -> stringResource(R.string.albums)
+                                MainNavigationTab.ARTISTS -> stringResource(R.string.artists)
+                                MainNavigationTab.LIBRARY -> stringResource(R.string.library)
+                                MainNavigationTab.SEARCH -> stringResource(R.string.search)
+                            }
+                            Row(
+                                modifier = Modifier
+                                    .fillMaxWidth()
+                                    .clickable {
+                                        AppSettings.setStartupTab(tab)
+                                        showStartupTabPicker = false
+                                    }
+                                    .padding(vertical = 6.dp),
+                                verticalAlignment = Alignment.CenterVertically,
+                            ) {
+                                RadioButton(
+                                    selected = startupTab == tab,
+                                    onClick = {
+                                        AppSettings.setStartupTab(tab)
+                                        showStartupTabPicker = false
+                                    },
+                                )
+                                Text(label, modifier = Modifier.padding(start = 8.dp))
+                            }
+                        }
+                    }
+                },
+                confirmButton = {
+                    TextButton(onClick = { showStartupTabPicker = false }) {
+                        Text(stringResource(R.string.done))
+                    }
+                },
+            )
+        }
+
         Text(
             text = buildAnnotatedString {
-                append("MusicBeat $version  ")
+                append("MusicBeatSP $version  ")
                 val linkStyles = TextLinkStyles(
                     style = SpanStyle(
                         color = MaterialTheme.colorScheme.primary,
                         textDecoration = TextDecoration.Underline,
                     ),
                 )
-                withLink(LinkAnnotation.Url("https://github.com/SamuelAdmand/MusicBeat", linkStyles)) {
+                withLink(LinkAnnotation.Url("https://github.com/Kdroidwin/MusicBeatSP", linkStyles)) {
                     append("GitHub")
                 }
                 append("  ")
                 withLink(LinkAnnotation.Url("https://github.com/kushagrasinghx", linkStyles)) {
-                    append("Original Dev")
+                    append(originalDeveloperLabel)
                 }
                 append("  ")
                 withLink(LinkAnnotation.Url("https://discord.gg/pDdKfrdHY6", linkStyles)) {

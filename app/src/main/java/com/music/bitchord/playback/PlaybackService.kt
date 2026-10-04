@@ -103,6 +103,7 @@ import kotlinx.coroutines.CompletableDeferred
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.CoroutineExceptionHandler
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.NonCancellable
 import kotlinx.coroutines.SupervisorJob
@@ -4216,25 +4217,38 @@ class PlaybackService : MediaLibraryService() {
                 it.startsWith("content://") || it.startsWith("file://") || it.startsWith("/")
             }
             var lines: List<LyricLine>? = null
-            if (targetUri != null) {
-                lines = EmbeddedLyrics.forUri(this@PlaybackService, targetUri)
-            }
-            if (lines == null) {
-                val found = LyricsRepository.lyrics(
-                    videoId = currentSong.videoId,
-                    title = currentSong.title,
-                    artist = currentSong.artist,
-                    durationMs = trackDurationMs,
-                    album = currentSong.albumName,
-                    sources = AppSettings.lyricsSources.value,
-                    order = AppSettings.lyricsSourceOrder.value,
-                    prioritizeSyllableSync = AppSettings.prioritizeSyllableSync.value,
-                )
-                lines = found?.lines
-                if (!lines.isNullOrEmpty() && AppSettings.autoEmbedLyrics.value && (targetUri != null || !currentSong.localPath.isNullOrBlank())) {
-                    val lrcText = lines.toLrc()
-                    LocalLyricsManager.autoEmbedLyrics(this@PlaybackService, currentSong, lrcText)
+            try {
+                if (targetUri != null) {
+                    lines = EmbeddedLyrics.forUri(this@PlaybackService, targetUri)
                 }
+                if (lines == null) {
+                    val found = LyricsRepository.lyrics(
+                        videoId = currentSong.videoId,
+                        title = currentSong.title,
+                        artist = currentSong.artist,
+                        durationMs = trackDurationMs,
+                        album = currentSong.albumName,
+                        sources = AppSettings.lyricsSources.value,
+                        order = AppSettings.lyricsSourceOrder.value,
+                        prioritizeSyllableSync = AppSettings.prioritizeSyllableSync.value,
+                    )
+                    lines = found?.lines
+                    if (!lines.isNullOrEmpty() && AppSettings.autoEmbedLyrics.value && (targetUri != null || !currentSong.localPath.isNullOrBlank())) {
+                        val lrcText = lines.toLrc()
+                        try {
+                            LocalLyricsManager.autoEmbedLyrics(this@PlaybackService, currentSong, lrcText)
+                        } catch (cancelled: CancellationException) {
+                            throw cancelled
+                        } catch (error: Exception) {
+                            TrackLog.w("Lyrics", "could not embed fetched lyrics into the local file", error)
+                        }
+                    }
+                }
+            } catch (cancelled: CancellationException) {
+                throw cancelled
+            } catch (error: Exception) {
+                TrackLog.w("Lyrics", "playback lyric lookup failed; playback service kept alive", error)
+                lines = null
             }
             withContext(Dispatchers.Main) {
                 serviceLyrics = lines

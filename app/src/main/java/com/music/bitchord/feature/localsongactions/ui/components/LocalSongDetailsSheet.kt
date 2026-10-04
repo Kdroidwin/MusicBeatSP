@@ -49,6 +49,8 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.res.stringResource
+import com.music.bitchord.R
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
@@ -253,7 +255,7 @@ private fun MetadataCard(
         ) {
             SectionHeader(
                 icon = Icons.Rounded.Info,
-                title = "Metadata",
+                title = stringResource(R.string.metadata),
             )
 
             metadata?.album?.takeIf { it.isNotBlank() }?.let {
@@ -308,7 +310,7 @@ private fun FileInfoCard(
         ) {
             SectionHeader(
                 icon = Icons.Rounded.AudioFile,
-                title = "File",
+                title = stringResource(R.string.file),
             )
 
             FlowRow(

@@ -11,6 +11,7 @@ import com.music.bitchord.auth.profileId
 import com.music.bitchord.auth.sessionId
 import com.music.bitchord.auth.adjacentProfile
 import com.music.bitchord.data.LocalMediaRepository
+import com.music.bitchord.data.TrackLog
 import com.music.bitchord.data.LikeState
 import com.music.bitchord.data.YtMusicRepository
 import com.music.bitchord.data.lyrics.EmbeddedLyrics
@@ -20,6 +21,7 @@ import com.music.bitchord.data.lyrics.LyricsSource
 import com.music.bitchord.data.lyrics.toLrc
 import com.music.bitchord.feature.lyricseditor.data.LocalLyricsManager
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.CancellationException
 import com.music.bitchord.data.settings.AppSettings
 import com.music.bitchord.data.innertube.Innertube
 import com.music.bitchord.auth.CapturedSession
@@ -296,7 +298,15 @@ class MainViewModel(app: Application) : AndroidViewModel(app) {
                 it.startsWith("content://") || it.startsWith("file://") || it.startsWith("/")
             }
             if (targetUri != null) {
-                EmbeddedLyrics.forUri(getApplication(), targetUri)?.let { embedded ->
+                val embedded = try {
+                    EmbeddedLyrics.forUri(getApplication(), targetUri)
+                } catch (cancelled: CancellationException) {
+                    throw cancelled
+                } catch (error: Exception) {
+                    TrackLog.w("Lyrics", "embedded lyric read failed; trying configured sources", error)
+                    null
+                }
+                embedded?.let {
                     _lyrics.value = embedded
                     // No source to name: what the file records is the lyrics,
                     // not which of the eight services they came from months ago.
@@ -318,10 +328,17 @@ class MainViewModel(app: Application) : AndroidViewModel(app) {
                 return@launch
             }
 
-            val found = LyricsRepository.lyrics(
-                videoId, title, artist, durationMs, album, sources,
-                AppSettings.lyricsSourceOrder.value, AppSettings.prioritizeSyllableSync.value,
-            )
+            val found = try {
+                LyricsRepository.lyrics(
+                    videoId, title, artist, durationMs, album, sources,
+                    AppSettings.lyricsSourceOrder.value, AppSettings.prioritizeSyllableSync.value,
+                )
+            } catch (cancelled: CancellationException) {
+                throw cancelled
+            } catch (error: Exception) {
+                TrackLog.w("Lyrics", "lyrics lookup failed; keeping the player available", error)
+                null
+            }
             _lyrics.value = found?.lines
             _lyricsSource.value = found?.source
             _lyricsChecked.value = true
@@ -342,7 +359,13 @@ class MainViewModel(app: Application) : AndroidViewModel(app) {
                     )
                     val lrcText = found.lines.toLrc()
                     viewModelScope.launch(Dispatchers.IO) {
-                        LocalLyricsManager.autoEmbedLyrics(getApplication(), targetSong, lrcText)
+                        try {
+                            LocalLyricsManager.autoEmbedLyrics(getApplication(), targetSong, lrcText)
+                        } catch (cancelled: CancellationException) {
+                            throw cancelled
+                        } catch (error: Exception) {
+                            TrackLog.w("Lyrics", "could not embed fetched lyrics into the local file", error)
+                        }
                     }
                 }
             }

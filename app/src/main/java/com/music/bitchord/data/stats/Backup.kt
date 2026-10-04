@@ -3,6 +3,7 @@ package com.music.bitchord.data.stats
 import android.content.Context
 import android.net.Uri
 import com.music.bitchord.BuildConfig
+import com.music.bitchord.data.model.Song
 import com.music.bitchord.data.settings.AppSettings
 import com.music.bitchord.data.settings.EqualizerBackup
 import com.music.bitchord.data.settings.EqualizerSettings
@@ -12,6 +13,8 @@ import com.music.bitchord.feature.localmusic.data.LocalPlaylistStore
 import com.music.bitchord.feature.localmusic.domain.model.LocalPlaylist
 import com.music.bitchord.feature.localsongactions.data.LocalPlayStatsStore
 import com.music.bitchord.feature.localsongactions.domain.model.LocalPlayStats
+import com.music.bitchord.playback.SavedQueue
+import com.music.bitchord.playback.SavedQueueStore
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
 import kotlinx.serialization.Serializable
@@ -33,7 +36,7 @@ import java.time.format.DateTimeFormatter
 object Backup {
 
     private const val APP_TAG = "musicbeat"
-    private const val SCHEMA_VERSION = 2
+    private const val SCHEMA_VERSION = 3
 
     private val json = Json {
         ignoreUnknownKeys = true
@@ -60,6 +63,7 @@ object Backup {
             val settingsMap = AppSettings.exportPrefs().mapNotNull { (key, value) ->
                 PrefValue.of(value)?.let { key to it }
             }.toMap()
+            val savedQueues = SavedQueueStore.exportQueues().map { it.toBackupQueue() }
 
             val file = BackupFile(
                 app = APP_TAG,
@@ -72,6 +76,7 @@ object Backup {
                 playStats = playStats,
                 equalizer = equalizer,
                 listening = buckets,
+                savedQueues = savedQueues,
             )
             val text = json.encodeToString(BackupFile.serializer(), file)
             context.contentResolver.openOutputStream(target, "wt")
@@ -85,6 +90,7 @@ object Backup {
                 months = buckets.size,
                 hasEqualizer = equalizer.enabled,
                 playStats = playStats.size,
+                queues = savedQueues.size,
             )
         }
     }
@@ -116,6 +122,9 @@ object Backup {
             AppSettings.importPrefs(file.settings.mapValues { it.value.decoded() })
             ListeningStats.importAll(file.listening)
             SearchHistory.reload()
+            check(SavedQueueStore.importQueues(file.savedQueues.map { it.toSavedQueue() })) {
+                "Could not restore saved queues"
+            }
 
             Summary(
                 playlists = file.playlists.size,
@@ -126,6 +135,7 @@ object Backup {
                 playStats = file.playStats.size,
                 from = file.versionName,
                 at = file.exportedAt,
+                queues = file.savedQueues.size,
             )
         }
     }
@@ -137,6 +147,7 @@ object Backup {
         val months: Int,
         val hasEqualizer: Boolean,
         val playStats: Int = 0,
+        val queues: Int = 0,
     )
 
     data class Summary(
@@ -148,6 +159,7 @@ object Backup {
         val playStats: Int = 0,
         val from: String,
         val at: String,
+        val queues: Int = 0,
     )
 
     @Serializable
@@ -162,7 +174,66 @@ object Backup {
         val playStats: Map<String, LocalPlayStats> = emptyMap(),
         val equalizer: EqualizerBackup? = null,
         val listening: List<StoredBucket> = emptyList(),
+        val savedQueues: List<BackupQueue> = emptyList(),
     )
+
+    @Serializable
+    data class BackupQueue(
+        val id: String,
+        val name: String,
+        val songs: List<BackupQueueSong>,
+        val currentIndex: Int,
+        val positionMs: Long,
+    ) {
+        fun toSavedQueue() = SavedQueue(
+            id = id,
+            name = name,
+            songs = songs.map { it.toSong() },
+            currentIndex = currentIndex,
+            positionMs = positionMs,
+        )
+    }
+
+    @Serializable
+    data class BackupQueueSong(
+        val videoId: String,
+        val title: String,
+        val artist: String,
+        val thumbnailUrl: String? = null,
+        val durationText: String? = null,
+        val artistId: String? = null,
+        val albumId: String? = null,
+        val albumName: String? = null,
+        val isVideo: Boolean = false,
+        val isVideoOrigin: Boolean = false,
+        val setVideoId: String? = null,
+        val fromAutoplay: Boolean = false,
+        val radioName: String? = null,
+        val localUri: String? = null,
+        val localPath: String? = null,
+        val downloadFormat: String? = null,
+        val isExplicit: Boolean? = null,
+    ) {
+        fun toSong() = Song(
+            videoId = videoId,
+            title = title,
+            artist = artist,
+            thumbnailUrl = thumbnailUrl,
+            durationText = durationText,
+            artistId = artistId,
+            albumId = albumId,
+            albumName = albumName,
+            isVideo = isVideo,
+            isVideoOrigin = isVideoOrigin,
+            setVideoId = setVideoId,
+            fromAutoplay = fromAutoplay,
+            radioName = radioName,
+            localUri = localUri,
+            localPath = localPath,
+            downloadFormat = downloadFormat,
+            isExplicit = isExplicit,
+        )
+    }
 
     @Serializable
     data class PrefValue(
@@ -199,4 +270,32 @@ object Backup {
             private const val STRING_SET = "stringSet"
         }
     }
+
+    private fun SavedQueue.toBackupQueue() = BackupQueue(
+        id = id,
+        name = name,
+        songs = songs.map { song ->
+            BackupQueueSong(
+                videoId = song.videoId,
+                title = song.title,
+                artist = song.artist,
+                thumbnailUrl = song.thumbnailUrl,
+                durationText = song.durationText,
+                artistId = song.artistId,
+                albumId = song.albumId,
+                albumName = song.albumName,
+                isVideo = song.isVideo,
+                isVideoOrigin = song.isVideoOrigin,
+                setVideoId = song.setVideoId,
+                fromAutoplay = song.fromAutoplay,
+                radioName = song.radioName,
+                localUri = song.localUri,
+                localPath = song.localPath,
+                downloadFormat = song.downloadFormat,
+                isExplicit = song.isExplicit,
+            )
+        },
+        currentIndex = currentIndex,
+        positionMs = positionMs,
+    )
 }

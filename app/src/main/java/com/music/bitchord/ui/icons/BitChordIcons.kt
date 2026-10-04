@@ -260,6 +260,37 @@ object BitChordIcons {
 
     val HeartFilled: ImageVector by lazy { heart("bc_heart_filled", filled = true) }
 
+    val Star: ImageVector by lazy { star("bc_star", filled = false) }
+
+    val StarFilled: ImageVector by lazy { star("bc_star_filled", filled = true) }
+
+    private fun star(name: String, filled: Boolean): ImageVector =
+        ImageVector.Builder(
+            name = name,
+            defaultWidth = 24.dp, defaultHeight = 24.dp,
+            viewportWidth = 24f, viewportHeight = 24f,
+        ).apply {
+            path(
+                stroke = stroke,
+                strokeLineWidth = STROKE,
+                strokeLineCap = StrokeCap.Round,
+                strokeLineJoin = StrokeJoin.Round,
+                fill = if (filled) stroke else null,
+            ) {
+                moveTo(12f, 3.8f)
+                lineTo(14.55f, 9.05f)
+                lineTo(20.35f, 9.9f)
+                lineTo(16.15f, 13.95f)
+                lineTo(17.15f, 19.7f)
+                lineTo(12f, 16.98f)
+                lineTo(6.85f, 19.7f)
+                lineTo(7.85f, 13.95f)
+                lineTo(3.65f, 9.9f)
+                lineTo(9.45f, 9.05f)
+                close()
+            }
+        }.build()
+
     private fun heart(name: String, filled: Boolean): ImageVector =
         ImageVector.Builder(
             name = name,

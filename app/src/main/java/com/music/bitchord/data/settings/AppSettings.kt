@@ -138,6 +138,7 @@ enum class LocalMusicSort {
 enum class PlayerControl {
     SHUFFLE,
     REPEAT,
+    LYRICS,
     LIKE,
     QUEUE,
     PLAYLIST,
@@ -206,6 +207,28 @@ enum class MainNavigationTab(val index: Int) {
     ARTISTS(2),
     LIBRARY(3),
     SEARCH(4),
+}
+
+enum class ScreenOrientationMode { SYSTEM, PORTRAIT, LANDSCAPE }
+
+/** Player shortcuts shown immediately to the left of the favorite action. */
+enum class PlayerQuickAction {
+    LYRICS,
+    ADD_TO_PLAYLIST,
+    PLAYBACK_TUNING,
+    QUEUE,
+    PLAYLISTS,
+    SEARCH,
+    ALBUM,
+    ARTIST,
+    EQUALIZER,
+    CHROMECAST,
+    SLEEP_TIMER,
+    TAG_EDITOR,
+    EDIT_LYRICS,
+    DETAILS,
+    SHARE_FILE,
+    FAVORITE,
 }
 
 object MainNavigationTabs {
@@ -426,6 +449,16 @@ object AppSettings {
     /** Main navigation destinations the user wants to keep in the bottom bar. */
     val visibleMainNavigationTabs = MutableStateFlow(MainNavigationTab.entries.toSet())
     val mainNavigationTabOrder = MutableStateFlow<List<MainNavigationTab>>(MainNavigationTab.entries)
+    val startupTab = MutableStateFlow(MainNavigationTab.SONGS)
+
+    /** System UI preferences; bars remain transiently revealable by swipe when hidden. */
+    val showStatusBar = MutableStateFlow(true)
+    val showNavigationBar = MutableStateFlow(true)
+    val keepScreenOn = MutableStateFlow(false)
+    val screenOrientationMode = MutableStateFlow(ScreenOrientationMode.SYSTEM)
+    val favoriteUsesStar = MutableStateFlow(false)
+    val playerQuickActions = MutableStateFlow<List<PlayerQuickAction>>(emptyList())
+    val persistentLocalArtwork = MutableStateFlow(false)
 
     /** Blurs unfocused lyric lines, keeping the active line sharp. */
     val lyricsBlur = MutableStateFlow(true)
@@ -807,6 +840,16 @@ object AppSettings {
         hideNavigationBarLabels.value = prefs.getBoolean(KEY_HIDE_NAVIGATION_BAR_LABELS, false)
         visibleMainNavigationTabs.value = readVisibleMainNavigationTabs()
         mainNavigationTabOrder.value = readMainNavigationTabOrder()
+        startupTab.value = readStartupTab()
+        showStatusBar.value = prefs.getBoolean(KEY_SHOW_STATUS_BAR, true)
+        showNavigationBar.value = prefs.getBoolean(KEY_SHOW_NAVIGATION_BAR, true)
+        keepScreenOn.value = prefs.getBoolean(KEY_KEEP_SCREEN_ON, false)
+        screenOrientationMode.value = runCatching {
+            ScreenOrientationMode.valueOf(prefs.getString(KEY_SCREEN_ORIENTATION, ScreenOrientationMode.SYSTEM.name) ?: ScreenOrientationMode.SYSTEM.name)
+        }.getOrDefault(ScreenOrientationMode.SYSTEM)
+        favoriteUsesStar.value = prefs.getBoolean(KEY_FAVORITE_USES_STAR, false)
+        playerQuickActions.value = readPlayerQuickActions()
+        persistentLocalArtwork.value = prefs.getBoolean(KEY_PERSISTENT_LOCAL_ARTWORK, false)
         lyricsBlur.value = prefs.getBoolean(KEY_LYRICS_BLUR, true)
         hideLyricsStatusText.value = prefs.getBoolean(KEY_HIDE_LYRICS_STATUS_TEXT, false)
         hideLyricsSavedMessage.value = prefs.getBoolean(KEY_HIDE_LYRICS_SAVED_MESSAGE, false)
@@ -1136,6 +1179,9 @@ object AppSettings {
         if (updated == current) return
         visibleMainNavigationTabs.value = updated
         prefs.edit().putStringSet(KEY_VISIBLE_MAIN_NAVIGATION_TABS, updated.map { it.name }.toSet()).apply()
+        if (startupTab.value !in updated) setStartupTab(MainNavigationTabs.fallback(
+            startupTab.value.index, updated, mainNavigationTabOrder.value,
+        ))
     }
 
     fun moveMainNavigationTab(tab: MainNavigationTab, offset: Int) {
@@ -1143,6 +1189,82 @@ object AppSettings {
         if (updated == mainNavigationTabOrder.value) return
         mainNavigationTabOrder.value = updated
         prefs.edit().putString(KEY_MAIN_NAVIGATION_TAB_ORDER, updated.joinToString(",") { it.name }).apply()
+    }
+
+    fun setStartupTab(tab: MainNavigationTab) {
+        val normalized = tab.takeIf { it in visibleMainNavigationTabs.value } ?: MainNavigationTabs.fallback(
+            tab.index, visibleMainNavigationTabs.value, mainNavigationTabOrder.value,
+        )
+        startupTab.value = normalized
+        prefs.edit().putString(KEY_STARTUP_TAB, normalized.name).apply()
+    }
+
+    private fun readStartupTab(): MainNavigationTab {
+        val saved = prefs.getString(KEY_STARTUP_TAB, MainNavigationTab.SONGS.name)
+            ?.let { name -> MainNavigationTab.entries.firstOrNull { it.name == name } }
+            ?: MainNavigationTab.SONGS
+        return saved.takeIf { it in visibleMainNavigationTabs.value }
+            ?: MainNavigationTabs.fallback(saved.index, visibleMainNavigationTabs.value, mainNavigationTabOrder.value)
+    }
+
+    fun setShowStatusBar(value: Boolean) {
+        showStatusBar.value = value
+        prefs.edit().putBoolean(KEY_SHOW_STATUS_BAR, value).apply()
+    }
+
+    fun setShowNavigationBar(value: Boolean) {
+        showNavigationBar.value = value
+        prefs.edit().putBoolean(KEY_SHOW_NAVIGATION_BAR, value).apply()
+    }
+
+    fun setKeepScreenOn(value: Boolean) {
+        keepScreenOn.value = value
+        prefs.edit().putBoolean(KEY_KEEP_SCREEN_ON, value).apply()
+    }
+
+    fun setScreenOrientationMode(value: ScreenOrientationMode) {
+        screenOrientationMode.value = value
+        prefs.edit().putString(KEY_SCREEN_ORIENTATION, value.name).apply()
+    }
+
+    fun setFavoriteUsesStar(value: Boolean) {
+        favoriteUsesStar.value = value
+        prefs.edit().putBoolean(KEY_FAVORITE_USES_STAR, value).apply()
+    }
+
+    fun setPlayerQuickActions(actions: List<PlayerQuickAction>) {
+        // The list is bounded by the enum itself; keep every distinct entry in
+        // the order selected by the user rather than imposing a UI count limit.
+        val normalized = actions.distinct()
+        playerQuickActions.value = normalized
+        prefs.edit().putString(KEY_PLAYER_QUICK_ACTIONS, normalized.joinToString(",") { it.name }).apply()
+        val showFavoriteBesideMenu = PlayerQuickAction.FAVORITE in normalized
+        favoriteBesideTrackMenu.value = showFavoriteBesideMenu
+        prefs.edit().putBoolean(KEY_FAVORITE_BESIDE_TRACK_MENU, showFavoriteBesideMenu).apply()
+    }
+
+    fun movePlayerQuickAction(action: PlayerQuickAction, offset: Int) {
+        val ordered = playerQuickActions.value.toMutableList()
+        val from = ordered.indexOf(action)
+        if (from < 0) return
+        val to = (from + offset).coerceIn(0, ordered.lastIndex)
+        if (from == to) return
+        ordered.add(to, ordered.removeAt(from))
+        setPlayerQuickActions(ordered)
+    }
+
+    private fun readPlayerQuickActions(): List<PlayerQuickAction> =
+        (prefs.getString(KEY_PLAYER_QUICK_ACTIONS, null)
+            ?.split(",")
+            ?.mapNotNull { name -> PlayerQuickAction.entries.firstOrNull { it.name == name } }
+            ?.distinct()
+            .orEmpty() + if (prefs.getBoolean(KEY_FAVORITE_BESIDE_TRACK_MENU, false)) {
+                listOf(PlayerQuickAction.FAVORITE)
+            } else emptyList()).distinct()
+
+    fun setPersistentLocalArtwork(value: Boolean) {
+        persistentLocalArtwork.value = value
+        prefs.edit().putBoolean(KEY_PERSISTENT_LOCAL_ARTWORK, value).apply()
     }
 
     private fun readMainNavigationTabOrder(): List<MainNavigationTab> {
@@ -1240,6 +1362,11 @@ object AppSettings {
     fun setFavoriteBesideTrackMenu(value: Boolean) {
         favoriteBesideTrackMenu.value = value
         prefs.edit().putBoolean(KEY_FAVORITE_BESIDE_TRACK_MENU, value).apply()
+        val actions = playerQuickActions.value.toMutableList()
+        if (value && PlayerQuickAction.FAVORITE !in actions) actions += PlayerQuickAction.FAVORITE
+        if (!value) actions.remove(PlayerQuickAction.FAVORITE)
+        playerQuickActions.value = actions
+        prefs.edit().putString(KEY_PLAYER_QUICK_ACTIONS, actions.joinToString(",") { it.name }).apply()
     }
 
     fun setPreventPlayAtZeroVolume(value: Boolean) {
@@ -1948,6 +2075,14 @@ object AppSettings {
     private const val KEY_HIDE_NAVIGATION_BAR_LABELS = "hide_navigation_bar_labels"
     private const val KEY_VISIBLE_MAIN_NAVIGATION_TABS = "visible_main_navigation_tabs"
     private const val KEY_MAIN_NAVIGATION_TAB_ORDER = "main_navigation_tab_order"
+    private const val KEY_STARTUP_TAB = "startup_tab"
+    private const val KEY_SHOW_STATUS_BAR = "show_status_bar"
+    private const val KEY_SHOW_NAVIGATION_BAR = "show_navigation_bar"
+    private const val KEY_KEEP_SCREEN_ON = "keep_screen_on"
+    private const val KEY_SCREEN_ORIENTATION = "screen_orientation_mode"
+    private const val KEY_FAVORITE_USES_STAR = "favorite_uses_star"
+    private const val KEY_PLAYER_QUICK_ACTIONS = "player_quick_actions"
+    private const val KEY_PERSISTENT_LOCAL_ARTWORK = "persistent_local_artwork"
     private const val KEY_LYRICS_BLUR = "lyrics_blur"
     private const val KEY_HIDE_LYRICS_STATUS_TEXT = "hide_lyrics_status_text"
     private const val KEY_HIDE_LYRICS_SAVED_MESSAGE = "hide_lyrics_saved_message"

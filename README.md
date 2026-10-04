@@ -25,7 +25,7 @@
 
 ---
 
-> **MusicBeatSP 2.0.0** is the MusicBeat fork under a new name and Android application ID. It builds on the open-source BitChord foundation and adds an extensive local music library, playlist, playback, lyrics, artwork, and customization feature set.
+> **MusicBeatSP 2.0.1** is the MusicBeat fork under a new name and Android application ID. It builds on the open-source BitChord foundation and adds an extensive local music library, playlist, playback, lyrics, artwork, and customization feature set.
 
 The standard Android package is `io.pockets.musicbestsp`. Because this differs from the previous MusicBeat package, Android installs MusicBeatSP as a separate app; app-private settings and data are not migrated automatically.
 
@@ -42,6 +42,7 @@ The standard Android package is `io.pockets.musicbestsp`. Because this differs f
 - Adjust audio focus from level 0 to 4, control whether playback can start at zero volume, and apply ReplayGain metadata.
 - Save and restore the position of tracks that are at least 15 minutes long, including when switching tracks or stopping playback.
 - Open the playback queue with both upcoming tracks and recently played tracks.
+- Save named queue snapshots, switch between them, replace or remove them, and load their saved current track and position after a restart.
 - Cast supported local tracks to Google Cast receivers on the local network.
 - View audio codec, sample rate, bit depth, bitrate, channels, and buffer information in Stats for Nerds.
 
@@ -50,8 +51,12 @@ The standard Android package is `io.pockets.musicbestsp`. Because this differs f
 - Choose System, Light, Dark, AMOLED Black, or Album Art theme. Album Art colors the app background, surfaces, controls, and accents from the playing cover.
 - Hide lyrics status messages, the saved-lyrics indicator, and audio-quality labels such as Lossless and Hi-Res.
 - Show, hide, and reorder available player actions, including Shuffle, Repeat, Like, Playlist/Library, Search, and Queue. Hiding a control does not change its playback state; the Playlist control can use a Library icon.
+- Configure up to six ordered shortcuts beside the player title, including Lyrics, Add to Playlist, Speed and Pitch, Queue, Playlists, and Search. All shortcuts can be turned off.
 - Choose whether the favorite button appears beside the More menu, keep artwork full-size while paused, and open lyrics by tapping the cover.
+- Switch the player favorite glyph between a heart and a star.
 - Show or hide the artist name, automatically hide “Unknown Artist,” and center the track information.
+- Keep the screen awake, independently show or hide the Android status and navigation bars, choose portrait, landscape, or system orientation, and select the tab opened at startup.
+- Use Japanese translations for the Settings screen and player More menu; additional app languages fall back to English where translations are not available.
 
 ### Library and playlists
 
@@ -59,9 +64,10 @@ The standard Android package is `io.pockets.musicbestsp`. Because this differs f
 - Long-press to select multiple tracks and add them to a playlist in one action. Search folder results can act on all tracks in that folder.
 - Sort folder search results by filename, including numbered names such as `1-01. example.flac`, while displaying the track title and artist from metadata.
 - Import `.m3u` and `.m3u8` playlists through Android's file picker. Import playlists from Musicolet backup ZIP files; unavailable tracks are skipped so the rest can still be imported.
+- Choose a persistent app-private storage location for extracted local album artwork so it survives cache cleanup and app restarts, without requesting additional storage access.
 - Drag to reorder playlists and reorder tracks within a playlist independently.
 - Choose a custom image for a playlist cover, and use list or grid layouts with optional small album artwork in list view.
-- Browse listening history and most-played tracks. App backup and restore includes the added settings and playlist data.
+- Browse listening history and most-played tracks. App backup and restore includes settings, playlist data, and saved queue snapshots.
 
 ### Lyrics and artwork
 

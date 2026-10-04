@@ -23,6 +23,8 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.res.stringResource
+import com.music.bitchord.R
 import com.music.bitchord.data.model.Song
 import java.io.File
 
@@ -128,12 +130,12 @@ fun LocalDeleteConfirmDialog(
                         contentColor = MaterialTheme.colorScheme.error,
                     ),
                 ) {
-                    Text("Delete")
+                    Text(stringResource(R.string.delete))
                 }
             },
             dismissButton = {
                 TextButton(onClick = onDismissRequest) {
-                    Text("Cancel")
+                    Text(stringResource(R.string.cancel))
                 }
             },
             modifier = modifier,

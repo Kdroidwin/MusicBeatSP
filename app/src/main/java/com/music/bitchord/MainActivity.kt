@@ -2,6 +2,7 @@ package com.music.bitchord
 
 import android.Manifest
 import android.content.Intent
+import android.content.pm.ActivityInfo
 import android.content.pm.PackageManager
 import android.net.Uri
 import android.os.Build
@@ -16,6 +17,8 @@ import androidx.activity.result.contract.ActivityResultContracts
 import androidx.appcompat.app.AppCompatActivity
 import androidx.media3.session.MediaController
 import androidx.core.content.ContextCompat
+import androidx.core.view.WindowInsetsCompat
+import androidx.core.view.WindowInsetsControllerCompat
 import androidx.compose.animation.AnimatedContent
 import androidx.compose.animation.EnterTransition
 import androidx.compose.animation.ExitTransition
@@ -100,6 +103,7 @@ import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.derivedStateOf
 import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.SideEffect
 import androidx.lifecycle.Lifecycle
 import androidx.lifecycle.LifecycleEventObserver
 import androidx.lifecycle.compose.LocalLifecycleOwner
@@ -146,6 +150,7 @@ import com.music.bitchord.data.scrobbling.LastFM
 import com.music.bitchord.data.settings.AppSettings
 import com.music.bitchord.data.settings.MainNavigationTab
 import com.music.bitchord.data.settings.MainNavigationTabs
+import com.music.bitchord.data.settings.PlayerQuickAction
 import com.music.bitchord.data.settings.ThemeMode
 import com.music.bitchord.ui.screens.SettingsScreen
 import com.music.bitchord.playback.LinkRequest
@@ -275,11 +280,29 @@ class MainActivity : AppCompatActivity() {
             }
             val highPerformance by AppSettings.highPerformanceMode.collectAsStateWithLifecycle()
             val liquidGlassEnabled by AppSettings.liquidGlass.collectAsStateWithLifecycle()
+            val keepScreenOn by AppSettings.keepScreenOn.collectAsStateWithLifecycle()
+            val showStatusBar by AppSettings.showStatusBar.collectAsStateWithLifecycle()
+            val showNavigationBar by AppSettings.showNavigationBar.collectAsStateWithLifecycle()
+            val screenOrientation by AppSettings.screenOrientationMode.collectAsStateWithLifecycle()
             val iosOverscrollFactory = rememberIosOverscrollFactory()
             val performanceRefreshRate by AppSettings.performanceRefreshRate.collectAsStateWithLifecycle()
             val composeView = LocalView.current
             LaunchedEffect(highPerformance, performanceRefreshRate, composeView) {
                 applyPerformanceMode(highPerformance, performanceRefreshRate, composeView)
+            }
+            SideEffect { composeView.keepScreenOn = keepScreenOn }
+            DisposableEffect(composeView) {
+                onDispose { composeView.keepScreenOn = false }
+            }
+            LaunchedEffect(showStatusBar, showNavigationBar) {
+                applySystemBarPreferences()
+            }
+            LaunchedEffect(screenOrientation) {
+                requestedOrientation = when (screenOrientation) {
+                    com.music.bitchord.data.settings.ScreenOrientationMode.SYSTEM -> ActivityInfo.SCREEN_ORIENTATION_UNSPECIFIED
+                    com.music.bitchord.data.settings.ScreenOrientationMode.PORTRAIT -> ActivityInfo.SCREEN_ORIENTATION_PORTRAIT
+                    com.music.bitchord.data.settings.ScreenOrientationMode.LANDSCAPE -> ActivityInfo.SCREEN_ORIENTATION_LANDSCAPE
+                }
             }
             val darkTheme = when (theme) {
                 ThemeMode.SYSTEM -> isSystemInDarkTheme()
@@ -338,6 +361,20 @@ class MainActivity : AppCompatActivity() {
                 }
             }
         }
+    }
+
+    override fun onWindowFocusChanged(hasFocus: Boolean) {
+        super.onWindowFocusChanged(hasFocus)
+        if (hasFocus) applySystemBarPreferences()
+    }
+
+    private fun applySystemBarPreferences() {
+        val bars = WindowInsetsControllerCompat(window, window.decorView)
+        bars.systemBarsBehavior = WindowInsetsControllerCompat.BEHAVIOR_SHOW_TRANSIENT_BARS_BY_SWIPE
+        if (AppSettings.showStatusBar.value) bars.show(WindowInsetsCompat.Type.statusBars())
+        else bars.hide(WindowInsetsCompat.Type.statusBars())
+        if (AppSettings.showNavigationBar.value) bars.show(WindowInsetsCompat.Type.navigationBars())
+        else bars.hide(WindowInsetsCompat.Type.navigationBars())
     }
 
     /**
@@ -402,7 +439,7 @@ private fun BitChordApp(
     val classicNavBar by AppSettings.classicNavBar.collectAsStateWithLifecycle()
     val useCollapsibleNavBar = !classicNavBar
     val glassSamplesBackdrop = glassActive && !reduceDynamicBlur
-    var selectedTab by rememberSaveable { mutableIntStateOf(0) }
+    var selectedTab by rememberSaveable { mutableIntStateOf(AppSettings.startupTab.value.index) }
     val visibleMainNavigationTabs by AppSettings.visibleMainNavigationTabs.collectAsStateWithLifecycle()
     val mainNavigationTabOrder by AppSettings.mainNavigationTabOrder.collectAsStateWithLifecycle()
     val visibleTabIndices = remember(visibleMainNavigationTabs, mainNavigationTabOrder) {
@@ -481,6 +518,10 @@ private fun BitChordApp(
      * question has to be answered by whoever opened the menu.
      */
     var menuFromPlayer by remember { mutableStateOf(false) }
+    var pendingPlayerQuickAction by remember { mutableStateOf<PlayerQuickAction?>(null) }
+    LaunchedEffect(songActions) {
+        if (songActions == null) pendingPlayerQuickAction = null
+    }
     // Keep the Cast receiver's local-file bridge alive after its menu closes.
     CastPlaybackBridge(controller, player.song)
     /** Holding a row anywhere but the player — the menu without the player's rows. */
@@ -1676,6 +1717,44 @@ private fun BitChordApp(
                 menuFromPlayer = true
                 songActions = song
             },
+            onQuickAddToPlaylist = { playlistTarget = song },
+            onQuickPlaybackTuning = { showPlaybackTuning = true },
+            onQuickMenuAction = { action ->
+                when (action) {
+                    PlayerQuickAction.EQUALIZER -> showEqualizerSheet = true
+                    PlayerQuickAction.SHARE_FILE -> {
+                        if (song.localUri != null || song.localPath != null) {
+                            LocalSongActionsHelper.shareSong(context, song)
+                        } else {
+                            menuFromPlayer = true
+                            songActions = song
+                        }
+                    }
+                    PlayerQuickAction.TAG_EDITOR,
+                    PlayerQuickAction.EDIT_LYRICS,
+                    PlayerQuickAction.DETAILS -> {
+                        pendingPlayerQuickAction = action
+                        menuFromPlayer = true
+                        songActions = song
+                    }
+                    else -> {
+                        menuFromPlayer = true
+                        songActions = song
+                    }
+                }
+            },
+            onLoadSavedQueue = { savedQueue ->
+                controller?.let { mediaController ->
+                    val wasPlayRequested = mediaController.playWhenReady
+                    mediaController.setMediaItems(
+                        savedQueue.songs.map { it.toMediaItem() },
+                        savedQueue.currentIndex.coerceIn(savedQueue.songs.indices),
+                        savedQueue.positionMs,
+                    )
+                    mediaController.prepare()
+                    if (wasPlayRequested) mediaController.play() else mediaController.pause()
+                }
+            },
             onOpenPlaylists = {
                 showNowPlaying = false
                 showSettings = false
@@ -2424,9 +2503,15 @@ private fun BitChordApp(
                  (originalSong.artist.isBlank() || local.artist.equals(originalSong.artist, ignoreCase = true)))
             } ?: originalSong
             val song = resolvedSong
-            var showTagEditor by remember { mutableStateOf(false) }
-            var showLyricsEditor by remember { mutableStateOf(false) }
-            var showDetailsSheet by remember { mutableStateOf(false) }
+            var showTagEditor by remember(song.videoId, pendingPlayerQuickAction) {
+                mutableStateOf(pendingPlayerQuickAction == PlayerQuickAction.TAG_EDITOR)
+            }
+            var showLyricsEditor by remember(song.videoId, pendingPlayerQuickAction) {
+                mutableStateOf(pendingPlayerQuickAction == PlayerQuickAction.EDIT_LYRICS)
+            }
+            var showDetailsSheet by remember(song.videoId, pendingPlayerQuickAction) {
+                mutableStateOf(pendingPlayerQuickAction == PlayerQuickAction.DETAILS)
+            }
             var showAddToPlaylist by remember { mutableStateOf(false) }
             var showArtistPicker by remember { mutableStateOf(false) }
 
