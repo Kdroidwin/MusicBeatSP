@@ -1,7 +1,9 @@
 package com.music.bitchord.feature.localsearch.ui.components
 
 import androidx.compose.foundation.background
+import androidx.compose.foundation.ExperimentalFoundationApi
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.combinedClickable
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
@@ -51,6 +53,8 @@ fun LocalSearchResultRow(
     onAlbumClick: (LocalSearchResult.Album) -> Unit,
     onArtistClick: (LocalSearchResult.Artist) -> Unit,
     onFolderClick: (LocalSearchResult.Folder) -> Unit,
+    onFolderLongPress: ((LocalSearchResult.Folder) -> Unit)? = null,
+    selected: Boolean = false,
     currentSong: Song? = null,
     isPlaying: Boolean = false,
     modifier: Modifier = Modifier,
@@ -63,6 +67,7 @@ fun LocalSearchResultRow(
                 song = song,
                 isCurrent = isCurrent,
                 isPlaying = isCurrent && isPlaying,
+                selected = selected,
                 onClick = { onSongClick(song) },
                 onLongPress = { onSongLongPress(song) },
                 onMore = { onSongLongPress(song) },
@@ -88,6 +93,7 @@ fun LocalSearchResultRow(
             FolderResultRow(
                 folder = result,
                 onClick = { onFolderClick(result) },
+                onLongClick = onFolderLongPress?.let { callback -> { callback(result) } },
                 modifier = modifier,
             )
         }
@@ -232,15 +238,17 @@ private fun ArtistResultRow(
 }
 
 @Composable
+@OptIn(ExperimentalFoundationApi::class)
 private fun FolderResultRow(
     folder: LocalSearchResult.Folder,
     onClick: () -> Unit,
+    onLongClick: (() -> Unit)?,
     modifier: Modifier = Modifier,
 ) {
     Row(
         modifier = modifier
             .fillMaxWidth()
-            .clickable(onClick = onClick)
+            .combinedClickable(onClick = onClick, onLongClick = onLongClick)
             .padding(horizontal = PAGE_GUTTER, vertical = 8.dp),
         verticalAlignment = Alignment.CenterVertically,
     ) {

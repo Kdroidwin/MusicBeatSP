@@ -3,6 +3,8 @@ package com.music.bitchord.feature.localsongactions.data
 import android.content.Context
 import android.content.SharedPreferences
 import com.music.bitchord.feature.localsongactions.domain.model.LocalPlayStats
+import kotlinx.coroutines.flow.MutableStateFlow
+import kotlinx.coroutines.flow.asStateFlow
 
 /**
  * Manages local song playback and skip statistics.
@@ -13,6 +15,13 @@ object LocalPlayStatsStore {
     private const val KEY_PLAY_COUNT = "play_"
     private const val KEY_SKIP_COUNT = "skip_"
     private const val KEY_LAST_PLAYED = "last_"
+
+    private val _revision = MutableStateFlow(0L)
+    val revision = _revision.asStateFlow()
+
+    private fun notifyChanged() {
+        _revision.value += 1L
+    }
 
     private fun getPrefs(context: Context): SharedPreferences =
         context.getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE)
@@ -37,6 +46,7 @@ object LocalPlayStatsStore {
             .putInt(KEY_PLAY_COUNT + songId, currentPlay)
             .putLong(KEY_LAST_PLAYED + songId, now)
             .apply()
+        notifyChanged()
         val skipCount = prefs.getInt(KEY_SKIP_COUNT + songId, 0)
         return LocalPlayStats(currentPlay, skipCount, now)
     }
@@ -48,6 +58,7 @@ object LocalPlayStatsStore {
         prefs.edit()
             .putInt(KEY_SKIP_COUNT + songId, currentSkip)
             .apply()
+        notifyChanged()
         val playCount = prefs.getInt(KEY_PLAY_COUNT + songId, 0)
         return LocalPlayStats(playCount, currentSkip, lastPlayed)
     }
@@ -59,6 +70,7 @@ object LocalPlayStatsStore {
             .remove(KEY_SKIP_COUNT + songId)
             .remove(KEY_LAST_PLAYED + songId)
             .apply()
+        notifyChanged()
         return LocalPlayStats.Empty
     }
 
@@ -79,14 +91,15 @@ object LocalPlayStatsStore {
     }
 
     fun importStats(context: Context, incoming: Map<String, LocalPlayStats>) {
-        if (incoming.isEmpty()) return
         val prefs = getPrefs(context)
         val editor = prefs.edit()
+        editor.clear()
         incoming.forEach { (songId, stats) ->
             if (stats.playedCount > 0) editor.putInt(KEY_PLAY_COUNT + songId, stats.playedCount)
             if (stats.skippedCount > 0) editor.putInt(KEY_SKIP_COUNT + songId, stats.skippedCount)
             if (stats.lastPlayedTimestamp > 0L) editor.putLong(KEY_LAST_PLAYED + songId, stats.lastPlayedTimestamp)
         }
         editor.apply()
+        notifyChanged()
     }
 }

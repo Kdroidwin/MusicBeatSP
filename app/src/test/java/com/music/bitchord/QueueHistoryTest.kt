@@ -3,6 +3,7 @@ package com.music.bitchord
 import com.music.bitchord.playback.MAX_QUEUE_HISTORY
 import com.music.bitchord.playback.LastPlayed
 import com.music.bitchord.playback.queueHistoryTrimCount
+import com.music.bitchord.playback.queueInitialVisibleIndex
 import com.music.bitchord.playback.queueStartingAt
 import com.music.bitchord.playback.skippedByQueueJump
 import org.junit.Assert.assertEquals
@@ -16,6 +17,17 @@ class QueueHistoryTest {
         assertEquals(0, queueHistoryTrimCount(MAX_QUEUE_HISTORY))
         assertEquals(1, queueHistoryTrimCount(MAX_QUEUE_HISTORY + 1))
         assertEquals(75, queueHistoryTrimCount(100))
+    }
+
+    @Test
+    fun `queue opens with recent history above the current track`() {
+        assertEquals(5, queueInitialVisibleIndex(currentIndex = 7, autoplayStart = 9))
+        assertEquals(0, queueInitialVisibleIndex(currentIndex = 1, autoplayStart = 5))
+    }
+
+    @Test
+    fun `queue open position includes autoplay heading when it precedes the visible row`() {
+        assertEquals(11, queueInitialVisibleIndex(currentIndex = 12, autoplayStart = 8))
     }
 
     @Test

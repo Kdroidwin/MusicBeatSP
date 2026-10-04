@@ -34,6 +34,7 @@ import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.rememberUpdatedState
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
@@ -50,6 +51,7 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import kotlinx.coroutines.delay
+import kotlinx.coroutines.Job
 import kotlinx.coroutines.launch
 
 /**
@@ -83,19 +85,24 @@ data class SeekFeedback(
 fun DoubleTapSeekArea(
     enabled: Boolean,
     onSeekRelative: (deltaSeconds: Long) -> Unit,
+    onSingleTap: (() -> Unit)? = null,
     modifier: Modifier = Modifier,
     shape: Shape = RoundedCornerShape(10.dp),
     content: @Composable () -> Unit,
 ) {
     var feedback by remember { mutableStateOf<SeekFeedback?>(null) }
     val currentOnSeekRelative by rememberUpdatedState(onSeekRelative)
+    val currentOnSingleTap by rememberUpdatedState(onSingleTap)
     val isEnabled by rememberUpdatedState(enabled)
+    val scope = rememberCoroutineScope()
+    var pendingSingleTap by remember { mutableStateOf<Job?>(null) }
+    val tapHandlingEnabled = enabled || onSingleTap != null
 
     Box(
         modifier = modifier
             .clip(shape)
             .then(
-                if (enabled) {
+                if (tapHandlingEnabled) {
                     Modifier.pointerInput(Unit) {
                         var lastTapTime = 0L
                         var lastIsForward = false
@@ -103,7 +110,7 @@ fun DoubleTapSeekArea(
 
                         awaitEachGesture {
                             val down = awaitFirstDown(requireUnconsumed = false)
-                            if (!isEnabled) return@awaitEachGesture
+                            if (!isEnabled && currentOnSingleTap == null) return@awaitEachGesture
                             val downTime = SystemClock.uptimeMillis()
                             val isForward = down.position.x >= size.width / 2f
 
@@ -113,8 +120,10 @@ fun DoubleTapSeekArea(
                                 val distance = (up.position - down.position).getDistance()
                                 if (distance <= viewConfiguration.touchSlop && upTime - downTime < 350L) {
                                     val timeSinceLast = upTime - lastTapTime
-                                    if (timeSinceLast < 450L && isForward == lastIsForward) {
+                                    if (isEnabled && timeSinceLast < 450L && isForward == lastIsForward) {
                                         // 2nd, 3rd, etc. tap in rapid sequence on the same side
+                                        pendingSingleTap?.cancel()
+                                        pendingSingleTap = null
                                         tapCounter++
                                         val seekSeconds = (tapCounter - 1) * 5
                                         val deltaSec = if (isForward) 5L else -5L
@@ -125,9 +134,24 @@ fun DoubleTapSeekArea(
                                             timestamp = upTime,
                                         )
                                     } else {
+                                        // A tap on the other side ends the previous single-tap
+                                        // candidate immediately; a same-side double tap above
+                                        // cancels it and remains a seek gesture.
+                                        if (pendingSingleTap != null) {
+                                            pendingSingleTap?.cancel()
+                                            pendingSingleTap = null
+                                            currentOnSingleTap?.invoke()
+                                        }
                                         // 1st tap of a potential sequence
                                         tapCounter = 1
                                         lastIsForward = isForward
+                                        if (currentOnSingleTap != null) {
+                                            pendingSingleTap = scope.launch {
+                                                delay(450L)
+                                                currentOnSingleTap?.invoke()
+                                                pendingSingleTap = null
+                                            }
+                                        }
                                     }
                                     lastTapTime = upTime
                                 }

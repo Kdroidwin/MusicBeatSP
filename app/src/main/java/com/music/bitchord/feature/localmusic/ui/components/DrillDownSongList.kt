@@ -5,6 +5,7 @@ import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.combinedClickable
+import androidx.compose.foundation.gestures.detectDragGestures
 import com.music.bitchord.ui.utils.debouncedCombinedClickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
@@ -35,6 +36,8 @@ import androidx.compose.material.icons.rounded.GraphicEq
 import androidx.compose.material.icons.rounded.MoreHoriz
 import androidx.compose.material.icons.rounded.MusicNote
 import androidx.compose.material.icons.rounded.Person
+import androidx.compose.material.icons.rounded.DragHandle
+import androidx.compose.material.icons.rounded.Reorder
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
@@ -42,12 +45,25 @@ import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.DisposableEffect
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.setValue
+import androidx.compose.runtime.mutableFloatStateOf
+import androidx.compose.runtime.mutableIntStateOf
+import androidx.compose.runtime.rememberUpdatedState
+import androidx.compose.runtime.withFrameNanos
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.layout.ContentScale
+import androidx.compose.ui.input.pointer.pointerInput
+import androidx.compose.ui.graphics.graphicsLayer
+import androidx.compose.ui.platform.LocalDensity
+import androidx.compose.ui.zIndex
 import androidx.compose.ui.res.pluralStringResource
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.style.TextAlign
@@ -69,6 +85,7 @@ import com.music.bitchord.ui.components.ROW_DIVIDER_INSET
 import com.music.bitchord.ui.components.SongRow
 import com.music.bitchord.ui.components.thumbnailBorder
 import com.music.bitchord.ui.icons.BitChordIcons
+import kotlin.math.abs
 
 @Composable
 fun DrillDownHeader(
@@ -185,6 +202,8 @@ fun DrillDownActionRow(
     onSongClick: (List<Song>, Int) -> Unit,
     onShuffle: (List<Song>) -> Unit,
     onMore: (() -> Unit)? = null,
+    reorderEnabled: Boolean = false,
+    onReorderToggle: (() -> Unit)? = null,
     modifier: Modifier = Modifier,
 ) {
     val buttonBackground = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.7f)
@@ -254,6 +273,31 @@ fun DrillDownActionRow(
                         if (viewType == LibraryViewType.GRID) R.string.switch_to_list_view else R.string.switch_to_grid_view,
                     ),
                     tint = buttonContentColor,
+                    modifier = Modifier.size(20.dp),
+                )
+            }
+        }
+        if (onReorderToggle != null) {
+            Box(
+                modifier = Modifier
+                    .size(50.dp)
+                    .clip(CircleShape)
+                    .background(
+                        if (reorderEnabled) MaterialTheme.colorScheme.primary.copy(alpha = 0.16f)
+                        else buttonBackground,
+                    )
+                    .border(
+                        0.5.dp,
+                        if (reorderEnabled) MaterialTheme.colorScheme.primary.copy(alpha = 0.38f) else buttonBorder,
+                        CircleShape,
+                    )
+                    .clickable(onClick = onReorderToggle),
+                contentAlignment = Alignment.Center,
+            ) {
+                Icon(
+                    Icons.Rounded.Reorder,
+                    contentDescription = stringResource(R.string.toggle_playlist_reorder),
+                    tint = if (reorderEnabled) MaterialTheme.colorScheme.primary else buttonContentColor,
                     modifier = Modifier.size(20.dp),
                 )
             }
@@ -363,6 +407,11 @@ fun DrillDownSongList(
     onSongSwipe: (Song) -> Unit,
     onShuffle: (List<Song>) -> Unit,
     onMore: (() -> Unit)? = null,
+    isPlaylist: Boolean = false,
+    showArtworkInList: Boolean = false,
+    reorderEnabled: Boolean = false,
+    onReorderToggle: (() -> Unit)? = null,
+    onReorderComplete: ((List<Song>) -> Unit)? = null,
     onBack: (() -> Unit)? = null,
     contentPadding: PaddingValues = PaddingValues(0.dp),
     songDropdownMenu: (@Composable (Song) -> Unit)? = null,
@@ -401,6 +450,8 @@ fun DrillDownSongList(
                         onSongClick = onSongClick,
                         onShuffle = onShuffle,
                         onMore = onMore,
+                        reorderEnabled = reorderEnabled,
+                        onReorderToggle = onReorderToggle,
                     )
                 }
                 itemsIndexed(songs) { index, song ->
@@ -426,6 +477,14 @@ fun DrillDownSongList(
         }
     } else {
         val listState = rememberLazyListState()
+        var displayedSongs by remember(songs) { mutableStateOf(songs) }
+        val dragState = rememberPlaylistSongDragState(listState, displayedSongs.size) { from, to ->
+            if (from in displayedSongs.indices && to in displayedSongs.indices && from != to) {
+                displayedSongs = displayedSongs.toMutableList().also { reordered ->
+                    reordered.add(to, reordered.removeAt(from))
+                }
+            }
+        }
         Box(modifier = modifier.fillMaxSize()) {
             LazyColumn(
                 state = listState,
@@ -449,21 +508,83 @@ fun DrillDownSongList(
                         onSongClick = onSongClick,
                         onShuffle = onShuffle,
                         onMore = onMore,
+                        reorderEnabled = reorderEnabled,
+                        onReorderToggle = onReorderToggle,
                     )
                 }
-                itemsIndexed(songs) { index, song ->
-                    SongRow(
-                        song = song,
-                        selected = song.videoId in selectedIds,
-                        isCurrent = song.isSameTrackAs(currentSong),
-                        isPlaying = song.isSameTrackAs(currentSong) && isPlaying,
-                        trackNumber = index + 1,
-                        onClick = { onSongClick(songs, index) },
-                        onLongPress = { onSongLongPress(song) },
-                        onMore = onSongMore?.let { more -> { more(song) } },
-                        onSwipeToQueue = { onSongSwipe(song) },
-                        dropdownMenu = songDropdownMenu?.let { menu -> { menu(song) } },
-                    )
+                itemsIndexed(displayedSongs, key = { _, song -> song.localUri ?: song.videoId }) { index, song ->
+                    val trackNumber = if (isPlaylist && showArtworkInList) null else index + 1
+                    if (reorderEnabled && isPlaylist) {
+                        val songKey = song.localUri ?: song.videoId
+                        val isDragging = dragState.draggedKey == songKey
+                        val finishDrag by rememberUpdatedState(newValue = {
+                            if (dragState.draggedKey == songKey) {
+                                dragState.onDragEnd()
+                                onReorderComplete?.invoke(displayedSongs)
+                            }
+                        })
+                        DisposableEffect(songKey) {
+                            onDispose { if (dragState.draggedKey == songKey) finishDrag() }
+                        }
+                        Row(
+                            modifier = Modifier
+                                .zIndex(if (isDragging) 1f else 0f)
+                                .graphicsLayer { translationY = if (isDragging) dragState.renderOffset else 0f }
+                                .background(
+                                    if (isDragging) MaterialTheme.colorScheme.primary.copy(alpha = 0.08f)
+                                    else Color.Transparent,
+                                ),
+                            verticalAlignment = Alignment.CenterVertically,
+                        ) {
+                            Box(Modifier.weight(1f)) {
+                                SongRow(
+                                    song = song,
+                                    selected = song.videoId in selectedIds,
+                                    isCurrent = song.isSameTrackAs(currentSong),
+                                    isPlaying = song.isSameTrackAs(currentSong) && isPlaying,
+                                    trackNumber = trackNumber,
+                                    onClick = { onSongClick(displayedSongs, index) },
+                                    onLongPress = { onSongLongPress(song) },
+                                    onMore = onSongMore?.let { more -> { more(song) } },
+                                    onSwipeToQueue = null,
+                                    dropdownMenu = songDropdownMenu?.let { menu -> { menu(song) } },
+                                )
+                            }
+                            Icon(
+                                imageVector = Icons.Rounded.DragHandle,
+                                contentDescription = stringResource(R.string.drag_to_reorder_song),
+                                tint = if (isDragging) MaterialTheme.colorScheme.primary
+                                    else MaterialTheme.colorScheme.onSurfaceVariant,
+                                modifier = Modifier
+                                    .size(48.dp)
+                                    .padding(end = PAGE_GUTTER)
+                                    .pointerInput(songKey) {
+                                        detectDragGestures(
+                                            onDragStart = { dragState.onDragStart(songKey) },
+                                            onDragEnd = { finishDrag() },
+                                            onDragCancel = { finishDrag() },
+                                            onDrag = { change, dragAmount ->
+                                                change.consume()
+                                                dragState.onDrag(dragAmount.y)
+                                            },
+                                        )
+                                    },
+                            )
+                        }
+                    } else {
+                        SongRow(
+                            song = song,
+                            selected = song.videoId in selectedIds,
+                            isCurrent = song.isSameTrackAs(currentSong),
+                            isPlaying = song.isSameTrackAs(currentSong) && isPlaying,
+                            trackNumber = trackNumber,
+                            onClick = { onSongClick(displayedSongs, index) },
+                            onLongPress = { onSongLongPress(song) },
+                            onMore = onSongMore?.let { more -> { more(song) } },
+                            onSwipeToQueue = { onSongSwipe(song) },
+                            dropdownMenu = songDropdownMenu?.let { menu -> { menu(song) } },
+                        )
+                    }
                     if (index < songs.lastIndex) {
                         HorizontalDivider(
                             modifier = Modifier.padding(start = ROW_DIVIDER_INSET),
@@ -481,5 +602,156 @@ fun DrillDownSongList(
                 contentPadding = contentPadding,
             )
         }
+    }
+}
+
+/** Drag-to-reorder state for the song section below the two static header rows. */
+@Composable
+private fun rememberPlaylistSongDragState(
+    listState: androidx.compose.foundation.lazy.LazyListState,
+    songCount: Int,
+    onMove: (Int, Int) -> Unit,
+): PlaylistSongDragState {
+    val state = remember(listState) { PlaylistSongDragState(listState) }
+    state.lazyOffset = 2
+    state.lazyRange = if (songCount > 0) 2 until songCount + 2 else IntRange.EMPTY
+    state.onMove = onMove
+    with(LocalDensity.current) {
+        state.edgeZone = 40.dp.toPx()
+        state.edgeSpeed = 340.dp.toPx()
+    }
+
+    val direction = state.autoScrollDir
+    LaunchedEffect(state, direction) {
+        if (direction == 0) return@LaunchedEffect
+        listState.scroll {
+            var previous = withFrameNanos { it }
+            while (true) {
+                val now = withFrameNanos { it }
+                val seconds = ((now - previous) / 1_000_000_000f).coerceAtMost(1f / 30f)
+                previous = now
+                val scrolled = scrollBy(state.autoScrollSpeed * seconds)
+                if (scrolled == 0f) break
+                state.onScrolled()
+            }
+        }
+    }
+    return state
+}
+
+/** Holds the grabbed song under the finger, swaps crossed rows, and scrolls at list edges. */
+private class PlaylistSongDragState(
+    private val listState: androidx.compose.foundation.lazy.LazyListState,
+) {
+    var lazyRange: IntRange = IntRange.EMPTY
+    var lazyOffset: Int = 2
+    var onMove: (Int, Int) -> Unit = { _, _ -> }
+    var edgeZone: Float = 0f
+    var edgeSpeed: Float = 0f
+
+    var draggedKey by mutableStateOf<Any?>(null)
+        private set
+    var renderOffset by mutableFloatStateOf(0f)
+        private set
+    var autoScrollDir by mutableIntStateOf(0)
+        private set
+    var autoScrollSpeed: Float = 0f
+        private set
+    private var heldCenter: Float = Float.NaN
+    private var awaiting: Int? = null
+
+    fun onDragStart(key: Any) {
+        draggedKey = key
+        heldCenter = Float.NaN
+        renderOffset = 0f
+        awaiting = null
+        setAutoScroll(0f)
+    }
+
+    fun onDrag(deltaY: Float) = settle(deltaY)
+    fun onScrolled() = settle(0f)
+
+    fun onDragEnd() {
+        draggedKey = null
+        heldCenter = Float.NaN
+        renderOffset = 0f
+        awaiting = null
+        setAutoScroll(0f)
+    }
+
+    private fun settle(deltaY: Float) {
+        val key = draggedKey ?: return
+        val items = listState.layoutInfo.visibleItemsInfo
+        val dragged = items.firstOrNull { it.key == key } ?: run {
+            setAutoScroll(0f)
+            return
+        }
+        val half = dragged.size / 2f
+        if (heldCenter.isNaN()) heldCenter = dragged.offset + half
+        heldCenter += deltaY
+        holdToSongRange(items, dragged)
+        val top = heldCenter - half
+        aimAutoScroll(top, dragged)
+        renderOffset = insideViewport(top, dragged.size) - dragged.offset
+
+        awaiting?.let { targetIndex ->
+            if (dragged.index != targetIndex) return
+            awaiting = null
+        }
+        val target = items
+            .filter { it.index in lazyRange && it.index != dragged.index }
+            .minByOrNull { abs((it.offset + it.size / 2f) - heldCenter ) }
+            ?: return
+        if (abs(heldCenter - (target.offset + target.size / 2f)) > target.size / 2f) return
+        if (target.index == listState.firstVisibleItemIndex && listState.canScrollBackward) return
+        onMove(dragged.index - lazyOffset, target.index - lazyOffset)
+        awaiting = target.index
+    }
+
+    private fun aimAutoScroll(top: Float, dragged: androidx.compose.foundation.lazy.LazyListItemInfo) {
+        val info = listState.layoutInfo
+        val bottom = top + dragged.size
+        val speed = when {
+            top < info.viewportStartOffset + edgeZone -> {
+                -edgeSpeed * ((info.viewportStartOffset + edgeZone - top) / edgeZone).coerceIn(0f, 1f)
+            }
+            bottom > info.viewportEndOffset - edgeZone -> {
+                edgeSpeed * ((bottom - (info.viewportEndOffset - edgeZone)) / edgeZone).coerceIn(0f, 1f)
+            }
+            else -> 0f
+        }
+        val blocked = when {
+            speed < 0f -> dragged.index <= lazyRange.first || !listState.canScrollBackward
+            speed > 0f -> dragged.index >= lazyRange.last || !listState.canScrollForward
+            else -> true
+        }
+        setAutoScroll(if (blocked) 0f else speed)
+    }
+
+    private fun holdToSongRange(items: List<androidx.compose.foundation.lazy.LazyListItemInfo>, dragged: androidx.compose.foundation.lazy.LazyListItemInfo) {
+        val half = dragged.size / 2f
+        items.firstOrNull { it.index == lazyRange.first }?.let {
+            heldCenter = heldCenter.coerceAtLeast(it.offset + half)
+        }
+        items.firstOrNull { it.index == lazyRange.last }?.let {
+            heldCenter = heldCenter.coerceAtMost(it.offset + it.size - half)
+        }
+    }
+
+    private fun insideViewport(top: Float, size: Int): Float {
+        val info = listState.layoutInfo
+        val minTop = info.viewportStartOffset.toFloat()
+        val maxTop = (info.viewportEndOffset - size).toFloat().coerceAtLeast(minTop)
+        return top.coerceIn(minTop, maxTop)
+    }
+
+    private fun setAutoScroll(speed: Float) {
+        autoScrollSpeed = speed
+        val direction = when {
+            speed > 0f -> 1
+            speed < 0f -> -1
+            else -> 0
+        }
+        if (autoScrollDir != direction) autoScrollDir = direction
     }
 }

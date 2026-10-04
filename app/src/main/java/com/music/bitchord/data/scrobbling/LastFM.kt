@@ -64,6 +64,7 @@ object LastFM {
 
     private val client by lazy {
         HttpClient(OkHttp) {
+            engine { preconfigured = com.music.bitchord.data.Http.client }
             install(ContentNegotiation) {
                 json(json)
             }

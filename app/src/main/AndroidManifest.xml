@@ -6,6 +6,7 @@
     <!-- Tells Wi-Fi from mobile data, so the matching quality ceiling applies. -->
     <uses-permission android:name="android.permission.ACCESS_NETWORK_STATE" />
     <uses-permission android:name="android.permission.WAKE_LOCK" />
+    <uses-permission android:name="android.permission.MODIFY_AUDIO_SETTINGS" />
     <uses-permission android:name="android.permission.FOREGROUND_SERVICE" />
     <uses-permission android:name="android.permission.FOREGROUND_SERVICE_MEDIA_PLAYBACK" />
     <!-- Saving a track to Music outlives the screen it was asked from. -->
@@ -51,6 +52,10 @@
         android:supportsRtl="true"
         android:theme="@style/Theme.BitChord"
         tools:targetApi="34">
+
+        <meta-data
+            android:name="com.google.android.gms.cast.framework.OPTIONS_PROVIDER_CLASS_NAME"
+            android:value="com.music.bitchord.playback.cast.CastOptionsProvider" />
 
         <!--
           One UI 7+ only routes an app's ongoing notification to Live
@@ -206,8 +211,8 @@
             android:foregroundServiceType="dataSync" />
 
         <!--
-          Home-screen widgets. Two providers so the picker lists a 2×2 and a 4×2,
-          both of which are the same widget resized — see MediaWidget.
+          Home-screen widgets. Two providers list the responsive 2×2 and 4×2
+          designs; a third lists the dedicated title + square-art layout.
 
           Not exported, which is correct for a widget provider despite the
           launcher being the one that talks to it: the system delivers
@@ -237,6 +242,18 @@
             <meta-data
                 android:name="android.appwidget.provider"
                 android:resource="@xml/widget_media_wide" />
+        </receiver>
+
+        <receiver
+            android:name=".widget.MediaWidgetAlbumSquare"
+            android:exported="false"
+            android:label="@string/widget_album_square_label">
+            <intent-filter>
+                <action android:name="android.appwidget.action.APPWIDGET_UPDATE" />
+            </intent-filter>
+            <meta-data
+                android:name="android.appwidget.provider"
+                android:resource="@xml/widget_media_album_square" />
         </receiver>
 
         <!-- The transport buttons. Reached only by this app's own PendingIntents. -->

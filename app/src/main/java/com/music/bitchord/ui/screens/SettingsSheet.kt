@@ -1,9 +1,11 @@
 package com.music.bitchord.ui.screens
 
+import android.Manifest
 import android.content.Context
 import android.content.Intent
 import android.media.audiofx.AudioEffect
 import android.net.Uri
+import android.os.Build
 import android.provider.Settings
 import android.widget.Toast
 import androidx.compose.animation.animateColorAsState
@@ -29,6 +31,9 @@ import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.rounded.Notes
 import androidx.compose.material.icons.automirrored.rounded.VolumeOff
+import androidx.compose.material.icons.rounded.Album
+import androidx.compose.material.icons.rounded.ArrowDownward
+import androidx.compose.material.icons.rounded.ArrowUpward
 import androidx.compose.material.icons.rounded.BarChart
 import androidx.compose.material.icons.rounded.AutoAwesome
 import androidx.compose.material.icons.rounded.BlurOff
@@ -50,10 +55,12 @@ import androidx.compose.material.icons.rounded.Fullscreen
 import androidx.compose.material.icons.rounded.Gradient
 import androidx.compose.material.icons.rounded.GraphicEq
 import androidx.compose.material.icons.rounded.History
+import androidx.compose.material.icons.rounded.Headphones
 import androidx.compose.material.icons.rounded.Language
 import androidx.compose.material.icons.rounded.LibraryMusic
 import androidx.compose.material.icons.rounded.LocalOffer
 import androidx.compose.material.icons.rounded.MusicOff
+import androidx.compose.material.icons.rounded.MusicNote
 import androidx.compose.material.icons.rounded.MotionPhotosOff
 import androidx.compose.material.icons.rounded.Person
 import androidx.compose.material.icons.rounded.PlaylistPlay
@@ -66,11 +73,15 @@ import androidx.compose.material.icons.rounded.Waves
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.appcompat.app.AppCompatDelegate
+import androidx.core.content.ContextCompat
 import androidx.compose.material3.AlertDialog
+import androidx.compose.material3.Checkbox
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
+import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.LocalContentColor
 import androidx.compose.material3.ModalBottomSheet
 import androidx.compose.material3.rememberModalBottomSheetState
 import androidx.compose.material3.OutlinedTextField
@@ -83,16 +94,20 @@ import androidx.compose.material3.SwitchDefaults
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
+import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.lifecycle.Lifecycle
 import androidx.lifecycle.LifecycleEventObserver
+import androidx.lifecycle.lifecycleScope
 import androidx.lifecycle.compose.LocalLifecycleOwner
+import android.content.pm.PackageManager
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.alpha
@@ -130,14 +145,26 @@ import com.music.bitchord.data.model.Account
 import com.music.bitchord.data.LocalMediaRepository
 import com.music.bitchord.data.scrobbling.LastFM
 import com.music.bitchord.data.settings.AppSettings
+import com.music.bitchord.data.settings.PlayerControl
+import com.music.bitchord.data.settings.MainNavigationTab
 import com.music.bitchord.data.settings.OutputPcmMode
 import com.music.bitchord.playback.AudioOutputStatus
 import com.music.bitchord.R
 import com.music.bitchord.data.settings.ThemeMode
 import com.music.bitchord.data.stats.Backup
+import com.music.bitchord.feature.localmusic.data.LocalPlaylistStore
+import com.music.bitchord.feature.localmusic.data.M3uImportException
+import com.music.bitchord.feature.localmusic.data.M3uImportFailure
+import com.music.bitchord.feature.localmusic.data.M3uPlaylistImporter
+import com.music.bitchord.feature.localmusic.data.PreparedM3uImport
+import com.music.bitchord.feature.localmusic.data.MusicoletBackupImporter
+import com.music.bitchord.feature.localmusic.data.MusicoletImportException
+import com.music.bitchord.feature.localmusic.data.MusicoletImportFailure
+import com.music.bitchord.feature.localmusic.data.PreparedMusicoletBackup
 import com.music.bitchord.ui.player.fullBleedArtworkAvailable
 import kotlinx.coroutines.launch
 import java.util.Locale
+import kotlin.math.roundToInt
 
 /**
  * Grouped settings, in the shape phones have taught people to expect: inset
@@ -168,9 +195,27 @@ fun SettingsScreen(
     val liquidGlass by AppSettings.liquidGlass.collectAsStateWithLifecycle()
     val classicNavBar by AppSettings.classicNavBar.collectAsStateWithLifecycle()
     val hideNavBarLabels by AppSettings.hideNavigationBarLabels.collectAsStateWithLifecycle()
+    val visibleMainTabs by AppSettings.visibleMainNavigationTabs.collectAsStateWithLifecycle()
+    val mainTabOrder by AppSettings.mainNavigationTabOrder.collectAsStateWithLifecycle()
     val liquidGlassSupported = isGlassSupported()
     val lyricsBlur by AppSettings.lyricsBlur.collectAsStateWithLifecycle()
+    val hideLyricsStatusText by AppSettings.hideLyricsStatusText.collectAsStateWithLifecycle()
+    val hideLyricsSavedMessage by AppSettings.hideLyricsSavedMessage.collectAsStateWithLifecycle()
+    val artworkTapOpensLyrics by AppSettings.artworkTapOpensLyrics.collectAsStateWithLifecycle()
+    val showPlayerLyricsStrip by AppSettings.showPlayerLyricsStrip.collectAsStateWithLifecycle()
+    val offlineMode by AppSettings.offlineMode.collectAsStateWithLifecycle()
+    val hideLosslessLabel by AppSettings.hideLosslessLabel.collectAsStateWithLifecycle()
+    val favoriteBesideTrackMenu by AppSettings.favoriteBesideTrackMenu.collectAsStateWithLifecycle()
+    val preventPlayAtZeroVolume by AppSettings.preventPlayAtZeroVolume.collectAsStateWithLifecycle()
+    val useLibraryIconForPlaylistControl by AppSettings.useLibraryIconForPlaylistControl.collectAsStateWithLifecycle()
+    val visiblePlayerControls by AppSettings.visiblePlayerControls.collectAsStateWithLifecycle()
+    val playerControlOrder by AppSettings.playerControlOrder.collectAsStateWithLifecycle()
+    val hidePlayerArtist by AppSettings.hidePlayerArtist.collectAsStateWithLifecycle()
+    val hideUnknownPlayerArtist by AppSettings.hideUnknownPlayerArtist.collectAsStateWithLifecycle()
+    val centerPlayerTrackInfo by AppSettings.centerPlayerTrackInfo.collectAsStateWithLifecycle()
+    val preloadAlbumArtOnStartup by AppSettings.preloadAlbumArtOnStartup.collectAsStateWithLifecycle()
     val fullBleedArtwork by AppSettings.fullBleedArtwork.collectAsStateWithLifecycle()
+    val keepArtworkFullSizeWhenPaused by AppSettings.keepArtworkFullSizeWhenPaused.collectAsStateWithLifecycle()
     val legacyMeshGradient by AppSettings.legacyMeshGradient.collectAsStateWithLifecycle()
     val syncedLyrics by AppSettings.syncedLyrics.collectAsStateWithLifecycle()
     val autoEmbedLyrics by AppSettings.autoEmbedLyrics.collectAsStateWithLifecycle()
@@ -182,11 +227,13 @@ fun SettingsScreen(
     val outputPcmMode by AppSettings.outputPcmMode.collectAsStateWithLifecycle()
     val preferUsbDac by AppSettings.preferUsbDac.collectAsStateWithLifecycle()
     val outputStatus by AudioOutputStatus.current.collectAsStateWithLifecycle()
+    val audioFocusLevel by AppSettings.audioFocusLevel.collectAsStateWithLifecycle()
     val stopOnTaskRemoved by AppSettings.stopOnTaskRemoved.collectAsStateWithLifecycle()
     val hideVolumeBar by AppSettings.hideVolumeBar.collectAsStateWithLifecycle()
     val swipeToPlayNext by AppSettings.swipeToPlayNext.collectAsStateWithLifecycle()
     val dontRepeatSuggestions by AppSettings.dontRepeatSuggestions.collectAsStateWithLifecycle()
     val filterNonMusicAudio by AppSettings.filterNonMusicAudio.collectAsStateWithLifecycle()
+    val showPlaylistSongArtwork by AppSettings.showPlaylistSongArtwork.collectAsStateWithLifecycle()
     val highPerformanceMode by AppSettings.highPerformanceMode.collectAsStateWithLifecycle()
     val performanceRefreshRate by AppSettings.performanceRefreshRate.collectAsStateWithLifecycle()
     val currentDisplay = LocalView.current.display
@@ -216,6 +263,7 @@ fun SettingsScreen(
     val listenBrainzToken by AppSettings.listenBrainzToken.collectAsStateWithLifecycle()
 
     val replayGenres by AppSettings.replayGenres.collectAsStateWithLifecycle()
+    val localPlaylists by LocalPlaylistStore.playlists.collectAsStateWithLifecycle()
 
     // What the last export or import did, shown on the row that did it rather
     // than as a toast: a backup is the one action here whose outcome nobody can
@@ -228,9 +276,19 @@ fun SettingsScreen(
     var showPerformanceConfirmation by remember { mutableStateOf(false) }
     var showEqualizerSheet by remember { mutableStateOf(false) }
     var showManageFoldersSheet by remember { mutableStateOf(false) }
+    var showPlaylistOrderDialog by remember { mutableStateOf(false) }
+    var preparedM3uImport by remember { mutableStateOf<PreparedM3uImport?>(null) }
+    var m3uPlaylistName by remember { mutableStateOf("") }
+    var preparedMusicoletBackup by remember { mutableStateOf<PreparedMusicoletBackup?>(null) }
+    var selectedMusicoletPlaylistIds by remember { mutableStateOf<Set<String>>(emptySet()) }
+    var pendingMusicoletBackupUri by rememberSaveable { mutableStateOf<String?>(null) }
     val manageFoldersSheetState = rememberModalBottomSheetState()
     var discoveredFolders by remember { mutableStateOf<List<LocalFolder>>(emptyList()) }
-    val backupScope = rememberCoroutineScope()
+    val lifecycleOwner = LocalLifecycleOwner.current
+    // SAF result callbacks can arrive after this composable's remembered scope has
+    // left composition (for example when the system picker recreates the activity).
+    // Use the screen owner's lifecycle scope for the work they start.
+    val backupScope = lifecycleOwner.lifecycleScope
 
     LaunchedEffect(showManageFoldersSheet) {
         if (showManageFoldersSheet) {
@@ -250,7 +308,6 @@ fun SettingsScreen(
         hasAllFiles = LocalMediaRepository.hasAllFilesPermission(context)
     }
 
-    val lifecycleOwner = LocalLifecycleOwner.current
     DisposableEffect(lifecycleOwner) {
         val observer = LifecycleEventObserver { _, event ->
             if (event == Lifecycle.Event.ON_RESUME) {
@@ -315,6 +372,115 @@ fun SettingsScreen(
                     context.getString(R.string.import_failed, it.message ?: context.getString(R.string.unknown_error))
                 },
             )
+        }
+    }
+    val m3uPicker = rememberLauncherForActivityResult(
+        ActivityResultContracts.OpenDocument(),
+    ) { source ->
+        if (source == null) return@rememberLauncherForActivityResult
+        runCatching {
+            context.contentResolver.takePersistableUriPermission(
+                source,
+                Intent.FLAG_GRANT_READ_URI_PERMISSION,
+            )
+        }
+        backupScope.launch {
+            runCatching {
+                val songs = LocalMediaRepository.getLocalMusic(context)
+                M3uPlaylistImporter.prepare(context, source, songs)
+            }.onSuccess { prepared ->
+                if (prepared.tracks.isEmpty()) {
+                    Toast.makeText(
+                        context,
+                        context.getString(R.string.m3u_no_tracks_found, prepared.skippedCount),
+                        Toast.LENGTH_LONG,
+                    ).show()
+                } else {
+                    preparedM3uImport = prepared
+                    m3uPlaylistName = prepared.suggestedName
+                }
+            }.onFailure { error ->
+                val message = if (error is M3uImportException) {
+                    context.getString(
+                        when (error.reason) {
+                            M3uImportFailure.CANNOT_OPEN -> R.string.m3u_cannot_open
+                            M3uImportFailure.EMPTY_FILE -> R.string.m3u_empty_file
+                            M3uImportFailure.INVALID_FILE -> R.string.m3u_invalid_file
+                            M3uImportFailure.NO_ENTRIES -> R.string.m3u_no_entries
+                        },
+                    )
+                } else {
+                    context.getString(
+                        R.string.import_failed,
+                        error.message ?: context.getString(R.string.unknown_error),
+                    )
+                }
+                Toast.makeText(context, message, Toast.LENGTH_LONG).show()
+            }
+        }
+    }
+    fun importMusicoletBackup(source: Uri) {
+        backupScope.launch {
+            runCatching {
+                val songs = LocalMediaRepository.getLocalMusic(context)
+                MusicoletBackupImporter.prepare(context, source, songs)
+            }.onSuccess { prepared ->
+                preparedMusicoletBackup = prepared
+                selectedMusicoletPlaylistIds = prepared.playlists.map { it.id }.toSet()
+            }.onFailure { error ->
+                val message = if (error is MusicoletImportException) {
+                    context.getString(
+                        when (error.reason) {
+                            MusicoletImportFailure.CANNOT_OPEN -> R.string.musicolet_cannot_open
+                            MusicoletImportFailure.EMPTY_FILE -> R.string.musicolet_empty_file
+                            MusicoletImportFailure.INVALID_BACKUP -> R.string.musicolet_invalid_backup
+                            MusicoletImportFailure.NO_PLAYLISTS -> R.string.musicolet_no_playlists
+                        },
+                    )
+                } else {
+                    context.getString(
+                        R.string.import_failed,
+                        error.message ?: context.getString(R.string.unknown_error),
+                    )
+                }
+                Toast.makeText(context, message, Toast.LENGTH_LONG).show()
+            }
+        }
+    }
+    val audioPermission = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
+        Manifest.permission.READ_MEDIA_AUDIO
+    } else {
+        Manifest.permission.READ_EXTERNAL_STORAGE
+    }
+    val audioPermissionLauncher = rememberLauncherForActivityResult(
+        ActivityResultContracts.RequestPermission(),
+    ) { granted ->
+        val source = pendingMusicoletBackupUri?.let { runCatching { Uri.parse(it) }.getOrNull() }
+        pendingMusicoletBackupUri = null
+        if (!granted) {
+            Toast.makeText(
+                context,
+                context.getString(R.string.musicolet_audio_permission_denied),
+                Toast.LENGTH_LONG,
+            ).show()
+        }
+        source?.let(::importMusicoletBackup)
+    }
+    val musicoletBackupPicker = rememberLauncherForActivityResult(
+        ActivityResultContracts.OpenDocument(),
+    ) { source ->
+        if (source == null) return@rememberLauncherForActivityResult
+        runCatching {
+            context.contentResolver.takePersistableUriPermission(
+                source,
+                Intent.FLAG_GRANT_READ_URI_PERMISSION,
+            )
+        }
+        if (ContextCompat.checkSelfPermission(context, audioPermission) == PackageManager.PERMISSION_GRANTED) {
+            importMusicoletBackup(source)
+        } else {
+            pendingMusicoletBackupUri = source.toString()
+            audioPermissionLauncher.launch(audioPermission)
         }
     }
     var showListenBrainzTokenDialog by remember { mutableStateOf(false) }
@@ -388,6 +554,26 @@ fun SettingsScreen(
             )
             RowDivider()
             SettingsRow(
+                icon = Icons.Rounded.Headphones,
+                title = stringResource(R.string.audio_focus_level),
+                subtitle = stringResource(R.string.audio_focus_level_subtitle),
+                trailing = {
+                    Text(
+                        text = audioFocusLevel.toString(),
+                        color = MaterialTheme.colorScheme.primary,
+                        style = MaterialTheme.typography.labelLarge,
+                    )
+                },
+            )
+            Slider(
+                value = audioFocusLevel.toFloat(),
+                onValueChange = { AppSettings.setAudioFocusLevel(it.roundToInt()) },
+                steps = 3,
+                valueRange = 0f..4f,
+                modifier = Modifier.padding(start = ROW_INSET, end = ROW_INSET, bottom = 14.dp),
+            )
+            RowDivider()
+            SettingsRow(
                 icon = Icons.Rounded.FastForward,
                 title = stringResource(R.string.double_tap_to_seek),
                 subtitle = stringResource(R.string.double_tap_to_seek_subtitle),
@@ -427,6 +613,166 @@ fun SettingsScreen(
                 subtitle = stringResource(R.string.equalizer_subtitle),
                 onClick = { showEqualizerSheet = true },
             )
+            RowDivider()
+            SettingsRow(
+                icon = Icons.Rounded.Headphones,
+                title = stringResource(R.string.hide_lossless_label),
+                subtitle = stringResource(R.string.hide_lossless_label_subtitle),
+                trailing = {
+                    Switch(
+                        checked = hideLosslessLabel,
+                        onCheckedChange = AppSettings::setHideLosslessLabel,
+                        colors = SwitchDefaults.colors(
+                            checkedTrackColor = MaterialTheme.colorScheme.primary,
+                            checkedBorderColor = MaterialTheme.colorScheme.primary,
+                        ),
+                    )
+                },
+                onClick = { AppSettings.setHideLosslessLabel(!hideLosslessLabel) },
+            )
+        }
+
+        SettingsGroup(header = stringResource(R.string.player_controls)) {
+            playerControlOrder.forEachIndexed { index, control ->
+                if (index > 0) RowDivider()
+                val title = when (control) {
+                    PlayerControl.SHUFFLE -> stringResource(R.string.player_control_shuffle)
+                    PlayerControl.REPEAT -> stringResource(R.string.player_control_repeat)
+                    PlayerControl.LIKE -> stringResource(R.string.player_control_like)
+                    PlayerControl.QUEUE -> stringResource(R.string.player_control_queue)
+                    PlayerControl.PLAYLIST -> stringResource(R.string.player_control_playlist)
+                    PlayerControl.SEARCH -> stringResource(R.string.player_control_search)
+                }
+                SettingsRow(
+                    icon = Icons.Rounded.Tune,
+                    title = title,
+                    subtitle = stringResource(R.string.player_control_order_subtitle),
+                    trailing = {
+                        Row(verticalAlignment = Alignment.CenterVertically) {
+                            IconButton(
+                                enabled = index > 0,
+                                onClick = { AppSettings.movePlayerControl(control, -1) },
+                            ) {
+                                Icon(
+                                    Icons.Rounded.ArrowUpward,
+                                    stringResource(R.string.move_up),
+                                    tint = if (index > 0) MaterialTheme.colorScheme.onSurfaceVariant else MaterialTheme.colorScheme.outlineVariant,
+                                )
+                            }
+                            IconButton(
+                                enabled = index < playerControlOrder.lastIndex,
+                                onClick = { AppSettings.movePlayerControl(control, 1) },
+                            ) {
+                                Icon(
+                                    Icons.Rounded.ArrowDownward,
+                                    stringResource(R.string.move_down),
+                                    tint = if (index < playerControlOrder.lastIndex) MaterialTheme.colorScheme.onSurfaceVariant else MaterialTheme.colorScheme.outlineVariant,
+                                )
+                            }
+                            Switch(
+                                checked = control in visiblePlayerControls,
+                                onCheckedChange = { AppSettings.setPlayerControlVisible(control, it) },
+                                colors = SwitchDefaults.colors(
+                                    checkedTrackColor = MaterialTheme.colorScheme.primary,
+                                    checkedBorderColor = MaterialTheme.colorScheme.primary,
+                                ),
+                            )
+                        }
+                    },
+                )
+            }
+            RowDivider()
+            SettingsRow(
+                icon = Icons.Rounded.LibraryMusic,
+                title = stringResource(R.string.player_playlist_library_icon),
+                subtitle = stringResource(R.string.player_playlist_library_icon_subtitle),
+                trailing = {
+                    Switch(
+                        checked = useLibraryIconForPlaylistControl,
+                        onCheckedChange = AppSettings::setUseLibraryIconForPlaylistControl,
+                        colors = SwitchDefaults.colors(
+                            checkedTrackColor = MaterialTheme.colorScheme.primary,
+                            checkedBorderColor = MaterialTheme.colorScheme.primary,
+                        ),
+                    )
+                },
+                onClick = {
+                    AppSettings.setUseLibraryIconForPlaylistControl(!useLibraryIconForPlaylistControl)
+                },
+            )
+            RowDivider()
+            SettingsRow(
+                icon = BitChordIcons.Heart,
+                title = stringResource(R.string.favorite_beside_track_menu),
+                subtitle = stringResource(R.string.favorite_beside_track_menu_subtitle),
+                trailing = {
+                    Switch(
+                        checked = favoriteBesideTrackMenu,
+                        onCheckedChange = AppSettings::setFavoriteBesideTrackMenu,
+                        colors = SwitchDefaults.colors(
+                            checkedTrackColor = MaterialTheme.colorScheme.primary,
+                            checkedBorderColor = MaterialTheme.colorScheme.primary,
+                        ),
+                    )
+                },
+                onClick = { AppSettings.setFavoriteBesideTrackMenu(!favoriteBesideTrackMenu) },
+            )
+            RowDivider()
+            SettingsRow(
+                icon = Icons.Rounded.VolumeOff,
+                title = stringResource(R.string.prevent_play_at_zero_volume),
+                subtitle = stringResource(R.string.prevent_play_at_zero_volume_subtitle),
+                trailing = {
+                    Switch(
+                        checked = preventPlayAtZeroVolume,
+                        onCheckedChange = AppSettings::setPreventPlayAtZeroVolume,
+                        colors = SwitchDefaults.colors(
+                            checkedTrackColor = MaterialTheme.colorScheme.primary,
+                            checkedBorderColor = MaterialTheme.colorScheme.primary,
+                        ),
+                    )
+                },
+                onClick = { AppSettings.setPreventPlayAtZeroVolume(!preventPlayAtZeroVolume) },
+            )
+            RowDivider()
+            SettingsRow(
+                icon = Icons.Rounded.Person,
+                title = stringResource(R.string.hide_player_artist),
+                subtitle = stringResource(R.string.hide_player_artist_subtitle),
+                trailing = {
+                    Switch(
+                        checked = hidePlayerArtist,
+                        onCheckedChange = AppSettings::setHidePlayerArtist,
+                    )
+                },
+                onClick = { AppSettings.setHidePlayerArtist(!hidePlayerArtist) },
+            )
+            RowDivider()
+            SettingsRow(
+                icon = Icons.Rounded.Person,
+                title = stringResource(R.string.hide_unknown_player_artist),
+                subtitle = stringResource(R.string.hide_unknown_player_artist_subtitle),
+                trailing = {
+                    Switch(
+                        checked = hideUnknownPlayerArtist,
+                        onCheckedChange = AppSettings::setHideUnknownPlayerArtist,
+                    )
+                },
+                onClick = { AppSettings.setHideUnknownPlayerArtist(!hideUnknownPlayerArtist) },
+            )
+            RowDivider()
+            SettingsRow(
+                icon = Icons.Rounded.Tune,
+                title = stringResource(R.string.center_player_track_info),
+                subtitle = stringResource(R.string.center_player_track_info_subtitle),
+                trailing = {
+                    Switch(
+                        checked = centerPlayerTrackInfo,
+                        onCheckedChange = AppSettings::setCenterPlayerTrackInfo,
+                    )
+                },
+                onClick = { AppSettings.setCenterPlayerTrackInfo(!centerPlayerTrackInfo) },
+            )
         }
 
         SettingsGroup(header = stringResource(R.string.appearance)) {
@@ -436,6 +782,18 @@ fun SettingsScreen(
                 selectedIndex = ThemeMode.entries.indexOf(theme),
                 onSelect = { AppSettings.setThemeMode(ThemeMode.entries[it]) },
                 modifier = Modifier.padding(start = ROW_INSET, end = ROW_INSET, bottom = 14.dp),
+            )
+            RowDivider()
+            SettingsRow(
+                icon = Icons.Rounded.Album,
+                title = stringResource(R.string.preload_album_art),
+                subtitle = stringResource(R.string.preload_album_art_subtitle),
+                trailing = {
+                    Switch(
+                        checked = preloadAlbumArtOnStartup,
+                        onCheckedChange = AppSettings::setPreloadAlbumArtOnStartup,
+                    )
+                },
             )
             RowDivider()
             SettingsRow(
@@ -555,6 +913,25 @@ fun SettingsScreen(
                 RowDivider()
             }
             SettingsRow(
+                icon = Icons.Rounded.Album,
+                title = stringResource(R.string.keep_artwork_full_size_paused),
+                subtitle = stringResource(R.string.keep_artwork_full_size_paused_subtitle),
+                trailing = {
+                    Switch(
+                        checked = keepArtworkFullSizeWhenPaused,
+                        onCheckedChange = AppSettings::setKeepArtworkFullSizeWhenPaused,
+                        colors = SwitchDefaults.colors(
+                            checkedTrackColor = MaterialTheme.colorScheme.primary,
+                            checkedBorderColor = MaterialTheme.colorScheme.primary,
+                        ),
+                    )
+                },
+                onClick = {
+                    AppSettings.setKeepArtworkFullSizeWhenPaused(!keepArtworkFullSizeWhenPaused)
+                },
+            )
+            RowDivider()
+            SettingsRow(
                 icon = Icons.Rounded.Gradient,
                 title = stringResource(R.string.legacy_mesh_gradient),
                 subtitle = stringResource(R.string.legacy_mesh_gradient_subtitle),
@@ -588,9 +965,80 @@ fun SettingsScreen(
                 },
                 onClick = { AppSettings.setSyncedLyrics(!syncedLyrics) },
             )
+            RowDivider()
+            SettingsRow(
+                icon = Icons.AutoMirrored.Rounded.Notes,
+                title = stringResource(R.string.player_lyrics_strip),
+                subtitle = stringResource(R.string.player_lyrics_strip_subtitle),
+                trailing = {
+                    Switch(
+                        checked = showPlayerLyricsStrip,
+                        onCheckedChange = AppSettings::setShowPlayerLyricsStrip,
+                        colors = SwitchDefaults.colors(
+                            checkedTrackColor = MaterialTheme.colorScheme.primary,
+                            checkedBorderColor = MaterialTheme.colorScheme.primary,
+                        ),
+                    )
+                },
+                onClick = { AppSettings.setShowPlayerLyricsStrip(!showPlayerLyricsStrip) },
+            )
+            RowDivider()
+            SettingsRow(
+                icon = Icons.AutoMirrored.Rounded.Notes,
+                title = stringResource(R.string.artwork_tap_opens_lyrics),
+                subtitle = stringResource(R.string.artwork_tap_opens_lyrics_subtitle),
+                trailing = {
+                    Switch(
+                        checked = artworkTapOpensLyrics,
+                        onCheckedChange = AppSettings::setArtworkTapOpensLyrics,
+                        colors = SwitchDefaults.colors(
+                            checkedTrackColor = MaterialTheme.colorScheme.primary,
+                            checkedBorderColor = MaterialTheme.colorScheme.primary,
+                        ),
+                    )
+                },
+                onClick = { AppSettings.setArtworkTapOpensLyrics(!artworkTapOpensLyrics) },
+            )
             // Nothing to choose between while the feature is off, and the
             // sources are third-party services being reached on the user's
             // connection — which is the part worth being able to narrow.
+            if (syncedLyrics) {
+                RowDivider()
+                SettingsRow(
+                    icon = Icons.AutoMirrored.Rounded.Notes,
+                    title = stringResource(R.string.hide_lyrics_status_text),
+                    subtitle = stringResource(R.string.hide_lyrics_status_text_subtitle),
+                    trailing = {
+                        Switch(
+                            checked = hideLyricsStatusText,
+                            onCheckedChange = AppSettings::setHideLyricsStatusText,
+                            colors = SwitchDefaults.colors(
+                                checkedTrackColor = MaterialTheme.colorScheme.primary,
+                                checkedBorderColor = MaterialTheme.colorScheme.primary,
+                            ),
+                        )
+                    },
+                    onClick = { AppSettings.setHideLyricsStatusText(!hideLyricsStatusText) },
+                )
+                RowDivider()
+            }
+            SettingsRow(
+                icon = Icons.AutoMirrored.Rounded.Notes,
+                title = stringResource(R.string.hide_lyrics_saved_message),
+                subtitle = stringResource(R.string.hide_lyrics_saved_message_subtitle),
+                trailing = {
+                    Switch(
+                        checked = hideLyricsSavedMessage,
+                        onCheckedChange = AppSettings::setHideLyricsSavedMessage,
+                        colors = SwitchDefaults.colors(
+                            checkedTrackColor = MaterialTheme.colorScheme.primary,
+                            checkedBorderColor = MaterialTheme.colorScheme.primary,
+                        ),
+                    )
+                },
+                onClick = { AppSettings.setHideLyricsSavedMessage(!hideLyricsSavedMessage) },
+            )
+            // Source ordering and lyric lookup only matter while lyrics are on.
             if (syncedLyrics) {
                 RowDivider()
             SettingsRow(
@@ -636,6 +1084,66 @@ fun SettingsScreen(
                         .ifEmpty { stringResource(R.string.no_lyrics_sources_enabled) },
                     trailing = { Chevron() },
                     onClick = onLyricsSources,
+                )
+            }
+        }
+
+        SettingsGroup(header = stringResource(R.string.main_navigation_tabs)) {
+            mainTabOrder.forEachIndexed { index, tab ->
+                if (index > 0) RowDivider()
+                val titleRes = when (tab) {
+                    MainNavigationTab.SONGS -> R.string.songs
+                    MainNavigationTab.ALBUMS -> R.string.albums
+                    MainNavigationTab.ARTISTS -> R.string.artists
+                    MainNavigationTab.LIBRARY -> R.string.library
+                    MainNavigationTab.SEARCH -> R.string.search
+                }
+                val icon = when (tab) {
+                    MainNavigationTab.SONGS -> Icons.Rounded.MusicNote
+                    MainNavigationTab.ALBUMS -> Icons.Rounded.Album
+                    MainNavigationTab.ARTISTS -> Icons.Rounded.Person
+                    MainNavigationTab.LIBRARY -> Icons.Rounded.LibraryMusic
+                    MainNavigationTab.SEARCH -> BitChordIcons.Search
+                }
+                val checked = tab in visibleMainTabs
+                SettingsRow(
+                    icon = icon,
+                    title = stringResource(titleRes),
+                    subtitle = stringResource(R.string.navigation_tab_order_subtitle),
+                    enabled = checked || visibleMainTabs.size > 1,
+                    trailing = {
+                        Row(verticalAlignment = Alignment.CenterVertically) {
+                            IconButton(
+                                enabled = index > 0,
+                                onClick = { AppSettings.moveMainNavigationTab(tab, -1) },
+                            ) {
+                                Icon(
+                                    Icons.Rounded.ArrowUpward,
+                                    stringResource(R.string.move_up),
+                                    tint = if (index > 0) MaterialTheme.colorScheme.onSurfaceVariant else MaterialTheme.colorScheme.outlineVariant,
+                                )
+                            }
+                            IconButton(
+                                enabled = index < mainTabOrder.lastIndex,
+                                onClick = { AppSettings.moveMainNavigationTab(tab, 1) },
+                            ) {
+                                Icon(
+                                    Icons.Rounded.ArrowDownward,
+                                    stringResource(R.string.move_down),
+                                    tint = if (index < mainTabOrder.lastIndex) MaterialTheme.colorScheme.onSurfaceVariant else MaterialTheme.colorScheme.outlineVariant,
+                                )
+                            }
+                            Switch(
+                                checked = checked,
+                                enabled = checked || visibleMainTabs.size > 1,
+                                onCheckedChange = { AppSettings.setMainNavigationTabVisible(tab, it) },
+                                colors = SwitchDefaults.colors(
+                                    checkedTrackColor = MaterialTheme.colorScheme.primary,
+                                    checkedBorderColor = MaterialTheme.colorScheme.primary,
+                                ),
+                            )
+                        }
+                    },
                 )
             }
         }
@@ -750,6 +1258,23 @@ fun SettingsScreen(
                 },
                 onClick = { AppSettings.setFilterNonMusicAudio(!filterNonMusicAudio) },
             )
+            RowDivider()
+            SettingsRow(
+                icon = Icons.Rounded.Album,
+                title = stringResource(R.string.playlist_song_artwork),
+                subtitle = stringResource(R.string.playlist_song_artwork_subtitle),
+                trailing = {
+                    Switch(
+                        checked = showPlaylistSongArtwork,
+                        onCheckedChange = AppSettings::setShowPlaylistSongArtwork,
+                        colors = SwitchDefaults.colors(
+                            checkedTrackColor = MaterialTheme.colorScheme.primary,
+                            checkedBorderColor = MaterialTheme.colorScheme.primary,
+                        ),
+                    )
+                },
+                onClick = { AppSettings.setShowPlaylistSongArtwork(!showPlaylistSongArtwork) },
+            )
         }
 
         SettingsGroup(header = stringResource(R.string.storage)) {
@@ -763,6 +1288,45 @@ fun SettingsScreen(
                     loader.diskCache?.clear()
                     Toast.makeText(context, context.getString(R.string.image_cache_cleared), Toast.LENGTH_SHORT).show()
                 },
+            )
+        }
+
+        SettingsGroup(header = stringResource(R.string.playlist_tools)) {
+            SettingsRow(
+                icon = Icons.Rounded.FileUpload,
+                title = stringResource(R.string.import_m3u_playlist),
+                subtitle = stringResource(R.string.import_m3u_subtitle),
+                onClick = {
+                    m3uPicker.launch(
+                        arrayOf(
+                            "audio/x-mpegurl",
+                            "application/vnd.apple.mpegurl",
+                            "application/x-mpegurl",
+                            "audio/mpegurl",
+                            "text/plain",
+                            "application/octet-stream",
+                            "*/*",
+                        ),
+                    )
+                },
+            )
+            RowDivider()
+            SettingsRow(
+                icon = Icons.Rounded.PlaylistPlay,
+                title = stringResource(R.string.import_musicolet_backup),
+                subtitle = stringResource(R.string.import_musicolet_backup_subtitle),
+                onClick = {
+                    musicoletBackupPicker.launch(
+                        arrayOf("application/zip", "application/x-zip-compressed", "application/octet-stream", "*/*"),
+                    )
+                },
+            )
+            RowDivider()
+            SettingsRow(
+                icon = Icons.Rounded.PlaylistPlay,
+                title = stringResource(R.string.manage_playlist_order),
+                subtitle = stringResource(R.string.manage_playlist_order_subtitle),
+                onClick = { showPlaylistOrderDialog = true },
             )
         }
 
@@ -900,6 +1464,23 @@ fun SettingsScreen(
 
         SettingsGroup(header = "Advanced Options") {
             SettingsRow(
+                icon = Icons.Rounded.Cloud,
+                title = stringResource(R.string.offline_mode),
+                subtitle = stringResource(R.string.offline_mode_subtitle),
+                trailing = {
+                    Switch(
+                        checked = offlineMode,
+                        onCheckedChange = AppSettings::setOfflineMode,
+                        colors = SwitchDefaults.colors(
+                            checkedTrackColor = MaterialTheme.colorScheme.primary,
+                            checkedBorderColor = MaterialTheme.colorScheme.primary,
+                        ),
+                    )
+                },
+                onClick = { AppSettings.setOfflineMode(!offlineMode) },
+            )
+            RowDivider()
+            SettingsRow(
                 icon = Icons.Rounded.GraphicEq,
                 title = stringResource(R.string.show_nerd_stats),
                 subtitle = stringResource(R.string.show_nerd_stats_subtitle),
@@ -988,6 +1569,230 @@ fun SettingsScreen(
             dismissButton = {
                 TextButton(onClick = { confirmImport = false }) {
                     Text(stringResource(R.string.cancel))
+                }
+            },
+        )
+    }
+
+    preparedM3uImport?.let { prepared ->
+        AlertDialog(
+            onDismissRequest = { preparedM3uImport = null },
+            title = { Text(stringResource(R.string.import_m3u_playlist)) },
+            text = {
+                Column {
+                    Text(stringResource(R.string.m3u_import_ready, prepared.tracks.size, prepared.skippedCount))
+                    Spacer(Modifier.height(12.dp))
+                    OutlinedTextField(
+                        value = m3uPlaylistName,
+                        onValueChange = { m3uPlaylistName = it },
+                        label = { Text(stringResource(R.string.m3u_playlist_name)) },
+                        singleLine = true,
+                        modifier = Modifier.fillMaxWidth(),
+                    )
+                }
+            },
+            confirmButton = {
+                TextButton(
+                    enabled = m3uPlaylistName.isNotBlank(),
+                    onClick = {
+                        val playlist = LocalPlaylistStore.createPlaylist(
+                            name = m3uPlaylistName,
+                            songIds = prepared.tracks.map { it.id },
+                            songMetadata = prepared.metadata,
+                            coverUrl = prepared.artworkUrl,
+                        )
+                        preparedM3uImport = null
+                        Toast.makeText(
+                            context,
+                            context.getString(
+                                R.string.m3u_import_summary,
+                                playlist.songIds.size,
+                                prepared.skippedCount,
+                            ),
+                            Toast.LENGTH_LONG,
+                        ).show()
+                    },
+                ) {
+                    Text(stringResource(R.string.import_m3u_playlist))
+                }
+            },
+            dismissButton = {
+                TextButton(onClick = { preparedM3uImport = null }) {
+                    Text(stringResource(R.string.cancel))
+                }
+            },
+        )
+    }
+
+    preparedMusicoletBackup?.let { prepared ->
+        val allSelected = prepared.playlists.isNotEmpty() &&
+            selectedMusicoletPlaylistIds.size == prepared.playlists.size
+        AlertDialog(
+            onDismissRequest = { preparedMusicoletBackup = null },
+            title = { Text(stringResource(R.string.import_musicolet_backup)) },
+            text = {
+                Column {
+                    Text(stringResource(R.string.musicolet_playlists_found, prepared.playlists.size))
+                    if (prepared.playlists.sumOf { it.tracks.size } == 0 &&
+                        prepared.playlists.any { it.skippedCount > 0 }
+                    ) {
+                        Text(
+                            text = stringResource(R.string.musicolet_no_tracks_match_hint),
+                            style = MaterialTheme.typography.bodySmall,
+                            color = MaterialTheme.colorScheme.error,
+                            modifier = Modifier.padding(top = 8.dp),
+                        )
+                    }
+                    Row(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .clickable {
+                                selectedMusicoletPlaylistIds = if (allSelected) emptySet()
+                                else prepared.playlists.map { it.id }.toSet()
+                            }
+                            .padding(vertical = 8.dp),
+                        verticalAlignment = Alignment.CenterVertically,
+                    ) {
+                        Checkbox(
+                            checked = allSelected,
+                            onCheckedChange = { checked ->
+                                selectedMusicoletPlaylistIds = if (checked) prepared.playlists.map { it.id }.toSet()
+                                else emptySet()
+                            },
+                        )
+                        Text(stringResource(R.string.select_all_playlists))
+                    }
+                    Column(
+                        modifier = Modifier
+                            .heightIn(max = 420.dp)
+                            .verticalScroll(rememberScrollState()),
+                    ) {
+                        prepared.playlists.forEachIndexed { index, playlist ->
+                            if (index > 0) HorizontalDivider()
+                            Row(
+                                modifier = Modifier
+                                    .fillMaxWidth()
+                                    .clickable {
+                                        selectedMusicoletPlaylistIds = if (playlist.id in selectedMusicoletPlaylistIds) {
+                                            selectedMusicoletPlaylistIds - playlist.id
+                                        } else {
+                                            selectedMusicoletPlaylistIds + playlist.id
+                                        }
+                                    }
+                                    .padding(vertical = 4.dp),
+                                verticalAlignment = Alignment.CenterVertically,
+                            ) {
+                                Checkbox(
+                                    checked = playlist.id in selectedMusicoletPlaylistIds,
+                                    onCheckedChange = { checked ->
+                                        selectedMusicoletPlaylistIds = if (checked) {
+                                            selectedMusicoletPlaylistIds + playlist.id
+                                        } else {
+                                            selectedMusicoletPlaylistIds - playlist.id
+                                        }
+                                    },
+                                )
+                                Column(modifier = Modifier.weight(1f).padding(end = 8.dp)) {
+                                    Text(playlist.name, maxLines = 2, overflow = TextOverflow.Ellipsis)
+                                    Text(
+                                        stringResource(
+                                            R.string.musicolet_playlist_track_counts,
+                                            playlist.tracks.size,
+                                            playlist.skippedCount,
+                                        ),
+                                        style = MaterialTheme.typography.bodySmall,
+                                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                                    )
+                                }
+                            }
+                        }
+                    }
+                }
+            },
+            confirmButton = {
+                TextButton(
+                    enabled = selectedMusicoletPlaylistIds.isNotEmpty(),
+                    onClick = {
+                        val selected = prepared.playlists.filter { it.id in selectedMusicoletPlaylistIds }
+                        var addedTracks = 0
+                        var skippedEntries = 0
+                        selected.forEach { playlist ->
+                            val imported = LocalPlaylistStore.createPlaylist(
+                                name = playlist.name,
+                                songIds = playlist.tracks.map { it.id },
+                                songMetadata = playlist.metadata,
+                                coverUrl = playlist.artworkUrl,
+                            )
+                            addedTracks += imported.songIds.size
+                            skippedEntries += playlist.skippedCount
+                        }
+                        preparedMusicoletBackup = null
+                        Toast.makeText(
+                            context,
+                            context.getString(
+                                R.string.musicolet_import_summary,
+                                selected.size,
+                                addedTracks,
+                                skippedEntries,
+                            ),
+                            Toast.LENGTH_LONG,
+                        ).show()
+                    },
+                ) { Text(stringResource(R.string.import_selected_playlists)) }
+            },
+            dismissButton = {
+                TextButton(onClick = { preparedMusicoletBackup = null }) {
+                    Text(stringResource(R.string.cancel))
+                }
+            },
+        )
+    }
+
+    if (showPlaylistOrderDialog) {
+        AlertDialog(
+            onDismissRequest = { showPlaylistOrderDialog = false },
+            title = { Text(stringResource(R.string.playlist_order_title)) },
+            text = {
+                if (localPlaylists.isEmpty()) {
+                    Text(stringResource(R.string.no_playlists_to_reorder))
+                } else {
+                    Column(
+                        modifier = Modifier
+                            .heightIn(max = 420.dp)
+                            .verticalScroll(rememberScrollState()),
+                    ) {
+                        localPlaylists.forEachIndexed { index, playlist ->
+                            if (index > 0) HorizontalDivider()
+                            Row(
+                                modifier = Modifier
+                                    .fillMaxWidth()
+                                    .padding(vertical = 6.dp),
+                                verticalAlignment = Alignment.CenterVertically,
+                            ) {
+                                Text(
+                                    text = playlist.name,
+                                    modifier = Modifier.weight(1f),
+                                    maxLines = 2,
+                                    style = MaterialTheme.typography.bodyMedium,
+                                )
+                                Column(horizontalAlignment = Alignment.End) {
+                                    TextButton(
+                                        enabled = index > 0,
+                                        onClick = { LocalPlaylistStore.movePlaylist(playlist.id, -1) },
+                                    ) { Text(stringResource(R.string.move_playlist_up)) }
+                                    TextButton(
+                                        enabled = index < localPlaylists.lastIndex,
+                                        onClick = { LocalPlaylistStore.movePlaylist(playlist.id, 1) },
+                                    ) { Text(stringResource(R.string.move_playlist_down)) }
+                                }
+                            }
+                        }
+                    }
+                }
+            },
+            confirmButton = {
+                TextButton(onClick = { showPlaylistOrderDialog = false }) {
+                    Text(stringResource(R.string.close))
                 }
             },
         )
@@ -1189,6 +1994,8 @@ private fun ThemeMode.localizedLabel(): String = stringResource(
         ThemeMode.SYSTEM -> R.string.system
         ThemeMode.LIGHT -> R.string.light
         ThemeMode.DARK -> R.string.dark
+        ThemeMode.AMOLED -> R.string.theme_amoled
+        ThemeMode.ARTWORK -> R.string.theme_match_artwork
     },
 )
 
@@ -1248,7 +2055,12 @@ internal fun SettingsGroup(
             .clip(GroupShape)
             .background(MaterialTheme.colorScheme.surfaceVariant),
     ) {
-        content()
+        // A plain background does not establish LocalContentColor. Explicitly
+        // provide the theme's foreground so default click ripples and controls
+        // stay visible in both dark surfaces and AMOLED black.
+        CompositionLocalProvider(LocalContentColor provides MaterialTheme.colorScheme.onSurface) {
+            content()
+        }
     }
     if (footer != null) {
         Text(

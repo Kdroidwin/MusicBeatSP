@@ -71,8 +71,8 @@ import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import coil3.compose.AsyncImage
+import com.music.bitchord.data.model.CARD_ART_PX
 import com.music.bitchord.data.model.LikeStatus
-import com.music.bitchord.data.model.ROW_ART_PX
 import com.music.bitchord.data.model.Song
 import com.music.bitchord.data.model.artworkAt
 import com.music.bitchord.download.DownloadState
@@ -165,7 +165,7 @@ fun SongActionsSheet(
     // showing, not a larger copy of it: the tint is a blur and a handful of
     // swatches, neither of which a bigger image improves, and going back for
     // one is what had the sheet opening grey and colouring in afterwards.
-    val palette = rememberArtworkPalette(song.thumbnailUrl, artPx = ROW_ART_PX)
+    val palette = rememberArtworkPalette(song.thumbnailUrl, artPx = CARD_ART_PX)
     val liked = likeStatus == LikeStatus.LIKE
     val disliked = likeStatus == LikeStatus.DISLIKE
     // A local file or a finished download has no YouTube identity behind it to
@@ -347,7 +347,7 @@ private fun TintedSheet(
             // A sheet is a fraction of the height of a page, so the wash has
             // to resolve over a much shorter run to read the same way.
             washFraction = 0.75f,
-            artPx = ROW_ART_PX,
+            artPx = CARD_ART_PX,
         )
         Column(Modifier.fillMaxWidth().heightIn(max = maxHeight)) {
             // Drawn rather than taken from BottomSheetDefaults, whose handle
@@ -708,7 +708,7 @@ internal fun SheetTrackHeader(
         verticalAlignment = Alignment.CenterVertically,
     ) {
         AsyncImage(
-            model = song.artworkAt(ROW_ART_PX),
+            model = song.artworkAt(CARD_ART_PX),
             contentDescription = null,
             modifier = Modifier
                 .size(52.dp)

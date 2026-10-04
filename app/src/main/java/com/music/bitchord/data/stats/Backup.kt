@@ -109,7 +109,7 @@ object Backup {
             if (file.version >= 2 || file.favorites.isNotEmpty()) {
                 LocalFavoritesStore.importFavorites(file.favorites)
             }
-            if (file.playStats.isNotEmpty()) {
+            if (file.version >= 2 || file.playStats.isNotEmpty()) {
                 LocalPlayStatsStore.importStats(context, file.playStats)
             }
             EqualizerSettings.importBackup(file.equalizer)

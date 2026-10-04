@@ -17,12 +17,18 @@ import coil3.fetch.FetchResult
 import coil3.fetch.Fetcher
 import coil3.fetch.ImageFetchResult
 import coil3.request.Options
+import coil3.size.pxOrElse
 import coil3.toAndroidUri
 import com.kyant.taglib.TagLib
+import com.music.bitchord.data.model.LOCAL_ARTWORK_SIZE_PARAMETER
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
 import java.io.File
 import java.util.Locale
+
+private const val DEFAULT_THUMBNAIL_PX = 256
+private const val MEDIASTORE_THUMBNAIL_MAX_PX = 512
+private const val MAX_ARTWORK_PX = 1600
 
 /**
  * Coil 3 Fetcher that extracts genuine track-level embedded artwork directly
@@ -40,22 +46,22 @@ class LocalAudioArtworkFetcher(
 
     override suspend fun fetch(): FetchResult? = withContext(Dispatchers.IO) {
         runCatching {
-            // 1. Try extracting track-level embedded artwork via native TagLib or MediaMetadataRetriever
-            val embeddedBitmap = extractEmbeddedCover(context, uri)
-            if (embeddedBitmap != null) {
-                return@withContext ImageFetchResult(
-                    image = embeddedBitmap.asImage(),
-                    isSampled = false,
-                    dataSource = DataSource.DISK,
-                )
-            }
-
             val cleanUri = if (uri.scheme == "content") uri.buildUpon().clearQuery().build() else uri
+            val requestedPx = maxOf(
+                options.size.width.pxOrElse { 0 },
+                options.size.height.pxOrElse { 0 },
+                uri.getQueryParameter(LOCAL_ARTWORK_SIZE_PARAMETER)?.toIntOrNull() ?: 0,
+            ).takeIf { it > 0 }?.coerceIn(256, MAX_ARTWORK_PX) ?: DEFAULT_THUMBNAIL_PX
+            val needsFullArtwork = requestedPx > MEDIASTORE_THUMBNAIL_MAX_PX
 
-            // 2. On Android 10+ (API 29+), attempt ContentResolver.loadThumbnail for the track
-            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q && cleanUri.scheme == "content") {
+            // Small library rows and playlist covers use MediaStore's fast cached
+            // thumbnail. Larger requests (the player and expanded artwork) must
+            // continue to the embedded/original cover below; returning this
+            // thumbnail first was the source of the visibly blurry player art.
+            if (!needsFullArtwork && Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q && cleanUri.scheme == "content") {
                 val thumb = runCatching {
-                    context.contentResolver.loadThumbnail(cleanUri, Size(512, 512), null)
+                    val thumbPx = requestedPx.coerceAtLeast(DEFAULT_THUMBNAIL_PX)
+                    context.contentResolver.loadThumbnail(cleanUri, Size(thumbPx, thumbPx), null)
                 }.getOrNull()
                 if (thumb != null) {
                     return@withContext ImageFetchResult(
@@ -66,17 +72,43 @@ class LocalAudioArtworkFetcher(
                 }
             }
 
+            // Preserve the more accurate track-level embedded art as a fallback. This still
+            // handles file:// URIs and providers without a MediaStore thumbnail. Keep the
+            // encoded cover bytes separate from decoding: the player, its palette, and its
+            // mesh can all ask for the same local cover at once, and separate MediaStore URIs
+            // for tracks on one album should not make us parse/decode the same cover repeatedly.
+            val embeddedCacheKey = embeddedCacheKey(uri, cleanUri)
+            val embeddedBytes = LocalArtworkCache.embeddedBytes(context, embeddedCacheKey) {
+                extractEmbeddedCoverBytes(context, uri)
+            }
+            val embeddedBitmap = embeddedBytes?.let { bytes ->
+                LocalArtworkCache.embeddedBitmap(bytes, requestedPx) {
+                    decodeCoverBitmap(bytes, requestedPx)
+                }
+            }
+            if (embeddedBitmap != null) {
+                return@withContext ImageFetchResult(
+                    image = embeddedBitmap.asImage(),
+                    isSampled = false,
+                    dataSource = DataSource.DISK,
+                )
+            }
+
             // 3. Fallback to albumart/<albumId> if albumId query param is provided or if URI is albumart
             val albumId = uri.getQueryParameter("albumId")?.toLongOrNull()
                 ?: if (uri.path?.contains("/audio/albumart") == true) {
                     uri.lastPathSegment?.toLongOrNull()
                 } else null
             if (albumId != null && albumId > 0) {
-                // Try Android 10+ album thumbnail first
-                if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
+                // Album thumbnails are useful at row size. A large player request
+                // reads the album-art provider's original bytes and downsamples
+                // once to the requested decode size instead of enlarging 512px art.
+                if (!needsFullArtwork && Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
                     val albumUri = ContentUris.withAppendedId(MediaStore.Audio.Albums.EXTERNAL_CONTENT_URI, albumId)
                     val albumThumb = runCatching {
-                        context.contentResolver.loadThumbnail(albumUri, Size(512, 512), null)
+                        val thumbPx = requestedPx.coerceAtLeast(DEFAULT_THUMBNAIL_PX)
+                            .coerceAtMost(MEDIASTORE_THUMBNAIL_MAX_PX)
+                        context.contentResolver.loadThumbnail(albumUri, Size(thumbPx, thumbPx), null)
                     }.getOrNull()
                     if (albumThumb != null) {
                         return@withContext ImageFetchResult(
@@ -89,11 +121,9 @@ class LocalAudioArtworkFetcher(
 
                 // Try legacy albumart ContentProvider URI
                 val albumArtUri = Uri.parse("content://media/external/audio/albumart/$albumId")
-                val albumBitmap = runCatching {
-                    context.contentResolver.openInputStream(albumArtUri)?.use { stream ->
-                        BitmapFactory.decodeStream(stream)
-                    }
-                }.getOrNull()
+                val albumBitmap = LocalArtworkCache.albumBitmap(albumId, requestedPx) {
+                    decodeCoverStream(context, albumArtUri, requestedPx)
+                }
                 if (albumBitmap != null) {
                     return@withContext ImageFetchResult(
                         image = albumBitmap.asImage(),
@@ -104,7 +134,7 @@ class LocalAudioArtworkFetcher(
             }
 
             // 4. Fallback to directory cover image sidecars (cover.jpg, folder.jpg, etc.)
-            val folderBitmap = findFolderCover(context, uri)
+            val folderBitmap = findFolderCover(context, uri, requestedPx)
             if (folderBitmap != null) {
                 return@withContext ImageFetchResult(
                     image = folderBitmap.asImage(),
@@ -117,35 +147,47 @@ class LocalAudioArtworkFetcher(
         }.getOrNull()
     }
 
-    private fun extractEmbeddedCover(context: Context, uri: Uri): Bitmap? {
+    private fun embeddedCacheKey(uri: Uri, cleanUri: Uri): String = buildString {
+        append(cleanUri.normalizeScheme())
+        // MediaStore supplies this timestamp on local-song artwork URIs. A changed file
+        // therefore naturally gets a fresh cache entry without invalidating unrelated art.
+        uri.getQueryParameter("t")?.let { append("|modified=").append(it) }
+        if (cleanUri.scheme == "file") {
+            val file = File(cleanUri.path.orEmpty())
+            append("|modified=").append(file.lastModified())
+            append("|length=").append(file.length())
+        }
+    }
+
+    private fun extractEmbeddedCoverBytes(context: Context, uri: Uri): ByteArray? {
         // First try native TagLib (fast C++ tag parser)
         val pfd = openFileDescriptor(context, uri)
         if (pfd != null) {
-            val tagLibBitmap = pfd.use { descriptor ->
+            val tagLibBytes = pfd.use { descriptor ->
                 runCatching {
                     val coverPicture = TagLib.getFrontCover(descriptor.dup().detachFd())
                     val bytes = coverPicture?.data ?: return@use null
-                    if (bytes.isEmpty()) return@use null
-                    decodeCoverBitmap(bytes)
+                    bytes.takeIf(ByteArray::isNotEmpty)
                 }.getOrNull()
             }
-            if (tagLibBitmap != null) return tagLibBitmap
+            if (tagLibBytes != null) return tagLibBytes
         }
 
         // Second fallback: MediaMetadataRetriever
         return runCatching {
             val mmr = MediaMetadataRetriever()
-            val cleanUri = if (uri.scheme == "content") uri.buildUpon().clearQuery().build() else uri
-            if (cleanUri.scheme == "file") {
-                mmr.setDataSource(cleanUri.path)
-            } else {
-                mmr.setDataSource(context, cleanUri)
+            try {
+                val cleanUri = if (uri.scheme == "content") uri.buildUpon().clearQuery().build() else uri
+                if (cleanUri.scheme == "file") {
+                    mmr.setDataSource(cleanUri.path)
+                } else {
+                    mmr.setDataSource(context, cleanUri)
+                }
+                val picBytes = mmr.embeddedPicture
+                picBytes?.takeIf(ByteArray::isNotEmpty)
+            } finally {
+                mmr.release()
             }
-            val picBytes = mmr.embeddedPicture
-            mmr.release()
-            if (picBytes != null && picBytes.isNotEmpty()) {
-                decodeCoverBitmap(picBytes)
-            } else null
         }.getOrNull()
     }
 
@@ -194,7 +236,7 @@ class LocalAudioArtworkFetcher(
         return null
     }
 
-    private fun findFolderCover(context: Context, uri: Uri): Bitmap? {
+    private fun findFolderCover(context: Context, uri: Uri, maxDim: Int): Bitmap? {
         val filePath = resolveFilePath(context, uri) ?: return null
         val parent = File(filePath).parentFile ?: return null
         if (!parent.exists() || !parent.isDirectory) return null
@@ -208,7 +250,7 @@ class LocalAudioArtworkFetcher(
         for (name in candidates) {
             val file = File(parent, name)
             if (file.exists() && file.isFile && file.canRead()) {
-                val bitmap = BitmapFactory.decodeFile(file.absolutePath)
+                val bitmap = decodeCoverFile(file, maxDim)
                 if (bitmap != null) return bitmap
             }
         }
@@ -227,6 +269,38 @@ class LocalAudioArtworkFetcher(
             } else null
         }
     }.getOrNull()
+
+    /** Decode provider artwork without loading a full-size bitmap into memory. */
+    private fun decodeCoverStream(context: Context, uri: Uri, maxDim: Int): Bitmap? = runCatching {
+        val bounds = BitmapFactory.Options().apply { inJustDecodeBounds = true }
+        context.contentResolver.openInputStream(uri)?.use { stream ->
+            BitmapFactory.decodeStream(stream, null, bounds)
+        }
+        if (bounds.outWidth <= 0 || bounds.outHeight <= 0) return@runCatching null
+        val decodeOptions = scaledOptions(bounds.outWidth, bounds.outHeight, maxDim)
+        context.contentResolver.openInputStream(uri)?.use { stream ->
+            BitmapFactory.decodeStream(stream, null, decodeOptions)
+        }
+    }.getOrNull()
+
+    private fun decodeCoverFile(file: File, maxDim: Int): Bitmap? = runCatching {
+        val bounds = BitmapFactory.Options().apply { inJustDecodeBounds = true }
+        BitmapFactory.decodeFile(file.absolutePath, bounds)
+        if (bounds.outWidth <= 0 || bounds.outHeight <= 0) return@runCatching null
+        BitmapFactory.decodeFile(
+            file.absolutePath,
+            scaledOptions(bounds.outWidth, bounds.outHeight, maxDim),
+        )
+    }.getOrNull()
+
+    private fun scaledOptions(width: Int, height: Int, maxDim: Int) = BitmapFactory.Options().apply {
+        var sampleSize = 1
+        while (width / sampleSize > maxDim * 1.5 || height / sampleSize > maxDim * 1.5) {
+            sampleSize *= 2
+        }
+        inSampleSize = sampleSize
+        inPreferredConfig = Bitmap.Config.ARGB_8888
+    }
 
     companion object {
         fun isLocalAudioUri(uri: Uri): Boolean {

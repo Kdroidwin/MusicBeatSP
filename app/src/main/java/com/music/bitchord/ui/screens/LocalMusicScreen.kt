@@ -55,6 +55,7 @@ import androidx.compose.material.icons.rounded.MoreHoriz
 import androidx.compose.material.icons.rounded.MusicNote
 import androidx.compose.material.icons.rounded.Person
 import androidx.compose.material.icons.rounded.PlayArrow
+import androidx.compose.material.icons.rounded.PlaylistAdd
 import androidx.compose.material.icons.rounded.Search
 import androidx.compose.material.icons.rounded.Shuffle
 import androidx.compose.material3.DropdownMenu
@@ -99,8 +100,10 @@ import com.music.bitchord.ui.components.ArtistViewAndSortControls
 import com.music.bitchord.feature.localmusic.domain.model.LocalFolder
 import com.music.bitchord.feature.localmusic.domain.model.LocalPlaylist
 import com.music.bitchord.feature.localmusic.data.LocalPlaylistStore
+import com.music.bitchord.feature.localmusic.data.resolvePlaylistSongs
 import com.music.bitchord.feature.localmusic.ui.components.LocalFoldersTab
 import com.music.bitchord.feature.localmusic.ui.components.LocalPlaylistsTab
+import com.music.bitchord.feature.localmusic.ui.components.rememberPlaylistCoverPicker
 import com.music.bitchord.feature.localmusic.ui.components.BlacklistedFoldersSheet
 import com.music.bitchord.feature.localmusic.ui.components.CreatePlaylistDialog
 import com.music.bitchord.feature.localmusic.ui.components.DrillDownSongList
@@ -231,12 +234,15 @@ fun LocalMusicScreen(
     onDrillDownDismiss: (() -> Unit)? = null,
 ) {
     val context = LocalContext.current
+    val choosePlaylistCover = rememberPlaylistCoverPicker { playlistId, uri ->
+        LocalPlaylistStore.setPlaylistCover(playlistId, uri)
+    }
     var activeMenuSong by remember { mutableStateOf<Song?>(null) }
     var detailsSong by remember { mutableStateOf<Song?>(null) }
     var tagEditorSong by remember { mutableStateOf<Song?>(null) }
     var lyricsEditorSong by remember { mutableStateOf<Song?>(null) }
     var deleteSong by remember { mutableStateOf<Song?>(null) }
-    var addToPlaylistSong by remember { mutableStateOf<Song?>(null) }
+    var addToPlaylistSongs by remember { mutableStateOf<List<Song>?>(null) }
 
     // Which top-level tab is selected.
     var selectedTab by rememberSaveable { mutableIntStateOf(initialTab) }
@@ -278,7 +284,7 @@ fun LocalMusicScreen(
         AppSettings.localDrillDownSongsViewType.collectAsStateWithLifecycle()
     }
     val sortedSongs = remember(songs, sortOrder) { songs.sortedForLibrary(sortOrder) }
-    var selectedDownloadIds by remember { mutableStateOf<Set<String>>(emptySet()) }
+    var selectedSongIds by remember { mutableStateOf<Set<String>>(emptySet()) }
     // Kept separately from the tracks selected for deletion: different albums
     // can share tracks, so inferring an album's selection from those track ids
     // made one held playlist appear to select unrelated albums.
@@ -301,10 +307,10 @@ fun LocalMusicScreen(
         }
     }
 
-    val selectingDownloads = isDownloads && selectedDownloadIds.isNotEmpty()
+    val selectingSongs = selectedSongIds.isNotEmpty()
 
     fun toggleDownloadSelection(song: Song) {
-        selectedDownloadIds = selectedDownloadIds.let { selected ->
+        selectedSongIds = selectedSongIds.let { selected ->
             if (song.videoId in selected) selected - song.videoId else selected + song.videoId
         }
     }
@@ -313,10 +319,10 @@ fun LocalMusicScreen(
         val albumIds = entry.songs.mapTo(linkedSetOf()) { it.videoId }
         if (entry.key in selectedAlbumKeys) {
             selectedAlbumKeys = selectedAlbumKeys - entry.key
-            selectedDownloadIds = selectedDownloadIds - albumIds
+            selectedSongIds = selectedSongIds - albumIds
         } else {
             selectedAlbumKeys = selectedAlbumKeys + entry.key
-            selectedDownloadIds = selectedDownloadIds + albumIds
+            selectedSongIds = selectedSongIds + albumIds
         }
     }
 
@@ -370,7 +376,7 @@ fun LocalMusicScreen(
             },
             onAddToPlaylist = {
                 activeMenuSong = null
-                addToPlaylistSong = song
+                addToPlaylistSongs = listOf(song)
             },
             onGoToAlbum = if (!song.albumName.isNullOrBlank()) {
                 { targetAlbum ->
@@ -415,11 +421,11 @@ fun LocalMusicScreen(
         )
     }
 
-    BackHandler(enabled = selectingDownloads) {
-        selectedDownloadIds = emptySet()
+    BackHandler(enabled = selectingSongs) {
+        selectedSongIds = emptySet()
         selectedAlbumKeys = emptySet()
     }
-    BackHandler(enabled = inDrillDown && !selectingDownloads) { leaveDrillDown() }
+    BackHandler(enabled = inDrillDown && !selectingSongs) { leaveDrillDown() }
 
     // When tab row is showing, content scrolls beneath it. When tab row is hidden (bottom bar handles tabs),
     // content takes the full content padding including top bar padding.
@@ -433,19 +439,26 @@ fun LocalMusicScreen(
 
     Column(modifier = modifier.fillMaxSize()) {
         // ── Search ───────────────────────────────────────────────────────────
-        if (selectingDownloads) {
+        if (selectingSongs) {
+            val selectableSongs = if (inDrillDown) drillDownSongs else sortedSongs
             DownloadSelectionBar(
-                count = selectedDownloadIds.size,
-                allSelected = sortedSongs.isNotEmpty() && selectedDownloadIds.containsAll(sortedSongs.map { it.videoId }),
-                onSelectAll = { selectedDownloadIds = sortedSongs.mapTo(linkedSetOf()) { it.videoId } },
+                count = selectedSongIds.size,
+                allSelected = selectableSongs.isNotEmpty() && selectedSongIds.containsAll(selectableSongs.map { it.videoId }),
+                showDelete = isDownloads,
+                onAddToPlaylist = {
+                    addToPlaylistSongs = songs.filter { it.videoId in selectedSongIds }
+                    selectedSongIds = emptySet()
+                    selectedAlbumKeys = emptySet()
+                },
+                onSelectAll = { selectedSongIds = selectedSongIds + selectableSongs.map { it.videoId } },
                 onDelete = {
-                    val chosen = songs.filter { it.videoId in selectedDownloadIds }
-                    selectedDownloadIds = emptySet()
+                    val chosen = songs.filter { it.videoId in selectedSongIds }
+                    selectedSongIds = emptySet()
                     selectedAlbumKeys = emptySet()
                     onDeleteDownloads?.invoke(chosen)
                 },
                 onCancel = {
-                    selectedDownloadIds = emptySet()
+                    selectedSongIds = emptySet()
                     selectedAlbumKeys = emptySet()
                 },
                 modifier = Modifier.padding(
@@ -473,7 +486,7 @@ fun LocalMusicScreen(
                         )
                     }
                 },
-                modifier = Modifier.padding(top = if (selectingDownloads) 0.dp else barHeight + 4.dp),
+                modifier = Modifier.padding(top = if (selectingSongs) 0.dp else barHeight + 4.dp),
             ) {
                 LocalTab(
                     icon = Icons.Rounded.MusicNote,
@@ -607,23 +620,18 @@ fun LocalMusicScreen(
                             if (isDownloads) AppSettings.setDownloadedDrillDownSongsViewType(next)
                             else AppSettings.setLocalDrillDownSongsViewType(next)
                         },
-                        selectedIds = selectedDownloadIds,
+                        selectedIds = selectedSongIds,
                         currentSong = currentSong,
                         isPlaying = isPlaying,
                         onSongClick = { tracks, index ->
                             val song = tracks[index]
-                            if (selectingDownloads) toggleDownloadSelection(song) else onSongClick(tracks, index)
+                            if (selectingSongs) toggleDownloadSelection(song) else onSongClick(tracks, index)
                         },
                         onSongLongPress = { song ->
-                            if (isDownloads) selectedDownloadIds = selectedDownloadIds + song.videoId
-                            else activeMenuSong = song
+                            toggleDownloadSelection(song)
                         },
                         onSongMore = { song ->
-                            if (isDownloads) {
-                                selectedDownloadIds = selectedDownloadIds + song.videoId
-                            } else {
-                                activeMenuSong = song
-                            }
+                            activeMenuSong = song
                         },
                         onSongSwipe = onSongSwipe,
                         onShuffle = onShuffle,
@@ -650,28 +658,18 @@ fun LocalMusicScreen(
                             if (isDownloads) AppSettings.setDownloadedSongsViewType(next)
                             else AppSettings.setLocalSongsViewType(next)
                         },
-                        selectedIds = selectedDownloadIds,
+                        selectedIds = selectedSongIds,
                         currentSong = currentSong,
                         isPlaying = isPlaying,
                         onSongClick = { tracks, index ->
                             val song = tracks[index]
-                            if (selectingDownloads) toggleDownloadSelection(song) else onSongClick(tracks, index)
+                            if (selectingSongs) toggleDownloadSelection(song) else onSongClick(tracks, index)
                         },
                         onSongLongPress = { song ->
-                            if (isDownloads) {
-                                selectedDownloadIds = selectedDownloadIds + song.videoId
-                                selectedTab = LOCAL_TAB_SONGS
-                                leaveDrillDown()
-                            } else activeMenuSong = song
+                            toggleDownloadSelection(song)
                         },
                         onSongMore = { song ->
-                            if (isDownloads) {
-                                selectedDownloadIds = selectedDownloadIds + song.videoId
-                                selectedTab = LOCAL_TAB_SONGS
-                                leaveDrillDown()
-                            } else {
-                                activeMenuSong = song
-                            }
+                            activeMenuSong = song
                         },
                         onSongSwipe = onSongSwipe,
                         contentPadding = bodyContentPadding,
@@ -729,7 +727,7 @@ fun LocalMusicScreen(
                         },
                         selectedKeys = selectedAlbumKeys,
                         onAlbumClick = { entry ->
-                            if (selectingDownloads) {
+                            if (selectingSongs) {
                                 toggleAlbumSelection(entry)
                             } else {
                                 drillDownLabel = entry.title
@@ -739,7 +737,7 @@ fun LocalMusicScreen(
                         },
                         onAlbumLongPress = { entry ->
                             if (isDownloads) {
-                                selectedDownloadIds = selectedDownloadIds + entry.songs.map { it.videoId }
+                                selectedSongIds = selectedSongIds + entry.songs.map { it.videoId }
                                 selectedAlbumKeys = selectedAlbumKeys + entry.key
                             } else onCollectionLongPress?.invoke(entry.title, entry.songs)
                         },
@@ -774,16 +772,19 @@ fun LocalMusicScreen(
                         playlists = localPlaylists,
                         onPlaylistClick = { playlist ->
                             drillDownLabel = playlist.name
-                            drillDownSongs = playlist.songIds.mapNotNull { id -> songs.find { s -> s.localUri == id || s.videoId == id } }
-                            drillDownArt = playlist.coverUrl
+                            drillDownSongs = resolvePlaylistSongs(playlist, songs)
+                            drillDownArt = playlist.customCoverUrl ?: playlist.coverUrl
                         },
                         onPlaylistPlay = { playlist ->
-                            val pSongs = playlist.songIds.mapNotNull { id -> songs.find { s -> s.localUri == id || s.videoId == id } }
+                            val pSongs = resolvePlaylistSongs(playlist, songs)
                             if (pSongs.isNotEmpty()) onSongClick(pSongs, 0)
                         },
                         onCreatePlaylist = { showCreatePlaylistDialog = true },
                         onRenamePlaylist = { playlistToRename = it },
                         onDeletePlaylist = { LocalPlaylistStore.deletePlaylist(it.id) },
+                        onChangePlaylistCover = { choosePlaylistCover(it.id) },
+                        onResetPlaylistCover = { LocalPlaylistStore.setPlaylistCover(it.id, null) },
+                        onMovePlaylist = { playlist, offset -> LocalPlaylistStore.movePlaylist(playlist.id, offset) },
                         contentPadding = bodyContentPadding,
                     )
                 }
@@ -895,10 +896,10 @@ fun LocalMusicScreen(
         )
     }
 
-    addToPlaylistSong?.let { song ->
+    addToPlaylistSongs?.let { selectedSongs ->
         LocalAddToPlaylistSheet(
-            song = song,
-            onDismissRequest = { addToPlaylistSong = null },
+            songs = selectedSongs,
+            onDismissRequest = { addToPlaylistSongs = null },
         )
     }
 }
@@ -1803,6 +1804,8 @@ private fun LocalMusicSort.localizedLabel(): String = when (this) {
 private fun DownloadSelectionBar(
     count: Int,
     allSelected: Boolean,
+    showDelete: Boolean,
+    onAddToPlaylist: () -> Unit,
     onSelectAll: () -> Unit,
     onDelete: () -> Unit,
     onCancel: () -> Unit,
@@ -1830,15 +1833,22 @@ private fun DownloadSelectionBar(
             color = MaterialTheme.colorScheme.onSurfaceVariant,
             modifier = Modifier.weight(1f),
         )
-        TextButton(onClick = onDelete, enabled = count > 0) {
-            Icon(
-                Icons.Rounded.Delete,
-                contentDescription = null,
-                tint = Color(0xFFFF453A),
-                modifier = Modifier.size(18.dp),
-            )
+        TextButton(onClick = onAddToPlaylist, enabled = count > 0) {
+            Icon(Icons.Rounded.PlaylistAdd, contentDescription = null, modifier = Modifier.size(18.dp))
             Spacer(Modifier.width(4.dp))
-            Text(stringResource(R.string.delete), color = Color(0xFFFF453A))
+            Text(stringResource(R.string.add_to_playlist))
+        }
+        if (showDelete) {
+            TextButton(onClick = onDelete, enabled = count > 0) {
+                Icon(
+                    Icons.Rounded.Delete,
+                    contentDescription = null,
+                    tint = Color(0xFFFF453A),
+                    modifier = Modifier.size(18.dp),
+                )
+                Spacer(Modifier.width(4.dp))
+                Text(stringResource(R.string.delete), color = Color(0xFFFF453A))
+            }
         }
         TextButton(onClick = onCancel) { Text(stringResource(R.string.cancel)) }
     }

@@ -18,4 +18,14 @@ data class LocalPlaylist(
     val createdAt: Long = System.currentTimeMillis(),
     val songIds: List<String> = emptyList(),
     val coverUrl: String? = null,
+    /** Optional user-selected image; [coverUrl] remains the automatic track artwork fallback. */
+    val customCoverUrl: String? = null,
+    /** Imported display tags for playable URIs that are not present in MediaStore. */
+    val songMetadata: Map<String, LocalPlaylistSongMetadata> = emptyMap(),
+)
+
+@Serializable
+data class LocalPlaylistSongMetadata(
+    val title: String,
+    val artist: String = "",
 )

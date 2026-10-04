@@ -81,6 +81,8 @@ import androidx.compose.foundation.shape.RoundedCornerShape
 import com.music.bitchord.feature.localmusic.data.LocalFavoritesStore
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.rounded.QueueMusic
+import androidx.compose.material.icons.automirrored.rounded.PlaylistPlay
+import androidx.compose.material.icons.rounded.LibraryMusic
 import androidx.compose.material.icons.automirrored.rounded.Undo
 import androidx.compose.material.icons.automirrored.rounded.VolumeDown
 import androidx.compose.material.icons.automirrored.rounded.VolumeUp
@@ -201,10 +203,12 @@ import com.music.bitchord.data.canvas.CanvasArtwork
 import com.music.bitchord.data.canvas.CanvasRepository
 import com.music.bitchord.data.lyrics.LrcParser
 import com.music.bitchord.data.lyrics.LyricLine
+import com.music.bitchord.data.lyrics.LyricsStripText
 import com.music.bitchord.data.lyrics.LyricsSource
 import com.music.bitchord.ui.components.LyricsLogConsole
 import com.music.bitchord.ui.player.components.DoubleTapSeekArea
 import com.music.bitchord.data.settings.AppSettings
+import com.music.bitchord.data.settings.PlayerControl
 import com.music.bitchord.data.settings.AudioQuality
 import com.music.bitchord.data.model.LikeStatus
 import com.music.bitchord.data.model.PLAYER_ART_PX
@@ -213,6 +217,7 @@ import com.music.bitchord.data.model.artworkAt
 import com.music.bitchord.data.model.durationMillis
 import com.music.bitchord.playback.BACK_RESTARTS_AFTER_MS
 import com.music.bitchord.playback.autoplaySectionStart
+import com.music.bitchord.playback.queueInitialVisibleIndex
 import kotlinx.coroutines.launch
 import dev.chrisbanes.haze.HazeState
 import dev.chrisbanes.haze.hazeSource
@@ -644,6 +649,8 @@ fun NowPlayingScreen(
     onMoveInQueue: (Int, Int) -> Unit,
     onClearQueue: () -> Unit,
     onOpenMenu: () -> Unit,
+    onOpenPlaylists: () -> Unit,
+    onOpenSearch: () -> Unit,
     onOpenAlbum: (String) -> Unit,
     onOpenArtist: (String) -> Unit,
     lyrics: List<LyricLine>?,
@@ -682,8 +689,43 @@ fun NowPlayingScreen(
     val playerHaze = remember { HazeState() }
 
     val syncedLyricsEnabled by AppSettings.syncedLyrics.collectAsStateWithLifecycle()
+    val hideLyricsStatusText by AppSettings.hideLyricsStatusText.collectAsStateWithLifecycle()
+    val hideLyricsSavedMessage by AppSettings.hideLyricsSavedMessage.collectAsStateWithLifecycle()
+    val favoriteBesideTrackMenu by AppSettings.favoriteBesideTrackMenu.collectAsStateWithLifecycle()
+    val artworkTapOpensLyrics by AppSettings.artworkTapOpensLyrics.collectAsStateWithLifecycle()
+    val showPlayerLyricsStrip by AppSettings.showPlayerLyricsStrip.collectAsStateWithLifecycle()
+    val offlineMode by AppSettings.offlineMode.collectAsStateWithLifecycle()
+    val visiblePlayerControls by AppSettings.visiblePlayerControls.collectAsStateWithLifecycle()
+    val playerControlOrder by AppSettings.playerControlOrder.collectAsStateWithLifecycle()
+    val hidePlayerArtist by AppSettings.hidePlayerArtist.collectAsStateWithLifecycle()
+    val hideUnknownPlayerArtist by AppSettings.hideUnknownPlayerArtist.collectAsStateWithLifecycle()
+    val centerPlayerTrackInfo by AppSettings.centerPlayerTrackInfo.collectAsStateWithLifecycle()
+    val useLibraryIconForPlaylistControl by AppSettings.useLibraryIconForPlaylistControl.collectAsStateWithLifecycle()
+    val keepArtworkFullSizeWhenPaused by AppSettings.keepArtworkFullSizeWhenPaused.collectAsStateWithLifecycle()
     val hideVolumeBar by AppSettings.hideVolumeBar.collectAsStateWithLifecycle()
     val favoriteIds by LocalFavoritesStore.favoriteIds.collectAsStateWithLifecycle()
+    val localUri = song.localUri
+    val normalizedArtistName = song.artist.trim().lowercase(Locale.ROOT)
+    val isUnknownArtist = normalizedArtistName.isBlank() || normalizedArtistName in setOf(
+        "unknown artist",
+        "unknown",
+        "<unknown>",
+        "unknown artists",
+        "不明なアーティスト",
+    )
+    val showPlayerArtist = !hidePlayerArtist && !(hideUnknownPlayerArtist && isUnknownArtist)
+    val liked = if (localUri != null) {
+        localUri in favoriteIds || song.videoId in favoriteIds
+    } else {
+        likeStatus == LikeStatus.LIKE
+    }
+    val likeAvailable = localUri != null || signedIn
+    val likeIcon = if (liked) BitChordIcons.HeartFilled else BitChordIcons.Heart
+    val likeDescription = stringResource(if (liked) R.string.remove_from_liked else R.string.like)
+    val toggleLike: () -> Unit = {
+        if (localUri != null) LocalFavoritesStore.toggleFavorite(localUri) else onToggleLike()
+        Unit
+    }
 
     // Animated cover art: the looping video some labels publish alongside a
     // release, laid over the sleeve. A miss is the normal answer — see
@@ -695,7 +737,7 @@ fun NowPlayingScreen(
     // The switch turns the feature off outright; this is the narrower "not
     // over cellular" case — see [AppSettings.canvasOverCellular] for why a
     // clip's own loop makes that worth guarding separately from a still image.
-    val canvasAllowedNow = canvasEnabled && (meteredConnection != true || canvasOverCellular)
+    val canvasAllowedNow = !offlineMode && canvasEnabled && (meteredConnection != true || canvasOverCellular)
     var canvas by remember(song.videoId) { mutableStateOf<CanvasArtwork?>(null) }
     // Whether the clip actually has a frame on screen right now, and one of
     // them — used to blow the sleeve out to the full-bleed hero treatment and
@@ -935,7 +977,7 @@ fun NowPlayingScreen(
 
     // Signature Apple Music touch: the sleeve shrinks back while paused.
     val artScale by animateFloatAsState(
-        targetValue = if (isPlaying) 1f else 0.86f,
+        targetValue = if (keepArtworkFullSizeWhenPaused || isPlaying) 1f else 0.86f,
         animationSpec = spring(
             dampingRatio = Spring.DampingRatioLowBouncy,
             stiffness = Spring.StiffnessLow,
@@ -1729,6 +1771,14 @@ fun NowPlayingScreen(
 
                     DoubleTapSeekArea(
                         enabled = doubleTapToSeek && !queueOpen && !lyricsOpen && p < 0.5f,
+                        onSingleTap = if (artworkTapOpensLyrics && !queueOpen && !lyricsOpen && p < 0.5f) {
+                            {
+                                queueOpen = false
+                                lyricsOpen = true
+                            }
+                        } else {
+                            null
+                        },
                         onSeekRelative = { deltaSeconds ->
                             val now = SystemClock.uptimeMillis()
                             val base = if (now - lastSeekTriggerTime < 1200L && pendingSeekTargetMs != null) {
@@ -1956,7 +2006,10 @@ fun NowPlayingScreen(
                         .onGloballyPositioned { dismissBandBottom = it.boundsInRoot().bottom },
                     verticalAlignment = Alignment.CenterVertically,
                 ) {
-                    Column(Modifier.weight(1f)) {
+                    Column(
+                        Modifier.weight(1f),
+                        horizontalAlignment = if (centerPlayerTrackInfo) Alignment.CenterHorizontally else Alignment.Start,
+                    ) {
                         // Shrinks as the header collapses, so the queue's
                         // heading doesn't have to compete with it.
                         val titleSize = lerp(20.sp, 16.sp, p)
@@ -1986,22 +2039,36 @@ fun NowPlayingScreen(
                             // lead anywhere; the rest stay plain text.
                             modifier = Modifier.opensPage(song.albumId, onOpenAlbum),
                         )
-                        MarqueeText(
-                            text = song.artist,
-                            style = MaterialTheme.typography.titleLarge.copy(
-                                fontWeight = FontWeight.W500,
-                                fontSize = titleSize,
-                            ),
-                            color = Color.White.copy(alpha = 0.55f),
-                            enabled = scrolls,
-                            // A title that's also scrolling gets to go first —
-                            // starting together reads as clutter, so the artist
-                            // waits a beat before it joins in.
-                            startDelayMillis = if (titleOverflowing) MARQUEE_ARTIST_STAGGER_MS else 0L,
-                            modifier = Modifier.opensPage(song.artistId, onOpenArtist),
-                        )
+                        if (showPlayerArtist) {
+                            MarqueeText(
+                                text = song.artist,
+                                style = MaterialTheme.typography.titleLarge.copy(
+                                    fontWeight = FontWeight.W500,
+                                    fontSize = titleSize,
+                                ),
+                                color = Color.White.copy(alpha = 0.55f),
+                                enabled = scrolls,
+                                // A title that's also scrolling gets to go first —
+                                // starting together reads as clutter, so the artist
+                                // waits a beat before it joins in.
+                                startDelayMillis = if (titleOverflowing) MARQUEE_ARTIST_STAGGER_MS else 0L,
+                                modifier = Modifier.opensPage(song.artistId, onOpenArtist),
+                            )
+                        }
                     }
                     Spacer(Modifier.width(10.dp))
+
+                    if (favoriteBesideTrackMenu && PlayerControl.LIKE in visiblePlayerControls) {
+                        CircleGlyph(
+                            icon = likeIcon,
+                            contentDescription = likeDescription,
+                            onClick = toggleLike,
+                            active = liked,
+                            enabled = likeAvailable,
+                            haptic = if (liked) Haptic.ToggleOff else Haptic.ToggleOn,
+                        )
+                        Spacer(Modifier.width(8.dp))
+                    }
 
                     CircleGlyph(
                         icon = if (showRevertCue) Icons.AutoMirrored.Rounded.Undo else Icons.Rounded.MoreHoriz,
@@ -2094,7 +2161,7 @@ fun NowPlayingScreen(
             // there saying no lyrics were found: none were looked for. It is
             // also the only way into the full lyrics panel, so with it gone
             // the feature is properly gone.
-            if (!lyricsOpen && (syncedLyricsEnabled || !lyrics.isNullOrEmpty())) {
+            if (showPlayerLyricsStrip && !lyricsOpen && (syncedLyricsEnabled || !lyrics.isNullOrEmpty())) {
                 Box(
                     modifier = Modifier
                         .fillMaxWidth()
@@ -2121,12 +2188,12 @@ fun NowPlayingScreen(
                             },
                             modifier = Modifier.fillMaxWidth(),
                         )
-                    } else if (lyricsUnavailable) {
+                    } else if (lyricsUnavailable && !hideLyricsStatusText) {
                         LyricsUnavailableLine(
                             trackKey = song.videoId,
                             modifier = Modifier.fillMaxWidth(),
                         )
-                    } else {
+                    } else if (!hideLyricsStatusText) {
                         LyricsLoadingLine(
                             trackKey = song.videoId,
                             modifier = Modifier.fillMaxWidth(),
@@ -2160,6 +2227,7 @@ fun NowPlayingScreen(
             // YouTube track.
             val losslessRequested =
                 (if (metered == true) cellularQuality else wifiQuality) == AudioQuality.LOSSLESS
+            val isLocalAudio = !song.localUri.isNullOrBlank() || !song.localPath.isNullOrBlank()
             // Whether a module is still racing YouTube for this exact track —
             // see [NerdStats.racingLossless]. YouTube can win that race and
             // already be playing while the module lookup is still running
@@ -2196,6 +2264,7 @@ fun NowPlayingScreen(
                 // dragging this along with it every tick. The screen's center
                 // doesn't move.
                 LosslessOrStats(
+                    isLocalAudio = isLocalAudio,
                     isLoading = isLoading,
                     stillRacing = stillRacing,
                     losslessRequested = losslessRequested,
@@ -2247,7 +2316,7 @@ fun NowPlayingScreen(
                     }
                     // Source credit pill — same style as original, but sits between
                     // the two icon buttons and fills leftover horizontal space.
-                    Box(
+                    if (lyricsSource != null || lyrics.isNullOrEmpty() || !hideLyricsSavedMessage) Box(
                         modifier = Modifier
                             .weight(1f)
                             .clip(RoundedCornerShape(percent = 50))
@@ -2270,10 +2339,7 @@ fun NowPlayingScreen(
                     Spacer(Modifier.width(8.dp))
                     Box(
                         modifier = Modifier
-                            // Height from the row, width from the height: a
-                            // circle, not an oval, whatever the pill measures.
-                            .fillMaxHeight()
-                            .aspectRatio(1f, matchHeightConstraintsFirst = true)
+                            .size(48.dp)
                             .clip(CircleShape)
                             .background(Color.White.copy(alpha = 0.10f))
                             .clickable(
@@ -2290,7 +2356,7 @@ fun NowPlayingScreen(
                             imageVector = Icons.Rounded.Close,
                             contentDescription = stringResource(R.string.close_lyrics),
                             tint = Color.White.copy(alpha = 0.7f),
-                            modifier = Modifier.size(16.dp),
+                            modifier = Modifier.size(22.dp),
                         )
                     }
                 }
@@ -2404,73 +2470,81 @@ fun NowPlayingScreen(
             // ---- Shuffle · Repeat · AutoPlay · Queue ----
             // These live here rather than in the queue panel so their state is
             // readable without opening anything.
-            Row(
-                modifier = Modifier.fillMaxWidth(),
-                horizontalArrangement = Arrangement.SpaceEvenly,
-                verticalAlignment = Alignment.CenterVertically,
-            ) {
-                BottomGlyph(
-                    icon = BitChordIcons.Shuffle,
-                    contentDescription = stringResource(
-                        if (shuffleEnabled) R.string.shuffle_on else R.string.shuffle_off,
-                    ),
-                    onClick = onToggleShuffle,
-                    highlighted = shuffleEnabled,
-                    haptic = if (shuffleEnabled) Haptic.ToggleOff else Haptic.ToggleOn,
-                    tapWindowMs = SHUFFLE_TAP_WINDOW_MS,
-                )
-                BottomGlyph(
-                    icon = if (repeatMode == Player.REPEAT_MODE_ONE) null else BitChordIcons.Repeat,
-                    label = if (repeatMode == Player.REPEAT_MODE_ONE) "1" else null,
-                    contentDescription = when (repeatMode) {
-                        Player.REPEAT_MODE_ONE -> stringResource(R.string.repeat_one)
-                        Player.REPEAT_MODE_ALL -> stringResource(R.string.repeat_all)
-                        else -> stringResource(R.string.repeat_off)
-                    },
-                    onClick = onCycleRepeat,
-                    highlighted = repeatMode != Player.REPEAT_MODE_OFF,
-                    // Three states, so the buzz tracks the edges of the cycle:
-                    // leaving off rises, returning to off falls, and the step
-                    // between the two repeat modes is just a selection.
-                    haptic = when (repeatMode) {
-                        Player.REPEAT_MODE_OFF -> Haptic.ToggleOn
-                        Player.REPEAT_MODE_ONE -> Haptic.ToggleOff
-                        else -> Haptic.Select
-                    },
-                )
-                val isLocal = song.localUri != null
-                val isLocalFav = isLocal && ((song.localUri?.toString() in favoriteIds) || (song.videoId in favoriteIds))
-                val liked = if (isLocal) isLocalFav else (likeStatus == LikeStatus.LIKE)
-                val likeAvailable = isLocal || signedIn
-                BottomGlyph(
-                    icon = if (liked) BitChordIcons.HeartFilled else BitChordIcons.Heart,
-                    contentDescription = stringResource(
-                        if (liked) R.string.remove_from_liked else R.string.like,
-                    ),
-                    onClick = {
-                        if (isLocal) {
-                            LocalFavoritesStore.toggleFavorite(song.localUri?.toString() ?: song.videoId)
-                        } else {
-                            onToggleLike()
+            if (visiblePlayerControls.isNotEmpty()) {
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.SpaceEvenly,
+                    verticalAlignment = Alignment.CenterVertically,
+                ) {
+                    playerControlOrder.forEach { control ->
+                        if (control !in visiblePlayerControls) return@forEach
+                        when (control) {
+                            PlayerControl.SHUFFLE -> BottomGlyph(
+                                icon = BitChordIcons.Shuffle,
+                                contentDescription = stringResource(
+                                    if (shuffleEnabled) R.string.shuffle_on else R.string.shuffle_off,
+                                ),
+                                onClick = onToggleShuffle,
+                                highlighted = shuffleEnabled,
+                                haptic = if (shuffleEnabled) Haptic.ToggleOff else Haptic.ToggleOn,
+                                tapWindowMs = SHUFFLE_TAP_WINDOW_MS,
+                            )
+                            PlayerControl.REPEAT -> BottomGlyph(
+                                icon = if (repeatMode == Player.REPEAT_MODE_ONE) null else BitChordIcons.Repeat,
+                                label = if (repeatMode == Player.REPEAT_MODE_ONE) "1" else null,
+                                contentDescription = when (repeatMode) {
+                                    Player.REPEAT_MODE_ONE -> stringResource(R.string.repeat_one)
+                                    Player.REPEAT_MODE_ALL -> stringResource(R.string.repeat_all)
+                                    else -> stringResource(R.string.repeat_off)
+                                },
+                                onClick = onCycleRepeat,
+                                highlighted = repeatMode != Player.REPEAT_MODE_OFF,
+                                haptic = when (repeatMode) {
+                                    Player.REPEAT_MODE_OFF -> Haptic.ToggleOn
+                                    Player.REPEAT_MODE_ONE -> Haptic.ToggleOff
+                                    else -> Haptic.Select
+                                },
+                            )
+                            PlayerControl.LIKE -> if (!favoriteBesideTrackMenu) BottomGlyph(
+                                icon = likeIcon,
+                                contentDescription = likeDescription,
+                                onClick = toggleLike,
+                                highlighted = liked,
+                                enabled = likeAvailable,
+                                haptic = if (liked) Haptic.ToggleOff else Haptic.ToggleOn,
+                            )
+                            PlayerControl.QUEUE -> BottomGlyph(
+                                icon = Icons.AutoMirrored.Rounded.QueueMusic,
+                                contentDescription = stringResource(R.string.up_next),
+                                onClick = {
+                                    lyricsOpen = false
+                                    queueOpen = !queueOpen
+                                },
+                                highlighted = queueOpen,
+                                haptic = if (queueOpen) Haptic.Tap else Haptic.Expand,
+                            )
+                            PlayerControl.PLAYLIST -> BottomGlyph(
+                                icon = if (useLibraryIconForPlaylistControl) {
+                                    Icons.Rounded.LibraryMusic
+                                } else {
+                                    Icons.AutoMirrored.Rounded.PlaylistPlay
+                                },
+                                contentDescription = stringResource(R.string.playlists),
+                                onClick = onOpenPlaylists,
+                                haptic = Haptic.Select,
+                            )
+                            PlayerControl.SEARCH -> BottomGlyph(
+                                icon = BitChordIcons.Search,
+                                contentDescription = stringResource(R.string.search),
+                                onClick = onOpenSearch,
+                                haptic = Haptic.Select,
+                            )
                         }
-                    },
-                    highlighted = liked,
-                    enabled = likeAvailable,
-                    haptic = if (liked) Haptic.ToggleOff else Haptic.ToggleOn,
-                )
-                BottomGlyph(
-                    icon = Icons.AutoMirrored.Rounded.QueueMusic,
-                    contentDescription = stringResource(R.string.up_next),
-                    onClick = {
-                        lyricsOpen = false
-                        queueOpen = !queueOpen
-                    },
-                    highlighted = queueOpen,
-                    haptic = if (queueOpen) Haptic.Tap else Haptic.Expand,
-                )
+                    }
+                }
             }
 
-            Spacer(Modifier.height(18.dp))
+            if (visiblePlayerControls.isNotEmpty()) Spacer(Modifier.height(18.dp))
             }
             }
             }
@@ -3214,9 +3288,10 @@ private fun CurrentLyricLine(
     modifier: Modifier = Modifier,
 ) {
     val isSynced = remember(lines) { lines.any { it.timeMs > 0L } }
+    val hideLyricsStatusText by AppSettings.hideLyricsStatusText.collectAsStateWithLifecycle()
     if (!isSynced) {
         val previewLine = remember(lines) {
-            lines.firstOrNull { !it.isGap && !LrcParser.isSectionHeader(it.text) }?.text
+            LyricsStripText.firstLyricLine(lines)?.text
         }
         val label = if (!previewLine.isNullOrBlank()) {
             "$previewLine • Tap for lyrics"
@@ -3256,30 +3331,26 @@ private fun CurrentLyricLine(
     val index by remember(lines) {
         derivedStateOf { lines.indexOfLast { it.timeMs <= clock.longValue } }
     }
-    val current = lines.getOrNull(index)
-    // Before the first line, and through instrumental breaks, show the note.
-    val instrumental = current == null || current.isGap
-    // Everything ahead of the first sung line is the intro — LRC files open on a
-    // bare [00:00.00] gap, so that stretch is gap lines rather than nothing.
-    val firstSung = remember(lines) { lines.indexOfFirst { !it.isGap } }
-    val intro = instrumental && firstSung >= 0 && index < firstSung
-    // The intro gets one of the slang lines; mid-song breaks stay plain.
-    val introLines = stringArrayResource(R.array.lyrics_intro_lines)
-    // `stringArrayResource` may return a new array on every recomposition.
-    // Keying this selection to that array made the intro copy change whenever
-    // the playback clock recomposed the strip. Pick it once for this track.
-    val introLine = remember(trackKey) { introLines.random() }
+    val current = lines.getOrNull(index)?.takeIf(LyricsStripText::isLyricLine)
+    val firstSung = remember(lines) { LyricsStripText.firstLyricIndex(lines) }
+    // LRC files often begin with an empty timestamp or put the first sung line
+    // a few seconds into the track. Preview that first real line during the
+    // intro instead of replacing it with generated mood copy.
+    val showingFirstLineEarly = current == null &&
+        LyricsStripText.shouldPreviewFirstLyric(index, firstSung)
+    val displayIndex = if (showingFirstLineEarly) firstSung else index
+    val displayLine = current ?: if (showingFirstLineEarly) lines.getOrNull(firstSung) else null
+    val instrumental = displayLine == null
     // The strip is one line and switches the moment the next one is due, so
     // the answering vocal — where there is one — has nowhere to go: showing
     // it would mean either cutting it short when the next line arrives or
     // holding the strip back and leaving a gap before the next line's own
     // words appear. [LyricsPanel] has the room to draw it properly; here it
     // is simply left off, same as before this line had a bracket in it.
-    val text = when {
-        intro -> introLine
-        instrumental -> stringResource(R.string.instrumental)
-        else -> current!!.text
-    }
+    val text = displayLine?.text ?: LyricsStripText.statusTextOrNull(
+        stringResource(R.string.instrumental),
+        hideLyricsStatusText,
+    ).orEmpty()
 
     Row(
         verticalAlignment = Alignment.CenterVertically,
@@ -3293,8 +3364,8 @@ private fun CurrentLyricLine(
                     alpha = 0.5f
                     return@graphicsLayer
                 }
-                val start = lines.getOrNull(index)?.timeMs ?: 0L
-                val end = lines.getOrNull(index + 1)?.timeMs
+                val start = lines.getOrNull(displayIndex)?.timeMs ?: 0L
+                val end = lines.getOrNull(displayIndex + 1)?.timeMs
                     ?: durationMs.takeIf { it > start }
                     ?: (start + 4_000L)
                 val fade = ((end - start) * LYRIC_FADE_FRACTION)
@@ -3312,7 +3383,7 @@ private fun CurrentLyricLine(
             )
             Spacer(Modifier.width(6.dp))
         }
-        val swept = current?.takeIf { !instrumental && it.isWordSynced }
+        val swept = current?.takeIf { !showingFirstLineEarly && !instrumental && it.isWordSynced }
         if (swept != null) {
             SweptLyricLine(
                 line = swept,
@@ -3497,6 +3568,7 @@ private fun CircleGlyph(
     contentDescription: String,
     onClick: () -> Unit,
     active: Boolean = false,
+    enabled: Boolean = true,
     haptic: Haptic = Haptic.Tap,
 ) {
     val haptics = rememberHaptics()
@@ -3510,6 +3582,7 @@ private fun CircleGlyph(
             .clip(CircleShape)
             .background(Color.White.copy(alpha = discAlpha))
             .clickable(
+                enabled = enabled,
                 interactionSource = remember { MutableInteractionSource() },
                 indication = null,
             ) {
@@ -3944,7 +4017,10 @@ private fun InlineQueue(
     LaunchedEffect(currentIndex) {
         val holding = manualDrag.draggedKey != null || autoplayDrag.draggedKey != null
         if (!holding && currentIndex in queue.indices) {
-            listState.scrollToItem(currentIndex + if (currentIndex >= autoplayStart) 1 else 0)
+            // Keep the current track in view while exposing the two most
+            // recent tracks above it when this queue has playback history.
+            // The rest of history remains reachable by scrolling upward.
+            listState.scrollToItem(queueInitialVisibleIndex(currentIndex, autoplayStart))
         }
     }
 
@@ -4594,13 +4670,18 @@ private fun formatTime(ms: Long): String {
  */
 @Composable
 private fun LosslessOrStats(
+    isLocalAudio: Boolean,
     isLoading: Boolean,
     stillRacing: Boolean,
     losslessRequested: Boolean,
     nerdStats: NerdStats.Snapshot?,
     modifier: Modifier = Modifier,
 ) {
+    val hideLosslessLabel by AppSettings.hideLosslessLabel.collectAsStateWithLifecycle()
     when {
+        // This preference hides the full quality/status badge family: lossless,
+        // hi-res, high-quality and the in-progress quality-upgrade label.
+        hideLosslessLabel -> {}
         // Still resolving — either the player itself is buffering, or a
         // module is still racing YouTube for this track in the background
         // (see [NerdStats.racingLossless]) even though YouTube already won
@@ -4622,8 +4703,8 @@ private fun LosslessOrStats(
         // [nerdStats] exists there is something measured to show instead, so
         // only a genuinely unmeasured track — or a real race via
         // [stillRacing] — earns this label.
-        (stillRacing && nerdStats?.isLossless != true) ||
-            (isLoading && losslessRequested && nerdStats == null) -> LosslessLabel(
+        (!isLocalAudio && stillRacing && nerdStats?.isLossless != true) ||
+            (!isLocalAudio && isLoading && losslessRequested && nerdStats == null) -> LosslessLabel(
             // What is already true, ahead of what is still being looked for.
             // A race running over JioSaavn's 320kbps AAC and one running over
             // YouTube's 160kbps Opus were both drawn as a bare "Upgrading
@@ -4648,7 +4729,7 @@ private fun LosslessOrStats(
             animated = false,
             modifier = modifier,
         )
-        nerdStats?.isLossless == true -> LosslessLabel(
+        nerdStats?.isLossless == true && !hideLosslessLabel -> LosslessLabel(
             // Same line Tidal, Qobuz and Apple Music draw it at — see
             // [NerdStats.Snapshot.isHiRes].
             text = stringResource(if (nerdStats.isHiRes) R.string.hi_res_lossless else R.string.lossless),

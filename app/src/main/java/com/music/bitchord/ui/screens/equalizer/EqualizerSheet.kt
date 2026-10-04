@@ -39,6 +39,7 @@ import com.music.bitchord.data.settings.EqualizerSettings
 import com.music.bitchord.ui.screens.equalizer.components.AudioEnhancements
 import com.music.bitchord.ui.screens.equalizer.components.EqualizerBandSliders
 import com.music.bitchord.ui.screens.equalizer.components.EqualizerPresetChips
+import com.music.bitchord.ui.screens.equalizer.components.ReplayGainControls
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -53,6 +54,10 @@ fun EqualizerSheet(
     val bassBoostStrength by EqualizerSettings.bassBoostStrength.collectAsStateWithLifecycle()
     val virtualizerStrength by EqualizerSettings.virtualizerStrength.collectAsStateWithLifecycle()
     val sessionId by AppSettings.audioSessionId.collectAsStateWithLifecycle()
+    val replayGainEnabled by AppSettings.replayGainEnabled.collectAsStateWithLifecycle()
+    val replayGainAlbumMode by AppSettings.replayGainAlbumMode.collectAsStateWithLifecycle()
+    val replayGainPreampDb by AppSettings.replayGainPreampDb.collectAsStateWithLifecycle()
+    val replayGainPreventClipping by AppSettings.replayGainPreventClipping.collectAsStateWithLifecycle()
 
     val scrollState = rememberScrollState()
 
@@ -145,6 +150,17 @@ fun EqualizerSheet(
                 audioSessionId = sessionId,
                 onBassBoostChange = { EqualizerSettings.setBassBoostStrength(it) },
                 onVirtualizerChange = { EqualizerSettings.setVirtualizerStrength(it) },
+            )
+
+            ReplayGainControls(
+                enabled = replayGainEnabled,
+                useAlbumGain = replayGainAlbumMode,
+                preampDb = replayGainPreampDb,
+                preventClipping = replayGainPreventClipping,
+                onEnabledChange = AppSettings::setReplayGainEnabled,
+                onAlbumGainChange = AppSettings::setReplayGainAlbumMode,
+                onPreampChange = AppSettings::setReplayGainPreampDb,
+                onPreventClippingChange = AppSettings::setReplayGainPreventClipping,
             )
 
             Spacer(modifier = Modifier.height(16.dp))

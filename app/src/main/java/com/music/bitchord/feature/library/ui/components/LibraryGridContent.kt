@@ -25,6 +25,9 @@ fun LibraryGridContent(
     onPlaylistPlay: (LocalPlaylist) -> Unit,
     onRenamePlaylist: (LocalPlaylist) -> Unit,
     onDeletePlaylist: (LocalPlaylist) -> Unit,
+    onChangePlaylistCover: (LocalPlaylist) -> Unit = {},
+    onResetPlaylistCover: (LocalPlaylist) -> Unit = {},
+    onMovePlaylist: (LocalPlaylist, Int) -> Unit,
     onCreatePlaylist: () -> Unit,
     contentPadding: PaddingValues,
     modifier: Modifier = Modifier,
@@ -56,12 +59,19 @@ fun LibraryGridContent(
 
         if (showPlaylists) {
             items(playlists, key = { it.id }) { playlist ->
+                val index = playlists.indexOfFirst { it.id == playlist.id }
                 LibraryPlaylistCard(
                     playlist = playlist,
                     onClick = { onPlaylistClick(playlist) },
                     onPlay = { onPlaylistPlay(playlist) },
                     onRename = { onRenamePlaylist(playlist) },
                     onDelete = { onDeletePlaylist(playlist) },
+                    onChangeCover = { onChangePlaylistCover(playlist) },
+                    onResetCover = { onResetPlaylistCover(playlist) },
+                    canMoveUp = index > 0,
+                    canMoveDown = index < playlists.lastIndex,
+                    onMoveUp = { onMovePlaylist(playlist, -1) },
+                    onMoveDown = { onMovePlaylist(playlist, 1) },
                 )
             }
 

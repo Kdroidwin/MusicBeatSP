@@ -1,0 +1,13 @@
+<?xml version="1.0" encoding="utf-8"?>
+<appwidget-provider xmlns:android="http://schemas.android.com/apk/res/android"
+    android:description="@string/widget_album_square_description"
+    android:initialLayout="@layout/widget_media_album_square"
+    android:minHeight="180dp"
+    android:minWidth="110dp"
+    android:previewImage="@drawable/widget_preview_square"
+    android:previewLayout="@layout/widget_media_album_square_preview"
+    android:resizeMode="none"
+    android:targetCellHeight="3"
+    android:targetCellWidth="2"
+    android:updatePeriodMillis="0"
+    android:widgetCategory="home_screen" />

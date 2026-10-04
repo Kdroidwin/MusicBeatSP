@@ -40,6 +40,7 @@ import androidx.compose.ui.unit.dp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.music.bitchord.data.model.Song
 import com.music.bitchord.feature.localmusic.data.LocalPlaylistStore
+import com.music.bitchord.feature.localmusic.domain.model.LocalPlaylistSongMetadata
 import com.music.bitchord.feature.localmusic.ui.components.CreatePlaylistDialog
 
 /**
@@ -48,7 +49,7 @@ import com.music.bitchord.feature.localmusic.ui.components.CreatePlaylistDialog
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun LocalAddToPlaylistSheet(
-    song: Song,
+    songs: List<Song>,
     onDismissRequest: () -> Unit,
     modifier: Modifier = Modifier,
 ) {
@@ -57,15 +58,28 @@ fun LocalAddToPlaylistSheet(
     val playlists by LocalPlaylistStore.playlists.collectAsStateWithLifecycle()
     var showCreateDialog by remember { mutableStateOf(false) }
 
-    val songId = song.localUri ?: song.videoId
+    val distinctSongs = remember(songs) {
+        songs.distinctBy { it.localUri ?: it.videoId }
+    }
+    val songIds = remember(distinctSongs) { distinctSongs.map { it.localUri ?: it.videoId } }
+    val songMetadata = remember(distinctSongs) {
+        distinctSongs.associate { song ->
+            (song.localUri ?: song.videoId) to LocalPlaylistSongMetadata(song.title, song.artist)
+        }
+    }
+    val coverUrl = distinctSongs.firstNotNullOfOrNull { it.thumbnailUrl }
 
     if (showCreateDialog) {
         CreatePlaylistDialog(
             onDismiss = { showCreateDialog = false },
             onConfirm = { name ->
-                val newPl = LocalPlaylistStore.createPlaylist(name)
-                LocalPlaylistStore.addSongToPlaylist(newPl.id, songId, song.thumbnailUrl)
-                Toast.makeText(context, "Added to ${newPl.name}", Toast.LENGTH_SHORT).show()
+                val newPl = LocalPlaylistStore.createPlaylist(
+                    name = name,
+                    songIds = songIds,
+                    songMetadata = songMetadata,
+                    coverUrl = coverUrl,
+                )
+                Toast.makeText(context, "Added ${songIds.size} songs to ${newPl.name}", Toast.LENGTH_SHORT).show()
                 showCreateDialog = false
                 onDismissRequest()
             },
@@ -143,8 +157,17 @@ fun LocalAddToPlaylistSheet(
                         modifier = Modifier
                             .fillMaxWidth()
                             .clickable {
-                                LocalPlaylistStore.addSongToPlaylist(playlist.id, songId, song.thumbnailUrl)
-                                Toast.makeText(context, "Added to ${playlist.name}", Toast.LENGTH_SHORT).show()
+                                val addedCount = LocalPlaylistStore.addSongsToPlaylist(
+                                    playlistId = playlist.id,
+                                    songIds = songIds,
+                                    songMetadata = songMetadata,
+                                    artworkUrl = coverUrl,
+                                )
+                                Toast.makeText(
+                                    context,
+                                    "Added $addedCount songs to ${playlist.name}",
+                                    Toast.LENGTH_SHORT,
+                                ).show()
                                 onDismissRequest()
                             }
                             .padding(horizontal = 20.dp, vertical = 14.dp),
@@ -164,7 +187,7 @@ fun LocalAddToPlaylistSheet(
                                 color = MaterialTheme.colorScheme.onSurface,
                             )
                             Text(
-                                text = "${playlist.songIds.size} songs",
+                                text = "${playlist.songIds.size} songs · ${distinctSongs.size} selected",
                                 style = MaterialTheme.typography.bodySmall,
                                 color = MaterialTheme.colorScheme.onSurfaceVariant,
                             )

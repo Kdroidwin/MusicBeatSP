@@ -24,6 +24,7 @@ import androidx.compose.material.icons.rounded.GraphicEq
 import androidx.compose.material.icons.rounded.Info
 import androidx.compose.material.icons.rounded.Person
 import androidx.compose.material.icons.rounded.Share
+import androidx.compose.material.icons.rounded.Speed
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.MaterialTheme
@@ -41,6 +42,7 @@ import androidx.compose.ui.unit.dp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.music.bitchord.R
 import com.music.bitchord.data.model.Song
+import com.music.bitchord.playback.cast.CastActionItem
 import com.music.bitchord.playback.SleepTimer
 import kotlinx.coroutines.delay
 import com.music.bitchord.feature.artistimage.util.ArtistSplitter
@@ -66,6 +68,9 @@ fun LocalSongActionsSheet(
     onGoToArtist: () -> Unit,
     onAddToPlaylist: () -> Unit,
     onEqualizer: () -> Unit,
+    onPlaybackTuning: () -> Unit,
+    showPlayerActions: Boolean,
+    onCastUnavailable: () -> Unit,
     onTagEditor: () -> Unit,
     onEditLyrics: () -> Unit,
     onDetails: () -> Unit,
@@ -156,6 +161,16 @@ fun LocalSongActionsSheet(
                         label = "Equalizer",
                         onClick = onEqualizer,
                     )
+
+                    if (showPlayerActions) {
+                        CastActionItem(onUnavailable = onCastUnavailable)
+
+                        LocalSongActionItem(
+                            icon = Icons.Rounded.Speed,
+                            label = stringResource(R.string.playback_tuning),
+                            onClick = onPlaybackTuning,
+                        )
+                    }
 
                     // 5. Sleep timer
                     LocalSongActionItem(

@@ -40,6 +40,8 @@ enum class LibraryFilter {
     ALL,
     FAVORITES,
     PLAYLISTS,
+    RECENTLY_PLAYED,
+    MOST_PLAYED,
 }
 
 /**
@@ -105,6 +107,34 @@ fun LibraryHeaderBar(
                     onFilterSelect(LibraryFilter.PLAYLISTS)
                 },
                 label = { Text(stringResource(R.string.playlists)) },
+                shape = RoundedCornerShape(12.dp),
+                colors = FilterChipDefaults.filterChipColors(
+                    selectedContainerColor = MaterialTheme.colorScheme.primaryContainer,
+                    selectedLabelColor = MaterialTheme.colorScheme.onPrimaryContainer,
+                ),
+            )
+
+            FilterChip(
+                selected = selectedFilter == LibraryFilter.RECENTLY_PLAYED,
+                onClick = {
+                    haptics.play(Haptic.Select)
+                    onFilterSelect(LibraryFilter.RECENTLY_PLAYED)
+                },
+                label = { Text(stringResource(R.string.recently_played)) },
+                shape = RoundedCornerShape(12.dp),
+                colors = FilterChipDefaults.filterChipColors(
+                    selectedContainerColor = MaterialTheme.colorScheme.primaryContainer,
+                    selectedLabelColor = MaterialTheme.colorScheme.onPrimaryContainer,
+                ),
+            )
+
+            FilterChip(
+                selected = selectedFilter == LibraryFilter.MOST_PLAYED,
+                onClick = {
+                    haptics.play(Haptic.Select)
+                    onFilterSelect(LibraryFilter.MOST_PLAYED)
+                },
+                label = { Text(stringResource(R.string.most_played)) },
                 shape = RoundedCornerShape(12.dp),
                 colors = FilterChipDefaults.filterChipColors(
                     selectedContainerColor = MaterialTheme.colorScheme.primaryContainer,

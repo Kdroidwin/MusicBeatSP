@@ -9,6 +9,7 @@ import androidx.compose.material3.Typography
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.SideEffect
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.lerp
 import androidx.compose.ui.platform.LocalView
 import androidx.core.view.WindowCompat
 import androidx.compose.ui.text.TextStyle
@@ -44,6 +45,18 @@ private val LightColors = lightColorScheme(
     surfaceVariant = Color(0xFFF2F2F7),
     onSurfaceVariant = Color(0xFF6E6E73),
     outline = Color(0xFFE5E5EA),
+)
+
+private val AmoledColors = darkColorScheme(
+    primary = Color.White,
+    onPrimary = Color.Black,
+    background = Color.Black,
+    onBackground = Color.White,
+    surface = Color.Black,
+    onSurface = Color.White,
+    surfaceVariant = Color(0xFF080808),
+    onSurfaceVariant = Color(0xFFB0B0B0),
+    outline = Color(0xFF242424),
 )
 
 /**
@@ -94,13 +107,63 @@ private fun Typography.withFamily(family: FontFamily) = Typography(
 @Composable
 fun BitChordTheme(
     darkTheme: Boolean = isSystemInDarkTheme(),
+    amoledBlack: Boolean = false,
+    artworkUrl: String? = null,
+    matchArtwork: Boolean = false,
     content: @Composable () -> Unit,
 ) {
     MaterialTheme(
-        colorScheme = if (darkTheme) DarkColors else LightColors,
+        colorScheme = when {
+            amoledBlack -> AmoledColors
+            darkTheme -> DarkColors
+            else -> LightColors
+        },
         typography = BitChordTypography,
-        content = content,
-    )
+    ) {
+        // Resolve the playing sleeve through the existing palette/cache path.
+        val base = MaterialTheme.colorScheme
+        val artwork = rememberArtworkPalette(artworkUrl, dark = darkTheme)
+        val colors = if (matchArtwork && artworkUrl != null) {
+            // Artwork mode is a full app theme. Tinting only the accents made
+            // it look like a minor player toggle while the library, sheets,
+            // and navigation stayed monochrome. Carry the sleeve palette into
+            // Material surfaces too, while retaining the existing contrast
+            // rules from ArtworkPalette for body text and secondary labels.
+            base.copy(
+                primary = artwork.accent,
+                onPrimary = if (darkTheme) Color.Black else Color.White,
+                primaryContainer = artwork.elevated,
+                onPrimaryContainer = artwork.onBackground,
+                secondary = artwork.accent,
+                onSecondary = if (darkTheme) Color.Black else Color.White,
+                secondaryContainer = artwork.elevated,
+                onSecondaryContainer = artwork.onBackground,
+                tertiary = artwork.accent,
+                onTertiary = if (darkTheme) Color.Black else Color.White,
+                tertiaryContainer = artwork.wash,
+                onTertiaryContainer = artwork.onBackground,
+                background = artwork.background,
+                onBackground = artwork.onBackground,
+                surface = artwork.elevated,
+                onSurface = artwork.onBackground,
+                surfaceVariant = artwork.wash,
+                onSurfaceVariant = artwork.onBackgroundVariant,
+                surfaceTint = artwork.accent,
+                outline = artwork.divider,
+                outlineVariant = artwork.divider,
+                surfaceDim = if (darkTheme) artwork.background else artwork.elevated,
+                surfaceBright = if (darkTheme) artwork.wash else artwork.background,
+                surfaceContainerLowest = artwork.background,
+                surfaceContainerLow = lerp(artwork.background, artwork.elevated, 0.22f),
+                surfaceContainer = lerp(artwork.background, artwork.elevated, 0.38f),
+                surfaceContainerHigh = lerp(artwork.background, artwork.elevated, 0.62f),
+                surfaceContainerHighest = artwork.elevated,
+            )
+        } else {
+            base
+        }
+        MaterialTheme(colorScheme = colors, typography = BitChordTypography, content = content)
+    }
 }
 
 /**

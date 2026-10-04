@@ -8,6 +8,16 @@ internal fun queueHistoryTrimCount(currentIndex: Int): Int =
     (currentIndex - MAX_QUEUE_HISTORY).coerceAtLeast(0)
 
 /**
+ * Queue list position to open at, keeping the current song visible with a
+ * small amount of recent playback history above it. AutoPlay's section label
+ * occupies an extra LazyColumn row only after its boundary.
+ */
+internal fun queueInitialVisibleIndex(currentIndex: Int, autoplayStart: Int): Int {
+    val firstVisible = (currentIndex - 2).coerceAtLeast(0)
+    return firstVisible + if (firstVisible >= autoplayStart) 1 else 0
+}
+
+/**
  * Entries bypassed when a listener chooses a later row directly from the queue.
  *
  * The current song is deliberately not included: it has actually been current,

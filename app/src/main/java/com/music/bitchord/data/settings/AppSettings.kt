@@ -120,7 +120,7 @@ enum class DownloadQuality(
 }
 
 enum class ThemeMode(val label: String) {
-    SYSTEM("System"), LIGHT("Light"), DARK("Dark")
+    SYSTEM("System"), LIGHT("Light"), DARK("Dark"), AMOLED("AMOLED black"), ARTWORK("Album art")
 }
 
 
@@ -133,6 +133,36 @@ enum class LocalMusicSort {
     DATE_MODIFIED,
     DURATION_DESC,
 }
+
+/** Secondary controls shown beneath the main play/pause controls. */
+enum class PlayerControl {
+    SHUFFLE,
+    REPEAT,
+    LIKE,
+    QUEUE,
+    PLAYLIST,
+    SEARCH,
+}
+
+object PlayerControlOrdering {
+    fun normalize(order: List<PlayerControl>): List<PlayerControl> =
+        (order + PlayerControl.entries).distinct()
+
+    fun move(order: List<PlayerControl>, control: PlayerControl, offset: Int): List<PlayerControl> {
+        val normalized = normalize(order).toMutableList()
+        val from = normalized.indexOf(control)
+        val to = (from + offset).coerceIn(0, normalized.lastIndex)
+        if (from != to) normalized.add(to, normalized.removeAt(from))
+        return normalized
+    }
+}
+
+private val DEFAULT_PLAYER_CONTROLS = setOf(
+    PlayerControl.SHUFFLE,
+    PlayerControl.REPEAT,
+    PlayerControl.LIKE,
+    PlayerControl.QUEUE,
+)
 
 /**
  * Stable persisted ordering for a Library "Show all" grid — playlists or
@@ -167,6 +197,60 @@ enum class SongSort {
 enum class LibraryViewType {
     LIST,
     GRID,
+}
+
+/** Stable identities for the destinations in the app's bottom navigation. */
+enum class MainNavigationTab(val index: Int) {
+    SONGS(0),
+    ALBUMS(1),
+    ARTISTS(2),
+    LIBRARY(3),
+    SEARCH(4),
+}
+
+object MainNavigationTabs {
+    fun normalizeOrder(order: List<MainNavigationTab>): List<MainNavigationTab> =
+        (order + MainNavigationTab.entries).distinct()
+
+    fun move(
+        order: List<MainNavigationTab>,
+        tab: MainNavigationTab,
+        offset: Int,
+    ): List<MainNavigationTab> {
+        val normalized = normalizeOrder(order).toMutableList()
+        val from = normalized.indexOf(tab)
+        val to = (from + offset).coerceIn(0, normalized.lastIndex)
+        if (from != to) normalized.add(to, normalized.removeAt(from))
+        return normalized
+    }
+
+    fun setVisible(
+        current: Set<MainNavigationTab>,
+        tab: MainNavigationTab,
+        visible: Boolean,
+    ): Set<MainNavigationTab> {
+        val baseline = current.ifEmpty { MainNavigationTab.entries.toSet() }
+        if (visible) return baseline + tab
+        if (baseline.size <= 1) return baseline
+        return baseline - tab
+    }
+
+    fun fallback(
+        selectedIndex: Int,
+        visible: Set<MainNavigationTab>,
+        order: List<MainNavigationTab> = MainNavigationTab.entries,
+    ): MainNavigationTab {
+        val available = visible.ifEmpty { MainNavigationTab.entries.toSet() }
+        val ordered = normalizeOrder(order)
+        val current = MainNavigationTab.entries.firstOrNull { it.index == selectedIndex }
+        current?.takeIf { it in available }?.let { return it }
+        val cursor = current?.let(ordered::indexOf)?.takeIf { it >= 0 } ?: -1
+        return (1..ordered.size)
+            .asSequence()
+            .map { ordered[(cursor + it) % ordered.size] }
+            .firstOrNull { it in available }
+            ?: MainNavigationTab.SONGS
+    }
 }
 
 /**
@@ -288,6 +372,7 @@ object AppSettings {
      */
     val spatialAudio = MutableStateFlow(false)
     val playbackSpeed = MutableStateFlow(1.0f)
+    val playbackPitch = MutableStateFlow(1.0f)
     val themeMode = MutableStateFlow(ThemeMode.DARK)
 
     /** Keep playing similar music once the queue runs out. */
@@ -295,6 +380,9 @@ object AppSettings {
 
     /** Whether the queue is held in shuffled order (Mix button). */
     val shuffleEnabled = MutableStateFlow(false)
+
+    /** Android audio-focus gain request: 0 disables focus and 1–4 select focus gain types. */
+    val audioFocusLevel = MutableStateFlow(1)
 
     /** Repeat mode for the player — Off, All, or One. */
     val repeatMode = MutableStateFlow(Player.REPEAT_MODE_OFF)
@@ -335,8 +423,53 @@ object AppSettings {
     /** When true, hides labels in the bottom navigation bar and displays only icons. */
     val hideNavigationBarLabels = MutableStateFlow(false)
 
+    /** Main navigation destinations the user wants to keep in the bottom bar. */
+    val visibleMainNavigationTabs = MutableStateFlow(MainNavigationTab.entries.toSet())
+    val mainNavigationTabOrder = MutableStateFlow<List<MainNavigationTab>>(MainNavigationTab.entries)
+
     /** Blurs unfocused lyric lines, keeping the active line sharp. */
     val lyricsBlur = MutableStateFlow(true)
+
+    /** Hides generated playback/mood copy in the one-line lyrics strip. */
+    val hideLyricsStatusText = MutableStateFlow(false)
+
+    /** Hides the lyrics-panel note when lyrics were stored in a downloaded file. */
+    val hideLyricsSavedMessage = MutableStateFlow(false)
+
+    /** Whether a tap on the player artwork opens the full lyrics panel. */
+    val artworkTapOpensLyrics = MutableStateFlow(false)
+
+    /** Presentation-only switch for the one-line lyric above the seek bar. */
+    val showPlayerLyricsStrip = MutableStateFlow(true)
+
+    /** Blocks app-managed network requests while keeping local and cached media available. */
+    val offlineMode = MutableStateFlow(false)
+
+    /** Hides the confirmed lossless quality badge on the player, without affecting audio. */
+    val hideLosslessLabel = MutableStateFlow(false)
+
+    /** Applies ReplayGain metadata to decoded local PCM when enabled. */
+    val replayGainEnabled = MutableStateFlow(false)
+    val replayGainAlbumMode = MutableStateFlow(false)
+    val replayGainPreampDb = MutableStateFlow(0f)
+    val replayGainPreventClipping = MutableStateFlow(true)
+
+    /** Places the favorite action beside the track menu instead of under playback controls. */
+    val favoriteBesideTrackMenu = MutableStateFlow(false)
+
+    /** Refuses a play command while Android's music stream volume is zero. */
+    val preventPlayAtZeroVolume = MutableStateFlow(false)
+
+    /** Presentation-only visibility for the four secondary player controls. */
+    val visiblePlayerControls = MutableStateFlow(DEFAULT_PLAYER_CONTROLS)
+    val playerControlOrder = MutableStateFlow<List<PlayerControl>>(PlayerControl.entries)
+
+    /** Uses the library glyph for the player shortcut that opens playlists. */
+    val useLibraryIconForPlaylistControl = MutableStateFlow(false)
+    val hidePlayerArtist = MutableStateFlow(false)
+    val hideUnknownPlayerArtist = MutableStateFlow(false)
+    val centerPlayerTrackInfo = MutableStateFlow(false)
+    val preloadAlbumArtOnStartup = MutableStateFlow(false)
 
     /**
      * Plays a looping video behind the cover art on the player when one is
@@ -376,6 +509,9 @@ object AppSettings {
      * [NowPlayingScreen][com.music.bitchord.ui.player.NowPlayingScreen].
      */
     val fullBleedArtwork = MutableStateFlow(true)
+
+    /** Keeps the sleeve at its playing size while playback is paused. */
+    val keepArtworkFullSizeWhenPaused = MutableStateFlow(false)
 
     /** Double-tapping the left or right side of the album art seeks 5 seconds backward or forward. */
     val doubleTapToSeek = MutableStateFlow(true)
@@ -476,6 +612,8 @@ object AppSettings {
     val downloadedMusicViewType = MutableStateFlow(LibraryViewType.LIST)
     val libraryPlaylistsViewType = MutableStateFlow(LibraryViewType.GRID)
     val librarySongsViewType = MutableStateFlow(LibraryViewType.LIST)
+    /** Show each track's cover in a playlist detail list instead of its number. */
+    val showPlaylistSongArtwork = MutableStateFlow(false)
     val localDrillDownSongsViewType = MutableStateFlow(LibraryViewType.LIST)
     val downloadedDrillDownSongsViewType = MutableStateFlow(LibraryViewType.LIST)
     val librarySort = MutableStateFlow(LibrarySort.DEFAULT)
@@ -639,12 +777,19 @@ object AppSettings {
         preferUsbDac.value = prefs.getBoolean(KEY_PREFER_USB_DAC, false)
         dolbyAtmos.value = prefs.getBoolean(KEY_DOLBY_ATMOS, true)
         spatialAudio.value = prefs.getBoolean(KEY_SPATIAL_AUDIO, false)
-        playbackSpeed.value = prefs.getFloat(KEY_SPEED, 1.0f)
-        themeMode.value = runCatching {
+        playbackSpeed.value = prefs.getFloat(KEY_SPEED, 1.0f).coerceIn(0.5f, 2.0f)
+        playbackPitch.value = prefs.getFloat(KEY_PITCH, 1.0f).coerceIn(0.5f, 2.0f)
+        val savedThemeMode = runCatching {
             ThemeMode.valueOf(prefs.getString(KEY_THEME, null) ?: "DARK")
         }.getOrDefault(ThemeMode.DARK)
+        // Older builds stored artwork tint as a separate toggle. Upgrade that
+        // choice into the matching theme mode without changing other themes.
+        themeMode.value = if (
+            savedThemeMode == ThemeMode.ARTWORK || prefs.getBoolean(KEY_THEME_MATCHES_ARTWORK, false)
+        ) ThemeMode.ARTWORK else savedThemeMode
         autoplay.value = prefs.getBoolean(KEY_AUTOPLAY, true)
         shuffleEnabled.value = prefs.getBoolean(KEY_SHUFFLE_ENABLED, false)
+        audioFocusLevel.value = prefs.getInt(KEY_AUDIO_FOCUS_LEVEL, 1).coerceIn(0, 4)
         repeatMode.value = prefs.getInt(KEY_REPEAT_MODE, Player.REPEAT_MODE_OFF)
         showNerdStats.value = prefs.getBoolean(KEY_NERD_STATS, false)
         reduceAnimation.value = prefs.getBoolean(KEY_REDUCE_ANIMATION, false)
@@ -660,7 +805,28 @@ object AppSettings {
         liquidGlass.value = prefs.getBoolean(KEY_LIQUID_GLASS, false)
         classicNavBar.value = prefs.getBoolean(KEY_CLASSIC_NAV_BAR, false)
         hideNavigationBarLabels.value = prefs.getBoolean(KEY_HIDE_NAVIGATION_BAR_LABELS, false)
+        visibleMainNavigationTabs.value = readVisibleMainNavigationTabs()
+        mainNavigationTabOrder.value = readMainNavigationTabOrder()
         lyricsBlur.value = prefs.getBoolean(KEY_LYRICS_BLUR, true)
+        hideLyricsStatusText.value = prefs.getBoolean(KEY_HIDE_LYRICS_STATUS_TEXT, false)
+        hideLyricsSavedMessage.value = prefs.getBoolean(KEY_HIDE_LYRICS_SAVED_MESSAGE, false)
+        artworkTapOpensLyrics.value = prefs.getBoolean(KEY_ARTWORK_TAP_OPENS_LYRICS, false)
+        showPlayerLyricsStrip.value = prefs.getBoolean(KEY_SHOW_PLAYER_LYRICS_STRIP, true)
+        offlineMode.value = prefs.getBoolean(KEY_OFFLINE_MODE, false)
+        hideLosslessLabel.value = prefs.getBoolean(KEY_HIDE_LOSSLESS_LABEL, false)
+        replayGainEnabled.value = prefs.getBoolean(KEY_REPLAYGAIN_ENABLED, false)
+        replayGainAlbumMode.value = prefs.getBoolean(KEY_REPLAYGAIN_ALBUM_MODE, false)
+        replayGainPreampDb.value = prefs.getFloat(KEY_REPLAYGAIN_PREAMP_DB, 0f).coerceIn(-12f, 12f)
+        replayGainPreventClipping.value = prefs.getBoolean(KEY_REPLAYGAIN_PREVENT_CLIPPING, true)
+        favoriteBesideTrackMenu.value = prefs.getBoolean(KEY_FAVORITE_BESIDE_TRACK_MENU, false)
+        preventPlayAtZeroVolume.value = prefs.getBoolean(KEY_PREVENT_PLAY_AT_ZERO_VOLUME, false)
+        visiblePlayerControls.value = readVisiblePlayerControls()
+        playerControlOrder.value = readPlayerControlOrder()
+        useLibraryIconForPlaylistControl.value = prefs.getBoolean(KEY_LIBRARY_ICON_FOR_PLAYLIST_CONTROL, false)
+        hidePlayerArtist.value = prefs.getBoolean(KEY_HIDE_PLAYER_ARTIST, false)
+        hideUnknownPlayerArtist.value = prefs.getBoolean(KEY_HIDE_UNKNOWN_PLAYER_ARTIST, false)
+        centerPlayerTrackInfo.value = prefs.getBoolean(KEY_CENTER_PLAYER_TRACK_INFO, false)
+        preloadAlbumArtOnStartup.value = prefs.getBoolean(KEY_PRELOAD_ALBUM_ART_ON_STARTUP, false)
         if (highPerformanceMode.value) {
             reduceAnimation.value = false
             reduceDynamicBlur.value = false
@@ -668,6 +834,7 @@ object AppSettings {
         animatedCanvas.value = prefs.getBoolean(KEY_ANIMATED_CANVAS, true)
         canvasOverCellular.value = prefs.getBoolean(KEY_CANVAS_OVER_CELLULAR, false)
         fullBleedArtwork.value = prefs.getBoolean(KEY_FULL_BLEED_ARTWORK, true)
+        keepArtworkFullSizeWhenPaused.value = prefs.getBoolean(KEY_KEEP_ARTWORK_FULL_SIZE_PAUSED, false)
         doubleTapToSeek.value = prefs.getBoolean(KEY_DOUBLE_TAP_TO_SEEK, true)
         legacyMeshGradient.value = prefs.getBoolean(KEY_LEGACY_MESH_GRADIENT, false)
         syncedLyrics.value = prefs.getBoolean(KEY_SYNCED_LYRICS, true)
@@ -712,6 +879,7 @@ object AppSettings {
         downloadedArtistsViewType.value = readLibraryViewType(KEY_DOWNLOADED_ARTISTS_VIEW_TYPE, LibraryViewType.GRID)
         libraryPlaylistsViewType.value = readLibraryViewType(KEY_LIBRARY_PLAYLISTS_VIEW_TYPE, LibraryViewType.GRID)
         librarySongsViewType.value = readLibraryViewType(KEY_LIBRARY_SONGS_VIEW_TYPE, LibraryViewType.LIST)
+        showPlaylistSongArtwork.value = prefs.getBoolean(KEY_SHOW_PLAYLIST_SONG_ARTWORK, false)
         localDrillDownSongsViewType.value = readLibraryViewType(KEY_LOCAL_DRILLDOWN_SONGS_VIEW_TYPE, LibraryViewType.LIST)
         downloadedDrillDownSongsViewType.value = readLibraryViewType(KEY_DOWNLOADED_DRILLDOWN_SONGS_VIEW_TYPE, LibraryViewType.LIST)
         librarySort.value = prefs.getString(KEY_LIBRARY_SORT, null)
@@ -886,8 +1054,15 @@ object AppSettings {
     }
 
     fun setPlaybackSpeed(value: Float) {
-        playbackSpeed.value = value
-        prefs.edit().putFloat(KEY_SPEED, value).apply()
+        val normalized = value.coerceIn(0.5f, 2.0f)
+        playbackSpeed.value = normalized
+        prefs.edit().putFloat(KEY_SPEED, normalized).apply()
+    }
+
+    fun setPlaybackPitch(value: Float) {
+        val normalized = value.coerceIn(0.5f, 2.0f)
+        playbackPitch.value = normalized
+        prefs.edit().putFloat(KEY_PITCH, normalized).apply()
     }
 
     fun setShowNerdStats(value: Boolean) {
@@ -897,7 +1072,10 @@ object AppSettings {
 
     fun setThemeMode(value: ThemeMode) {
         themeMode.value = value
-        prefs.edit().putString(KEY_THEME, value.name).apply()
+        prefs.edit()
+            .putString(KEY_THEME, value.name)
+            .putBoolean(KEY_THEME_MATCHES_ARTWORK, value == ThemeMode.ARTWORK)
+            .apply()
     }
 
     fun setReduceAnimation(value: Boolean) {
@@ -951,6 +1129,38 @@ object AppSettings {
         prefs.edit().putBoolean(KEY_HIDE_NAVIGATION_BAR_LABELS, value).apply()
     }
 
+    /** Keeps at least one destination available for navigation. */
+    fun setMainNavigationTabVisible(tab: MainNavigationTab, visible: Boolean) {
+        val current = visibleMainNavigationTabs.value
+        val updated = MainNavigationTabs.setVisible(current, tab, visible)
+        if (updated == current) return
+        visibleMainNavigationTabs.value = updated
+        prefs.edit().putStringSet(KEY_VISIBLE_MAIN_NAVIGATION_TABS, updated.map { it.name }.toSet()).apply()
+    }
+
+    fun moveMainNavigationTab(tab: MainNavigationTab, offset: Int) {
+        val updated = MainNavigationTabs.move(mainNavigationTabOrder.value, tab, offset)
+        if (updated == mainNavigationTabOrder.value) return
+        mainNavigationTabOrder.value = updated
+        prefs.edit().putString(KEY_MAIN_NAVIGATION_TAB_ORDER, updated.joinToString(",") { it.name }).apply()
+    }
+
+    private fun readMainNavigationTabOrder(): List<MainNavigationTab> {
+        val saved = prefs.getString(KEY_MAIN_NAVIGATION_TAB_ORDER, null)
+            ?.split(",")
+            ?.mapNotNull { name -> MainNavigationTab.entries.firstOrNull { it.name == name } }
+            .orEmpty()
+        return MainNavigationTabs.normalizeOrder(saved)
+    }
+
+    private fun readVisibleMainNavigationTabs(): Set<MainNavigationTab> {
+        val saved = prefs.getStringSet(KEY_VISIBLE_MAIN_NAVIGATION_TABS, null)
+            ?: return MainNavigationTab.entries.toSet()
+        return saved.mapNotNull { name -> MainNavigationTab.entries.firstOrNull { it.name == name } }
+            .toSet()
+            .ifEmpty { MainNavigationTab.entries.toSet() }
+    }
+
     fun setHighPerformanceMode(value: Boolean) {
         highPerformanceMode.value = value
         if (value) {
@@ -975,6 +1185,128 @@ object AppSettings {
         lyricsBlur.value = value
         prefs.edit().putBoolean(KEY_LYRICS_BLUR, value).apply()
     }
+
+    fun setHideLyricsStatusText(value: Boolean) {
+        hideLyricsStatusText.value = value
+        prefs.edit().putBoolean(KEY_HIDE_LYRICS_STATUS_TEXT, value).apply()
+    }
+
+    fun setHideLyricsSavedMessage(value: Boolean) {
+        hideLyricsSavedMessage.value = value
+        prefs.edit().putBoolean(KEY_HIDE_LYRICS_SAVED_MESSAGE, value).apply()
+    }
+
+    fun setArtworkTapOpensLyrics(value: Boolean) {
+        artworkTapOpensLyrics.value = value
+        prefs.edit().putBoolean(KEY_ARTWORK_TAP_OPENS_LYRICS, value).apply()
+    }
+
+    fun setShowPlayerLyricsStrip(value: Boolean) {
+        showPlayerLyricsStrip.value = value
+        prefs.edit().putBoolean(KEY_SHOW_PLAYER_LYRICS_STRIP, value).apply()
+    }
+
+    fun setOfflineMode(value: Boolean) {
+        offlineMode.value = value
+        prefs.edit().putBoolean(KEY_OFFLINE_MODE, value).apply()
+    }
+
+    fun setHideLosslessLabel(value: Boolean) {
+        hideLosslessLabel.value = value
+        prefs.edit().putBoolean(KEY_HIDE_LOSSLESS_LABEL, value).apply()
+    }
+
+    fun setReplayGainEnabled(value: Boolean) {
+        replayGainEnabled.value = value
+        prefs.edit().putBoolean(KEY_REPLAYGAIN_ENABLED, value).apply()
+    }
+
+    fun setReplayGainAlbumMode(value: Boolean) {
+        replayGainAlbumMode.value = value
+        prefs.edit().putBoolean(KEY_REPLAYGAIN_ALBUM_MODE, value).apply()
+    }
+
+    fun setReplayGainPreampDb(value: Float) {
+        val normalized = value.coerceIn(-12f, 12f)
+        replayGainPreampDb.value = normalized
+        prefs.edit().putFloat(KEY_REPLAYGAIN_PREAMP_DB, normalized).apply()
+    }
+
+    fun setReplayGainPreventClipping(value: Boolean) {
+        replayGainPreventClipping.value = value
+        prefs.edit().putBoolean(KEY_REPLAYGAIN_PREVENT_CLIPPING, value).apply()
+    }
+
+    fun setFavoriteBesideTrackMenu(value: Boolean) {
+        favoriteBesideTrackMenu.value = value
+        prefs.edit().putBoolean(KEY_FAVORITE_BESIDE_TRACK_MENU, value).apply()
+    }
+
+    fun setPreventPlayAtZeroVolume(value: Boolean) {
+        preventPlayAtZeroVolume.value = value
+        prefs.edit().putBoolean(KEY_PREVENT_PLAY_AT_ZERO_VOLUME, value).apply()
+    }
+
+    fun setAudioFocusLevel(value: Int) {
+        val normalized = value.coerceIn(0, 4)
+        audioFocusLevel.value = normalized
+        prefs.edit().putInt(KEY_AUDIO_FOCUS_LEVEL, normalized).apply()
+    }
+
+    fun setUseLibraryIconForPlaylistControl(value: Boolean) {
+        useLibraryIconForPlaylistControl.value = value
+        prefs.edit().putBoolean(KEY_LIBRARY_ICON_FOR_PLAYLIST_CONTROL, value).apply()
+    }
+
+    fun movePlayerControl(control: PlayerControl, offset: Int) {
+        val updated = PlayerControlOrdering.move(playerControlOrder.value, control, offset)
+        if (updated == playerControlOrder.value) return
+        playerControlOrder.value = updated
+        prefs.edit().putString(KEY_PLAYER_CONTROL_ORDER, updated.joinToString(",") { it.name }).apply()
+    }
+
+    private fun readPlayerControlOrder(): List<PlayerControl> {
+        val saved = prefs.getString(KEY_PLAYER_CONTROL_ORDER, null)
+            ?.split(",")
+            ?.mapNotNull { name -> PlayerControl.entries.firstOrNull { it.name == name } }
+            .orEmpty()
+        return PlayerControlOrdering.normalize(saved)
+    }
+
+    fun setHidePlayerArtist(value: Boolean) {
+        hidePlayerArtist.value = value
+        prefs.edit().putBoolean(KEY_HIDE_PLAYER_ARTIST, value).apply()
+    }
+
+    fun setHideUnknownPlayerArtist(value: Boolean) {
+        hideUnknownPlayerArtist.value = value
+        prefs.edit().putBoolean(KEY_HIDE_UNKNOWN_PLAYER_ARTIST, value).apply()
+    }
+
+    fun setCenterPlayerTrackInfo(value: Boolean) {
+        centerPlayerTrackInfo.value = value
+        prefs.edit().putBoolean(KEY_CENTER_PLAYER_TRACK_INFO, value).apply()
+    }
+
+    fun setPreloadAlbumArtOnStartup(value: Boolean) {
+        preloadAlbumArtOnStartup.value = value
+        prefs.edit().putBoolean(KEY_PRELOAD_ALBUM_ART_ON_STARTUP, value).apply()
+    }
+
+    fun setPlayerControlVisible(control: PlayerControl, visible: Boolean) {
+        val updated = visiblePlayerControls.value.toMutableSet().apply {
+            if (visible) add(control) else remove(control)
+        }
+        if (updated.isEmpty()) return
+        visiblePlayerControls.value = updated
+        prefs.edit().putStringSet(KEY_VISIBLE_PLAYER_CONTROLS, updated.mapTo(mutableSetOf()) { it.name }).apply()
+    }
+
+    private fun readVisiblePlayerControls(): Set<PlayerControl> =
+        prefs.getStringSet(KEY_VISIBLE_PLAYER_CONTROLS, null)
+            ?.mapNotNullTo(mutableSetOf()) { saved -> PlayerControl.entries.firstOrNull { it.name == saved } }
+            ?.takeIf { it.isNotEmpty() }
+            ?: DEFAULT_PLAYER_CONTROLS
 
     fun setSyncedLyrics(value: Boolean) {
         syncedLyrics.value = value
@@ -1077,6 +1409,11 @@ object AppSettings {
     fun setFullBleedArtwork(value: Boolean) {
         fullBleedArtwork.value = value
         prefs.edit().putBoolean(KEY_FULL_BLEED_ARTWORK, value).apply()
+    }
+
+    fun setKeepArtworkFullSizeWhenPaused(value: Boolean) {
+        keepArtworkFullSizeWhenPaused.value = value
+        prefs.edit().putBoolean(KEY_KEEP_ARTWORK_FULL_SIZE_PAUSED, value).apply()
     }
 
     fun setDoubleTapToSeek(value: Boolean) {
@@ -1366,6 +1703,11 @@ object AppSettings {
         prefs.edit().putString(KEY_LIBRARY_SONGS_VIEW_TYPE, value.name).apply()
     }
 
+    fun setShowPlaylistSongArtwork(value: Boolean) {
+        showPlaylistSongArtwork.value = value
+        prefs.edit().putBoolean(KEY_SHOW_PLAYLIST_SONG_ARTWORK, value).apply()
+    }
+
     fun setLocalDrillDownSongsViewType(value: LibraryViewType) {
         localDrillDownSongsViewType.value = value
         prefs.edit().putString(KEY_LOCAL_DRILLDOWN_SONGS_VIEW_TYPE, value.name).apply()
@@ -1584,9 +1926,12 @@ object AppSettings {
     private const val KEY_DOLBY_ATMOS = "dolby_atmos"
     private const val KEY_SPATIAL_AUDIO = "spatial_audio"
     private const val KEY_SPEED = "playback_speed"
+    private const val KEY_PITCH = "playback_pitch"
     private const val KEY_THEME = "theme_mode"
+    private const val KEY_THEME_MATCHES_ARTWORK = "theme_matches_artwork"
     private const val KEY_AUTOPLAY = "autoplay"
     private const val KEY_SHUFFLE_ENABLED = "shuffle_enabled"
+    private const val KEY_AUDIO_FOCUS_LEVEL = "audio_focus_level"
     private const val KEY_REPEAT_MODE = "repeat_mode"
     private const val KEY_NERD_STATS = "show_nerd_stats"
     private const val KEY_CACHE_LIMIT = "audio_cache_limit_bytes"
@@ -1601,10 +1946,32 @@ object AppSettings {
     private const val KEY_LIQUID_GLASS = "liquid_glass"
     private const val KEY_CLASSIC_NAV_BAR = "classic_nav_bar"
     private const val KEY_HIDE_NAVIGATION_BAR_LABELS = "hide_navigation_bar_labels"
+    private const val KEY_VISIBLE_MAIN_NAVIGATION_TABS = "visible_main_navigation_tabs"
+    private const val KEY_MAIN_NAVIGATION_TAB_ORDER = "main_navigation_tab_order"
     private const val KEY_LYRICS_BLUR = "lyrics_blur"
+    private const val KEY_HIDE_LYRICS_STATUS_TEXT = "hide_lyrics_status_text"
+    private const val KEY_HIDE_LYRICS_SAVED_MESSAGE = "hide_lyrics_saved_message"
+    private const val KEY_ARTWORK_TAP_OPENS_LYRICS = "artwork_tap_opens_lyrics"
+    private const val KEY_SHOW_PLAYER_LYRICS_STRIP = "show_player_lyrics_strip"
+    private const val KEY_OFFLINE_MODE = "offline_mode"
+    private const val KEY_HIDE_LOSSLESS_LABEL = "hide_lossless_label"
+    private const val KEY_REPLAYGAIN_ENABLED = "replaygain_enabled"
+    private const val KEY_REPLAYGAIN_ALBUM_MODE = "replaygain_album_mode"
+    private const val KEY_REPLAYGAIN_PREAMP_DB = "replaygain_preamp_db"
+    private const val KEY_REPLAYGAIN_PREVENT_CLIPPING = "replaygain_prevent_clipping"
+    private const val KEY_FAVORITE_BESIDE_TRACK_MENU = "favorite_beside_track_menu"
+    private const val KEY_PREVENT_PLAY_AT_ZERO_VOLUME = "prevent_play_at_zero_volume"
+    private const val KEY_VISIBLE_PLAYER_CONTROLS = "visible_player_controls"
+    private const val KEY_PLAYER_CONTROL_ORDER = "player_control_order"
+    private const val KEY_LIBRARY_ICON_FOR_PLAYLIST_CONTROL = "library_icon_for_playlist_control"
+    private const val KEY_HIDE_PLAYER_ARTIST = "hide_player_artist"
+    private const val KEY_HIDE_UNKNOWN_PLAYER_ARTIST = "hide_unknown_player_artist"
+    private const val KEY_CENTER_PLAYER_TRACK_INFO = "center_player_track_info"
+    private const val KEY_PRELOAD_ALBUM_ART_ON_STARTUP = "preload_album_art_on_startup"
     private const val KEY_ANIMATED_CANVAS = "animated_canvas"
     private const val KEY_CANVAS_OVER_CELLULAR = "canvas_over_cellular"
     private const val KEY_FULL_BLEED_ARTWORK = "full_bleed_artwork"
+    private const val KEY_KEEP_ARTWORK_FULL_SIZE_PAUSED = "keep_artwork_full_size_when_paused"
     private const val KEY_DOUBLE_TAP_TO_SEEK = "double_tap_to_seek"
     private const val KEY_LEGACY_MESH_GRADIENT = "legacy_mesh_gradient"
     private const val KEY_SYNCED_LYRICS = "synced_lyrics"
@@ -1636,6 +2003,7 @@ object AppSettings {
     private const val KEY_DOWNLOADED_ARTISTS_VIEW_TYPE = "downloaded_artists_view_type"
     private const val KEY_LIBRARY_PLAYLISTS_VIEW_TYPE = "library_playlists_view_type"
     private const val KEY_LIBRARY_SONGS_VIEW_TYPE = "library_songs_view_type"
+    private const val KEY_SHOW_PLAYLIST_SONG_ARTWORK = "show_playlist_song_artwork"
     private const val KEY_LOCAL_DRILLDOWN_SONGS_VIEW_TYPE = "local_drilldown_songs_view_type"
     private const val KEY_DOWNLOADED_DRILLDOWN_SONGS_VIEW_TYPE = "downloaded_drilldown_songs_view_type"
     private const val KEY_BLACKLISTED_FOLDERS = "blacklisted_folders"
@@ -1675,4 +2043,3 @@ object AppSettings {
     private const val KEY_DISCORD_INFO_DISMISSED = "discord_info_dismissed"
     private const val KEY_LAST_VERSION_CODE = "last_version_code"
 }
-

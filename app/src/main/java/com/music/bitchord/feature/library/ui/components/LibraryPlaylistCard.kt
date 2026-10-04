@@ -55,6 +55,12 @@ fun LibraryPlaylistCard(
     onPlay: () -> Unit,
     onRename: () -> Unit,
     onDelete: () -> Unit,
+    onChangeCover: () -> Unit = {},
+    onResetCover: () -> Unit = {},
+    canMoveUp: Boolean = false,
+    canMoveDown: Boolean = false,
+    onMoveUp: () -> Unit = {},
+    onMoveDown: () -> Unit = {},
     modifier: Modifier = Modifier,
 ) {
     var menuOpen by remember { mutableStateOf(false) }
@@ -80,9 +86,10 @@ fun LibraryPlaylistCard(
                     .background(MaterialTheme.colorScheme.primaryContainer.copy(alpha = 0.7f)),
                 contentAlignment = Alignment.Center,
             ) {
-                if (!playlist.coverUrl.isNullOrBlank()) {
+                val cover = playlist.customCoverUrl ?: playlist.coverUrl
+                if (!cover.isNullOrBlank()) {
                     AsyncImage(
-                        model = playlist.coverUrl,
+                        model = cover,
                         contentDescription = playlist.name,
                         contentScale = ContentScale.Crop,
                         modifier = Modifier.matchParentSize(),
@@ -159,6 +166,38 @@ fun LibraryPlaylistCard(
                         expanded = menuOpen,
                         onDismissRequest = { menuOpen = false },
                     ) {
+                        DropdownMenuItem(
+                            text = { Text(stringResource(R.string.change_playlist_cover)) },
+                            onClick = {
+                                menuOpen = false
+                                onChangeCover()
+                            },
+                        )
+                        if (!playlist.customCoverUrl.isNullOrBlank()) {
+                            DropdownMenuItem(
+                                text = { Text(stringResource(R.string.reset_playlist_cover)) },
+                                onClick = {
+                                    menuOpen = false
+                                    onResetCover()
+                                },
+                            )
+                        }
+                        DropdownMenuItem(
+                            text = { Text(stringResource(R.string.move_playlist_up)) },
+                            enabled = canMoveUp,
+                            onClick = {
+                                menuOpen = false
+                                onMoveUp()
+                            },
+                        )
+                        DropdownMenuItem(
+                            text = { Text(stringResource(R.string.move_playlist_down)) },
+                            enabled = canMoveDown,
+                            onClick = {
+                                menuOpen = false
+                                onMoveDown()
+                            },
+                        )
                         DropdownMenuItem(
                             text = { Text("Rename") },
                             leadingIcon = {

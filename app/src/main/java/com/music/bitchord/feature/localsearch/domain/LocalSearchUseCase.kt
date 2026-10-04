@@ -87,7 +87,7 @@ object LocalSearchUseCase {
                     LocalSearchResult.Folder(
                         name = dir.substringAfterLast('/'),
                         path = dir,
-                        songs = songs,
+                        songs = LocalFileNameOrdering.sort(songs),
                     )
                 }
                 .sortedWith(

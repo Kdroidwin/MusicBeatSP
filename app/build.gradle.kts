@@ -35,17 +35,19 @@ val lastfmSecret: String = (
     ).trim()
 
 android {
+    // Keep the Kotlin/R resource namespace stable; applicationId below is the
+    // package Android exposes to installers and to other applications.
     namespace = "com.music.bitchord"
     compileSdk = 37
 
     defaultConfig {
-        applicationId = "com.samuel.musicbeat"
+        applicationId = "io.pockets.musicbestsp"
         // 26 keeps reach wide; real-time blur (RenderEffect) kicks in on API 31+,
         // Haze falls back to a translucent scrim below that.
         minSdk = 26
         targetSdk = 36
-        versionCode = 17
-        versionName = "1.5.5"
+        versionCode = 18
+        versionName = "2.0.0"
 
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
 
@@ -68,25 +70,25 @@ android {
     productFlavors {
         create("standard") {
             dimension = "distribution"
-            applicationId = "com.samuel.musicbeat"
-            resValue("string", "app_name", "MusicBeat")
+            applicationId = "io.pockets.musicbestsp"
+            resValue("string", "app_name", "MusicBeatSP")
         }
         // OnePlus / OPPO whitelisted package flavor 1: unlocks native Dolby Atmos / Dirac / OReality hardware audio enhancements
         create("qqmusic") {
             dimension = "distribution"
             applicationId = "com.tencent.qqmusic"
-            resValue("string", "app_name", "MusicBeat")
+            resValue("string", "app_name", "MusicBeatSP")
         }
         // OnePlus / OPPO whitelisted package flavor 2: unlocks native hardware audio enhancements
         create("kugou") {
             dimension = "distribution"
             applicationId = "com.kugou.android"
-            resValue("string", "app_name", "MusicBeat")
+            resValue("string", "app_name", "MusicBeatSP")
         }
         create("dev") {
             dimension = "distribution"
             applicationId = "com.dev.musicbeat"
-            resValue("string", "app_name", "MusicBeat Dev")
+            resValue("string", "app_name", "MusicBeatSP Dev")
         }
     }
 
@@ -132,6 +134,11 @@ android {
             // Null without a keystore to sign with: the build then produces
             // app-release-unsigned.apk instead of failing outright.
             signingConfig = signingConfigs.findByName("release")
+        }
+    }
+    packaging {
+        resources {
+            excludes += "/META-INF/versions/9/OSGI-INF/MANIFEST.MF"
         }
     }
     compileOptions {
@@ -192,6 +199,9 @@ dependencies {
     implementation("androidx.media3:media3-session:1.11.0")
     implementation("androidx.media3:media3-common:1.11.0")
     implementation("androidx.media3:media3-datasource-okhttp:1.11.0")
+    // Official Google Cast sender framework. Device discovery and route UI
+    // are initialized only when the player details menu is opened.
+    implementation("com.google.android.gms:play-services-cast-framework:22.3.1")
     // Audio is progressive, but Apple serves its motion artwork as HLS — this
     // is what lets the animated sleeve play it. See CanvasArtworkPlayer.
     implementation("androidx.media3:media3-exoplayer-hls:1.11.0")
@@ -233,6 +243,9 @@ dependencies {
 
     // ---- Auth/session storage ----
     implementation("androidx.security:security-crypto:1.1.0-alpha06")
+    // Musicolet's legacy .mpl backup members use Blowfish, which is not
+    // available from every Android JCA provider. Use its portable primitive.
+    implementation("org.bouncycastle:bcprov-jdk18on:1.85")
 
     // ---- JS module execution: QuickJS VM for style source plugins ----
     implementation("io.github.dokar3:quickjs-kt-android:1.0.5")

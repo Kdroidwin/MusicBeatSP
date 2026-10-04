@@ -1,5 +1,6 @@
 package com.music.bitchord.data.model
 
+import android.net.Uri
 import kotlin.math.abs
 
 /** A playable YouTube Music track. */
@@ -87,7 +88,34 @@ data class Song(
  *
  * Video thumbnails carry no hint and are returned unchanged.
  */
-fun Song.artworkAt(px: Int): String? = thumbnailUrl.artworkAt(px)
+fun Song.artworkAt(px: Int): String? {
+    val artwork = thumbnailUrl.artworkAt(px) ?: return null
+    val artworkUri = Uri.parse(artwork)
+    // LocalAudioArtworkFetcher can return either a fast MediaStore thumbnail
+    // or the full embedded cover. Include the requested size in the URI so a
+    // 256px library thumbnail cannot satisfy (and blur) the player's 1200px
+    // request from Coil's memory cache.
+    if ((localUri.isNullOrBlank() && localPath.isNullOrBlank()) ||
+        artworkUri.scheme !in setOf("content", "file")
+    ) {
+        return artwork
+    }
+
+    val sizeParameter = LOCAL_ARTWORK_SIZE_PARAMETER
+    if (artworkUri.getQueryParameter(sizeParameter) == px.toString()) return artwork
+    val builder = artworkUri.buildUpon().clearQuery()
+    artworkUri.queryParameterNames.forEach { key ->
+        if (key != sizeParameter) {
+            artworkUri.getQueryParameters(key).forEach { value ->
+                builder.appendQueryParameter(key, value)
+            }
+        }
+    }
+    return builder.appendQueryParameter(sizeParameter, px.toString()).build().toString()
+}
+
+/** Appended to local audio artwork URIs to distinguish Coil cache sizes. */
+internal const val LOCAL_ARTWORK_SIZE_PARAMETER = "bitchordArtworkPx"
 
 /**
  * Whether a row is the track the player is on, for the now-playing highlight.

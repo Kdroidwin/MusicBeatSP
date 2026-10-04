@@ -93,6 +93,7 @@ class MediaWidgetActions : BroadcastReceiver() {
                 seekToPreviousMediaItem()
                 prepareIfIdle()
             }
+            ACTION_SHUFFLE -> shuffleModeEnabled = !shuffleModeEnabled
         }
     }
 
@@ -106,11 +107,12 @@ class MediaWidgetActions : BroadcastReceiver() {
         const val ACTION_TOGGLE = "com.music.bitchord.widget.TOGGLE"
         const val ACTION_NEXT = "com.music.bitchord.widget.NEXT"
         const val ACTION_PREVIOUS = "com.music.bitchord.widget.PREVIOUS"
+        const val ACTION_SHUFFLE = "com.music.bitchord.widget.SHUFFLE"
 
         fun pendingIntent(context: Context, action: String): PendingIntent =
             PendingIntent.getBroadcast(
                 context,
-                // Distinct per action, so the three buttons cannot collapse into
+                // Distinct per action, so the transport buttons cannot collapse into
                 // one PendingIntent — extras are ignored when they are compared,
                 // and only the request code and the action tell them apart.
                 REQUEST_BASE + ACTIONS.indexOf(action),
@@ -118,7 +120,7 @@ class MediaWidgetActions : BroadcastReceiver() {
                 PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE,
             )
 
-        private val ACTIONS = listOf(ACTION_TOGGLE, ACTION_NEXT, ACTION_PREVIOUS)
+        private val ACTIONS = listOf(ACTION_TOGGLE, ACTION_NEXT, ACTION_PREVIOUS, ACTION_SHUFFLE)
 
         private const val REQUEST_BASE = 100
 

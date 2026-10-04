@@ -38,6 +38,8 @@ import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
+import androidx.compose.ui.res.stringResource
+import com.music.bitchord.R
 import coil3.compose.AsyncImage
 import com.music.bitchord.feature.localmusic.domain.model.LocalPlaylist
 
@@ -52,6 +54,12 @@ fun LocalPlaylistItem(
     onPlay: () -> Unit,
     onRename: () -> Unit,
     onDelete: () -> Unit,
+    onChangeCover: () -> Unit = {},
+    onResetCover: () -> Unit = {},
+    canMoveUp: Boolean = false,
+    canMoveDown: Boolean = false,
+    onMoveUp: () -> Unit = {},
+    onMoveDown: () -> Unit = {},
     modifier: Modifier = Modifier,
 ) {
     var menuOpen by remember { mutableStateOf(false) }
@@ -79,9 +87,10 @@ fun LocalPlaylistItem(
                     .background(MaterialTheme.colorScheme.primaryContainer),
                 contentAlignment = Alignment.Center,
             ) {
-                if (!playlist.coverUrl.isNullOrBlank()) {
+                val cover = playlist.customCoverUrl ?: playlist.coverUrl
+                if (!cover.isNullOrBlank()) {
                     AsyncImage(
-                        model = playlist.coverUrl,
+                        model = cover,
                         contentDescription = playlist.name,
                         contentScale = ContentScale.Crop,
                         modifier = Modifier.matchParentSize(),
@@ -132,6 +141,38 @@ fun LocalPlaylistItem(
                     expanded = menuOpen,
                     onDismissRequest = { menuOpen = false },
                 ) {
+                    DropdownMenuItem(
+                        text = { Text(stringResource(R.string.change_playlist_cover)) },
+                        onClick = {
+                            menuOpen = false
+                            onChangeCover()
+                        },
+                    )
+                    if (!playlist.customCoverUrl.isNullOrBlank()) {
+                        DropdownMenuItem(
+                            text = { Text(stringResource(R.string.reset_playlist_cover)) },
+                            onClick = {
+                                menuOpen = false
+                                onResetCover()
+                            },
+                        )
+                    }
+                    DropdownMenuItem(
+                        text = { Text(stringResource(R.string.move_playlist_up)) },
+                        enabled = canMoveUp,
+                        onClick = {
+                            menuOpen = false
+                            onMoveUp()
+                        },
+                    )
+                    DropdownMenuItem(
+                        text = { Text(stringResource(R.string.move_playlist_down)) },
+                        enabled = canMoveDown,
+                        onClick = {
+                            menuOpen = false
+                            onMoveDown()
+                        },
+                    )
                     DropdownMenuItem(
                         text = { Text("Play") },
                         leadingIcon = {

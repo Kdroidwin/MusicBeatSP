@@ -138,6 +138,10 @@ internal object MediaWidgetArt {
     fun peek(key: String?, widthPx: Int, heightPx: Int, bandPx: Int): Bitmap? =
         key?.let { composites[cacheKey(it, widthPx, heightPx, bandPx)] }?.takeIf { !it.isRecycled }
 
+    /** Loads a crisp cover for the dedicated square-art widget, without the blurred transport composite. */
+    suspend fun loadSquareCover(context: Context, artworkUrl: String?, sizePx: Int): Bitmap? =
+        loadArtwork(context, artworkUrl, sizePx.coerceAtLeast(1))
+
     /** Drops every remembered composite — the last widget has just been removed. */
     fun clear() {
         composites.evictAll()

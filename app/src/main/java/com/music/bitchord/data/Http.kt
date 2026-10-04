@@ -1,6 +1,7 @@
 package com.music.bitchord.data
 
 import android.util.Log
+import com.music.bitchord.data.settings.AppSettings
 import okhttp3.ConnectionPool
 import okhttp3.Dispatcher
 import okhttp3.OkHttpClient
@@ -13,6 +14,7 @@ import okio.buffer
 import java.util.concurrent.ConcurrentHashMap
 import java.util.concurrent.TimeUnit
 import java.util.concurrent.atomic.AtomicLong
+import java.io.IOException
 
 /**
  * One OkHttp client for the whole app.
@@ -114,6 +116,10 @@ object Http {
         .retryOnConnectionFailure(true)
         .dispatcher(Dispatcher().apply { maxRequestsPerHost = 16 })
         .connectionPool(ConnectionPool(16, 5, TimeUnit.MINUTES))
+        .addInterceptor { chain ->
+            if (AppSettings.offlineMode.value) throw IOException("Offline mode is enabled")
+            chain.proceed(chain.request())
+        }
         .apply { if (USAGE_LOGGING_ENABLED) addNetworkInterceptor(usageInterceptor) }
         .build()
 }

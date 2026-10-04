@@ -33,11 +33,15 @@ import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
 
+@kotlin.OptIn(coil3.annotation.ExperimentalCoilApi::class)
 class BitChordApplication : Application(), SingletonImageLoader.Factory {
 
     @OptIn(UnstableApi::class)
     override fun onCreate() {
         super.onCreate()
+        // Load network and playback preferences before asynchronous session
+        // restoration can make a request.
+        AppSettings.init(this)
         // PlaybackService shares this process, so seeding the cookie here means
         // stream resolution is authenticated from the first play onwards.
         authStore = AuthStore(this)
@@ -62,7 +66,6 @@ class BitChordApplication : Application(), SingletonImageLoader.Factory {
                 ?.let { Innertube.selectChannel(it.pageId, it.dataSyncId, it.authUser) }
             CoroutineScope(Dispatchers.IO).launch { Innertube.ensureSessionScope() }
         }
-        AppSettings.init(this)
         com.music.bitchord.feature.lyrics.manager.LyricsExtensionManager.init(this)
         com.music.bitchord.data.settings.EqualizerSettings.init(this)
         SourceRegistry.init(this)
@@ -125,6 +128,13 @@ class BitChordApplication : Application(), SingletonImageLoader.Factory {
     override fun newImageLoader(context: PlatformContext): ImageLoader =
         ImageLoader.Builder(context)
             .components {
+                add(
+                    coil3.network.okhttp.OkHttpNetworkFetcherFactory(
+                        callFactory = { com.music.bitchord.data.Http.client },
+                        cacheStrategy = { coil3.network.CacheStrategy.DEFAULT },
+                        connectivityChecker = { coil3.network.ConnectivityChecker(it) },
+                    ),
+                )
                 add(ArtistImageKeyer())
                 add(ArtistImageFetcher.Factory())
                 add(LocalAudioArtworkFetcher.CoilUriFactory(context))

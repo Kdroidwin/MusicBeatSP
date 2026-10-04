@@ -14,6 +14,7 @@ import androidx.activity.compose.setContent
 import androidx.activity.enableEdgeToEdge
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.appcompat.app.AppCompatActivity
+import androidx.media3.session.MediaController
 import androidx.core.content.ContextCompat
 import androidx.compose.animation.AnimatedContent
 import androidx.compose.animation.EnterTransition
@@ -65,6 +66,7 @@ import androidx.compose.material.icons.rounded.Settings
 import androidx.compose.material.icons.rounded.Sort
 import androidx.compose.material3.DropdownMenu
 import androidx.compose.material3.DropdownMenuItem
+import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
@@ -73,6 +75,7 @@ import androidx.compose.material3.ModalBottomSheet
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
+import androidx.compose.material3.Slider
 import kotlinx.coroutines.Job
 import androidx.compose.material.icons.automirrored.rounded.QueueMusic
 import androidx.compose.material.icons.rounded.Album
@@ -82,6 +85,7 @@ import androidx.compose.material.icons.rounded.Person
 import com.music.bitchord.feature.localmusic.ui.components.LocalPermissionCard
 import androidx.compose.material.icons.rounded.LibraryMusic
 import com.music.bitchord.feature.library.ui.LibraryScreen
+import com.music.bitchord.feature.library.ui.components.LibraryFilter
 import com.music.bitchord.ui.screens.LOCAL_TAB_SONGS
 import com.music.bitchord.ui.screens.LOCAL_TAB_ALBUMS
 import com.music.bitchord.ui.screens.LOCAL_TAB_ARTISTS
@@ -140,6 +144,8 @@ import com.music.bitchord.data.model.UiState
 import com.music.bitchord.data.model.durationMillis
 import com.music.bitchord.data.scrobbling.LastFM
 import com.music.bitchord.data.settings.AppSettings
+import com.music.bitchord.data.settings.MainNavigationTab
+import com.music.bitchord.data.settings.MainNavigationTabs
 import com.music.bitchord.data.settings.ThemeMode
 import com.music.bitchord.ui.screens.SettingsScreen
 import com.music.bitchord.playback.LinkRequest
@@ -170,6 +176,8 @@ import com.music.bitchord.ui.components.DownloadManagerSheet
 import com.music.bitchord.ui.components.PlaylistPickerSheet
 import com.music.bitchord.playback.rememberMediaController
 import com.music.bitchord.playback.rememberPlayerState
+import com.music.bitchord.playback.PlayerState
+import com.music.bitchord.playback.cast.CastPlaybackBridge
 import com.music.bitchord.ui.MainViewModel
 import com.music.bitchord.ui.components.BottomFadeScrim
 import com.music.bitchord.ui.components.BottomTab
@@ -227,12 +235,22 @@ import com.music.bitchord.ui.theme.rememberArtworkPalette
 import com.music.bitchord.ui.theme.SystemBarIcons
 import com.music.bitchord.ui.utils.rememberIosOverscrollFactory
 import com.music.bitchord.ui.performance.resolvePerformanceRefreshRate
+import com.music.bitchord.data.model.PLAYER_ART_PX
+import com.music.bitchord.data.model.artworkAt
 import dev.chrisbanes.haze.HazeState
 import dev.chrisbanes.haze.hazeSource
 import dev.chrisbanes.haze.materials.ExperimentalHazeMaterialsApi
 import dev.chrisbanes.haze.materials.HazeMaterials
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.async
+import kotlinx.coroutines.awaitAll
+import kotlinx.coroutines.coroutineScope
+import kotlinx.coroutines.Dispatchers
+import coil3.SingletonImageLoader
+import coil3.request.ImageRequest
+import coil3.request.SuccessResult
 import java.util.Locale
+import kotlinx.coroutines.flow.first
 
 /** A full first screen of a native YouTube Music radio before AutoPlay tops it up. */
 private const val INITIAL_RADIO_TRACKS = 24
@@ -248,6 +266,13 @@ class MainActivity : AppCompatActivity() {
         MusicLink.consume(intent)
         setContent {
             val theme by AppSettings.themeMode.collectAsStateWithLifecycle()
+            val controller = rememberMediaController()
+            val player = rememberPlayerState(controller)
+            val currentArtwork = if (theme == ThemeMode.ARTWORK) {
+                player.song?.artworkAt(PLAYER_ART_PX)
+            } else {
+                null
+            }
             val highPerformance by AppSettings.highPerformanceMode.collectAsStateWithLifecycle()
             val liquidGlassEnabled by AppSettings.liquidGlass.collectAsStateWithLifecycle()
             val iosOverscrollFactory = rememberIosOverscrollFactory()
@@ -259,9 +284,15 @@ class MainActivity : AppCompatActivity() {
             val darkTheme = when (theme) {
                 ThemeMode.SYSTEM -> isSystemInDarkTheme()
                 ThemeMode.LIGHT -> false
-                ThemeMode.DARK -> true
+                ThemeMode.DARK, ThemeMode.AMOLED -> true
+                ThemeMode.ARTWORK -> isSystemInDarkTheme()
             }
-            BitChordTheme(darkTheme = darkTheme) {
+            BitChordTheme(
+                darkTheme = darkTheme,
+                amoledBlack = theme == ThemeMode.AMOLED,
+                artworkUrl = currentArtwork,
+                matchArtwork = theme == ThemeMode.ARTWORK,
+            ) {
                 // The glass surfaces sample this layer, and a layer records only
                 // what is drawn into it — which, for BitChord, is a page that
                 // paints no background of its own. Everywhere a page is not
@@ -296,7 +327,13 @@ class MainActivity : AppCompatActivity() {
                 // A measured constraint cannot be stale — it is the very width
                 // the split is about to be laid out in.
                 BoxWithConstraints(Modifier.fillMaxSize()) {
-                    BitChordApp(darkTheme = darkTheme, windowWidth = maxWidth, appBackdrop = appBackdrop)
+                    BitChordApp(
+                        darkTheme = darkTheme,
+                        windowWidth = maxWidth,
+                        appBackdrop = appBackdrop,
+                        controller = controller,
+                        player = player,
+                    )
                 }
                 }
             }
@@ -345,6 +382,8 @@ private fun BitChordApp(
     /** The width of the window this is laid out in — see the call site. */
     windowWidth: Dp,
     appBackdrop: LayerBackdrop,
+    controller: MediaController?,
+    player: PlayerState,
     viewModel: MainViewModel = viewModel(),
 ) {
     val context = LocalContext.current
@@ -364,6 +403,23 @@ private fun BitChordApp(
     val useCollapsibleNavBar = !classicNavBar
     val glassSamplesBackdrop = glassActive && !reduceDynamicBlur
     var selectedTab by rememberSaveable { mutableIntStateOf(0) }
+    val visibleMainNavigationTabs by AppSettings.visibleMainNavigationTabs.collectAsStateWithLifecycle()
+    val mainNavigationTabOrder by AppSettings.mainNavigationTabOrder.collectAsStateWithLifecycle()
+    val visibleTabIndices = remember(visibleMainNavigationTabs, mainNavigationTabOrder) {
+        mainNavigationTabOrder
+            .filter { it in visibleMainNavigationTabs }
+            .map(MainNavigationTab::index)
+    }
+    LaunchedEffect(visibleTabIndices, mainNavigationTabOrder) {
+        if (selectedTab !in visibleTabIndices && visibleTabIndices.isNotEmpty()) {
+            selectedTab = MainNavigationTabs.fallback(
+                selectedTab,
+                visibleMainNavigationTabs,
+                mainNavigationTabOrder,
+            ).index
+            viewModel.clearDetail()
+        }
+    }
     // Whether there is room to keep the player open beside the page rather than
     // raising it over one. Read all over what follows, because most of what the
     // page does about the player is really about which of the two it is: no mini
@@ -410,6 +466,7 @@ private fun BitChordApp(
     var showLastfmLogin by remember { mutableStateOf(false) }
     var showDownloadManager by remember { mutableStateOf(false) }
     var showEqualizerSheet by remember { mutableStateOf(false) }
+    var showPlaybackTuning by remember { mutableStateOf(false) }
     var targetAlbumDrillDown by remember { mutableStateOf<String?>(null) }
     var targetArtistDrillDown by remember { mutableStateOf<String?>(null) }
     var songActions by remember { mutableStateOf<Song?>(null) }
@@ -424,6 +481,8 @@ private fun BitChordApp(
      * question has to be answered by whoever opened the menu.
      */
     var menuFromPlayer by remember { mutableStateOf(false) }
+    // Keep the Cast receiver's local-file bridge alive after its menu closes.
+    CastPlaybackBridge(controller, player.song)
     /** Holding a row anywhere but the player — the menu without the player's rows. */
     val openSongMenu: (Song) -> Unit = { song ->
         menuFromPlayer = false
@@ -450,6 +509,7 @@ private fun BitChordApp(
     // Incremented each time the search tab is re-tapped while already selected,
     // which SearchScreen uses as a signal to focus the input field.
     var searchFocusTrigger by remember { mutableIntStateOf(0) }
+    var libraryFilterRequest by remember { mutableStateOf<LibraryFilter?>(null) }
     // Invalidates an in-flight radio lookup when a later play request wins.
     var playRequestGeneration by remember { mutableIntStateOf(0) }
     // Single-flight playback job to cancel previous in-flight requests on rapid taps
@@ -543,8 +603,6 @@ private fun BitChordApp(
         }
     }
 
-    val controller = rememberMediaController()
-    val player = rememberPlayerState(controller)
     val hasMusicBar = player.song != null && !playerDocked
     val navBarScroll = rememberFloatingTabBarScrollConnection(
         inlineBehavior = if (hasMusicBar) FloatingTabBarInlineBehavior.OnScrollDown else FloatingTabBarInlineBehavior.Never,
@@ -596,6 +654,53 @@ private fun BitChordApp(
     val isRefreshingLocalMusic by viewModel.isRefreshingLocalMusic.collectAsStateWithLifecycle()
     val localSongs = (localSongsState as? UiState.Success)?.data.orEmpty()
     val localEmptyMessage = (localSongsState as? UiState.Error)?.message
+    val preloadArtworkOnStartup by AppSettings.preloadAlbumArtOnStartup.collectAsStateWithLifecycle()
+    var artworkPreloadFinished by rememberSaveable { mutableStateOf(false) }
+
+    LaunchedEffect(preloadArtworkOnStartup, artworkPreloadFinished) {
+        if (!preloadArtworkOnStartup || artworkPreloadFinished) return@LaunchedEffect
+        // Wait for a completed local scan rather than consuming this option
+        // while the library is still Loading or after an unsuccessful scan.
+        val scanState = viewModel.localSongs.first { it !is UiState.Loading }
+        val songs = (scanState as? UiState.Success)?.data ?: run {
+            Toast.makeText(context, R.string.preload_album_art_scan_failed, Toast.LENGTH_LONG).show()
+            return@LaunchedEffect
+        }
+        val requests = songs.mapNotNull { song ->
+            song.artworkAt(PLAYER_ART_PX)?.let { url -> url to song }
+        }.distinctBy { it.first }
+        val loader = SingletonImageLoader.get(context)
+        // Full-size requests make LocalAudioArtworkFetcher read embedded covers
+        // and persist their encoded bytes in LocalArtworkCache. A row-size
+        // request returns MediaStore's thumbnail early and skips that cache.
+        // Bounded batches keep memory and file-descriptor use predictable.
+        var loaded = 0
+        requests.chunked(3).forEach { batch ->
+            val results = coroutineScope {
+                batch.map { (url, _) ->
+                    async(Dispatchers.IO) {
+                        runCatching {
+                            loader.execute(
+                                ImageRequest.Builder(context)
+                                    .data(url)
+                                    .size(PLAYER_ART_PX)
+                                    .build(),
+                            ) is SuccessResult
+                        }.getOrDefault(false)
+                    }
+                }.awaitAll()
+            }
+            loaded += results.count { it }
+        }
+        Toast.makeText(
+            context,
+            context.getString(R.string.preload_album_art_result, loaded, requests.size - loaded),
+            Toast.LENGTH_LONG,
+        ).show()
+        // A partial read remains eligible for a retry after recreation; a full
+        // pass is not repeated just because the Activity recomposed or rotated.
+        artworkPreloadFinished = loaded == requests.size
+    }
 
     LaunchedEffect(Unit) {
         if (LocalMediaRepository.hasStoragePermission(context)) {
@@ -678,7 +783,7 @@ private fun BitChordApp(
     val artistsLabel = stringResource(R.string.artists)
     val libraryLabel = stringResource(R.string.library)
     val searchLabel = stringResource(R.string.search)
-    val tabs = remember(songsLabel, albumsLabel, artistsLabel, libraryLabel, searchLabel) {
+    val allTabs = remember(songsLabel, albumsLabel, artistsLabel, libraryLabel, searchLabel) {
         listOf(
             BottomTab(songsLabel, Icons.Rounded.MusicNote),
             BottomTab(albumsLabel, Icons.Rounded.Album),
@@ -686,6 +791,9 @@ private fun BitChordApp(
             BottomTab(libraryLabel, Icons.Rounded.LibraryMusic),
             BottomTab(searchLabel, BitChordIcons.Search),
         )
+    }
+    val tabs = remember(allTabs, visibleTabIndices) {
+        visibleTabIndices.mapNotNull(allTabs::getOrNull)
     }
 
     val scope = rememberCoroutineScope()
@@ -1568,6 +1676,22 @@ private fun BitChordApp(
                 menuFromPlayer = true
                 songActions = song
             },
+            onOpenPlaylists = {
+                showNowPlaying = false
+                showSettings = false
+                showReplay = false
+                viewModel.clearDetail()
+                libraryFilterRequest = LibraryFilter.PLAYLISTS
+                selectedTab = TAB_LIBRARY
+            },
+            onOpenSearch = {
+                showNowPlaying = false
+                showSettings = false
+                showReplay = false
+                viewModel.clearDetail()
+                selectedTab = TAB_SEARCH
+                searchFocusTrigger++
+            },
             onOpenAlbum = { _ ->
                 showNowPlaying = false
                 val albumName = song.albumName?.trim().orEmpty()
@@ -2015,6 +2139,8 @@ private fun BitChordApp(
                                 onAddToQueue = addToQueue,
                                 onDeleteSong = { viewModel.loadLocalMusic() },
                                 onSongTagsOrLyricsSaved = { viewModel.reloadLyrics(it) },
+                                initialFilterRequest = libraryFilterRequest,
+                                onInitialFilterApplied = { libraryFilterRequest = null },
                             )
                         }
                         TAB_SEARCH -> if (!hasStoragePermission) {
@@ -2073,7 +2199,7 @@ private fun BitChordApp(
                         showSettings -> stringResource(R.string.settings)
                         showReplay -> stringResource(R.string.replay)
                         detail != null -> detail.title
-                        else -> tabs[selectedTab].label
+                        else -> allTabs.getOrElse(selectedTab) { allTabs.first() }.label
                     },
                     scrolled = when {
                         showSettings -> true
@@ -2123,7 +2249,8 @@ private fun BitChordApp(
                 )
 
                 // One tab handler, whichever bar is drawing it.
-                val onTabSelected: (Int) -> Unit = { index ->
+                val onTabSelected: (Int) -> Unit = onTabSelected@{ visibleIndex ->
+                    val index = visibleTabIndices.getOrNull(visibleIndex) ?: return@onTabSelected
                     if (index == TAB_SEARCH && selectedTab == TAB_SEARCH) {
                         searchFocusTrigger++
                     } else {
@@ -2149,7 +2276,7 @@ private fun BitChordApp(
                     // and the pair folds together on scroll. Works with or without liquid glass.
                     GlassNavBar(
                         tabs = tabs,
-                        selectedIndex = selectedTab,
+                        selectedIndex = visibleTabIndices.indexOf(selectedTab).coerceAtLeast(0),
                         onTabSelected = onTabSelected,
                         scrollConnection = navBarScroll,
                         song = player.song?.takeUnless { playerDocked },
@@ -2202,7 +2329,7 @@ private fun BitChordApp(
                     }
                     FloatingBottomBar(
                         tabs = tabs,
-                        selectedIndex = selectedTab,
+                        selectedIndex = visibleTabIndices.indexOf(selectedTab).coerceAtLeast(0),
                         hazeState = hazeState,
                         onTabSelected = onTabSelected,
                     )
@@ -2368,7 +2495,7 @@ private fun BitChordApp(
                 )
             } else if (showAddToPlaylist) {
                 LocalAddToPlaylistSheet(
-                    song = song,
+                    songs = listOf(song),
                     onDismissRequest = {
                         showAddToPlaylist = false
                         songActions = null
@@ -2432,6 +2559,18 @@ private fun BitChordApp(
                         songActions = null
                         showEqualizerSheet = true
                     },
+                    onPlaybackTuning = {
+                        songActions = null
+                        showPlaybackTuning = true
+                    },
+                    showPlayerActions = menuFromPlayer,
+                    onCastUnavailable = {
+                        Toast.makeText(
+                            context,
+                            context.getString(R.string.chromecast_unavailable),
+                            Toast.LENGTH_SHORT,
+                        ).show()
+                    },
                     onTagEditor = {
                         showTagEditor = true
                     },
@@ -2472,6 +2611,10 @@ private fun BitChordApp(
             EqualizerSheet(
                 onDismiss = { showEqualizerSheet = false },
             )
+        }
+
+        if (showPlaybackTuning) {
+            PlaybackTuningDialog(onDismiss = { showPlaybackTuning = false })
         }
 
         // ---- Add to playlist / new playlist ----
@@ -2977,6 +3120,47 @@ private fun DockedPlayer(
             )
         }
     }
+}
+
+@Composable
+private fun PlaybackTuningDialog(onDismiss: () -> Unit) {
+    var speed by remember { mutableStateOf(AppSettings.playbackSpeed.value) }
+    var pitch by remember { mutableStateOf(AppSettings.playbackPitch.value) }
+    AlertDialog(
+        onDismissRequest = onDismiss,
+        title = { Text(stringResource(R.string.playback_tuning)) },
+        text = {
+            Column {
+                Text(stringResource(R.string.playback_speed) + " · " + String.format(Locale.ROOT, "%.2fx", speed))
+                Slider(
+                    value = speed,
+                    onValueChange = { speed = it },
+                    valueRange = 0.5f..2.0f,
+                    steps = 29,
+                )
+                Spacer(Modifier.height(12.dp))
+                Text(stringResource(R.string.playback_pitch) + " · " + String.format(Locale.ROOT, "%.2fx", pitch))
+                Slider(
+                    value = pitch,
+                    onValueChange = { pitch = it },
+                    valueRange = 0.5f..2.0f,
+                    steps = 29,
+                )
+            }
+        },
+        confirmButton = {
+            TextButton(onClick = {
+                AppSettings.setPlaybackSpeed(speed)
+                AppSettings.setPlaybackPitch(pitch)
+                onDismiss()
+            }) {
+                Text(stringResource(R.string.save))
+            }
+        },
+        dismissButton = {
+            TextButton(onClick = onDismiss) { Text(stringResource(R.string.cancel)) }
+        },
+    )
 }
 
 /**

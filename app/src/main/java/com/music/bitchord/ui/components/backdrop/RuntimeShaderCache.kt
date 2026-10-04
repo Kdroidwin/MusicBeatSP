@@ -9,6 +9,7 @@
  */
 package com.music.bitchord.ui.components.backdrop
 
+import android.os.Build
 import org.intellij.lang.annotations.Language
 
 sealed interface RuntimeShaderCache {
@@ -21,6 +22,12 @@ internal class RuntimeShaderCacheImpl : RuntimeShaderCache {
     private val runtimeShaders = mutableMapOf<String, RuntimeShader>()
 
     override fun obtainRuntimeShader(key: String, string: String): RuntimeShader {
+        // Callers normally guard the effect using isRuntimeShaderSupported();
+        // keep the API boundary safe here as well in case a future call site
+        // forgets that RuntimeShader is API 33+.
+        if (Build.VERSION.SDK_INT < Build.VERSION_CODES.TIRAMISU) {
+            throw UnsupportedOperationException("RuntimeShader requires Android 13 or later")
+        }
         return runtimeShaders.getOrPut(key) { RuntimeShader(string) }
     }
 

@@ -13,7 +13,7 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyColumn
-import androidx.compose.foundation.lazy.items
+import androidx.compose.foundation.lazy.itemsIndexed
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.rounded.QueueMusic
@@ -41,6 +41,9 @@ fun LocalPlaylistsTab(
     onCreatePlaylist: () -> Unit,
     onRenamePlaylist: (LocalPlaylist) -> Unit,
     onDeletePlaylist: (LocalPlaylist) -> Unit,
+    onChangePlaylistCover: (LocalPlaylist) -> Unit = {},
+    onResetPlaylistCover: (LocalPlaylist) -> Unit = {},
+    onMovePlaylist: (LocalPlaylist, Int) -> Unit,
     contentPadding: PaddingValues,
     modifier: Modifier = Modifier,
 ) {
@@ -127,13 +130,19 @@ fun LocalPlaylistsTab(
             }
         }
 
-        items(playlists, key = { it.id }) { playlist ->
+        itemsIndexed(playlists, key = { _, playlist -> playlist.id }) { index, playlist ->
             LocalPlaylistItem(
                 playlist = playlist,
                 onClick = { onPlaylistClick(playlist) },
                 onPlay = { onPlaylistPlay(playlist) },
                 onRename = { onRenamePlaylist(playlist) },
                 onDelete = { onDeletePlaylist(playlist) },
+                onChangeCover = { onChangePlaylistCover(playlist) },
+                onResetCover = { onResetPlaylistCover(playlist) },
+                canMoveUp = index > 0,
+                canMoveDown = index < playlists.lastIndex,
+                onMoveUp = { onMovePlaylist(playlist, -1) },
+                onMoveDown = { onMovePlaylist(playlist, 1) },
             )
         }
     }

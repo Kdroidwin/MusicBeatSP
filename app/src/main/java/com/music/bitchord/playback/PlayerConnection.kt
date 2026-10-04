@@ -275,7 +275,12 @@ fun MediaItem.toSong() = Song(
     videoId = mediaId,
     title = mediaMetadata.title?.toString().orEmpty(),
     artist = mediaMetadata.artist?.toString().orEmpty(),
-    thumbnailUrl = mediaMetadata.artworkUri?.toString(),
+    // The session-facing artworkUri is deliberately down-sized for system
+    // surfaces. Keep the source URL separately so a controller round-trip
+    // doesn't make the full-screen player mistake that preview for the
+    // original and request a larger derivative of an already reduced image.
+    thumbnailUrl = mediaMetadata.extras?.getString(EXTRA_ARTWORK_SOURCE_URL)
+        ?: mediaMetadata.artworkUri?.toString(),
     durationText = mediaMetadata.extras?.getString(EXTRA_DURATION),
     artistId = mediaMetadata.extras?.getString(EXTRA_ARTIST_ID),
     albumId = mediaMetadata.extras?.getString(EXTRA_ALBUM_ID),
@@ -319,6 +324,9 @@ private const val EXTRA_ALBUM_ID = "bitchord.albumId"
 
 /** @see Song.setVideoId */
 private const val EXTRA_SET_VIDEO_ID = "bitchord.setVideoId"
+
+/** @see Song.thumbnailUrl; separate from the smaller URI sent to Media3 surfaces. */
+private const val EXTRA_ARTWORK_SOURCE_URL = "bitchord.artworkSourceUrl"
 
 /** @see Song.localUri */
 internal const val EXTRA_LOCAL_URI = "bitchord.localUri"
@@ -522,7 +530,8 @@ fun Song.toMediaItem(): MediaItem {
             .apply {
                 if (fromAutoplay || offlineUri != null || durationText != null ||
                     artistId != null || albumId != null || setVideoId != null ||
-                    isExplicit != null || isVideo || isVideoOrigin || radioName != null
+                    isExplicit != null || isVideo || isVideoOrigin || radioName != null ||
+                    thumbnailUrl != null
                 ) {
                     setExtras(
                         bundleOf(
@@ -534,6 +543,7 @@ fun Song.toMediaItem(): MediaItem {
                             EXTRA_ARTIST_ID to artistId,
                             EXTRA_ALBUM_ID to albumId,
                             EXTRA_SET_VIDEO_ID to setVideoId,
+                            EXTRA_ARTWORK_SOURCE_URL to thumbnailUrl,
                             EXTRA_EXPLICIT to isExplicit,
                             EXTRA_IS_VIDEO to isVideo,
                             EXTRA_VIDEO_ORIGIN to isVideoOrigin,
