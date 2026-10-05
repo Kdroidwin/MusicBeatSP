@@ -73,6 +73,7 @@ import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
+import androidx.compose.material3.LinearProgressIndicator
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.ModalBottomSheet
 import androidx.compose.material3.Surface
@@ -248,14 +249,7 @@ import dev.chrisbanes.haze.materials.ExperimentalHazeMaterialsApi
 import dev.chrisbanes.haze.materials.HazeMaterials
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.async
-import kotlinx.coroutines.awaitAll
-import kotlinx.coroutines.coroutineScope
-import kotlinx.coroutines.Dispatchers
-import coil3.SingletonImageLoader
-import coil3.request.ImageRequest
-import coil3.request.SuccessResult
 import java.util.Locale
-import kotlinx.coroutines.flow.first
 
 /** A full first screen of a native YouTube Music radio before AutoPlay tops it up. */
 private const val INITIAL_RADIO_TRACKS = 24
@@ -693,54 +687,15 @@ private fun BitChordApp(
 
     val localSongsState by viewModel.localSongs.collectAsStateWithLifecycle()
     val isRefreshingLocalMusic by viewModel.isRefreshingLocalMusic.collectAsStateWithLifecycle()
+    val localArtworkPreload by viewModel.localArtworkPreload.collectAsStateWithLifecycle()
     val localSongs = (localSongsState as? UiState.Success)?.data.orEmpty()
     val localEmptyMessage = (localSongsState as? UiState.Error)?.message
     val preloadArtworkOnStartup by AppSettings.preloadAlbumArtOnStartup.collectAsStateWithLifecycle()
-    var artworkPreloadFinished by rememberSaveable { mutableStateOf(false) }
 
-    LaunchedEffect(preloadArtworkOnStartup, artworkPreloadFinished) {
-        if (!preloadArtworkOnStartup || artworkPreloadFinished) return@LaunchedEffect
-        // Wait for a completed local scan rather than consuming this option
-        // while the library is still Loading or after an unsuccessful scan.
-        val scanState = viewModel.localSongs.first { it !is UiState.Loading }
-        val songs = (scanState as? UiState.Success)?.data ?: run {
-            Toast.makeText(context, R.string.preload_album_art_scan_failed, Toast.LENGTH_LONG).show()
-            return@LaunchedEffect
+    LaunchedEffect(preloadArtworkOnStartup, hasStoragePermission) {
+        if (preloadArtworkOnStartup && hasStoragePermission) {
+            viewModel.preloadLocalArtwork(startup = true)
         }
-        val requests = songs.mapNotNull { song ->
-            song.artworkAt(PLAYER_ART_PX)?.let { url -> url to song }
-        }.distinctBy { it.first }
-        val loader = SingletonImageLoader.get(context)
-        // Full-size requests make LocalAudioArtworkFetcher read embedded covers
-        // and persist their encoded bytes in LocalArtworkCache. A row-size
-        // request returns MediaStore's thumbnail early and skips that cache.
-        // Bounded batches keep memory and file-descriptor use predictable.
-        var loaded = 0
-        requests.chunked(3).forEach { batch ->
-            val results = coroutineScope {
-                batch.map { (url, _) ->
-                    async(Dispatchers.IO) {
-                        runCatching {
-                            loader.execute(
-                                ImageRequest.Builder(context)
-                                    .data(url)
-                                    .size(PLAYER_ART_PX)
-                                    .build(),
-                            ) is SuccessResult
-                        }.getOrDefault(false)
-                    }
-                }.awaitAll()
-            }
-            loaded += results.count { it }
-        }
-        Toast.makeText(
-            context,
-            context.getString(R.string.preload_album_art_result, loaded, requests.size - loaded),
-            Toast.LENGTH_LONG,
-        ).show()
-        // A partial read remains eligible for a retry after recreation; a full
-        // pass is not repeated just because the Activity recomposed or rotated.
-        artworkPreloadFinished = loaded == requests.size
     }
 
     LaunchedEffect(Unit) {
@@ -1933,6 +1888,7 @@ private fun BitChordApp(
                             },
                             onLyricsSources = { showLyricsSources = true },
                             onAppLanguage = { showAppLanguage = true },
+                            onPreloadArtworkNow = { viewModel.preloadLocalArtwork() },
                             contentPadding = listPadding,
                         )
                     } else if (page != null && page.browseId.isDeviceFolder()) {
@@ -2901,6 +2857,88 @@ private fun BitChordApp(
             LyricsSourcesDialog(
                 hazeState = hazeState,
                 onDismiss = { showLyricsSources = false },
+            )
+        }
+
+        if (localArtworkPreload.isRunning || localArtworkPreload.isComplete || localArtworkPreload.errorMessage != null) {
+            AlertDialog(
+                onDismissRequest = { viewModel.dismissLocalArtworkPreload() },
+                title = {
+                    Text(
+                        stringResource(
+                            when {
+                                localArtworkPreload.isRunning -> R.string.preload_album_art_progress_title
+                                localArtworkPreload.errorMessage != null ||
+                                    (localArtworkPreload.isComplete && localArtworkPreload.skipped > 0) ->
+                                    R.string.preload_album_art_failed_title
+                                else -> R.string.preload_album_art_complete_title
+                            },
+                        ),
+                    )
+                },
+                text = {
+                    Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
+                        when {
+                            localArtworkPreload.isRunning && localArtworkPreload.total > 0 -> {
+                                Text(
+                                    stringResource(
+                                        R.string.preload_album_art_progress,
+                                        localArtworkPreload.processed,
+                                        localArtworkPreload.total,
+                                        localArtworkPreload.loaded,
+                                        localArtworkPreload.skipped,
+                                    ),
+                                )
+                                LinearProgressIndicator(
+                                    progress = {
+                                        (localArtworkPreload.processed.toFloat() /
+                                            localArtworkPreload.total.toFloat()).coerceIn(0f, 1f)
+                                    },
+                                    modifier = Modifier.fillMaxWidth(),
+                                )
+                            }
+                            localArtworkPreload.isRunning -> {
+                                Text(stringResource(R.string.preload_album_art_progress_scanning))
+                                LinearProgressIndicator(modifier = Modifier.fillMaxWidth())
+                            }
+                            localArtworkPreload.errorMessage != null -> {
+                                Text(localArtworkPreload.errorMessage!!)
+                            }
+                            localArtworkPreload.isComplete && localArtworkPreload.skipped > 0 -> {
+                                Text(stringResource(R.string.preload_album_art_partial_failure))
+                                Text(
+                                    stringResource(
+                                        R.string.preload_album_art_result,
+                                        localArtworkPreload.loaded,
+                                        localArtworkPreload.skipped,
+                                    ),
+                                )
+                            }
+                            else -> {
+                                Text(
+                                    stringResource(
+                                        R.string.preload_album_art_result,
+                                        localArtworkPreload.loaded,
+                                        localArtworkPreload.skipped,
+                                    ),
+                                )
+                            }
+                        }
+                    }
+                },
+                confirmButton = {
+                    TextButton(
+                        enabled = !localArtworkPreload.isRunning,
+                        onClick = { viewModel.dismissLocalArtworkPreload() },
+                    ) {
+                        Text(
+                            stringResource(
+                                if (localArtworkPreload.isRunning) R.string.preload_album_art_working
+                                else R.string.close,
+                            ),
+                        )
+                    }
+                },
             )
         }
 

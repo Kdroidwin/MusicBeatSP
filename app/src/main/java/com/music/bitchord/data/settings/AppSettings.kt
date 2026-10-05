@@ -82,6 +82,13 @@ enum class OutputPcmMode(val label: String) {
     FLOAT_32("32-bit float"),
 }
 
+/** Text alignment for the full-screen lyrics panel. */
+enum class LyricsTextAlignment {
+    LEFT,
+    CENTER,
+    RIGHT,
+}
+
 /**
  * What to keep when a track is saved to the device.
  *
@@ -355,6 +362,9 @@ object AppSettings {
 
     val crossfadeSeconds = MutableStateFlow(0)
 
+    /** Optional high-frequency cutoff for PCM playback. Zero leaves audio untouched. */
+    val resamplerCutoffHz = MutableStateFlow(0)
+
     val skipSilence = MutableStateFlow(false)
 
     /** Requested PCM representation at the Android AudioTrack boundary. */
@@ -469,6 +479,22 @@ object AppSettings {
     /** Hides the lyrics-panel note when lyrics were stored in a downloaded file. */
     val hideLyricsSavedMessage = MutableStateFlow(false)
 
+    /** Hides the empty-result label in the lyrics panel and the one-line player strip. */
+    val hideLyricsUnavailableLabel = MutableStateFlow(false)
+
+    /** Hides the music-note glyph used to mark instrumental gaps in synced lyrics. */
+    val hideLyricsGapNote = MutableStateFlow(false)
+
+    /** Optional transport shortcuts shown in the lyrics header when its status pill is hidden. */
+    val showLyricsPreviousControl = MutableStateFlow(false)
+    val showLyricsPlayPauseControl = MutableStateFlow(false)
+    val showLyricsNextControl = MutableStateFlow(false)
+
+    /** Multiplier applied to the lyrics panel's existing synced/unsynced type sizes. */
+    val lyricsFontScale = MutableStateFlow(1f)
+
+    val lyricsTextAlignment = MutableStateFlow(LyricsTextAlignment.CENTER)
+
     /** Whether a tap on the player artwork opens the full lyrics panel. */
     val artworkTapOpensLyrics = MutableStateFlow(false)
 
@@ -502,6 +528,7 @@ object AppSettings {
     val hidePlayerArtist = MutableStateFlow(false)
     val hideUnknownPlayerArtist = MutableStateFlow(false)
     val centerPlayerTrackInfo = MutableStateFlow(false)
+    val playerDetailsVerticalMenu = MutableStateFlow(false)
     val preloadAlbumArtOnStartup = MutableStateFlow(false)
 
     /**
@@ -801,6 +828,7 @@ object AppSettings {
         wifiOnlyDownloads.value = prefs.getBoolean(KEY_WIFI_ONLY_DOWNLOADS, true)
         exportDownloads.value = prefs.getBoolean(KEY_EXPORT_DOWNLOADS, false)
         skipSilence.value = prefs.getBoolean(KEY_SKIP_SILENCE, false)
+        resamplerCutoffHz.value = normalizeResamplerCutoffHz(prefs.getInt(KEY_RESAMPLER_CUTOFF_HZ, 0))
         outputPcmMode.value = runCatching {
             OutputPcmMode.valueOf(
                 prefs.getString(KEY_OUTPUT_PCM_MODE, OutputPcmMode.PCM_16.name)
@@ -853,6 +881,18 @@ object AppSettings {
         lyricsBlur.value = prefs.getBoolean(KEY_LYRICS_BLUR, true)
         hideLyricsStatusText.value = prefs.getBoolean(KEY_HIDE_LYRICS_STATUS_TEXT, false)
         hideLyricsSavedMessage.value = prefs.getBoolean(KEY_HIDE_LYRICS_SAVED_MESSAGE, false)
+        hideLyricsUnavailableLabel.value = prefs.getBoolean(KEY_HIDE_LYRICS_UNAVAILABLE_LABEL, false)
+        hideLyricsGapNote.value = prefs.getBoolean(KEY_HIDE_LYRICS_GAP_NOTE, false)
+        showLyricsPreviousControl.value = prefs.getBoolean(KEY_SHOW_LYRICS_PREVIOUS_CONTROL, false)
+        showLyricsPlayPauseControl.value = prefs.getBoolean(KEY_SHOW_LYRICS_PLAY_PAUSE_CONTROL, false)
+        showLyricsNextControl.value = prefs.getBoolean(KEY_SHOW_LYRICS_NEXT_CONTROL, false)
+        lyricsFontScale.value = prefs.getFloat(KEY_LYRICS_FONT_SCALE, 1f).coerceIn(0.6f, 1.6f)
+        lyricsTextAlignment.value = runCatching {
+            LyricsTextAlignment.valueOf(
+                prefs.getString(KEY_LYRICS_TEXT_ALIGNMENT, LyricsTextAlignment.CENTER.name)
+                    ?: LyricsTextAlignment.CENTER.name,
+            )
+        }.getOrDefault(LyricsTextAlignment.CENTER)
         artworkTapOpensLyrics.value = prefs.getBoolean(KEY_ARTWORK_TAP_OPENS_LYRICS, false)
         showPlayerLyricsStrip.value = prefs.getBoolean(KEY_SHOW_PLAYER_LYRICS_STRIP, true)
         offlineMode.value = prefs.getBoolean(KEY_OFFLINE_MODE, false)
@@ -869,7 +909,12 @@ object AppSettings {
         hidePlayerArtist.value = prefs.getBoolean(KEY_HIDE_PLAYER_ARTIST, false)
         hideUnknownPlayerArtist.value = prefs.getBoolean(KEY_HIDE_UNKNOWN_PLAYER_ARTIST, false)
         centerPlayerTrackInfo.value = prefs.getBoolean(KEY_CENTER_PLAYER_TRACK_INFO, false)
+        playerDetailsVerticalMenu.value = prefs.getBoolean(KEY_PLAYER_DETAILS_VERTICAL_MENU, false)
         preloadAlbumArtOnStartup.value = prefs.getBoolean(KEY_PRELOAD_ALBUM_ART_ON_STARTUP, false)
+        if (preloadAlbumArtOnStartup.value && !persistentLocalArtwork.value) {
+            persistentLocalArtwork.value = true
+            prefs.edit().putBoolean(KEY_PERSISTENT_LOCAL_ARTWORK, true).apply()
+        }
         if (highPerformanceMode.value) {
             reduceAnimation.value = false
             reduceDynamicBlur.value = false
@@ -1084,6 +1129,12 @@ object AppSettings {
     fun setSkipSilence(value: Boolean) {
         skipSilence.value = value
         prefs.edit().putBoolean(KEY_SKIP_SILENCE, value).apply()
+    }
+
+    fun setResamplerCutoffHz(value: Int) {
+        val normalized = normalizeResamplerCutoffHz(value)
+        resamplerCutoffHz.value = normalized
+        prefs.edit().putInt(KEY_RESAMPLER_CUTOFF_HZ, normalized).apply()
     }
 
     fun setDolbyAtmos(value: Boolean) {
@@ -1318,6 +1369,42 @@ object AppSettings {
         prefs.edit().putBoolean(KEY_HIDE_LYRICS_SAVED_MESSAGE, value).apply()
     }
 
+    fun setHideLyricsUnavailableLabel(value: Boolean) {
+        hideLyricsUnavailableLabel.value = value
+        prefs.edit().putBoolean(KEY_HIDE_LYRICS_UNAVAILABLE_LABEL, value).apply()
+    }
+
+    fun setHideLyricsGapNote(value: Boolean) {
+        hideLyricsGapNote.value = value
+        prefs.edit().putBoolean(KEY_HIDE_LYRICS_GAP_NOTE, value).apply()
+    }
+
+    fun setShowLyricsPreviousControl(value: Boolean) {
+        showLyricsPreviousControl.value = value
+        prefs.edit().putBoolean(KEY_SHOW_LYRICS_PREVIOUS_CONTROL, value).apply()
+    }
+
+    fun setShowLyricsPlayPauseControl(value: Boolean) {
+        showLyricsPlayPauseControl.value = value
+        prefs.edit().putBoolean(KEY_SHOW_LYRICS_PLAY_PAUSE_CONTROL, value).apply()
+    }
+
+    fun setShowLyricsNextControl(value: Boolean) {
+        showLyricsNextControl.value = value
+        prefs.edit().putBoolean(KEY_SHOW_LYRICS_NEXT_CONTROL, value).apply()
+    }
+
+    fun setLyricsFontScale(value: Float) {
+        val normalized = value.coerceIn(0.6f, 1.6f)
+        lyricsFontScale.value = normalized
+        prefs.edit().putFloat(KEY_LYRICS_FONT_SCALE, normalized).apply()
+    }
+
+    fun setLyricsTextAlignment(value: LyricsTextAlignment) {
+        lyricsTextAlignment.value = value
+        prefs.edit().putString(KEY_LYRICS_TEXT_ALIGNMENT, value.name).apply()
+    }
+
     fun setArtworkTapOpensLyrics(value: Boolean) {
         artworkTapOpensLyrics.value = value
         prefs.edit().putBoolean(KEY_ARTWORK_TAP_OPENS_LYRICS, value).apply()
@@ -1415,7 +1502,13 @@ object AppSettings {
         prefs.edit().putBoolean(KEY_CENTER_PLAYER_TRACK_INFO, value).apply()
     }
 
+    fun setPlayerDetailsVerticalMenu(value: Boolean) {
+        playerDetailsVerticalMenu.value = value
+        prefs.edit().putBoolean(KEY_PLAYER_DETAILS_VERTICAL_MENU, value).apply()
+    }
+
     fun setPreloadAlbumArtOnStartup(value: Boolean) {
+        if (value) setPersistentLocalArtwork(true)
         preloadAlbumArtOnStartup.value = value
         prefs.edit().putBoolean(KEY_PRELOAD_ALBUM_ART_ON_STARTUP, value).apply()
     }
@@ -2037,6 +2130,9 @@ object AppSettings {
 
     private const val DEFAULT_PERFORMANCE_REFRESH_RATE = 120
 
+    private fun normalizeResamplerCutoffHz(value: Int): Int =
+        if (value <= 0) 0 else value.coerceIn(8_000, 22_000)
+
     private fun normalizePerformanceRefreshRate(value: Int): Int =
         value.takeIf { it in 50..240 } ?: DEFAULT_PERFORMANCE_REFRESH_RATE
 
@@ -2048,6 +2144,7 @@ object AppSettings {
     private const val KEY_EXPORT_DOWNLOADS = "export_downloads"
     private const val KEY_LOSSLESS = "lossless_audio"
     private const val KEY_SKIP_SILENCE = "skip_silence"
+    private const val KEY_RESAMPLER_CUTOFF_HZ = "resampler_cutoff_hz"
     private const val KEY_OUTPUT_PCM_MODE = "output_pcm_mode"
     private const val KEY_PREFER_USB_DAC = "prefer_usb_dac"
     private const val KEY_DOLBY_ATMOS = "dolby_atmos"
@@ -2086,6 +2183,13 @@ object AppSettings {
     private const val KEY_LYRICS_BLUR = "lyrics_blur"
     private const val KEY_HIDE_LYRICS_STATUS_TEXT = "hide_lyrics_status_text"
     private const val KEY_HIDE_LYRICS_SAVED_MESSAGE = "hide_lyrics_saved_message"
+    private const val KEY_HIDE_LYRICS_UNAVAILABLE_LABEL = "hide_lyrics_unavailable_label"
+    private const val KEY_HIDE_LYRICS_GAP_NOTE = "hide_lyrics_gap_note"
+    private const val KEY_SHOW_LYRICS_PREVIOUS_CONTROL = "show_lyrics_previous_control"
+    private const val KEY_SHOW_LYRICS_PLAY_PAUSE_CONTROL = "show_lyrics_play_pause_control"
+    private const val KEY_SHOW_LYRICS_NEXT_CONTROL = "show_lyrics_next_control"
+    private const val KEY_LYRICS_FONT_SCALE = "lyrics_font_scale"
+    private const val KEY_LYRICS_TEXT_ALIGNMENT = "lyrics_text_alignment"
     private const val KEY_ARTWORK_TAP_OPENS_LYRICS = "artwork_tap_opens_lyrics"
     private const val KEY_SHOW_PLAYER_LYRICS_STRIP = "show_player_lyrics_strip"
     private const val KEY_OFFLINE_MODE = "offline_mode"
@@ -2102,6 +2206,7 @@ object AppSettings {
     private const val KEY_HIDE_PLAYER_ARTIST = "hide_player_artist"
     private const val KEY_HIDE_UNKNOWN_PLAYER_ARTIST = "hide_unknown_player_artist"
     private const val KEY_CENTER_PLAYER_TRACK_INFO = "center_player_track_info"
+    private const val KEY_PLAYER_DETAILS_VERTICAL_MENU = "player_details_vertical_menu"
     private const val KEY_PRELOAD_ALBUM_ART_ON_STARTUP = "preload_album_art_on_startup"
     private const val KEY_ANIMATED_CANVAS = "animated_canvas"
     private const val KEY_CANVAS_OVER_CELLULAR = "canvas_over_cellular"

@@ -45,8 +45,21 @@ internal object LocalArtworkCache {
         return decodedBitmaps.getOrLoad(key, decode)
     }
 
-    suspend fun albumBitmap(albumId: Long, maxDim: Int, decode: () -> Bitmap?): Bitmap? =
-        decodedBitmaps.getOrLoad("album:$albumId:$maxDim", decode)
+    suspend fun albumBitmap(
+        context: Context,
+        albumId: Long,
+        maxDim: Int,
+        loadEncoded: () -> ByteArray?,
+        decode: (ByteArray, Int) -> Bitmap?,
+    ): Bitmap? {
+        // MediaStore album-art fallbacks used to live only in the small in-memory
+        // bitmap LRU. A full-library preload evicted early albums before playback
+        // reached them, so the first play had to decode the provider image again.
+        // Keep the encoded original in the same app-private persistent cache as
+        // embedded covers, then decode only the requested player-size bitmap.
+        val bytes = embeddedBytes(context, "album:$albumId", loadEncoded) ?: return null
+        return embeddedBitmap(bytes, maxDim) { decode(bytes, maxDim) }
+    }
 
     /**
      * Encoded embedded covers survive process restarts in app-private cache storage.
@@ -214,7 +227,7 @@ internal object LocalArtworkCache {
     }
 
     private const val DISK_CACHE_DIRECTORY = "local-artwork"
-    private const val MAX_DISK_CACHE_BYTES = 64L * 1024 * 1024
-    private const val MAX_DISK_CACHE_ENTRIES = 256
+    private const val MAX_DISK_CACHE_BYTES = 512L * 1024 * 1024
+    private const val MAX_DISK_CACHE_ENTRIES = 4096
     private const val MAX_SINGLE_ARTWORK_BYTES = 8L * 1024 * 1024
 }

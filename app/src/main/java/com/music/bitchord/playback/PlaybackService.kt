@@ -419,6 +419,7 @@ class PlaybackService : MediaLibraryService() {
 
     private val spatialAudioProcessor = SpatialAudioProcessor()
     private val replayGainAudioProcessor = ReplayGainAudioProcessor()
+    private val resamplerCutoffAudioProcessor = ResamplerCutoffAudioProcessor()
     private var replayGainLookupJob: Job? = null
     private var replayGainConfigToken: String? = null
 
@@ -1469,7 +1470,9 @@ class PlaybackService : MediaLibraryService() {
         spatial: SpatialAudioProcessor,
         ownsSession: Boolean = true,
     ): ExoPlayer = ExoPlayer.Builder(this)
-        .setRenderersFactory(silenceSkippingRenderers(spatial, replayGainAudioProcessor))
+        .setRenderersFactory(
+            silenceSkippingRenderers(spatial, replayGainAudioProcessor, resamplerCutoffAudioProcessor),
+        )
         .setMediaSourceFactory(requireNotNull(mediaSourceFactory))
         .setLoadControl(farBufferingLoadControl())
         // Audio focus is managed by this service so Settings can select one of
@@ -3541,6 +3544,7 @@ class PlaybackService : MediaLibraryService() {
     private fun silenceSkippingRenderers(
         spatial: SpatialAudioProcessor,
         replayGain: ReplayGainAudioProcessor,
+        resamplerCutoff: ResamplerCutoffAudioProcessor,
     ) = object : DefaultRenderersFactory(this) {
         init {
             // Do not force PCM_FLOAT onto an OEM speaker mixer merely because
@@ -3581,7 +3585,7 @@ class PlaybackService : MediaLibraryService() {
             .setEnableAudioTrackPlaybackParams(enableAudioTrackPlaybackParams)
             .setAudioProcessorChain(
                 DefaultAudioSink.DefaultAudioProcessorChain(
-                    arrayOf(spatial, replayGain),
+                    arrayOf(resamplerCutoff, spatial, replayGain),
                     SilenceSkippingAudioProcessor(
                         MIN_SILENCE_US,
                         SilenceSkippingAudioProcessor.DEFAULT_SILENCE_RETENTION_RATIO,
@@ -3602,6 +3606,7 @@ class PlaybackService : MediaLibraryService() {
      */
     private fun applySettings(player: ExoPlayer) {
         player.skipSilenceEnabled = AppSettings.skipSilence.value
+        resamplerCutoffAudioProcessor.cutoffHz = AppSettings.resamplerCutoffHz.value
         player.playbackParameters = PlaybackParameters(
             AppSettings.playbackSpeed.value,
             AppSettings.playbackPitch.value,
@@ -3734,6 +3739,11 @@ class PlaybackService : MediaLibraryService() {
         }
         scope.launch {
             AppSettings.skipSilence.collect { on -> eachPlayer { it.skipSilenceEnabled = on } }
+        }
+        scope.launch {
+            AppSettings.resamplerCutoffHz.collect { cutoff ->
+                resamplerCutoffAudioProcessor.cutoffHz = cutoff
+            }
         }
         scope.launch {
             AppSettings.audioFocusLevel.drop(1).collect { level ->

@@ -23,12 +23,15 @@ import com.kyant.taglib.TagLib
 import com.music.bitchord.data.model.LOCAL_ARTWORK_SIZE_PARAMETER
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
+import java.io.ByteArrayOutputStream
 import java.io.File
+import java.io.InputStream
 import java.util.Locale
 
 private const val DEFAULT_THUMBNAIL_PX = 256
 private const val MEDIASTORE_THUMBNAIL_MAX_PX = 512
 private const val MAX_ARTWORK_PX = 1600
+private const val MAX_CACHED_ARTWORK_BYTES = 8 * 1024 * 1024
 
 /**
  * Coil 3 Fetcher that extracts genuine track-level embedded artwork directly
@@ -121,9 +124,13 @@ class LocalAudioArtworkFetcher(
 
                 // Try legacy albumart ContentProvider URI
                 val albumArtUri = Uri.parse("content://media/external/audio/albumart/$albumId")
-                val albumBitmap = LocalArtworkCache.albumBitmap(albumId, requestedPx) {
-                    decodeCoverStream(context, albumArtUri, requestedPx)
-                }
+                val albumBitmap = LocalArtworkCache.albumBitmap(
+                    context = context,
+                    albumId = albumId,
+                    maxDim = requestedPx,
+                    loadEncoded = { readCoverBytes(context, albumArtUri) },
+                    decode = ::decodeCoverBitmap,
+                ) ?: decodeCoverStream(context, albumArtUri, requestedPx)
                 if (albumBitmap != null) {
                     return@withContext ImageFetchResult(
                         image = albumBitmap.asImage(),
@@ -236,7 +243,7 @@ class LocalAudioArtworkFetcher(
         return null
     }
 
-    private fun findFolderCover(context: Context, uri: Uri, maxDim: Int): Bitmap? {
+    private suspend fun findFolderCover(context: Context, uri: Uri, maxDim: Int): Bitmap? {
         val filePath = resolveFilePath(context, uri) ?: return null
         val parent = File(filePath).parentFile ?: return null
         if (!parent.exists() || !parent.isDirectory) return null
@@ -250,7 +257,15 @@ class LocalAudioArtworkFetcher(
         for (name in candidates) {
             val file = File(parent, name)
             if (file.exists() && file.isFile && file.canRead()) {
-                val bitmap = decodeCoverFile(file, maxDim)
+                val cacheKey = "folder:${file.absolutePath}|modified=${file.lastModified()}|length=${file.length()}"
+                val bytes = LocalArtworkCache.embeddedBytes(context, cacheKey) {
+                    runCatching { file.inputStream().use(::readBoundedArtworkBytes) }.getOrNull()
+                }
+                val bitmap = bytes?.let { encoded ->
+                    LocalArtworkCache.embeddedBitmap(encoded, maxDim) {
+                        decodeCoverBitmap(encoded, maxDim)
+                    }
+                } ?: decodeCoverFile(file, maxDim)
                 if (bitmap != null) return bitmap
             }
         }
@@ -282,6 +297,26 @@ class LocalAudioArtworkFetcher(
             BitmapFactory.decodeStream(stream, null, decodeOptions)
         }
     }.getOrNull()
+
+    private fun readCoverBytes(context: Context, uri: Uri): ByteArray? = runCatching {
+        val input = context.contentResolver.openInputStream(uri) ?: return@runCatching null
+        input.use(::readBoundedArtworkBytes)
+    }.getOrNull()
+
+    /** Avoid retaining unexpectedly large provider/sidecar files in app storage. */
+    private fun readBoundedArtworkBytes(input: InputStream): ByteArray? {
+        val output = ByteArrayOutputStream()
+        val buffer = ByteArray(16 * 1024)
+        var total = 0
+        while (true) {
+            val read = input.read(buffer)
+            if (read < 0) break
+            total += read
+            if (total > MAX_CACHED_ARTWORK_BYTES) return null
+            output.write(buffer, 0, read)
+        }
+        return output.toByteArray().takeIf(ByteArray::isNotEmpty)
+    }
 
     private fun decodeCoverFile(file: File, maxDim: Int): Bitmap? = runCatching {
         val bounds = BitmapFactory.Options().apply { inJustDecodeBounds = true }

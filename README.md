@@ -25,7 +25,7 @@
 
 ---
 
-> **MusicBeatSP 2.0.1** is the MusicBeat fork under a new name and Android application ID. It builds on the open-source BitChord foundation and adds an extensive local music library, playlist, playback, lyrics, artwork, and customization feature set.
+> **MusicBeatSP 2.0.2** is the MusicBeat fork under a new name and Android application ID. It builds on the open-source BitChord foundation and adds an extensive local music library, playlist, playback, lyrics, artwork, and customization feature set.
 
 The standard Android package is `io.pockets.musicbestsp`. Because this differs from the previous MusicBeat package, Android installs MusicBeatSP as a separate app; app-private settings and data are not migrated automatically.
 
@@ -51,7 +51,7 @@ The standard Android package is `io.pockets.musicbestsp`. Because this differs f
 - Choose System, Light, Dark, AMOLED Black, or Album Art theme. Album Art colors the app background, surfaces, controls, and accents from the playing cover.
 - Hide lyrics status messages, the saved-lyrics indicator, and audio-quality labels such as Lossless and Hi-Res.
 - Show, hide, and reorder available player actions, including Shuffle, Repeat, Like, Playlist/Library, Search, and Queue. Hiding a control does not change its playback state; the Playlist control can use a Library icon.
-- Configure up to six ordered shortcuts beside the player title, including Lyrics, Add to Playlist, Speed and Pitch, Queue, Playlists, and Search. All shortcuts can be turned off.
+- Configure and reorder shortcuts beside the player title, including Lyrics, Add to Playlist, Speed and Pitch, Queue, Playlists, and Search. Shortcuts can be turned off individually.
 - Choose whether the favorite button appears beside the More menu, keep artwork full-size while paused, and open lyrics by tapping the cover.
 - Switch the player favorite glyph between a heart and a star.
 - Show or hide the artist name, automatically hide “Unknown Artist,” and center the track information.
@@ -72,13 +72,14 @@ The standard Android package is `io.pockets.musicbestsp`. Because this differs f
 ### Lyrics and artwork
 
 - Display the first lyric line for timed and plain lyrics while preserving synchronized scrolling and highlighting.
-- Hide generated lyric status text without hiding the lyrics themselves, and optionally hide the saved-to-device label.
+- Hide generated lyric status text, unavailable and saved-lyrics labels, or instrumental gap notes. Set lyric size and alignment, and choose which playback controls appear on the lyrics screen.
 - Cache and prefetch local album artwork to speed up track changes; optionally load the local artwork library at startup.
 - Use high-resolution local artwork in the player and customize playlist cover images.
 
 ### Widgets and appearance
 
 - Keep the two existing playback widgets and add a third square album-art widget with track title and playback controls.
+- Expose playback state, track metadata, and artwork through Android's standard media session for external music widgets such as KWGT.
 - Use the album-art color theme throughout the app, in addition to the System, Light, Dark, and AMOLED Black themes.
 - Enable Offline Mode to block the app's network requests; local files and saved caches remain available. Online catalog, lyrics, casting, and connected services need their respective network or device connections.
 

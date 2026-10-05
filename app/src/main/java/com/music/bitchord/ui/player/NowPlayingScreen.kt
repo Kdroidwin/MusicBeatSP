@@ -101,6 +101,7 @@ import androidx.compose.material.icons.rounded.Headphones
 import androidx.compose.material.icons.rounded.History
 import androidx.compose.material.icons.rounded.Info
 import androidx.compose.material.icons.rounded.MoreHoriz
+import androidx.compose.material.icons.rounded.MoreVert
 import androidx.compose.material.icons.rounded.Person
 import androidx.compose.material.icons.rounded.PlaylistAdd
 import androidx.compose.material.icons.rounded.Share
@@ -222,6 +223,7 @@ import com.music.bitchord.data.lyrics.LyricsSource
 import com.music.bitchord.ui.components.LyricsLogConsole
 import com.music.bitchord.ui.player.components.DoubleTapSeekArea
 import com.music.bitchord.data.settings.AppSettings
+import com.music.bitchord.data.settings.LyricsTextAlignment
 import com.music.bitchord.data.settings.PlayerControl
 import com.music.bitchord.data.settings.PlayerQuickAction
 import com.music.bitchord.data.settings.AudioQuality
@@ -716,6 +718,10 @@ fun NowPlayingScreen(
     val syncedLyricsEnabled by AppSettings.syncedLyrics.collectAsStateWithLifecycle()
     val hideLyricsStatusText by AppSettings.hideLyricsStatusText.collectAsStateWithLifecycle()
     val hideLyricsSavedMessage by AppSettings.hideLyricsSavedMessage.collectAsStateWithLifecycle()
+    val hideLyricsUnavailableLabel by AppSettings.hideLyricsUnavailableLabel.collectAsStateWithLifecycle()
+    val showLyricsPreviousControl by AppSettings.showLyricsPreviousControl.collectAsStateWithLifecycle()
+    val showLyricsPlayPauseControl by AppSettings.showLyricsPlayPauseControl.collectAsStateWithLifecycle()
+    val showLyricsNextControl by AppSettings.showLyricsNextControl.collectAsStateWithLifecycle()
     val favoriteUsesStar by AppSettings.favoriteUsesStar.collectAsStateWithLifecycle()
     val playerQuickActions by AppSettings.playerQuickActions.collectAsStateWithLifecycle()
     val keepScreenOn by AppSettings.keepScreenOn.collectAsStateWithLifecycle()
@@ -727,6 +733,7 @@ fun NowPlayingScreen(
     val hidePlayerArtist by AppSettings.hidePlayerArtist.collectAsStateWithLifecycle()
     val hideUnknownPlayerArtist by AppSettings.hideUnknownPlayerArtist.collectAsStateWithLifecycle()
     val centerPlayerTrackInfo by AppSettings.centerPlayerTrackInfo.collectAsStateWithLifecycle()
+    val playerDetailsVerticalMenu by AppSettings.playerDetailsVerticalMenu.collectAsStateWithLifecycle()
     val useLibraryIconForPlaylistControl by AppSettings.useLibraryIconForPlaylistControl.collectAsStateWithLifecycle()
     val keepArtworkFullSizeWhenPaused by AppSettings.keepArtworkFullSizeWhenPaused.collectAsStateWithLifecycle()
     val hideVolumeBar by AppSettings.hideVolumeBar.collectAsStateWithLifecycle()
@@ -2207,7 +2214,11 @@ fun NowPlayingScreen(
                     Spacer(Modifier.width(4.dp))
 
                     CircleGlyph(
-                        icon = if (showRevertCue) Icons.AutoMirrored.Rounded.Undo else Icons.Rounded.MoreHoriz,
+                        icon = when {
+                            showRevertCue -> Icons.AutoMirrored.Rounded.Undo
+                            playerDetailsVerticalMenu -> Icons.Rounded.MoreVert
+                            else -> Icons.Rounded.MoreHoriz
+                        },
                         contentDescription = stringResource(R.string.more),
                         onClick = onOpenMenu,
                     )
@@ -2325,11 +2336,13 @@ fun NowPlayingScreen(
                             },
                             modifier = Modifier.fillMaxWidth(),
                         )
-                    } else if (lyricsUnavailable && !hideLyricsStatusText) {
-                        LyricsUnavailableLine(
-                            trackKey = song.videoId,
-                            modifier = Modifier.fillMaxWidth(),
-                        )
+                    } else if (lyricsUnavailable) {
+                        if (!hideLyricsStatusText && !hideLyricsUnavailableLabel) {
+                            LyricsUnavailableLine(
+                                trackKey = song.videoId,
+                                modifier = Modifier.fillMaxWidth(),
+                            )
+                        }
                     } else if (!hideLyricsStatusText) {
                         LyricsLoadingLine(
                             trackKey = song.videoId,
@@ -2453,7 +2466,10 @@ fun NowPlayingScreen(
                     }
                     // Source credit pill — same style as original, but sits between
                     // the two icon buttons and fills leftover horizontal space.
-                    if (lyricsSource != null || lyrics.isNullOrEmpty() || !hideLyricsSavedMessage) Box(
+                    val headerLabelVisible = lyricsSource != null ||
+                        (lyrics.isNullOrEmpty() && !hideLyricsUnavailableLabel) ||
+                        (!lyrics.isNullOrEmpty() && !hideLyricsSavedMessage)
+                    if (headerLabelVisible) Box(
                         modifier = Modifier
                             .weight(1f)
                             .clip(RoundedCornerShape(percent = 50))
@@ -2469,9 +2485,42 @@ fun NowPlayingScreen(
                             },
                             style = MaterialTheme.typography.labelLarge,
                             color = Color.White.copy(alpha = 0.7f),
-                            maxLines = 1,
-                            overflow = TextOverflow.Ellipsis,
-                        )
+                        maxLines = 1,
+                        overflow = TextOverflow.Ellipsis,
+                    )
+                    } else {
+                        // Keep the dismiss affordance pinned to the right even
+                        // when the source/status pill is hidden.
+                        Spacer(Modifier.weight(1f))
+                    }
+                    if (!headerLabelVisible) {
+                        if (showLyricsPreviousControl) {
+                            TransportGlyph(
+                                icon = Icons.Rounded.FastRewind,
+                                contentDescription = stringResource(R.string.widget_previous),
+                                size = 22.dp,
+                                enabled = hasPrevious || positionMs > BACK_RESTARTS_AFTER_MS,
+                                onClick = onPrevious,
+                            )
+                        }
+                        if (showLyricsPlayPauseControl) {
+                            TransportGlyph(
+                                icon = if (isPlaying) Icons.Rounded.Pause else Icons.Rounded.PlayArrow,
+                                contentDescription = stringResource(if (isPlaying) R.string.pause else R.string.play),
+                                size = 22.dp,
+                                enabled = !isLoading,
+                                onClick = onPlayPause,
+                            )
+                        }
+                        if (showLyricsNextControl) {
+                            TransportGlyph(
+                                icon = Icons.Rounded.FastForward,
+                                contentDescription = stringResource(R.string.widget_next),
+                                size = 22.dp,
+                                enabled = hasNext,
+                                onClick = onNext,
+                            )
+                        }
                     }
                     Spacer(Modifier.width(8.dp))
                     Box(
@@ -2876,7 +2925,7 @@ private fun SweptLyricLine(
             maxLines = maxLines,
             overflow = overflow,
             onTextLayout = { layout = it },
-            modifier = room,
+            modifier = room.fillMaxWidth(),
         )
         if (glowAlpha > 0.01f) {
             Text(
@@ -2886,6 +2935,7 @@ private fun SweptLyricLine(
                 maxLines = maxLines,
                 overflow = overflow,
                 modifier = Modifier
+                    .fillMaxWidth()
                     // Read in the layer block rather than in composition: the
                     // intensity changes every frame, and this way only the
                     // layer's alpha is recomputed, not the line.
@@ -2918,7 +2968,7 @@ private fun SweptLyricLine(
             color = Color.White,
             maxLines = maxLines,
             overflow = overflow,
-            modifier = room.then(sweep),
+            modifier = room.fillMaxWidth().then(sweep),
         )
     }
 }
@@ -3079,7 +3129,15 @@ private fun LyricsPanel(
     var browsing by remember { mutableStateOf(false) }
     val reduceDynamicBlur by AppSettings.reduceDynamicBlur.collectAsStateWithLifecycle()
     val lyricsBlur by AppSettings.lyricsBlur.collectAsStateWithLifecycle()
+    val hideLyricsGapNote by AppSettings.hideLyricsGapNote.collectAsStateWithLifecycle()
     val reduceAnimation by AppSettings.reduceAnimation.collectAsStateWithLifecycle()
+    val lyricsFontScale by AppSettings.lyricsFontScale.collectAsStateWithLifecycle()
+    val lyricsTextAlignment by AppSettings.lyricsTextAlignment.collectAsStateWithLifecycle()
+    val lyricTextAlign = when (lyricsTextAlignment) {
+        LyricsTextAlignment.LEFT -> TextAlign.Left
+        LyricsTextAlignment.CENTER -> TextAlign.Center
+        LyricsTextAlignment.RIGHT -> TextAlign.Right
+    }
 
     val glowing = !reduceAnimation && !reduceDynamicBlur && lyricsBlur &&
         Build.VERSION.SDK_INT >= Build.VERSION_CODES.S
@@ -3215,29 +3273,36 @@ private fun LyricsPanel(
                     targetValue = if (isActive) 34.dp else 26.dp,
                     label = "noteSize",
                 )
-                Icon(
-                    imageVector = BitChordIcons.MusicNote,
-                    contentDescription = stringResource(R.string.instrumental),
-                    tint = Color.White.copy(alpha = lineAlpha),
+                Box(
                     modifier = Modifier
                         .blur(blur, BlurredEdgeTreatment.Unbounded)
                         .clip(RoundedCornerShape(10.dp))
                         .clickable(enabled = isSynced) { onSeekToLine(line.timeMs) }
-                        // Matches the inset every sung line carries, so the
-                        // rhythm of the list doesn't break at a break.
+                        // Keep the same gap and seek target when the decorative
+                        // glyph is hidden, so synced scrolling stays aligned.
                         .padding(GLOW_ROOM)
                         .size(noteSize),
-                )
+                    contentAlignment = Alignment.Center,
+                ) {
+                    if (!hideLyricsGapNote) {
+                        Icon(
+                            imageVector = BitChordIcons.MusicNote,
+                            contentDescription = stringResource(R.string.instrumental),
+                            tint = Color.White.copy(alpha = lineAlpha),
+                            modifier = Modifier.fillMaxSize(),
+                        )
+                    }
+                }
             } else {
                 val style = if (isSynced) {
                     MaterialTheme.typography.headlineLarge.copy(
-                        fontSize = 27.sp,
-                        lineHeight = 33.sp,
+                        fontSize = (27f * lyricsFontScale).sp,
+                        lineHeight = (33f * lyricsFontScale).sp,
                     )
                 } else {
                     MaterialTheme.typography.headlineMedium.copy(
-                        fontSize = 23.sp,
-                        lineHeight = 31.sp,
+                        fontSize = (23f * lyricsFontScale).sp,
+                        lineHeight = (31f * lyricsFontScale).sp,
                         fontWeight = FontWeight.SemiBold,
                     )
                 }
@@ -3279,6 +3344,7 @@ private fun LyricsPanel(
                         browsing = browsing,
                         glowAlpha = glow,
                         room = GLOW_ROOM,
+                        textAlign = lyricTextAlign,
                         modifier = Modifier.fillMaxWidth(),
                     )
                     line.background?.let { backing ->
@@ -3286,8 +3352,8 @@ private fun LyricsPanel(
                             line = backing.withoutBracketPunctuation(),
                             clock = clock,
                             style = style.copy(
-                                fontSize = BACKING_FONT_SIZE,
-                                lineHeight = BACKING_LINE_HEIGHT,
+                                fontSize = (BACKING_FONT_SIZE.value * lyricsFontScale).sp,
+                                lineHeight = (BACKING_LINE_HEIGHT.value * lyricsFontScale).sp,
                             ),
                             isActive = isActive,
                             browsing = browsing,
@@ -3297,6 +3363,7 @@ private fun LyricsPanel(
                             // the thing this split exists to stop.
                             glowAlpha = 0f,
                             room = 0.dp,
+                            textAlign = lyricTextAlign,
                             modifier = Modifier
                                 .fillMaxWidth()
                                 // No top inset: the lead's own bottom room is
@@ -3331,6 +3398,7 @@ private fun PanelVoice(
     browsing: Boolean,
     glowAlpha: Float,
     room: Dp,
+    textAlign: TextAlign,
     modifier: Modifier = Modifier,
 ) {
     if (line.isWordSynced && !browsing) {
@@ -3350,7 +3418,7 @@ private fun PanelVoice(
         SweptLyricLine(
             line = line,
             clock = clock,
-            style = style,
+            style = style.copy(textAlign = textAlign),
             dimAlpha = tail,
             modifier = modifier,
             glowAlpha = glowAlpha,
@@ -3368,7 +3436,7 @@ private fun PanelVoice(
         SweptLyricLine(
             line = line,
             clock = clock,
-            style = style,
+            style = style.copy(textAlign = textAlign),
             dimAlpha = tail,
             modifier = modifier,
             glowAlpha = 0f,
@@ -3381,9 +3449,9 @@ private fun PanelVoice(
         // full white.
         Text(
             text = line.text,
-            style = style,
+            style = style.copy(textAlign = textAlign),
             color = Color.White,
-            modifier = modifier.padding(room),
+            modifier = modifier.padding(room).fillMaxWidth(),
         )
     }
 }

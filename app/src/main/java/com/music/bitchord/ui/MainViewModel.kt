@@ -37,6 +37,7 @@ import com.music.bitchord.data.model.LikeStatus
 import com.music.bitchord.data.model.MoodGenre
 import com.music.bitchord.data.model.MoodGenreSection
 import com.music.bitchord.data.model.PlaylistPrivacy
+import com.music.bitchord.data.model.PLAYER_ART_PX
 import com.music.bitchord.data.model.SearchFilter
 import com.music.bitchord.data.model.SearchResult
 import com.music.bitchord.data.model.ShelfItem
@@ -45,12 +46,17 @@ import com.music.bitchord.data.model.SongMenu
 import com.music.bitchord.data.model.SubscriptionState
 import com.music.bitchord.data.model.UiState
 import com.music.bitchord.data.model.UserPlaylist
+import com.music.bitchord.data.model.artworkAt
 import com.music.bitchord.data.settings.SearchHistory
 import com.music.bitchord.download.Downloads
 import android.util.LruCache
+import coil3.SingletonImageLoader
+import coil3.request.ImageRequest
+import coil3.request.SuccessResult
 import kotlinx.coroutines.FlowPreview
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.async
+import kotlinx.coroutines.awaitAll
 import kotlinx.coroutines.coroutineScope
 import kotlinx.coroutines.withTimeout
 import kotlinx.coroutines.channels.BufferOverflow
@@ -74,6 +80,16 @@ import com.music.bitchord.data.sources.TrackMatcher
 import com.music.bitchord.playback.StreamChoice
 import java.util.concurrent.atomic.AtomicLong
 import java.util.Locale
+
+data class LocalArtworkPreloadState(
+    val isRunning: Boolean = false,
+    val isComplete: Boolean = false,
+    val processed: Int = 0,
+    val total: Int = 0,
+    val loaded: Int = 0,
+    val skipped: Int = 0,
+    val errorMessage: String? = null,
+)
 
 class MainViewModel(app: Application) : AndroidViewModel(app) {
 
@@ -143,6 +159,11 @@ class MainViewModel(app: Application) : AndroidViewModel(app) {
 
     private val _localSongs = MutableStateFlow<UiState<List<Song>>>(UiState.Loading)
     val localSongs: StateFlow<UiState<List<Song>>> = _localSongs.asStateFlow()
+
+    private val _localArtworkPreload = MutableStateFlow(LocalArtworkPreloadState())
+    val localArtworkPreload: StateFlow<LocalArtworkPreloadState> = _localArtworkPreload.asStateFlow()
+    private var artworkPreloadJob: Job? = null
+    private var startupArtworkPreloadAttempted = false
 
     private val _isRefreshingLocalMusic = MutableStateFlow(false)
     val isRefreshingLocalMusic: StateFlow<Boolean> = _isRefreshingLocalMusic.asStateFlow()
@@ -2112,6 +2133,111 @@ class MainViewModel(app: Application) : AndroidViewModel(app) {
             } finally {
                 _isRefreshingLocalMusic.value = false
             }
+        }
+    }
+
+    /**
+     * Reads every local track's player-size artwork through the same Coil
+     * fetcher used by the player. The work belongs to the ViewModel so a
+     * configuration change cannot cancel a long scan halfway through.
+     */
+    fun preloadLocalArtwork(startup: Boolean = false) {
+        if (startup && startupArtworkPreloadAttempted) return
+        if (artworkPreloadJob?.isActive == true) return
+        if (startup) startupArtworkPreloadAttempted = true
+
+        val context = getApplication<Application>()
+        _localArtworkPreload.value = LocalArtworkPreloadState(isRunning = true)
+        artworkPreloadJob = viewModelScope.launch {
+            try {
+                if (!LocalMediaRepository.hasStoragePermission(context)) {
+                    _localArtworkPreload.value = LocalArtworkPreloadState(
+                        errorMessage = context.getString(R.string.preload_album_art_failed_permission),
+                    )
+                    return@launch
+                }
+
+                val songs = LocalMediaRepository.getLocalMusic(context)
+                if (songs.isEmpty()) {
+                    _localArtworkPreload.value = LocalArtworkPreloadState(
+                        errorMessage = context.getString(R.string.preload_album_art_failed_empty),
+                    )
+                    return@launch
+                }
+
+                // The cache uses this setting to choose durable app-private
+                // storage. Turn it on before the first request is issued.
+                AppSettings.setPersistentLocalArtwork(true)
+                val artworkCounts = songs
+                    .mapNotNull { it.artworkAt(PLAYER_ART_PX) }
+                    .groupingBy { it }
+                    .eachCount()
+                val artworkUrls = artworkCounts.keys.toList()
+                var processed = songs.size - artworkCounts.values.sum()
+                var loaded = 0
+                var skipped = processed
+                _localArtworkPreload.value = LocalArtworkPreloadState(
+                    isRunning = true,
+                    processed = processed,
+                    total = songs.size,
+                    loaded = loaded,
+                    skipped = skipped,
+                )
+
+                val imageLoader = SingletonImageLoader.get(context)
+                artworkUrls.chunked(3).forEach { batch ->
+                    val results = coroutineScope {
+                        batch.map { url ->
+                            async(Dispatchers.IO) {
+                                try {
+                                    imageLoader.execute(
+                                        ImageRequest.Builder(context)
+                                            .data(url)
+                                            .size(PLAYER_ART_PX)
+                                            .build(),
+                                    ) is SuccessResult
+                                } catch (cancelled: CancellationException) {
+                                    throw cancelled
+                                } catch (_: Exception) {
+                                    false
+                                }
+                            }
+                        }.awaitAll()
+                    }
+                    batch.zip(results).forEach { (url, succeeded) ->
+                        val songCount = artworkCounts[url] ?: 1
+                        processed += songCount
+                        if (succeeded) loaded += songCount else skipped += songCount
+                    }
+                    _localArtworkPreload.value = LocalArtworkPreloadState(
+                        isRunning = true,
+                        processed = processed,
+                        total = songs.size,
+                        loaded = loaded,
+                        skipped = skipped,
+                    )
+                }
+
+                _localArtworkPreload.value = LocalArtworkPreloadState(
+                    isComplete = true,
+                    processed = songs.size,
+                    total = songs.size,
+                    loaded = loaded,
+                    skipped = skipped,
+                )
+            } catch (cancelled: CancellationException) {
+                throw cancelled
+            } catch (_: Exception) {
+                _localArtworkPreload.value = LocalArtworkPreloadState(
+                    errorMessage = context.getString(R.string.preload_album_art_failed_generic),
+                )
+            }
+        }
+    }
+
+    fun dismissLocalArtworkPreload() {
+        if (!_localArtworkPreload.value.isRunning) {
+            _localArtworkPreload.value = LocalArtworkPreloadState()
         }
     }
 

@@ -51,6 +51,7 @@ import androidx.compose.material.icons.rounded.DeleteSweep
 import androidx.compose.material.icons.rounded.Edit
 import androidx.compose.material.icons.rounded.Dns
 import androidx.compose.material.icons.rounded.FastForward
+import androidx.compose.material.icons.rounded.FastRewind
 import androidx.compose.material.icons.rounded.FileDownload
 import androidx.compose.material.icons.rounded.FileUpload
 import androidx.compose.material.icons.rounded.FilterAlt
@@ -66,9 +67,12 @@ import androidx.compose.material.icons.rounded.LibraryMusic
 import androidx.compose.material.icons.rounded.LocalOffer
 import androidx.compose.material.icons.rounded.MusicOff
 import androidx.compose.material.icons.rounded.MusicNote
+import androidx.compose.material.icons.rounded.MoreVert
 import androidx.compose.material.icons.rounded.MotionPhotosOff
 import androidx.compose.material.icons.rounded.Person
 import androidx.compose.material.icons.rounded.PlaylistPlay
+import androidx.compose.material.icons.rounded.Pause
+import androidx.compose.material.icons.rounded.PlayArrow
 import androidx.compose.material.icons.rounded.SmartDisplay
 import androidx.compose.material.icons.rounded.Share
 import androidx.compose.material.icons.rounded.ScreenRotation
@@ -154,11 +158,12 @@ import com.music.bitchord.data.model.Account
 import com.music.bitchord.data.LocalMediaRepository
 import com.music.bitchord.data.scrobbling.LastFM
 import com.music.bitchord.data.settings.AppSettings
-import com.music.bitchord.data.settings.PlayerControl
 import com.music.bitchord.data.settings.MainNavigationTab
+import com.music.bitchord.data.settings.PlayerControl
 import com.music.bitchord.data.settings.PlayerQuickAction
 import com.music.bitchord.data.settings.ScreenOrientationMode
 import com.music.bitchord.data.settings.OutputPcmMode
+import com.music.bitchord.data.settings.LyricsTextAlignment
 import com.music.bitchord.playback.AudioOutputStatus
 import com.music.bitchord.R
 import com.music.bitchord.data.settings.ThemeMode
@@ -177,6 +182,14 @@ import kotlinx.coroutines.launch
 import java.util.Locale
 import kotlin.math.roundToInt
 
+private data class SettingsSearchEntry(
+    val title: String,
+    val subtitle: String,
+    val keywords: List<String> = emptyList(),
+    val checked: Boolean? = null,
+    val activate: () -> Unit,
+)
+
 /**
  * Grouped settings, in the shape phones have taught people to expect: inset
  * cards of rows, a leading glyph per row, the current value on the right, and a
@@ -192,6 +205,7 @@ fun SettingsScreen(
     onOpenReplay: () -> Unit,
     onLyricsSources: () -> Unit,
     onAppLanguage: () -> Unit,
+    onPreloadArtworkNow: () -> Unit,
     contentPadding: PaddingValues,
     modifier: Modifier = Modifier,
 ) {
@@ -216,10 +230,18 @@ fun SettingsScreen(
     val orientationMode by AppSettings.screenOrientationMode.collectAsStateWithLifecycle()
     val favoriteUsesStar by AppSettings.favoriteUsesStar.collectAsStateWithLifecycle()
     val persistentLocalArtwork by AppSettings.persistentLocalArtwork.collectAsStateWithLifecycle()
+    val resamplerCutoffHz by AppSettings.resamplerCutoffHz.collectAsStateWithLifecycle()
     val liquidGlassSupported = isGlassSupported()
     val lyricsBlur by AppSettings.lyricsBlur.collectAsStateWithLifecycle()
+    val lyricsFontScale by AppSettings.lyricsFontScale.collectAsStateWithLifecycle()
+    val lyricsTextAlignment by AppSettings.lyricsTextAlignment.collectAsStateWithLifecycle()
     val hideLyricsStatusText by AppSettings.hideLyricsStatusText.collectAsStateWithLifecycle()
     val hideLyricsSavedMessage by AppSettings.hideLyricsSavedMessage.collectAsStateWithLifecycle()
+    val hideLyricsUnavailableLabel by AppSettings.hideLyricsUnavailableLabel.collectAsStateWithLifecycle()
+    val hideLyricsGapNote by AppSettings.hideLyricsGapNote.collectAsStateWithLifecycle()
+    val showLyricsPreviousControl by AppSettings.showLyricsPreviousControl.collectAsStateWithLifecycle()
+    val showLyricsPlayPauseControl by AppSettings.showLyricsPlayPauseControl.collectAsStateWithLifecycle()
+    val showLyricsNextControl by AppSettings.showLyricsNextControl.collectAsStateWithLifecycle()
     val artworkTapOpensLyrics by AppSettings.artworkTapOpensLyrics.collectAsStateWithLifecycle()
     val showPlayerLyricsStrip by AppSettings.showPlayerLyricsStrip.collectAsStateWithLifecycle()
     val offlineMode by AppSettings.offlineMode.collectAsStateWithLifecycle()
@@ -231,6 +253,7 @@ fun SettingsScreen(
     val hidePlayerArtist by AppSettings.hidePlayerArtist.collectAsStateWithLifecycle()
     val hideUnknownPlayerArtist by AppSettings.hideUnknownPlayerArtist.collectAsStateWithLifecycle()
     val centerPlayerTrackInfo by AppSettings.centerPlayerTrackInfo.collectAsStateWithLifecycle()
+    val playerDetailsVerticalMenu by AppSettings.playerDetailsVerticalMenu.collectAsStateWithLifecycle()
     val preloadAlbumArtOnStartup by AppSettings.preloadAlbumArtOnStartup.collectAsStateWithLifecycle()
     val fullBleedArtwork by AppSettings.fullBleedArtwork.collectAsStateWithLifecycle()
     val keepArtworkFullSizeWhenPaused by AppSettings.keepArtworkFullSizeWhenPaused.collectAsStateWithLifecycle()
@@ -260,6 +283,62 @@ fun SettingsScreen(
     }
     val selectedPerformanceRefreshRate = remember(currentDisplay, performanceRefreshRate) {
         currentDisplay.resolvePerformanceRefreshRate(performanceRefreshRate)
+    }
+    var settingsSearchQuery by rememberSaveable { mutableStateOf("") }
+
+    val settingsSearchEntries = listOf(
+        SettingsSearchEntry(stringResource(R.string.hide_lyrics_status_text), stringResource(R.string.hide_lyrics_status_text_subtitle), listOf("lyrics", "歌詞", "状態", "status"), hideLyricsStatusText) { AppSettings.setHideLyricsStatusText(!hideLyricsStatusText) },
+        SettingsSearchEntry(stringResource(R.string.hide_lyrics_saved_message), stringResource(R.string.hide_lyrics_saved_message_subtitle), listOf("lyrics", "歌詞", "保存済み", "downloaded"), hideLyricsSavedMessage) { AppSettings.setHideLyricsSavedMessage(!hideLyricsSavedMessage) },
+        SettingsSearchEntry(stringResource(R.string.hide_lyrics_unavailable_label), stringResource(R.string.hide_lyrics_unavailable_label_subtitle), listOf("lyrics", "歌詞", "ありません", "unavailable"), hideLyricsUnavailableLabel) { AppSettings.setHideLyricsUnavailableLabel(!hideLyricsUnavailableLabel) },
+        SettingsSearchEntry(stringResource(R.string.hide_lyrics_gap_note), stringResource(R.string.hide_lyrics_gap_note_subtitle), listOf("lyrics", "歌詞", "音符", "gap", "instrumental"), hideLyricsGapNote) { AppSettings.setHideLyricsGapNote(!hideLyricsGapNote) },
+        SettingsSearchEntry(stringResource(R.string.lyrics_show_previous), stringResource(R.string.lyrics_transport_visibility_subtitle), listOf("lyrics", "歌詞", "previous", "前の曲"), showLyricsPreviousControl) { AppSettings.setShowLyricsPreviousControl(!showLyricsPreviousControl) },
+        SettingsSearchEntry(stringResource(R.string.lyrics_show_play_pause), stringResource(R.string.lyrics_transport_visibility_subtitle), listOf("lyrics", "歌詞", "play", "pause", "再生", "一時停止"), showLyricsPlayPauseControl) { AppSettings.setShowLyricsPlayPauseControl(!showLyricsPlayPauseControl) },
+        SettingsSearchEntry(stringResource(R.string.lyrics_show_next), stringResource(R.string.lyrics_transport_visibility_subtitle), listOf("lyrics", "歌詞", "next", "次の曲"), showLyricsNextControl) { AppSettings.setShowLyricsNextControl(!showLyricsNextControl) },
+        SettingsSearchEntry(stringResource(R.string.hide_lossless_label), stringResource(R.string.hide_lossless_label_subtitle), listOf("lossless", "quality", "ロスレス", "高音質"), hideLosslessLabel) { AppSettings.setHideLosslessLabel(!hideLosslessLabel) },
+        SettingsSearchEntry(stringResource(R.string.offline_mode), stringResource(R.string.offline_mode_subtitle), listOf("offline", "オフライン", "通信"), offlineMode) { AppSettings.setOfflineMode(!offlineMode) },
+        SettingsSearchEntry(stringResource(R.string.keep_screen_on), stringResource(R.string.keep_screen_on_subtitle), listOf("screen", "display", "画面", "常時"), keepScreenOn) { AppSettings.setKeepScreenOn(!keepScreenOn) },
+        SettingsSearchEntry(stringResource(R.string.show_status_bar), stringResource(R.string.show_status_bar_search_help), listOf("status bar", "ステータスバー", "battery", "電池"), showStatusBar) { AppSettings.setShowStatusBar(!showStatusBar) },
+        SettingsSearchEntry(stringResource(R.string.show_navigation_bar), stringResource(R.string.show_navigation_bar_search_help), listOf("navigation bar", "ナビゲーションバー", "戻る", "home"), showNavigationBar) { AppSettings.setShowNavigationBar(!showNavigationBar) },
+        SettingsSearchEntry(stringResource(R.string.hide_player_artist), stringResource(R.string.hide_player_artist_subtitle), listOf("artist", "アーティスト", "player"), hidePlayerArtist) { AppSettings.setHidePlayerArtist(!hidePlayerArtist) },
+        SettingsSearchEntry(stringResource(R.string.player_lyrics_strip), stringResource(R.string.player_lyrics_strip_subtitle), listOf("lyrics", "歌詞", "strip", "player"), showPlayerLyricsStrip) { AppSettings.setShowPlayerLyricsStrip(!showPlayerLyricsStrip) },
+        SettingsSearchEntry(stringResource(R.string.skip_silence), stringResource(R.string.skip_silence_subtitle), listOf("silence", "無音", "再生"), skipSilence) { AppSettings.setSkipSilence(!skipSilence) },
+        SettingsSearchEntry(stringResource(R.string.double_tap_to_seek), stringResource(R.string.double_tap_to_seek_subtitle), listOf("seek", "double tap", "シーク", "ダブルタップ"), doubleTapToSeek) { AppSettings.setDoubleTapToSeek(!doubleTapToSeek) },
+        SettingsSearchEntry(stringResource(R.string.spatial_audio), stringResource(R.string.spatial_audio_subtitle), listOf("spatial", "空間オーディオ"), spatialAudio) { AppSettings.setSpatialAudio(!spatialAudio) },
+        SettingsSearchEntry(stringResource(R.string.favorite_icon_star), stringResource(R.string.favorite_icon_star_subtitle), listOf("favorite", "star", "お気に入り", "星", "ハート"), favoriteUsesStar) { AppSettings.setFavoriteUsesStar(!favoriteUsesStar) },
+        SettingsSearchEntry(stringResource(R.string.hide_unknown_player_artist), stringResource(R.string.hide_unknown_player_artist_subtitle), listOf("artist", "unknown", "アーティスト", "unknown artist"), hideUnknownPlayerArtist) { AppSettings.setHideUnknownPlayerArtist(!hideUnknownPlayerArtist) },
+        SettingsSearchEntry(stringResource(R.string.center_player_track_info), stringResource(R.string.center_player_track_info_subtitle), listOf("center", "中央", "曲情報"), centerPlayerTrackInfo) { AppSettings.setCenterPlayerTrackInfo(!centerPlayerTrackInfo) },
+        SettingsSearchEntry(stringResource(R.string.player_playlist_library_icon), stringResource(R.string.player_playlist_library_icon_subtitle), listOf("playlist", "library", "プレイリスト", "ライブラリ", "icon"), useLibraryIconForPlaylistControl) { AppSettings.setUseLibraryIconForPlaylistControl(!useLibraryIconForPlaylistControl) },
+        SettingsSearchEntry(stringResource(R.string.prevent_play_at_zero_volume), stringResource(R.string.prevent_play_at_zero_volume_subtitle), listOf("volume", "音量", "zero", "0"), preventPlayAtZeroVolume) { AppSettings.setPreventPlayAtZeroVolume(!preventPlayAtZeroVolume) },
+        SettingsSearchEntry(stringResource(R.string.preload_album_art), stringResource(R.string.preload_album_art_subtitle), listOf("artwork", "album art", "preload", "先読み", "アルバムアート"), preloadAlbumArtOnStartup) { AppSettings.setPreloadAlbumArtOnStartup(!preloadAlbumArtOnStartup) },
+        SettingsSearchEntry(stringResource(R.string.persistent_local_artwork), stringResource(R.string.persistent_local_artwork_subtitle), listOf("artwork", "album art", "storage", "画像", "ストレージ"), persistentLocalArtwork) { AppSettings.setPersistentLocalArtwork(!persistentLocalArtwork) },
+        SettingsSearchEntry(stringResource(R.string.synced_lyrics), stringResource(R.string.synced_lyrics_subtitle), listOf("lyrics", "歌詞", "同期"), syncedLyrics) { AppSettings.setSyncedLyrics(!syncedLyrics) },
+        SettingsSearchEntry(stringResource(R.string.blur_unfocused_lyrics), stringResource(R.string.blur_unfocused_lyrics_subtitle), listOf("lyrics", "歌詞", "blur", "ぼかし"), lyricsBlur) { AppSettings.setLyricsBlur(!lyricsBlur) },
+        SettingsSearchEntry(stringResource(R.string.auto_embed_lyrics), stringResource(R.string.auto_embed_lyrics_subtitle), listOf("lyrics", "歌詞", "embed", "埋め込み"), autoEmbedLyrics) { AppSettings.setAutoEmbedLyrics(!autoEmbedLyrics) },
+        SettingsSearchEntry(stringResource(R.string.full_screen_cover_art), stringResource(R.string.full_screen_cover_art_subtitle), listOf("artwork", "cover", "full screen", "アート", "全画面"), fullBleedArtwork) { AppSettings.setFullBleedArtwork(!fullBleedArtwork) },
+        SettingsSearchEntry(stringResource(R.string.keep_artwork_full_size_paused), stringResource(R.string.keep_artwork_full_size_paused_subtitle), listOf("artwork", "cover", "paused", "停止中", "アート"), keepArtworkFullSizeWhenPaused) { AppSettings.setKeepArtworkFullSizeWhenPaused(!keepArtworkFullSizeWhenPaused) },
+        SettingsSearchEntry(stringResource(R.string.reduce_animation), stringResource(R.string.reduce_animation_subtitle), listOf("animation", "reduce", "アニメーション"), reduceAnimation) { AppSettings.setReduceAnimation(!reduceAnimation) },
+        SettingsSearchEntry(stringResource(R.string.reduce_dynamic_blur), stringResource(R.string.reduce_dynamic_blur_subtitle), listOf("blur", "ぼかし", "performance", "動的"), reduceDynamicBlur) { AppSettings.setReduceDynamicBlur(!reduceDynamicBlur) },
+        SettingsSearchEntry(stringResource(R.string.classic_nav_bar), stringResource(R.string.classic_nav_bar_subtitle), listOf("navigation", "nav bar", "ナビゲーション", "classic"), classicNavBar) { AppSettings.setClassicNavBar(!classicNavBar) },
+        SettingsSearchEntry(stringResource(R.string.hide_nav_bar_labels), stringResource(R.string.hide_nav_bar_labels_subtitle), listOf("navigation", "nav bar", "label", "ラベル", "ナビゲーション"), hideNavBarLabels) { AppSettings.setHideNavigationBarLabels(!hideNavBarLabels) },
+        SettingsSearchEntry(stringResource(R.string.legacy_mesh_gradient), stringResource(R.string.legacy_mesh_gradient_subtitle), listOf("theme", "gradient", "テーマ", "グラデーション"), legacyMeshGradient) { AppSettings.setLegacyMeshGradient(!legacyMeshGradient) },
+        SettingsSearchEntry(stringResource(R.string.filter_non_music_audio), stringResource(R.string.filter_non_music_audio_subtitle), listOf("filter", "audio", "music", "音楽", "フィルター"), filterNonMusicAudio) { AppSettings.setFilterNonMusicAudio(!filterNonMusicAudio) },
+        SettingsSearchEntry(stringResource(R.string.playlist_song_artwork), stringResource(R.string.playlist_song_artwork_subtitle), listOf("playlist", "artwork", "プレイリスト", "アルバムアート"), showPlaylistSongArtwork) { AppSettings.setShowPlaylistSongArtwork(!showPlaylistSongArtwork) },
+    ) + MainNavigationTab.entries.map { tab ->
+        val tabTitle = stringResource(when (tab) {
+            MainNavigationTab.SONGS -> R.string.songs
+            MainNavigationTab.ALBUMS -> R.string.albums
+            MainNavigationTab.ARTISTS -> R.string.artists
+            MainNavigationTab.LIBRARY -> R.string.library
+            MainNavigationTab.SEARCH -> R.string.search
+        })
+        SettingsSearchEntry(
+            title = stringResource(R.string.show_tab_setting, tabTitle),
+            subtitle = stringResource(R.string.show_tab_setting_subtitle, tabTitle),
+            keywords = listOf("tab", "タブ", tabTitle),
+            checked = tab in visibleMainTabs,
+        ) {
+            AppSettings.setMainNavigationTabVisible(tab, tab !in visibleMainTabs)
+        }
     }
 
     LaunchedEffect(selectedPerformanceRefreshRate, performanceRefreshRate) {
@@ -513,6 +592,78 @@ fun SettingsScreen(
             context.packageManager.getPackageInfo(context.packageName, 0).versionName
         }.getOrNull() ?: "1.0"
     }
+    val settingsActionSearchEntries = listOf(
+        SettingsSearchEntry(
+            title = stringResource(R.string.import_m3u_playlist),
+            subtitle = stringResource(R.string.import_m3u_subtitle),
+            keywords = listOf("M3U", "M3U8", "playlist", "プレイリスト", "取り込み"),
+            activate = {
+                m3uPicker.launch(
+                    arrayOf(
+                        "audio/x-mpegurl",
+                        "application/vnd.apple.mpegurl",
+                        "application/x-mpegurl",
+                        "audio/mpegurl",
+                        "text/plain",
+                        "application/octet-stream",
+                        "*/*",
+                    ),
+                )
+            },
+        ),
+        SettingsSearchEntry(
+            title = stringResource(R.string.import_musicolet_backup),
+            subtitle = stringResource(R.string.import_musicolet_backup_subtitle),
+            keywords = listOf("Musicolet", "backup", "バックアップ", "プレイリスト", "ZIP"),
+            activate = {
+                musicoletBackupPicker.launch(
+                    arrayOf("application/zip", "application/x-zip-compressed", "application/octet-stream", "*/*"),
+                )
+            },
+        ),
+        SettingsSearchEntry(
+            title = stringResource(R.string.manage_playlist_order),
+            subtitle = stringResource(R.string.manage_playlist_order_subtitle),
+            keywords = listOf("playlist", "order", "並び替え", "プレイリスト"),
+            activate = { showPlaylistOrderDialog = true },
+        ),
+        SettingsSearchEntry(
+            title = stringResource(R.string.lyrics_sources),
+            subtitle = lyricsSourceOrder
+                .filter { it in lyricsSources }
+                .joinToString(", ") { it.label }
+                .ifEmpty { stringResource(R.string.no_lyrics_sources_enabled) },
+            keywords = listOf("lyrics", "source", "歌詞", "検索元"),
+            activate = { onLyricsSources() },
+        ),
+        SettingsSearchEntry(
+            title = stringResource(R.string.preload_album_art_now),
+            subtitle = stringResource(R.string.preload_album_art_now_subtitle),
+            keywords = listOf("artwork", "preload", "先読み", "アルバムアート"),
+            activate = { onPreloadArtworkNow() },
+        ),
+        SettingsSearchEntry(
+            title = stringResource(R.string.startup_tab),
+            subtitle = stringResource(R.string.startup_tab_subtitle),
+            keywords = listOf("startup", "起動", "tab", "タブ"),
+            activate = {
+                settingsSearchQuery = ""
+                showStartupTabPicker = true
+            },
+        ),
+        SettingsSearchEntry(
+            title = stringResource(R.string.export_data),
+            subtitle = stringResource(R.string.export_data_subtitle),
+            keywords = listOf("backup", "export", "バックアップ", "書き出し"),
+            activate = { exportPicker.launch(Backup.suggestedName()) },
+        ),
+        SettingsSearchEntry(
+            title = stringResource(R.string.import_data),
+            subtitle = stringResource(R.string.import_data_subtitle),
+            keywords = listOf("backup", "restore", "import", "バックアップ", "復元"),
+            activate = { confirmImport = true },
+        ),
+    )
 
     Column(
         modifier = modifier
@@ -528,7 +679,63 @@ fun SettingsScreen(
             modifier = Modifier.padding(start = 20.dp, end = 20.dp, top = 8.dp, bottom = 14.dp),
         )
 
+        OutlinedTextField(
+            value = settingsSearchQuery,
+            onValueChange = { settingsSearchQuery = it },
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(horizontal = 20.dp, vertical = 4.dp),
+            singleLine = true,
+            label = { Text(stringResource(R.string.search_settings)) },
+            leadingIcon = {
+                Icon(
+                    imageVector = BitChordIcons.Search,
+                    contentDescription = null,
+                    tint = MaterialTheme.colorScheme.onSurfaceVariant,
+                    modifier = Modifier.size(20.dp),
+                )
+            },
+        )
 
+        if (settingsSearchQuery.isNotBlank()) {
+            val matches = (settingsSearchEntries + settingsActionSearchEntries).filter { entry ->
+                (entry.title + " " + entry.subtitle + " " + entry.keywords.joinToString(" "))
+                    .contains(settingsSearchQuery.trim(), ignoreCase = true)
+            }
+            SettingsGroup(header = stringResource(R.string.settings_search_results)) {
+                if (matches.isEmpty()) {
+                    Text(
+                        text = stringResource(R.string.settings_search_no_results),
+                        style = MaterialTheme.typography.bodyMedium,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                        modifier = Modifier.padding(horizontal = 18.dp, vertical = 16.dp),
+                    )
+                } else {
+                    matches.forEachIndexed { index, entry ->
+                        if (index > 0) RowDivider()
+                        SettingsRow(
+                            icon = Icons.Rounded.Tune,
+                            title = entry.title,
+                            subtitle = entry.subtitle,
+                            trailing = entry.checked?.let { checked ->
+                                {
+                                    Switch(
+                                        checked = checked,
+                                        onCheckedChange = { entry.activate() },
+                                        colors = SwitchDefaults.colors(
+                                            checkedTrackColor = MaterialTheme.colorScheme.primary,
+                                            checkedBorderColor = MaterialTheme.colorScheme.primary,
+                                        ),
+                                    )
+                                }
+                            },
+                            onClick = entry.activate,
+                        )
+                    }
+                }
+            }
+        } else {
+        val originalDeveloperLabel = stringResource(R.string.original_developer)
 
         SettingsGroup(header = stringResource(R.string.playback)) {
             SettingsRow(
@@ -574,6 +781,47 @@ fun SettingsScreen(
                 },
                 onClick = { AppSettings.setSkipSilence(!skipSilence) },
             )
+            RowDivider()
+            SettingsRow(
+                icon = Icons.Rounded.GraphicEq,
+                title = stringResource(R.string.resampler_cutoff),
+                subtitle = stringResource(R.string.resampler_cutoff_subtitle),
+                trailing = {
+                    Switch(
+                        checked = resamplerCutoffHz > 0,
+                        onCheckedChange = { enabled ->
+                            AppSettings.setResamplerCutoffHz(if (enabled) 20_000 else 0)
+                        },
+                        colors = SwitchDefaults.colors(
+                            checkedTrackColor = MaterialTheme.colorScheme.primary,
+                            checkedBorderColor = MaterialTheme.colorScheme.primary,
+                        ),
+                    )
+                },
+                onClick = {
+                    AppSettings.setResamplerCutoffHz(if (resamplerCutoffHz > 0) 0 else 20_000)
+                },
+            )
+            if (resamplerCutoffHz > 0) {
+                SettingsRow(
+                    icon = Icons.Rounded.Tune,
+                    title = stringResource(R.string.resampler_cutoff),
+                    trailing = {
+                        Text(
+                            text = stringResource(R.string.resampler_cutoff_value, resamplerCutoffHz),
+                            color = MaterialTheme.colorScheme.primary,
+                            style = MaterialTheme.typography.labelLarge,
+                        )
+                    },
+                )
+                Slider(
+                    value = resamplerCutoffHz.toFloat(),
+                    onValueChange = { AppSettings.setResamplerCutoffHz(it.roundToInt()) },
+                    steps = 13,
+                    valueRange = 8_000f..22_000f,
+                    modifier = Modifier.padding(start = ROW_INSET, end = ROW_INSET, bottom = 14.dp),
+                )
+            }
             RowDivider()
             SettingsRow(
                 icon = Icons.Rounded.Headphones,
@@ -792,6 +1040,21 @@ fun SettingsScreen(
                 },
                 onClick = { AppSettings.setCenterPlayerTrackInfo(!centerPlayerTrackInfo) },
             )
+            RowDivider()
+            SettingsRow(
+                icon = Icons.Rounded.MoreVert,
+                title = stringResource(R.string.player_details_vertical_menu),
+                subtitle = stringResource(R.string.player_details_vertical_menu_subtitle),
+                trailing = {
+                    Switch(
+                        checked = playerDetailsVerticalMenu,
+                        onCheckedChange = AppSettings::setPlayerDetailsVerticalMenu,
+                    )
+                },
+                onClick = {
+                    AppSettings.setPlayerDetailsVerticalMenu(!playerDetailsVerticalMenu)
+                },
+            )
         }
 
         SettingsGroup(
@@ -877,6 +1140,42 @@ fun SettingsScreen(
             }
         }
 
+        SettingsGroup(header = stringResource(R.string.lyrics_display)) {
+            SettingsRow(
+                icon = Icons.AutoMirrored.Rounded.Notes,
+                title = stringResource(R.string.lyrics_font_size),
+                trailing = {
+                    Text(
+                        text = stringResource(R.string.lyrics_font_size_value, (lyricsFontScale * 100f).roundToInt()),
+                        color = MaterialTheme.colorScheme.primary,
+                        style = MaterialTheme.typography.labelLarge,
+                    )
+                },
+            )
+            Slider(
+                value = lyricsFontScale,
+                onValueChange = AppSettings::setLyricsFontScale,
+                steps = 19,
+                valueRange = 0.6f..1.6f,
+                modifier = Modifier.padding(start = ROW_INSET, end = ROW_INSET, bottom = 14.dp),
+            )
+            RowDivider()
+            SettingsRow(
+                icon = Icons.AutoMirrored.Rounded.Notes,
+                title = stringResource(R.string.lyrics_text_alignment),
+            )
+            SegmentedControl(
+                options = listOf(
+                    stringResource(R.string.lyrics_align_left),
+                    stringResource(R.string.lyrics_align_center),
+                    stringResource(R.string.lyrics_align_right),
+                ),
+                selectedIndex = LyricsTextAlignment.entries.indexOf(lyricsTextAlignment),
+                onSelect = { AppSettings.setLyricsTextAlignment(LyricsTextAlignment.entries[it]) },
+                modifier = Modifier.padding(start = ROW_INSET, end = ROW_INSET, bottom = 14.dp),
+            )
+        }
+
         SettingsGroup(header = stringResource(R.string.appearance)) {
             SettingsRow(icon = Icons.Rounded.Brightness4, title = stringResource(R.string.theme))
             SegmentedControl(
@@ -955,6 +1254,13 @@ fun SettingsScreen(
                     )
                 },
                 onClick = { AppSettings.setPersistentLocalArtwork(!persistentLocalArtwork) },
+            )
+            RowDivider()
+            SettingsRow(
+                icon = Icons.Rounded.Album,
+                title = stringResource(R.string.preload_album_art_now),
+                subtitle = stringResource(R.string.preload_album_art_now_subtitle),
+                onClick = onPreloadArtworkNow,
             )
             RowDivider()
             SettingsRow(
@@ -1199,6 +1505,93 @@ fun SettingsScreen(
                 },
                 onClick = { AppSettings.setHideLyricsSavedMessage(!hideLyricsSavedMessage) },
             )
+            RowDivider()
+            SettingsRow(
+                icon = Icons.AutoMirrored.Rounded.Notes,
+                title = stringResource(R.string.hide_lyrics_unavailable_label),
+                subtitle = stringResource(R.string.hide_lyrics_unavailable_label_subtitle),
+                trailing = {
+                    Switch(
+                        checked = hideLyricsUnavailableLabel,
+                        onCheckedChange = AppSettings::setHideLyricsUnavailableLabel,
+                        colors = SwitchDefaults.colors(
+                            checkedTrackColor = MaterialTheme.colorScheme.primary,
+                            checkedBorderColor = MaterialTheme.colorScheme.primary,
+                        ),
+                    )
+                },
+                onClick = { AppSettings.setHideLyricsUnavailableLabel(!hideLyricsUnavailableLabel) },
+            )
+            RowDivider()
+            SettingsRow(
+                icon = Icons.Rounded.MusicNote,
+                title = stringResource(R.string.hide_lyrics_gap_note),
+                subtitle = stringResource(R.string.hide_lyrics_gap_note_subtitle),
+                trailing = {
+                    Switch(
+                        checked = hideLyricsGapNote,
+                        onCheckedChange = AppSettings::setHideLyricsGapNote,
+                        colors = SwitchDefaults.colors(
+                            checkedTrackColor = MaterialTheme.colorScheme.primary,
+                            checkedBorderColor = MaterialTheme.colorScheme.primary,
+                        ),
+                    )
+                },
+                onClick = { AppSettings.setHideLyricsGapNote(!hideLyricsGapNote) },
+            )
+            if (hideLyricsSavedMessage || hideLyricsUnavailableLabel) {
+                RowDivider()
+                SettingsRow(
+                    icon = Icons.Rounded.FastRewind,
+                    title = stringResource(R.string.lyrics_show_previous),
+                    subtitle = stringResource(R.string.lyrics_transport_visibility_subtitle),
+                    trailing = {
+                        Switch(
+                            checked = showLyricsPreviousControl,
+                            onCheckedChange = AppSettings::setShowLyricsPreviousControl,
+                            colors = SwitchDefaults.colors(
+                                checkedTrackColor = MaterialTheme.colorScheme.primary,
+                                checkedBorderColor = MaterialTheme.colorScheme.primary,
+                            ),
+                        )
+                    },
+                    onClick = { AppSettings.setShowLyricsPreviousControl(!showLyricsPreviousControl) },
+                )
+                RowDivider()
+                SettingsRow(
+                    icon = if (showLyricsPlayPauseControl) Icons.Rounded.Pause else Icons.Rounded.PlayArrow,
+                    title = stringResource(R.string.lyrics_show_play_pause),
+                    subtitle = stringResource(R.string.lyrics_transport_visibility_subtitle),
+                    trailing = {
+                        Switch(
+                            checked = showLyricsPlayPauseControl,
+                            onCheckedChange = AppSettings::setShowLyricsPlayPauseControl,
+                            colors = SwitchDefaults.colors(
+                                checkedTrackColor = MaterialTheme.colorScheme.primary,
+                                checkedBorderColor = MaterialTheme.colorScheme.primary,
+                            ),
+                        )
+                    },
+                    onClick = { AppSettings.setShowLyricsPlayPauseControl(!showLyricsPlayPauseControl) },
+                )
+                RowDivider()
+                SettingsRow(
+                    icon = Icons.Rounded.FastForward,
+                    title = stringResource(R.string.lyrics_show_next),
+                    subtitle = stringResource(R.string.lyrics_transport_visibility_subtitle),
+                    trailing = {
+                        Switch(
+                            checked = showLyricsNextControl,
+                            onCheckedChange = AppSettings::setShowLyricsNextControl,
+                            colors = SwitchDefaults.colors(
+                                checkedTrackColor = MaterialTheme.colorScheme.primary,
+                                checkedBorderColor = MaterialTheme.colorScheme.primary,
+                            ),
+                        )
+                    },
+                    onClick = { AppSettings.setShowLyricsNextControl(!showLyricsNextControl) },
+                )
+            }
             // Source ordering and lyric lookup only matter while lyrics are on.
             if (syncedLyrics) {
                 RowDivider()
@@ -1763,6 +2156,7 @@ fun SettingsScreen(
                 .fillMaxWidth()
                 .padding(top = 24.dp, bottom = 8.dp),
         )
+        }
     }
 
 
