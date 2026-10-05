@@ -14,6 +14,9 @@ import com.music.bitchord.feature.artistimage.model.ArtistSort
 import kotlinx.coroutines.flow.MutableStateFlow
 import java.util.Locale
 
+/** Maximum blur radius for the player-only artwork backdrop, in dp. */
+const val MAX_PLAYER_ARTWORK_BLUR_DP = 128f
+
 /**
  * Stream bitrate ceiling on the YouTube fallback path — MEDIUM, HIGH and
  * LOSSLESS all mean "whatever the best available Opus format is" there; what
@@ -236,6 +239,21 @@ enum class PlayerQuickAction {
     DETAILS,
     SHARE_FILE,
     FAVORITE,
+}
+
+/** Items shown in the player’s song actions sheet opened from the More button. */
+enum class PlayerDetailsAction {
+    ALBUM,
+    ARTIST,
+    ADD_TO_PLAYLIST,
+    EQUALIZER,
+    CHROMECAST,
+    PLAYBACK_TUNING,
+    SLEEP_TIMER,
+    TAG_EDITOR,
+    EDIT_LYRICS,
+    DETAILS,
+    SHARE_FILE,
 }
 
 object MainNavigationTabs {
@@ -468,6 +486,11 @@ object AppSettings {
     val screenOrientationMode = MutableStateFlow(ScreenOrientationMode.SYSTEM)
     val favoriteUsesStar = MutableStateFlow(false)
     val playerQuickActions = MutableStateFlow<List<PlayerQuickAction>>(emptyList())
+    val hiddenPlayerDetailsActions = MutableStateFlow<Set<PlayerDetailsAction>>(emptySet())
+    /** The cutter is opt-in because it exports a re-encoded, edited copy of a track. */
+    val audioCutterEnabled = MutableStateFlow(false)
+    /** Player backdrop blur in dp; zero draws sampled colours sharply. */
+    val artworkBackdropBlurDp = MutableStateFlow(32f)
     val persistentLocalArtwork = MutableStateFlow(false)
 
     /** Blurs unfocused lyric lines, keeping the active line sharp. */
@@ -489,6 +512,8 @@ object AppSettings {
     val showLyricsPreviousControl = MutableStateFlow(false)
     val showLyricsPlayPauseControl = MutableStateFlow(false)
     val showLyricsNextControl = MutableStateFlow(false)
+    /** Icon size for optional transport controls in the lyrics header, in dp. */
+    val lyricsTransportControlSize = MutableStateFlow(22f)
 
     /** Multiplier applied to the lyrics panel's existing synced/unsynced type sizes. */
     val lyricsFontScale = MutableStateFlow(1f)
@@ -877,6 +902,10 @@ object AppSettings {
         }.getOrDefault(ScreenOrientationMode.SYSTEM)
         favoriteUsesStar.value = prefs.getBoolean(KEY_FAVORITE_USES_STAR, false)
         playerQuickActions.value = readPlayerQuickActions()
+        hiddenPlayerDetailsActions.value = readHiddenPlayerDetailsActions()
+        audioCutterEnabled.value = prefs.getBoolean(KEY_AUDIO_CUTTER_ENABLED, false)
+        artworkBackdropBlurDp.value = prefs.getFloat(KEY_ARTWORK_BACKDROP_BLUR_DP, 32f)
+            .coerceIn(0f, MAX_PLAYER_ARTWORK_BLUR_DP)
         persistentLocalArtwork.value = prefs.getBoolean(KEY_PERSISTENT_LOCAL_ARTWORK, false)
         lyricsBlur.value = prefs.getBoolean(KEY_LYRICS_BLUR, true)
         hideLyricsStatusText.value = prefs.getBoolean(KEY_HIDE_LYRICS_STATUS_TEXT, false)
@@ -886,6 +915,7 @@ object AppSettings {
         showLyricsPreviousControl.value = prefs.getBoolean(KEY_SHOW_LYRICS_PREVIOUS_CONTROL, false)
         showLyricsPlayPauseControl.value = prefs.getBoolean(KEY_SHOW_LYRICS_PLAY_PAUSE_CONTROL, false)
         showLyricsNextControl.value = prefs.getBoolean(KEY_SHOW_LYRICS_NEXT_CONTROL, false)
+        lyricsTransportControlSize.value = prefs.getFloat(KEY_LYRICS_TRANSPORT_CONTROL_SIZE, 22f).coerceIn(14f, 30f)
         lyricsFontScale.value = prefs.getFloat(KEY_LYRICS_FONT_SCALE, 1f).coerceIn(0.6f, 1.6f)
         lyricsTextAlignment.value = runCatching {
             LyricsTextAlignment.valueOf(
@@ -1294,6 +1324,31 @@ object AppSettings {
         prefs.edit().putBoolean(KEY_FAVORITE_BESIDE_TRACK_MENU, showFavoriteBesideMenu).apply()
     }
 
+    fun setPlayerDetailsActionVisible(action: PlayerDetailsAction, visible: Boolean) {
+        val hidden = hiddenPlayerDetailsActions.value.toMutableSet().apply {
+            if (visible) remove(action) else add(action)
+        }
+        hiddenPlayerDetailsActions.value = hidden
+        prefs.edit().putStringSet(KEY_HIDDEN_PLAYER_DETAILS_ACTIONS, hidden.map { it.name }.toSet()).apply()
+    }
+
+    private fun readHiddenPlayerDetailsActions(): Set<PlayerDetailsAction> =
+        prefs.getStringSet(KEY_HIDDEN_PLAYER_DETAILS_ACTIONS, emptySet())
+            .orEmpty()
+            .mapNotNull { name -> PlayerDetailsAction.entries.firstOrNull { it.name == name } }
+            .toSet()
+
+    fun setAudioCutterEnabled(value: Boolean) {
+        audioCutterEnabled.value = value
+        prefs.edit().putBoolean(KEY_AUDIO_CUTTER_ENABLED, value).apply()
+    }
+
+    fun setArtworkBackdropBlurDp(value: Float) {
+        val normalized = value.coerceIn(0f, MAX_PLAYER_ARTWORK_BLUR_DP)
+        artworkBackdropBlurDp.value = normalized
+        prefs.edit().putFloat(KEY_ARTWORK_BACKDROP_BLUR_DP, normalized).apply()
+    }
+
     fun movePlayerQuickAction(action: PlayerQuickAction, offset: Int) {
         val ordered = playerQuickActions.value.toMutableList()
         val from = ordered.indexOf(action)
@@ -1392,6 +1447,12 @@ object AppSettings {
     fun setShowLyricsNextControl(value: Boolean) {
         showLyricsNextControl.value = value
         prefs.edit().putBoolean(KEY_SHOW_LYRICS_NEXT_CONTROL, value).apply()
+    }
+
+    fun setLyricsTransportControlSize(value: Float) {
+        val normalized = value.coerceIn(14f, 30f)
+        lyricsTransportControlSize.value = normalized
+        prefs.edit().putFloat(KEY_LYRICS_TRANSPORT_CONTROL_SIZE, normalized).apply()
     }
 
     fun setLyricsFontScale(value: Float) {
@@ -2179,6 +2240,9 @@ object AppSettings {
     private const val KEY_SCREEN_ORIENTATION = "screen_orientation_mode"
     private const val KEY_FAVORITE_USES_STAR = "favorite_uses_star"
     private const val KEY_PLAYER_QUICK_ACTIONS = "player_quick_actions"
+    private const val KEY_HIDDEN_PLAYER_DETAILS_ACTIONS = "hidden_player_details_actions"
+    private const val KEY_AUDIO_CUTTER_ENABLED = "audio_cutter_enabled"
+    private const val KEY_ARTWORK_BACKDROP_BLUR_DP = "artwork_backdrop_blur_dp"
     private const val KEY_PERSISTENT_LOCAL_ARTWORK = "persistent_local_artwork"
     private const val KEY_LYRICS_BLUR = "lyrics_blur"
     private const val KEY_HIDE_LYRICS_STATUS_TEXT = "hide_lyrics_status_text"
@@ -2188,6 +2252,7 @@ object AppSettings {
     private const val KEY_SHOW_LYRICS_PREVIOUS_CONTROL = "show_lyrics_previous_control"
     private const val KEY_SHOW_LYRICS_PLAY_PAUSE_CONTROL = "show_lyrics_play_pause_control"
     private const val KEY_SHOW_LYRICS_NEXT_CONTROL = "show_lyrics_next_control"
+    private const val KEY_LYRICS_TRANSPORT_CONTROL_SIZE = "lyrics_transport_control_size"
     private const val KEY_LYRICS_FONT_SCALE = "lyrics_font_scale"
     private const val KEY_LYRICS_TEXT_ALIGNMENT = "lyrics_text_alignment"
     private const val KEY_ARTWORK_TAP_OPENS_LYRICS = "artwork_tap_opens_lyrics"

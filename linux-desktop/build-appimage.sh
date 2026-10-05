@@ -42,6 +42,7 @@ cp "$BUILD_DIR/musicbeat-linux.jar" "$INPUT_DIR/"
 cp -a "$JPACKAGE_DIR/$APP_NAME/." "$APP_DIR/usr/lib/musicbeat/"
 ln -s ../lib/musicbeat/bin/$APP_NAME "$APP_DIR/usr/bin/musicbeat"
 cp "$REPO_DIR/Logo.png" "$APP_DIR/usr/share/icons/hicolor/256x256/apps/musicbeat.png"
+cp "$REPO_DIR/Logo.png" "$APP_DIR/musicbeat.png"
 ln -s usr/share/icons/hicolor/256x256/apps/musicbeat.png "$APP_DIR/.DirIcon"
 
 cat > "$APP_DIR/AppRun" <<'APPRUN'

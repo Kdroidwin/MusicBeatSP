@@ -29,6 +29,7 @@ import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
@@ -36,6 +37,7 @@ import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.music.bitchord.R
 import com.music.bitchord.data.settings.AppSettings
 import com.music.bitchord.data.settings.EqualizerSettings
+import com.music.bitchord.playback.ReplayGainScanner
 import com.music.bitchord.ui.screens.equalizer.components.AudioEnhancements
 import com.music.bitchord.ui.screens.equalizer.components.EqualizerBandSliders
 import com.music.bitchord.ui.screens.equalizer.components.EqualizerPresetChips
@@ -58,6 +60,8 @@ fun EqualizerSheet(
     val replayGainAlbumMode by AppSettings.replayGainAlbumMode.collectAsStateWithLifecycle()
     val replayGainPreampDb by AppSettings.replayGainPreampDb.collectAsStateWithLifecycle()
     val replayGainPreventClipping by AppSettings.replayGainPreventClipping.collectAsStateWithLifecycle()
+    val replayGainScanState by ReplayGainScanner.state.collectAsStateWithLifecycle()
+    val context = LocalContext.current
 
     val scrollState = rememberScrollState()
 
@@ -161,6 +165,9 @@ fun EqualizerSheet(
                 onAlbumGainChange = AppSettings::setReplayGainAlbumMode,
                 onPreampChange = AppSettings::setReplayGainPreampDb,
                 onPreventClippingChange = AppSettings::setReplayGainPreventClipping,
+                scanState = replayGainScanState,
+                onScan = { ReplayGainScanner.start(context) },
+                onCancelScan = ReplayGainScanner::cancel,
             )
 
             Spacer(modifier = Modifier.height(16.dp))

@@ -4,6 +4,11 @@ import kotlin.math.log10
 
 /** Pure ReplayGain tag selection and gain calculation, kept separate from file I/O. */
 object ReplayGainValues {
+    fun hasGainTags(properties: Map<String, Array<String>>): Boolean = properties.keys.any { key ->
+        key.endsWith("REPLAYGAIN_TRACK_GAIN", ignoreCase = true) ||
+            key.endsWith("REPLAYGAIN_ALBUM_GAIN", ignoreCase = true)
+    }
+
     fun calculateDb(
         properties: Map<String, Array<String>>,
         useAlbumGain: Boolean,

@@ -33,6 +33,7 @@ import androidx.compose.material.icons.automirrored.rounded.Notes
 import androidx.compose.material.icons.automirrored.rounded.PlaylistAdd
 import androidx.compose.material.icons.automirrored.rounded.VolumeOff
 import androidx.compose.material.icons.rounded.Album
+import androidx.compose.material.icons.rounded.AudioFile
 import androidx.compose.material.icons.rounded.ArrowDownward
 import androidx.compose.material.icons.rounded.ArrowUpward
 import androidx.compose.material.icons.rounded.BarChart
@@ -158,9 +159,11 @@ import com.music.bitchord.data.model.Account
 import com.music.bitchord.data.LocalMediaRepository
 import com.music.bitchord.data.scrobbling.LastFM
 import com.music.bitchord.data.settings.AppSettings
+import com.music.bitchord.data.settings.MAX_PLAYER_ARTWORK_BLUR_DP
 import com.music.bitchord.data.settings.MainNavigationTab
 import com.music.bitchord.data.settings.PlayerControl
 import com.music.bitchord.data.settings.PlayerQuickAction
+import com.music.bitchord.data.settings.PlayerDetailsAction
 import com.music.bitchord.data.settings.ScreenOrientationMode
 import com.music.bitchord.data.settings.OutputPcmMode
 import com.music.bitchord.data.settings.LyricsTextAlignment
@@ -187,6 +190,11 @@ private data class SettingsSearchEntry(
     val subtitle: String,
     val keywords: List<String> = emptyList(),
     val checked: Boolean? = null,
+    val valueLabel: String? = null,
+    val sliderValue: Float? = null,
+    val sliderValueRange: ClosedFloatingPointRange<Float> = 0f..1f,
+    val sliderSteps: Int = 0,
+    val onSliderValueChange: ((Float) -> Unit)? = null,
     val activate: () -> Unit,
 )
 
@@ -224,6 +232,9 @@ fun SettingsScreen(
     val mainTabOrder by AppSettings.mainNavigationTabOrder.collectAsStateWithLifecycle()
     val startupTab by AppSettings.startupTab.collectAsStateWithLifecycle()
     val quickActions by AppSettings.playerQuickActions.collectAsStateWithLifecycle()
+    val hiddenPlayerDetailsActions by AppSettings.hiddenPlayerDetailsActions.collectAsStateWithLifecycle()
+    val audioCutterEnabled by AppSettings.audioCutterEnabled.collectAsStateWithLifecycle()
+    val artworkBackdropBlurDp by AppSettings.artworkBackdropBlurDp.collectAsStateWithLifecycle()
     val keepScreenOn by AppSettings.keepScreenOn.collectAsStateWithLifecycle()
     val showStatusBar by AppSettings.showStatusBar.collectAsStateWithLifecycle()
     val showNavigationBar by AppSettings.showNavigationBar.collectAsStateWithLifecycle()
@@ -242,6 +253,7 @@ fun SettingsScreen(
     val showLyricsPreviousControl by AppSettings.showLyricsPreviousControl.collectAsStateWithLifecycle()
     val showLyricsPlayPauseControl by AppSettings.showLyricsPlayPauseControl.collectAsStateWithLifecycle()
     val showLyricsNextControl by AppSettings.showLyricsNextControl.collectAsStateWithLifecycle()
+    val lyricsTransportControlSize by AppSettings.lyricsTransportControlSize.collectAsStateWithLifecycle()
     val artworkTapOpensLyrics by AppSettings.artworkTapOpensLyrics.collectAsStateWithLifecycle()
     val showPlayerLyricsStrip by AppSettings.showPlayerLyricsStrip.collectAsStateWithLifecycle()
     val offlineMode by AppSettings.offlineMode.collectAsStateWithLifecycle()
@@ -294,7 +306,30 @@ fun SettingsScreen(
         SettingsSearchEntry(stringResource(R.string.lyrics_show_previous), stringResource(R.string.lyrics_transport_visibility_subtitle), listOf("lyrics", "歌詞", "previous", "前の曲"), showLyricsPreviousControl) { AppSettings.setShowLyricsPreviousControl(!showLyricsPreviousControl) },
         SettingsSearchEntry(stringResource(R.string.lyrics_show_play_pause), stringResource(R.string.lyrics_transport_visibility_subtitle), listOf("lyrics", "歌詞", "play", "pause", "再生", "一時停止"), showLyricsPlayPauseControl) { AppSettings.setShowLyricsPlayPauseControl(!showLyricsPlayPauseControl) },
         SettingsSearchEntry(stringResource(R.string.lyrics_show_next), stringResource(R.string.lyrics_transport_visibility_subtitle), listOf("lyrics", "歌詞", "next", "次の曲"), showLyricsNextControl) { AppSettings.setShowLyricsNextControl(!showLyricsNextControl) },
+        SettingsSearchEntry(
+            title = stringResource(R.string.lyrics_transport_control_size),
+            subtitle = stringResource(R.string.lyrics_transport_control_size_subtitle),
+            keywords = listOf("lyrics", "歌詞", "button", "ボタン", "size", "サイズ", "transport"),
+            valueLabel = stringResource(R.string.lyrics_transport_control_size_value, lyricsTransportControlSize.roundToInt()),
+            sliderValue = lyricsTransportControlSize,
+            sliderValueRange = 14f..30f,
+            sliderSteps = 15,
+            onSliderValueChange = AppSettings::setLyricsTransportControlSize,
+            activate = {},
+        ),
         SettingsSearchEntry(stringResource(R.string.hide_lossless_label), stringResource(R.string.hide_lossless_label_subtitle), listOf("lossless", "quality", "ロスレス", "高音質"), hideLosslessLabel) { AppSettings.setHideLosslessLabel(!hideLosslessLabel) },
+        SettingsSearchEntry(stringResource(R.string.audio_cutter_enabled), stringResource(R.string.audio_cutter_enabled_subtitle), listOf("audio cutter", "cut", "edit", "オーディオカッター", "曲編集"), audioCutterEnabled) { AppSettings.setAudioCutterEnabled(!audioCutterEnabled) },
+        SettingsSearchEntry(
+            title = stringResource(R.string.artwork_backdrop_blur),
+            subtitle = stringResource(R.string.artwork_backdrop_blur_subtitle),
+            keywords = listOf("artwork", "background", "blur", "ぼかし", "背景", "アルバムアート"),
+            valueLabel = stringResource(R.string.artwork_backdrop_blur_value, artworkBackdropBlurDp.roundToInt()),
+            sliderValue = artworkBackdropBlurDp,
+            sliderValueRange = 0f..MAX_PLAYER_ARTWORK_BLUR_DP,
+            sliderSteps = 31,
+            onSliderValueChange = AppSettings::setArtworkBackdropBlurDp,
+            activate = {},
+        ),
         SettingsSearchEntry(stringResource(R.string.offline_mode), stringResource(R.string.offline_mode_subtitle), listOf("offline", "オフライン", "通信"), offlineMode) { AppSettings.setOfflineMode(!offlineMode) },
         SettingsSearchEntry(stringResource(R.string.keep_screen_on), stringResource(R.string.keep_screen_on_subtitle), listOf("screen", "display", "画面", "常時"), keepScreenOn) { AppSettings.setKeepScreenOn(!keepScreenOn) },
         SettingsSearchEntry(stringResource(R.string.show_status_bar), stringResource(R.string.show_status_bar_search_help), listOf("status bar", "ステータスバー", "battery", "電池"), showStatusBar) { AppSettings.setShowStatusBar(!showStatusBar) },
@@ -323,7 +358,29 @@ fun SettingsScreen(
         SettingsSearchEntry(stringResource(R.string.legacy_mesh_gradient), stringResource(R.string.legacy_mesh_gradient_subtitle), listOf("theme", "gradient", "テーマ", "グラデーション"), legacyMeshGradient) { AppSettings.setLegacyMeshGradient(!legacyMeshGradient) },
         SettingsSearchEntry(stringResource(R.string.filter_non_music_audio), stringResource(R.string.filter_non_music_audio_subtitle), listOf("filter", "audio", "music", "音楽", "フィルター"), filterNonMusicAudio) { AppSettings.setFilterNonMusicAudio(!filterNonMusicAudio) },
         SettingsSearchEntry(stringResource(R.string.playlist_song_artwork), stringResource(R.string.playlist_song_artwork_subtitle), listOf("playlist", "artwork", "プレイリスト", "アルバムアート"), showPlaylistSongArtwork) { AppSettings.setShowPlaylistSongArtwork(!showPlaylistSongArtwork) },
-    ) + MainNavigationTab.entries.map { tab ->
+    ) + PlayerDetailsAction.entries.map { action ->
+        val actionTitle = stringResource(when (action) {
+            PlayerDetailsAction.ALBUM -> R.string.go_to_album
+            PlayerDetailsAction.ARTIST -> R.string.go_to_artist
+            PlayerDetailsAction.ADD_TO_PLAYLIST -> R.string.add_to_playlist
+            PlayerDetailsAction.EQUALIZER -> R.string.equalizer
+            PlayerDetailsAction.CHROMECAST -> R.string.chromecast
+            PlayerDetailsAction.PLAYBACK_TUNING -> R.string.playback_tuning
+            PlayerDetailsAction.SLEEP_TIMER -> R.string.sleep_timer
+            PlayerDetailsAction.TAG_EDITOR -> R.string.tag_editor
+            PlayerDetailsAction.EDIT_LYRICS -> R.string.edit_lyrics
+            PlayerDetailsAction.DETAILS -> R.string.details
+            PlayerDetailsAction.SHARE_FILE -> R.string.share_file
+        })
+        SettingsSearchEntry(
+            title = stringResource(R.string.player_menu_action_visibility, actionTitle),
+            subtitle = stringResource(R.string.player_details_actions_subtitle),
+            keywords = listOf("player", "menu", "details", actionTitle, "表示", "非表示"),
+            checked = action !in hiddenPlayerDetailsActions,
+        ) {
+            AppSettings.setPlayerDetailsActionVisible(action, action in hiddenPlayerDetailsActions)
+        }
+    } + MainNavigationTab.entries.map { tab ->
         val tabTitle = stringResource(when (tab) {
             MainNavigationTab.SONGS -> R.string.songs
             MainNavigationTab.ALBUMS -> R.string.albums
@@ -728,9 +785,28 @@ fun SettingsScreen(
                                         ),
                                     )
                                 }
+                            } ?: entry.valueLabel?.let { valueLabel ->
+                                {
+                                    Text(
+                                        text = valueLabel,
+                                        color = MaterialTheme.colorScheme.primary,
+                                        style = MaterialTheme.typography.labelLarge,
+                                    )
+                                }
                             },
-                            onClick = entry.activate,
+                            onClick = if (entry.sliderValue == null) entry.activate else null,
                         )
+                        val sliderValue = entry.sliderValue
+                        val onSliderValueChange = entry.onSliderValueChange
+                        if (sliderValue != null && onSliderValueChange != null) {
+                            Slider(
+                                value = sliderValue,
+                                onValueChange = onSliderValueChange,
+                                steps = entry.sliderSteps,
+                                valueRange = entry.sliderValueRange,
+                                modifier = Modifier.padding(start = ROW_INSET, end = ROW_INSET, bottom = 14.dp),
+                            )
+                        }
                     }
                 }
             }
@@ -1140,6 +1216,52 @@ fun SettingsScreen(
             }
         }
 
+        SettingsGroup(
+            header = stringResource(R.string.player_details_actions),
+            footer = stringResource(R.string.player_details_actions_subtitle),
+        ) {
+            SettingsRow(
+                icon = Icons.Rounded.AudioFile,
+                title = stringResource(R.string.audio_cutter_enabled),
+                subtitle = stringResource(R.string.audio_cutter_enabled_subtitle),
+                trailing = {
+                    Switch(
+                        checked = audioCutterEnabled,
+                        onCheckedChange = AppSettings::setAudioCutterEnabled,
+                    )
+                },
+                onClick = { AppSettings.setAudioCutterEnabled(!audioCutterEnabled) },
+            )
+            PlayerDetailsAction.entries.forEach { action ->
+                RowDivider()
+                val title = stringResource(when (action) {
+                    PlayerDetailsAction.ALBUM -> R.string.go_to_album
+                    PlayerDetailsAction.ARTIST -> R.string.go_to_artist
+                    PlayerDetailsAction.ADD_TO_PLAYLIST -> R.string.add_to_playlist
+                    PlayerDetailsAction.EQUALIZER -> R.string.equalizer
+                    PlayerDetailsAction.CHROMECAST -> R.string.chromecast
+                    PlayerDetailsAction.PLAYBACK_TUNING -> R.string.playback_tuning
+                    PlayerDetailsAction.SLEEP_TIMER -> R.string.sleep_timer
+                    PlayerDetailsAction.TAG_EDITOR -> R.string.tag_editor
+                    PlayerDetailsAction.EDIT_LYRICS -> R.string.edit_lyrics
+                    PlayerDetailsAction.DETAILS -> R.string.details
+                    PlayerDetailsAction.SHARE_FILE -> R.string.share_file
+                })
+                val visible = action !in hiddenPlayerDetailsActions
+                SettingsRow(
+                    icon = Icons.Rounded.MoreVert,
+                    title = title,
+                    trailing = {
+                        Switch(
+                            checked = visible,
+                            onCheckedChange = { AppSettings.setPlayerDetailsActionVisible(action, it) },
+                        )
+                    },
+                    onClick = { AppSettings.setPlayerDetailsActionVisible(action, !visible) },
+                )
+            }
+        }
+
         SettingsGroup(header = stringResource(R.string.lyrics_display)) {
             SettingsRow(
                 icon = Icons.AutoMirrored.Rounded.Notes,
@@ -1182,6 +1304,20 @@ fun SettingsScreen(
                 options = ThemeMode.entries.map { it.localizedLabel() },
                 selectedIndex = ThemeMode.entries.indexOf(theme),
                 onSelect = { AppSettings.setThemeMode(ThemeMode.entries[it]) },
+                modifier = Modifier.padding(start = ROW_INSET, end = ROW_INSET, bottom = 14.dp),
+            )
+            RowDivider()
+            SettingsRow(
+                icon = Icons.Rounded.BlurOn,
+                title = stringResource(R.string.artwork_backdrop_blur),
+                subtitle = stringResource(R.string.artwork_backdrop_blur_subtitle),
+                value = stringResource(R.string.artwork_backdrop_blur_value, artworkBackdropBlurDp.roundToInt()),
+            )
+            Slider(
+                value = artworkBackdropBlurDp,
+                onValueChange = AppSettings::setArtworkBackdropBlurDp,
+                valueRange = 0f..MAX_PLAYER_ARTWORK_BLUR_DP,
+                steps = 31,
                 modifier = Modifier.padding(start = ROW_INSET, end = ROW_INSET, bottom = 14.dp),
             )
             RowDivider()
@@ -1590,6 +1726,29 @@ fun SettingsScreen(
                         )
                     },
                     onClick = { AppSettings.setShowLyricsNextControl(!showLyricsNextControl) },
+                )
+                RowDivider()
+                SettingsRow(
+                    icon = Icons.Rounded.Tune,
+                    title = stringResource(R.string.lyrics_transport_control_size),
+                    subtitle = stringResource(R.string.lyrics_transport_control_size_subtitle),
+                    trailing = {
+                        Text(
+                            text = stringResource(
+                                R.string.lyrics_transport_control_size_value,
+                                lyricsTransportControlSize.roundToInt(),
+                            ),
+                            color = MaterialTheme.colorScheme.primary,
+                            style = MaterialTheme.typography.labelLarge,
+                        )
+                    },
+                )
+                Slider(
+                    value = lyricsTransportControlSize,
+                    onValueChange = AppSettings::setLyricsTransportControlSize,
+                    steps = 15,
+                    valueRange = 14f..30f,
+                    modifier = Modifier.padding(start = ROW_INSET, end = ROW_INSET, bottom = 14.dp),
                 )
             }
             // Source ordering and lyric lookup only matter while lyrics are on.

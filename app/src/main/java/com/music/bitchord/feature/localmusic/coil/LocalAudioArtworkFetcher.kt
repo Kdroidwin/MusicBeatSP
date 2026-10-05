@@ -9,6 +9,7 @@ import android.net.Uri
 import android.os.Build
 import android.os.ParcelFileDescriptor
 import android.provider.MediaStore
+import android.os.SystemClock
 import android.util.Size
 import coil3.ImageLoader
 import coil3.asImage
@@ -27,6 +28,7 @@ import java.io.ByteArrayOutputStream
 import java.io.File
 import java.io.InputStream
 import java.util.Locale
+import java.util.concurrent.ConcurrentHashMap
 
 private const val DEFAULT_THUMBNAIL_PX = 256
 private const val MEDIASTORE_THUMBNAIL_MAX_PX = 512
@@ -80,7 +82,7 @@ class LocalAudioArtworkFetcher(
             // encoded cover bytes separate from decoding: the player, its palette, and its
             // mesh can all ask for the same local cover at once, and separate MediaStore URIs
             // for tracks on one album should not make us parse/decode the same cover repeatedly.
-            val embeddedCacheKey = embeddedCacheKey(uri, cleanUri)
+            val embeddedCacheKey = embeddedCacheKey(context, uri, cleanUri)
             val embeddedBytes = LocalArtworkCache.embeddedBytes(context, embeddedCacheKey) {
                 extractEmbeddedCoverBytes(context, uri)
             }
@@ -154,15 +156,26 @@ class LocalAudioArtworkFetcher(
         }.getOrNull()
     }
 
-    private fun embeddedCacheKey(uri: Uri, cleanUri: Uri): String = buildString {
-        append(cleanUri.normalizeScheme())
-        // MediaStore supplies this timestamp on local-song artwork URIs. A changed file
-        // therefore naturally gets a fresh cache entry without invalidating unrelated art.
-        uri.getQueryParameter("t")?.let { append("|modified=").append(it) }
-        if (cleanUri.scheme == "file") {
-            val file = File(cleanUri.path.orEmpty())
-            append("|modified=").append(file.lastModified())
-            append("|length=").append(file.length())
+    private fun embeddedCacheKey(context: Context, uri: Uri, cleanUri: Uri): String {
+        // Preload requests often arrive as MediaStore content:// URIs, while a
+        // downloaded queue entry may later use the same file:// path. Key both
+        // forms by their physical file identity when MediaStore exposes it, so
+        // playback can reuse what startup preload already extracted.
+        val filePath = if (cleanUri.scheme == "file") cleanUri.path else resolveFilePath(context, cleanUri)
+        val file = filePath?.let(::File)?.takeIf { it.isFile }
+        return if (file != null) {
+            buildString {
+                append("local-file:").append(runCatching { file.canonicalPath }.getOrDefault(file.absolutePath))
+                append("|modified=").append(file.lastModified())
+                append("|length=").append(file.length())
+            }
+        } else {
+            buildString {
+                append(cleanUri.normalizeScheme())
+                // If a provider does not expose a filesystem path, MediaStore's
+                // modification marker still separates an edited file's cover.
+                uri.getQueryParameter("t")?.let { append("|modified=").append(it) }
+            }
         }
     }
 
@@ -272,18 +285,40 @@ class LocalAudioArtworkFetcher(
         return null
     }
 
-    private fun resolveFilePath(context: Context, uri: Uri): String? = runCatching {
+    private fun resolveFilePath(context: Context, uri: Uri): String? {
         if (uri.scheme == "file") return uri.path
         if (uri.scheme != "content") return null
         val cleanUri = uri.buildUpon().clearQuery().build()
-        val proj = arrayOf(MediaStore.Audio.Media.DATA)
-        context.contentResolver.query(cleanUri, proj, null, null, null)?.use { cursor ->
-            if (cursor.moveToFirst()) {
-                val idx = cursor.getColumnIndex(MediaStore.Audio.Media.DATA)
-                if (idx != -1) cursor.getString(idx) else null
-            } else null
+        val cacheKey = cleanUri.normalizeScheme().toString()
+        val now = SystemClock.elapsedRealtime()
+        val cached = resolvedPathCache.compute(cacheKey) { _, previous ->
+            when {
+                previous?.path != null && File(previous.path).isFile -> previous
+                previous?.path == null && previous != null && now - previous.cachedAtMs < NEGATIVE_PATH_CACHE_MS -> previous
+                else -> {
+                    val path = runCatching {
+                        context.contentResolver.query(
+                            cleanUri,
+                            arrayOf(MediaStore.Audio.Media.DATA),
+                            null,
+                            null,
+                            null,
+                        )?.use { cursor ->
+                            if (cursor.moveToFirst()) {
+                                val index = cursor.getColumnIndex(MediaStore.Audio.Media.DATA)
+                                if (index >= 0) cursor.getString(index) else null
+                            } else null
+                        }
+                    }.getOrNull()
+                    CachedResolvedPath(path, now)
+                }
+            }
         }
-    }.getOrNull()
+        if (resolvedPathCache.size > MAX_RESOLVED_PATHS) {
+            resolvedPathCache.keys.firstOrNull { it != cacheKey }?.let(resolvedPathCache::remove)
+        }
+        return cached?.path
+    }
 
     /** Decode provider artwork without loading a full-size bitmap into memory. */
     private fun decodeCoverStream(context: Context, uri: Uri, maxDim: Int): Bitmap? = runCatching {
@@ -338,6 +373,11 @@ class LocalAudioArtworkFetcher(
     }
 
     companion object {
+        private const val MAX_RESOLVED_PATHS = 512
+        private const val NEGATIVE_PATH_CACHE_MS = 30_000L
+        private data class CachedResolvedPath(val path: String?, val cachedAtMs: Long)
+        private val resolvedPathCache = ConcurrentHashMap<String, CachedResolvedPath>()
+
         fun isLocalAudioUri(uri: Uri): Boolean {
             val scheme = uri.scheme?.lowercase(Locale.ROOT) ?: return false
             if (scheme == "content") {

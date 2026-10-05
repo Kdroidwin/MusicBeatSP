@@ -42,6 +42,8 @@ import androidx.compose.ui.unit.dp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.music.bitchord.R
 import com.music.bitchord.data.model.Song
+import com.music.bitchord.data.settings.AppSettings
+import com.music.bitchord.data.settings.PlayerDetailsAction
 import com.music.bitchord.playback.cast.CastActionItem
 import com.music.bitchord.playback.SleepTimer
 import kotlinx.coroutines.delay
@@ -80,6 +82,7 @@ fun LocalSongActionsSheet(
 ) {
     val sheetState = rememberModalBottomSheetState(skipPartiallyExpanded = true)
     var pickingSleepTimer by remember { mutableStateOf(false) }
+    val hiddenActions by AppSettings.hiddenPlayerDetailsActions.collectAsStateWithLifecycle()
 
     val afterTrack by SleepTimer.afterTrack.collectAsStateWithLifecycle()
     val deadline by SleepTimer.deadline.collectAsStateWithLifecycle()
@@ -134,37 +137,46 @@ fun LocalSongActionsSheet(
                     )
 
                     // 1. Go to Album
-                    LocalSongActionItem(
-                        icon = Icons.Rounded.Album,
-                        label = stringResource(R.string.go_to_album),
-                        onClick = onGoToAlbum,
-                    )
+                    if (PlayerDetailsAction.ALBUM !in hiddenActions) {
+                        LocalSongActionItem(
+                            icon = Icons.Rounded.Album,
+                            label = stringResource(R.string.go_to_album),
+                            onClick = onGoToAlbum,
+                        )
+                    }
 
                     // 2. Go to Artist
-                    LocalSongActionItem(
-                        icon = Icons.Rounded.Person,
-                        label = stringResource(R.string.go_to_artist),
-                        trailingIcon = if (artists.size > 1) Icons.AutoMirrored.Rounded.KeyboardArrowRight else null,
-                        onClick = onGoToArtist,
-                    )
+                    if (PlayerDetailsAction.ARTIST !in hiddenActions) {
+                        LocalSongActionItem(
+                            icon = Icons.Rounded.Person,
+                            label = stringResource(R.string.go_to_artist),
+                            trailingIcon = if (artists.size > 1) Icons.AutoMirrored.Rounded.KeyboardArrowRight else null,
+                            onClick = onGoToArtist,
+                        )
+                    }
 
                     // 3. Add to playlist
-                    LocalSongActionItem(
-                        icon = Icons.AutoMirrored.Rounded.PlaylistAdd,
-                        label = stringResource(R.string.add_to_playlist),
-                        onClick = onAddToPlaylist,
-                    )
+                    if (PlayerDetailsAction.ADD_TO_PLAYLIST !in hiddenActions) {
+                        LocalSongActionItem(
+                            icon = Icons.AutoMirrored.Rounded.PlaylistAdd,
+                            label = stringResource(R.string.add_to_playlist),
+                            onClick = onAddToPlaylist,
+                        )
+                    }
 
                     // 4. Equalizer
+                    if (PlayerDetailsAction.EQUALIZER !in hiddenActions) {
                         LocalSongActionItem(
                             icon = Icons.Rounded.GraphicEq,
                             label = stringResource(R.string.equalizer),
-                        onClick = onEqualizer,
-                    )
+                            onClick = onEqualizer,
+                        )
+                    }
 
-                    if (showPlayerActions) {
+                    if (showPlayerActions && PlayerDetailsAction.CHROMECAST !in hiddenActions) {
                         CastActionItem(onUnavailable = onCastUnavailable)
-
+                    }
+                    if (showPlayerActions && PlayerDetailsAction.PLAYBACK_TUNING !in hiddenActions) {
                         LocalSongActionItem(
                             icon = Icons.Rounded.Speed,
                             label = stringResource(R.string.playback_tuning),
@@ -173,40 +185,50 @@ fun LocalSongActionsSheet(
                     }
 
                     // 5. Sleep timer
-                    LocalSongActionItem(
-                        icon = Icons.Rounded.Bedtime,
-                        label = stringResource(R.string.sleep_timer),
-                        value = sleepTimerStatus,
-                        onClick = { pickingSleepTimer = true },
-                    )
+                    if (PlayerDetailsAction.SLEEP_TIMER !in hiddenActions) {
+                        LocalSongActionItem(
+                            icon = Icons.Rounded.Bedtime,
+                            label = stringResource(R.string.sleep_timer),
+                            value = sleepTimerStatus,
+                            onClick = { pickingSleepTimer = true },
+                        )
+                    }
 
                     // 6. Tag editor
-                    LocalSongActionItem(
-                        icon = Icons.Rounded.Edit,
-                        label = stringResource(R.string.tag_editor),
-                        onClick = onTagEditor,
-                    )
+                    if (PlayerDetailsAction.TAG_EDITOR !in hiddenActions) {
+                        LocalSongActionItem(
+                            icon = Icons.Rounded.Edit,
+                            label = stringResource(R.string.tag_editor),
+                            onClick = onTagEditor,
+                        )
+                    }
 
                     // 7. Edit lyrics
-                    LocalSongActionItem(
-                        icon = Icons.AutoMirrored.Rounded.Notes,
-                        label = stringResource(R.string.edit_lyrics),
-                        onClick = onEditLyrics,
-                    )
+                    if (PlayerDetailsAction.EDIT_LYRICS !in hiddenActions) {
+                        LocalSongActionItem(
+                            icon = Icons.AutoMirrored.Rounded.Notes,
+                            label = stringResource(R.string.edit_lyrics),
+                            onClick = onEditLyrics,
+                        )
+                    }
 
                     // 8. Details
-                    LocalSongActionItem(
-                        icon = Icons.Rounded.Info,
-                        label = stringResource(R.string.details),
-                        onClick = onDetails,
-                    )
+                    if (PlayerDetailsAction.DETAILS !in hiddenActions) {
+                        LocalSongActionItem(
+                            icon = Icons.Rounded.Info,
+                            label = stringResource(R.string.details),
+                            onClick = onDetails,
+                        )
+                    }
 
                     // 9. Share file
-                    LocalSongActionItem(
-                        icon = Icons.Rounded.Share,
-                        label = stringResource(R.string.share_file),
-                        onClick = onShareFile,
-                    )
+                    if (PlayerDetailsAction.SHARE_FILE !in hiddenActions) {
+                        LocalSongActionItem(
+                            icon = Icons.Rounded.Share,
+                            label = stringResource(R.string.share_file),
+                            onClick = onShareFile,
+                        )
+                    }
 
                     Spacer(Modifier.height(8.dp))
                 }

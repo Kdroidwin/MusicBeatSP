@@ -2,9 +2,12 @@ package com.music.bitchord.data.canvas
 
 import android.annotation.SuppressLint
 import android.content.Context
-import android.graphics.Bitmap
+import android.net.Uri
+import android.os.Handler
+import android.os.Looper
 import android.webkit.CookieManager
-import android.webkit.JavascriptInterface
+import android.webkit.WebResourceRequest
+import android.webkit.WebSettings
 import android.webkit.WebStorage
 import android.webkit.WebView
 import android.webkit.WebViewClient
@@ -42,8 +45,8 @@ import java.util.Base64
 internal object SpotifyToken {
 
     private const val TAG = "SpotifyToken"
-    private const val BRIDGE_NAME = "BitChordSpotifyTokenBridge"
     private const val HARVEST_TIMEOUT_MS = 20_000L
+    private const val HARVEST_POLL_INTERVAL_MS = 250L
     private const val DEFAULT_TOKEN_LIFETIME_MS = 3_600_000L
 
     private val json = Json { ignoreUnknownKeys = true; isLenient = true }
@@ -124,6 +127,7 @@ internal object SpotifyToken {
      */
     @SuppressLint("SetJavaScriptEnabled")
     private suspend fun harvestViaWebView(context: Context, cookie: String): HarvestedToken? {
+        if (cookie.isBlank() || cookie.any { it == '\r' || it == '\n' || it == ';' }) return null
         val deferred = CompletableDeferred<HarvestedToken?>()
 
         val cookieManager = CookieManager.getInstance().apply {
@@ -133,70 +137,102 @@ internal object SpotifyToken {
             flush()
         }
         // The player caches its token in web storage and skips a fresh
-        // /api/token request if a live one is already sitting there, leaving
-        // the hook with nothing to see — wipe storage so every harvest forces
-        // a real mint.
-        runCatching { WebStorage.getInstance().deleteAllData() }
+        // /api/token request if a live one is already sitting there. Clear only
+        // Spotify's origin so other in-app WebViews keep their local data.
+        runCatching { WebStorage.getInstance().deleteOrigin("https://open.spotify.com") }
 
         var webView: WebView? = null
+        val handler = Handler(Looper.getMainLooper())
+        val poller = object : Runnable {
+            override fun run() {
+                val view = webView ?: return
+                if (deferred.isCompleted) return
+                view.evaluateJavascript("window.__musicbeatTokenPayload || null") { encodedPayload ->
+                    if (deferred.isCompleted) return@evaluateJavascript
+                    val payload = runCatching {
+                        json.parseToJsonElement(encodedPayload ?: "null")
+                            .jsonPrimitive.contentOrNull
+                    }.getOrNull()
+                    payload?.let(::parseHarvestedToken)?.let(deferred::complete)
+                    if (!deferred.isCompleted) handler.postDelayed(this, HARVEST_POLL_INTERVAL_MS)
+                }
+            }
+        }
         return try {
             webView = WebView(context).apply {
                 settings.javaScriptEnabled = true
                 settings.domStorageEnabled = true
+                settings.allowFileAccess = false
+                settings.allowContentAccess = false
+                settings.mixedContentMode = WebSettings.MIXED_CONTENT_NEVER_ALLOW
+                settings.safeBrowsingEnabled = true
                 settings.userAgentString = CANVAS_UA
-                cookieManager.setAcceptThirdPartyCookies(this, true)
-                addJavascriptInterface(TokenBridge(deferred), BRIDGE_NAME)
+                cookieManager.setAcceptThirdPartyCookies(this, false)
 
                 webViewClient = object : WebViewClient() {
-                    override fun onPageStarted(view: WebView, url: String?, favicon: Bitmap?) {
+                    override fun shouldOverrideUrlLoading(view: WebView, request: WebResourceRequest): Boolean {
+                        if (!request.isForMainFrame) return false
+                        val allowed = isAllowedSpotifyPage(request.url)
+                        if (!allowed) deferred.complete(null)
+                        return !allowed
+                    }
+
+                    override fun onPageStarted(view: WebView, url: String?, favicon: android.graphics.Bitmap?) {
                         super.onPageStarted(view, url, favicon)
-                        view.evaluateJavascript(HOOK_SCRIPT, null)
+                        if (isAllowedSpotifyPage(Uri.parse(url.orEmpty()))) {
+                            view.evaluateJavascript(HOOK_SCRIPT, null)
+                        } else {
+                            deferred.complete(null)
+                            view.stopLoading()
+                        }
                     }
 
                     override fun onPageFinished(view: WebView, url: String?) {
                         super.onPageFinished(view, url)
                         // Re-assert in case the player navigated client-side
                         // after the onPageStarted injection ran.
-                        view.evaluateJavascript(HOOK_SCRIPT, null)
+                        if (isAllowedSpotifyPage(Uri.parse(url.orEmpty()))) {
+                            view.evaluateJavascript(HOOK_SCRIPT, null)
+                        }
                     }
                 }
                 loadUrl("https://open.spotify.com/")
             }
 
+            handler.post(poller)
             withTimeoutOrNull(HARVEST_TIMEOUT_MS) { deferred.await() }
         } catch (e: Exception) {
             Log.w(TAG, "token harvest threw: ${e.message}")
             null
         } finally {
+            handler.removeCallbacks(poller)
             runCatching {
-                webView?.removeJavascriptInterface(BRIDGE_NAME)
                 webView?.stopLoading()
                 webView?.destroy()
             }
         }
     }
 
-    /** Receives raw `/api/token` response bodies from the hooked page. */
-    private class TokenBridge(private val deferred: CompletableDeferred<HarvestedToken?>) {
-        @JavascriptInterface
-        fun onTokenPayload(payload: String?) {
-            if (payload.isNullOrBlank() || deferred.isCompleted) return
-            runCatching {
-                val root = json.parseToJsonElement(payload).jsonObject
-                val token = root["accessToken"]?.jsonPrimitive?.contentOrNull
-                val anonymous = root["isAnonymous"]?.jsonPrimitive?.contentOrNull
-                    ?.toBooleanStrictOrNull() ?: false
-                // The player also mints an anonymous token before the cookie
-                // takes effect; that one can't read canvases, so keep waiting
-                // for the logged-in one.
-                if (token.isNullOrBlank() || anonymous) return
-                val expiresAt = root["accessTokenExpirationTimestampMs"]?.jsonPrimitive?.contentOrNull
-                    ?.toLongOrNull()?.takeIf { it > System.currentTimeMillis() }
-                    ?: (System.currentTimeMillis() + DEFAULT_TOKEN_LIFETIME_MS)
-                val clientId = root["clientId"]?.jsonPrimitive?.contentOrNull
-                deferred.complete(HarvestedToken(token, expiresAt, clientId))
-            }
-        }
+    private fun isAllowedSpotifyPage(uri: Uri): Boolean =
+        uri.scheme.equals("https", ignoreCase = true) &&
+            uri.host.equals("open.spotify.com", ignoreCase = true) &&
+            (uri.port == -1 || uri.port == 443)
+
+    /** Reads and validates the token payload only from the trusted page's main frame. */
+    private fun parseHarvestedToken(payload: String): HarvestedToken? {
+        if (payload.isBlank() || payload.length > MAX_TOKEN_PAYLOAD_CHARS) return null
+        val root = runCatching { json.parseToJsonElement(payload).jsonObject }.getOrNull() ?: return null
+        val token = root["accessToken"]?.jsonPrimitive?.contentOrNull
+        val anonymous = root["isAnonymous"]?.jsonPrimitive?.contentOrNull
+            ?.toBooleanStrictOrNull() ?: false
+        // The player can mint an anonymous token before the cookie takes
+        // effect. Keep polling until it reports the signed-in token.
+        if (token.isNullOrBlank() || anonymous) return null
+        val expiresAt = root["accessTokenExpirationTimestampMs"]?.jsonPrimitive?.contentOrNull
+            ?.toLongOrNull()?.takeIf { it > System.currentTimeMillis() }
+            ?: (System.currentTimeMillis() + DEFAULT_TOKEN_LIFETIME_MS)
+        val clientId = root["clientId"]?.jsonPrimitive?.contentOrNull
+        return HarvestedToken(token, expiresAt, clientId)
     }
 
     private val HOOK_SCRIPT = """
@@ -204,10 +240,17 @@ internal object SpotifyToken {
           if (window.__bitchordTokenHook) return;
           window.__bitchordTokenHook = true;
           var report = function (body) {
-            try { $BRIDGE_NAME.onTokenPayload(body); } catch (e) {}
+            try {
+              if (typeof body === 'string' && body.length <= 65536) {
+                window.__musicbeatTokenPayload = body;
+              }
+            } catch (e) {}
           };
           var isToken = function (u) {
-            try { return String(u).indexOf('/api/token') !== -1; } catch (e) { return false; }
+            try {
+              var parsed = new URL(String(u), window.location.href);
+              return parsed.origin === 'https://open.spotify.com' && parsed.pathname === '/api/token';
+            } catch (e) { return false; }
           };
           var origFetch = window.fetch;
           if (origFetch) {
@@ -243,6 +286,8 @@ internal object SpotifyToken {
           };
         })();
     """.trimIndent()
+
+    private const val MAX_TOKEN_PAYLOAD_CHARS = 65_536
 
     /**
      * The second header these endpoints have started demanding alongside the

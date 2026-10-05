@@ -224,6 +224,7 @@ import com.music.bitchord.feature.localsongactions.ui.components.LocalAddToPlayl
 import com.music.bitchord.feature.localsongactions.ui.components.LocalArtistPickerSheet
 import com.music.bitchord.feature.localsongactions.ui.components.LocalSongActionsSheet
 import com.music.bitchord.feature.localsongactions.ui.components.LocalSongDetailsSheet
+import com.music.bitchord.feature.localsongactions.ui.components.AudioCutterSheet
 import com.music.bitchord.feature.tageditor.ui.TagEditorScreen
 import com.music.bitchord.ui.screens.equalizer.EqualizerSheet
 import androidx.compose.ui.window.Dialog
@@ -2468,6 +2469,9 @@ private fun BitChordApp(
             var showDetailsSheet by remember(song.videoId, pendingPlayerQuickAction) {
                 mutableStateOf(pendingPlayerQuickAction == PlayerQuickAction.DETAILS)
             }
+            var showAudioCutterSheet by remember(song.videoId, pendingPlayerQuickAction) {
+                mutableStateOf(false)
+            }
             var showAddToPlaylist by remember { mutableStateOf(false) }
             var showArtistPicker by remember { mutableStateOf(false) }
 
@@ -2532,6 +2536,18 @@ private fun BitChordApp(
                     onTagEditorClick = {
                         showDetailsSheet = false
                         showTagEditor = true
+                    },
+                    onAudioCutterClick = {
+                        showDetailsSheet = false
+                        showAudioCutterSheet = true
+                    },
+                )
+            } else if (showAudioCutterSheet) {
+                AudioCutterSheet(
+                    song = song,
+                    onDismissRequest = {
+                        showAudioCutterSheet = false
+                        songActions = null
                     },
                 )
             } else if (showAddToPlaylist) {

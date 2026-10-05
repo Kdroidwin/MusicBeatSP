@@ -46,8 +46,8 @@ android {
         // Haze falls back to a translucent scrim below that.
         minSdk = 26
         targetSdk = 36
-        versionCode = 20
-        versionName = "2.0.2"
+        versionCode = 21
+        versionName = "2.0.3"
 
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
 
@@ -198,6 +198,7 @@ dependencies {
     implementation("androidx.media3:media3-exoplayer:1.11.0")
     implementation("androidx.media3:media3-session:1.11.0")
     implementation("androidx.media3:media3-common:1.11.0")
+    implementation("androidx.media3:media3-transformer:1.11.0")
     implementation("androidx.media3:media3-datasource-okhttp:1.11.0")
     // Official Google Cast sender framework. Device discovery and route UI
     // are initialized only when the player details menu is opened.

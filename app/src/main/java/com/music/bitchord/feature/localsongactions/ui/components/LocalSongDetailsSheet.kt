@@ -55,9 +55,11 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
+import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import coil3.compose.AsyncImage
 import com.music.bitchord.data.model.Song
 import com.music.bitchord.data.model.artworkAt
+import com.music.bitchord.data.settings.AppSettings
 import com.music.bitchord.feature.localsongactions.data.LocalSongMetadataRetriever
 import com.music.bitchord.feature.localsongactions.domain.model.LocalSongFullMetadata
 
@@ -72,10 +74,12 @@ fun LocalSongDetailsSheet(
     onDismissRequest: () -> Unit,
     onLyricsEditorClick: () -> Unit,
     onTagEditorClick: () -> Unit,
+    onAudioCutterClick: (() -> Unit)? = null,
     modifier: Modifier = Modifier,
 ) {
     val context = LocalContext.current
     val sheetState = rememberModalBottomSheetState(skipPartiallyExpanded = true)
+    val audioCutterEnabled by AppSettings.audioCutterEnabled.collectAsStateWithLifecycle()
 
     var metadata by remember { mutableStateOf<LocalSongFullMetadata?>(null) }
     var isLoading by remember { mutableStateOf(true) }
@@ -115,6 +119,14 @@ fun LocalSongDetailsSheet(
                 )
             }
 
+            if (audioCutterEnabled && onAudioCutterClick != null &&
+                (!song.localUri.isNullOrBlank() || !song.localPath.isNullOrBlank())
+            ) {
+                item {
+                    AudioCutterAction(onClick = onAudioCutterClick)
+                }
+            }
+
             item {
                 MetadataCard(metadata = metadata)
             }
@@ -125,6 +137,28 @@ fun LocalSongDetailsSheet(
                 }
             }
         }
+    }
+}
+
+@Composable
+private fun AudioCutterAction(onClick: () -> Unit) {
+    FilledTonalButton(
+        onClick = onClick,
+        shape = RoundedCornerShape(24.dp),
+        modifier = Modifier
+            .fillMaxWidth()
+            .height(48.dp),
+    ) {
+        Icon(
+            imageVector = Icons.Rounded.AudioFile,
+            contentDescription = null,
+            modifier = Modifier.size(18.dp),
+        )
+        Spacer(Modifier.width(8.dp))
+        Text(
+            text = stringResource(R.string.audio_cutter),
+            style = MaterialTheme.typography.labelLarge,
+        )
     }
 }
 

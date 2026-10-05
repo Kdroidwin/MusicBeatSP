@@ -106,6 +106,8 @@ fun MeshGradientBackground(
     animated: Boolean = true,
 ) {
     val reduceAnimation by AppSettings.reduceAnimation.collectAsStateWithLifecycle()
+    val reduceDynamicBlur by AppSettings.reduceDynamicBlur.collectAsStateWithLifecycle()
+    val effectiveBlurRadius = if (reduceDynamicBlur) 0.dp else blurRadius
 
     val tuned = (palette.colors.ifEmpty { FallbackColors } + FallbackColors)
         .take(4)
@@ -165,7 +167,7 @@ fun MeshGradientBackground(
                 scaleY = 1.3f
             }
             .background(baseColor)
-            .blur(blurRadius),
+            .then(if (effectiveBlurRadius > 0.dp) Modifier.blur(effectiveBlurRadius) else Modifier),
     ) {
         val anchors = listOf(
             Offset(0.20f, 0.25f),

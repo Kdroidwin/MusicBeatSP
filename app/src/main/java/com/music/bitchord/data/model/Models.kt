@@ -1,6 +1,7 @@
 package com.music.bitchord.data.model
 
 import android.net.Uri
+import java.io.File
 import kotlin.math.abs
 
 /** A playable YouTube Music track. */
@@ -89,7 +90,24 @@ data class Song(
  * Video thumbnails carry no hint and are returned unchanged.
  */
 fun Song.artworkAt(px: Int): String? {
-    val artwork = thumbnailUrl.artworkAt(px) ?: return null
+    val thumbnailUri = thumbnailUrl?.let(Uri::parse)
+    val hasRemoteThumbnail = thumbnailUri?.scheme in setOf("http", "https")
+    // A downloaded/local track can still carry the original online thumbnail URL.
+    // That URL bypasses LocalAudioArtworkFetcher and the artwork preloader's
+    // app-private cache, so the player waits on the network even though the file
+    // already contains the cover. Use the local audio source for backed tracks;
+    // the player keeps the remote thumbnail as a fallback if the local file has
+    // no readable cover.
+    val artworkSource = if ((hasRemoteThumbnail || thumbnailUrl.isNullOrBlank()) &&
+        (!localUri.isNullOrBlank() || !localPath.isNullOrBlank())
+    ) {
+        localUri?.takeIf { it.isLocalAudioArtworkUri() }
+            ?: localPath?.takeIf(String::isNotBlank)?.let { Uri.fromFile(File(it)).toString() }
+            ?: thumbnailUrl
+    } else {
+        thumbnailUrl
+    }
+    val artwork = artworkSource.artworkAt(px) ?: return null
     val artworkUri = Uri.parse(artwork)
     // LocalAudioArtworkFetcher can return either a fast MediaStore thumbnail
     // or the full embedded cover. Include the requested size in the URI so a
@@ -112,6 +130,14 @@ fun Song.artworkAt(px: Int): String? {
         }
     }
     return builder.appendQueryParameter(sizeParameter, px.toString()).build().toString()
+}
+
+private fun String.isLocalAudioArtworkUri(): Boolean {
+    val uri = runCatching { Uri.parse(this) }.getOrNull() ?: return false
+    if (uri.scheme == "content" && uri.path.orEmpty().contains("/audio/")) return true
+    if (uri.scheme != "file" && uri.scheme != "content") return false
+    val extension = uri.lastPathSegment.orEmpty().substringAfterLast('.', "").lowercase()
+    return extension in setOf("mp3", "m4a", "flac", "ogg", "opus", "aac", "webm", "wav", "3gp")
 }
 
 /** Appended to local audio artwork URIs to distinguish Coil cache sizes. */

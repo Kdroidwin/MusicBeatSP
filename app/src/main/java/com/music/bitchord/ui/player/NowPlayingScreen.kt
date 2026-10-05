@@ -700,12 +700,16 @@ fun NowPlayingScreen(
     val context = LocalContext.current
     val density = LocalDensity.current
     val haptics = rememberHaptics()
+    val artUrl = song.artworkAt(ART_PX)
+    val remoteArtFallbackUrl = song.thumbnailUrl?.artworkAt(ART_PX)
+        ?.takeIf { it.startsWith("http://") || it.startsWith("https://") }
+        ?.takeIf { it != artUrl }
 
     // A docked pane sits beside the page rather than covering the screen, so
     // the status bar it's under belongs to the page, not this artwork — only
     // the full-screen sheet gets to repaint it.
     if (!docked) {
-        val artLuminance = rememberArtworkLuminance(song.thumbnailUrl)
+        val artLuminance = rememberArtworkLuminance(artUrl)
         val isLightArtwork = artLuminance?.let { it > LIGHT_ARTWORK_LUMINANCE_THRESHOLD } ?: false
         SystemBarIcons(dark = isLightArtwork)
     }
@@ -722,6 +726,7 @@ fun NowPlayingScreen(
     val showLyricsPreviousControl by AppSettings.showLyricsPreviousControl.collectAsStateWithLifecycle()
     val showLyricsPlayPauseControl by AppSettings.showLyricsPlayPauseControl.collectAsStateWithLifecycle()
     val showLyricsNextControl by AppSettings.showLyricsNextControl.collectAsStateWithLifecycle()
+    val lyricsTransportControlSize by AppSettings.lyricsTransportControlSize.collectAsStateWithLifecycle()
     val favoriteUsesStar by AppSettings.favoriteUsesStar.collectAsStateWithLifecycle()
     val playerQuickActions by AppSettings.playerQuickActions.collectAsStateWithLifecycle()
     val keepScreenOn by AppSettings.keepScreenOn.collectAsStateWithLifecycle()
@@ -734,6 +739,7 @@ fun NowPlayingScreen(
     val hideUnknownPlayerArtist by AppSettings.hideUnknownPlayerArtist.collectAsStateWithLifecycle()
     val centerPlayerTrackInfo by AppSettings.centerPlayerTrackInfo.collectAsStateWithLifecycle()
     val playerDetailsVerticalMenu by AppSettings.playerDetailsVerticalMenu.collectAsStateWithLifecycle()
+    val artworkBackdropBlurDp by AppSettings.artworkBackdropBlurDp.collectAsStateWithLifecycle()
     val useLibraryIconForPlaylistControl by AppSettings.useLibraryIconForPlaylistControl.collectAsStateWithLifecycle()
     val keepArtworkFullSizeWhenPaused by AppSettings.keepArtworkFullSizeWhenPaused.collectAsStateWithLifecycle()
     val hideVolumeBar by AppSettings.hideVolumeBar.collectAsStateWithLifecycle()
@@ -804,7 +810,7 @@ fun NowPlayingScreen(
     // a pixel readback of its own on every track change, and the two answer the
     // same picture in two different ways, so whichever is not on screen is pure
     // cost — the legacy path pays [rememberArtworkColors] instead.
-    val artMesh = if (legacyMesh) null else rememberArtworkMesh(song.thumbnailUrl, canvasFrame, ART_PX)
+    val artMesh = if (legacyMesh) null else rememberArtworkMesh(artUrl, canvasFrame, ART_PX)
     // Asked of every clip, Spotify's Canvas and every other source alike — see
     // CanvasArtworkPlayer's refreshFrameEveryMs. A clip's own colours move as
     // it plays regardless of who published it, and the backdrop should follow.
@@ -1146,8 +1152,9 @@ fun NowPlayingScreen(
     // full-bleed at once. Keyed on the cover there is nothing to reset: the
     // bitmap really is still loaded, so the state stays true and the two
     // layers go on trading places as they should.
-    val artUrl = song.artworkAt(ART_PX)
-    var artLoaded by remember(artUrl) { mutableStateOf(false) }
+    var useRemoteArtworkFallback by remember(artUrl) { mutableStateOf(false) }
+    val displayedArtUrl = if (useRemoteArtworkFallback) remoteArtFallbackUrl ?: artUrl else artUrl
+    var artLoaded by remember(displayedArtUrl) { mutableStateOf(false) }
     /**
      * Which go at this cover we are on, and the reason there is more than one.
      *
@@ -1162,7 +1169,7 @@ fun NowPlayingScreen(
      * is no network at all, and a retry per recomposition — which is what an
      * unremembered request effectively gave — is a spin, not a recovery.
      */
-    var artAttempt by remember(artUrl) { mutableIntStateOf(0) }
+    var artAttempt by remember(displayedArtUrl) { mutableIntStateOf(0) }
     /**
      * The one request for this cover, built once.
      *
@@ -1181,9 +1188,9 @@ fun NowPlayingScreen(
      * Remembered on the cover and the attempt, so it changes when the picture
      * changes and when a retry is deliberately asked for, and at no other time.
      */
-    val artRequest = remember(artUrl, artAttempt) {
+    val artRequest = remember(displayedArtUrl, artAttempt) {
         ImageRequest.Builder(context)
-            .data(artUrl)
+            .data(displayedArtUrl)
             .size(ART_PX)
             // What makes a retry a new request as far as Coil's model comparison
             // is concerned. Only from the second go onwards, so the ordinary
@@ -1193,12 +1200,12 @@ fun NowPlayingScreen(
             .apply { if (artAttempt > 0) memoryCacheKeyExtra("attempt", artAttempt.toString()) }
             .build()
     }
-    var artFailed by remember(artUrl) { mutableStateOf(false) }
-    LaunchedEffect(artUrl, artFailed) {
+    var artFailed by remember(displayedArtUrl) { mutableStateOf(false) }
+    LaunchedEffect(displayedArtUrl, artFailed) {
         // A track with no artwork at all fails immediately and would fail
         // identically three more times: there is no request to make, so there is
         // nothing a second go could do differently.
-        if (artUrl == null || !artFailed || artAttempt >= ART_RETRIES) return@LaunchedEffect
+        if (displayedArtUrl == null || !artFailed || artAttempt >= ART_RETRIES) return@LaunchedEffect
         delay(ART_RETRY_DELAY_MS)
         artFailed = false
         artAttempt++
@@ -1321,13 +1328,15 @@ fun NowPlayingScreen(
             // drag a full-screen blur along with them, which is why the palette
             // is passed as one immutable value.
             MeshGradientBackground(
-                palette = rememberArtworkColors(song.thumbnailUrl, canvasFrame),
+                palette = rememberArtworkColors(artUrl, canvasFrame),
                 trackKey = song.videoId,
+                blurRadius = artworkBackdropBlurDp.dp,
             )
         } else {
             ArtworkMeshBackdrop(
                 mesh = artMesh,
                 seam = if (heroMode) heroHeight else 0.dp,
+                blurRadius = artworkBackdropBlurDp.dp,
             )
         }
 
@@ -1932,7 +1941,14 @@ fun NowPlayingScreen(
                                 // effect, and clearing it from a Loading state
                                 // here would cancel that effect's wait every time
                                 // the painter passed back through Loading.
-                                if (it is AsyncImagePainter.State.Error) artFailed = true
+                                if (it is AsyncImagePainter.State.Error) {
+                                    if (!useRemoteArtworkFallback && remoteArtFallbackUrl != null) {
+                                        useRemoteArtworkFallback = true
+                                        artFailed = false
+                                    } else {
+                                        artFailed = true
+                                    }
+                                }
                             },
                             // TextureView-backed canvas frames can arrive
                             // before Coil has decoded the sleeve. Alpha alone
@@ -2498,7 +2514,7 @@ fun NowPlayingScreen(
                             TransportGlyph(
                                 icon = Icons.Rounded.FastRewind,
                                 contentDescription = stringResource(R.string.widget_previous),
-                                size = 22.dp,
+                                size = lyricsTransportControlSize.dp,
                                 enabled = hasPrevious || positionMs > BACK_RESTARTS_AFTER_MS,
                                 onClick = onPrevious,
                             )
@@ -2507,7 +2523,7 @@ fun NowPlayingScreen(
                             TransportGlyph(
                                 icon = if (isPlaying) Icons.Rounded.Pause else Icons.Rounded.PlayArrow,
                                 contentDescription = stringResource(if (isPlaying) R.string.pause else R.string.play),
-                                size = 22.dp,
+                                size = lyricsTransportControlSize.dp,
                                 enabled = !isLoading,
                                 onClick = onPlayPause,
                             )
@@ -2516,7 +2532,7 @@ fun NowPlayingScreen(
                             TransportGlyph(
                                 icon = Icons.Rounded.FastForward,
                                 contentDescription = stringResource(R.string.widget_next),
-                                size = 22.dp,
+                                size = lyricsTransportControlSize.dp,
                                 enabled = hasNext,
                                 onClick = onNext,
                             )
