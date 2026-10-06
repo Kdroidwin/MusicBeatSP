@@ -106,9 +106,8 @@ object LrcParser {
             .map { it.trim().lowercase(java.util.Locale.ROOT) }
             .filter { it.length >= 2 }
 
-    private val STAMP = Regex("""\[(\d{1,2}):(\d{2})[.:](\d{2,3})]""")
+    private val STAMP = Regex("""\[(\d{1,3}):(\d{2})[.:](\d{2,3})]""")
     private val WORD_STAMP = Regex("""<(\d{1,3}):(\d{2})[.:](\d{2,3})>""")
 }
 
 fun cleanArtistForSearch(artist: String): String = LrcParser.cleanArtistForSearch(artist)
-

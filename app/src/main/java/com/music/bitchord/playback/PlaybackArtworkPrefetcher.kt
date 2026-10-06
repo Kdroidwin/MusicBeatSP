@@ -18,7 +18,7 @@ import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 
-/** Warms Coil's exact full-player artwork request for the current and next tracks. */
+/** Warms upcoming artwork without competing with the current track's first audio buffer. */
 internal object PlaybackArtworkPrefetcher {
 
     private const val PREFETCH_DELAY_MS = 1_500L
@@ -44,15 +44,11 @@ internal object PlaybackArtworkPrefetcher {
         }
     }
 
-    /** Local current art is warmed on selection; next-track art is warmed during playback. */
-    fun prefetch(context: Context, currentSong: Song?, nextSong: Song?) {
+    /** Prefetch only the upcoming track; the visible player owns current-track artwork. */
+    fun prefetch(context: Context, nextSong: Song?) {
         data class Candidate(val url: String, val localAudio: Boolean)
 
         val candidates = buildList {
-            currentSong?.artworkAt(PLAYER_ART_PX)?.takeIf(String::isNotBlank)?.let { url ->
-                val localAudio = LocalAudioArtworkFetcher.isLocalAudioUri(Uri.parse(url))
-                if (localAudio) add(Candidate(url, localAudio = true))
-            }
             nextSong?.artworkAt(PLAYER_ART_PX)?.takeIf(String::isNotBlank)?.let { url ->
                 add(Candidate(url, LocalAudioArtworkFetcher.isLocalAudioUri(Uri.parse(url))))
             }
@@ -88,9 +84,9 @@ internal object PlaybackArtworkPrefetcher {
                 val completedUrls = mutableListOf<Candidate>()
                 try {
                     eligible.forEach { candidate ->
-                        // Local covers are read from the device, so warm the current
-                        // track immediately. Keep the short delay only for remote next
-                        // tracks, where art work can compete with the audio stream.
+                        // Local next-track covers can be warmed while the current
+                        // track is playing. Keep the delay for remote sources too,
+                        // where artwork work can compete with the audio stream.
                         if (!candidate.localAudio) delay(PREFETCH_DELAY_MS)
                         if (AppSettings.offlineMode.value && candidate.url.isRemote()) return@forEach
 

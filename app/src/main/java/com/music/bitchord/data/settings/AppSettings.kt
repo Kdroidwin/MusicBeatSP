@@ -92,6 +92,13 @@ enum class LyricsTextAlignment {
     RIGHT,
 }
 
+/** Presentation mode for dedicated seek buttons beside the transport controls. */
+enum class SeekButtonMode {
+    OFF,
+    ALWAYS,
+    LONG_TRACKS_ONLY,
+}
+
 /**
  * What to keep when a track is saved to the device.
  *
@@ -517,6 +524,10 @@ object AppSettings {
 
     /** Multiplier applied to the lyrics panel's existing synced/unsynced type sizes. */
     val lyricsFontScale = MutableStateFlow(1f)
+    /** Shows Japanese readings written as `漢字((かんじ))` above their base text. */
+    val showLyricsFurigana = MutableStateFlow(false)
+    /** Shrinks one-line lyric text to fit the available width without truncation. */
+    val autoFitOneLineLyrics = MutableStateFlow(false)
 
     val lyricsTextAlignment = MutableStateFlow(LyricsTextAlignment.CENTER)
 
@@ -595,11 +606,20 @@ object AppSettings {
      */
     val fullBleedArtwork = MutableStateFlow(true)
 
+    /** Preserves non-square still-cover proportions when the full-bleed treatment is off. */
+    val keepOriginalArtworkAspectRatio = MutableStateFlow(false)
+
     /** Keeps the sleeve at its playing size while playback is paused. */
     val keepArtworkFullSizeWhenPaused = MutableStateFlow(false)
 
     /** Double-tapping the left or right side of the album art seeks 5 seconds backward or forward. */
     val doubleTapToSeek = MutableStateFlow(true)
+    /** User-selected seek interval shared by double-tap and optional transport buttons. */
+    val seekIntervalSeconds = MutableStateFlow(5)
+    /** Optional seek-back/forward buttons beside previous/next. */
+    val seekButtonMode = MutableStateFlow(SeekButtonMode.OFF)
+    /** Hides the numeric seconds caption beneath optional seek buttons. */
+    val hideSeekButtonLabels = MutableStateFlow(false)
 
     /**
      * Puts v1.5's backdrop back on the player: four quantised blobs drifting
@@ -952,10 +972,18 @@ object AppSettings {
         animatedCanvas.value = prefs.getBoolean(KEY_ANIMATED_CANVAS, true)
         canvasOverCellular.value = prefs.getBoolean(KEY_CANVAS_OVER_CELLULAR, false)
         fullBleedArtwork.value = prefs.getBoolean(KEY_FULL_BLEED_ARTWORK, true)
+        keepOriginalArtworkAspectRatio.value = prefs.getBoolean(KEY_KEEP_ORIGINAL_ARTWORK_ASPECT_RATIO, false)
         keepArtworkFullSizeWhenPaused.value = prefs.getBoolean(KEY_KEEP_ARTWORK_FULL_SIZE_PAUSED, false)
         doubleTapToSeek.value = prefs.getBoolean(KEY_DOUBLE_TAP_TO_SEEK, true)
+        seekIntervalSeconds.value = prefs.getInt(KEY_SEEK_INTERVAL_SECONDS, 5).coerceIn(1, 60)
+        seekButtonMode.value = runCatching {
+            SeekButtonMode.valueOf(prefs.getString(KEY_SEEK_BUTTON_MODE, SeekButtonMode.OFF.name).orEmpty())
+        }.getOrDefault(SeekButtonMode.OFF)
+        hideSeekButtonLabels.value = prefs.getBoolean(KEY_HIDE_SEEK_BUTTON_LABELS, false)
         legacyMeshGradient.value = prefs.getBoolean(KEY_LEGACY_MESH_GRADIENT, false)
         syncedLyrics.value = prefs.getBoolean(KEY_SYNCED_LYRICS, true)
+        showLyricsFurigana.value = prefs.getBoolean(KEY_SHOW_LYRICS_FURIGANA, false)
+        autoFitOneLineLyrics.value = prefs.getBoolean(KEY_AUTO_FIT_ONE_LINE_LYRICS, false)
         prioritizeSyllableSync.value = prefs.getBoolean(KEY_PRIORITIZE_SYLLABLE_SYNC, false)
         showLyricsLogs.value = prefs.getBoolean(KEY_SHOW_LYRICS_LOGS, false)
         autoEmbedLyrics.value = prefs.getBoolean(KEY_AUTO_EMBED_LYRICS, true)
@@ -1594,6 +1622,16 @@ object AppSettings {
         prefs.edit().putBoolean(KEY_SYNCED_LYRICS, value).apply()
     }
 
+    fun setShowLyricsFurigana(value: Boolean) {
+        showLyricsFurigana.value = value
+        prefs.edit().putBoolean(KEY_SHOW_LYRICS_FURIGANA, value).apply()
+    }
+
+    fun setAutoFitOneLineLyrics(value: Boolean) {
+        autoFitOneLineLyrics.value = value
+        prefs.edit().putBoolean(KEY_AUTO_FIT_ONE_LINE_LYRICS, value).apply()
+    }
+
     fun setLyricsSources(value: Set<LyricsSource>) {
         lyricsSources.value = value
         prefs.edit().putString(KEY_LYRICS_SOURCES, value.joinToString(",") { it.id }).apply()
@@ -1692,6 +1730,11 @@ object AppSettings {
         prefs.edit().putBoolean(KEY_FULL_BLEED_ARTWORK, value).apply()
     }
 
+    fun setKeepOriginalArtworkAspectRatio(value: Boolean) {
+        keepOriginalArtworkAspectRatio.value = value
+        prefs.edit().putBoolean(KEY_KEEP_ORIGINAL_ARTWORK_ASPECT_RATIO, value).apply()
+    }
+
     fun setKeepArtworkFullSizeWhenPaused(value: Boolean) {
         keepArtworkFullSizeWhenPaused.value = value
         prefs.edit().putBoolean(KEY_KEEP_ARTWORK_FULL_SIZE_PAUSED, value).apply()
@@ -1700,6 +1743,22 @@ object AppSettings {
     fun setDoubleTapToSeek(value: Boolean) {
         doubleTapToSeek.value = value
         prefs.edit().putBoolean(KEY_DOUBLE_TAP_TO_SEEK, value).apply()
+    }
+
+    fun setSeekIntervalSeconds(value: Int) {
+        val safe = value.coerceIn(1, 60)
+        seekIntervalSeconds.value = safe
+        prefs.edit().putInt(KEY_SEEK_INTERVAL_SECONDS, safe).apply()
+    }
+
+    fun setSeekButtonMode(value: SeekButtonMode) {
+        seekButtonMode.value = value
+        prefs.edit().putString(KEY_SEEK_BUTTON_MODE, value.name).apply()
+    }
+
+    fun setHideSeekButtonLabels(value: Boolean) {
+        hideSeekButtonLabels.value = value
+        prefs.edit().putBoolean(KEY_HIDE_SEEK_BUTTON_LABELS, value).apply()
     }
 
     fun setLegacyMeshGradient(value: Boolean) {
@@ -2276,10 +2335,16 @@ object AppSettings {
     private const val KEY_ANIMATED_CANVAS = "animated_canvas"
     private const val KEY_CANVAS_OVER_CELLULAR = "canvas_over_cellular"
     private const val KEY_FULL_BLEED_ARTWORK = "full_bleed_artwork"
+    private const val KEY_KEEP_ORIGINAL_ARTWORK_ASPECT_RATIO = "keep_original_artwork_aspect_ratio"
     private const val KEY_KEEP_ARTWORK_FULL_SIZE_PAUSED = "keep_artwork_full_size_when_paused"
     private const val KEY_DOUBLE_TAP_TO_SEEK = "double_tap_to_seek"
+    private const val KEY_SEEK_INTERVAL_SECONDS = "seek_interval_seconds"
+    private const val KEY_SEEK_BUTTON_MODE = "seek_button_mode"
+    private const val KEY_HIDE_SEEK_BUTTON_LABELS = "hide_seek_button_labels"
     private const val KEY_LEGACY_MESH_GRADIENT = "legacy_mesh_gradient"
     private const val KEY_SYNCED_LYRICS = "synced_lyrics"
+    private const val KEY_SHOW_LYRICS_FURIGANA = "show_lyrics_furigana"
+    private const val KEY_AUTO_FIT_ONE_LINE_LYRICS = "auto_fit_one_line_lyrics"
     private const val KEY_LYRICS_SOURCES = "lyrics_sources"
     private const val KEY_LYRICS_SOURCE_ORDER = "lyrics_source_order"
     private const val KEY_PRIORITIZE_SYLLABLE_SYNC = "prioritize_syllable_sync"

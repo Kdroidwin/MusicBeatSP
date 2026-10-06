@@ -5,6 +5,7 @@ import android.content.Context
 import android.graphics.Bitmap
 import android.graphics.BitmapFactory
 import android.media.MediaMetadataRetriever
+import android.media.ThumbnailUtils
 import android.net.Uri
 import android.os.Build
 import android.os.ParcelFileDescriptor
@@ -63,10 +64,20 @@ class LocalAudioArtworkFetcher(
             // thumbnail. Larger requests (the player and expanded artwork) must
             // continue to the embedded/original cover below; returning this
             // thumbnail first was the source of the visibly blurry player art.
-            if (!needsFullArtwork && Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q && cleanUri.scheme == "content") {
+            if (!needsFullArtwork && Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
                 val thumb = runCatching {
                     val thumbPx = requestedPx.coerceAtLeast(DEFAULT_THUMBNAIL_PX)
-                    context.contentResolver.loadThumbnail(cleanUri, Size(thumbPx, thumbPx), null)
+                    val targetSize = Size(thumbPx, thumbPx)
+                    when (cleanUri.scheme) {
+                        "content" -> context.contentResolver.loadThumbnail(cleanUri, targetSize, null)
+                        "file" -> cleanUri.path?.let { path ->
+                            // Accord-alpha also uses Android's file thumbnail API for
+                            // directly accessible files. This avoids opening/parsing
+                            // the full audio file just to paint the player's preview.
+                            ThumbnailUtils.createAudioThumbnail(File(path), targetSize, null)
+                        }
+                        else -> null
+                    }
                 }.getOrNull()
                 if (thumb != null) {
                     return@withContext ImageFetchResult(
@@ -87,7 +98,7 @@ class LocalAudioArtworkFetcher(
                 extractEmbeddedCoverBytes(context, uri)
             }
             val embeddedBitmap = embeddedBytes?.let { bytes ->
-                LocalArtworkCache.embeddedBitmap(bytes, requestedPx) {
+                LocalArtworkCache.embeddedBitmap(context, bytes, requestedPx) {
                     decodeCoverBitmap(bytes, requestedPx)
                 }
             }
@@ -275,7 +286,7 @@ class LocalAudioArtworkFetcher(
                     runCatching { file.inputStream().use(::readBoundedArtworkBytes) }.getOrNull()
                 }
                 val bitmap = bytes?.let { encoded ->
-                    LocalArtworkCache.embeddedBitmap(encoded, maxDim) {
+                    LocalArtworkCache.embeddedBitmap(context, encoded, maxDim) {
                         decodeCoverBitmap(encoded, maxDim)
                     }
                 } ?: decodeCoverFile(file, maxDim)

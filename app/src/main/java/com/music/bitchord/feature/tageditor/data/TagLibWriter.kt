@@ -104,9 +104,10 @@ object TagLibWriter {
                 put("ARRANGER", data.arranger)
                 put("COMMENT", data.comment)
 
-                val cleanedMap = newMap
-                    .filterKeys { !it.contains(Regex("(?i)REPLAYGAIN_(TRACK|ALBUM)_[A-Z0-7_]+")) }
-                    .filterValues { it.isNotEmpty() }
+                // Editing descriptive tags or lyrics does not change the PCM
+                // samples, so ReplayGain values remain valid and must survive
+                // a metadata write. Only empty property entries are removed.
+                val cleanedMap = newMap.filterValues { it.isNotEmpty() }
                     .mapValuesTo(hashMapOf()) { it.value }
 
                 val propsOk = TagLib.savePropertyMap(descriptor.dup().detachFd(), cleanedMap)

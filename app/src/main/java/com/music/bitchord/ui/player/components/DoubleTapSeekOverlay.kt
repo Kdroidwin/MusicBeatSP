@@ -85,6 +85,7 @@ data class SeekFeedback(
 fun DoubleTapSeekArea(
     enabled: Boolean,
     onSeekRelative: (deltaSeconds: Long) -> Unit,
+    seekIntervalSeconds: Int = 5,
     onSingleTap: (() -> Unit)? = null,
     modifier: Modifier = Modifier,
     shape: Shape = RoundedCornerShape(10.dp),
@@ -94,6 +95,7 @@ fun DoubleTapSeekArea(
     val currentOnSeekRelative by rememberUpdatedState(onSeekRelative)
     val currentOnSingleTap by rememberUpdatedState(onSingleTap)
     val isEnabled by rememberUpdatedState(enabled)
+    val currentSeekInterval by rememberUpdatedState(seekIntervalSeconds)
     val scope = rememberCoroutineScope()
     var pendingSingleTap by remember { mutableStateOf<Job?>(null) }
     val tapHandlingEnabled = enabled || onSingleTap != null
@@ -106,7 +108,6 @@ fun DoubleTapSeekArea(
                     Modifier.pointerInput(Unit) {
                         var lastTapTime = 0L
                         var lastIsForward = false
-                        var tapCounter = 0
 
                         awaitEachGesture {
                             val down = awaitFirstDown(requireUnconsumed = false)
@@ -121,18 +122,20 @@ fun DoubleTapSeekArea(
                                 if (distance <= viewConfiguration.touchSlop && upTime - downTime < 350L) {
                                     val timeSinceLast = upTime - lastTapTime
                                     if (isEnabled && timeSinceLast < 450L && isForward == lastIsForward) {
-                                        // 2nd, 3rd, etc. tap in rapid sequence on the same side
+                                        // A pair of taps is one seek action. Start a fresh
+                                        // pair afterwards so four taps are two configured
+                                        // seeks, rather than three progressively counted taps.
                                         pendingSingleTap?.cancel()
                                         pendingSingleTap = null
-                                        tapCounter++
-                                        val seekSeconds = (tapCounter - 1) * 5
-                                        val deltaSec = if (isForward) 5L else -5L
+                                        val interval = currentSeekInterval.coerceIn(1, 60)
+                                        val deltaSec = if (isForward) interval.toLong() else -interval.toLong()
                                         currentOnSeekRelative(deltaSec)
                                         feedback = SeekFeedback(
                                             direction = if (isForward) SeekDirection.FORWARD else SeekDirection.BACKWARD,
-                                            seconds = seekSeconds,
+                                            seconds = interval,
                                             timestamp = upTime,
                                         )
+                                        lastTapTime = 0L
                                     } else {
                                         // A tap on the other side ends the previous single-tap
                                         // candidate immediately; a same-side double tap above
@@ -142,8 +145,7 @@ fun DoubleTapSeekArea(
                                             pendingSingleTap = null
                                             currentOnSingleTap?.invoke()
                                         }
-                                        // 1st tap of a potential sequence
-                                        tapCounter = 1
+                                        // 1st tap of a potential pair.
                                         lastIsForward = isForward
                                         if (currentOnSingleTap != null) {
                                             pendingSingleTap = scope.launch {
@@ -152,12 +154,12 @@ fun DoubleTapSeekArea(
                                                 pendingSingleTap = null
                                             }
                                         }
+                                        lastTapTime = upTime
                                     }
-                                    lastTapTime = upTime
                                 }
                             } else {
                                 // Drag or cancellation
-                                tapCounter = 0
+                                lastTapTime = 0L
                             }
                         }
                     }

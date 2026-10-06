@@ -2,6 +2,7 @@ package com.music.bitchord.feature.localmusic.coil
 
 import android.content.Context
 import android.graphics.Bitmap
+import android.graphics.BitmapFactory
 import android.util.Base64
 import kotlinx.coroutines.CompletableDeferred
 import kotlinx.coroutines.CoroutineScope
@@ -34,15 +35,38 @@ internal object LocalArtworkCache {
         embeddedBytes.getOrLoad(key) {
             val appContext = context.applicationContext
             preparePersistentCache(appContext)
-            readDisk(appContext, key) ?: load()?.also { bytes ->
-                writeDisk(appContext, key, bytes)
+            val cached = readDisk(appContext, key)
+            if (cached.found) {
+                cached.bytes
+            } else {
+                load()?.also { bytes ->
+                    writeDisk(appContext, key, bytes)
+                } ?: run {
+                    // A negative result is useful too: otherwise every player
+                    // open re-runs TagLib and MediaMetadataRetriever on tracks
+                    // whose artwork comes from the album provider. The key
+                    // includes file mtime/length (or the MediaStore modified
+                    // marker), so edits naturally invalidate this result.
+                    writeMissingDisk(appContext, key)
+                    null
+                }
             }
         }
 
-    suspend fun embeddedBitmap(bytes: ByteArray, maxDim: Int, decode: () -> Bitmap?): Bitmap? {
+    suspend fun embeddedBitmap(
+        context: Context,
+        bytes: ByteArray,
+        maxDim: Int,
+        decode: () -> Bitmap?,
+    ): Bitmap? {
         val digest = MessageDigest.getInstance("SHA-256").digest(bytes)
         val key = "embedded:${Base64.encodeToString(digest, Base64.NO_WRAP)}:$maxDim"
-        return decodedBitmaps.getOrLoad(key, decode)
+        val appContext = context.applicationContext
+        return decodedBitmaps.getOrLoad(key) {
+            readRenderedBitmap(appContext, key) ?: decode()?.also { bitmap ->
+                writeRenderedBitmap(appContext, key, bitmap)
+            }
+        }
     }
 
     suspend fun albumBitmap(
@@ -58,7 +82,7 @@ internal object LocalArtworkCache {
         // Keep the encoded original in the same app-private persistent cache as
         // embedded covers, then decode only the requested player-size bitmap.
         val bytes = embeddedBytes(context, "album:$albumId", loadEncoded) ?: return null
-        return embeddedBitmap(bytes, maxDim) { decode(bytes, maxDim) }
+        return embeddedBitmap(context, bytes, maxDim) { decode(bytes, maxDim) }
     }
 
     /**
@@ -66,20 +90,33 @@ internal object LocalArtworkCache {
      * The caller's key includes the track URI and its modification marker, so updated
      * tags naturally get a new entry. Cache I/O is best-effort and never blocks playback.
      */
-    private fun readDisk(context: Context, key: String): ByteArray? = runCatching {
+    private data class DiskLookup(val found: Boolean, val bytes: ByteArray? = null)
+
+    private fun readDisk(context: Context, key: String): DiskLookup = runCatching {
         val file = diskFile(context, key)
-        if (!file.isFile || file.length() !in 1..MAX_SINGLE_ARTWORK_BYTES) {
+        if (file.isFile) {
+            if (file.length() in 1..MAX_SINGLE_ARTWORK_BYTES) {
+                file.setLastModified(System.currentTimeMillis())
+                return@runCatching DiskLookup(found = true, bytes = file.readBytes())
+            }
             file.delete()
-            return@runCatching null
         }
-        file.setLastModified(System.currentTimeMillis())
-        file.readBytes()
-    }.getOrNull()
+        val missing = missingDiskFile(context, key)
+        if (missing.isFile) {
+            if (System.currentTimeMillis() - missing.lastModified() <= MISSING_CACHE_TTL_MS) {
+                missing.setLastModified(System.currentTimeMillis())
+                return@runCatching DiskLookup(found = true)
+            }
+            missing.delete()
+        }
+        DiskLookup(found = false)
+    }.getOrDefault(DiskLookup(found = false))
 
     private fun writeDisk(context: Context, key: String, bytes: ByteArray) {
         if (bytes.isEmpty() || bytes.size > MAX_SINGLE_ARTWORK_BYTES) return
         runCatching {
             val file = diskFile(context, key)
+            missingDiskFile(context, key).delete()
             val directory = file.parentFile ?: return
             if (!directory.isDirectory && !directory.mkdirs()) return
             if (file.isFile && file.length() in 1..MAX_SINGLE_ARTWORK_BYTES) {
@@ -101,15 +138,92 @@ internal object LocalArtworkCache {
         }
     }
 
+    private fun writeMissingDisk(context: Context, key: String) {
+        runCatching {
+            val file = missingDiskFile(context, key)
+            val directory = file.parentFile ?: return
+            if (!directory.isDirectory && !directory.mkdirs()) return
+            if (!file.exists()) file.createNewFile()
+            file.setLastModified(System.currentTimeMillis())
+            pruneDiskCache(directory)
+        }
+    }
+
     private fun diskFile(context: Context, key: String): File {
+        return cacheFile(context, key, "cover")
+    }
+
+    private fun renderedFile(context: Context, key: String): File {
+        return cacheFile(context, key, "rendered")
+    }
+
+    private fun cacheFile(context: Context, key: String, extension: String): File {
         val digest = MessageDigest.getInstance("SHA-256").digest(key.toByteArray(Charsets.UTF_8))
         val filename = digest.joinToString("") { byte -> "%02x".format(byte.toInt() and 0xff) }
         val root = if (AppSettings.persistentLocalArtwork.value) context.filesDir else context.cacheDir
-        return File(File(root, DISK_CACHE_DIRECTORY), "$filename.cover")
+        return File(File(root, DISK_CACHE_DIRECTORY), "$filename.$extension")
+    }
+
+    /**
+     * A full-library preload can outlive the small in-memory bitmap LRU. Keep
+     * the already-downsampled player image on disk too, so reopening a track
+     * does not decode a very large embedded image again after process restart
+     * or cache eviction.
+     */
+    private fun readRenderedBitmap(context: Context, key: String): Bitmap? = runCatching {
+        val file = renderedFile(context, key)
+        if (!file.isFile) return@runCatching null
+        if (file.length() !in 1..MAX_SINGLE_ARTWORK_BYTES) {
+            file.delete()
+            return@runCatching null
+        }
+        BitmapFactory.decodeFile(file.absolutePath)?.also {
+            file.setLastModified(System.currentTimeMillis())
+        } ?: run {
+            file.delete()
+            null
+        }
+    }.getOrNull()
+
+    private fun writeRenderedBitmap(context: Context, key: String, bitmap: Bitmap) {
+        runCatching {
+            val file = renderedFile(context, key)
+            val directory = file.parentFile ?: return
+            if (!directory.isDirectory && !directory.mkdirs()) return
+            if (file.isFile && file.length() in 1..MAX_SINGLE_ARTWORK_BYTES) {
+                file.setLastModified(System.currentTimeMillis())
+                return
+            }
+
+            val temp = File.createTempFile("cover-rendered-", ".tmp", directory)
+            try {
+                val format = if (bitmap.hasAlpha()) Bitmap.CompressFormat.PNG else Bitmap.CompressFormat.JPEG
+                val quality = if (format == Bitmap.CompressFormat.PNG) 100 else 92
+                val compressed = FileOutputStream(temp).use { output ->
+                    bitmap.compress(format, quality, output)
+                }
+                if (!compressed || temp.length() !in 1..MAX_SINGLE_ARTWORK_BYTES) return
+                if (!temp.renameTo(file)) {
+                    if (!file.exists()) temp.copyTo(file, overwrite = true)
+                    temp.delete()
+                }
+                if (file.isFile) file.setLastModified(System.currentTimeMillis())
+                pruneDiskCache(directory)
+            } finally {
+                temp.delete()
+            }
+        }
+    }
+
+    private fun missingDiskFile(context: Context, key: String): File {
+        val coverFile = diskFile(context, key)
+        return File(coverFile.parentFile, coverFile.nameWithoutExtension + ".missing")
     }
 
     private fun pruneDiskCache(directory: File) {
-        val files = directory.listFiles()?.filter { it.isFile && it.extension == "cover" } ?: return
+        val files = directory.listFiles()?.filter {
+            it.isFile && it.extension in setOf("cover", "missing", "rendered")
+        } ?: return
         var totalBytes = files.sumOf(File::length)
         var remaining = files.size
         files.sortedBy(File::lastModified).forEach { file ->
@@ -140,7 +254,14 @@ internal object LocalArtworkCache {
             if (!destination.isDirectory && !destination.mkdirs()) return@runCatching false
             source.listFiles()
                 ?.asSequence()
-                ?.filter { it.isFile && it.extension == "cover" && it.length() in 1..MAX_SINGLE_ARTWORK_BYTES }
+                ?.filter {
+                    it.isFile && when (it.extension) {
+                        "cover" -> it.length() in 1..MAX_SINGLE_ARTWORK_BYTES
+                        "missing" -> System.currentTimeMillis() - it.lastModified() <= MISSING_CACHE_TTL_MS
+                        "rendered" -> it.length() in 1..MAX_SINGLE_ARTWORK_BYTES
+                        else -> false
+                    }
+                }
                 ?.sortedBy(File::lastModified)
                 ?.forEach { oldFile ->
                     val newFile = File(destination, oldFile.name)
@@ -230,4 +351,5 @@ internal object LocalArtworkCache {
     private const val MAX_DISK_CACHE_BYTES = 512L * 1024 * 1024
     private const val MAX_DISK_CACHE_ENTRIES = 4096
     private const val MAX_SINGLE_ARTWORK_BYTES = 8L * 1024 * 1024
+    private const val MISSING_CACHE_TTL_MS = 30L * 24 * 60 * 60 * 1000
 }

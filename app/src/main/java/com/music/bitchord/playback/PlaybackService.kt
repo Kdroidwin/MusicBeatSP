@@ -3406,7 +3406,6 @@ class PlaybackService : MediaLibraryService() {
         }
         PlaybackArtworkPrefetcher.prefetch(
             context = this,
-            currentSong = player.currentMediaItem?.toSong(),
             nextSong = nextArtwork?.takeIf { player.isPlaying },
         )
         AudioCache.prefetchQueue(upcoming)

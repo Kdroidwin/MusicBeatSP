@@ -219,6 +219,12 @@ fun LocalMusicScreen(
     isDownloads: Boolean = false,
     currentSong: Song? = null,
     isPlaying: Boolean = false,
+    playbackPositionMs: Long = 0L,
+    playbackDurationMs: Long = 0L,
+    onLyricsEditorPlaybackToggle: ((Song) -> Unit)? = null,
+    onLyricsEditorSeek: ((Long) -> Unit)? = null,
+    onLyricsEditorPrevious: (() -> Unit)? = null,
+    onLyricsEditorNext: (() -> Unit)? = null,
     /** Deletes the Downloads rows selected through this screen's long-press mode. */
     onDeleteDownloads: ((List<Song>) -> Unit)? = null,
     initialTab: Int = LOCAL_TAB_SONGS,
@@ -868,6 +874,8 @@ fun LocalMusicScreen(
     }
 
     lyricsEditorSong?.let { song ->
+        val isActiveLyricsTrack = currentSong?.videoId == song.videoId ||
+            (song.localUri != null && currentSong?.localUri == song.localUri)
         Dialog(
             onDismissRequest = { lyricsEditorSong = null },
             properties = DialogProperties(
@@ -878,6 +886,13 @@ fun LocalMusicScreen(
             LyricsEditorScreen(
                 song = song,
                 onBackClick = { lyricsEditorSong = null },
+                playbackPositionMs = if (isActiveLyricsTrack) playbackPositionMs else 0L,
+                playbackDurationMs = if (isActiveLyricsTrack) playbackDurationMs else 0L,
+                playbackIsPlaying = isPlaying && isActiveLyricsTrack,
+                onSyncPlaybackToggle = { onLyricsEditorPlaybackToggle?.invoke(song) },
+                onSyncSeek = if (isActiveLyricsTrack) onLyricsEditorSeek else null,
+                onSyncPrevious = if (isActiveLyricsTrack) onLyricsEditorPrevious else null,
+                onSyncNext = if (isActiveLyricsTrack) onLyricsEditorNext else null,
                 onLyricsSaved = {
                     onSongTagsOrLyricsSaved?.invoke(song)
                 },

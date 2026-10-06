@@ -1,5 +1,15 @@
 package com.music.bitchord.feature.library.ui
 
+import android.app.Activity
+import android.content.Intent
+import android.net.Uri
+import android.os.Build
+import android.os.Process
+import android.provider.MediaStore
+import android.widget.Toast
+import androidx.activity.compose.rememberLauncherForActivityResult
+import androidx.activity.result.IntentSenderRequest
+import androidx.activity.result.contract.ActivityResultContracts
 import androidx.activity.compose.BackHandler
 import androidx.compose.animation.AnimatedContent
 import androidx.compose.animation.fadeIn
@@ -9,10 +19,30 @@ import androidx.compose.animation.slideOutHorizontally
 import androidx.compose.animation.togetherWith
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.fillMaxSize
+import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.horizontalScroll
+import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.verticalScroll
+import androidx.compose.foundation.layout.heightIn
 import androidx.compose.material3.Text
+import androidx.compose.material3.AlertDialog
+import androidx.compose.material3.Icon
+import androidx.compose.material3.IconButton
+import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.OutlinedTextField
+import androidx.compose.material3.TextButton
+import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.rounded.ArrowDownward
+import androidx.compose.material.icons.rounded.ArrowUpward
+import androidx.compose.material.icons.rounded.Close
+import androidx.compose.material.icons.rounded.Edit
+import androidx.compose.material.icons.rounded.PlaylistAdd
+import androidx.compose.material.icons.rounded.Share
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
@@ -20,7 +50,9 @@ import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
+import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.Alignment
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.unit.dp
@@ -39,10 +71,60 @@ import com.music.bitchord.feature.localmusic.data.resolvePlaylistSongs
 import com.music.bitchord.feature.localsongactions.data.LocalPlayStatsStore
 import com.music.bitchord.feature.localmusic.domain.model.LocalPlaylist
 import com.music.bitchord.feature.localmusic.ui.components.CreatePlaylistDialog
+import com.music.bitchord.feature.localsongactions.ui.components.LocalAddToPlaylistSheet
+import com.music.bitchord.feature.localsongactions.ui.LocalSongActionsHelper
+import com.music.bitchord.feature.tageditor.data.TagLibWriter
+import kotlinx.coroutines.launch
 import com.music.bitchord.feature.localmusic.ui.components.DrillDownSongList
 import com.music.bitchord.feature.localmusic.ui.components.rememberPlaylistCoverPicker
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
+
+@Composable
+private fun PlaylistSelectionToolbar(
+    count: Int,
+    onAddToPlaylist: () -> Unit,
+    onEditTags: () -> Unit,
+    onShare: () -> Unit,
+    onMoveToTop: () -> Unit,
+    onMoveToBottom: () -> Unit,
+    onCancel: () -> Unit,
+) {
+    Row(
+        modifier = Modifier
+            .fillMaxWidth()
+            .horizontalScroll(rememberScrollState())
+            .padding(horizontal = 14.dp, vertical = 2.dp),
+        verticalAlignment = Alignment.CenterVertically,
+        horizontalArrangement = Arrangement.spacedBy(4.dp),
+    ) {
+        Text(
+            text = "$count ${stringResource(R.string.selected)}",
+            style = MaterialTheme.typography.labelLarge,
+            color = MaterialTheme.colorScheme.primary,
+            modifier = Modifier.padding(end = 4.dp),
+            maxLines = 1,
+        )
+        IconButton(onClick = onAddToPlaylist) {
+            Icon(Icons.Rounded.PlaylistAdd, contentDescription = stringResource(R.string.add_to_playlist))
+        }
+        IconButton(onClick = onEditTags) {
+            Icon(Icons.Rounded.Edit, contentDescription = stringResource(R.string.selection_edit_tags))
+        }
+        IconButton(onClick = onShare) {
+            Icon(Icons.Rounded.Share, contentDescription = stringResource(R.string.selection_share))
+        }
+        IconButton(onClick = onMoveToTop) {
+            Icon(Icons.Rounded.ArrowUpward, contentDescription = stringResource(R.string.selection_move_to_top))
+        }
+        IconButton(onClick = onMoveToBottom) {
+            Icon(Icons.Rounded.ArrowDownward, contentDescription = stringResource(R.string.selection_move_to_bottom))
+        }
+        IconButton(onClick = onCancel) {
+            Icon(Icons.Rounded.Close, contentDescription = stringResource(R.string.cancel))
+        }
+    }
+}
 
 /**
  * Modern Library screen unifying user Favorites and Playlists with list/grid toggle.
@@ -104,6 +186,93 @@ fun LibraryScreen(
     var drillDownArt by remember { mutableStateOf<String?>(null) }
     var drillDownPlaylistId by remember { mutableStateOf<String?>(null) }
     var playlistReorderEnabled by rememberSaveable { mutableStateOf(false) }
+    var playlistSelectionMode by rememberSaveable { mutableStateOf(false) }
+    var selectedPlaylistSongIds by rememberSaveable { mutableStateOf(emptySet<String>()) }
+    var showAddSelectedToPlaylist by remember { mutableStateOf(false) }
+    var showBulkTagEditor by remember { mutableStateOf(false) }
+    var bulkArtist by remember { mutableStateOf("") }
+    var bulkAlbumArtist by remember { mutableStateOf("") }
+    var bulkAlbum by remember { mutableStateOf("") }
+    var bulkGenre by remember { mutableStateOf("") }
+    var bulkYear by remember { mutableStateOf("") }
+    var bulkComposer by remember { mutableStateOf("") }
+    var pendingBulkTagSongs by remember { mutableStateOf<List<Song>?>(null) }
+    val scope = rememberCoroutineScope()
+
+    suspend fun writeBulkTags(targets: List<Song>) {
+        val updated = withContext(Dispatchers.IO) {
+            targets.count { song ->
+                runCatching {
+                    val current = TagLibWriter.readTags(context, song)
+                    TagLibWriter.writeTags(
+                        context,
+                        song,
+                        current.copy(
+                            artist = bulkArtist.trim().ifBlank { current.artist },
+                            albumArtist = bulkAlbumArtist.trim().ifBlank { current.albumArtist },
+                            album = bulkAlbum.trim().ifBlank { current.album },
+                            genre = bulkGenre.trim().ifBlank { current.genre },
+                            year = bulkYear.trim().ifBlank { current.year },
+                            composer = bulkComposer.trim().ifBlank { current.composer },
+                        ),
+                    )
+                }.getOrDefault(false)
+            }
+        }
+        Toast.makeText(context, context.getString(R.string.bulk_tag_saved, updated, targets.size), Toast.LENGTH_LONG).show()
+        targets.forEach { onSongTagsOrLyricsSaved?.invoke(it) }
+        showBulkTagEditor = false
+        bulkArtist = ""
+        bulkAlbumArtist = ""
+        bulkAlbum = ""
+        bulkGenre = ""
+        bulkYear = ""
+        bulkComposer = ""
+    }
+
+    val bulkTagWritePermission = rememberLauncherForActivityResult(
+        ActivityResultContracts.StartIntentSenderForResult(),
+    ) { result ->
+        val targets = pendingBulkTagSongs.orEmpty()
+        pendingBulkTagSongs = null
+        if (result.resultCode == Activity.RESULT_OK && targets.isNotEmpty()) {
+            scope.launch { writeBulkTags(targets) }
+        } else if (targets.isNotEmpty()) {
+            Toast.makeText(context, context.getString(R.string.bulk_tag_permission_denied), Toast.LENGTH_LONG).show()
+        }
+    }
+
+    fun saveBulkTags(targets: List<Song>) {
+        val contentUris = targets.mapNotNull { song ->
+            (song.localUri ?: song.videoId)
+                .takeIf { it.startsWith("content://") }
+                ?.let { runCatching { Uri.parse(it) }.getOrNull() }
+        }.distinct()
+        val needsApproval = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.R) {
+            contentUris.filter { uri ->
+                context.checkUriPermission(
+                    uri,
+                    Process.myPid(),
+                    Process.myUid(),
+                    Intent.FLAG_GRANT_WRITE_URI_PERMISSION,
+                ) != android.content.pm.PackageManager.PERMISSION_GRANTED
+            }
+        } else emptyList()
+        if (needsApproval.isNotEmpty()) {
+            val request = runCatching { MediaStore.createWriteRequest(context.contentResolver, needsApproval) }.getOrNull()
+            if (request != null) {
+                pendingBulkTagSongs = targets
+                bulkTagWritePermission.launch(IntentSenderRequest.Builder(request.intentSender).build())
+                return
+            }
+        }
+        scope.launch { writeBulkTags(targets) }
+    }
+
+    LaunchedEffect(drillDownPlaylistId) {
+        playlistSelectionMode = false
+        selectedPlaylistSongIds = emptySet()
+    }
 
     LaunchedEffect(initialFilterRequest) {
         val requestedFilter = initialFilterRequest ?: return@LaunchedEffect
@@ -114,12 +283,35 @@ fun LibraryScreen(
     val inDrillDown = drillDownLabel != null
     val inHistoryView = selectedFilter == LibraryFilter.RECENTLY_PLAYED ||
         selectedFilter == LibraryFilter.MOST_PLAYED
+    val selectedPlaylistSongs = remember(drillDownSongs, selectedPlaylistSongIds) {
+        drillDownSongs.filter { (it.localUri ?: it.videoId) in selectedPlaylistSongIds }
+    }
+    fun togglePlaylistSongSelection(song: Song) {
+        val key = song.localUri ?: song.videoId
+        selectedPlaylistSongIds = if (key in selectedPlaylistSongIds) {
+            selectedPlaylistSongIds - key
+        } else {
+            selectedPlaylistSongIds + key
+        }
+        if (selectedPlaylistSongIds.isEmpty()) playlistSelectionMode = false
+    }
+    fun persistSelectedOrder(toTop: Boolean) {
+        val playlistId = drillDownPlaylistId ?: return
+        val selected = drillDownSongs.filter { (it.localUri ?: it.videoId) in selectedPlaylistSongIds }
+        val remaining = drillDownSongs.filterNot { (it.localUri ?: it.videoId) in selectedPlaylistSongIds }
+        val reordered = if (toTop) selected + remaining else remaining + selected
+        drillDownSongs = reordered
+        LocalPlaylistStore.setSongOrder(playlistId, reordered.map { it.localUri ?: it.videoId })
+        playlistReorderEnabled = false
+    }
     val leaveDrillDown = {
         drillDownLabel = null
         drillDownSongs = emptyList()
         drillDownArt = null
         drillDownPlaylistId = null
         playlistReorderEnabled = false
+        playlistSelectionMode = false
+        selectedPlaylistSongIds = emptySet()
     }
 
     BackHandler(enabled = inDrillDown || inHistoryView) {
@@ -167,11 +359,44 @@ fun LibraryScreen(
                         val next = if (songsViewType == LibraryViewType.GRID) LibraryViewType.LIST else LibraryViewType.GRID
                         AppSettings.setLibrarySongsViewType(next)
                     },
-                    selectedIds = emptySet(),
+                    selectionMode = playlistSelectionMode && drillDownPlaylistId != null,
+                    onSelectionToggle = ::togglePlaylistSongSelection,
+                    selectionToolbar = if (playlistSelectionMode && drillDownPlaylistId != null) {
+                        {
+                            PlaylistSelectionToolbar(
+                                count = selectedPlaylistSongIds.size,
+                                onAddToPlaylist = { showAddSelectedToPlaylist = true },
+                                onEditTags = { showBulkTagEditor = true },
+                                onShare = { LocalSongActionsHelper.shareSongs(context, selectedPlaylistSongs) },
+                                onMoveToTop = { persistSelectedOrder(toTop = true) },
+                                onMoveToBottom = { persistSelectedOrder(toTop = false) },
+                                onCancel = {
+                                    playlistSelectionMode = false
+                                    selectedPlaylistSongIds = emptySet()
+                                },
+                            )
+                        }
+                    } else null,
+                    selectedIds = selectedPlaylistSongIds,
                     currentSong = currentSong,
                     isPlaying = isPlaying,
                     onSongClick = { list, idx -> onSongClick(list, idx) },
-                    onSongLongPress = onSongLongPress,
+                    onSongLongPress = { song ->
+                        if (drillDownPlaylistId != null) {
+                            val key = song.localUri ?: song.videoId
+                            if (!playlistSelectionMode) {
+                                playlistReorderEnabled = false
+                                playlistSelectionMode = true
+                                selectedPlaylistSongIds = setOf(key)
+                            } else {
+                                togglePlaylistSongSelection(song)
+                            }
+                        } else {
+                            onSongLongPress(song)
+                        }
+                    },
+                    // Selection changes the row tap and long-press behavior,
+                    // but the trailing details/actions button stays available.
                     onSongMore = onSongLongPress,
                     onSongSwipe = onSongSwipe,
                     onShuffle = onShuffle,
@@ -368,6 +593,57 @@ fun LibraryScreen(
                 playlistToRename = null
             },
             onDismiss = { playlistToRename = null },
+        )
+    }
+
+    if (showAddSelectedToPlaylist && selectedPlaylistSongs.isNotEmpty()) {
+        LocalAddToPlaylistSheet(
+            songs = selectedPlaylistSongs,
+            onDismissRequest = {
+                showAddSelectedToPlaylist = false
+                playlistSelectionMode = false
+                selectedPlaylistSongIds = emptySet()
+            },
+        )
+    }
+
+    if (showBulkTagEditor) {
+        AlertDialog(
+            onDismissRequest = { showBulkTagEditor = false },
+            title = { Text(stringResource(R.string.bulk_tag_edit)) },
+            text = {
+                Column(
+                    modifier = Modifier
+                        .heightIn(max = 440.dp)
+                        .verticalScroll(rememberScrollState()),
+                    verticalArrangement = Arrangement.spacedBy(8.dp),
+                ) {
+                    Text(
+                        text = stringResource(R.string.bulk_tag_hint),
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    )
+                    OutlinedTextField(bulkArtist, { bulkArtist = it }, label = { Text(stringResource(R.string.bulk_tag_artist)) }, singleLine = true)
+                    OutlinedTextField(bulkAlbumArtist, { bulkAlbumArtist = it }, label = { Text(stringResource(R.string.bulk_tag_album_artist)) }, singleLine = true)
+                    OutlinedTextField(bulkAlbum, { bulkAlbum = it }, label = { Text(stringResource(R.string.bulk_tag_album)) }, singleLine = true)
+                    OutlinedTextField(bulkGenre, { bulkGenre = it }, label = { Text(stringResource(R.string.bulk_tag_genre)) }, singleLine = true)
+                    OutlinedTextField(bulkYear, { bulkYear = it }, label = { Text(stringResource(R.string.bulk_tag_year)) }, singleLine = true)
+                    OutlinedTextField(bulkComposer, { bulkComposer = it }, label = { Text(stringResource(R.string.bulk_tag_composer)) }, singleLine = true)
+                }
+            },
+            confirmButton = {
+                TextButton(
+                    enabled = listOf(bulkArtist, bulkAlbumArtist, bulkAlbum, bulkGenre, bulkYear, bulkComposer).any { it.isNotBlank() } && selectedPlaylistSongs.isNotEmpty(),
+                    onClick = { saveBulkTags(selectedPlaylistSongs) },
+                ) {
+                    Text(stringResource(R.string.save))
+                }
+            },
+            dismissButton = {
+                TextButton(onClick = { showBulkTagEditor = false }) {
+                    Text(stringResource(R.string.cancel))
+                }
+            },
         )
     }
 }

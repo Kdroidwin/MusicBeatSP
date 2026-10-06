@@ -6,6 +6,7 @@ import com.music.bitchord.ui.components.ExplicitSongTitle
 import android.database.ContentObserver
 import android.graphics.Bitmap
 import android.media.AudioManager
+import android.net.Uri
 import android.os.Build
 import android.os.Handler
 import android.os.Looper
@@ -71,6 +72,8 @@ import androidx.compose.foundation.layout.statusBarsPadding
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.layout.widthIn
 import androidx.compose.foundation.layout.wrapContentWidth
+import androidx.compose.foundation.text.InlineTextContent
+import androidx.compose.foundation.text.appendInlineContent
 import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.lazy.LazyColumn
@@ -81,6 +84,7 @@ import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import com.music.bitchord.feature.localmusic.data.LocalFavoritesStore
+import com.music.bitchord.data.lyrics.LyricsFurigana
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.rounded.QueueMusic
 import androidx.compose.material.icons.automirrored.rounded.PlaylistPlay
@@ -180,6 +184,9 @@ import androidx.compose.ui.platform.LocalView
 import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.text.TextLayoutResult
+import androidx.compose.ui.text.AnnotatedString
+import androidx.compose.ui.text.Placeholder
+import androidx.compose.ui.text.PlaceholderVerticalAlign
 import androidx.compose.ui.text.TextStyle
 import androidx.compose.ui.text.rememberTextMeasurer
 import androidx.compose.ui.text.SpanStyle
@@ -189,6 +196,7 @@ import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.text.withStyle
 import androidx.compose.ui.unit.Dp
+import androidx.compose.ui.unit.Constraints
 import androidx.compose.ui.unit.IntOffset
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.lerp
@@ -224,6 +232,7 @@ import com.music.bitchord.ui.components.LyricsLogConsole
 import com.music.bitchord.ui.player.components.DoubleTapSeekArea
 import com.music.bitchord.data.settings.AppSettings
 import com.music.bitchord.data.settings.LyricsTextAlignment
+import com.music.bitchord.data.settings.SeekButtonMode
 import com.music.bitchord.data.settings.PlayerControl
 import com.music.bitchord.data.settings.PlayerQuickAction
 import com.music.bitchord.data.settings.AudioQuality
@@ -231,6 +240,7 @@ import com.music.bitchord.data.model.LikeStatus
 import com.music.bitchord.data.model.PLAYER_ART_PX
 import com.music.bitchord.data.model.Song
 import com.music.bitchord.data.model.artworkAt
+import com.music.bitchord.feature.localmusic.coil.LocalAudioArtworkFetcher
 import com.music.bitchord.playback.SavedQueue
 import com.music.bitchord.playback.SavedQueueStore
 import com.music.bitchord.playback.cast.CastQuickActionButton
@@ -701,6 +711,26 @@ fun NowPlayingScreen(
     val density = LocalDensity.current
     val haptics = rememberHaptics()
     val artUrl = song.artworkAt(ART_PX)
+    // Ask MediaStore for its already-indexed thumbnail while the full-size
+    // embedded cover is being read and decoded. The player keeps the sharp
+    // request below and swaps it in as soon as it is ready.
+    val localPreviewArtUrl = remember(song, artUrl) {
+        artUrl?.takeIf { LocalAudioArtworkFetcher.isLocalAudioUri(Uri.parse(it)) }
+            ?.let { song.artworkAt(480) }
+    }
+    val localPreviewRequest = remember(localPreviewArtUrl) {
+        localPreviewArtUrl?.let { url ->
+            ImageRequest.Builder(context)
+                .data(url)
+                .size(480)
+                .build()
+        }
+    }
+    // Keep the small local preview responsible for the backdrop as well as the
+    // first frame of the cover. Asking the full-size artwork pipeline for its
+    // own palette here used to leave an art-colour player black until a second,
+    // larger decode had finished.
+    val backdropArtworkUrl = localPreviewArtUrl ?: artUrl
     val remoteArtFallbackUrl = song.thumbnailUrl?.artworkAt(ART_PX)
         ?.takeIf { it.startsWith("http://") || it.startsWith("https://") }
         ?.takeIf { it != artUrl }
@@ -709,7 +739,7 @@ fun NowPlayingScreen(
     // the status bar it's under belongs to the page, not this artwork — only
     // the full-screen sheet gets to repaint it.
     if (!docked) {
-        val artLuminance = rememberArtworkLuminance(artUrl)
+        val artLuminance = rememberArtworkLuminance(backdropArtworkUrl)
         val isLightArtwork = artLuminance?.let { it > LIGHT_ARTWORK_LUMINANCE_THRESHOLD } ?: false
         SystemBarIcons(dark = isLightArtwork)
     }
@@ -810,7 +840,7 @@ fun NowPlayingScreen(
     // a pixel readback of its own on every track change, and the two answer the
     // same picture in two different ways, so whichever is not on screen is pure
     // cost — the legacy path pays [rememberArtworkColors] instead.
-    val artMesh = if (legacyMesh) null else rememberArtworkMesh(artUrl, canvasFrame, ART_PX)
+    val artMesh = if (legacyMesh) null else rememberArtworkMesh(backdropArtworkUrl, canvasFrame, ART_PX)
     // Asked of every clip, Spotify's Canvas and every other source alike — see
     // CanvasArtworkPlayer's refreshFrameEveryMs. A clip's own colours move as
     // it plays regardless of who published it, and the backdrop should follow.
@@ -1116,7 +1146,21 @@ fun NowPlayingScreen(
         label = "sleeveCollapse",
     )
     val fullBleedArt by AppSettings.fullBleedArtwork.collectAsStateWithLifecycle()
+    val keepOriginalArtworkAspectRatio by AppSettings.keepOriginalArtworkAspectRatio.collectAsStateWithLifecycle()
+    var loadedArtworkAspectRatio by remember(song.videoId, artUrl) { mutableFloatStateOf(1f) }
+    val animatedArtworkAspectRatio by animateFloatAsState(
+        targetValue = loadedArtworkAspectRatio,
+        animationSpec = tween(durationMillis = 240, easing = FastOutSlowInEasing),
+        label = "coverAspectRatio",
+    )
+    // The option applies to the compact sleeve. Full-bleed artwork keeps its
+    // existing edge-to-edge crop behavior.
+    val preserveSleeveArtworkShape = keepOriginalArtworkAspectRatio && !fullBleedArt
+    val sleeveContentScale = if (preserveSleeveArtworkShape) ContentScale.Fit else ContentScale.Crop
     val doubleTapToSeek by AppSettings.doubleTapToSeek.collectAsStateWithLifecycle()
+    val seekIntervalSeconds by AppSettings.seekIntervalSeconds.collectAsStateWithLifecycle()
+    val seekButtonMode by AppSettings.seekButtonMode.collectAsStateWithLifecycle()
+    val hideSeekButtonLabels by AppSettings.hideSeekButtonLabels.collectAsStateWithLifecycle()
     // Full-bleed is a phone idiom, and a docked pane is a phone's width — so it
     // is asked of the player's own width rather than of the window's. Asking the
     // window is what left the pane with a square sleeve floating in a field of
@@ -1154,7 +1198,26 @@ fun NowPlayingScreen(
     // layers go on trading places as they should.
     var useRemoteArtworkFallback by remember(artUrl) { mutableStateOf(false) }
     val displayedArtUrl = if (useRemoteArtworkFallback) remoteArtFallbackUrl ?: artUrl else artUrl
-    var artLoaded by remember(displayedArtUrl) { mutableStateOf(false) }
+    // A large embedded-cover read/decode can compete with the first audio
+    // buffer on slower devices. The MediaStore thumbnail is already on screen;
+    // wait until ExoPlayer leaves BUFFERING before asking for the full cover.
+    // Latch the decision for this track so a later brief rebuffer never swaps
+    // the player back to its preview.
+    var fullLocalArtworkAllowed by remember(song.videoId, artUrl) {
+        mutableStateOf(!isLoading || localPreviewArtUrl == null)
+    }
+    LaunchedEffect(song.videoId, artUrl, isLoading) {
+        if (!isLoading) {
+            delay(150)
+            fullLocalArtworkAllowed = true
+        }
+    }
+    val requestedArtUrl = if (localPreviewArtUrl != null && !fullLocalArtworkAllowed) {
+        localPreviewArtUrl
+    } else {
+        displayedArtUrl
+    }
+    var artLoaded by remember(requestedArtUrl) { mutableStateOf(false) }
     /**
      * Which go at this cover we are on, and the reason there is more than one.
      *
@@ -1169,7 +1232,7 @@ fun NowPlayingScreen(
      * is no network at all, and a retry per recomposition — which is what an
      * unremembered request effectively gave — is a spin, not a recovery.
      */
-    var artAttempt by remember(displayedArtUrl) { mutableIntStateOf(0) }
+    var artAttempt by remember(requestedArtUrl) { mutableIntStateOf(0) }
     /**
      * The one request for this cover, built once.
      *
@@ -1188,9 +1251,9 @@ fun NowPlayingScreen(
      * Remembered on the cover and the attempt, so it changes when the picture
      * changes and when a retry is deliberately asked for, and at no other time.
      */
-    val artRequest = remember(displayedArtUrl, artAttempt) {
+    val artRequest = remember(requestedArtUrl, artAttempt) {
         ImageRequest.Builder(context)
-            .data(displayedArtUrl)
+            .data(requestedArtUrl)
             .size(ART_PX)
             // What makes a retry a new request as far as Coil's model comparison
             // is concerned. Only from the second go onwards, so the ordinary
@@ -1200,12 +1263,12 @@ fun NowPlayingScreen(
             .apply { if (artAttempt > 0) memoryCacheKeyExtra("attempt", artAttempt.toString()) }
             .build()
     }
-    var artFailed by remember(displayedArtUrl) { mutableStateOf(false) }
-    LaunchedEffect(displayedArtUrl, artFailed) {
+    var artFailed by remember(requestedArtUrl) { mutableStateOf(false) }
+    LaunchedEffect(requestedArtUrl, artFailed) {
         // A track with no artwork at all fails immediately and would fail
         // identically three more times: there is no request to make, so there is
         // nothing a second go could do differently.
-        if (displayedArtUrl == null || !artFailed || artAttempt >= ART_RETRIES) return@LaunchedEffect
+        if (requestedArtUrl == null || !artFailed || artAttempt >= ART_RETRIES) return@LaunchedEffect
         delay(ART_RETRY_DELAY_MS)
         artFailed = false
         artAttempt++
@@ -1328,7 +1391,7 @@ fun NowPlayingScreen(
             // drag a full-screen blur along with them, which is why the palette
             // is passed as one immutable value.
             MeshGradientBackground(
-                palette = rememberArtworkColors(artUrl, canvasFrame),
+                palette = rememberArtworkColors(backdropArtworkUrl, canvasFrame),
                 trackKey = song.videoId,
                 blurRadius = artworkBackdropBlurDp.dp,
             )
@@ -1368,6 +1431,20 @@ fun NowPlayingScreen(
             if (heroMode && !(stillCovered && heroClip != null) &&
                 (p < 0.5f || heroVisible > 0.001f)
             ) {
+                if (!useRemoteArtworkFallback) {
+                    localPreviewRequest?.let { previewRequest ->
+                        AsyncImage(
+                            model = previewRequest,
+                            contentDescription = null,
+                            contentScale = ContentScale.Crop,
+                            modifier = Modifier
+                                .align(Alignment.TopStart)
+                                .fillMaxWidth()
+                                .height(heroHeight)
+                                .graphicsLayer { alpha = heroVisible },
+                        )
+                    }
+                }
                 AsyncImage(
                     // Decoded at the same size the sleeve asks for, so the two
                     // share one entry in Coil's cache and one bitmap: the pair
@@ -1735,15 +1812,25 @@ fun NowPlayingScreen(
                 // the pair sits centred while the queue is closed — in whatever
                 // the controls couldn't take, which on all but the tallest
                 // screens is nothing.
-                val groupTop = (maxHeight - fullArt - ART_TITLE_GAP - HEADER_HEIGHT)
+                val sleeveAspectRatio = if (preserveSleeveArtworkShape) {
+                    animatedArtworkAspectRatio.coerceIn(0.25f, 4f)
+                } else {
+                    1f
+                }
+                // Fit the original image proportion inside the same maximum
+                // square footprint used by the old sleeve layout.
+                val expandedArtWidth = fullArt * minOf(1f, sleeveAspectRatio)
+                val expandedArtHeight = fullArt * minOf(1f, 1f / sleeveAspectRatio)
+                val groupTop = (maxHeight - expandedArtHeight - ART_TITLE_GAP - HEADER_HEIGHT)
                     .coerceAtLeast(0.dp) / 2
-                val artSize = lerp(fullArt, THUMB_SIZE, p)
+                val artWidth = lerp(expandedArtWidth, THUMB_SIZE, p)
+                val artHeight = lerp(expandedArtHeight, THUMB_SIZE, p)
                 val artTop = lerp(groupTop, 0.dp, p)
                 // Expanded and height-bound, the sleeve is narrower than the
                 // player and has to be centred in it; collapsed, it belongs
                 // hard against the left edge with the credits beside it.
-                val artStart = lerp((maxWidth - fullArt) / 2, 0.dp, p)
-                val titleTop = lerp(groupTop + fullArt + ART_TITLE_GAP, 0.dp, p)
+                val artStart = lerp((maxWidth - expandedArtWidth) / 2, 0.dp, p)
+                val titleTop = lerp(groupTop + expandedArtHeight + ART_TITLE_GAP, 0.dp, p)
                 val titleStart = lerp(0.dp, THUMB_SIZE + 12.dp, p)
 
                 // How far down the *screen* the sleeve's bottom edge sits, which
@@ -1752,7 +1839,7 @@ fun NowPlayingScreen(
                 // screen's top and this box's own top is fixed padding, so it
                 // can simply be added back up rather than measured.
                 val bannerBottom = statusBarTop + topStrip + ART_BOX_TOP_PAD +
-                    groupTop + fullArt + ART_TITLE_GAP / 2
+                    groupTop + expandedArtHeight + ART_TITLE_GAP / 2
                 // Held where it was while the lyrics are up.
                 //
                 // [groupTop] centres the block in this box's *real* height, and
@@ -1802,7 +1889,7 @@ fun NowPlayingScreen(
                         // all — once per frame. Read at placement instead, the
                         // same movement costs a placement pass.
                         .offset { IntOffset(artStart.roundToPx(), artTop.roundToPx()) }
-                        .size(artSize)
+                        .size(width = artWidth, height = artHeight)
                         // Where the dismiss band starts. Read here, above the
                         // paused shrink below, so the band covers the sleeve's
                         // slot rather than the 86% of it that is drawn while
@@ -1845,6 +1932,7 @@ fun NowPlayingScreen(
 
                     DoubleTapSeekArea(
                         enabled = doubleTapToSeek && !queueOpen && !lyricsOpen && p < 0.5f,
+                        seekIntervalSeconds = seekIntervalSeconds,
                         onSingleTap = if (artworkTapOpensLyrics && !queueOpen && !lyricsOpen && p < 0.5f) {
                             {
                                 queueOpen = false
@@ -1913,6 +2001,16 @@ fun NowPlayingScreen(
                                 modifier = Modifier.size(lerp(40.dp, 20.dp, p)),
                             )
                         }
+                        if (!useRemoteArtworkFallback) {
+                            localPreviewRequest?.let { previewRequest ->
+                                AsyncImage(
+                                    model = previewRequest,
+                                    contentDescription = null,
+                                    contentScale = sleeveContentScale,
+                                    modifier = Modifier.fillMaxSize(),
+                                )
+                            }
+                        }
                         AsyncImage(
                             // Decode at the sleeve's *expanded* size, always.
                             // Coil otherwise sizes the decode to however large
@@ -1933,16 +2031,29 @@ fun NowPlayingScreen(
                             contentDescription = null,
                             // Video thumbnails are 16:9; letterboxing them inside
                             // the square sleeve looks like a broken frame.
-                            contentScale = ContentScale.Crop,
+                            contentScale = sleeveContentScale,
                             onState = {
                                 artLoaded = it is AsyncImagePainter.State.Success
+                                if (it is AsyncImagePainter.State.Success) {
+                                    val image = it.result.image
+                                    val aspectRatio = image.width.toFloat() / image.height.coerceAtLeast(1)
+                                    if (aspectRatio.isFinite() && aspectRatio in 0.25f..4f) {
+                                        loadedArtworkAspectRatio = aspectRatio
+                                    }
+                                }
                                 // Only the failure is latched, and only upwards:
                                 // the retry that clears it is [artFailed]'s own
                                 // effect, and clearing it from a Loading state
                                 // here would cancel that effect's wait every time
                                 // the painter passed back through Loading.
                                 if (it is AsyncImagePainter.State.Error) {
-                                    if (!useRemoteArtworkFallback && remoteArtFallbackUrl != null) {
+                                    if (localPreviewArtUrl != null && !fullLocalArtworkAllowed) {
+                                        // If the platform thumbnail is unavailable,
+                                        // still try the exact embedded cover before
+                                        // falling back to any remote metadata URL.
+                                        fullLocalArtworkAllowed = true
+                                        artFailed = false
+                                    } else if (!useRemoteArtworkFallback && remoteArtFallbackUrl != null) {
                                         useRemoteArtworkFallback = true
                                         artFailed = false
                                     } else {
@@ -2067,7 +2178,7 @@ fun NowPlayingScreen(
                         ),
                         modifier = Modifier
                             .align(Alignment.TopCenter)
-                            .offset(y = artTop + artSize + (ART_TITLE_GAP - 16.dp) / 2)
+                            .offset(y = artTop + artHeight + (ART_TITLE_GAP - 16.dp) / 2)
                             .size(16.dp),
                     )
                 }
@@ -2578,6 +2689,22 @@ fun NowPlayingScreen(
                 horizontalArrangement = Arrangement.SpaceEvenly,
                 verticalAlignment = Alignment.CenterVertically,
             ) {
+                val seekButtonsVisible = when (seekButtonMode) {
+                    SeekButtonMode.OFF -> false
+                    SeekButtonMode.ALWAYS -> true
+                    SeekButtonMode.LONG_TRACKS_ONLY -> effectiveDurationMs >= 15L * 60L * 1000L
+                }
+                if (seekButtonsVisible) {
+                    SeekTransportGlyph(
+                        icon = Icons.Rounded.FastRewind,
+                        contentDescription = stringResource(R.string.seek_back_seconds, seekIntervalSeconds),
+                        label = stringResource(R.string.seek_seconds_short, seekIntervalSeconds),
+                        showLabel = !hideSeekButtonLabels,
+                        onClick = {
+                            onSeek((positionMs - seekIntervalSeconds * 1000L).coerceAtLeast(0L))
+                        },
+                    )
+                }
                 TransportGlyph(
                     icon = Icons.Rounded.FastRewind,
                     contentDescription = stringResource(R.string.widget_previous),
@@ -2617,6 +2744,18 @@ fun NowPlayingScreen(
                     enabled = hasNext,
                     haptic = Haptic.SkipNext,
                 )
+                if (seekButtonsVisible) {
+                    SeekTransportGlyph(
+                        icon = Icons.Rounded.FastForward,
+                        contentDescription = stringResource(R.string.seek_forward_seconds, seekIntervalSeconds),
+                        label = stringResource(R.string.seek_seconds_short, seekIntervalSeconds),
+                        showLabel = !hideSeekButtonLabels,
+                        onClick = {
+                            val end = effectiveDurationMs.takeIf { it > 0L } ?: Long.MAX_VALUE
+                            onSeek((positionMs + seekIntervalSeconds * 1000L).coerceAtMost(end))
+                        },
+                    )
+                }
             }
 
             // Hidden entirely rather than just faded out — with the setting
@@ -2906,6 +3045,12 @@ private fun SweptLyricLine(
     glowRoom: Dp = 0.dp,
 ) {
     var layout by remember(line) { mutableStateOf<TextLayoutResult?>(null) }
+    val autoFit by AppSettings.autoFitOneLineLyrics.collectAsStateWithLifecycle()
+    val showFurigana by AppSettings.showLyricsFurigana.collectAsStateWithLifecycle()
+    val textMeasurer = rememberTextMeasurer()
+    val richText = remember(line.text, style, showFurigana) {
+        makeLyricRichText(line.text, style, Color.White, showFurigana)
+    }
 
     // Carried by every copy: identical insets keep them laying out identically,
     // and the inset is what gives the blurred copy's layer somewhere to put the
@@ -2929,27 +3074,35 @@ private fun SweptLyricLine(
             position >= line.endMs -> drawContent()
             // Not started: nothing lit, the dim copy is the whole of it.
             position <= line.timeMs -> Unit
-            else -> layout?.let { sweepTo(it, line.revealedChars(position)) }
+            else -> layout?.let { sweepTo(it, richText.renderedOffset(line.revealedChars(position))) }
         }
     }
 
-    Box(modifier) {
+    BoxWithConstraints(modifier) {
+        val fittedStyle = remember(line.text, style, constraints.maxWidth, autoFit) {
+            fitLyricTextStyle(line.text, style, constraints.maxWidth, autoFit, textMeasurer)
+        }
+        val displayedMaxLines = if (autoFit) 1 else maxLines
+        val displayedOverflow = if (autoFit) TextOverflow.Clip else overflow
+        Box(Modifier.fillMaxSize()) {
         Text(
-            text = line.text,
-            style = style,
+            text = richText.annotated,
+            inlineContent = richText.inlineContent,
+            style = fittedStyle,
             color = Color.White.copy(alpha = dimAlpha),
-            maxLines = maxLines,
-            overflow = overflow,
+            maxLines = displayedMaxLines,
+            overflow = displayedOverflow,
             onTextLayout = { layout = it },
             modifier = room.fillMaxWidth(),
         )
         if (glowAlpha > 0.01f) {
             Text(
-                text = line.text,
-                style = style,
+                text = richText.annotated,
+                inlineContent = richText.inlineContent,
+                style = fittedStyle,
                 color = Color.White,
-                maxLines = maxLines,
-                overflow = overflow,
+                maxLines = displayedMaxLines,
+                overflow = displayedOverflow,
                 modifier = Modifier
                     .fillMaxWidth()
                     // Read in the layer block rather than in composition: the
@@ -2972,20 +3125,22 @@ private fun SweptLyricLine(
                         val position = clock.longValue
                         glowAt(
                             layout = measured,
-                            revealedChars = line.revealedChars(position),
+                            revealedChars = richText.renderedOffset(line.revealedChars(position)),
                             intensity = line.glowIntensity(position),
                         )
                     },
             )
         }
         Text(
-            text = line.text,
-            style = style,
+            text = richText.annotated,
+            inlineContent = richText.inlineContent,
+            style = fittedStyle,
             color = Color.White,
-            maxLines = maxLines,
-            overflow = overflow,
+            maxLines = displayedMaxLines,
+            overflow = displayedOverflow,
             modifier = room.fillMaxWidth().then(sweep),
         )
+        }
     }
 }
 
@@ -3463,10 +3618,11 @@ private fun PanelVoice(
         // rely on graphicsLayer alpha (set by the parent) to dim inactive
         // lines.  During browsing the same rule applies — do not default to
         // full white.
-        Text(
+        LyricTextDisplay(
             text = line.text,
-            style = style.copy(textAlign = textAlign),
+            style = style,
             color = Color.White,
+            textAlign = textAlign,
             modifier = modifier.padding(room).fillMaxWidth(),
         )
     }
@@ -3508,6 +3664,175 @@ private fun String.stripParens(): String = replace("(", "").replace(")", "").tri
  * only the draw phase runs each frame; the text itself recomposes just once
  * per line.
  */
+private data class LyricRichText(
+    val annotated: AnnotatedString,
+    val inlineContent: Map<String, InlineTextContent>,
+    val rubyRanges: List<RubySourceRange> = emptyList(),
+)
+
+private data class RubySourceRange(
+    val sourceStart: Int,
+    val sourceEndExclusive: Int,
+    val baseLength: Int,
+    val renderedStart: Int,
+)
+
+private fun LyricRichText.renderedOffset(sourceOffset: Float): Float {
+    if (rubyRanges.isEmpty()) return sourceOffset
+    var removedCharacters = 0
+    rubyRanges.forEach { range ->
+        if (sourceOffset < range.sourceStart) return@forEach
+        if (sourceOffset < range.sourceEndExclusive) {
+            val baseEnd = range.sourceStart + range.baseLength
+            return if (sourceOffset < baseEnd) range.renderedStart.toFloat()
+            else (range.renderedStart + 1).toFloat()
+        }
+        removedCharacters += (range.sourceEndExclusive - range.sourceStart - 1)
+    }
+    return (sourceOffset - removedCharacters).coerceAtLeast(0f)
+}
+
+/** Expands the app's `漢字((かんじ))` convention into an inline ruby layout. */
+private fun makeLyricRichText(
+    source: String,
+    style: TextStyle,
+    color: Color,
+    enabled: Boolean,
+): LyricRichText {
+    if (!enabled) return LyricRichText(AnnotatedString(source), emptyMap())
+    val matches = LyricsFurigana.annotations(source)
+    if (matches.isEmpty()) return LyricRichText(AnnotatedString(source), emptyMap())
+
+    val renderedRanges = mutableListOf<RubySourceRange>()
+    val builder = androidx.compose.ui.text.buildAnnotatedString {
+        var cursor = 0
+        var renderedLength = 0
+        matches.forEachIndexed { index, match ->
+            val ordinary = source.substring(cursor, match.sourceStart)
+            append(ordinary)
+            renderedLength += ordinary.length
+            val id = "lyric-ruby-$index"
+            renderedRanges += RubySourceRange(
+                sourceStart = match.sourceStart,
+                sourceEndExclusive = match.sourceEndExclusive,
+                baseLength = match.base.length,
+                renderedStart = renderedLength,
+            )
+            appendInlineContent(id, match.base)
+            renderedLength++
+            cursor = match.sourceEndExclusive
+        }
+        val trailing = source.substring(cursor)
+        append(trailing)
+    }
+    val inline = matches.mapIndexed { index, match ->
+        val id = "lyric-ruby-$index"
+        val base = match.base
+        val reading = match.reading
+        val baseSize = style.fontSize.value
+            .takeIf { it.isFinite() && it > 0f }
+            ?.sp ?: 22.sp
+        val emWidth = maxOf(base.length.toFloat(), reading.length * 0.5f).coerceAtLeast(1f)
+        val width = (baseSize.value * emWidth).sp
+        id to InlineTextContent(
+            placeholder = Placeholder(
+                width = width,
+                height = baseSize * 1.6f,
+                placeholderVerticalAlign = PlaceholderVerticalAlign.AboveBaseline,
+            ),
+            children = {
+                // Inline content is measured inside the placeholder's fixed
+                // box. Fill it explicitly so the base glyph remains present
+                // and the reading is laid out above it on every Compose path.
+                Column(
+                    modifier = Modifier.fillMaxSize(),
+                    horizontalAlignment = Alignment.CenterHorizontally,
+                    verticalArrangement = Arrangement.Bottom,
+                ) {
+                    Text(
+                        text = reading,
+                        color = color,
+                        maxLines = 1,
+                        softWrap = false,
+                        modifier = Modifier.fillMaxWidth(),
+                        style = style.copy(
+                            fontSize = baseSize * 0.42f,
+                            lineHeight = baseSize * 0.48f,
+                            textAlign = TextAlign.Center,
+                        ),
+                    )
+                    Text(
+                        text = base,
+                        color = color,
+                        maxLines = 1,
+                        softWrap = false,
+                        modifier = Modifier.fillMaxWidth(),
+                        style = style.copy(fontSize = baseSize, lineHeight = baseSize),
+                    )
+                }
+            },
+        )
+    }.toMap()
+    return LyricRichText(builder, inline, renderedRanges)
+}
+
+@Composable
+private fun LyricTextDisplay(
+    text: String,
+    style: TextStyle,
+    color: Color,
+    modifier: Modifier = Modifier,
+    maxLines: Int = Int.MAX_VALUE,
+    overflow: TextOverflow = TextOverflow.Clip,
+    textAlign: TextAlign? = null,
+) {
+    val showFurigana by AppSettings.showLyricsFurigana.collectAsStateWithLifecycle()
+    val autoFit by AppSettings.autoFitOneLineLyrics.collectAsStateWithLifecycle()
+    val actualStyle = if (textAlign == null) style else style.copy(textAlign = textAlign)
+    val rich = remember(text, actualStyle, color, showFurigana) {
+        makeLyricRichText(text, actualStyle, color, showFurigana)
+    }
+    val textMeasurer = rememberTextMeasurer()
+    BoxWithConstraints(modifier) {
+        val availableWidth = constraints.maxWidth
+        val fittedStyle = remember(text, actualStyle, availableWidth, autoFit) {
+            fitLyricTextStyle(text, actualStyle, availableWidth, autoFit, textMeasurer)
+        }
+        Text(
+            text = rich.annotated,
+            inlineContent = rich.inlineContent,
+            style = fittedStyle,
+            color = color,
+            maxLines = if (autoFit) 1 else maxLines,
+            overflow = if (autoFit) TextOverflow.Clip else overflow,
+            modifier = Modifier.fillMaxWidth(),
+        )
+    }
+}
+
+private fun fitLyricTextStyle(
+    text: String,
+    style: TextStyle,
+    availableWidth: Int,
+    enabled: Boolean,
+    textMeasurer: androidx.compose.ui.text.TextMeasurer,
+): TextStyle {
+    if (!enabled || availableWidth <= 0 || style.fontSize.value <= MIN_AUTOFIT_LYRIC_SP) return style
+    val measured = textMeasurer.measure(text = text, style = style, maxLines = 1, softWrap = false)
+    if (measured.size.width <= availableWidth) return style
+    var low = MIN_AUTOFIT_LYRIC_SP
+    var high = style.fontSize.value
+    repeat(12) {
+        val candidate = (low + high) / 2f
+        val candidateStyle = style.copy(fontSize = candidate.sp)
+        val layout = textMeasurer.measure(text = text, style = candidateStyle, maxLines = 1, softWrap = false)
+        if (layout.size.width <= availableWidth) low = candidate else high = candidate
+    }
+    return style.copy(fontSize = low.sp, lineHeight = minOf(style.lineHeight.value, low * 1.25f).sp)
+}
+
+private const val MIN_AUTOFIT_LYRIC_SP = 8f
+
 @Composable
 private fun CurrentLyricLine(
     lines: List<LyricLine>,
@@ -3626,7 +3951,7 @@ private fun CurrentLyricLine(
                 modifier = Modifier.weight(1f, fill = false),
             )
         } else {
-            Text(
+            LyricTextDisplay(
                 text = text,
                 style = MaterialTheme.typography.titleMedium,
                 color = Color.White,
@@ -3877,6 +4202,47 @@ private fun TransportGlyph(
             tint = Color.White.copy(alpha = alpha),
             modifier = Modifier.size(size),
         )
+    }
+}
+
+@Composable
+private fun SeekTransportGlyph(
+    icon: ImageVector,
+    contentDescription: String,
+    label: String,
+    showLabel: Boolean,
+    onClick: () -> Unit,
+) {
+    val haptics = rememberHaptics()
+    Column(
+        modifier = Modifier
+            .size(42.dp)
+            .clip(CircleShape)
+            .clickable(
+                interactionSource = remember { MutableInteractionSource() },
+                indication = null,
+                onClick = {
+                    haptics.play(Haptic.Tap)
+                    onClick()
+                },
+            ),
+        horizontalAlignment = Alignment.CenterHorizontally,
+        verticalArrangement = Arrangement.Center,
+    ) {
+        Icon(
+            imageVector = icon,
+            contentDescription = contentDescription,
+            tint = Color.White,
+            modifier = Modifier.size(21.dp),
+        )
+        if (showLabel) {
+            Text(
+                text = label,
+                color = Color.White.copy(alpha = 0.86f),
+                style = MaterialTheme.typography.labelSmall,
+                maxLines = 1,
+            )
+        }
     }
 }
 

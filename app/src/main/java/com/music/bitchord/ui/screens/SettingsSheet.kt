@@ -81,6 +81,7 @@ import androidx.compose.material.icons.rounded.Speed
 import androidx.compose.material.icons.rounded.SurroundSound
 import androidx.compose.material.icons.rounded.Tune
 import androidx.compose.material.icons.rounded.ViewStream
+import androidx.compose.material.icons.rounded.VisibilityOff
 import androidx.compose.material.icons.rounded.VolumeOff
 import androidx.compose.material.icons.rounded.Waves
 import androidx.activity.compose.rememberLauncherForActivityResult
@@ -159,6 +160,7 @@ import com.music.bitchord.data.model.Account
 import com.music.bitchord.data.LocalMediaRepository
 import com.music.bitchord.data.scrobbling.LastFM
 import com.music.bitchord.data.settings.AppSettings
+import com.music.bitchord.data.settings.SeekButtonMode
 import com.music.bitchord.data.settings.MAX_PLAYER_ARTWORK_BLUR_DP
 import com.music.bitchord.data.settings.MainNavigationTab
 import com.music.bitchord.data.settings.PlayerControl
@@ -221,6 +223,9 @@ fun SettingsScreen(
 
     val skipSilence by AppSettings.skipSilence.collectAsStateWithLifecycle()
     val doubleTapToSeek by AppSettings.doubleTapToSeek.collectAsStateWithLifecycle()
+    val seekIntervalSeconds by AppSettings.seekIntervalSeconds.collectAsStateWithLifecycle()
+    val seekButtonMode by AppSettings.seekButtonMode.collectAsStateWithLifecycle()
+    val hideSeekButtonLabels by AppSettings.hideSeekButtonLabels.collectAsStateWithLifecycle()
     val spatialAudio by AppSettings.spatialAudio.collectAsStateWithLifecycle()
     val nerdStats by AppSettings.showNerdStats.collectAsStateWithLifecycle()
     val reduceAnimation by AppSettings.reduceAnimation.collectAsStateWithLifecycle()
@@ -246,6 +251,8 @@ fun SettingsScreen(
     val lyricsBlur by AppSettings.lyricsBlur.collectAsStateWithLifecycle()
     val lyricsFontScale by AppSettings.lyricsFontScale.collectAsStateWithLifecycle()
     val lyricsTextAlignment by AppSettings.lyricsTextAlignment.collectAsStateWithLifecycle()
+    val showLyricsFurigana by AppSettings.showLyricsFurigana.collectAsStateWithLifecycle()
+    val autoFitOneLineLyrics by AppSettings.autoFitOneLineLyrics.collectAsStateWithLifecycle()
     val hideLyricsStatusText by AppSettings.hideLyricsStatusText.collectAsStateWithLifecycle()
     val hideLyricsSavedMessage by AppSettings.hideLyricsSavedMessage.collectAsStateWithLifecycle()
     val hideLyricsUnavailableLabel by AppSettings.hideLyricsUnavailableLabel.collectAsStateWithLifecycle()
@@ -268,6 +275,7 @@ fun SettingsScreen(
     val playerDetailsVerticalMenu by AppSettings.playerDetailsVerticalMenu.collectAsStateWithLifecycle()
     val preloadAlbumArtOnStartup by AppSettings.preloadAlbumArtOnStartup.collectAsStateWithLifecycle()
     val fullBleedArtwork by AppSettings.fullBleedArtwork.collectAsStateWithLifecycle()
+    val keepOriginalArtworkAspectRatio by AppSettings.keepOriginalArtworkAspectRatio.collectAsStateWithLifecycle()
     val keepArtworkFullSizeWhenPaused by AppSettings.keepArtworkFullSizeWhenPaused.collectAsStateWithLifecycle()
     val legacyMeshGradient by AppSettings.legacyMeshGradient.collectAsStateWithLifecycle()
     val syncedLyrics by AppSettings.syncedLyrics.collectAsStateWithLifecycle()
@@ -338,6 +346,44 @@ fun SettingsScreen(
         SettingsSearchEntry(stringResource(R.string.player_lyrics_strip), stringResource(R.string.player_lyrics_strip_subtitle), listOf("lyrics", "歌詞", "strip", "player"), showPlayerLyricsStrip) { AppSettings.setShowPlayerLyricsStrip(!showPlayerLyricsStrip) },
         SettingsSearchEntry(stringResource(R.string.skip_silence), stringResource(R.string.skip_silence_subtitle), listOf("silence", "無音", "再生"), skipSilence) { AppSettings.setSkipSilence(!skipSilence) },
         SettingsSearchEntry(stringResource(R.string.double_tap_to_seek), stringResource(R.string.double_tap_to_seek_subtitle), listOf("seek", "double tap", "シーク", "ダブルタップ"), doubleTapToSeek) { AppSettings.setDoubleTapToSeek(!doubleTapToSeek) },
+        SettingsSearchEntry(
+            title = stringResource(R.string.seek_interval),
+            subtitle = stringResource(R.string.seek_interval_subtitle),
+            keywords = listOf("seek", "seconds", "秒", "シーク", "ダブルタップ"),
+            valueLabel = stringResource(R.string.seek_interval_value, seekIntervalSeconds),
+            sliderValue = seekIntervalSeconds.toFloat(),
+            sliderValueRange = 1f..60f,
+            sliderSteps = 58,
+            onSliderValueChange = { AppSettings.setSeekIntervalSeconds(it.roundToInt()) },
+            activate = {},
+        ),
+        SettingsSearchEntry(
+            stringResource(R.string.hide_seek_button_labels),
+            stringResource(R.string.hide_seek_button_labels_subtitle),
+            listOf("seek", "seconds", "label", "シーク", "秒数", "ラベル"),
+            hideSeekButtonLabels,
+        ) { AppSettings.setHideSeekButtonLabels(!hideSeekButtonLabels) },
+        SettingsSearchEntry(
+            stringResource(R.string.seek_button_mode),
+            stringResource(R.string.seek_button_mode_subtitle),
+            listOf("seek", "button", "15 minutes", "シーク", "ボタン"),
+            valueLabel = stringResource(when (seekButtonMode) {
+                SeekButtonMode.OFF -> R.string.seek_buttons_off
+                SeekButtonMode.ALWAYS -> R.string.seek_buttons_always
+                SeekButtonMode.LONG_TRACKS_ONLY -> R.string.seek_buttons_long_tracks
+            }),
+            activate = {
+                AppSettings.setSeekButtonMode(
+                    when (seekButtonMode) {
+                        SeekButtonMode.OFF -> SeekButtonMode.ALWAYS
+                        SeekButtonMode.ALWAYS -> SeekButtonMode.LONG_TRACKS_ONLY
+                        SeekButtonMode.LONG_TRACKS_ONLY -> SeekButtonMode.OFF
+                    },
+                )
+            },
+        ),
+        SettingsSearchEntry(stringResource(R.string.lyrics_furigana), stringResource(R.string.lyrics_furigana_subtitle), listOf("lyrics", "furigana", "ruby", "ふりがな", "ルビ"), showLyricsFurigana) { AppSettings.setShowLyricsFurigana(!showLyricsFurigana) },
+        SettingsSearchEntry(stringResource(R.string.lyrics_auto_fit), stringResource(R.string.lyrics_auto_fit_subtitle), listOf("lyrics", "one line", "fit", "歌詞", "一行", "文字サイズ"), autoFitOneLineLyrics) { AppSettings.setAutoFitOneLineLyrics(!autoFitOneLineLyrics) },
         SettingsSearchEntry(stringResource(R.string.spatial_audio), stringResource(R.string.spatial_audio_subtitle), listOf("spatial", "空間オーディオ"), spatialAudio) { AppSettings.setSpatialAudio(!spatialAudio) },
         SettingsSearchEntry(stringResource(R.string.favorite_icon_star), stringResource(R.string.favorite_icon_star_subtitle), listOf("favorite", "star", "お気に入り", "星", "ハート"), favoriteUsesStar) { AppSettings.setFavoriteUsesStar(!favoriteUsesStar) },
         SettingsSearchEntry(stringResource(R.string.hide_unknown_player_artist), stringResource(R.string.hide_unknown_player_artist_subtitle), listOf("artist", "unknown", "アーティスト", "unknown artist"), hideUnknownPlayerArtist) { AppSettings.setHideUnknownPlayerArtist(!hideUnknownPlayerArtist) },
@@ -350,6 +396,7 @@ fun SettingsScreen(
         SettingsSearchEntry(stringResource(R.string.blur_unfocused_lyrics), stringResource(R.string.blur_unfocused_lyrics_subtitle), listOf("lyrics", "歌詞", "blur", "ぼかし"), lyricsBlur) { AppSettings.setLyricsBlur(!lyricsBlur) },
         SettingsSearchEntry(stringResource(R.string.auto_embed_lyrics), stringResource(R.string.auto_embed_lyrics_subtitle), listOf("lyrics", "歌詞", "embed", "埋め込み"), autoEmbedLyrics) { AppSettings.setAutoEmbedLyrics(!autoEmbedLyrics) },
         SettingsSearchEntry(stringResource(R.string.full_screen_cover_art), stringResource(R.string.full_screen_cover_art_subtitle), listOf("artwork", "cover", "full screen", "アート", "全画面"), fullBleedArtwork) { AppSettings.setFullBleedArtwork(!fullBleedArtwork) },
+        SettingsSearchEntry(stringResource(R.string.keep_original_artwork_aspect_ratio), stringResource(R.string.keep_original_artwork_aspect_ratio_subtitle), listOf("artwork", "cover", "aspect ratio", "crop", "縦長", "横長", "比率", "トリミング"), keepOriginalArtworkAspectRatio) { AppSettings.setKeepOriginalArtworkAspectRatio(!keepOriginalArtworkAspectRatio) },
         SettingsSearchEntry(stringResource(R.string.keep_artwork_full_size_paused), stringResource(R.string.keep_artwork_full_size_paused_subtitle), listOf("artwork", "cover", "paused", "停止中", "アート"), keepArtworkFullSizeWhenPaused) { AppSettings.setKeepArtworkFullSizeWhenPaused(!keepArtworkFullSizeWhenPaused) },
         SettingsSearchEntry(stringResource(R.string.reduce_animation), stringResource(R.string.reduce_animation_subtitle), listOf("animation", "reduce", "アニメーション"), reduceAnimation) { AppSettings.setReduceAnimation(!reduceAnimation) },
         SettingsSearchEntry(stringResource(R.string.reduce_dynamic_blur), stringResource(R.string.reduce_dynamic_blur_subtitle), listOf("blur", "ぼかし", "performance", "動的"), reduceDynamicBlur) { AppSettings.setReduceDynamicBlur(!reduceDynamicBlur) },
@@ -937,6 +984,59 @@ fun SettingsScreen(
             )
             RowDivider()
             SettingsRow(
+                icon = Icons.Rounded.FastForward,
+                title = stringResource(R.string.seek_interval),
+                subtitle = stringResource(R.string.seek_interval_subtitle),
+                trailing = {
+                    Text(
+                        text = stringResource(R.string.seek_interval_value, seekIntervalSeconds),
+                        color = MaterialTheme.colorScheme.primary,
+                        style = MaterialTheme.typography.labelLarge,
+                    )
+                },
+            )
+            Slider(
+                value = seekIntervalSeconds.toFloat(),
+                onValueChange = { AppSettings.setSeekIntervalSeconds(it.roundToInt()) },
+                steps = 58,
+                valueRange = 1f..60f,
+                modifier = Modifier.padding(start = ROW_INSET, end = ROW_INSET, bottom = 14.dp),
+            )
+            RowDivider()
+            SettingsRow(
+                icon = Icons.Rounded.FastForward,
+                title = stringResource(R.string.seek_button_mode),
+                subtitle = stringResource(R.string.seek_button_mode_subtitle),
+            )
+            SegmentedControl(
+                options = listOf(
+                    stringResource(R.string.seek_buttons_off),
+                    stringResource(R.string.seek_buttons_always),
+                    stringResource(R.string.seek_buttons_long_tracks),
+                ),
+                selectedIndex = SeekButtonMode.entries.indexOf(seekButtonMode),
+                onSelect = { AppSettings.setSeekButtonMode(SeekButtonMode.entries[it]) },
+                modifier = Modifier.padding(start = ROW_INSET, end = ROW_INSET, bottom = 14.dp),
+            )
+            RowDivider()
+            SettingsRow(
+                icon = Icons.Rounded.VisibilityOff,
+                title = stringResource(R.string.hide_seek_button_labels),
+                subtitle = stringResource(R.string.hide_seek_button_labels_subtitle),
+                trailing = {
+                    Switch(
+                        checked = hideSeekButtonLabels,
+                        onCheckedChange = AppSettings::setHideSeekButtonLabels,
+                        colors = SwitchDefaults.colors(
+                            checkedTrackColor = MaterialTheme.colorScheme.primary,
+                            checkedBorderColor = MaterialTheme.colorScheme.primary,
+                        ),
+                    )
+                },
+                onClick = { AppSettings.setHideSeekButtonLabels(!hideSeekButtonLabels) },
+            )
+            RowDivider()
+            SettingsRow(
                 icon = Icons.Rounded.SurroundSound,
                 title = stringResource(R.string.spatial_audio),
                 subtitle = stringResource(R.string.spatial_audio_subtitle),
@@ -1296,6 +1396,22 @@ fun SettingsScreen(
                 onSelect = { AppSettings.setLyricsTextAlignment(LyricsTextAlignment.entries[it]) },
                 modifier = Modifier.padding(start = ROW_INSET, end = ROW_INSET, bottom = 14.dp),
             )
+            RowDivider()
+            SettingsRow(
+                icon = Icons.AutoMirrored.Rounded.Notes,
+                title = stringResource(R.string.lyrics_furigana),
+                subtitle = stringResource(R.string.lyrics_furigana_subtitle),
+                trailing = { Switch(checked = showLyricsFurigana, onCheckedChange = AppSettings::setShowLyricsFurigana) },
+                onClick = { AppSettings.setShowLyricsFurigana(!showLyricsFurigana) },
+            )
+            RowDivider()
+            SettingsRow(
+                icon = Icons.AutoMirrored.Rounded.Notes,
+                title = stringResource(R.string.lyrics_auto_fit),
+                subtitle = stringResource(R.string.lyrics_auto_fit_subtitle),
+                trailing = { Switch(checked = autoFitOneLineLyrics, onCheckedChange = AppSettings::setAutoFitOneLineLyrics) },
+                onClick = { AppSettings.setAutoFitOneLineLyrics(!autoFitOneLineLyrics) },
+            )
         }
 
         SettingsGroup(header = stringResource(R.string.appearance)) {
@@ -1515,6 +1631,25 @@ fun SettingsScreen(
                 )
                 RowDivider()
             }
+            SettingsRow(
+                icon = Icons.Rounded.ViewStream,
+                title = stringResource(R.string.keep_original_artwork_aspect_ratio),
+                subtitle = stringResource(R.string.keep_original_artwork_aspect_ratio_subtitle),
+                trailing = {
+                    Switch(
+                        checked = keepOriginalArtworkAspectRatio,
+                        onCheckedChange = AppSettings::setKeepOriginalArtworkAspectRatio,
+                        colors = SwitchDefaults.colors(
+                            checkedTrackColor = MaterialTheme.colorScheme.primary,
+                            checkedBorderColor = MaterialTheme.colorScheme.primary,
+                        ),
+                    )
+                },
+                onClick = {
+                    AppSettings.setKeepOriginalArtworkAspectRatio(!keepOriginalArtworkAspectRatio)
+                },
+            )
+            RowDivider()
             SettingsRow(
                 icon = Icons.Rounded.Album,
                 title = stringResource(R.string.keep_artwork_full_size_paused),

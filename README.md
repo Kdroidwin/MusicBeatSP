@@ -25,7 +25,7 @@
 
 ---
 
-> **MusicBeatSP 2.0.3** is the MusicBeat fork under a new name and Android application ID. It builds on the open-source BitChord foundation and adds an extensive local music library, playlist, playback, lyrics, artwork, and customization feature set.
+> **MusicBeatSP 2.0.9** is the MusicBeat fork under a new name and Android application ID. It builds on the open-source BitChord foundation and adds an extensive local music library, playlist, playback, lyrics, artwork, and customization feature set.
 
 The standard Android package is `io.pockets.musicbestsp`. Because this differs from the previous MusicBeat package, Android installs MusicBeatSP as a separate app; app-private settings and data are not migrated automatically.
 
@@ -73,7 +73,9 @@ The standard Android package is `io.pockets.musicbestsp`. Because this differs f
 ### Lyrics and artwork
 
 - Display the first lyric line for timed and plain lyrics while preserving synchronized scrolling and highlighting.
+- Create synchronized lyrics with the audio-guided editor, which records line timestamps during playback. Optionally render `漢字((かんじ))` readings above kanji.
 - Hide generated lyric status text, unavailable and saved-lyrics labels, or instrumental gap notes. Set lyric size and alignment, and choose which playback controls appear on the lyrics screen.
+- Configure double-tap seeking and optional skip buttons, including their intervals and whether seconds labels appear.
 - Cache and prefetch local album artwork to speed up track changes; optionally load the local artwork library at startup.
 - Use high-resolution local artwork in the player and customize playlist cover images.
 - Use the optional audio cutter from local track details to export a trimmed AAC copy; the original file remains unchanged.

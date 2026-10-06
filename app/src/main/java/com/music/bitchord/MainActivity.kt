@@ -1923,6 +1923,23 @@ private fun BitChordApp(
                             isDownloads = page.browseId == "local:downloads",
                             currentSong = player.song,
                             isPlaying = player.isPlaying,
+                            playbackPositionMs = player.position.positionMs,
+                            playbackDurationMs = player.durationMs,
+                            onLyricsEditorPlaybackToggle = { target ->
+                                val active = player.song
+                                val sameTrack = active?.videoId == target.videoId ||
+                                    (active?.localUri != null && active.localUri == target.localUri)
+                                controller?.let { c ->
+                                    if (sameTrack) {
+                                        if (c.isPlaying) c.pause() else c.play()
+                                    } else {
+                                        play(listOf(target), 0)
+                                    }
+                                }
+                            },
+                            onLyricsEditorSeek = { target -> controller?.seekTo(target) },
+                            onLyricsEditorPrevious = { controller?.seekToPrevious() },
+                            onLyricsEditorNext = { controller?.seekToNextMediaItem() },
                             isRefreshing = isRefreshingLocalMusic,
                             onRefresh = {
                                 if (page.browseId == "local:downloads") {
@@ -2511,8 +2528,25 @@ private fun BitChordApp(
                         decorFitsSystemWindows = false,
                     ),
                 ) {
+                    val isActiveLyricsTrack = player.song?.videoId == song.videoId ||
+                        (song.localUri != null && player.song?.localUri == song.localUri)
                     LyricsEditorScreen(
                         song = song,
+                        playbackPositionMs = if (isActiveLyricsTrack) player.position.positionMs else 0L,
+                        playbackDurationMs = if (isActiveLyricsTrack) player.durationMs else 0L,
+                        playbackIsPlaying = player.isPlaying && isActiveLyricsTrack,
+                        onSyncPlaybackToggle = {
+                            controller?.let { c ->
+                                if (isActiveLyricsTrack) {
+                                    if (c.isPlaying) c.pause() else c.play()
+                                } else {
+                                    play(listOf(song), 0)
+                                }
+                            }
+                        },
+                        onSyncSeek = if (isActiveLyricsTrack) ({ target -> controller?.seekTo(target) }) else null,
+                        onSyncPrevious = if (isActiveLyricsTrack) ({ controller?.seekToPrevious() }) else null,
+                        onSyncNext = if (isActiveLyricsTrack) ({ controller?.seekToNextMediaItem() }) else null,
                         onBackClick = {
                             showLyricsEditor = false
                             songActions = null

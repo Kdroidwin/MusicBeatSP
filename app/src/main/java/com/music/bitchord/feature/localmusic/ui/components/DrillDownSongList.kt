@@ -399,6 +399,9 @@ fun DrillDownSongList(
     viewType: LibraryViewType = LibraryViewType.LIST,
     onViewTypeToggle: (() -> Unit)? = null,
     selectedIds: Set<String> = emptySet(),
+    selectionMode: Boolean = false,
+    onSelectionToggle: ((Song) -> Unit)? = null,
+    selectionToolbar: (@Composable () -> Unit)? = null,
     currentSong: Song? = null,
     isPlaying: Boolean = false,
     onSongClick: (List<Song>, Int) -> Unit,
@@ -442,7 +445,7 @@ fun DrillDownSongList(
                         onBack = onBack,
                     )
                 }
-                item(span = { GridItemSpan(maxLineSpan) }) {
+                if (!selectionMode) item(span = { GridItemSpan(maxLineSpan) }) {
                     DrillDownActionRow(
                         songs = songs,
                         viewType = viewType,
@@ -454,12 +457,17 @@ fun DrillDownSongList(
                         onReorderToggle = onReorderToggle,
                     )
                 }
+                if (selectionToolbar != null) {
+                    item(span = { GridItemSpan(maxLineSpan) }) { selectionToolbar() }
+                }
                 itemsIndexed(songs) { index, song ->
                     SongGridCard(
                         song = song,
-                        selected = song.videoId in selectedIds,
+                        selected = song.videoId in selectedIds || (song.localUri ?: song.videoId) in selectedIds,
                         isCurrent = song.isSameTrackAs(currentSong),
-                        onClick = { onSongClick(songs, index) },
+                        onClick = {
+                            if (selectionMode) onSelectionToggle?.invoke(song) else onSongClick(songs, index)
+                        },
                         onLongPress = { onSongLongPress(song) },
                     )
                 }
@@ -500,7 +508,7 @@ fun DrillDownSongList(
                         onBack = onBack,
                     )
                 }
-                item {
+                if (!selectionMode) item {
                     DrillDownActionRow(
                         songs = songs,
                         viewType = viewType,
@@ -512,9 +520,12 @@ fun DrillDownSongList(
                         onReorderToggle = onReorderToggle,
                     )
                 }
+                if (selectionToolbar != null) {
+                    item { selectionToolbar() }
+                }
                 itemsIndexed(displayedSongs, key = { _, song -> song.localUri ?: song.videoId }) { index, song ->
                     val trackNumber = if (isPlaylist && showArtworkInList) null else index + 1
-                    if (reorderEnabled && isPlaylist) {
+                    if (reorderEnabled && isPlaylist && !selectionMode) {
                         val songKey = song.localUri ?: song.videoId
                         val isDragging = dragState.draggedKey == songKey
                         val finishDrag by rememberUpdatedState(newValue = {
@@ -539,7 +550,7 @@ fun DrillDownSongList(
                             Box(Modifier.weight(1f)) {
                                 SongRow(
                                     song = song,
-                                    selected = song.videoId in selectedIds,
+                                    selected = song.videoId in selectedIds || (song.localUri ?: song.videoId) in selectedIds,
                                     isCurrent = song.isSameTrackAs(currentSong),
                                     isPlaying = song.isSameTrackAs(currentSong) && isPlaying,
                                     trackNumber = trackNumber,
@@ -574,14 +585,16 @@ fun DrillDownSongList(
                     } else {
                         SongRow(
                             song = song,
-                            selected = song.videoId in selectedIds,
+                            selected = song.videoId in selectedIds || (song.localUri ?: song.videoId) in selectedIds,
                             isCurrent = song.isSameTrackAs(currentSong),
                             isPlaying = song.isSameTrackAs(currentSong) && isPlaying,
                             trackNumber = trackNumber,
-                            onClick = { onSongClick(displayedSongs, index) },
+                            onClick = {
+                                if (selectionMode) onSelectionToggle?.invoke(song) else onSongClick(displayedSongs, index)
+                            },
                             onLongPress = { onSongLongPress(song) },
                             onMore = onSongMore?.let { more -> { more(song) } },
-                            onSwipeToQueue = { onSongSwipe(song) },
+                            onSwipeToQueue = if (selectionMode) null else { { onSongSwipe(song) } },
                             dropdownMenu = songDropdownMenu?.let { menu -> { menu(song) } },
                         )
                     }
