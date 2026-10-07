@@ -688,6 +688,10 @@
     <string name="align_right">右</string>
     <string name="player_controls">ミニプレーヤーの操作ボタン</string>
     <string name="mini_player_control_subtitle">画面下部のプレーヤーにこのボタンを表示します</string>
+    <string name="mini_player_favorite">お気に入り</string>
+    <string name="mini_player_lyrics">歌詞</string>
+    <string name="mini_player_queue">再生キュー</string>
+    <string name="mini_player_add_to_playlist">プレイリストに追加</string>
     <string name="hide_lyrics_status_text">歌詞のステータス表示を隠す</string>
     <string name="hide_lyrics_status_text_subtitle">一行歌詞欄に出る読み込み中や利用不可などの自動メッセージを隠します</string>
     <string name="move_up">上へ移動</string>

@@ -874,6 +874,10 @@
     <string name="align_right">Right</string>
     <string name="player_controls">Mini-player controls</string>
     <string name="mini_player_control_subtitle">Show this control in the bottom player bar</string>
+    <string name="mini_player_favorite">Favorite</string>
+    <string name="mini_player_lyrics">Lyrics</string>
+    <string name="mini_player_queue">Queue</string>
+    <string name="mini_player_add_to_playlist">Add to playlist</string>
     <string name="hide_lyrics_status_text">Hide lyrics status text</string>
     <string name="hide_lyrics_status_text_subtitle">Hide generated loading and unavailable messages in the one-line lyric area</string>
     <string name="move_up">Move up</string>

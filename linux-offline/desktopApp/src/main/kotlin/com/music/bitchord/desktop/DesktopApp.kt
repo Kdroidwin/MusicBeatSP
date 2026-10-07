@@ -1030,9 +1030,11 @@ fun BitChordDesktopApp() {
         }
         persistence.saveLikedIds(likedIds)
         persistence.saveDislikedIds(dislikedIds)
-        scope.launch {
-            DesktopSearchClient.rate(song.videoId, status)
-                .onFailure { DesktopTrackLog.log("youtube: rating ${song.videoId} failed: ${it.message}") }
+        if (!MUSICBEATSP_LOCAL_ONLY_BUILD && song.localPath == null) {
+            scope.launch {
+                DesktopSearchClient.rate(song.videoId, status)
+                    .onFailure { DesktopTrackLog.log("youtube: rating ${song.videoId} failed: ${it.message}") }
+            }
         }
     }
 
@@ -3109,6 +3111,11 @@ fun BitChordDesktopApp() {
                             repeatMode = it
                             persistence.saveString("repeat_mode", it.name)
                         },
+                        isLiked = selectedSong?.videoId?.let { it in likedIds } == true,
+                        onToggleFavorite = { selectedSong?.let(::toggleLike) },
+                        onOpenLyrics = { overlays.toggleSidePanel(DesktopSidePanel.LYRICS) },
+                        onOpenQueue = { overlays.toggleSidePanel(DesktopSidePanel.QUEUE) },
+                        onAddToPlaylist = { playlistTarget = it },
                     )
                 },
                 trailing = {
@@ -4579,6 +4586,11 @@ private fun DesktopBottomChrome(
     onNext: () -> Unit,
     onShuffleChange: (Boolean) -> Unit,
     onRepeatModeChange: (DesktopRepeatMode) -> Unit,
+    isLiked: Boolean,
+    onToggleFavorite: () -> Unit,
+    onOpenLyrics: () -> Unit,
+    onOpenQueue: () -> Unit,
+    onAddToPlaylist: (Song) -> Unit,
 ) {
     val miniPlayerControls by DesktopPlayerSettings.miniPlayerControls.collectAsState()
     Column(
@@ -4604,6 +4616,11 @@ private fun DesktopBottomChrome(
                 onNext = onNext,
                 onShuffleChange = onShuffleChange,
                 onRepeatModeChange = onRepeatModeChange,
+                isLiked = isLiked,
+                onToggleFavorite = onToggleFavorite,
+                onOpenLyrics = onOpenLyrics,
+                onOpenQueue = onOpenQueue,
+                onAddToPlaylist = { onAddToPlaylist(song) },
             )
         }
         if (compact) DesktopFloatingNavigation(destination, onDestinationSelected, MUSICBEATSP_LOCAL_ONLY_BUILD)
@@ -4678,6 +4695,11 @@ private fun DesktopMiniPlayer(
     onNext: () -> Unit,
     onShuffleChange: (Boolean) -> Unit,
     onRepeatModeChange: (DesktopRepeatMode) -> Unit,
+    isLiked: Boolean,
+    onToggleFavorite: () -> Unit,
+    onOpenLyrics: () -> Unit,
+    onOpenQueue: () -> Unit,
+    onAddToPlaylist: () -> Unit,
 ) {
     val shape = RoundedCornerShape(percent = 50)
     Row(
@@ -4704,29 +4726,46 @@ private fun DesktopMiniPlayer(
             Text(song.title, maxLines = 1, overflow = TextOverflow.Ellipsis, fontWeight = FontWeight.SemiBold)
             Text(song.artist, color = DesktopSecondary, style = MaterialTheme.typography.bodySmall, maxLines = 1, overflow = TextOverflow.Ellipsis)
         }
-        controls.forEach { control ->
-            when (control) {
-                DesktopMiniPlayerControl.SHUFFLE -> DesktopToolbarButton(onClick = { onShuffleChange(!shuffle) }, size = 34.dp) {
-                    Icon(BitChordIcons.Shuffle, DesktopStrings["shuffle", "Shuffle"], tint = if (shuffle) DesktopAccent else DesktopSecondary, modifier = Modifier.size(18.dp))
-                }
-                DesktopMiniPlayerControl.PREVIOUS -> DesktopToolbarButton(onClick = onPrevious, enabled = previousEnabled, size = 34.dp) {
-                    Icon(Icons.Rounded.FastRewind, DesktopStrings["widget_previous", "Previous"], tint = if (previousEnabled) Color.White else DesktopSecondary.copy(alpha = 0.4f), modifier = Modifier.size(20.dp))
-                }
-                DesktopMiniPlayerControl.PLAY_PAUSE -> DesktopToolbarButton(onClick = onPlayPause, size = 38.dp) {
-                    if (isLoading) {
-                        CircularProgressIndicator(Modifier.size(18.dp), color = Color.White, strokeWidth = 2.dp)
-                    } else {
-                        Icon(if (isPlaying) Icons.Rounded.Pause else Icons.Rounded.PlayArrow, if (isPlaying) "Pause" else "Play", tint = Color.White, modifier = Modifier.size(24.dp))
+        Row(
+            Modifier.widthIn(max = 480.dp).horizontalScroll(rememberScrollState()),
+            verticalAlignment = Alignment.CenterVertically,
+        ) {
+            controls.forEach { control ->
+                when (control) {
+                    DesktopMiniPlayerControl.SHUFFLE -> DesktopToolbarButton(onClick = { onShuffleChange(!shuffle) }, size = 34.dp) {
+                        Icon(BitChordIcons.Shuffle, DesktopStrings["shuffle", "Shuffle"], tint = if (shuffle) DesktopAccent else DesktopSecondary, modifier = Modifier.size(18.dp))
                     }
-                }
-                DesktopMiniPlayerControl.NEXT -> DesktopToolbarButton(onClick = onNext, size = 34.dp) {
-                    Icon(Icons.Rounded.FastForward, DesktopStrings["widget_next", "Next"], tint = Color.White, modifier = Modifier.size(20.dp))
-                }
-                DesktopMiniPlayerControl.REPEAT -> DesktopToolbarButton(onClick = { onRepeatModeChange(repeatMode.next()) }, size = 34.dp) {
-                    if (repeatMode == DesktopRepeatMode.ONE) {
-                        Text("1", color = DesktopAccent, fontWeight = FontWeight.Bold, style = MaterialTheme.typography.labelMedium)
-                    } else {
-                        Icon(BitChordIcons.Repeat, "Repeat ${repeatMode.label()}", tint = if (repeatMode == DesktopRepeatMode.OFF) DesktopSecondary else DesktopAccent, modifier = Modifier.size(18.dp))
+                    DesktopMiniPlayerControl.PREVIOUS -> DesktopToolbarButton(onClick = onPrevious, enabled = previousEnabled, size = 34.dp) {
+                        Icon(Icons.Rounded.FastRewind, DesktopStrings["widget_previous", "Previous"], tint = if (previousEnabled) Color.White else DesktopSecondary.copy(alpha = 0.4f), modifier = Modifier.size(20.dp))
+                    }
+                    DesktopMiniPlayerControl.PLAY_PAUSE -> DesktopToolbarButton(onClick = onPlayPause, size = 38.dp) {
+                        if (isLoading) {
+                            CircularProgressIndicator(Modifier.size(18.dp), color = Color.White, strokeWidth = 2.dp)
+                        } else {
+                            Icon(if (isPlaying) Icons.Rounded.Pause else Icons.Rounded.PlayArrow, if (isPlaying) "Pause" else "Play", tint = Color.White, modifier = Modifier.size(24.dp))
+                        }
+                    }
+                    DesktopMiniPlayerControl.NEXT -> DesktopToolbarButton(onClick = onNext, size = 34.dp) {
+                        Icon(Icons.Rounded.FastForward, DesktopStrings["widget_next", "Next"], tint = Color.White, modifier = Modifier.size(20.dp))
+                    }
+                    DesktopMiniPlayerControl.REPEAT -> DesktopToolbarButton(onClick = { onRepeatModeChange(repeatMode.next()) }, size = 34.dp) {
+                        if (repeatMode == DesktopRepeatMode.ONE) {
+                            Text("1", color = DesktopAccent, fontWeight = FontWeight.Bold, style = MaterialTheme.typography.labelMedium)
+                        } else {
+                            Icon(BitChordIcons.Repeat, "Repeat ${repeatMode.label()}", tint = if (repeatMode == DesktopRepeatMode.OFF) DesktopSecondary else DesktopAccent, modifier = Modifier.size(18.dp))
+                        }
+                    }
+                    DesktopMiniPlayerControl.FAVORITE -> DesktopToolbarButton(onClick = onToggleFavorite, size = 34.dp) {
+                        Icon(if (isLiked) BitChordIcons.HeartFilled else BitChordIcons.Heart, DesktopStrings["mini_player_favorite", "Favorite"], tint = if (isLiked) DesktopAccent else DesktopSecondary, modifier = Modifier.size(18.dp))
+                    }
+                    DesktopMiniPlayerControl.LYRICS -> DesktopToolbarButton(onClick = onOpenLyrics, size = 34.dp) {
+                        Icon(BitChordIcons.Lyrics, DesktopStrings["mini_player_lyrics", "Lyrics"], tint = DesktopSecondary, modifier = Modifier.size(18.dp))
+                    }
+                    DesktopMiniPlayerControl.QUEUE -> DesktopToolbarButton(onClick = onOpenQueue, size = 34.dp) {
+                        Icon(BitChordIcons.Queue, DesktopStrings["mini_player_queue", "Queue"], tint = DesktopSecondary, modifier = Modifier.size(18.dp))
+                    }
+                    DesktopMiniPlayerControl.ADD_TO_PLAYLIST -> DesktopToolbarButton(onClick = onAddToPlaylist, size = 34.dp) {
+                        Icon(Icons.AutoMirrored.Rounded.PlaylistAdd, DesktopStrings["mini_player_add_to_playlist", "Add to playlist"], tint = DesktopSecondary, modifier = Modifier.size(18.dp))
                     }
                 }
             }
@@ -5743,6 +5782,10 @@ private fun DesktopSettingsScreen(
                             DesktopMiniPlayerControl.PLAY_PAUSE -> DesktopStrings["d_play_pause", "Play / pause"]
                             DesktopMiniPlayerControl.NEXT -> DesktopStrings["widget_next", "Next"]
                             DesktopMiniPlayerControl.REPEAT -> DesktopStrings["d_repeat", "Repeat"]
+                            DesktopMiniPlayerControl.FAVORITE -> DesktopStrings["mini_player_favorite", "Favorite"]
+                            DesktopMiniPlayerControl.LYRICS -> DesktopStrings["mini_player_lyrics", "Lyrics"]
+                            DesktopMiniPlayerControl.QUEUE -> DesktopStrings["mini_player_queue", "Queue"]
+                            DesktopMiniPlayerControl.ADD_TO_PLAYLIST -> DesktopStrings["mini_player_add_to_playlist", "Add to playlist"]
                         }
                         val selectedIndex = miniPlayerControls.indexOf(control)
                         val subtitle = DesktopStrings["mini_player_control_subtitle", "Show this control in the bottom player bar"]

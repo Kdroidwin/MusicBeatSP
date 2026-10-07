@@ -3,6 +3,13 @@ package com.music.bitchord.desktop
 import java.nio.charset.StandardCharsets
 import java.nio.file.Files
 import java.nio.file.Path
+import java.nio.file.StandardOpenOption
+import java.nio.ByteBuffer
+import java.nio.channels.FileChannel
+import java.io.ByteArrayOutputStream
+import java.io.DataInputStream
+import java.io.BufferedInputStream
+import java.util.Locale
 
 /**
  * The lyrics already sitting inside a local file.
@@ -30,12 +37,20 @@ internal object DesktopEmbeddedLyrics {
      * A cap rather than a size: the metadata region is small in all three containers, but its
      * length is stated *by the file*, so a corrupt one could claim any number at all.
      */
-    private const val MAX_TAG_BYTES = 8 * 1024 * 1024
+    private const val MAX_TAG_BYTES = 16 * 1024 * 1024
+    private const val MAX_MP4_MOOV_BYTES = 32 * 1024 * 1024
+    private const val MAX_CONTAINER_SCAN_BYTES = 128L * 1024 * 1024
 
     /** The raw LRC text inside [path], or null when it has none. */
     fun read(path: Path?): String? {
         if (path == null || !Files.isRegularFile(path)) return null
         sidecar(path)?.let { return it }
+        // FLAC comments can follow a large PICTURE block, and M4A files commonly put `moov` after
+        // the audio payload. Read those structures by offset instead of assuming every useful tag
+        // is near byte zero.
+        flacFile(path)?.let { return it }
+        mp4File(path)?.let { return it }
+        matroskaTail(path)?.let { return it }
         val head = runCatching {
             Files.newInputStream(path).use { stream ->
                 val buffer = ByteArray(MAX_TAG_BYTES)
@@ -48,22 +63,263 @@ internal object DesktopEmbeddedLyrics {
                 buffer.copyOf(total)
             }
         }.getOrNull() ?: return null
-        return fromBytes(head)
+        return id3v2(head) ?: ogg(head) ?: fromBytes(head)
     }
 
-    /**
-     * The `lyrics.lrc` written next to an offline package's playlist.
-     *
-     * Recognised by the playlist rather than the directory: a local `.m3u8` is only ever one of
-     * these packages, since nothing else here saves a playlist to disk.
-     */
+    /** A normal same-name `.lrc` sidecar, or the lyrics file next to an exported playlist. */
     internal fun sidecar(path: Path): String? {
-        if (!path.fileName.toString().endsWith(".m3u8", ignoreCase = true)) return null
-        val file = path.parent?.resolve("lyrics.lrc") ?: return null
-        if (!Files.isRegularFile(file)) return null
+        val parent = path.parent ?: return null
+        val baseName = path.fileName.toString().substringBeforeLast('.', path.fileName.toString())
+        val sameName = runCatching {
+            Files.newDirectoryStream(parent).use { stream ->
+                stream.firstOrNull { candidate ->
+                    Files.isRegularFile(candidate) && candidate.fileName.toString()
+                        .substringBeforeLast('.', candidate.fileName.toString()).equals(baseName, ignoreCase = true) &&
+                        candidate.fileName.toString().substringAfterLast('.', "").equals("lrc", ignoreCase = true)
+                }
+            }
+        }.getOrNull()
+        val playlistLyrics = if (path.fileName.toString().endsWith(".m3u8", ignoreCase = true)) {
+            parent.resolve("lyrics.lrc").takeIf(Files::isRegularFile)
+        } else {
+            null
+        }
+        val file = sameName ?: playlistLyrics ?: return null
         val size = runCatching { Files.size(file) }.getOrDefault(0L)
         if (size !in 1..MAX_TAG_BYTES.toLong()) return null
-        return runCatching { Files.readString(file) }.getOrNull()?.takeIf(String::isNotBlank)
+        return runCatching { Files.readString(file, StandardCharsets.UTF_8).removePrefix("\uFEFF") }
+            .getOrNull()?.takeIf(String::isNotBlank)
+    }
+
+    /** MP3/ID3v2 USLT or a user-text LYRICS frame, including v2.2 tags. */
+    private fun id3v2(bytes: ByteArray): String? {
+        if (bytes.size < 10 || !bytes.startsWith(byteArrayOf('I'.code.toByte(), 'D'.code.toByte(), '3'.code.toByte()))) return null
+        val version = bytes[3].toInt() and 0xFF
+        if (version !in 2..4) return null
+        val tagSize = syncSafeInt(bytes, 6) ?: return null
+        val end = (10L + tagSize).coerceAtMost(bytes.size.toLong()).toInt()
+        var position = 10
+        val flags = bytes[5].toInt() and 0xFF
+        if (flags and 0x40 != 0) {
+            if (position + 4 > end) return null
+            val extended = if (version == 4) syncSafeInt(bytes, position) else readU32(bytes, position).toInt()
+            if (extended == null || extended < 0) return null
+            position += if (version == 4) extended else 4 + extended
+        }
+
+        while (position < end) {
+            val headerSize = if (version == 2) 6 else 10
+            if (position + headerSize > end || bytes[position] == 0.toByte()) break
+            val frameId = String(bytes, position, if (version == 2) 3 else 4, StandardCharsets.ISO_8859_1)
+            val frameSize = when (version) {
+                2 -> ((bytes[position + 3].toInt() and 0xFF) shl 16) or
+                    ((bytes[position + 4].toInt() and 0xFF) shl 8) or (bytes[position + 5].toInt() and 0xFF)
+                4 -> syncSafeInt(bytes, position + 4) ?: break
+                else -> readU32(bytes, position + 4).toInt()
+            }
+            if (frameSize <= 0 || frameSize > end - position - headerSize) break
+            val bodyStart = position + headerSize
+            val body = bytes.copyOfRange(bodyStart, bodyStart + frameSize)
+            val lyric = when (frameId) {
+                "USLT", "ULT" -> unsynchronizedLyrics(body)
+                "TXXX", "TXX" -> userLyrics(body)
+                else -> null
+            }
+            if (!lyric.isNullOrBlank()) return lyric
+            position = bodyStart + frameSize
+        }
+        return null
+    }
+
+    private fun unsynchronizedLyrics(body: ByteArray): String? {
+        if (body.size < 5) return null // encoding, three-byte language and a description terminator
+        val encoding = body[0].toInt() and 0xFF
+        val terminator = textTerminator(body, 4, encoding) ?: return null
+        val start = terminator.first + terminator.second
+        return decodeText(body, start, body.size, encoding)?.trim('\u0000', '\uFEFF', '\r', '\n', ' ')
+            ?.takeIf(String::isNotBlank)
+    }
+
+    private fun userLyrics(body: ByteArray): String? {
+        if (body.isEmpty()) return null
+        val encoding = body[0].toInt() and 0xFF
+        val description = textTerminator(body, 1, encoding) ?: return null
+        val label = decodeText(body, 1, description.first, encoding)?.trim('\u0000', '\uFEFF')
+        if (!label.equals("lyrics", ignoreCase = true) && !label.equals("unsyncedlyrics", ignoreCase = true)) return null
+        val start = description.first + description.second
+        return decodeText(body, start, body.size, encoding)?.trim('\u0000', '\uFEFF', '\r', '\n', ' ')
+            ?.takeIf(String::isNotBlank)
+    }
+
+    private fun textTerminator(bytes: ByteArray, from: Int, encoding: Int): Pair<Int, Int>? {
+        val width = if (encoding == 1 || encoding == 2) 2 else 1
+        var index = from
+        while (index + width <= bytes.size) {
+            if (bytes[index] == 0.toByte() && (width == 1 || bytes[index + 1] == 0.toByte())) return index to width
+            index += width
+        }
+        return null
+    }
+
+    private fun decodeText(bytes: ByteArray, start: Int, end: Int, encoding: Int): String? {
+        if (start !in 0..end || end > bytes.size) return null
+        val charset = when (encoding) {
+            0 -> StandardCharsets.ISO_8859_1
+            1 -> StandardCharsets.UTF_16
+            2 -> StandardCharsets.UTF_16BE
+            3 -> StandardCharsets.UTF_8
+            else -> return null
+        }
+        return runCatching { String(bytes, start, end - start, charset) }.getOrNull()
+    }
+
+    /** Vorbis comments in Ogg/Vorbis and the OpusTags packet in Ogg/Opus. */
+    private fun ogg(bytes: ByteArray): String? {
+        var page = 0
+        val packet = ByteArrayOutputStream()
+        while (page + 27 <= bytes.size) {
+            val capture = byteArrayOf('O'.code.toByte(), 'g'.code.toByte(), 'g'.code.toByte(), 'S'.code.toByte())
+            val at = bytes.indexOf(capture, page, bytes.size) ?: return null
+            if (at + 27 > bytes.size) return null
+            val segments = bytes[at + 26].toInt() and 0xFF
+            val table = at + 27
+            if (table + segments > bytes.size) return null
+            var body = table + segments
+            for (index in 0 until segments) {
+                val length = bytes[table + index].toInt() and 0xFF
+                if (body + length > bytes.size) return null
+                packet.write(bytes, body, length)
+                body += length
+                if (length < 255) {
+                    vorbisLyrics(packet.toByteArray())?.let { return it }
+                    packet.reset()
+                }
+            }
+            page = body
+        }
+        return null
+    }
+
+    private fun vorbisLyrics(packet: ByteArray): String? {
+        val prefix = when {
+            packet.startsWith(byteArrayOf(3) + "vorbis".toByteArray(StandardCharsets.US_ASCII)) -> 7
+            packet.startsWith("OpusTags".toByteArray(StandardCharsets.US_ASCII)) -> 8
+            else -> return null
+        }
+        var position = prefix
+        fun littleInt(): Int? {
+            if (position + 4 > packet.size) return null
+            val value = (packet[position].toInt() and 0xFF) or
+                ((packet[position + 1].toInt() and 0xFF) shl 8) or
+                ((packet[position + 2].toInt() and 0xFF) shl 16) or
+                ((packet[position + 3].toInt() and 0xFF) shl 24)
+            position += 4
+            return value
+        }
+        val vendorLength = littleInt()?.takeIf { it >= 0 && it <= packet.size - position } ?: return null
+        position += vendorLength
+        val count = littleInt()?.coerceIn(0, 4_096) ?: return null
+        repeat(count) {
+            val length = littleInt()?.takeIf { it >= 0 && it <= packet.size - position } ?: return null
+            val entry = String(packet, position, length, StandardCharsets.UTF_8)
+            position += length
+            val name = entry.substringBefore('=').uppercase(Locale.ROOT)
+            val value = entry.substringAfter('=', "")
+            if (name in setOf("LYRICS", "UNSYNCEDLYRICS", WORD_LYRICS_FIELD) && value.isNotBlank()) return value
+        }
+        return null
+    }
+
+    /** FLAC's metadata chain is small; skip picture blocks without loading them into memory. */
+    private fun flacFile(path: Path): String? = runCatching {
+        DataInputStream(BufferedInputStream(Files.newInputStream(path))).use { input ->
+            val signature = ByteArray(4)
+            if (input.readNBytes(signature, 0, signature.size) != signature.size || !signature.contentEquals(FLAC_MAGIC)) return null
+            var scanned = 4L
+            var last = false
+            while (!last && scanned < MAX_CONTAINER_SCAN_BYTES) {
+                val first = input.read()
+                if (first < 0) return null
+                val b1 = input.read(); val b2 = input.read(); val b3 = input.read()
+                if (b1 < 0 || b2 < 0 || b3 < 0) return null
+                scanned += 4
+                last = first and 0x80 != 0
+                val type = first and 0x7F
+                val length = (b1 shl 16) or (b2 shl 8) or b3
+                if (length < 0 || scanned + length > MAX_CONTAINER_SCAN_BYTES) return null
+                if (type == FLAC_VORBIS_COMMENT) {
+                    val body = input.readNBytes(length)
+                    if (body.size != length) return null
+                    return vorbisComment(body, 0, body.size)
+                }
+                input.skipNBytes(length.toLong())
+                scanned += length
+            }
+            null
+        }
+    }.getOrNull()
+
+    /** Read a tail-positioned `moov` without loading the audio payload. */
+    private fun mp4File(path: Path): String? = runCatching {
+        FileChannel.open(path, StandardOpenOption.READ).use { channel ->
+            val fileSize = channel.size()
+            var position = 0L
+            while (position + 8 <= fileSize) {
+                val header = readAt(channel, position, 8) ?: return null
+                val declared = readU32(header, 0)
+                val type = String(header, 4, 4, StandardCharsets.ISO_8859_1)
+                val headerSize: Long
+                val boxSize: Long
+                if (declared == 1L) {
+                    headerSize = 16L
+                    val extendedSize = readAt(channel, position + 8, 8) ?: return null
+                    boxSize = readU64(extendedSize, 0)
+                } else {
+                    headerSize = 8L
+                    boxSize = if (declared == 0L) fileSize - position else declared
+                }
+                if (boxSize < headerSize || position + boxSize > fileSize) return null
+                if (type == "moov") {
+                    if (boxSize > MAX_MP4_MOOV_BYTES || boxSize > Int.MAX_VALUE) return null
+                    val moov = readAt(channel, position, boxSize.toInt()) ?: return null
+                    return mp4(moov)
+                }
+                position += boxSize
+            }
+            null
+        }
+    }.getOrNull()
+
+    private fun readAt(channel: FileChannel, offset: Long, size: Int): ByteArray? {
+        val buffer = ByteBuffer.allocate(size)
+        var position = offset
+        while (buffer.hasRemaining()) {
+            val read = channel.read(buffer, position)
+            if (read <= 0) return null
+            position += read
+        }
+        return buffer.array()
+    }
+
+    /** EBML `Tags` may be written after the clusters, well beyond the initial metadata window. */
+    private fun matroskaTail(path: Path): String? = runCatching {
+        FileChannel.open(path, StandardOpenOption.READ).use { channel ->
+            val length = minOf(channel.size(), MAX_TAG_BYTES.toLong()).toInt()
+            if (length <= 0) return null
+            val tail = readAt(channel, channel.size() - length, length) ?: return null
+            matroska(tail)
+        }
+    }.getOrNull()
+
+    private fun syncSafeInt(bytes: ByteArray, offset: Int): Int? {
+        if (offset < 0 || offset + 4 > bytes.size) return null
+        var result = 0
+        repeat(4) { index ->
+            val byte = bytes[offset + index].toInt() and 0xFF
+            if (byte and 0x80 != 0) return null
+            result = (result shl 7) or byte
+        }
+        return result
     }
 
     /**
@@ -167,11 +423,11 @@ internal object DesktopEmbeddedLyrics {
             pos += 4
             return value
         }
-        val vendor = u32() ?: return null
+        val vendor = u32()?.takeIf { it >= 0 && pos.toLong() + it <= end.toLong() } ?: return null
         pos += vendor
-        val count = u32() ?: return null
+        val count = u32()?.coerceIn(0, 4_096) ?: return null
         var plain: String? = null
-        repeat(count.coerceAtMost(4_096)) {
+        repeat(count) {
             val length = u32() ?: return plain
             if (length < 0 || pos + length > end) return plain
             val entry = String(bytes, pos, length, StandardCharsets.UTF_8)
@@ -181,7 +437,7 @@ internal object DesktopEmbeddedLyrics {
             // This app's own field wins outright; the standard one is held in case it is the only
             // one there.
             if (name == WORD_LYRICS_FIELD && value.isNotBlank()) return value
-            if (name == "LYRICS" && plain == null && value.isNotBlank()) plain = value
+            if (name in setOf("LYRICS", "UNSYNCEDLYRICS", "SYNCEDLYRICS") && plain == null && value.isNotBlank()) plain = value
         }
         return plain
     }

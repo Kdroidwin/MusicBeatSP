@@ -184,6 +184,10 @@ internal enum class DesktopMiniPlayerControl {
     PLAY_PAUSE,
     NEXT,
     REPEAT,
+    FAVORITE,
+    LYRICS,
+    QUEUE,
+    ADD_TO_PLAYLIST,
 }
 
 /**
@@ -219,6 +223,13 @@ internal object DesktopPlayerSettings : PlayerSettingsSource {
     val themeMode = MutableStateFlow(
         runCatching { DesktopThemeMode.valueOf(persistence.string(KEY_THEME_MODE, "DARK")) }
             .getOrDefault(DesktopThemeMode.DARK),
+    )
+    private val defaultMiniPlayerControls = listOf(
+        DesktopMiniPlayerControl.SHUFFLE,
+        DesktopMiniPlayerControl.PREVIOUS,
+        DesktopMiniPlayerControl.PLAY_PAUSE,
+        DesktopMiniPlayerControl.NEXT,
+        DesktopMiniPlayerControl.REPEAT,
     )
     val miniPlayerControls = MutableStateFlow(readMiniPlayerControls())
     override val lyricsOffsetMs = MutableStateFlow(
@@ -317,7 +328,7 @@ internal object DesktopPlayerSettings : PlayerSettingsSource {
 
     private fun readMiniPlayerControls(): List<DesktopMiniPlayerControl> {
         val stored = persistence.string(KEY_MINI_PLAYER_CONTROLS, "\u0000unset")
-        if (stored == "\u0000unset") return DesktopMiniPlayerControl.entries
+        if (stored == "\u0000unset") return defaultMiniPlayerControls
         val parsed = stored.split(',').mapNotNull { name ->
             runCatching { DesktopMiniPlayerControl.valueOf(name) }.getOrNull()
         }

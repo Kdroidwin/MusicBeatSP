@@ -22,7 +22,7 @@ Requires JDK 17, CMake, and a Linux x86-64 host. Gradle downloads dependencies o
 Create the bundled application directory and AppImage:
 
 ```sh
-./gradlew :desktopApp:createDistributable -Pbitchord.version=2.1.0
+./gradlew :desktopApp:createDistributable -Pbitchord.version=2.1.1
 desktopApp/packaging/appimage.sh \
   desktopApp/build/compose/binaries/main/app/MusicBeatSP \
   desktopApp/build/compose/binaries/main/app/MusicBeatSP.AppImage \
