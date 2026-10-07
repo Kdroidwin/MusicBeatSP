@@ -25,7 +25,7 @@
 
 ---
 
-> **MusicBeatSP 2.0.9** is the MusicBeat fork under a new name and Android application ID. It builds on the open-source BitChord foundation and adds an extensive local music library, playlist, playback, lyrics, artwork, and customization feature set.
+> **MusicBeatSP 2.1.1** is the MusicBeat fork under a new name and Android application ID. It builds on the open-source BitChord foundation and adds an extensive local music library, playlist, playback, lyrics, artwork, and customization feature set.
 
 The standard Android package is `io.pockets.musicbestsp`. Because this differs from the previous MusicBeat package, Android installs MusicBeatSP as a separate app; app-private settings and data are not migrated automatically.
 
@@ -141,9 +141,9 @@ cd MusicBeatSP
 
 APK files are written to `app/build/outputs/apk/<flavor>/<build-type>/`. Release signing is configured locally through `keystore.properties`; do not commit the keystore or its passwords.
 
-## Linux preview
+## Linux desktop
 
-The repository also contains an early native Linux desktop preview for local music playback. It supports a local folder scan, metadata display, search, and basic playback controls. See [`linux-desktop/README.md`](linux-desktop/README.md) for requirements and build instructions.
+The Linux edition is a dedicated offline fork of BitChord's Compose Desktop app, included under [`linux-offline/`](linux-offline/README.md). It scans and plays local files, reads embedded and sidecar artwork, keeps a persistent queue and playlists, and keeps BitChord's desktop player UI. Network catalogs, accounts, online lyrics fallback, Canvas, and Listen Together are disabled in this build. The AppImage build and local source-tree details are documented in [`linux-offline/README.md`](linux-offline/README.md).
 
 ## Credits and attribution
 

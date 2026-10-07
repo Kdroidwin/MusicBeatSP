@@ -13,11 +13,14 @@ import android.os.Bundle
 import android.os.Handler
 import android.os.Looper
 import android.os.SystemClock
+import android.widget.Toast
 import kotlinx.coroutines.sync.Mutex
 import kotlinx.coroutines.sync.withLock
 import android.util.Log
 import androidx.media3.common.AudioAttributes
 import androidx.media3.common.C
+import androidx.media3.common.DeviceInfo
+import androidx.media3.common.FlagSet
 import androidx.media3.common.ForwardingPlayer
 import androidx.media3.common.Format
 import androidx.media3.common.MediaItem
@@ -31,6 +34,7 @@ import androidx.media3.common.MediaMetadata
 import androidx.media3.common.audio.SonicAudioProcessor
 import androidx.media3.common.util.UnstableApi
 import androidx.media3.datasource.DefaultDataSource
+import androidx.media3.datasource.DataSpec
 import androidx.media3.datasource.ResolvingDataSource
 import androidx.media3.datasource.okhttp.OkHttpDataSource
 import androidx.media3.exoplayer.DecoderReuseEvaluation
@@ -77,6 +81,7 @@ import com.music.bitchord.data.model.ShelfItem
 import com.music.bitchord.data.model.artworkAt
 import com.music.bitchord.download.Downloads
 import java.util.concurrent.ConcurrentHashMap
+import java.util.concurrent.CopyOnWriteArraySet
 import com.music.bitchord.data.Http
 import com.music.bitchord.data.LikeState
 import com.music.bitchord.data.NerdStats
@@ -99,6 +104,11 @@ import com.music.bitchord.data.sources.StreamFormat
 import com.music.bitchord.data.sources.TrackMatcher
 import com.music.bitchord.widget.MediaWidget
 import com.music.bitchord.widget.MediaWidgetSnapshot
+import com.music.bitchord.playback.cast.CastController
+import com.music.bitchord.playback.cast.CastPlayback
+import com.music.bitchord.playback.cast.CastSink
+import com.music.bitchord.playback.cast.CastStream
+import com.music.bitchord.playback.cast.LocalCastHttpServer
 import kotlinx.coroutines.CompletableDeferred
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.CoroutineExceptionHandler
@@ -133,6 +143,7 @@ const val BACK_RESTARTS_AFTER_MS = 10_000L
 private const val LONG_TRACK_RESUME_START_CLEAR_MS = 1_000L
 private const val LONG_TRACK_POSITION_ALREADY_SET_MS = 1_500L
 private const val LONG_TRACK_RESUME_END_CLEAR_MS = 5_000L
+private const val MAX_CAST_LOCAL_SERVERS = 8
 
 /** Session command used by both the player UI and the media notification. */
 const val ACTION_TOGGLE_AUTOPLAY = "com.music.bitchord.action.TOGGLE_AUTOPLAY"
@@ -432,6 +443,8 @@ class PlaybackService : MediaLibraryService() {
     private var activeTrackIsDolbyAtmos = false
 
     private var mediaSourceFactory: DefaultMediaSourceFactory? = null
+    /** Same URI resolver as ExoPlayer, reused to hand Cast receivers a playable URL. */
+    private var castStreamResolver: ResolvingDataSource.Resolver? = null
 
     /** Last sampled position of the playing track, in seconds. */
     private var lastPositionSeconds = 0L
@@ -509,6 +522,17 @@ class PlaybackService : MediaLibraryService() {
         }
     }
     private val scope = CoroutineScope(Dispatchers.Main + SupervisorJob() + playbackTaskExceptionHandler)
+
+    /** Local audio is served only for the lifetime of a Cast session. */
+    private val castLocalServerLock = Any()
+    private val castLocalServers = java.util.LinkedHashMap<String, LocalCastHttpServer>(16, 0.75f, true)
+
+    private val castPlayback = CastPlayback(
+        scope = scope,
+        localPlayer = { player },
+        resolve = ::resolveForCast,
+        say = { message -> Toast.makeText(applicationContext, message, Toast.LENGTH_SHORT).show() },
+    )
 
     /** Commands exposed as the secondary buttons on the media notification. */
     private val favoriteCommand = SessionCommand(ACTION_TOGGLE_FAVORITE, Bundle.EMPTY)
@@ -673,6 +697,7 @@ class PlaybackService : MediaLibraryService() {
         override fun onPlayWhenReadyChanged(playWhenReady: Boolean, reason: Int) {
             handleAudioFocusPlaybackChange(playWhenReady)
             publishWidgetState(playing = playWhenReady)
+            if (playWhenReady) player?.let(castPlayback::onLocalStartedPlaying)
         }
 
         override fun onShuffleModeEnabledChanged(shuffleModeEnabled: Boolean) {
@@ -711,6 +736,7 @@ class PlaybackService : MediaLibraryService() {
             // The player this fired on, which is by definition the one the
             // session is currently pointed at.
             val exoPlayer = player ?: return
+            castPlayback.onLocalTransition(mediaItem, reason)
             // A quality swap replaces the playing item, which Media3
             // reports here as a playlist change — indistinguishable, from
             // this callback's point of view, from the queue moving on. It
@@ -820,6 +846,7 @@ class PlaybackService : MediaLibraryService() {
         }
 
         override fun onRepeatModeChanged(repeatMode: Int) {
+            castPlayback.onLocalRepeatChanged(repeatMode)
             val previous = lastRepeatMode
             lastRepeatMode = repeatMode
             // Repeat-all loops the queue as it stands; AutoPlay's tracks are the
@@ -852,6 +879,7 @@ class PlaybackService : MediaLibraryService() {
             // The player this fired on, which is by definition the one the
             // session is currently pointed at.
             val exoPlayer = player ?: return
+            castPlayback.onLocalQueueChanged()
             if (exoPlayer.isPlaying) prefetchAround(exoPlayer)
             if (reason == Player.TIMELINE_CHANGE_REASON_PLAYLIST_CHANGED) {
                 saveQueueSnapshot(exoPlayer)
@@ -1179,6 +1207,8 @@ class PlaybackService : MediaLibraryService() {
                 .build()
         }
 
+        castStreamResolver = streamResolver
+
         // No user agent on the factory: the right one depends on which client
         // minted the URL, so it is set per request below. Setting it here as
         // well would not override that — OkHttpDataSource *appends* the
@@ -1256,6 +1286,8 @@ class PlaybackService : MediaLibraryService() {
                 { lastPublishedSubtitle },
                 ::canStartPlaybackAtCurrentVolume,
                 { savePlaybackState(exoPlayer) },
+                castPlayback,
+                ::closeLocalCastServers,
             ),
             MediaLibraryCallback(),
         )
@@ -1264,6 +1296,80 @@ class PlaybackService : MediaLibraryService() {
             .setBitmapLoader(CoilBitmapLoader(this, scope))
             .build()
         mediaSession?.setCustomLayout(notificationButtons())
+        CastController.ensureStarted(this)
+        CastController.attach(castPlayback)
+    }
+
+    /** Resolve the same stream the local player uses, or expose a local file over a session token. */
+    private suspend fun resolveForCast(item: MediaItem): CastStream? = withContext(Dispatchers.IO) {
+        val uri = item.localConfiguration?.uri ?: return@withContext null
+        if (uri.scheme == "content" || uri.scheme == "file") {
+            val mimeType = castMimeType(item, uri)
+            val url = startLocalCastServer(item.mediaId, uri, mimeType)
+            return@withContext CastStream(url, mimeType)
+        }
+
+        val resolver = castStreamResolver ?: return@withContext null
+        val resolved = resolver.resolveDataSpec(DataSpec(uri)).uri
+        if (resolved.scheme != "http" && resolved.scheme != "https") {
+            null
+        } else {
+            CastStream(resolved.toString(), CastPlayback.mimeTypeOf(resolved))
+        }
+    }
+
+    private fun castMimeType(item: MediaItem, uri: Uri): String {
+        val configured = item.localConfiguration?.mimeType
+            ?.takeIf { it.startsWith("audio/", ignoreCase = true) }
+        val provider = runCatching { contentResolver.getType(uri) }.getOrNull()
+            ?.takeIf { it.startsWith("audio/", ignoreCase = true) }
+        val localPath = item.mediaMetadata.extras?.getString(EXTRA_LOCAL_PATH)
+        val pathMime = (localPath ?: uri.lastPathSegment.orEmpty()).substringAfterLast('.', "")
+            .lowercase(Locale.ROOT)
+            .let {
+                when (it) {
+                    "mp3" -> "audio/mpeg"
+                    "flac" -> "audio/flac"
+                    "ogg", "oga", "opus" -> "audio/ogg"
+                    "wav" -> "audio/wav"
+                    "m4a", "mp4" -> "audio/mp4"
+                    "aac" -> "audio/aac"
+                    "aif", "aiff" -> "audio/aiff"
+                    else -> null
+                }
+            }
+        return configured ?: provider ?: pathMime ?: CastPlayback.mimeTypeOf(uri)
+    }
+
+    private fun startLocalCastServer(mediaId: String, uri: Uri, mimeType: String): String {
+        val evicted = mutableListOf<LocalCastHttpServer>()
+        val server = synchronized(castLocalServerLock) {
+            val current = castLocalServers[mediaId] ?: LocalCastHttpServer(applicationContext, uri, mimeType)
+                .also { castLocalServers[mediaId] = it }
+            while (castLocalServers.size > MAX_CAST_LOCAL_SERVERS) {
+                val oldest = castLocalServers.entries.iterator().next()
+                castLocalServers.remove(oldest.key)
+                if (oldest.value !== current) evicted += oldest.value
+            }
+            current
+        }
+        evicted.forEach { it.close() }
+        return try {
+            server.start()
+        } catch (error: Exception) {
+            synchronized(castLocalServerLock) {
+                if (castLocalServers[mediaId] === server) castLocalServers.remove(mediaId)
+            }
+            server.close()
+            throw error
+        }
+    }
+
+    private fun closeLocalCastServers() {
+        val servers = synchronized(castLocalServerLock) {
+            castLocalServers.values.toList().also { castLocalServers.clear() }
+        }
+        servers.forEach { it.close() }
     }
 
     /**
@@ -3691,6 +3797,8 @@ class PlaybackService : MediaLibraryService() {
             { lastPublishedSubtitle },
             ::canStartPlaybackAtCurrentVolume,
             { savePlaybackState(newActive) },
+            castPlayback,
+            ::closeLocalCastServers,
         )
         applyOutputRoute()
         if (items.isNotEmpty()) newActive.prepare()
@@ -4122,6 +4230,7 @@ class PlaybackService : MediaLibraryService() {
     override fun onTaskRemoved(rootIntent: Intent?) {
         super.onTaskRemoved(rootIntent)
         if (AppSettings.stopOnTaskRemoved.value) {
+            if (castPlayback.active) CastController.disconnect(resumeHere = false)
             // Both, or a swipe-away mid-crossfade leaves the outgoing track
             // playing on its own out of a service that is on its way out.
             player?.let(::savePlaybackState)
@@ -4193,6 +4302,9 @@ class PlaybackService : MediaLibraryService() {
                 runCatching { rpc.closeRPC() }
             }
         }
+        CastController.detach(castPlayback)
+        castPlayback.release()
+        closeLocalCastServers()
         scope.cancel()
         mediaSession?.release()
         mediaSession = null
@@ -4349,20 +4461,115 @@ class PlaybackService : MediaLibraryService() {
         private val getSubtitle: () -> String?,
         private val canStartPlayback: () -> Boolean,
         private val beforeStop: () -> Unit,
-    ) : ForwardingPlayer(player) {
+        private val cast: CastPlayback,
+        private val onCastEnded: () -> Unit,
+    ) : ForwardingPlayer(player), CastSink {
+
+        private val listeners = CopyOnWriteArraySet<Player.Listener>()
+        private var reportedPlayWhenReady = false
+        private var reportedPlaybackState = Player.STATE_IDLE
+        private var reportedIsPlaying = false
+
+        init {
+            cast.sink = this
+        }
+
+        private companion object {
+            val CAST_DEVICE: DeviceInfo = DeviceInfo.Builder(DeviceInfo.PLAYBACK_TYPE_REMOTE)
+                .setMinVolume(0)
+                .setMaxVolume(100)
+                .build()
+            const val VOLUME_STEP = 0.05f
+        }
+
+        override fun addListener(listener: Player.Listener) {
+            listeners += listener
+            super.addListener(listener)
+        }
+
+        override fun removeListener(listener: Player.Listener) {
+            listeners -= listener
+            super.removeListener(listener)
+        }
+
+        override fun getPlayWhenReady() = if (cast.active) cast.playWhenReady else super.getPlayWhenReady()
+        override fun isPlaying() = if (cast.active) cast.isPlaying else super.isPlaying()
+        override fun getPlaybackState() = if (cast.active) cast.playbackState else super.getPlaybackState()
+        override fun getCurrentPosition() = if (cast.active) cast.positionMs else super.getCurrentPosition()
+        override fun getContentPosition() = if (cast.active) cast.positionMs else super.getContentPosition()
+        override fun getBufferedPosition() = if (cast.active) cast.positionMs else super.getBufferedPosition()
+        override fun getContentBufferedPosition() = if (cast.active) cast.positionMs else super.getContentBufferedPosition()
+
+        override fun getDuration(): Long =
+            if (cast.active && cast.durationMs != C.TIME_UNSET) cast.durationMs else super.getDuration()
+
+        override fun getContentDuration(): Long =
+            if (cast.active && cast.durationMs != C.TIME_UNSET) cast.durationMs else super.getContentDuration()
+
+        override fun getDeviceInfo(): DeviceInfo = if (cast.active) CAST_DEVICE else super.getDeviceInfo()
+        override fun getDeviceVolume(): Int = if (cast.active) cast.deviceVolume else super.getDeviceVolume()
+        override fun isDeviceMuted(): Boolean = if (cast.active) false else super.isDeviceMuted()
+
+        override fun setDeviceVolume(volume: Int, flags: Int) {
+            if (cast.active) CastController.setVolume(volume / 100f) else super.setDeviceVolume(volume, flags)
+        }
+
+        @Suppress("DEPRECATION")
+        override fun setDeviceVolume(volume: Int) {
+            if (cast.active) CastController.setVolume(volume / 100f) else super.setDeviceVolume(volume)
+        }
+
+        override fun increaseDeviceVolume(flags: Int) {
+            if (cast.active) nudgeReceiverVolume(VOLUME_STEP) else super.increaseDeviceVolume(flags)
+        }
+
+        @Suppress("DEPRECATION")
+        override fun increaseDeviceVolume() {
+            if (cast.active) nudgeReceiverVolume(VOLUME_STEP) else super.increaseDeviceVolume()
+        }
+
+        override fun decreaseDeviceVolume(flags: Int) {
+            if (cast.active) nudgeReceiverVolume(-VOLUME_STEP) else super.decreaseDeviceVolume(flags)
+        }
+
+        @Suppress("DEPRECATION")
+        override fun decreaseDeviceVolume() {
+            if (cast.active) nudgeReceiverVolume(-VOLUME_STEP) else super.decreaseDeviceVolume()
+        }
+
+        override fun setDeviceMuted(muted: Boolean, flags: Int) {
+            if (!cast.active) super.setDeviceMuted(muted, flags)
+        }
+
+        @Suppress("DEPRECATION")
+        override fun setDeviceMuted(muted: Boolean) {
+            if (!cast.active) super.setDeviceMuted(muted)
+        }
+
+        private fun nudgeReceiverVolume(delta: Float) =
+            CastController.setVolume(CastController.volume.value + delta)
 
         override fun play() {
-            if (canStartPlayback()) wrappedPlayer.play()
+            if (!canStartPlayback()) return
+            if (cast.active) cast.play() else wrappedPlayer.play()
+        }
+
+        override fun pause() {
+            if (cast.active) cast.pause() else wrappedPlayer.pause()
         }
 
         override fun setPlayWhenReady(playWhenReady: Boolean) {
-            if (!playWhenReady || canStartPlayback()) {
+            if (playWhenReady && !canStartPlayback()) return
+            if (cast.active) {
+                if (playWhenReady) cast.play() else cast.pause()
+            } else {
                 wrappedPlayer.playWhenReady = playWhenReady
             }
         }
 
         override fun stop() {
             beforeStop()
+            if (cast.active) cast.pause()
             wrappedPlayer.stop()
         }
 
@@ -4377,6 +4584,10 @@ class PlaybackService : MediaLibraryService() {
         }
 
         override fun seekTo(mediaItemIndex: Int, positionMs: Long) {
+            if (cast.active && mediaItemIndex == currentMediaItemIndex) {
+                cast.seekTo(positionMs)
+                return
+            }
             val skipped = skippedByQueueJump(currentMediaItemIndex, mediaItemIndex)
             if (skipped == null) {
                 wrappedPlayer.seekTo(mediaItemIndex, positionMs)
@@ -4391,8 +4602,24 @@ class PlaybackService : MediaLibraryService() {
             wrappedPlayer.seekTo(skipped.first, positionMs)
         }
 
+        override fun seekTo(positionMs: Long) {
+            if (cast.active) cast.seekTo(positionMs) else super.seekTo(positionMs)
+        }
+
+        override fun seekBack() {
+            if (cast.active) cast.seekTo(cast.positionMs - seekBackIncrement) else super.seekBack()
+        }
+
+        override fun seekForward() {
+            if (cast.active) cast.seekTo(cast.positionMs + seekForwardIncrement) else super.seekForward()
+        }
+
+        override fun seekToPrevious() {
+            if (cast.active) castPrevious() else super.seekToPrevious()
+        }
+
         override fun seekToPreviousMediaItem() {
-            wrappedPlayer.seekToPrevious()
+            if (cast.active) castPrevious() else wrappedPlayer.seekToPrevious()
         }
 
         override fun seekToNextMediaItem() {
@@ -4401,6 +4628,78 @@ class PlaybackService : MediaLibraryService() {
 
         override fun seekToNext() {
             wrappedPlayer.seekToNext()
+        }
+
+        override fun seekToDefaultPosition() {
+            if (cast.active) cast.seekTo(0L) else super.seekToDefaultPosition()
+        }
+
+        private fun castPrevious() {
+            if (cast.positionMs > wrappedPlayer.maxSeekToPreviousPosition || !wrappedPlayer.hasPreviousMediaItem()) {
+                cast.seekTo(0L)
+            } else {
+                wrappedPlayer.seekToPreviousMediaItem()
+            }
+        }
+
+        override fun onRemotePlaybackChanged() {
+            val flags = FlagSet.Builder()
+            val playWhenReady = getPlayWhenReady()
+            val state = getPlaybackState()
+            val playing = isPlaying()
+            if (playWhenReady != reportedPlayWhenReady) {
+                reportedPlayWhenReady = playWhenReady
+                flags.add(Player.EVENT_PLAY_WHEN_READY_CHANGED)
+                listeners.forEach {
+                    it.onPlayWhenReadyChanged(playWhenReady, Player.PLAY_WHEN_READY_CHANGE_REASON_REMOTE)
+                }
+            }
+            if (state != reportedPlaybackState) {
+                reportedPlaybackState = state
+                flags.add(Player.EVENT_PLAYBACK_STATE_CHANGED)
+                listeners.forEach { it.onPlaybackStateChanged(state) }
+            }
+            if (playing != reportedIsPlaying) {
+                reportedIsPlaying = playing
+                flags.add(Player.EVENT_IS_PLAYING_CHANGED)
+                listeners.forEach { it.onIsPlayingChanged(playing) }
+            }
+            flags.add(Player.EVENT_POSITION_DISCONTINUITY)
+            val position = Player.PositionInfo(
+                null,
+                currentMediaItemIndex,
+                currentMediaItem,
+                null,
+                currentPeriodIndex,
+                currentPosition,
+                contentPosition,
+                C.INDEX_UNSET,
+                C.INDEX_UNSET,
+            )
+            listeners.forEach {
+                it.onPositionDiscontinuity(position, position, Player.DISCONTINUITY_REASON_INTERNAL)
+            }
+            val events = Player.Events(flags.build())
+            listeners.forEach { it.onEvents(this, events) }
+        }
+
+        override fun onRemoteRouteChanged() {
+            if (!cast.active) onCastEnded()
+            val info = deviceInfo
+            listeners.forEach { it.onDeviceInfoChanged(info) }
+            listeners.forEach {
+                it.onEvents(this, Player.Events(FlagSet.Builder().add(Player.EVENT_DEVICE_INFO_CHANGED).build()))
+            }
+            onRemoteVolumeChanged()
+        }
+
+        override fun onRemoteVolumeChanged() {
+            val volume = deviceVolume
+            val muted = isDeviceMuted
+            listeners.forEach { it.onDeviceVolumeChanged(volume, muted) }
+            listeners.forEach {
+                it.onEvents(this, Player.Events(FlagSet.Builder().add(Player.EVENT_DEVICE_VOLUME_CHANGED).build()))
+            }
         }
     }
 

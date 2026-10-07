@@ -1,5 +1,7 @@
 <resources>
     <string name="app_name">MusicBeatSP</string>
+    <string name="cast_connect_failed">Chromecastに接続できませんでした。</string>
+    <string name="cast_track_unsupported">この曲はChromecastで再生できませんでした。</string>
     <string name="playback_channel_name">再生中</string>
     <string name="download_channel_name">ダウンロード</string>
     <string name="download_channel_description">ミュージックフォルダに保存中の曲</string>

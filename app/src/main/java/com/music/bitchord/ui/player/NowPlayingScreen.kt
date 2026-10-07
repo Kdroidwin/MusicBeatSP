@@ -1441,7 +1441,25 @@ fun NowPlayingScreen(
                                 .align(Alignment.TopStart)
                                 .fillMaxWidth()
                                 .height(heroHeight)
-                                .graphicsLayer { alpha = heroVisible },
+                                // Match the full-size image's bottom dissolve.
+                                // Without this mask the fast preview stayed
+                                // opaque underneath it and covered the blurred
+                                // backdrop along the hero's lower edge.
+                                .graphicsLayer {
+                                    alpha = heroVisible
+                                    compositingStrategy = CompositingStrategy.Offscreen
+                                }
+                                .drawWithContent {
+                                    drawContent()
+                                    drawRect(
+                                        brush = Brush.verticalGradient(
+                                            colors = listOf(Color.Black, Color.Transparent),
+                                            startY = size.height * (1f - HERO_FADE_FRACTION),
+                                            endY = size.height,
+                                        ),
+                                        blendMode = BlendMode.DstIn,
+                                    )
+                                },
                         )
                     }
                 }

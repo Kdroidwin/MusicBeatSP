@@ -183,7 +183,6 @@ import com.music.bitchord.ui.components.PlaylistPickerSheet
 import com.music.bitchord.playback.rememberMediaController
 import com.music.bitchord.playback.rememberPlayerState
 import com.music.bitchord.playback.PlayerState
-import com.music.bitchord.playback.cast.CastPlaybackBridge
 import com.music.bitchord.ui.MainViewModel
 import com.music.bitchord.ui.components.BottomFadeScrim
 import com.music.bitchord.ui.components.BottomTab
@@ -517,8 +516,6 @@ private fun BitChordApp(
     LaunchedEffect(songActions) {
         if (songActions == null) pendingPlayerQuickAction = null
     }
-    // Keep the Cast receiver's local-file bridge alive after its menu closes.
-    CastPlaybackBridge(controller, player.song)
     /** Holding a row anywhere but the player — the menu without the player's rows. */
     val openSongMenu: (Song) -> Unit = { song ->
         menuFromPlayer = false
