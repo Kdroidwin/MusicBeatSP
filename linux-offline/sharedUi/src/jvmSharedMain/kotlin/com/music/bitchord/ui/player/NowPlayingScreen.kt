@@ -714,6 +714,7 @@ fun NowPlayingScreen(
      */
     onQueueDragActiveChange: (Boolean) -> Unit = {},
     onClearQueue: () -> Unit,
+    onManageQueues: (() -> Unit)? = null,
     onOpenMenu: () -> Unit,
     /** Runs a desktop shortcut whose behavior belongs to the containing app. */
     onQuickAction: (PlayerQuickAction) -> Unit,
@@ -2071,6 +2072,7 @@ fun NowPlayingScreen(
                         onRemove = onRemoveFromQueue,
                         onMove = onMoveInQueue,
                         onClear = onClearQueue,
+                        onManageQueues = onManageQueues,
                         onDragActiveChange = onQueueDragActiveChange,
                         modifier = Modifier.fillMaxSize(),
                     )
@@ -3560,6 +3562,7 @@ fun NowPlayingScreen(
                             onRemove = onRemoveFromQueue,
                             onMove = onMoveInQueue,
                             onClear = onClearQueue,
+                            onManageQueues = onManageQueues,
                             onScrollingChange = { queueScrolling = it },
                             onDragActiveChange = onQueueDragActiveChange,
                             collapsePlayerOnScroll = true,

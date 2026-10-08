@@ -1,6 +1,8 @@
 package com.music.bitchord.desktop
 
 import com.music.bitchord.data.lyrics.LyricsSource
+import com.music.bitchord.data.model.PlaybackSourceType
+import com.music.bitchord.data.model.QueueTier
 import com.music.bitchord.data.model.Song
 import kotlinx.serialization.decodeFromString
 import kotlinx.serialization.encodeToString
@@ -104,6 +106,46 @@ class DesktopPersistence {
     fun queue(): List<Song> = readSongs(KEY_QUEUE)
 
     fun saveQueue(songs: List<Song>) = writeSongs(KEY_QUEUE, songs.take(MAX_QUEUE))
+
+    /** Named, independent snapshots of the playback queue, like Android's saved queues. */
+    fun savedQueues(): List<DesktopSavedQueue> = readLines(KEY_SAVED_QUEUES)
+        .take(MAX_SAVED_QUEUES)
+        .mapNotNull(::decodeSavedQueue)
+
+    fun saveQueueAs(name: String, songs: List<Song>, currentIndex: Int, positionMs: Long): Boolean {
+        val cleanName = name.trim().take(MAX_SAVED_QUEUE_NAME)
+        val current = savedQueues()
+        if (cleanName.isBlank() || songs.isEmpty() || songs.size > MAX_SAVED_QUEUE_SONGS ||
+            current.size >= MAX_SAVED_QUEUES || current.any { it.name.equals(cleanName, ignoreCase = true) }
+        ) return false
+        return writeSavedQueues(
+            current + DesktopSavedQueue(
+                id = UUID.randomUUID().toString(),
+                name = cleanName,
+                songs = songs.toList(),
+                currentIndex = currentIndex.coerceIn(songs.indices),
+                positionMs = positionMs.coerceAtLeast(0L),
+            ),
+        )
+    }
+
+    fun replaceSavedQueue(id: String, songs: List<Song>, currentIndex: Int, positionMs: Long): Boolean {
+        if (songs.isEmpty() || songs.size > MAX_SAVED_QUEUE_SONGS) return false
+        val current = savedQueues()
+        if (current.none { it.id == id }) return false
+        return writeSavedQueues(current.map { queue ->
+            if (queue.id == id) queue.copy(
+                songs = songs.toList(),
+                currentIndex = currentIndex.coerceIn(songs.indices),
+                positionMs = positionMs.coerceAtLeast(0L),
+            ) else queue
+        })
+    }
+
+    fun deleteSavedQueue(id: String) {
+        val current = savedQueues()
+        writeSavedQueues(current.filterNot { it.id == id })
+    }
 
     /** Tracks pinned to YouTube's own upload — see [DesktopOriginalVersion]. */
     internal fun originalVersionIds(): Set<String> = readLines(KEY_ORIGINAL_VERSIONS).toSet()
@@ -255,6 +297,38 @@ class DesktopPersistence {
     private fun writeSongs(key: String, songs: List<Song>) =
         writeLines(key, songs.map(::encodeSong))
 
+    private fun writeSavedQueues(queues: List<DesktopSavedQueue>): Boolean = runCatching {
+        val encoded = queues.take(MAX_SAVED_QUEUES).filter { it.name.isNotBlank() && it.songs.isNotEmpty() }
+            .map { queue ->
+                listOf(
+                    encode(queue.id),
+                    encode(queue.name.take(MAX_SAVED_QUEUE_NAME)),
+                    queue.currentIndex.coerceIn(queue.songs.indices).toString(),
+                    queue.positionMs.coerceAtLeast(0L).toString(),
+                    queue.songs.take(MAX_SAVED_QUEUE_SONGS).joinToString(SONG_DELIMITER, transform = ::encodeSong),
+                ).joinToString(SAVED_QUEUE_DELIMITER)
+            }
+        require(encoded.sumOf(String::length) <= MAX_SAVED_QUEUES_BYTES) { "Saved queues are too large" }
+        writeLines(KEY_SAVED_QUEUES, encoded)
+        true
+    }.getOrDefault(false)
+
+    private fun decodeSavedQueue(value: String): DesktopSavedQueue? = runCatching {
+        val fields = value.split(SAVED_QUEUE_DELIMITER, limit = 5)
+        if (fields.size != 5) return null
+        val id = decode(fields[0]).takeIf(String::isNotBlank) ?: return null
+        val name = decode(fields[1]).trim().take(MAX_SAVED_QUEUE_NAME).takeIf(String::isNotBlank) ?: return null
+        val songs = fields[4].split(SONG_DELIMITER).take(MAX_SAVED_QUEUE_SONGS).mapNotNull(::decodeSong)
+        if (songs.isEmpty()) return null
+        DesktopSavedQueue(
+            id = id,
+            name = name,
+            songs = songs,
+            currentIndex = fields[2].toIntOrNull()?.coerceIn(songs.indices) ?: 0,
+            positionMs = fields[3].toLongOrNull()?.coerceAtLeast(0L) ?: 0L,
+        )
+    }.getOrNull()
+
     private fun readLines(key: String): List<String> =
         DesktopPreferenceChunks.read(preferences, key).orEmpty()
             .split('\n')
@@ -282,6 +356,12 @@ class DesktopPersistence {
         song.localDateModifiedSeconds?.toString().orEmpty(),
         song.sourceQuality.orEmpty(),
         song.isExplicit?.toString().orEmpty(),
+        song.queueTier.name,
+        song.queueEntryId.orEmpty(),
+        song.radioName.orEmpty(),
+        song.playbackSource.orEmpty(),
+        song.playbackSourceType?.name.orEmpty(),
+        song.playbackSourceId.orEmpty(),
     ).joinToString(DELIMITER, transform = ::encode)
 
     private fun decodeSong(value: String): Song? {
@@ -302,11 +382,17 @@ class DesktopPersistence {
             isVideo = isVideo,
             isVideoOrigin = fields.getOrNull(11)?.toBooleanStrictOrNull() ?: isVideo,
             setVideoId = fields.getOrNull(12)?.ifBlank { null },
-            fromAutoplay = fields.getOrNull(13)?.toBooleanStrictOrNull() ?: false,
             localDateAddedSeconds = fields.getOrNull(14)?.toLongOrNull(),
             localDateModifiedSeconds = fields.getOrNull(15)?.toLongOrNull(),
             sourceQuality = fields.getOrNull(16)?.ifBlank { null },
             isExplicit = fields.getOrNull(17)?.toBooleanStrictOrNull(),
+            queueTier = fields.getOrNull(18)?.let { runCatching { QueueTier.valueOf(it) }.getOrNull() }
+                ?: if (fields.getOrNull(13)?.toBooleanStrictOrNull() == true) QueueTier.AUTOPLAY else QueueTier.CONTEXT,
+            queueEntryId = fields.getOrNull(19)?.ifBlank { null },
+            radioName = fields.getOrNull(20)?.ifBlank { null },
+            playbackSource = fields.getOrNull(21)?.ifBlank { null },
+            playbackSourceType = fields.getOrNull(22)?.let { runCatching { PlaybackSourceType.valueOf(it) }.getOrNull() },
+            playbackSourceId = fields.getOrNull(23)?.ifBlank { null },
         )
     }
 
@@ -330,6 +416,7 @@ class DesktopPersistence {
         const val KEY_DISLIKED_IDS = "disliked_ids"
         const val KEY_HISTORY = "history"
         const val KEY_QUEUE = "queue"
+        private const val KEY_SAVED_QUEUES = "saved_queues"
         const val KEY_DOWNLOADS = "downloads"
         const val KEY_PLAYLISTS = "playlists"
         const val KEY_MODULE_INDEX_URL = "module_index_url"
@@ -340,6 +427,11 @@ class DesktopPersistence {
         const val KEY_SOURCE_CONFIGS_PROTECTED = "source_configs_dpapi_v1"
         const val MAX_HISTORY = 100
         const val MAX_QUEUE = 200
+        private const val MAX_SAVED_QUEUES = 20
+        private const val MAX_SAVED_QUEUE_SONGS = 1_000
+        private const val MAX_SAVED_QUEUE_NAME = 80
+        private const val MAX_SAVED_QUEUES_BYTES = 8 * 1024 * 1024
+        private const val SAVED_QUEUE_DELIMITER = "#"
         const val DELIMITER = "|"
         const val PLAYLIST_DELIMITER = "#"
         const val SONG_DELIMITER = ";"
@@ -350,6 +442,14 @@ data class DesktopPlaylist(
     val id: String = UUID.randomUUID().toString(),
     val title: String,
     val songs: List<Song> = emptyList(),
+)
+
+data class DesktopSavedQueue(
+    val id: String,
+    val name: String,
+    val songs: List<Song>,
+    val currentIndex: Int,
+    val positionMs: Long,
 )
 
 private fun DesktopPlaylist.toPreferenceLine(): String = listOf(

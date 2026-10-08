@@ -208,4 +208,15 @@
     <string name="search_library_empty">ローカル音楽フォルダ内の曲を検索します。</string>
     <string name="search_library_hint">曲・アーティスト・アルバム</string>
     <string name="search_library_no_results">ローカル音楽に「%1$s」に一致するものはありません。</string>
+    <string name="manage_queues">キューを管理</string>
+    <string name="queue_name">キュー名</string>
+    <string name="save_current_queue">現在のキューを保存</string>
+    <string name="queue_save_failed">保存できませんでした。名前、曲数、保存上限を確認してください。</string>
+    <string name="no_saved_queues">保存済みキューはありません。</string>
+    <string name="queue_track_count">%1$d曲</string>
+    <string name="load_queue">読み込む</string>
+    <string name="replace_queue">置き換える</string>
+    <string name="delete_saved_queue">保存済みキューを削除しますか？</string>
+    <string name="done">完了</string>
+    <string name="delete">削除</string>
 </resources>

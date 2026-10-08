@@ -36,6 +36,7 @@ import androidx.compose.material.icons.rounded.GraphicEq
 import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
+import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.LaunchedEffect
@@ -216,6 +217,7 @@ internal fun InlineQueue(
     onRemove: (Int) -> Unit,
     onMove: (Int, Int) -> Unit,
     onClear: () -> Unit,
+    onManageQueues: (() -> Unit)? = null,
     onScrollingChange: (Boolean) -> Unit = {},
     onDragActiveChange: (Boolean) -> Unit = {},
     /** Phone only: let queue scrolling dismiss/restore the lower half player. */
@@ -269,6 +271,11 @@ internal fun InlineQueue(
                 color = Color.White,
                 modifier = Modifier.weight(1f),
             )
+            if (onManageQueues != null) {
+                TextButton(onClick = onManageQueues) {
+                    Text(stringResource(Res.string.manage_queues))
+                }
+            }
             if (tracks.user.isNotEmpty()) {
                 QueueClearButton(MaterialTheme.typography.titleMedium, controlsLocked, onClear)
             }

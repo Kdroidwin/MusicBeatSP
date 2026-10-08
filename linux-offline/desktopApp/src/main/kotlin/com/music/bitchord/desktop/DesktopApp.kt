@@ -578,6 +578,8 @@ fun BitChordDesktopApp() {
     var personalPositionStash by remember { mutableStateOf(0L) }
     var personalPlayingStash by remember { mutableStateOf(false) }
     val persistence = remember { DesktopPersistence() }
+    var savedQueues by remember { mutableStateOf(persistence.savedQueues()) }
+    var savedQueueManagerOpen by remember { mutableStateOf(false) }
     var availableUpdate by remember { mutableStateOf<DesktopUpdateChecker.UpdateInfo?>(null) }
     if (!MUSICBEATSP_LOCAL_ONLY_BUILD) {
         LaunchedEffect(Unit) { availableUpdate = DesktopUpdateChecker.check() }
@@ -899,13 +901,13 @@ fun BitChordDesktopApp() {
     }
 
     /** Opens whatever the queue is currently pointing at. */
-    fun playCurrent(startPlaying: Boolean = true) {
+    fun playCurrent(startPlaying: Boolean = true, startAtMs: Long = 0L) {
         val song = liveQueue.current ?: return
         selectedSong = song
         history = (listOf(song) + history.filterNot { it.videoId == song.videoId }).take(50)
         saveQueue()
         persistence.saveHistory(history)
-        playbackEngine.load(song, startPlaying)
+        playbackEngine.load(song, startPlaying, startAtMs)
         partySyncHolder[0]?.onLocalIntent(song.videoId)
         if (!MUSICBEATSP_LOCAL_ONLY_BUILD) scope.launch { DesktopScrobbling.updateNowPlaying(song) }
     }
@@ -3206,6 +3208,11 @@ fun BitChordDesktopApp() {
                                 onRemove = ::removeFromQueue,
                                 onMove = ::moveInQueue,
                                 onClear = ::clearQueue,
+                                onManageQueues = {
+                                    if (partyState.inParty) {
+                                        DesktopPlayerHost.showMessage("Saved queues are unavailable during a shared session")
+                                    } else savedQueueManagerOpen = true
+                                },
                                 modifier = Modifier.fillMaxSize(),
                             )
                         }
@@ -3289,6 +3296,11 @@ fun BitChordDesktopApp() {
                             onRemoveFromQueue = ::removeFromQueue,
                             onMoveInQueue = ::moveInQueue,
                             onClearQueue = ::clearQueue,
+                            onManageQueues = {
+                                if (partyState.inParty) {
+                                    DesktopPlayerHost.showMessage("Saved queues are unavailable during a shared session")
+                                } else savedQueueManagerOpen = true
+                            },
                             onOpenMenu = { playerMenuOpen = true },
                             onQuickAction = { action ->
                                 when (action) {
@@ -3508,6 +3520,42 @@ fun BitChordDesktopApp() {
                                 overlays.signIn = false
                                 signInError = null
                             },
+                        )
+                    }
+                    if (savedQueueManagerOpen) {
+                        DesktopSavedQueuesDialog(
+                            queues = savedQueues,
+                            currentSongs = liveQueue.songs,
+                            currentIndex = liveQueue.index,
+                            positionMs = playback.positionMs,
+                            onSave = { name, songs, index, position ->
+                                persistence.saveQueueAs(name, songs, index, position).also { saved ->
+                                    if (saved) savedQueues = persistence.savedQueues()
+                                }
+                            },
+                            onReplace = { id, songs, index, position ->
+                                persistence.replaceSavedQueue(id, songs, index, position).also { saved ->
+                                    if (saved) savedQueues = persistence.savedQueues()
+                                }
+                            },
+                            onLoad = { saved ->
+                                if (!partyTrackChangeBlocked()) {
+                                    liveQueue = DesktopQueue(
+                                        songs = saved.songs,
+                                        index = saved.currentIndex.coerceIn(saved.songs.indices),
+                                    )
+                                    preShuffleOrder = emptyList()
+                                    playCurrent(
+                                        startPlaying = playbackEngine.state.value.isPlaying,
+                                        startAtMs = saved.positionMs,
+                                    )
+                                }
+                            },
+                            onDelete = { saved ->
+                                persistence.deleteSavedQueue(saved.id)
+                                savedQueues = persistence.savedQueues()
+                            },
+                            onDismiss = { savedQueueManagerOpen = false },
                         )
                     }
                     if (overlays.playlistDialog || playlistTarget != null) {

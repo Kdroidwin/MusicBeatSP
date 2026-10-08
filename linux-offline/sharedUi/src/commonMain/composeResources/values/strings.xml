@@ -208,4 +208,15 @@
     <string name="member_since">Member since</string>
     <string name="import_spotify">Import Spotify</string>
     <string name="import_spotify_subtitle">From a playlist link</string>
+    <string name="manage_queues">Manage queues</string>
+    <string name="queue_name">Queue name</string>
+    <string name="save_current_queue">Save current queue</string>
+    <string name="queue_save_failed">Could not save. Check the name, queue size, and saved-queue limit.</string>
+    <string name="no_saved_queues">No saved queues yet.</string>
+    <string name="queue_track_count">%1$d tracks</string>
+    <string name="load_queue">Load</string>
+    <string name="replace_queue">Replace</string>
+    <string name="delete_saved_queue">Delete saved queue?</string>
+    <string name="done">Done</string>
+    <string name="delete">Delete</string>
 </resources>

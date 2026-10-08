@@ -213,7 +213,7 @@ internal object DesktopSettingsBackup {
         val name = key.lowercase()
         if (name.isBlank() || name.endsWith(".dpapi_v1")) return false
         if (name in setOf(
-                "liked_ids", "disliked_ids", "history", "queue", "downloads", "playlists",
+                "liked_ids", "disliked_ids", "history", "queue", "saved_queues", "downloads", "playlists",
                 "original_versions", "downloaded_tracks", "downloaded_tracks_metadata",
                 "downloaded_collections", "last_version_code", "source_configs",
                 "source_configs_dpapi_v1", "module_index_url", "local_music_folder",
