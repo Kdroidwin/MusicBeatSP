@@ -6214,7 +6214,10 @@ private fun DesktopSettingsScreen(
                         style = MaterialTheme.typography.titleSmall,
                         modifier = Modifier.padding(top = 12.dp, bottom = 4.dp),
                     )
-                    val miniPlayerControls by DesktopPlayerSettings.miniPlayerControls.collectAsState()
+                    // Settings can be restored from older/corrupt preference snapshots. Keep the
+                    // settings page safe even if a flow briefly exposes a null list at runtime.
+                    val miniPlayerControls = DesktopPlayerSettings.miniPlayerControls
+                        .collectAsState().value.orEmpty()
                     DesktopMiniPlayerControl.entries.forEach { control ->
                         val label = when (control) {
                             DesktopMiniPlayerControl.SHUFFLE -> DesktopStrings["shuffle", "Shuffle"]
@@ -6281,8 +6284,10 @@ private fun DesktopSettingsScreen(
                             }
                         }
                     }
-                    val expandedPlayerQuickActions by DesktopPlayerSettings.playerQuickActions.collectAsState()
-                    val fullScreenActions by DesktopPlayerSettings.playerBottomActions.collectAsState()
+                    val expandedPlayerQuickActions = DesktopPlayerSettings.playerQuickActions
+                        .collectAsState().value.orEmpty()
+                    val fullScreenActions = DesktopPlayerSettings.playerBottomActions
+                        .collectAsState().value.orEmpty()
                     Text(
                         DesktopStrings["d_full_screen_player_buttons", "Full-screen player buttons"],
                         style = MaterialTheme.typography.titleSmall,
