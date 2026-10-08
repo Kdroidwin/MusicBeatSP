@@ -58,12 +58,24 @@ import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.statusBarsPadding
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.layout.widthIn
+import androidx.compose.foundation.horizontalScroll
+import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.rounded.Undo
+import androidx.compose.material.icons.automirrored.rounded.PlaylistAdd
+import androidx.compose.material.icons.automirrored.rounded.QueueMusic
+import androidx.compose.material.icons.rounded.Album
+import androidx.compose.material.icons.rounded.Bedtime
 import androidx.compose.material.icons.rounded.FastForward
 import androidx.compose.material.icons.rounded.FastRewind
+import androidx.compose.material.icons.rounded.Favorite
+import androidx.compose.material.icons.rounded.GraphicEq
+import androidx.compose.material.icons.rounded.Info
+import androidx.compose.material.icons.rounded.LibraryMusic
 import androidx.compose.material.icons.rounded.MoreHoriz
+import androidx.compose.material.icons.rounded.Person
+import androidx.compose.material.icons.rounded.Speed
 import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
@@ -703,6 +715,8 @@ fun NowPlayingScreen(
     onQueueDragActiveChange: (Boolean) -> Unit = {},
     onClearQueue: () -> Unit,
     onOpenMenu: () -> Unit,
+    /** Runs a desktop shortcut whose behavior belongs to the containing app. */
+    onQuickAction: (PlayerQuickAction) -> Unit,
     onOpenAlbum: (String) -> Unit,
     /**
      * Opens an artist's page. [browseId] is null for anyone but the lead credit:
@@ -740,6 +754,7 @@ fun NowPlayingScreen(
 ) {
     val density = LocalDensity.current
     val haptics = rememberHaptics()
+    val playerQuickActions by PlayerSettings.playerQuickActions.collectAsStateWithLifecycle()
 
     // Remote tracks whose art lives inside the file resolve it here, once —
     // every surface below reads the same value rather than each triggering
@@ -3280,13 +3295,78 @@ fun NowPlayingScreen(
                         }
                     }
                     Spacer(Modifier.width(10.dp))
+                    if (playerQuickActions.isNotEmpty()) {
+                        Row(
+                            modifier = Modifier
+                                .widthIn(max = 264.dp)
+                                .horizontalScroll(rememberScrollState()),
+                            verticalAlignment = Alignment.CenterVertically,
+                        ) {
+                            playerQuickActions.forEach { action ->
+                                val icon = when (action) {
+                                    PlayerQuickAction.LYRICS -> BitChordIcons.LyricsQuote
+                                    PlayerQuickAction.ADD_TO_PLAYLIST -> Icons.AutoMirrored.Rounded.PlaylistAdd
+                                    PlayerQuickAction.PLAYBACK_TUNING -> Icons.Rounded.Speed
+                                    PlayerQuickAction.QUEUE -> Icons.AutoMirrored.Rounded.QueueMusic
+                                    PlayerQuickAction.PLAYLISTS -> Icons.Rounded.LibraryMusic
+                                    PlayerQuickAction.SEARCH -> BitChordIcons.Search
+                                    PlayerQuickAction.ALBUM -> Icons.Rounded.Album
+                                    PlayerQuickAction.ARTIST -> Icons.Rounded.Person
+                                    PlayerQuickAction.EQUALIZER -> Icons.Rounded.GraphicEq
+                                    PlayerQuickAction.SLEEP_TIMER -> Icons.Rounded.Bedtime
+                                    PlayerQuickAction.DETAILS -> Icons.Rounded.Info
+                                    PlayerQuickAction.FAVORITE -> if (likeStatus == LikeStatus.LIKE) {
+                                        BitChordIcons.HeartFilled
+                                    } else {
+                                        Icons.Rounded.Favorite
+                                    }
+                                }
+                                val label = when (action) {
+                                    PlayerQuickAction.LYRICS -> stringResource(Res.string.quick_action_lyrics)
+                                    PlayerQuickAction.ADD_TO_PLAYLIST -> stringResource(Res.string.quick_action_add_to_playlist)
+                                    PlayerQuickAction.PLAYBACK_TUNING -> stringResource(Res.string.quick_action_playback_tuning)
+                                    PlayerQuickAction.QUEUE -> stringResource(Res.string.up_next)
+                                    PlayerQuickAction.PLAYLISTS -> stringResource(Res.string.playlists)
+                                    PlayerQuickAction.SEARCH -> stringResource(Res.string.search)
+                                    PlayerQuickAction.ALBUM -> stringResource(Res.string.quick_action_album)
+                                    PlayerQuickAction.ARTIST -> stringResource(Res.string.quick_action_artist)
+                                    PlayerQuickAction.EQUALIZER -> stringResource(Res.string.quick_action_equalizer)
+                                    PlayerQuickAction.SLEEP_TIMER -> stringResource(Res.string.quick_action_sleep_timer)
+                                    PlayerQuickAction.DETAILS -> stringResource(Res.string.quick_action_details)
+                                    PlayerQuickAction.FAVORITE -> stringResource(
+                                        if (likeStatus == LikeStatus.LIKE) Res.string.remove_from_liked else Res.string.like,
+                                    )
+                                }
+                                CircleGlyph(
+                                    icon = icon,
+                                    contentDescription = label,
+                                    active = when (action) {
+                                        PlayerQuickAction.LYRICS -> lyricsOpen
+                                        PlayerQuickAction.QUEUE -> queueOpen
+                                        PlayerQuickAction.FAVORITE -> likeStatus == LikeStatus.LIKE
+                                        else -> false
+                                    },
+                                    onClick = {
+                                        when (action) {
+                                            PlayerQuickAction.LYRICS -> toggleLyrics()
+                                            PlayerQuickAction.QUEUE -> toggleQueue()
+                                            PlayerQuickAction.FAVORITE -> onToggleLike()
+                                            else -> onQuickAction(action)
+                                        }
+                                    },
+                                )
+                                Spacer(Modifier.width(4.dp))
+                            }
+                        }
+                        Spacer(Modifier.width(8.dp))
+                    }
                     // Beside the credits rather than down in the toggle row:
                     // liking is about *this song*, and the row below is about
                     // how the queue plays. Guests get nothing to tap, since
                     // there's no account to record it against — and neither
                     // does a local file or a finished download, which carries
                     // no YouTube identity to rate.
-                    if (signedIn && song.localUri == null) {
+                    if (signedIn && song.localUri == null && PlayerQuickAction.FAVORITE !in playerQuickActions) {
                         val liked = likeStatus == LikeStatus.LIKE
                         CircleGlyph(
                             icon = if (liked) BitChordIcons.HeartFilled else BitChordIcons.Heart,

@@ -28,6 +28,7 @@ import com.music.bitchord.ui.player.PlayerHost
 import com.music.bitchord.ui.player.PlayerLyricsAlignment
 import com.music.bitchord.ui.player.PlayerSeekButtonMode
 import com.music.bitchord.ui.player.PlayerSettingsSource
+import com.music.bitchord.ui.player.PlayerQuickAction
 import com.music.bitchord.ui.player.SystemVolume
 import dev.chrisbanes.haze.HazeState
 import kotlinx.coroutines.CoroutineScope
@@ -226,6 +227,7 @@ internal object DesktopPlayerSettings : PlayerSettingsSource {
     // This must share the setting's live flow. A constant false made the visible setting a mock:
     // the switch persisted, but the shared player never observed it.
     override val hideVolumeBar: StateFlow<Boolean> = DesktopAppearanceSettings.hideVolumeBar
+    override val playerQuickActions = MutableStateFlow(readPlayerQuickActions())
     override val lastPlayerScreen = MutableStateFlow(
         runCatching { LastPlayerScreen.valueOf(persistence.string(KEY_LAST_SCREEN, "MAIN")) }
             .getOrDefault(LastPlayerScreen.MAIN),
@@ -370,6 +372,37 @@ internal object DesktopPlayerSettings : PlayerSettingsSource {
         persistence.saveString(KEY_MINI_PLAYER_CONTROLS, normalized.joinToString(",") { it.name })
     }
 
+    fun setPlayerQuickActionVisible(action: PlayerQuickAction, visible: Boolean) {
+        val next = playerQuickActions.value.toMutableList().apply {
+            if (visible && action !in this) add(action)
+            if (!visible) remove(action)
+        }
+        playerQuickActions.value = next.distinct()
+        persistence.saveString(KEY_PLAYER_QUICK_ACTIONS, playerQuickActions.value.joinToString(",") { it.name })
+    }
+
+    fun setPlayerQuickActions(values: List<PlayerQuickAction>) {
+        playerQuickActions.value = values.distinct()
+        persistence.saveString(KEY_PLAYER_QUICK_ACTIONS, playerQuickActions.value.joinToString(",") { it.name })
+    }
+
+    fun movePlayerQuickAction(action: PlayerQuickAction, direction: Int) {
+        val current = playerQuickActions.value.toMutableList()
+        val index = current.indexOf(action)
+        if (index < 0) return
+        val target = (index + direction.coerceIn(-1, 1)).coerceIn(0, current.lastIndex)
+        if (target == index) return
+        current.add(target, current.removeAt(index))
+        playerQuickActions.value = current
+        persistence.saveString(KEY_PLAYER_QUICK_ACTIONS, current.joinToString(",") { it.name })
+    }
+
+    private fun readPlayerQuickActions(): List<PlayerQuickAction> =
+        persistence.string(KEY_PLAYER_QUICK_ACTIONS, "")
+            .split(',')
+            .mapNotNull { name -> runCatching { PlayerQuickAction.valueOf(name) }.getOrNull() }
+            .distinct()
+
     private fun readMiniPlayerControls(): List<DesktopMiniPlayerControl> {
         val stored = persistence.string(KEY_MINI_PLAYER_CONTROLS, "\u0000unset")
         if (stored == "\u0000unset") return defaultMiniPlayerControls
@@ -397,6 +430,7 @@ internal object DesktopPlayerSettings : PlayerSettingsSource {
     private const val KEY_LYRICS_ALIGNMENT = "lyrics_text_alignment"
     private const val KEY_THEME_MODE = "theme_mode"
     private const val KEY_MINI_PLAYER_CONTROLS = "mini_player_controls"
+    private const val KEY_PLAYER_QUICK_ACTIONS = "player_quick_actions"
 }
 
 /** Which glyph a mixer gets, from the only thing Java Sound says about it: its name. */

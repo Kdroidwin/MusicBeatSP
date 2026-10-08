@@ -41,6 +41,7 @@ import com.music.bitchord.ui.player.NowPlayingScreen
 import com.music.bitchord.ui.player.QueueSidePanel
 import com.music.bitchord.ui.player.PlayerBack
 import com.music.bitchord.ui.player.PlayerLyricsAlignment
+import com.music.bitchord.ui.player.PlayerQuickAction
 import com.music.bitchord.ui.player.PlayerSeekButtonMode
 import com.music.bitchord.ui.player.RepeatModes
 import com.music.bitchord.ui.player.rememberMixPulse
@@ -3286,6 +3287,53 @@ fun BitChordDesktopApp() {
                             onMoveInQueue = ::moveInQueue,
                             onClearQueue = ::clearQueue,
                             onOpenMenu = { playerMenuOpen = true },
+                            onQuickAction = { action ->
+                                when (action) {
+                                    PlayerQuickAction.ADD_TO_PLAYLIST -> {
+                                        overlays.nowPlaying = false
+                                        playlistTarget = current
+                                    }
+                                    PlayerQuickAction.PLAYBACK_TUNING -> openPlaybackTuning()
+                                    PlayerQuickAction.PLAYLISTS -> {
+                                        overlays.nowPlaying = false
+                                        localMusicTabRequest = 4
+                                        selectDestination(DesktopDestination.LOCAL_MUSIC)
+                                    }
+                                    PlayerQuickAction.SEARCH -> {
+                                        overlays.nowPlaying = false
+                                        localMusicTabRequest = 0
+                                        selectDestination(DesktopDestination.SEARCH)
+                                    }
+                                    PlayerQuickAction.ALBUM -> {
+                                        val albumId = playerSong.albumId
+                                        if (albumId == null) {
+                                            playerMenuOpen = true
+                                        } else {
+                                            overlays.nowPlaying = false
+                                            openAlbum(albumId)
+                                        }
+                                    }
+                                    PlayerQuickAction.ARTIST -> {
+                                        val artistId = playerSong.artistId
+                                        if (artistId == null) {
+                                            playerMenuOpen = true
+                                        } else {
+                                            overlays.nowPlaying = false
+                                            openArtist(artistId, playerSong.artist)
+                                        }
+                                    }
+                                    PlayerQuickAction.EQUALIZER -> {
+                                        overlays.nowPlaying = false
+                                        openSettings()
+                                        overlays.settingsPage = DesktopSettingsPage.EQUALIZER
+                                    }
+                                    PlayerQuickAction.SLEEP_TIMER -> cycleSleepTimer()
+                                    PlayerQuickAction.DETAILS -> playerMenuOpen = true
+                                    PlayerQuickAction.LYRICS,
+                                    PlayerQuickAction.QUEUE,
+                                    PlayerQuickAction.FAVORITE -> Unit
+                                }
+                            },
                             onOpenAlbum = { id ->
                                 overlays.nowPlaying = false
                                 openAlbum(id)
@@ -3707,6 +3755,10 @@ fun BitChordDesktopApp() {
                                     onSleepTimerCycle = ::cycleSleepTimer,
                                     sourceConfigs = sourceConfigs,
                                     sourceStatus = sourceStatus,
+                                    onImportM3uPlaylist = { title, songs ->
+                                        playlists = playlists + DesktopPlaylist(title = title, songs = songs)
+                                        persistence.savePlaylists(playlists)
+                                    },
                                     onSourceEnabledChange = { config, enabled ->
                                         val next = sourceConfigs.map {
                                             if (it.id == config.id && it.kind != DesktopSourceKind.YOUTUBE) {
@@ -5845,9 +5897,15 @@ private fun DesktopSettingsScreen(
     onTestSource: (DesktopSourceConfig) -> Unit,
     onOpenIntegrations: () -> Unit,
     onOpenLicenses: () -> Unit,
+    onImportM3uPlaylist: (title: String, songs: List<Song>) -> Unit,
 ) {
     var editingSource by remember { mutableStateOf<DesktopSourceConfig?>(null) }
     var backupMessage by remember { mutableStateOf<String?>(null) }
+    var m3uImportFile by remember { mutableStateOf<java.io.File?>(null) }
+    var m3uPlaylistName by remember { mutableStateOf("") }
+    var m3uImportBusy by remember { mutableStateOf(false) }
+    var m3uMessage by remember { mutableStateOf<String?>(null) }
+    val settingsScope = rememberCoroutineScope()
     val sourceProbeKey = sourceConfigs
         .filter { it.kind.needsServer && it.isComplete }
         .joinToString { "${it.id}@${it.baseUrl}" }
@@ -6135,6 +6193,83 @@ private fun DesktopSettingsScreen(
                                 Switch(
                                     checked = selectedIndex >= 0,
                                     onCheckedChange = { DesktopPlayerSettings.setMiniPlayerControlVisible(control, it) },
+                                    colors = desktopSwitchColors(),
+                                )
+                            }
+                        }
+                    }
+                    val expandedPlayerQuickActions by DesktopPlayerSettings.playerQuickActions.collectAsState()
+                    Text(
+                        DesktopStrings["d_player_quick_actions", "Expanded player shortcuts"],
+                        style = MaterialTheme.typography.titleSmall,
+                        modifier = Modifier.padding(top = 14.dp, bottom = 4.dp),
+                    )
+                    val quickActionsSubtitle = DesktopStrings[
+                        "d_player_quick_actions_subtitle",
+                        "Choose and reorder shortcuts shown beside the track information in the expanded player.",
+                    ]
+                    PlayerQuickAction.entries.forEach { action ->
+                        val label = when (action) {
+                            PlayerQuickAction.LYRICS -> DesktopStrings["d_quick_action_lyrics", "Lyrics"]
+                            PlayerQuickAction.ADD_TO_PLAYLIST -> DesktopStrings["d_quick_action_add_to_playlist", "Add to playlist"]
+                            PlayerQuickAction.PLAYBACK_TUNING -> DesktopStrings["d_quick_action_playback_tuning", "Playback settings"]
+                            PlayerQuickAction.QUEUE -> DesktopStrings["d_quick_action_queue", "Queue"]
+                            PlayerQuickAction.PLAYLISTS -> DesktopStrings["d_quick_action_playlists", "Playlists"]
+                            PlayerQuickAction.SEARCH -> DesktopStrings["d_quick_action_search", "Search"]
+                            PlayerQuickAction.ALBUM -> DesktopStrings["d_quick_action_album", "Album"]
+                            PlayerQuickAction.ARTIST -> DesktopStrings["d_quick_action_artist", "Artist"]
+                            PlayerQuickAction.EQUALIZER -> DesktopStrings["d_quick_action_equalizer", "Equalizer"]
+                            PlayerQuickAction.SLEEP_TIMER -> DesktopStrings["d_quick_action_sleep_timer", "Sleep timer"]
+                            PlayerQuickAction.DETAILS -> DesktopStrings["d_quick_action_details", "Details"]
+                            PlayerQuickAction.FAVORITE -> DesktopStrings["d_quick_action_favorite", "Favorite"]
+                        }
+                        val index = expandedPlayerQuickActions.indexOf(action)
+                        if (settingsRowVisible(label, quickActionsSubtitle)) {
+                            Row(
+                                Modifier.fillMaxWidth().desktopRowClickable {
+                                    DesktopPlayerSettings.setPlayerQuickActionVisible(action, index < 0)
+                                }.padding(vertical = 8.dp),
+                                verticalAlignment = Alignment.CenterVertically,
+                            ) {
+                                Column(Modifier.weight(1f)) {
+                                    Text(label, style = MaterialTheme.typography.bodyLarge)
+                                    if (index >= 0) {
+                                        Text(
+                                            quickActionsSubtitle,
+                                            color = DesktopSecondary,
+                                            style = MaterialTheme.typography.bodyMedium,
+                                            maxLines = 2,
+                                        )
+                                    }
+                                }
+                                if (index >= 0) {
+                                    IconButton(
+                                        enabled = index > 0,
+                                        onClick = { DesktopPlayerSettings.movePlayerQuickAction(action, -1) },
+                                        modifier = Modifier.size(36.dp),
+                                    ) {
+                                        Icon(
+                                            Icons.Rounded.KeyboardArrowUp,
+                                            DesktopStrings["move_up", "Move up"],
+                                            tint = if (index > 0) DesktopSecondary else DesktopSecondary.copy(alpha = 0.35f),
+                                        )
+                                    }
+                                    IconButton(
+                                        enabled = index < expandedPlayerQuickActions.lastIndex,
+                                        onClick = { DesktopPlayerSettings.movePlayerQuickAction(action, 1) },
+                                        modifier = Modifier.size(36.dp),
+                                    ) {
+                                        Icon(
+                                            Icons.Rounded.KeyboardArrowDown,
+                                            DesktopStrings["move_down", "Move down"],
+                                            tint = if (index < expandedPlayerQuickActions.lastIndex) DesktopSecondary else DesktopSecondary.copy(alpha = 0.35f),
+                                        )
+                                    }
+                                }
+                                Spacer(Modifier.width(8.dp))
+                                Switch(
+                                    checked = index >= 0,
+                                    onCheckedChange = { DesktopPlayerSettings.setPlayerQuickActionVisible(action, it) },
                                     colors = desktopSwitchColors(),
                                 )
                             }
@@ -6565,6 +6700,7 @@ private fun DesktopSettingsScreen(
                             style = MaterialTheme.typography.bodySmall,
                             modifier = Modifier.padding(bottom = 10.dp),
                         )
+                        Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
                         Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                             Button(
                                 onClick = {
@@ -6623,6 +6759,30 @@ private fun DesktopSettingsScreen(
                                     }
                                 },
                             ) { Text(DesktopStrings["d_export_settings", "Export settings"]) }
+                        }
+                        Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                            Button(
+                                onClick = {
+                                    val chooser = javax.swing.JFileChooser(System.getProperty("user.home")).apply {
+                                        dialogTitle = DesktopStrings["d_import_m3u_playlist", "Import M3U playlist"]
+                                        isAcceptAllFileFilterUsed = false
+                                        addChoosableFileFilter(
+                                            javax.swing.filechooser.FileNameExtensionFilter(
+                                                "M3U playlists (*.m3u, *.m3u8)", "m3u", "m3u8",
+                                            ),
+                                        )
+                                    }
+                                    if (chooser.showOpenDialog(null) == javax.swing.JFileChooser.APPROVE_OPTION) {
+                                        chooser.selectedFile?.let { file ->
+                                            m3uImportFile = file
+                                            m3uPlaylistName = file.nameWithoutExtension
+                                        }
+                                    }
+                                },
+                                shape = RoundedCornerShape(50),
+                                colors = ButtonDefaults.buttonColors(containerColor = DesktopAccent, contentColor = Color.Black),
+                            ) { Text(DesktopStrings["d_import_m3u_playlist", "Import M3U playlist"]) }
+                        }
                         }
                     }
                 }
@@ -6816,6 +6976,101 @@ private fun DesktopSettingsScreen(
             text = { Text(message) },
             confirmButton = {
                 TextButton(onClick = { backupMessage = null }) { Text(DesktopStrings["done", "Done"]) }
+            },
+        )
+    }
+    m3uImportFile?.let { file ->
+        AlertDialog(
+            onDismissRequest = { if (!m3uImportBusy) m3uImportFile = null },
+            title = { Text(DesktopStrings["d_import_m3u_playlist", "Import M3U playlist"]) },
+            text = {
+                Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
+                    Text(
+                        DesktopStrings.format(
+                            "d_m3u_playlist_name_prompt",
+                            file.name,
+                            fallback = "Choose a playlist name for ${file.name}.",
+                        ),
+                    )
+                    OutlinedTextField(
+                        value = m3uPlaylistName,
+                        onValueChange = { m3uPlaylistName = it },
+                        label = { Text(DesktopStrings["playlist_name", "Playlist name"]) },
+                        singleLine = true,
+                        enabled = !m3uImportBusy,
+                    )
+                    if (m3uImportBusy) {
+                        Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                            CircularProgressIndicator(modifier = Modifier.size(18.dp), strokeWidth = 2.dp)
+                            Text(DesktopStrings["loading", "Loading…"])
+                        }
+                    }
+                }
+            },
+            confirmButton = {
+                TextButton(
+                    enabled = !m3uImportBusy && m3uPlaylistName.isNotBlank(),
+                    onClick = {
+                        val name = m3uPlaylistName.trim()
+                        m3uImportBusy = true
+                        settingsScope.launch {
+                            try {
+                                val result = withContext(Dispatchers.IO) {
+                                    DesktopM3uImporter.import(file.toPath())
+                                }
+                                if (result.songs.isNotEmpty()) onImportM3uPlaylist(name, result.songs)
+                                val countMessage = DesktopStrings.format(
+                                    "d_m3u_import_result",
+                                    result.songs.size,
+                                    result.skipped,
+                                    name,
+                                    fallback = "Imported ${result.songs.size} songs into $name; skipped ${result.skipped} entries.",
+                                )
+                                m3uMessage = if (result.songs.isEmpty()) {
+                                    DesktopStrings.format(
+                                        "d_m3u_import_no_tracks",
+                                        result.skipped,
+                                        fallback = "No playable local tracks were found. Skipped ${result.skipped} entries.",
+                                    )
+                                } else countMessage
+                                m3uImportFile = null
+                            } catch (error: Exception) {
+                                m3uMessage = if (error is DesktopM3uImporter.ImportException) {
+                                    val key = when (error.reason) {
+                                        DesktopM3uImporter.Error.UNREADABLE -> "d_m3u_error_unreadable"
+                                        DesktopM3uImporter.Error.TOO_LARGE -> "d_m3u_error_too_large"
+                                        DesktopM3uImporter.Error.EMPTY -> "d_m3u_error_empty"
+                                        DesktopM3uImporter.Error.NO_ENTRIES -> "d_m3u_error_no_entries"
+                                        DesktopM3uImporter.Error.TOO_MANY -> "d_m3u_error_too_many"
+                                        DesktopM3uImporter.Error.NO_PARENT -> "d_m3u_error_no_parent"
+                                    }
+                                    DesktopStrings[key, DesktopStrings["d_m3u_import_failed", "Could not import this M3U playlist"]]
+                                } else {
+                                    error.message ?: DesktopStrings["d_m3u_import_failed", "Could not import this M3U playlist"]
+                                }
+                                m3uImportFile = null
+                            } finally {
+                                m3uImportBusy = false
+                            }
+                        }
+                    },
+                ) { Text(DesktopStrings["import", "Import"]) }
+            },
+            dismissButton = {
+                TextButton(
+                    enabled = !m3uImportBusy,
+                    onClick = { m3uImportFile = null },
+                ) { Text(DesktopStrings["cancel", "Cancel"]) }
+            },
+        )
+    }
+    m3uMessage?.let { message ->
+        AlertDialog(
+            onDismissRequest = { m3uMessage = null },
+            title = { Text(DesktopStrings["d_import_m3u_playlist", "Import M3U playlist"]) },
+            text = { Text(message) },
+            confirmButton = {
+                TextButton(onClick = { m3uMessage = null }) { Text(DesktopStrings["done", "Done"]) }
             },
         )
     }

@@ -5,6 +5,7 @@ import kotlinx.serialization.decodeFromString
 import kotlinx.serialization.encodeToString
 import kotlinx.serialization.json.Json
 import com.music.bitchord.ui.player.PlayerLyricsAlignment
+import com.music.bitchord.ui.player.PlayerQuickAction
 import com.music.bitchord.ui.player.PlayerSeekButtonMode
 import java.io.File
 import java.time.Instant
@@ -15,7 +16,7 @@ internal object DesktopSettingsBackup {
     private const val ANDROID_APP_ID = "musicbeat"
     private const val DESKTOP_APP_ID = "musicbeatsp-desktop-settings"
     private const val ANDROID_SCHEMA = 3
-    private const val DESKTOP_SCHEMA = 1
+    private const val DESKTOP_SCHEMA = 2
     private const val MAX_FILE_BYTES = 10L * 1024 * 1024
 
     private val json = Json {
@@ -73,12 +74,16 @@ internal object DesktopSettingsBackup {
         // standard key so the ordering and compatible actions can be transferred across targets.
         values["player_quick_actions"] = SettingValue(
             type = "stringSet",
+            values = DesktopPlayerSettings.playerQuickActions.value.map { it.name },
+        )
+        values["desktop_mini_player_controls"] = SettingValue(
+            type = "stringSet",
             values = DesktopPlayerSettings.miniPlayerControls.value.map { it.name },
         )
         val backup = BackupFile(
             app = DESKTOP_APP_ID,
             version = DESKTOP_SCHEMA,
-            versionName = "2.1.0-desktop",
+            versionName = "2.1.1-desktop",
             exportedAt = Instant.now().toString(),
             settings = values,
         )
@@ -102,17 +107,33 @@ internal object DesktopSettingsBackup {
         val persistence = DesktopPersistence()
         var imported = 0
         var skipped = 0
-        var importedActions: List<DesktopMiniPlayerControl>? = null
+        var importedQuickActions: List<PlayerQuickAction>? = null
+        var importedMiniPlayerControls: List<DesktopMiniPlayerControl>? = null
         backup.settings.forEach { (key, stored) ->
             if (!isExportable(key, allowLocalPath = !androidBackup)) {
                 skipped++
                 return@forEach
             }
-            if (key == "player_quick_actions" || key == "mini_player_controls") {
+            if (key == "player_quick_actions") {
                 val names = if (stored.type == "stringSet") stored.values else stored.value.orEmpty().split(',')
-                importedActions = names.mapNotNull { name ->
-                    runCatching { DesktopMiniPlayerControl.valueOf(name) }.getOrNull()
+                if (!androidBackup && backup.version < 2) {
+                    importedMiniPlayerControls = names.mapNotNull { name ->
+                        runCatching { DesktopMiniPlayerControl.valueOf(name) }.getOrNull()
+                    }
+                } else {
+                    importedQuickActions = names.mapNotNull { name ->
+                        runCatching { PlayerQuickAction.valueOf(name) }.getOrNull()
+                    }.distinct()
+                    skipped += names.size - importedQuickActions.orEmpty().size
                 }
+                return@forEach
+            }
+            if (key == "desktop_mini_player_controls" || key == "mini_player_controls") {
+                val names = if (stored.type == "stringSet") stored.values else stored.value.orEmpty().split(',')
+                importedMiniPlayerControls = names.mapNotNull { name ->
+                    runCatching { DesktopMiniPlayerControl.valueOf(name) }.getOrNull()
+                }.distinct()
+                skipped += names.size - importedMiniPlayerControls.orEmpty().size
                 return@forEach
             }
             val value = stored.asText()
@@ -128,7 +149,11 @@ internal object DesktopSettingsBackup {
             if (!applyLiveSetting(key, value)) persistence.preferences.put(key, value)
             imported++
         }
-        importedActions?.let {
+        importedQuickActions?.let {
+            DesktopPlayerSettings.setPlayerQuickActions(it)
+            imported++
+        }
+        importedMiniPlayerControls?.let {
             DesktopPlayerSettings.setMiniPlayerControls(it)
             imported++
         }

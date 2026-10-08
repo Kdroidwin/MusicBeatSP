@@ -89,6 +89,14 @@ object DesktopLocalMusic {
         return NON_MUSIC_MARKERS.none { it in haystack }
     }
 
+    /** Builds a local song row for a playlist reference, including files outside the scan folder. */
+    internal fun songForPath(path: Path): Song? = runCatching {
+        val absolutePath = path.toAbsolutePath().normalize()
+        if (!Files.isRegularFile(absolutePath) || !Files.isReadable(absolutePath)) return null
+        if (absolutePath.extension.lowercase(Locale.ROOT) !in supportedExtensions) return null
+        absolutePath.toSong()
+    }.getOrNull()
+
     /** Folders and names that hold something other than music. */
     private val NON_MUSIC_MARKERS = listOf(
         "/ringtones/", "/notifications/", "/alarms/", "/ui/", "/recordings/", "/voice recorder/",

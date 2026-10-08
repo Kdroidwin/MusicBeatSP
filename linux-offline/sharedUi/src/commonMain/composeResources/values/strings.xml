@@ -35,6 +35,14 @@
     <string name="increase_lyrics_offset">Increase lyrics offset</string>
     <string name="instrumental">Instrumental</string>
     <string name="like">Like</string>
+    <string name="quick_action_lyrics">Lyrics</string>
+    <string name="quick_action_add_to_playlist">Add to playlist</string>
+    <string name="quick_action_playback_tuning">Playback settings</string>
+    <string name="quick_action_album">Album</string>
+    <string name="quick_action_artist">Artist</string>
+    <string name="quick_action_equalizer">Equalizer</string>
+    <string name="quick_action_sleep_timer">Sleep timer</string>
+    <string name="quick_action_details">Details</string>
     <string name="listen_together">Listen together</string>
     <string name="listen_together_away">Away — their slot is held</string>
     <string name="listen_together_host">Host</string>

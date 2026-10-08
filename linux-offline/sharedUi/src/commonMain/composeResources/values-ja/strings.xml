@@ -35,6 +35,14 @@
     <string name="increase_lyrics_offset">Increase lyrics offset</string>
     <string name="instrumental">インストゥルメンタル</string>
     <string name="like">高評価</string>
+    <string name="quick_action_lyrics">歌詞</string>
+    <string name="quick_action_add_to_playlist">プレイリストに追加</string>
+    <string name="quick_action_playback_tuning">再生設定</string>
+    <string name="quick_action_album">アルバム</string>
+    <string name="quick_action_artist">アーティスト</string>
+    <string name="quick_action_equalizer">イコライザー</string>
+    <string name="quick_action_sleep_timer">スリープタイマー</string>
+    <string name="quick_action_details">詳細</string>
     <string name="listen_together">一緒に聴く</string>
     <string name="listen_together_away">離席中 — 枠は確保されています</string>
     <string name="listen_together_host">ホスト</string>

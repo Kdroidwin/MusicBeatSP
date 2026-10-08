@@ -153,6 +153,8 @@ interface PlayerSettingsSource {
     val seekButtonSeconds: StateFlow<Int>
     val hideSeekSecondsLabel: StateFlow<Boolean>
     val hideVolumeBar: StateFlow<Boolean>
+    /** Ordered shortcuts shown beside the title in the expanded player. */
+    val playerQuickActions: StateFlow<List<PlayerQuickAction>>
     val lastPlayerScreen: StateFlow<LastPlayerScreen>
     val legacyMeshGradient: StateFlow<Boolean>
     val lyricsBlur: StateFlow<Boolean>
@@ -180,6 +182,22 @@ interface PlayerSettingsSource {
 
     fun setLastPlayerScreen(value: LastPlayerScreen)
     fun setLyricsOffsetMs(value: Int)
+}
+
+/** Shortcuts the desktop can run directly from the expanded player. */
+enum class PlayerQuickAction {
+    LYRICS,
+    ADD_TO_PLAYLIST,
+    PLAYBACK_TUNING,
+    QUEUE,
+    PLAYLISTS,
+    SEARCH,
+    ALBUM,
+    ARTIST,
+    EQUALIZER,
+    SLEEP_TIMER,
+    DETAILS,
+    FAVORITE,
 }
 
 /** Text alignment choices shared by the Android and desktop lyric panels. */
