@@ -755,7 +755,8 @@ fun NowPlayingScreen(
 ) {
     val density = LocalDensity.current
     val haptics = rememberHaptics()
-    val playerQuickActions by PlayerSettings.playerQuickActions.collectAsStateWithLifecycle()
+    val playerQuickActions = PlayerSettings.playerQuickActions
+        .collectAsStateWithLifecycle().value.orEmpty()
 
     // Remote tracks whose art lives inside the file resolve it here, once —
     // every surface below reads the same value rather than each triggering
@@ -797,7 +798,8 @@ fun NowPlayingScreen(
     val hideLyricsAboveSeekbar by PlayerSettings.hideLyricsAboveSeekbar.collectAsStateWithLifecycle()
     val hideLyricsTranslationButton by PlayerSettings.hideLyricsTranslationButton.collectAsStateWithLifecycle()
     val hideLyricsRomanizationButton by PlayerSettings.hideLyricsRomanizationButton.collectAsStateWithLifecycle()
-    val playerBottomActions by PlayerSettings.playerBottomActions.collectAsStateWithLifecycle()
+    val playerBottomActions = PlayerSettings.playerBottomActions
+        .collectAsStateWithLifecycle().value.orEmpty()
     val lyricsOffsetMs by PlayerSettings.lyricsOffsetMs.collectAsStateWithLifecycle()
     // A lambda, not a value: read by the lyric strip and panel in scopes of
     // their own, so a tick recomposes them and not the player around them.

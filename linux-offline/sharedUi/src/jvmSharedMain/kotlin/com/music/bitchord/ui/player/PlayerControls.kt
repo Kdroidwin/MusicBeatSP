@@ -586,7 +586,7 @@ internal fun VolumeRow(
  */
 @Composable
 internal fun PlayerActionRow(
-    actions: List<PlayerBottomAction>,
+    actions: List<PlayerBottomAction>?,
     lyricsOpen: Boolean,
     queueOpen: Boolean,
     shuffleEnabled: Boolean,
@@ -604,7 +604,7 @@ internal fun PlayerActionRow(
     /** Opens [ListenTogetherMembersSheet] rather than settings directly. */
     onOpenListenTogetherMembers: () -> Unit,
 ) {
-    val visibleActions = actions.distinct()
+    val visibleActions = actions.orEmpty().distinct()
     if (visibleActions.isEmpty()) return
     Row(
         modifier = Modifier.fillMaxWidth().padding(horizontal = 12.dp),
