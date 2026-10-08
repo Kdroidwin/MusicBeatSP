@@ -35,6 +35,7 @@ import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
@@ -74,6 +75,7 @@ internal fun DesktopPlaylistDialog(
     onDismiss: () -> Unit,
 ) {
     var creating by remember { mutableStateOf(song == null) }
+    val hideOnThisComputerLabel by DesktopPlayerSettings.hideOnThisComputerLabel.collectAsState()
 
     DesktopDialogFrame(onDismiss = onDismiss) {
         if (creating) {
@@ -135,7 +137,11 @@ internal fun DesktopPlaylistDialog(
                     }
                 }
                 if (localPlaylists.isNotEmpty()) {
-                    item(key = "heading:local") { DialogSectionHeading("On this computer") }
+                    if (!hideOnThisComputerLabel) {
+                        item(key = "heading:local") {
+                            DialogSectionHeading(DesktopStrings["d_on_this_computer", "On this computer"])
+                        }
+                    }
                     items(localPlaylists.size, key = { localPlaylists[it].id }) { index ->
                         val playlist = localPlaylists[index]
                         DialogAction(

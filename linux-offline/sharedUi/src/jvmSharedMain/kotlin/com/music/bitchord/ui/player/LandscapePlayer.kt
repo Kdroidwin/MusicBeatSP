@@ -492,9 +492,10 @@ internal fun LandscapeCredits(
 internal fun LandscapeLyricsPane(
     hasLyrics: Boolean,
     /** Shown in place of the sheet while there are no lines to draw. */
-    placeholder: String,
+    placeholder: String?,
     status: String,
     onStatusClick: () -> Unit,
+    hideStatus: Boolean = false,
     /** Whether lines are being picked, which is what the bar stands in for. */
     picking: Boolean = false,
     /** The pick bar itself, drawn in place of the row below. */
@@ -517,13 +518,15 @@ internal fun LandscapeLyricsPane(
                 // [LyricsUnavailableLine] or [LyricsLoadingLine]: those fade
                 // out after a few seconds, which here would leave the whole
                 // column blank for as long as the track keeps playing.
-                Text(
-                    text = placeholder,
-                    style = MaterialTheme.typography.titleMedium,
-                    color = Color.White.copy(alpha = 0.6f),
-                    textAlign = TextAlign.Center,
-                    modifier = Modifier.align(Alignment.Center),
-                )
+                placeholder?.let {
+                    Text(
+                        text = it,
+                        style = MaterialTheme.typography.titleMedium,
+                        color = Color.White.copy(alpha = 0.6f),
+                        textAlign = TextAlign.Center,
+                        modifier = Modifier.align(Alignment.Center),
+                    )
+                }
             }
         }
         // While a pick is open the row below gives way to the bar: the two
@@ -548,10 +551,12 @@ internal fun LandscapeLyricsPane(
                     .padding(horizontal = 12.dp),
                 contentAlignment = Alignment.Center,
             ) {
-                LyricsStatusWithChange(
-                    status = status,
-                    onStatusClick = onStatusClick,
-                )
+                if (!hideStatus) {
+                    LyricsStatusWithChange(
+                        status = status,
+                        onStatusClick = onStatusClick,
+                    )
+                }
             }
             Box(Modifier.size(34.dp)) { if (hasLyrics) translationToggle() }
         }

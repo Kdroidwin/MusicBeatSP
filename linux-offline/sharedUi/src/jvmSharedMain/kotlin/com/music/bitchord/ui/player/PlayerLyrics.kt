@@ -2709,6 +2709,8 @@ internal class LyricsTranslationUi(
     val reduceMotion: Boolean,
     /** The line naming the lyrics' source, or what the translation is doing. */
     val status: String,
+    /** True only for the static saved/unavailable captions that can be hidden. */
+    val statusIsSavedOrUnavailable: Boolean,
     val toggleTranslation: () -> Unit,
     val toggleRomanization: () -> Unit,
 )
@@ -2918,6 +2920,15 @@ internal fun rememberLyricsTranslation(
         lyrics.isNullOrEmpty() -> loadingText
         else -> stringResource(Res.string.lyrics_saved_with_download)
     }
+    val statusIsSavedOrUnavailable =
+        translationState !is LyricsTranslationUiState.Loading &&
+            romanizationState !is LyricsTranslationUiState.Loading &&
+            !showingTranslation &&
+            !showingRomanization &&
+            translationState !is LyricsTranslationUiState.SameLanguage &&
+            romanizationState !is LyricsTranslationUiState.SameLanguage &&
+            lyricsSource == null &&
+            (lyricsUnavailable || !lyrics.isNullOrEmpty())
 
     return LyricsTranslationUi(
         displayedLyrics = displayedLyrics,
@@ -2929,6 +2940,7 @@ internal fun rememberLyricsTranslation(
         transition = translationTransition,
         reduceMotion = reduceTranslationMotion,
         status = status,
+        statusIsSavedOrUnavailable = statusIsSavedOrUnavailable,
         toggleTranslation = toggleTranslation,
         toggleRomanization = toggleRomanization,
     )

@@ -792,6 +792,11 @@ fun NowPlayingScreen(
     val openListenTogetherMembers: () -> Unit = { showListenTogetherMembers = true }
 
     val syncedLyricsEnabled by PlayerSettings.syncedLyrics.collectAsStateWithLifecycle()
+    val hideLyricsSavedAndUnavailable by PlayerSettings.hideLyricsSavedAndUnavailable.collectAsStateWithLifecycle()
+    val hideLyricsAboveSeekbar by PlayerSettings.hideLyricsAboveSeekbar.collectAsStateWithLifecycle()
+    val hideLyricsTranslationButton by PlayerSettings.hideLyricsTranslationButton.collectAsStateWithLifecycle()
+    val hideLyricsRomanizationButton by PlayerSettings.hideLyricsRomanizationButton.collectAsStateWithLifecycle()
+    val playerBottomActions by PlayerSettings.playerBottomActions.collectAsStateWithLifecycle()
     val lyricsOffsetMs by PlayerSettings.lyricsOffsetMs.collectAsStateWithLifecycle()
     // A lambda, not a value: read by the lyric strip and panel in scopes of
     // their own, so a tick recomposes them and not the player around them.
@@ -1507,6 +1512,7 @@ fun NowPlayingScreen(
     // besides the sleeve.
     val playerActions: @Composable () -> Unit = {
         PlayerActionRow(
+            actions = playerBottomActions,
             lyricsOpen = lyricsOpen,
             queueOpen = queueOpen,
             shuffleEnabled = shuffleEnabled,
@@ -1519,6 +1525,7 @@ fun NowPlayingScreen(
             onCycleRepeat = onCycleRepeat,
             onToggleAutoplay = onToggleAutoplay,
             onOpenOutput = openAudioOutput,
+            onOpenPlaylists = { onQuickAction(PlayerQuickAction.PLAYLISTS) },
             onListenTogether = onListenTogether,
             onOpenListenTogetherMembers = openListenTogetherMembers,
         )
@@ -1902,7 +1909,7 @@ fun NowPlayingScreen(
                                 onOpenArtist = onOpenArtist,
                             )
                         },
-                        lyricStrip = if (syncedLyricsEnabled) {
+                        lyricStrip = if (syncedLyricsEnabled && !hideLyricsAboveSeekbar) {
                             {
                                 CurrentLyricStrip(
                                     lines = lyricsTranslation.displayedLyrics,
@@ -1979,13 +1986,16 @@ fun NowPlayingScreen(
                 lyricsPane = {
                     LandscapeLyricsPane(
                         hasLyrics = lyricsTranslation.displayedLyrics.isNotEmpty(),
-                        placeholder = if (lyricsUnavailable) {
+                        placeholder = if (lyricsUnavailable && hideLyricsSavedAndUnavailable) {
+                            null
+                        } else if (lyricsUnavailable) {
                             stringResource(Res.string.lyrics_not_available)
                         } else {
                             lyricsLoadingText
                         },
                         status = lyricsTranslation.status,
                         onStatusClick = { showLyricsProviders = true },
+                        hideStatus = hideLyricsSavedAndUnavailable && lyricsTranslation.statusIsSavedOrUnavailable,
                         picking = lyricPicker.picking,
                         pickBar = {
                             LyricsPickBar(
@@ -1996,20 +2006,24 @@ fun NowPlayingScreen(
                             )
                         },
                         romanizationToggle = {
-                            RomanizationToggleButton(
-                                state = lyricsTranslation.romanizationState,
-                                showingRomanization = lyricsTranslation.showingRomanization,
-                                enabled = !lyrics.isNullOrEmpty(),
-                                onClick = lyricsTranslation.toggleRomanization,
-                            )
+                            if (!hideLyricsRomanizationButton) {
+                                RomanizationToggleButton(
+                                    state = lyricsTranslation.romanizationState,
+                                    showingRomanization = lyricsTranslation.showingRomanization,
+                                    enabled = !lyrics.isNullOrEmpty(),
+                                    onClick = lyricsTranslation.toggleRomanization,
+                                )
+                            }
                         },
                         translationToggle = {
-                            TranslationToggleButton(
-                                state = lyricsTranslation.translationState,
-                                showingTranslation = lyricsTranslation.showingTranslation,
-                                enabled = !lyrics.isNullOrEmpty(),
-                                onClick = lyricsTranslation.toggleTranslation,
-                            )
+                            if (!hideLyricsTranslationButton) {
+                                TranslationToggleButton(
+                                    state = lyricsTranslation.translationState,
+                                    showingTranslation = lyricsTranslation.showingTranslation,
+                                    enabled = !lyrics.isNullOrEmpty(),
+                                    onClick = lyricsTranslation.toggleTranslation,
+                                )
+                            }
                         },
                     ) { panelModifier ->
                         LyricsTranslationMotion(
@@ -3454,31 +3468,35 @@ fun NowPlayingScreen(
                         label = "translateFade",
                     )
                     if (translateFade > 0.01f && !lyricPicker.picking) {
-                        Box(
-                            modifier = Modifier
-                                .align(Alignment.BottomStart)
-                                .graphicsLayer { alpha = translateFade },
-                        ) {
-                            RomanizationToggleButton(
-                                state = lyricsTranslation.romanizationState,
-                                showingRomanization = lyricsTranslation.showingRomanization,
-                                enabled = translateShown && !lyrics.isNullOrEmpty(),
-                                onClick = lyricsTranslation.toggleRomanization,
-                            )
+                        if (!hideLyricsRomanizationButton) {
+                            Box(
+                                modifier = Modifier
+                                    .align(Alignment.BottomStart)
+                                    .graphicsLayer { alpha = translateFade },
+                            ) {
+                                RomanizationToggleButton(
+                                    state = lyricsTranslation.romanizationState,
+                                    showingRomanization = lyricsTranslation.showingRomanization,
+                                    enabled = translateShown && !lyrics.isNullOrEmpty(),
+                                    onClick = lyricsTranslation.toggleRomanization,
+                                )
+                            }
                         }
-                        Box(
-                            modifier = Modifier
-                                .align(Alignment.BottomEnd)
-                                .graphicsLayer { alpha = translateFade },
-                        ) {
-                            TranslationToggleButton(
-                                state = lyricsTranslation.translationState,
-                                showingTranslation = lyricsTranslation.showingTranslation,
-                                // Not tappable on the way out: a disc at 20%
-                                // opacity is on its way to gone, not a target.
-                                enabled = translateShown && !lyrics.isNullOrEmpty(),
-                                onClick = lyricsTranslation.toggleTranslation,
-                            )
+                        if (!hideLyricsTranslationButton) {
+                            Box(
+                                modifier = Modifier
+                                    .align(Alignment.BottomEnd)
+                                    .graphicsLayer { alpha = translateFade },
+                            ) {
+                                TranslationToggleButton(
+                                    state = lyricsTranslation.translationState,
+                                    showingTranslation = lyricsTranslation.showingTranslation,
+                                    // Not tappable on the way out: a disc at 20%
+                                    // opacity is on its way to gone, not a target.
+                                    enabled = translateShown && !lyrics.isNullOrEmpty(),
+                                    onClick = lyricsTranslation.toggleTranslation,
+                                )
+                            }
                         }
                     }
                     // The bar arrives and leaves without a transition of its own:
@@ -3604,7 +3622,7 @@ fun NowPlayingScreen(
             // accompanied by a dedicated lyrics button in the bottom row. Its
             // one-line slot remains, invisibly, so opening lyrics cannot grow
             // the half-player merely to make room for the source label.
-            if (!lyricsOpen && syncedLyricsEnabled) {
+            if (!lyricsOpen && syncedLyricsEnabled && !hideLyricsAboveSeekbar) {
                 CurrentLyricStrip(
                     lines = lyricsTranslation.displayedLyrics,
                     trackKey = song.videoId,
@@ -3621,7 +3639,7 @@ fun NowPlayingScreen(
                     onClick = openLyrics,
                 )
             }
-            if (!lyricsOpen && !syncedLyricsEnabled) {
+            if (!lyricsOpen && (!syncedLyricsEnabled || hideLyricsAboveSeekbar)) {
                 Text(
                     text = "\u00A0",
                     style = MaterialTheme.typography.titleMedium,
@@ -3633,14 +3651,16 @@ fun NowPlayingScreen(
                 )
             }
             if (lyricsOpen) {
-                LyricsStatusWithChange(
-                    status = lyricsTranslation.status,
-                    onStatusClick = { showLyricsProviders = true },
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .offset(y = 6.dp)
-                        .padding(vertical = 4.dp),
-                )
+                if (!(hideLyricsSavedAndUnavailable && lyricsTranslation.statusIsSavedOrUnavailable)) {
+                    LyricsStatusWithChange(
+                        status = lyricsTranslation.status,
+                        onStatusClick = { showLyricsProviders = true },
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .offset(y = 6.dp)
+                            .padding(vertical = 4.dp),
+                    )
+                }
             }
             val transitionWindow by PlayerSettings.smartTransitionWindow.collectAsStateWithLifecycle()
             PlayerScrubber(

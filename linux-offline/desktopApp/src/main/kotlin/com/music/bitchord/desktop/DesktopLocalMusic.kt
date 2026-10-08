@@ -122,6 +122,7 @@ object DesktopLocalMusic {
         val fileSize = attributes?.size() ?: runCatching { Files.size(absolutePath) }.getOrDefault(0L)
         val modifiedMillis = attributes?.lastModifiedTime()?.toMillis() ?: 0L
         val parsed = parseFileName(nameWithoutExtension)
+        val tags = DesktopLocalMetadata.read(absolutePath, fileSize, modifiedMillis)
         val codec = extension.lowercase(Locale.ROOT).let { value ->
             when (value) {
                 "flac" -> "FLAC"
@@ -134,9 +135,14 @@ object DesktopLocalMusic {
         }
         return Song(
             videoId = "local:$identity",
-            title = parsed.title,
-            artist = parsed.artist,
+            // Android's MediaStore supplies these from the audio tags. The desktop used to show
+            // the file name only, which made album and artist browsing effectively empty for
+            // ordinary tagged files. Keep the filename parser as a safe fallback for untagged or
+            // damaged files.
+            title = tags.title ?: parsed.title,
+            artist = tags.artist ?: parsed.artist,
             thumbnailUrl = DesktopLocalArtwork.reference(absolutePath, fileSize, modifiedMillis),
+            albumName = tags.album,
             localUri = absolutePath.toUri().toString(),
             localPath = absolutePath.toString(),
             localDateAddedSeconds = added.epochSecond,

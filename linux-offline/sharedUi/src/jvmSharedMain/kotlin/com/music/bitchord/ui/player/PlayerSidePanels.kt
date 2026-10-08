@@ -49,6 +49,9 @@ fun LyricsSidePanel(
 ) {
     val haptics = rememberHaptics()
     val lyricsOffsetMs by PlayerSettings.lyricsOffsetMs.collectAsStateWithLifecycle()
+    val hideSavedAndUnavailable by PlayerSettings.hideLyricsSavedAndUnavailable.collectAsStateWithLifecycle()
+    val hideTranslationButton by PlayerSettings.hideLyricsTranslationButton.collectAsStateWithLifecycle()
+    val hideRomanizationButton by PlayerSettings.hideLyricsRomanizationButton.collectAsStateWithLifecycle()
     val lyricsPlayhead = rememberLyricPlayhead(position)
     val seekToLyric: (Long) -> Unit = { lineTimeMs ->
         onSeek(adjustedLyricsSeekTarget(lineTimeMs, lyricsOffsetMs))
@@ -73,28 +76,35 @@ fun LyricsSidePanel(
         Box(Modifier.fillMaxSize().hazeSource(haze)) {
             LandscapeLyricsPane(
                 hasLyrics = lyricsTranslation.displayedLyrics.isNotEmpty(),
-                placeholder = if (lyricsUnavailable) {
+                placeholder = if (lyricsUnavailable && hideSavedAndUnavailable) {
+                    null
+                } else if (lyricsUnavailable) {
                     stringResource(Res.string.lyrics_not_available)
                 } else {
                     lyricsLoadingText
                 },
                 status = lyricsTranslation.status,
                 onStatusClick = { showLyricsProviders = true },
+                hideStatus = hideSavedAndUnavailable && lyricsTranslation.statusIsSavedOrUnavailable,
                 romanizationToggle = {
-                    RomanizationToggleButton(
-                        state = lyricsTranslation.romanizationState,
-                        showingRomanization = lyricsTranslation.showingRomanization,
-                        enabled = !lyrics.isNullOrEmpty(),
-                        onClick = lyricsTranslation.toggleRomanization,
-                    )
+                    if (!hideRomanizationButton) {
+                        RomanizationToggleButton(
+                            state = lyricsTranslation.romanizationState,
+                            showingRomanization = lyricsTranslation.showingRomanization,
+                            enabled = !lyrics.isNullOrEmpty(),
+                            onClick = lyricsTranslation.toggleRomanization,
+                        )
+                    }
                 },
                 translationToggle = {
-                    TranslationToggleButton(
-                        state = lyricsTranslation.translationState,
-                        showingTranslation = lyricsTranslation.showingTranslation,
-                        enabled = !lyrics.isNullOrEmpty(),
-                        onClick = lyricsTranslation.toggleTranslation,
-                    )
+                    if (!hideTranslationButton) {
+                        TranslationToggleButton(
+                            state = lyricsTranslation.translationState,
+                            showingTranslation = lyricsTranslation.showingTranslation,
+                            enabled = !lyrics.isNullOrEmpty(),
+                            onClick = lyricsTranslation.toggleTranslation,
+                        )
+                    }
                 },
             ) { panelModifier ->
                 LyricsTranslationMotion(

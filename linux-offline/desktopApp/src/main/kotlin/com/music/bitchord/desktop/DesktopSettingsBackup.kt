@@ -5,6 +5,7 @@ import kotlinx.serialization.decodeFromString
 import kotlinx.serialization.encodeToString
 import kotlinx.serialization.json.Json
 import com.music.bitchord.ui.player.PlayerLyricsAlignment
+import com.music.bitchord.ui.player.PlayerBottomAction
 import com.music.bitchord.ui.player.PlayerQuickAction
 import com.music.bitchord.ui.player.PlayerSeekButtonMode
 import java.io.File
@@ -80,6 +81,10 @@ internal object DesktopSettingsBackup {
             type = "stringSet",
             values = DesktopPlayerSettings.miniPlayerControls.value.map { it.name },
         )
+        values["player_bottom_actions"] = SettingValue(
+            type = "stringSet",
+            values = DesktopPlayerSettings.playerBottomActions.value.map { it.name },
+        )
         val backup = BackupFile(
             app = DESKTOP_APP_ID,
             version = DESKTOP_SCHEMA,
@@ -109,6 +114,7 @@ internal object DesktopSettingsBackup {
         var skipped = 0
         var importedQuickActions: List<PlayerQuickAction>? = null
         var importedMiniPlayerControls: List<DesktopMiniPlayerControl>? = null
+        var importedBottomActions: List<PlayerBottomAction>? = null
         backup.settings.forEach { (key, stored) ->
             if (!isExportable(key, allowLocalPath = !androidBackup)) {
                 skipped++
@@ -136,6 +142,14 @@ internal object DesktopSettingsBackup {
                 skipped += names.size - importedMiniPlayerControls.orEmpty().size
                 return@forEach
             }
+            if (key == "player_bottom_actions") {
+                val names = if (stored.type == "stringSet") stored.values else stored.value.orEmpty().split(',')
+                importedBottomActions = names.mapNotNull { name ->
+                    runCatching { PlayerBottomAction.valueOf(name) }.getOrNull()
+                }.distinct()
+                skipped += names.size - importedBottomActions.orEmpty().size
+                return@forEach
+            }
             val value = stored.asText()
             if (value == null) {
                 skipped++
@@ -157,6 +171,10 @@ internal object DesktopSettingsBackup {
             DesktopPlayerSettings.setMiniPlayerControls(it)
             imported++
         }
+        importedBottomActions?.let {
+            DesktopPlayerSettings.setPlayerBottomActions(it)
+            imported++
+        }
         runCatching { persistence.preferences.flush() }
         return ImportResult(imported, skipped, if (androidBackup) "Android" else "desktop")
     }
@@ -172,6 +190,11 @@ internal object DesktopSettingsBackup {
         "hide_unknown_player_artist" -> value.toBooleanStrictOrNull()?.let { DesktopPlayerSettings.setHideUnknownPlayerArtist(it); true } ?: false
         "center_player_track_info" -> value.toBooleanStrictOrNull()?.let { DesktopPlayerSettings.setCenterPlayerTrackInfo(it); true } ?: false
         "hide_lyrics_status_text" -> value.toBooleanStrictOrNull()?.let { DesktopPlayerSettings.setHideLyricsStatusText(it); true } ?: false
+        "hide_lyrics_saved_unavailable" -> value.toBooleanStrictOrNull()?.let { DesktopPlayerSettings.setHideLyricsSavedAndUnavailable(it); true } ?: false
+        "hide_lyrics_above_seekbar" -> value.toBooleanStrictOrNull()?.let { DesktopPlayerSettings.setHideLyricsAboveSeekbar(it); true } ?: false
+        "hide_lyrics_translation_button" -> value.toBooleanStrictOrNull()?.let { DesktopPlayerSettings.setHideLyricsTranslationButton(it); true } ?: false
+        "hide_lyrics_romanization_button" -> value.toBooleanStrictOrNull()?.let { DesktopPlayerSettings.setHideLyricsRomanizationButton(it); true } ?: false
+        "hide_on_this_computer_label" -> value.toBooleanStrictOrNull()?.let { DesktopPlayerSettings.setHideOnThisComputerLabel(it); true } ?: false
         "hide_song_status" -> value.toBooleanStrictOrNull()?.let { DesktopPlayerSettings.setHideSongStatus(it); true } ?: false
         "seek_button_mode" -> runCatching { PlayerSeekButtonMode.valueOf(value) }
             .getOrNull()?.let { DesktopPlayerSettings.setSeekButtonMode(it); true } ?: false

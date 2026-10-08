@@ -155,6 +155,12 @@ interface PlayerSettingsSource {
     val hideVolumeBar: StateFlow<Boolean>
     /** Ordered shortcuts shown beside the title in the expanded player. */
     val playerQuickActions: StateFlow<List<PlayerQuickAction>>
+    /** Ordered buttons shown along the bottom edge of the full-screen player. */
+    val playerBottomActions: StateFlow<List<PlayerBottomAction>>
+    val hideLyricsSavedAndUnavailable: StateFlow<Boolean>
+    val hideLyricsAboveSeekbar: StateFlow<Boolean>
+    val hideLyricsTranslationButton: StateFlow<Boolean>
+    val hideLyricsRomanizationButton: StateFlow<Boolean>
     val lastPlayerScreen: StateFlow<LastPlayerScreen>
     val legacyMeshGradient: StateFlow<Boolean>
     val lyricsBlur: StateFlow<Boolean>
@@ -198,6 +204,14 @@ enum class PlayerQuickAction {
     SLEEP_TIMER,
     DETAILS,
     FAVORITE,
+}
+
+/** Buttons at the foot of the full-screen player; independent of title shortcuts. */
+enum class PlayerBottomAction {
+    LYRICS,
+    AUDIO_OUTPUT,
+    QUEUE,
+    PLAYLISTS,
 }
 
 /** Text alignment choices shared by the Android and desktop lyric panels. */

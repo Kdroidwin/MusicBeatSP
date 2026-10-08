@@ -21,6 +21,7 @@ import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.LazyListScope
+import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
@@ -35,6 +36,7 @@ import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.produceState
+import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
@@ -64,6 +66,7 @@ import java.time.format.DateTimeFormatter
 import java.util.Locale
 import kotlin.math.roundToInt
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 
 // ── The banner on the Library page ──────────────────────────────────────────
@@ -78,11 +81,14 @@ internal fun DesktopReplayPage(
     onPeriodChange: (DesktopReplayPeriod) -> Unit,
     onPlaySong: (Song) -> Unit,
     onOpenArtist: (String) -> Unit,
+    onPlayAlbum: (String) -> Unit,
     contentPadding: PaddingValues,
 ) {
+    val listState = rememberLazyListState()
+    val scope = rememberCoroutineScope()
     // The mesh behind this page is painted by the frame, so the chrome is tinted by it too.
     Box(Modifier.fillMaxSize()) {
-        LazyColumn(Modifier.fillMaxSize(), contentPadding = contentPadding) {
+        LazyColumn(Modifier.fillMaxSize(), state = listState, contentPadding = contentPadding) {
             item("heading") {
                 // No arrow of its own: the top bar's back is the way out, as the gesture is on
                 // Android.
@@ -123,7 +129,14 @@ internal fun DesktopReplayPage(
                             artworkUrl = card.artworkUrl,
                             holder = holder,
                             memberSince = summary.memberSince(),
-                            onClick = {},
+                            // These cards were clickable on Android, but desktop had an empty
+                            // callback. Keep the same intent by taking the user to the chart or
+                            // stats that explain each headline.
+                            onClick = {
+                                scope.launch {
+                                    listState.animateScrollToItem(summary.anchorIndex(card.anchor))
+                                }
+                            },
                             modifier = Modifier.width(300.dp),
                         )
                     }
@@ -147,7 +160,7 @@ internal fun DesktopReplayPage(
                 key = "albums",
                 title = DesktopStrings["top_albums", "Top Albums"],
                 rows = summary.albumRows(CHART_LENGTH),
-                onClick = {},
+                onClick = { index -> summary.albums.getOrNull(index)?.let { onPlayAlbum(it.title) } },
             )
 
             item("habits") { Habits(summary) }
@@ -423,12 +436,29 @@ data class DesktopReplayRow(
 )
 
 /** One of the cards along the top of the page. */
-data class DesktopReplayHeroCard(
+internal data class DesktopReplayHeroCard(
     val label: String,
     val value: String,
     val detail: String?,
     val artworkUrl: String?,
+    val anchor: DesktopReplayAnchor,
 )
+
+internal enum class DesktopReplayAnchor { SONGS, ARTISTS, ALBUMS, HABITS }
+
+/** Item position for the chart that explains a Replay card, including variable chart lengths. */
+internal fun DesktopReplaySummary.anchorIndex(anchor: DesktopReplayAnchor): Int {
+    val songsTitle = 2 // heading, cards, then the first chart
+    val artistTitle = songsTitle + 1 + songs.take(CHART_LENGTH).size + 1
+    val albumTitle = artistTitle + 1 + artists.take(CHART_LENGTH).size + 1
+    val habits = albumTitle + 1 + albums.take(CHART_LENGTH).size + 1
+    return when (anchor) {
+        DesktopReplayAnchor.SONGS -> songsTitle
+        DesktopReplayAnchor.ARTISTS -> artistTitle
+        DesktopReplayAnchor.ALBUMS -> albumTitle
+        DesktopReplayAnchor.HABITS -> habits
+    }
+}
 
 internal fun DesktopReplaySummary.songRows(limit: Int): List<DesktopReplayRow> =
     songs.take(limit).mapIndexed { index, entry ->
@@ -472,6 +502,7 @@ internal fun DesktopReplaySummary.heroCards(): List<DesktopReplayHeroCard> = bui
             value = grouped(minutes),
             detail = "${plays(totalPlays)} · ${label.ifBlank { period.chip }}",
             artworkUrl = songs.firstOrNull()?.song?.thumbnailUrl,
+            anchor = DesktopReplayAnchor.HABITS,
         ),
     )
     artists.firstOrNull()?.let {
@@ -481,6 +512,7 @@ internal fun DesktopReplaySummary.heroCards(): List<DesktopReplayHeroCard> = bui
                 value = it.title,
                 detail = "${formatListening(it.ms)} · ${plays(it.plays)}",
                 artworkUrl = it.artworkUrl,
+                anchor = DesktopReplayAnchor.ARTISTS,
             ),
         )
     }
@@ -491,6 +523,7 @@ internal fun DesktopReplaySummary.heroCards(): List<DesktopReplayHeroCard> = bui
                 value = it.song.title,
                 detail = "${it.song.artist} · ${plays(it.plays)}",
                 artworkUrl = it.song.thumbnailUrl,
+                anchor = DesktopReplayAnchor.SONGS,
             ),
         )
     }
@@ -501,6 +534,7 @@ internal fun DesktopReplaySummary.heroCards(): List<DesktopReplayHeroCard> = bui
                 value = it.title,
                 detail = listOfNotNull(it.subtitle, formatListening(it.ms)).joinToString(" · "),
                 artworkUrl = it.artworkUrl,
+                anchor = DesktopReplayAnchor.ALBUMS,
             ),
         )
     }

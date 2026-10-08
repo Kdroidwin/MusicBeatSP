@@ -56,6 +56,7 @@ import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.rounded.VolumeDown
 import androidx.compose.material.icons.automirrored.rounded.VolumeUp
+import androidx.compose.material.icons.automirrored.rounded.PlaylistPlay
 import androidx.compose.material.icons.rounded.Headphones
 import androidx.compose.material.icons.rounded.FastForward
 import androidx.compose.material.icons.rounded.FastRewind
@@ -585,6 +586,7 @@ internal fun VolumeRow(
  */
 @Composable
 internal fun PlayerActionRow(
+    actions: List<PlayerBottomAction>,
     lyricsOpen: Boolean,
     queueOpen: Boolean,
     shuffleEnabled: Boolean,
@@ -597,93 +599,97 @@ internal fun PlayerActionRow(
     onCycleRepeat: () -> Unit,
     onToggleAutoplay: () -> Unit,
     onOpenOutput: () -> Unit,
+    onOpenPlaylists: () -> Unit,
     onListenTogether: () -> Unit,
     /** Opens [ListenTogetherMembersSheet] rather than settings directly. */
     onOpenListenTogetherMembers: () -> Unit,
 ) {
-    BoxWithConstraints(Modifier.fillMaxWidth()) {
-        // Sized for the wider of the two capsules — the three-up one — in both
-        // states. Computed for whichever was on screen it would change as they
-        // swap, and the lyrics and queue glyphs would slide with it.
-        val widestRow = BOTTOM_ACTION_SIZE * 2 + pillWidth(3)
-        val edgeInset = ((maxWidth - widestRow) / 4).coerceAtLeast(0.dp)
-        Row(
-            modifier = Modifier.fillMaxWidth().padding(horizontal = edgeInset),
-            horizontalArrangement = Arrangement.SpaceBetween,
-            verticalAlignment = Alignment.CenterVertically,
-        ) {
-            BottomGlyph(
-                icon = BitChordIcons.LyricsQuote,
-                contentDescription = stringResource(if (lyricsOpen) Res.string.close_lyrics else Res.string.open_lyrics),
-                // Lyrics and the queue are two things to show in one place, so
-                // opening either closes the other; lit to say which is up.
-                onClick = onToggleLyrics,
-                highlighted = lyricsOpen,
-            )
-            AnimatedContent(
-                targetState = queueOpen,
-                transitionSpec = {
-                    (fadeIn(tween(180, delayMillis = 140)) togetherWith fadeOut(tween(140)))
-                        // Unclipped: the capsule's own rounded ends are what
-                        // the eye follows through the width change, and the
-                        // default clip cuts them square while it happens.
-                        .using(SizeTransform(clip = false) { _, _ -> tween(220) })
-                },
-                label = "playerBottomPill",
-            ) { showQueueModes ->
-                if (showQueueModes) {
-                    // Always three-up, unlike the output/party capsule — so it
-                    // always takes the narrower spacing. See
-                    // [PILL_SEGMENT_WIDTH_TRIPLE].
-                    Pill {
-                        PillSegment(
-                            icon = BitChordIcons.Shuffle,
-                            contentDescription = stringResource(
-                                if (shuffleEnabled) Res.string.shuffle_on else Res.string.shuffle_off,
-                            ),
-                            onClick = onToggleShuffle,
-                            highlighted = shuffleEnabled,
-                            haptic = if (shuffleEnabled) Haptic.ToggleOff else Haptic.ToggleOn,
-                            tapWindowMs = SHUFFLE_TAP_WINDOW_MS,
-                            width = PILL_SEGMENT_WIDTH_TRIPLE,
-                        )
-                        PillDivider()
-                        PillSegment(
-                            icon = if (repeatMode == RepeatModes.ONE) null else BitChordIcons.Repeat,
-                            label = if (repeatMode == RepeatModes.ONE) "1" else null,
-                            contentDescription = when (repeatMode) {
-                                RepeatModes.ONE -> stringResource(Res.string.repeat_one)
-                                RepeatModes.ALL -> stringResource(Res.string.repeat_all)
-                                else -> stringResource(Res.string.repeat_off)
-                            },
-                            onClick = onCycleRepeat,
-                            highlighted = repeatMode != RepeatModes.OFF,
-                            // Three states, so the buzz tracks the edges of the
-                            // cycle: leaving off rises, returning to off falls,
-                            // and the step between the two repeat modes is just
-                            // a selection.
-                            haptic = when (repeatMode) {
-                                RepeatModes.OFF -> Haptic.ToggleOn
-                                RepeatModes.ONE -> Haptic.ToggleOff
-                                else -> Haptic.Select
-                            },
-                            width = PILL_SEGMENT_WIDTH_TRIPLE,
-                        )
-                        PillDivider()
-                        PillSegment(
-                            icon = BitChordIcons.Infinity,
-                            contentDescription = stringResource(
-                                if (autoplayEnabled) Res.string.autoplay_on else Res.string.autoplay_off,
-                            ),
-                            onClick = onToggleAutoplay,
-                            highlighted = autoplayEnabled,
-                            haptic = if (autoplayEnabled) Haptic.ToggleOff else Haptic.ToggleOn,
-                            tapWindowMs = AUTOPLAY_TAP_WINDOW_MS,
-                            width = PILL_SEGMENT_WIDTH_TRIPLE,
-                        )
-                    }
-                } else {
-                    if (listenTogetherAvailable) {
+    val visibleActions = actions.distinct()
+    if (visibleActions.isEmpty()) return
+    Row(
+        modifier = Modifier.fillMaxWidth().padding(horizontal = 12.dp),
+        horizontalArrangement = Arrangement.SpaceEvenly,
+        verticalAlignment = Alignment.CenterVertically,
+    ) {
+        visibleActions.forEach { action ->
+            when (action) {
+                PlayerBottomAction.LYRICS -> BottomGlyph(
+                    icon = BitChordIcons.LyricsQuote,
+                    contentDescription = stringResource(if (lyricsOpen) Res.string.close_lyrics else Res.string.open_lyrics),
+                    // Lyrics and the queue are two things to show in one place, so
+                    // opening either closes the other; lit to say which is up.
+                    onClick = onToggleLyrics,
+                    highlighted = lyricsOpen,
+                )
+                PlayerBottomAction.QUEUE -> BottomGlyph(
+                    icon = BitChordIcons.Queue,
+                    contentDescription = stringResource(Res.string.up_next),
+                    onClick = onToggleQueue,
+                    highlighted = queueOpen,
+                    haptic = if (queueOpen) Haptic.Tap else Haptic.Expand,
+                )
+                PlayerBottomAction.PLAYLISTS -> BottomGlyph(
+                    icon = Icons.AutoMirrored.Rounded.PlaylistPlay,
+                    contentDescription = stringResource(Res.string.playlists),
+                    onClick = onOpenPlaylists,
+                )
+                PlayerBottomAction.AUDIO_OUTPUT -> AnimatedContent(
+                    targetState = queueOpen,
+                    transitionSpec = {
+                        (fadeIn(tween(180, delayMillis = 140)) togetherWith fadeOut(tween(140)))
+                            // Unclipped: the capsule's own rounded ends are what
+                            // the eye follows through the width change.
+                            .using(SizeTransform(clip = false) { _, _ -> tween(220) })
+                    },
+                    label = "playerBottomPill",
+                ) { showQueueModes ->
+                    if (showQueueModes) {
+                        // Shuffle, repeat and autoplay stay available while the
+                        // queue is open, in the same centre capsule as before.
+                        Pill {
+                            PillSegment(
+                                icon = BitChordIcons.Shuffle,
+                                contentDescription = stringResource(
+                                    if (shuffleEnabled) Res.string.shuffle_on else Res.string.shuffle_off,
+                                ),
+                                onClick = onToggleShuffle,
+                                highlighted = shuffleEnabled,
+                                haptic = if (shuffleEnabled) Haptic.ToggleOff else Haptic.ToggleOn,
+                                tapWindowMs = SHUFFLE_TAP_WINDOW_MS,
+                                width = PILL_SEGMENT_WIDTH_TRIPLE,
+                            )
+                            PillDivider()
+                            PillSegment(
+                                icon = if (repeatMode == RepeatModes.ONE) null else BitChordIcons.Repeat,
+                                label = if (repeatMode == RepeatModes.ONE) "1" else null,
+                                contentDescription = when (repeatMode) {
+                                    RepeatModes.ONE -> stringResource(Res.string.repeat_one)
+                                    RepeatModes.ALL -> stringResource(Res.string.repeat_all)
+                                    else -> stringResource(Res.string.repeat_off)
+                                },
+                                onClick = onCycleRepeat,
+                                highlighted = repeatMode != RepeatModes.OFF,
+                                haptic = when (repeatMode) {
+                                    RepeatModes.OFF -> Haptic.ToggleOn
+                                    RepeatModes.ONE -> Haptic.ToggleOff
+                                    else -> Haptic.Select
+                                },
+                                width = PILL_SEGMENT_WIDTH_TRIPLE,
+                            )
+                            PillDivider()
+                            PillSegment(
+                                icon = BitChordIcons.Infinity,
+                                contentDescription = stringResource(
+                                    if (autoplayEnabled) Res.string.autoplay_on else Res.string.autoplay_off,
+                                ),
+                                onClick = onToggleAutoplay,
+                                highlighted = autoplayEnabled,
+                                haptic = if (autoplayEnabled) Haptic.ToggleOff else Haptic.ToggleOn,
+                                tapWindowMs = AUTOPLAY_TAP_WINDOW_MS,
+                                width = PILL_SEGMENT_WIDTH_TRIPLE,
+                            )
+                        }
+                    } else if (listenTogetherAvailable) {
                         OutputPartyPill(
                             onOutput = onOpenOutput,
                             onParty = onListenTogether,
@@ -701,13 +707,6 @@ internal fun PlayerActionRow(
                     }
                 }
             }
-            BottomGlyph(
-                icon = BitChordIcons.Queue,
-                contentDescription = stringResource(Res.string.up_next),
-                onClick = onToggleQueue,
-                highlighted = queueOpen,
-                haptic = if (queueOpen) Haptic.Tap else Haptic.Expand,
-            )
         }
     }
 }

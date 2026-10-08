@@ -29,6 +29,7 @@ import com.music.bitchord.ui.player.PlayerLyricsAlignment
 import com.music.bitchord.ui.player.PlayerSeekButtonMode
 import com.music.bitchord.ui.player.PlayerSettingsSource
 import com.music.bitchord.ui.player.PlayerQuickAction
+import com.music.bitchord.ui.player.PlayerBottomAction
 import com.music.bitchord.ui.player.SystemVolume
 import dev.chrisbanes.haze.HazeState
 import kotlinx.coroutines.CoroutineScope
@@ -217,6 +218,12 @@ internal object DesktopPlayerSettings : PlayerSettingsSource {
     override val hideUnknownPlayerArtist = MutableStateFlow(persistence.boolean(KEY_HIDE_UNKNOWN_PLAYER_ARTIST, false))
     override val centerPlayerTrackInfo = MutableStateFlow(persistence.boolean(KEY_CENTER_PLAYER_INFO, false))
     override val hideLyricsStatusText = MutableStateFlow(persistence.boolean(KEY_HIDE_LYRICS_STATUS, false))
+    override val hideLyricsSavedAndUnavailable = MutableStateFlow(
+        persistence.boolean(KEY_HIDE_LYRICS_SAVED_UNAVAILABLE, false),
+    )
+    override val hideLyricsAboveSeekbar = MutableStateFlow(persistence.boolean(KEY_HIDE_LYRICS_ABOVE_SEEKBAR, false))
+    override val hideLyricsTranslationButton = MutableStateFlow(persistence.boolean(KEY_HIDE_LYRICS_TRANSLATION, false))
+    override val hideLyricsRomanizationButton = MutableStateFlow(persistence.boolean(KEY_HIDE_LYRICS_ROMANIZATION, false))
     override val hideSongStatus = MutableStateFlow(persistence.boolean(KEY_HIDE_SONG_STATUS, false))
     override val seekButtonMode = MutableStateFlow(
         runCatching { PlayerSeekButtonMode.valueOf(persistence.string(KEY_SEEK_BUTTON_MODE, "OFF")) }
@@ -228,6 +235,8 @@ internal object DesktopPlayerSettings : PlayerSettingsSource {
     // the switch persisted, but the shared player never observed it.
     override val hideVolumeBar: StateFlow<Boolean> = DesktopAppearanceSettings.hideVolumeBar
     override val playerQuickActions = MutableStateFlow(readPlayerQuickActions())
+    override val playerBottomActions = MutableStateFlow(readPlayerBottomActions())
+    val hideOnThisComputerLabel = MutableStateFlow(persistence.boolean(KEY_HIDE_ON_THIS_COMPUTER_LABEL, true))
     override val lastPlayerScreen = MutableStateFlow(
         runCatching { LastPlayerScreen.valueOf(persistence.string(KEY_LAST_SCREEN, "MAIN")) }
             .getOrDefault(LastPlayerScreen.MAIN),
@@ -307,6 +316,31 @@ internal object DesktopPlayerSettings : PlayerSettingsSource {
     fun setHideLyricsStatusText(value: Boolean) {
         hideLyricsStatusText.value = value
         persistence.saveBoolean(KEY_HIDE_LYRICS_STATUS, value)
+    }
+
+    fun setHideLyricsSavedAndUnavailable(value: Boolean) {
+        hideLyricsSavedAndUnavailable.value = value
+        persistence.saveBoolean(KEY_HIDE_LYRICS_SAVED_UNAVAILABLE, value)
+    }
+
+    fun setHideLyricsAboveSeekbar(value: Boolean) {
+        hideLyricsAboveSeekbar.value = value
+        persistence.saveBoolean(KEY_HIDE_LYRICS_ABOVE_SEEKBAR, value)
+    }
+
+    fun setHideLyricsTranslationButton(value: Boolean) {
+        hideLyricsTranslationButton.value = value
+        persistence.saveBoolean(KEY_HIDE_LYRICS_TRANSLATION, value)
+    }
+
+    fun setHideLyricsRomanizationButton(value: Boolean) {
+        hideLyricsRomanizationButton.value = value
+        persistence.saveBoolean(KEY_HIDE_LYRICS_ROMANIZATION, value)
+    }
+
+    fun setHideOnThisComputerLabel(value: Boolean) {
+        hideOnThisComputerLabel.value = value
+        persistence.saveBoolean(KEY_HIDE_ON_THIS_COMPUTER_LABEL, value)
     }
 
     fun setHideSongStatus(value: Boolean) {
@@ -403,6 +437,44 @@ internal object DesktopPlayerSettings : PlayerSettingsSource {
             .mapNotNull { name -> runCatching { PlayerQuickAction.valueOf(name) }.getOrNull() }
             .distinct()
 
+    fun setPlayerBottomActionVisible(action: PlayerBottomAction, visible: Boolean) {
+        val next = playerBottomActions.value.toMutableList().apply {
+            if (visible && action !in this) add(action)
+            if (!visible) remove(action)
+        }
+        setPlayerBottomActions(next)
+    }
+
+    fun setPlayerBottomActions(values: List<PlayerBottomAction>) {
+        val normalized = values.distinct()
+        playerBottomActions.value = normalized
+        persistence.saveString(KEY_PLAYER_BOTTOM_ACTIONS, normalized.joinToString(",") { it.name })
+    }
+
+    fun movePlayerBottomAction(action: PlayerBottomAction, direction: Int) {
+        val current = playerBottomActions.value.toMutableList()
+        val index = current.indexOf(action)
+        if (index < 0) return
+        val target = (index + direction.coerceIn(-1, 1)).coerceIn(0, current.lastIndex)
+        if (target == index) return
+        current.add(target, current.removeAt(index))
+        setPlayerBottomActions(current)
+    }
+
+    private val defaultPlayerBottomActions = listOf(
+        PlayerBottomAction.LYRICS,
+        PlayerBottomAction.AUDIO_OUTPUT,
+        PlayerBottomAction.QUEUE,
+    )
+
+    private fun readPlayerBottomActions(): List<PlayerBottomAction> {
+        val stored = persistence.string(KEY_PLAYER_BOTTOM_ACTIONS, "\u0000unset")
+        if (stored == "\u0000unset") return defaultPlayerBottomActions
+        return stored.split(',')
+            .mapNotNull { name -> runCatching { PlayerBottomAction.valueOf(name) }.getOrNull() }
+            .distinct()
+    }
+
     private fun readMiniPlayerControls(): List<DesktopMiniPlayerControl> {
         val stored = persistence.string(KEY_MINI_PLAYER_CONTROLS, "\u0000unset")
         if (stored == "\u0000unset") return defaultMiniPlayerControls
@@ -422,6 +494,11 @@ internal object DesktopPlayerSettings : PlayerSettingsSource {
     private const val KEY_HIDE_UNKNOWN_PLAYER_ARTIST = "hide_unknown_player_artist"
     private const val KEY_CENTER_PLAYER_INFO = "center_player_track_info"
     private const val KEY_HIDE_LYRICS_STATUS = "hide_lyrics_status_text"
+    private const val KEY_HIDE_LYRICS_SAVED_UNAVAILABLE = "hide_lyrics_saved_unavailable"
+    private const val KEY_HIDE_LYRICS_ABOVE_SEEKBAR = "hide_lyrics_above_seekbar"
+    private const val KEY_HIDE_LYRICS_TRANSLATION = "hide_lyrics_translation_button"
+    private const val KEY_HIDE_LYRICS_ROMANIZATION = "hide_lyrics_romanization_button"
+    private const val KEY_HIDE_ON_THIS_COMPUTER_LABEL = "hide_on_this_computer_label"
     private const val KEY_HIDE_SONG_STATUS = "hide_song_status"
     private const val KEY_SEEK_BUTTON_MODE = "seek_button_mode"
     private const val KEY_SEEK_BUTTON_SECONDS = "seek_button_seconds"
@@ -431,6 +508,7 @@ internal object DesktopPlayerSettings : PlayerSettingsSource {
     private const val KEY_THEME_MODE = "theme_mode"
     private const val KEY_MINI_PLAYER_CONTROLS = "mini_player_controls"
     private const val KEY_PLAYER_QUICK_ACTIONS = "player_quick_actions"
+    private const val KEY_PLAYER_BOTTOM_ACTIONS = "player_bottom_actions"
 }
 
 /** Which glyph a mixer gets, from the only thing Java Sound says about it: its name. */

@@ -5,6 +5,7 @@ import com.music.bitchord.ui.components.LocalShelfRowChrome
 import com.music.bitchord.ui.components.ShelfRowChrome
 import com.music.bitchord.ui.components.ShelfRow
 import androidx.compose.material.icons.automirrored.rounded.ArrowBack
+import androidx.compose.material.icons.rounded.Add
 import androidx.compose.ui.input.key.isAltPressed
 import androidx.compose.ui.input.pointer.isBackPressed
 import androidx.compose.ui.input.pointer.PointerEventType
@@ -40,6 +41,7 @@ import com.music.bitchord.ui.player.LyricsSidePanel
 import com.music.bitchord.ui.player.NowPlayingScreen
 import com.music.bitchord.ui.player.QueueSidePanel
 import com.music.bitchord.ui.player.PlayerBack
+import com.music.bitchord.ui.player.PlayerBottomAction
 import com.music.bitchord.ui.player.PlayerLyricsAlignment
 import com.music.bitchord.ui.player.PlayerQuickAction
 import com.music.bitchord.ui.player.PlayerSeekButtonMode
@@ -3112,6 +3114,7 @@ fun BitChordDesktopApp() {
                         onDestinationSelected = ::selectDestination,
                         onOpenAccountPlaylist = { openShelfItem(it, PLAYLISTS_SHELF) },
                         onOpenLocalPlaylist = ::openPlaylist,
+                        onCreatePlaylist = { overlays.playlistDialog = true },
                         onOpenSettings = ::openSettings,
                         focusSearch = searchFocusRequested,
                         onSearchFocused = { searchFocusRequested = false },
@@ -3873,6 +3876,16 @@ fun BitChordDesktopApp() {
                             onPeriodChange = { replayPeriod = it },
                             onPlaySong = { playSong(it) },
                             onOpenArtist = ::openArtistByName,
+                            onPlayAlbum = { albumTitle ->
+                                val tracks = localSongs
+                                    .filter { (it.albumName?.takeIf(String::isNotBlank) ?: "Unknown Album").equals(albumTitle, ignoreCase = true) }
+                                    .sortedWith(compareBy(String.CASE_INSENSITIVE_ORDER) { it.title })
+                                if (tracks.isEmpty()) {
+                                    DesktopPlayerHost.showMessage("No local tracks found for $albumTitle")
+                                } else {
+                                    playSongs(tracks, source = DesktopQueueSource(albumTitle, PlaybackSourceType.BROWSE))
+                                }
+                            },
                             contentPadding = contentPadding,
                         )
                         openedArtist != null -> DesktopArtistPage(
@@ -4512,6 +4525,7 @@ private fun DesktopSidebar(
     onDestinationSelected: (DesktopDestination) -> Unit,
     onOpenAccountPlaylist: (ShelfItem) -> Unit,
     onOpenLocalPlaylist: (DesktopPlaylist) -> Unit,
+    onCreatePlaylist: () -> Unit,
     onOpenSettings: () -> Unit,
     /** Search was picked: the sidebar's box is the page's field, so it takes the focus. */
     focusSearch: Boolean,
@@ -4614,6 +4628,27 @@ private fun DesktopSidebar(
                 modifier = Modifier.fillMaxWidth().weight(1f),
                 contentPadding = PaddingValues(bottom = 8.dp),
             ) {
+                item(key = "heading:playlists") {
+                    Row(
+                        Modifier.fillMaxWidth().padding(start = 9.dp, end = 2.dp, top = 2.dp, bottom = 4.dp),
+                        verticalAlignment = Alignment.CenterVertically,
+                    ) {
+                        Text(
+                            DesktopStrings["playlists", "Playlists"],
+                            modifier = Modifier.weight(1f),
+                            color = DesktopSecondary,
+                            style = MaterialTheme.typography.labelMedium,
+                        )
+                        IconButton(onClick = onCreatePlaylist, modifier = Modifier.size(30.dp)) {
+                            Icon(
+                                Icons.Rounded.Add,
+                                DesktopStrings["d_create_playlist", "Create playlist"],
+                                tint = DesktopSecondary,
+                                modifier = Modifier.size(18.dp),
+                            )
+                        }
+                    }
+                }
                 if (!localOnly) items(accountPlaylists, key = { "account:${it.browseId}" }) { playlist ->
                     DesktopSidebarItem(
                         Icons.AutoMirrored.Rounded.PlaylistPlay,
@@ -4662,7 +4697,7 @@ private fun DesktopSidebar(
                 if (localPlaylists.isEmpty() && (localOnly || accountPlaylists.isEmpty())) {
                     item {
                         Text(
-                            "Your playlists will appear here",
+                            DesktopStrings["d_no_local_playlists", "Create a local playlist to see it here."],
                             modifier = Modifier.padding(horizontal = 9.dp, vertical = 8.dp),
                             color = DesktopSecondary.copy(alpha = 0.68f),
                             style = MaterialTheme.typography.bodySmall,
@@ -6199,6 +6234,75 @@ private fun DesktopSettingsScreen(
                         }
                     }
                     val expandedPlayerQuickActions by DesktopPlayerSettings.playerQuickActions.collectAsState()
+                    val fullScreenActions by DesktopPlayerSettings.playerBottomActions.collectAsState()
+                    Text(
+                        DesktopStrings["d_full_screen_player_buttons", "Full-screen player buttons"],
+                        style = MaterialTheme.typography.titleSmall,
+                        modifier = Modifier.padding(top = 14.dp, bottom = 4.dp),
+                    )
+                    val fullScreenActionsSubtitle = DesktopStrings[
+                        "d_full_screen_player_buttons_subtitle",
+                        "Choose which buttons appear below the full-screen player and change their order.",
+                    ]
+                    PlayerBottomAction.entries.forEach { action ->
+                        val label = when (action) {
+                            PlayerBottomAction.LYRICS -> DesktopStrings["d_quick_action_lyrics", "Lyrics"]
+                            PlayerBottomAction.AUDIO_OUTPUT -> DesktopStrings["d_full_screen_audio_output_action", "Audio output / queue modes"]
+                            PlayerBottomAction.QUEUE -> DesktopStrings["d_quick_action_queue", "Queue"]
+                            PlayerBottomAction.PLAYLISTS -> DesktopStrings["d_quick_action_playlists", "Playlists"]
+                        }
+                        val index = fullScreenActions.indexOf(action)
+                        if (settingsRowVisible(label, fullScreenActionsSubtitle)) {
+                            Row(
+                                Modifier.fillMaxWidth().desktopRowClickable {
+                                    DesktopPlayerSettings.setPlayerBottomActionVisible(action, index < 0)
+                                }.padding(vertical = 8.dp),
+                                verticalAlignment = Alignment.CenterVertically,
+                            ) {
+                                Column(Modifier.weight(1f)) {
+                                    Text(label, style = MaterialTheme.typography.bodyLarge)
+                                    if (index >= 0) {
+                                        Text(
+                                            fullScreenActionsSubtitle,
+                                            color = DesktopSecondary,
+                                            style = MaterialTheme.typography.bodyMedium,
+                                            maxLines = 2,
+                                        )
+                                    }
+                                }
+                                if (index >= 0) {
+                                    IconButton(
+                                        enabled = index > 0,
+                                        onClick = { DesktopPlayerSettings.movePlayerBottomAction(action, -1) },
+                                        modifier = Modifier.size(36.dp),
+                                    ) {
+                                        Icon(
+                                            Icons.Rounded.KeyboardArrowUp,
+                                            DesktopStrings["move_up", "Move up"],
+                                            tint = if (index > 0) DesktopSecondary else DesktopSecondary.copy(alpha = 0.35f),
+                                        )
+                                    }
+                                    IconButton(
+                                        enabled = index < fullScreenActions.lastIndex,
+                                        onClick = { DesktopPlayerSettings.movePlayerBottomAction(action, 1) },
+                                        modifier = Modifier.size(36.dp),
+                                    ) {
+                                        Icon(
+                                            Icons.Rounded.KeyboardArrowDown,
+                                            DesktopStrings["move_down", "Move down"],
+                                            tint = if (index < fullScreenActions.lastIndex) DesktopSecondary else DesktopSecondary.copy(alpha = 0.35f),
+                                        )
+                                    }
+                                }
+                                Spacer(Modifier.width(8.dp))
+                                Switch(
+                                    checked = index >= 0,
+                                    onCheckedChange = { DesktopPlayerSettings.setPlayerBottomActionVisible(action, it) },
+                                    colors = desktopSwitchColors(),
+                                )
+                            }
+                        }
+                    }
                     Text(
                         DesktopStrings["d_player_quick_actions", "Expanded player shortcuts"],
                         style = MaterialTheme.typography.titleSmall,
@@ -6308,6 +6412,34 @@ private fun DesktopSettingsScreen(
                         DesktopStrings["hide_lyrics_status_text_subtitle", "Hide generated loading and unavailable messages in the one-line lyric area"],
                         hideLyricsStatusText,
                         DesktopPlayerSettings::setHideLyricsStatusText,
+                    )
+                    val hideSavedLyricsStatus by DesktopPlayerSettings.hideLyricsSavedAndUnavailable.collectAsState()
+                    SettingsToggle(
+                        DesktopStrings["d_hide_saved_unavailable_lyrics_status", "Hide saved / unavailable lyrics labels"],
+                        DesktopStrings["d_hide_saved_unavailable_lyrics_status_subtitle", "Hide the saved-with-download and lyrics-unavailable labels in the lyrics view"],
+                        hideSavedLyricsStatus,
+                        DesktopPlayerSettings::setHideLyricsSavedAndUnavailable,
+                    )
+                    val hideLyricsAboveSeekbar by DesktopPlayerSettings.hideLyricsAboveSeekbar.collectAsState()
+                    SettingsToggle(
+                        DesktopStrings["d_hide_lyrics_above_seekbar", "Hide lyrics above the seek bar"],
+                        DesktopStrings["d_hide_lyrics_above_seekbar_subtitle", "Hide the current lyric line shown above the player's seek bar"],
+                        hideLyricsAboveSeekbar,
+                        DesktopPlayerSettings::setHideLyricsAboveSeekbar,
+                    )
+                    val hideTranslationButton by DesktopPlayerSettings.hideLyricsTranslationButton.collectAsState()
+                    SettingsToggle(
+                        DesktopStrings["d_hide_lyrics_translation_button", "Hide translation button"],
+                        DesktopStrings["d_hide_lyrics_translation_button_subtitle", "Remove the translation control from the lyrics view"],
+                        hideTranslationButton,
+                        DesktopPlayerSettings::setHideLyricsTranslationButton,
+                    )
+                    val hideRomanizationButton by DesktopPlayerSettings.hideLyricsRomanizationButton.collectAsState()
+                    SettingsToggle(
+                        DesktopStrings["d_hide_lyrics_romanization_button", "Hide romanization button"],
+                        DesktopStrings["d_hide_lyrics_romanization_button_subtitle", "Remove the romanization control from the lyrics view"],
+                        hideRomanizationButton,
+                        DesktopPlayerSettings::setHideLyricsRomanizationButton,
                     )
                     val fontScale by DesktopPlayerSettings.lyricsFontScale.collectAsState()
                     if (settingsRowVisible("Lyrics text size")) {
@@ -6466,6 +6598,13 @@ private fun DesktopSettingsScreen(
             }
             if (section == DesktopSettingsSection.LOCAL_MUSIC) item {
                 SettingsGroup(DesktopStrings["local_music", "Local Music"]) {
+                    val hideOnThisComputerLabel by DesktopPlayerSettings.hideOnThisComputerLabel.collectAsState()
+                    SettingsToggle(
+                        DesktopStrings["d_hide_on_this_computer_label", "Hide “On this computer” label"],
+                        DesktopStrings["d_hide_on_this_computer_label_subtitle", "Hide the local-playlist heading in the add-to-playlist window"],
+                        hideOnThisComputerLabel,
+                        DesktopPlayerSettings::setHideOnThisComputerLabel,
+                    )
                     var folderLabel by remember { mutableStateOf(DesktopLocalMusic.folderLabel()) }
                     SettingsRow(
                         Icons.Rounded.Folder,
