@@ -89,4 +89,23 @@
     <string name="d_translation_unavailable">翻訳を利用できません</string>
     <string name="d_what_the_translate_button_translates_into">歌詞の翻訳ボタンが翻訳する言語</string>
     <string name="d_off">オフ</string>
+    <string name="seek_buttons">シークボタン</string>
+    <string name="seek_buttons_subtitle">前の曲／次の曲ボタンの横にシーク操作を表示します</string>
+    <string name="seek_long_tracks">15分以上</string>
+    <string name="seek_interval">シーク秒数</string>
+    <string name="seek_interval_subtitle">シークボタンで移動する秒数</string>
+    <string name="hide_seek_seconds_label">シーク秒数ラベルを隠す</string>
+    <string name="hide_seek_seconds_label_subtitle">シークボタンの下に表示する秒数を隠します</string>
+    <string name="hide_playing_from">「Playing from」ラベルを隠す</string>
+    <string name="hide_playing_from_subtitle">この曲の再生元となるプレイリストやページの表示を隠します</string>
+    <string name="d_settings_backup">設定のバックアップ</string>
+    <string name="d_settings_backup_subtitle">Android版MusicBeatのバックアップから設定を取り込むか、このLinux版の設定をJSONファイルに保存します。認証情報と再生履歴は含まれません。</string>
+    <string name="d_import_settings">設定をインポート</string>
+    <string name="d_export_settings">設定をエクスポート</string>
+    <string name="d_settings_import_result">%3$sから設定を%1$d件取り込みました。未対応または安全上取り込まない値は%2$d件です。</string>
+    <string name="d_settings_export_result">設定を%1$d件、%2$sに保存しました。</string>
+    <string name="d_settings_import_failed">設定ファイルをインポートできませんでした</string>
+    <string name="d_settings_export_failed">設定をエクスポートできませんでした</string>
+    <string name="d_no_local_playlists">ローカルプレイリストを作成すると、ここに表示されます。</string>
+    <string name="d_playlist_song_count">%1$d曲</string>
 </resources>

@@ -57,6 +57,8 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.rounded.VolumeDown
 import androidx.compose.material.icons.automirrored.rounded.VolumeUp
 import androidx.compose.material.icons.rounded.Headphones
+import androidx.compose.material.icons.rounded.FastForward
+import androidx.compose.material.icons.rounded.FastRewind
 import androidx.compose.material.icons.rounded.Person
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.Icon
@@ -420,6 +422,12 @@ internal fun TransportRow(
     onPrevious: () -> Unit,
     onPlayPause: () -> Unit,
     onNext: () -> Unit,
+    seekButtonsVisible: Boolean,
+    seekSeconds: Int,
+    hideSeekSecondsLabel: Boolean,
+    seekEnabled: Boolean,
+    onSeekBackward: () -> Unit,
+    onSeekForward: () -> Unit,
     compact: Boolean = false,
 ) {
     val playSize = if (compact) 58.dp else 74.dp
@@ -432,6 +440,9 @@ internal fun TransportRow(
         horizontalArrangement = Arrangement.SpaceAround,
         verticalAlignment = Alignment.CenterVertically,
     ) {
+        if (seekButtonsVisible) {
+            SeekStepButton(false, seekSeconds, hideSeekSecondsLabel, seekEnabled, onSeekBackward)
+        }
         TransportGlyph(
             icon = Res.drawable.ic_player_previous,
             contentDescription = stringResource(Res.string.widget_previous),
@@ -472,6 +483,52 @@ internal fun TransportRow(
             enabled = nextEnabled,
             haptic = Haptic.SkipNext,
         )
+        if (seekButtonsVisible) {
+            SeekStepButton(true, seekSeconds, hideSeekSecondsLabel, seekEnabled, onSeekForward)
+        }
+    }
+}
+
+@Composable
+private fun SeekStepButton(
+    forward: Boolean,
+    seconds: Int,
+    hideSecondsLabel: Boolean,
+    enabled: Boolean,
+    onClick: () -> Unit,
+) {
+    val haptics = rememberHaptics()
+    val direction = if (forward) "forward" else "backward"
+    Column(
+        modifier = Modifier
+            .size(width = 48.dp, height = 54.dp)
+            .semantics { contentDescription = "Seek $direction $seconds seconds" }
+            .clickable(
+                interactionSource = remember { MutableInteractionSource() },
+                indication = null,
+                enabled = enabled,
+            ) {
+                haptics.play(Haptic.Tap)
+                onClick()
+            },
+        horizontalAlignment = Alignment.CenterHorizontally,
+        verticalArrangement = Arrangement.Center,
+    ) {
+        Icon(
+            imageVector = if (forward) Icons.Rounded.FastForward else Icons.Rounded.FastRewind,
+            contentDescription = null,
+            tint = Color.White.copy(alpha = if (enabled) 0.9f else 0.32f),
+            modifier = Modifier.size(25.dp),
+        )
+        if (!hideSecondsLabel) {
+            Text(
+                text = "${seconds}s",
+                color = Color.White.copy(alpha = if (enabled) 0.82f else 0.32f),
+                style = MaterialTheme.typography.labelSmall,
+                fontSize = 10.sp,
+                maxLines = 1,
+            )
+        }
     }
 }
 

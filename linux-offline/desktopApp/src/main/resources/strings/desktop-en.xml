@@ -91,4 +91,23 @@
     <string name="d_translation_unavailable">Translation unavailable</string>
     <string name="d_what_the_translate_button_translates_into">What the translate button on the lyrics translates into</string>
     <string name="d_off">Off</string>
+    <string name="seek_buttons">Seek buttons</string>
+    <string name="seek_buttons_subtitle">Show small seek controls beside previous and next</string>
+    <string name="seek_long_tracks">15 min and longer</string>
+    <string name="seek_interval">Seek interval</string>
+    <string name="seek_interval_subtitle">How many seconds each seek button moves</string>
+    <string name="hide_seek_seconds_label">Hide seek seconds label</string>
+    <string name="hide_seek_seconds_label_subtitle">Hide the seconds shown below seek buttons</string>
+    <string name="hide_playing_from">Hide Playing from label</string>
+    <string name="hide_playing_from_subtitle">Hide the caption that names the playlist or page this track came from</string>
+    <string name="d_settings_backup">Settings backup</string>
+    <string name="d_settings_backup_subtitle">Import settings from an Android MusicBeat backup, or save this desktop setup to a JSON file. Credentials and playback history are excluded.</string>
+    <string name="d_import_settings">Import settings</string>
+    <string name="d_export_settings">Export settings</string>
+    <string name="d_settings_import_result">Imported %1$d settings from %3$s; skipped %2$d unsupported or unsafe values.</string>
+    <string name="d_settings_export_result">Exported %1$d settings to %2$s.</string>
+    <string name="d_settings_import_failed">Could not import this settings file</string>
+    <string name="d_settings_export_failed">Could not export settings</string>
+    <string name="d_no_local_playlists">Create a local playlist to see it here.</string>
+    <string name="d_playlist_song_count">%1$d songs</string>
 </resources>

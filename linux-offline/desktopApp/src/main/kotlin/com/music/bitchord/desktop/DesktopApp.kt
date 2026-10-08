@@ -41,6 +41,7 @@ import com.music.bitchord.ui.player.NowPlayingScreen
 import com.music.bitchord.ui.player.QueueSidePanel
 import com.music.bitchord.ui.player.PlayerBack
 import com.music.bitchord.ui.player.PlayerLyricsAlignment
+import com.music.bitchord.ui.player.PlayerSeekButtonMode
 import com.music.bitchord.ui.player.RepeatModes
 import com.music.bitchord.ui.player.rememberMixPulse
 import androidx.compose.runtime.SideEffect
@@ -67,6 +68,7 @@ import androidx.compose.foundation.clickable
 import androidx.compose.foundation.gestures.Orientation
 import androidx.compose.foundation.gestures.animateScrollBy
 import androidx.compose.foundation.gestures.detectHorizontalDragGestures
+import androidx.compose.foundation.gestures.detectDragGesturesAfterLongPress
 import androidx.compose.foundation.gestures.draggable
 import androidx.compose.foundation.gestures.rememberDraggableState
 import androidx.compose.foundation.gestures.scrollBy
@@ -127,6 +129,7 @@ import androidx.compose.material.icons.rounded.ChevronLeft
 import androidx.compose.material.icons.rounded.Close
 import androidx.compose.material.icons.rounded.Delete
 import androidx.compose.material.icons.rounded.DeleteSweep
+import androidx.compose.material.icons.rounded.DragHandle
 import androidx.compose.material.icons.rounded.Edit
 import androidx.compose.material.icons.rounded.Extension
 import androidx.compose.material.icons.rounded.FastForward
@@ -600,6 +603,7 @@ fun BitChordDesktopApp() {
         )
     }
     var destination by remember { mutableStateOf(DesktopDestination.LOCAL_MUSIC) }
+    var localMusicTabRequest by remember { mutableStateOf<Int?>(null) }
     var query by remember { mutableStateOf("") }
     var searchFilter by remember { mutableStateOf(SearchFilter.ALL) }
     var searchRows by remember { mutableStateOf<List<SearchResult>>(emptyList()) }
@@ -1504,6 +1508,19 @@ fun BitChordDesktopApp() {
         )
     }
 
+    /** Moves a local playlist as a whole; the tracks and their order stay untouched. */
+    fun moveLocalPlaylist(id: String, delta: Int) {
+        val from = playlists.indexOfFirst { it.id == id }
+        if (from < 0 || delta == 0) return
+        val to = (from + delta).coerceIn(playlists.indices)
+        if (from == to) return
+        val reordered = playlists.toMutableList().apply {
+            add(to, removeAt(from))
+        }
+        playlists = reordered
+        persistence.savePlaylists(reordered)
+    }
+
     fun addToPlaylist(playlist: DesktopPlaylist) {
         val song = playlistTarget ?: return
         playlists = playlists.map { current ->
@@ -2237,12 +2254,24 @@ fun BitChordDesktopApp() {
     var settingsSession by remember { mutableStateOf(0) }
     var settingsQuery by remember(settingsSession) { mutableStateOf("") }
     val settingsListState = remember(settingsSession) { LazyListState() }
+    var requestedSettingsQuery by remember { mutableStateOf<String?>(null) }
+    LaunchedEffect(settingsSession, requestedSettingsQuery) {
+        requestedSettingsQuery?.let { queryToApply ->
+            settingsQuery = queryToApply
+            requestedSettingsQuery = null
+        }
+    }
 
     /** Settings in place of the page — from the sidebar, the account switcher or the tray. */
     fun openSettings() {
         overlays.nowPlaying = false
         if (overlays.settingsPage == null) settingsSession++
         overlays.settingsPage = DesktopSettingsPage.MAIN
+    }
+
+    fun openPlaybackTuning() {
+        requestedSettingsQuery = DesktopStrings["d_playback_speed", "Playback speed"]
+        openSettings()
     }
 
     /** The Library's folder rows: the two folders this computer has. */
@@ -3069,6 +3098,7 @@ fun BitChordDesktopApp() {
                         settingsOpen = overlays.settingsPage != null,
                         accountPlaylists = sidebarAccountPlaylists,
                         localPlaylists = playlists,
+                        onMoveLocalPlaylist = ::moveLocalPlaylist,
                         openedCollectionId = openedCollection?.browseId,
                         query = query,
                         onQueryChange = { text ->
@@ -3116,6 +3146,32 @@ fun BitChordDesktopApp() {
                         onOpenLyrics = { overlays.toggleSidePanel(DesktopSidePanel.LYRICS) },
                         onOpenQueue = { overlays.toggleSidePanel(DesktopSidePanel.QUEUE) },
                         onAddToPlaylist = { playlistTarget = it },
+                        onOpenSearch = {
+                            localMusicTabRequest = 0
+                            selectDestination(DesktopDestination.SEARCH)
+                        },
+                        onOpenPlaylists = {
+                            localMusicTabRequest = 4
+                            selectDestination(DesktopDestination.LOCAL_MUSIC)
+                        },
+                        onOpenAlbum = {
+                            localMusicTabRequest = 3
+                            selectDestination(DesktopDestination.LOCAL_MUSIC)
+                        },
+                        onOpenArtist = {
+                            localMusicTabRequest = 2
+                            selectDestination(DesktopDestination.LOCAL_MUSIC)
+                        },
+                        onOpenEqualizer = {
+                            openSettings()
+                            overlays.settingsPage = DesktopSettingsPage.EQUALIZER
+                        },
+                        onOpenPlaybackTuning = ::openPlaybackTuning,
+                        onCycleSleepTimer = ::cycleSleepTimer,
+                        onOpenDetails = {
+                            overlays.nowPlaying = true
+                            playerMenuOpen = true
+                        },
                     )
                 },
                 trailing = {
@@ -4056,6 +4112,10 @@ fun BitChordDesktopApp() {
                             onSongClick = { playSong(it, source = DesktopQueueSource(DesktopStrings["local_music", "Local Music"], PlaybackSourceType.BROWSE)) },
                             contentPadding = contentPadding,
                             menu = { song -> songMenu(song) },
+                            requestedTab = localMusicTabRequest,
+                            onRequestedTabConsumed = { localMusicTabRequest = null },
+                            playlists = playlists,
+                            onPlaylistClick = ::openPlaylist,
                         )
                     }
                 }
@@ -4392,6 +4452,7 @@ private fun DesktopSidebar(
     settingsOpen: Boolean,
     accountPlaylists: List<ShelfItem>,
     localPlaylists: List<DesktopPlaylist>,
+    onMoveLocalPlaylist: (String, Int) -> Unit,
     openedCollectionId: String?,
     query: String,
     onQueryChange: (String) -> Unit,
@@ -4405,6 +4466,9 @@ private fun DesktopSidebar(
     onSearchFocused: () -> Unit,
 ) {
     val searchFocusRequester = remember { FocusRequester() }
+    var draggingLocalPlaylistId by remember { mutableStateOf<String?>(null) }
+    val moveLocalPlaylist by rememberUpdatedState(onMoveLocalPlaylist)
+    val density = LocalDensity.current
     LaunchedEffect(focusSearch) {
         if (focusSearch) {
             runCatching { searchFocusRequester.requestFocus() }
@@ -4510,6 +4574,37 @@ private fun DesktopSidebar(
                         Icons.AutoMirrored.Rounded.PlaylistPlay,
                         playlist.title,
                         openedCollectionId == playlist.id,
+                        trailing = {
+                            Icon(
+                                Icons.Rounded.DragHandle,
+                                "Hold and drag to reorder playlists",
+                                tint = DesktopSecondary.copy(alpha = 0.72f),
+                                modifier = Modifier.size(16.dp),
+                            )
+                        },
+                        modifier = Modifier
+                            .graphicsLayer { alpha = if (draggingLocalPlaylistId == playlist.id) 0.62f else 1f }
+                            .pointerInput(playlist.id) {
+                                var accumulatedDrag = 0f
+                                val rowHeightPx = with(density) { 40.dp.toPx() }
+                                detectDragGesturesAfterLongPress(
+                                    onDragStart = {
+                                        draggingLocalPlaylistId = playlist.id
+                                        accumulatedDrag = 0f
+                                    },
+                                    onDragEnd = { if (draggingLocalPlaylistId == playlist.id) draggingLocalPlaylistId = null },
+                                    onDragCancel = { if (draggingLocalPlaylistId == playlist.id) draggingLocalPlaylistId = null },
+                                    onDrag = { change, amount ->
+                                        change.consume()
+                                        accumulatedDrag += amount.y
+                                        val steps = (accumulatedDrag / rowHeightPx).toInt()
+                                        if (steps != 0) {
+                                            moveLocalPlaylist(playlist.id, steps)
+                                            accumulatedDrag -= steps * rowHeightPx
+                                        }
+                                    },
+                                )
+                            },
                     ) { onOpenLocalPlaylist(playlist) }
                 }
                 if (localPlaylists.isEmpty() && (localOnly || accountPlaylists.isEmpty())) {
@@ -4545,10 +4640,12 @@ private fun DesktopSidebarItem(
     icon: androidx.compose.ui.graphics.vector.ImageVector,
     label: String,
     selected: Boolean,
+    modifier: Modifier = Modifier,
+    trailing: @Composable RowScope.() -> Unit = {},
     onClick: () -> Unit,
 ) {
     Row(
-        Modifier
+        modifier
             .fillMaxWidth()
             .clip(RoundedCornerShape(7.dp))
             .background(if (selected) Color.White.copy(alpha = 0.12f) else Color.Transparent)
@@ -4564,7 +4661,9 @@ private fun DesktopSidebarItem(
             style = MaterialTheme.typography.bodyMedium,
             maxLines = 1,
             overflow = TextOverflow.Ellipsis,
+            modifier = Modifier.weight(1f),
         )
+        trailing()
     }
 }
 
@@ -4591,6 +4690,14 @@ private fun DesktopBottomChrome(
     onOpenLyrics: () -> Unit,
     onOpenQueue: () -> Unit,
     onAddToPlaylist: (Song) -> Unit,
+    onOpenSearch: () -> Unit,
+    onOpenPlaylists: () -> Unit,
+    onOpenAlbum: (Song) -> Unit,
+    onOpenArtist: (Song) -> Unit,
+    onOpenEqualizer: () -> Unit,
+    onOpenPlaybackTuning: () -> Unit,
+    onCycleSleepTimer: () -> Unit,
+    onOpenDetails: () -> Unit,
 ) {
     val miniPlayerControls by DesktopPlayerSettings.miniPlayerControls.collectAsState()
     Column(
@@ -4621,6 +4728,14 @@ private fun DesktopBottomChrome(
                 onOpenLyrics = onOpenLyrics,
                 onOpenQueue = onOpenQueue,
                 onAddToPlaylist = { onAddToPlaylist(song) },
+                onOpenSearch = onOpenSearch,
+                onOpenPlaylists = onOpenPlaylists,
+                onOpenAlbum = onOpenAlbum,
+                onOpenArtist = onOpenArtist,
+                onOpenEqualizer = onOpenEqualizer,
+                onOpenPlaybackTuning = onOpenPlaybackTuning,
+                onCycleSleepTimer = onCycleSleepTimer,
+                onOpenDetails = onOpenDetails,
             )
         }
         if (compact) DesktopFloatingNavigation(destination, onDestinationSelected, MUSICBEATSP_LOCAL_ONLY_BUILD)
@@ -4700,6 +4815,14 @@ private fun DesktopMiniPlayer(
     onOpenLyrics: () -> Unit,
     onOpenQueue: () -> Unit,
     onAddToPlaylist: () -> Unit,
+    onOpenSearch: () -> Unit,
+    onOpenPlaylists: () -> Unit,
+    onOpenAlbum: (Song) -> Unit,
+    onOpenArtist: (Song) -> Unit,
+    onOpenEqualizer: () -> Unit,
+    onOpenPlaybackTuning: () -> Unit,
+    onCycleSleepTimer: () -> Unit,
+    onOpenDetails: () -> Unit,
 ) {
     val shape = RoundedCornerShape(percent = 50)
     Row(
@@ -4766,6 +4889,30 @@ private fun DesktopMiniPlayer(
                     }
                     DesktopMiniPlayerControl.ADD_TO_PLAYLIST -> DesktopToolbarButton(onClick = onAddToPlaylist, size = 34.dp) {
                         Icon(Icons.AutoMirrored.Rounded.PlaylistAdd, DesktopStrings["mini_player_add_to_playlist", "Add to playlist"], tint = DesktopSecondary, modifier = Modifier.size(18.dp))
+                    }
+                    DesktopMiniPlayerControl.PLAYLISTS -> DesktopToolbarButton(onClick = onOpenPlaylists, size = 34.dp) {
+                        Icon(Icons.AutoMirrored.Rounded.PlaylistPlay, DesktopStrings["playlists", "Playlists"], tint = DesktopSecondary, modifier = Modifier.size(18.dp))
+                    }
+                    DesktopMiniPlayerControl.SEARCH -> DesktopToolbarButton(onClick = onOpenSearch, size = 34.dp) {
+                        Icon(BitChordIcons.Search, DesktopStrings["search", "Search"], tint = DesktopSecondary, modifier = Modifier.size(18.dp))
+                    }
+                    DesktopMiniPlayerControl.ALBUM -> DesktopToolbarButton(onClick = { onOpenAlbum(song) }, size = 34.dp) {
+                        Icon(Icons.Rounded.Album, DesktopStrings["album", "Album"], tint = DesktopSecondary, modifier = Modifier.size(18.dp))
+                    }
+                    DesktopMiniPlayerControl.ARTIST -> DesktopToolbarButton(onClick = { onOpenArtist(song) }, size = 34.dp) {
+                        Icon(Icons.Rounded.Person, DesktopStrings["artist", "Artist"], tint = DesktopSecondary, modifier = Modifier.size(18.dp))
+                    }
+                    DesktopMiniPlayerControl.EQUALIZER -> DesktopToolbarButton(onClick = onOpenEqualizer, size = 34.dp) {
+                        Icon(Icons.Rounded.GraphicEq, DesktopStrings["equalizer", "Equalizer"], tint = DesktopSecondary, modifier = Modifier.size(18.dp))
+                    }
+                    DesktopMiniPlayerControl.PLAYBACK_TUNING -> DesktopToolbarButton(onClick = onOpenPlaybackTuning, size = 34.dp) {
+                        Icon(Icons.Rounded.Tune, DesktopStrings["d_playback_speed", "Playback settings"], tint = DesktopSecondary, modifier = Modifier.size(18.dp))
+                    }
+                    DesktopMiniPlayerControl.SLEEP_TIMER -> DesktopToolbarButton(onClick = onCycleSleepTimer, size = 34.dp) {
+                        Icon(Icons.Rounded.Bedtime, DesktopStrings["sleep_timer", "Sleep timer"], tint = DesktopSecondary, modifier = Modifier.size(18.dp))
+                    }
+                    DesktopMiniPlayerControl.DETAILS -> DesktopToolbarButton(onClick = onOpenDetails, size = 34.dp) {
+                        Icon(Icons.Rounded.MoreHoriz, DesktopStrings["d_details", "Details"], tint = DesktopSecondary, modifier = Modifier.size(18.dp))
                     }
                 }
             }
@@ -5313,9 +5460,19 @@ private fun DesktopLocalMusicPage(
     emptyDescription: String = "Put audio files in your Music folder and reopen this page.",
     persistenceKey: String = "local",
     menu: (@Composable (Song) -> Unit)? = null,
+    requestedTab: Int? = null,
+    onRequestedTabConsumed: () -> Unit = {},
+    playlists: List<DesktopPlaylist> = emptyList(),
+    onPlaylistClick: (DesktopPlaylist) -> Unit = {},
 ) {
     val persistence = remember { DesktopPersistence() }
     var selectedTab by remember(persistenceKey) { mutableStateOf(0) }
+    LaunchedEffect(requestedTab) {
+        requestedTab?.let {
+            selectedTab = it.coerceIn(0, 4)
+            onRequestedTabConsumed()
+        }
+    }
     var searchQuery by remember(persistenceKey) { mutableStateOf("") }
     var view by remember(persistenceKey) {
         mutableStateOf(
@@ -5337,8 +5494,15 @@ private fun DesktopLocalMusicPage(
     val filteredSongs = remember(songs, sort, searchQuery) {
         songs.sortedForDesktopLibrary(sort).filter { song ->
             searchQuery.isBlank() || song.title.contains(searchQuery, true) || song.artist.contains(searchQuery, true) ||
-                song.albumName.orEmpty().contains(searchQuery, true)
+                song.albumName.orEmpty().contains(searchQuery, true) ||
+                song.localPath?.let { java.io.File(it).name.contains(searchQuery, true) } == true ||
+                song.localPath?.contains(searchQuery, true) == true
         }
+    }
+    val folders = remember(filteredSongs) {
+        filteredSongs.groupBy { song ->
+            song.localPath?.let { java.io.File(it).parentFile?.absolutePath } ?: "Unknown folder"
+        }.entries.sortedBy { it.key.lowercase() }
     }
     val artists = remember(filteredSongs) {
         filteredSongs.groupBy { it.artist.ifBlank { "On This Computer" } }
@@ -5381,7 +5545,13 @@ private fun DesktopLocalMusicPage(
             }
             Spacer(Modifier.height(10.dp))
             TabRow(selectedTabIndex = selectedTab, containerColor = Color.Transparent) {
-                listOf("Songs", "Artists", "Albums").forEachIndexed { index, label ->
+                listOf(
+                    DesktopStrings["all", "All"],
+                    DesktopStrings["folders", "Folders"],
+                    DesktopStrings["artists", "Artists"],
+                    DesktopStrings["albums", "Albums"],
+                    DesktopStrings["playlists", "Playlists"],
+                ).forEachIndexed { index, label ->
                     Tab(selected = selectedTab == index, onClick = { selectedTab = index }, text = { Text(label) })
                 }
             }
@@ -5397,8 +5567,72 @@ private fun DesktopLocalMusicPage(
                 DesktopLibrarySongContent(drillDown!!.second, view, onSongClick, menu)
             } else when (selectedTab) {
                 0 -> DesktopLibrarySongContent(filteredSongs, view, onSongClick, menu)
-                1 -> DesktopLibraryGroupingContent(artists, view, onGroupClick = { drillDown = it })
-                else -> DesktopLibraryGroupingContent(albums, view, onGroupClick = { drillDown = it })
+                1 -> DesktopLibraryGroupingContent(
+                    folders,
+                    view,
+                    onGroupClick = { drillDown = it },
+                    displayName = { java.io.File(it).name.ifBlank { it } },
+                    groupSubtitle = { location, group -> "${group.size} songs · $location" },
+                )
+                2 -> DesktopLibraryGroupingContent(artists, view, onGroupClick = { drillDown = it })
+                3 -> DesktopLibraryGroupingContent(albums, view, onGroupClick = { drillDown = it })
+                else -> DesktopLocalPlaylistContent(
+                    playlists = playlists.filter { playlist ->
+                        searchQuery.isBlank() || playlist.title.contains(searchQuery, true) ||
+                            playlist.songs.any { song -> song.title.contains(searchQuery, true) || song.artist.contains(searchQuery, true) }
+                    },
+                    onPlaylistClick = onPlaylistClick,
+                )
+            }
+        }
+    }
+}
+
+@Composable
+private fun DesktopLocalPlaylistContent(
+    playlists: List<DesktopPlaylist>,
+    onPlaylistClick: (DesktopPlaylist) -> Unit,
+) {
+    if (playlists.isEmpty()) {
+        DesktopEmptyPage(
+            Icons.AutoMirrored.Rounded.PlaylistPlay,
+            DesktopStrings["playlists", "Playlists"],
+            DesktopStrings["d_no_local_playlists", "Create a local playlist to see it here."],
+        )
+        return
+    }
+    LazyColumn(
+        modifier = Modifier.fillMaxSize(),
+        contentPadding = pagePadding(bottom = 32.dp),
+        verticalArrangement = Arrangement.spacedBy(4.dp),
+    ) {
+        items(playlists.sortedBy { it.title.lowercase() }, key = DesktopPlaylist::id) { playlist ->
+            Row(
+                Modifier.fillMaxWidth().clip(RoundedCornerShape(10.dp)).clickable { onPlaylistClick(playlist) }
+                    .padding(horizontal = 8.dp, vertical = 7.dp),
+                verticalAlignment = Alignment.CenterVertically,
+            ) {
+                val artwork = playlist.songs.firstOrNull()?.thumbnailUrl
+                if (artwork != null) {
+                    DesktopArtwork(artwork, Modifier.size(50.dp).clip(RoundedCornerShape(8.dp)), px = ROW_ART_PX)
+                } else {
+                    Box(
+                        Modifier.size(50.dp).clip(RoundedCornerShape(8.dp)).background(Color.White.copy(alpha = 0.08f)),
+                        contentAlignment = Alignment.Center,
+                    ) {
+                        Icon(Icons.AutoMirrored.Rounded.PlaylistPlay, null, tint = DesktopSecondary)
+                    }
+                }
+                Spacer(Modifier.width(12.dp))
+                Column(Modifier.weight(1f)) {
+                    Text(playlist.title, maxLines = 1, overflow = TextOverflow.Ellipsis, fontWeight = FontWeight.Medium)
+                    Text(
+                        DesktopStrings.format("d_playlist_song_count", playlist.songs.size, fallback = "${playlist.songs.size} songs"),
+                        color = DesktopSecondary,
+                        style = MaterialTheme.typography.bodySmall,
+                    )
+                }
+                Icon(Icons.Rounded.ArrowForward, null, tint = DesktopSecondary)
             }
         }
     }
@@ -5462,6 +5696,8 @@ private fun DesktopLibraryGroupingContent(
     groups: List<Map.Entry<String, List<Song>>>,
     view: DesktopLibraryView,
     onGroupClick: (Pair<String, List<Song>>) -> Unit,
+    displayName: (String) -> String = { it },
+    groupSubtitle: (String, List<Song>) -> String = { _, songs -> "${songs.size} songs" },
 ) {
     if (groups.isEmpty()) {
         DesktopEmptyPage(BitChordIcons.Search, "Nothing here yet", "Music will be grouped as it is added.")
@@ -5477,8 +5713,8 @@ private fun DesktopLibraryGroupingContent(
                 Column(Modifier.fillMaxWidth().clickable { onGroupClick(group.key to group.value) }) {
                     DesktopArtwork(group.value.firstOrNull()?.thumbnailUrl, Modifier.fillMaxWidth().height(150.dp).clip(CircleShape))
                     Spacer(Modifier.height(7.dp))
-                    Text(group.key, maxLines = 1, overflow = TextOverflow.Ellipsis, fontWeight = FontWeight.Medium)
-                    Text("${group.value.size} songs", color = DesktopSecondary, style = MaterialTheme.typography.bodySmall)
+                    Text(displayName(group.key), maxLines = 1, overflow = TextOverflow.Ellipsis, fontWeight = FontWeight.Medium)
+                    Text(groupSubtitle(group.key, group.value), color = DesktopSecondary, style = MaterialTheme.typography.bodySmall, maxLines = 1, overflow = TextOverflow.Ellipsis)
                 }
             }
         }
@@ -5496,8 +5732,8 @@ private fun DesktopLibraryGroupingContent(
                     DesktopArtwork(group.value.firstOrNull()?.thumbnailUrl, Modifier.size(54.dp).clip(CircleShape))
                     Spacer(Modifier.width(12.dp))
                     Column(Modifier.weight(1f)) {
-                        Text(group.key, maxLines = 1, overflow = TextOverflow.Ellipsis, fontWeight = FontWeight.Medium)
-                        Text("${group.value.size} songs", color = DesktopSecondary, style = MaterialTheme.typography.bodySmall)
+                        Text(displayName(group.key), maxLines = 1, overflow = TextOverflow.Ellipsis, fontWeight = FontWeight.Medium)
+                        Text(groupSubtitle(group.key, group.value), color = DesktopSecondary, style = MaterialTheme.typography.bodySmall, maxLines = 1, overflow = TextOverflow.Ellipsis)
                     }
                     Icon(BitChordIcons.Play, DesktopStrings["open", "Open"], tint = DesktopSecondary)
                 }
@@ -5611,6 +5847,7 @@ private fun DesktopSettingsScreen(
     onOpenLicenses: () -> Unit,
 ) {
     var editingSource by remember { mutableStateOf<DesktopSourceConfig?>(null) }
+    var backupMessage by remember { mutableStateOf<String?>(null) }
     val sourceProbeKey = sourceConfigs
         .filter { it.kind.needsServer && it.isComplete }
         .joinToString { "${it.id}@${it.baseUrl}" }
@@ -5723,6 +5960,68 @@ private fun DesktopSettingsScreen(
                         skipSilence,
                         onSkipSilenceChange,
                     )
+                    val seekButtonMode by DesktopPlayerSettings.seekButtonMode.collectAsState()
+                    if (settingsRowVisible(
+                            DesktopStrings["seek_buttons", "Seek buttons"],
+                            DesktopStrings["seek_buttons_subtitle", "Show small seek controls beside previous and next"],
+                        )
+                    ) {
+                        Column(Modifier.fillMaxWidth().padding(vertical = 10.dp)) {
+                            Text(DesktopStrings["seek_buttons", "Seek buttons"], style = MaterialTheme.typography.bodyLarge)
+                            Text(
+                                DesktopStrings["seek_buttons_subtitle", "Show small seek controls beside previous and next"],
+                                color = DesktopSecondary,
+                                style = MaterialTheme.typography.bodySmall,
+                            )
+                            Spacer(Modifier.height(8.dp))
+                            Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                                PlayerSeekButtonMode.entries.forEach { mode ->
+                                    val label = when (mode) {
+                                        PlayerSeekButtonMode.OFF -> DesktopStrings["d_off", "Off"]
+                                        PlayerSeekButtonMode.ALWAYS -> DesktopStrings["always", "Always"]
+                                        PlayerSeekButtonMode.LONG_TRACKS -> DesktopStrings["seek_long_tracks", "15 min and longer"]
+                                    }
+                                    FilterChip(
+                                        colors = desktopChipColors(),
+                                        selected = seekButtonMode == mode,
+                                        onClick = { DesktopPlayerSettings.setSeekButtonMode(mode) },
+                                        label = { Text(label) },
+                                    )
+                                }
+                            }
+                        }
+                    }
+                    val seekSeconds by DesktopPlayerSettings.seekButtonSeconds.collectAsState()
+                    if (settingsRowVisible(
+                            DesktopStrings["seek_interval", "Seek interval"],
+                            DesktopStrings["seek_interval_subtitle", "How many seconds each seek button moves"],
+                        )
+                    ) {
+                        Column(Modifier.fillMaxWidth().padding(vertical = 10.dp)) {
+                            Text(
+                                "${DesktopStrings["seek_interval", "Seek interval"]} · ${seekSeconds}s",
+                                style = MaterialTheme.typography.bodyLarge,
+                            )
+                            Text(
+                                DesktopStrings["seek_interval_subtitle", "How many seconds each seek button moves"],
+                                color = DesktopSecondary,
+                                style = MaterialTheme.typography.bodySmall,
+                            )
+                            DesktopBareSlider(
+                                value = seekSeconds.toFloat(),
+                                onValueChange = { DesktopPlayerSettings.setSeekButtonSeconds(it.toInt()) },
+                                valueRange = 1f..60f,
+                                steps = 58,
+                            )
+                        }
+                    }
+                    val hideSeekSecondsLabel by DesktopPlayerSettings.hideSeekSecondsLabel.collectAsState()
+                    SettingsToggle(
+                        DesktopStrings["hide_seek_seconds_label", "Hide seek seconds label"],
+                        DesktopStrings["hide_seek_seconds_label_subtitle", "Hide the seconds shown below seek buttons"],
+                        hideSeekSecondsLabel,
+                        DesktopPlayerSettings::setHideSeekSecondsLabel,
+                    )
                     SettingsToggle(
                         DesktopStrings["spatial_audio", "Spatial audio"],
                         DesktopStrings["spatial_audio_subtitle", "Widens stereo tracks for a more immersive feel"],
@@ -5786,6 +6085,14 @@ private fun DesktopSettingsScreen(
                             DesktopMiniPlayerControl.LYRICS -> DesktopStrings["mini_player_lyrics", "Lyrics"]
                             DesktopMiniPlayerControl.QUEUE -> DesktopStrings["mini_player_queue", "Queue"]
                             DesktopMiniPlayerControl.ADD_TO_PLAYLIST -> DesktopStrings["mini_player_add_to_playlist", "Add to playlist"]
+                            DesktopMiniPlayerControl.PLAYLISTS -> DesktopStrings["playlists", "Playlists"]
+                            DesktopMiniPlayerControl.SEARCH -> DesktopStrings["search", "Search"]
+                            DesktopMiniPlayerControl.ALBUM -> DesktopStrings["album", "Album"]
+                            DesktopMiniPlayerControl.ARTIST -> DesktopStrings["artist", "Artist"]
+                            DesktopMiniPlayerControl.EQUALIZER -> DesktopStrings["equalizer", "Equalizer"]
+                            DesktopMiniPlayerControl.PLAYBACK_TUNING -> DesktopStrings["d_playback_speed", "Playback settings"]
+                            DesktopMiniPlayerControl.SLEEP_TIMER -> DesktopStrings["sleep_timer", "Sleep timer"]
+                            DesktopMiniPlayerControl.DETAILS -> DesktopStrings["d_details", "Details"]
                         }
                         val selectedIndex = miniPlayerControls.indexOf(control)
                         val subtitle = DesktopStrings["mini_player_control_subtitle", "Show this control in the bottom player bar"]
@@ -6074,6 +6381,13 @@ private fun DesktopSettingsScreen(
                         }
                     }
                     val hidePlayerArtist by DesktopPlayerSettings.hidePlayerArtist.collectAsState()
+                    val hidePlayingFrom by DesktopPlayerSettings.hideSongStatus.collectAsState()
+                    SettingsToggle(
+                        DesktopStrings["hide_playing_from", "Hide Playing from label"],
+                        DesktopStrings["hide_playing_from_subtitle", "Hide the caption that names the playlist or page this track came from"],
+                        hidePlayingFrom,
+                        DesktopPlayerSettings::setHideSongStatus,
+                    )
                     SettingsToggle(
                         DesktopStrings["hide_player_artist", "Hide player artist"],
                         DesktopStrings["hide_player_artist_subtitle", "Hide the artist line beneath the song title"],
@@ -6241,6 +6555,76 @@ private fun DesktopSettingsScreen(
                         hideVolumeBar,
                         DesktopAppearanceSettings::setHideVolumeBar,
                     )
+                    SettingsGroup(DesktopStrings["d_settings_backup", "Settings backup"]) {
+                        Text(
+                            DesktopStrings[
+                                "d_settings_backup_subtitle",
+                                "Import settings from an Android MusicBeat backup, or save this desktop setup to a JSON file. Credentials and playback history are excluded.",
+                            ],
+                            color = DesktopSecondary,
+                            style = MaterialTheme.typography.bodySmall,
+                            modifier = Modifier.padding(bottom = 10.dp),
+                        )
+                        Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                            Button(
+                                onClick = {
+                                    val chooser = javax.swing.JFileChooser(System.getProperty("user.home")).apply {
+                                        dialogTitle = DesktopStrings["d_import_settings", "Import settings"]
+                                        isAcceptAllFileFilterUsed = false
+                                        addChoosableFileFilter(
+                                            javax.swing.filechooser.FileNameExtensionFilter("JSON backup (*.json)", "json"),
+                                        )
+                                    }
+                                    if (chooser.showOpenDialog(null) == javax.swing.JFileChooser.APPROVE_OPTION) {
+                                        runCatching { DesktopSettingsBackup.importFrom(chooser.selectedFile) }
+                                            .onSuccess { result ->
+                                                backupMessage = DesktopStrings.format(
+                                                    "d_settings_import_result",
+                                                    result.imported,
+                                                    result.skipped,
+                                                    result.source,
+                                                    fallback = "Imported ${result.imported} settings from ${result.source}; skipped ${result.skipped} unsupported or unsafe values.",
+                                                )
+                                            }
+                                            .onFailure { error ->
+                                                backupMessage = error.message ?: DesktopStrings["d_settings_import_failed", "Could not import this settings file"]
+                                            }
+                                    }
+                                },
+                                shape = RoundedCornerShape(50),
+                                colors = ButtonDefaults.buttonColors(containerColor = DesktopAccent, contentColor = Color.Black),
+                            ) { Text(DesktopStrings["d_import_settings", "Import settings"]) }
+                            TextButton(
+                                onClick = {
+                                    val chooser = javax.swing.JFileChooser(DesktopSettingsBackup.suggestedFile().parentFile).apply {
+                                        dialogTitle = DesktopStrings["d_export_settings", "Export settings"]
+                                        selectedFile = DesktopSettingsBackup.suggestedFile()
+                                        isAcceptAllFileFilterUsed = false
+                                        addChoosableFileFilter(
+                                            javax.swing.filechooser.FileNameExtensionFilter("JSON backup (*.json)", "json"),
+                                        )
+                                    }
+                                    if (chooser.showSaveDialog(null) == javax.swing.JFileChooser.APPROVE_OPTION) {
+                                        val selected = chooser.selectedFile
+                                        val target = if (selected.extension.equals("json", ignoreCase = true)) selected
+                                        else java.io.File(selected.parentFile, "${selected.name}.json")
+                                        runCatching { DesktopSettingsBackup.exportTo(target) }
+                                            .onSuccess { count ->
+                                                backupMessage = DesktopStrings.format(
+                                                    "d_settings_export_result",
+                                                    count,
+                                                    target.name,
+                                                    fallback = "Exported $count settings to ${target.name}.",
+                                                )
+                                            }
+                                            .onFailure { error ->
+                                                backupMessage = error.message ?: DesktopStrings["d_settings_export_failed", "Could not export settings"]
+                                            }
+                                    }
+                                },
+                            ) { Text(DesktopStrings["d_export_settings", "Export settings"]) }
+                        }
+                    }
                 }
             }
             if (section == DesktopSettingsSection.AUDIO_QUALITY) item {
@@ -6423,6 +6807,16 @@ private fun DesktopSettingsScreen(
                 editingSource = null
             },
             onTest = onTestSource,
+        )
+    }
+    backupMessage?.let { message ->
+        AlertDialog(
+            onDismissRequest = { backupMessage = null },
+            title = { Text(DesktopStrings["d_settings_backup", "Settings backup"]) },
+            text = { Text(message) },
+            confirmButton = {
+                TextButton(onClick = { backupMessage = null }) { Text(DesktopStrings["done", "Done"]) }
+            },
         )
     }
 }

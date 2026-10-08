@@ -149,6 +149,9 @@ interface PlayerSettingsSource {
     val centerPlayerTrackInfo: StateFlow<Boolean>
     val hideLyricsStatusText: StateFlow<Boolean>
     val hideSongStatus: StateFlow<Boolean>
+    val seekButtonMode: StateFlow<PlayerSeekButtonMode>
+    val seekButtonSeconds: StateFlow<Int>
+    val hideSeekSecondsLabel: StateFlow<Boolean>
     val hideVolumeBar: StateFlow<Boolean>
     val lastPlayerScreen: StateFlow<LastPlayerScreen>
     val legacyMeshGradient: StateFlow<Boolean>
@@ -181,6 +184,9 @@ interface PlayerSettingsSource {
 
 /** Text alignment choices shared by the Android and desktop lyric panels. */
 enum class PlayerLyricsAlignment { LEFT, CENTER, RIGHT }
+
+/** Optional seek controls beside the track-skip buttons. */
+enum class PlayerSeekButtonMode { OFF, ALWAYS, LONG_TRACKS }
 
 /** The player's name for the installed host's settings, read where AppSettings used to be. */
 internal val PlayerSettings: PlayerSettingsSource

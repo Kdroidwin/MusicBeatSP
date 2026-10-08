@@ -41,7 +41,6 @@ object DesktopLocalMusic {
     fun folder(): Path? = DesktopPersistence().string(KEY_LOCAL_MUSIC_FOLDER)
         .takeIf(String::isNotBlank)
         ?.let { runCatching { Paths.get(it) }.getOrNull() }
-        ?.takeIf(Files::isDirectory)
 
     fun setFolder(path: Path?) {
         DesktopPersistence().saveString(KEY_LOCAL_MUSIC_FOLDER, path?.toAbsolutePath()?.toString().orEmpty())

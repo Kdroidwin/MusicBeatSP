@@ -18,6 +18,38 @@ class DesktopPersistence {
         encodeDefaults = true
     }
 
+    init {
+        migrateLocalMusicSettings()
+    }
+
+    /** Keep the two user-facing local-library choices when upgrading from earlier desktop IDs. */
+    private fun migrateLocalMusicSettings() = runCatching {
+        val root = Preferences.userRoot()
+        val previousNodes = listOf("/com.music.bitchord.desktop", "/com/samuel/musicbeat/desktop")
+            .filter(root::nodeExists)
+            .map(root::node)
+
+        fun previousValue(key: String): String? = previousNodes
+            .asSequence()
+            .mapNotNull { DesktopPreferenceChunks.read(it, key) }
+            .firstOrNull(String::isNotBlank)
+
+        if (DesktopPreferenceChunks.read(preferences, DesktopStrings.KEY_LANGUAGE) == null) {
+            previousValue(DesktopStrings.KEY_LANGUAGE)?.let {
+                DesktopPreferenceChunks.write(preferences, DesktopStrings.KEY_LANGUAGE, it)
+            }
+        }
+        if (DesktopPreferenceChunks.read(preferences, DesktopLocalMusic.KEY_LOCAL_MUSIC_FOLDER) == null) {
+            val savedFolder = previousValue(DesktopLocalMusic.KEY_LOCAL_MUSIC_FOLDER)
+                ?: previousNodes.asSequence().mapNotNull { it.get("musicFolder", null) }
+                    .firstOrNull(String::isNotBlank)
+            savedFolder?.let {
+                DesktopPreferenceChunks.write(preferences, DesktopLocalMusic.KEY_LOCAL_MUSIC_FOLDER, it)
+            }
+        }
+        preferences.flush()
+    }
+
     fun likedIds(): Set<String> = readLines(KEY_LIKED_IDS).toSet()
 
     fun saveLikedIds(ids: Set<String>) = writeLines(KEY_LIKED_IDS, ids.toList())

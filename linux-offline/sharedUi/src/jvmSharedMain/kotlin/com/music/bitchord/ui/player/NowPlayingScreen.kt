@@ -787,6 +787,15 @@ fun NowPlayingScreen(
     val hideVolumeBar by PlayerSettings.hideVolumeBar.collectAsStateWithLifecycle()
     val hideSongStatus by PlayerSettings.hideSongStatus.collectAsStateWithLifecycle()
     val hideLyricsStatusText by PlayerSettings.hideLyricsStatusText.collectAsStateWithLifecycle()
+    val seekButtonMode by PlayerSettings.seekButtonMode.collectAsStateWithLifecycle()
+    val seekButtonSeconds by PlayerSettings.seekButtonSeconds.collectAsStateWithLifecycle()
+    val hideSeekSecondsLabel by PlayerSettings.hideSeekSecondsLabel.collectAsStateWithLifecycle()
+    val seekButtonsVisible = when (seekButtonMode) {
+        PlayerSeekButtonMode.OFF -> false
+        PlayerSeekButtonMode.ALWAYS -> true
+        PlayerSeekButtonMode.LONG_TRACKS -> durationMs >= 15L * 60L * 1_000L
+    }
+    val seekDeltaMs = seekButtonSeconds.coerceIn(1, 60) * 1_000L
     val lyricsFontScale by PlayerSettings.lyricsFontScale.collectAsStateWithLifecycle()
     val lyricsTextAlignment by PlayerSettings.lyricsTextAlignment.collectAsStateWithLifecycle()
     val hidePlayerArtist by PlayerSettings.hidePlayerArtist.collectAsStateWithLifecycle()
@@ -1926,6 +1935,16 @@ fun NowPlayingScreen(
                                 onPrevious = onPrevious,
                                 onPlayPause = onPlayPause,
                                 onNext = onNext,
+                                seekButtonsVisible = seekButtonsVisible,
+                                seekSeconds = seekButtonSeconds,
+                                hideSeekSecondsLabel = hideSeekSecondsLabel,
+                                seekEnabled = !controlsLocked,
+                                onSeekBackward = {
+                                    onSeek((position.positionMs - seekDeltaMs).coerceIn(0L, durationMs.coerceAtLeast(0L)))
+                                },
+                                onSeekForward = {
+                                    onSeek((position.positionMs + seekDeltaMs).coerceIn(0L, durationMs.coerceAtLeast(0L)))
+                                },
                                 compact = compact,
                             )
                         },
@@ -3584,6 +3603,16 @@ fun NowPlayingScreen(
                 onPrevious = onPrevious,
                 onPlayPause = onPlayPause,
                 onNext = onNext,
+                seekButtonsVisible = seekButtonsVisible,
+                seekSeconds = seekButtonSeconds,
+                hideSeekSecondsLabel = hideSeekSecondsLabel,
+                seekEnabled = !controlsLocked,
+                onSeekBackward = {
+                    onSeek((position.positionMs - seekDeltaMs).coerceIn(0L, durationMs.coerceAtLeast(0L)))
+                },
+                onSeekForward = {
+                    onSeek((position.positionMs + seekDeltaMs).coerceIn(0L, durationMs.coerceAtLeast(0L)))
+                },
             )
 
             // Keep the volume slot's full footprint when its contents are

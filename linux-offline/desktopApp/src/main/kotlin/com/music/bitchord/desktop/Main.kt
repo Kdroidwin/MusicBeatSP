@@ -1,5 +1,7 @@
 package com.music.bitchord.desktop
 
+import coil3.ImageLoader
+import coil3.SingletonImageLoader
 import androidx.compose.runtime.CompositionLocalProvider
 import com.music.bitchord.ui.player.PlayerPlatform
 import com.music.bitchord.data.DebugLog
@@ -23,6 +25,13 @@ import kotlin.math.roundToInt
 import org.jetbrains.compose.resources.painterResource
 
 fun main() {
+    // Shared player surfaces use Coil directly; teach its one app-wide loader how to resolve our
+    // local-artwork URIs before the first composition creates that loader.
+    SingletonImageLoader.setSafe { context ->
+        ImageLoader.Builder(context)
+            .components { add(DesktopLocalArtworkFetcher.Factory()) }
+            .build()
+    }
     // The player is the phone's, from the shared UI module; this is what it reads underneath.
     PlayerPlatform.install(DesktopPlayerHost)
     com.music.bitchord.ui.AppUi.install(DesktopAppUiHost)

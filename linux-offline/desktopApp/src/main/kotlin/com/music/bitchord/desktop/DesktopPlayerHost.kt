@@ -26,6 +26,7 @@ import com.music.bitchord.ui.player.OutputFormatUi
 import com.music.bitchord.ui.player.PartyUi
 import com.music.bitchord.ui.player.PlayerHost
 import com.music.bitchord.ui.player.PlayerLyricsAlignment
+import com.music.bitchord.ui.player.PlayerSeekButtonMode
 import com.music.bitchord.ui.player.PlayerSettingsSource
 import com.music.bitchord.ui.player.SystemVolume
 import dev.chrisbanes.haze.HazeState
@@ -188,6 +189,14 @@ internal enum class DesktopMiniPlayerControl {
     LYRICS,
     QUEUE,
     ADD_TO_PLAYLIST,
+    PLAYLISTS,
+    SEARCH,
+    ALBUM,
+    ARTIST,
+    EQUALIZER,
+    PLAYBACK_TUNING,
+    SLEEP_TIMER,
+    DETAILS,
 }
 
 /**
@@ -207,8 +216,16 @@ internal object DesktopPlayerSettings : PlayerSettingsSource {
     override val hideUnknownPlayerArtist = MutableStateFlow(persistence.boolean(KEY_HIDE_UNKNOWN_PLAYER_ARTIST, false))
     override val centerPlayerTrackInfo = MutableStateFlow(persistence.boolean(KEY_CENTER_PLAYER_INFO, false))
     override val hideLyricsStatusText = MutableStateFlow(persistence.boolean(KEY_HIDE_LYRICS_STATUS, false))
-    override val hideSongStatus = MutableStateFlow(false)
-    override val hideVolumeBar = MutableStateFlow(false)
+    override val hideSongStatus = MutableStateFlow(persistence.boolean(KEY_HIDE_SONG_STATUS, false))
+    override val seekButtonMode = MutableStateFlow(
+        runCatching { PlayerSeekButtonMode.valueOf(persistence.string(KEY_SEEK_BUTTON_MODE, "OFF")) }
+            .getOrDefault(PlayerSeekButtonMode.OFF),
+    )
+    override val seekButtonSeconds = MutableStateFlow(persistence.int(KEY_SEEK_BUTTON_SECONDS, 5).coerceIn(1, 60))
+    override val hideSeekSecondsLabel = MutableStateFlow(persistence.boolean(KEY_HIDE_SEEK_SECONDS_LABEL, false))
+    // This must share the setting's live flow. A constant false made the visible setting a mock:
+    // the switch persisted, but the shared player never observed it.
+    override val hideVolumeBar: StateFlow<Boolean> = DesktopAppearanceSettings.hideVolumeBar
     override val lastPlayerScreen = MutableStateFlow(
         runCatching { LastPlayerScreen.valueOf(persistence.string(KEY_LAST_SCREEN, "MAIN")) }
             .getOrDefault(LastPlayerScreen.MAIN),
@@ -290,6 +307,27 @@ internal object DesktopPlayerSettings : PlayerSettingsSource {
         persistence.saveBoolean(KEY_HIDE_LYRICS_STATUS, value)
     }
 
+    fun setHideSongStatus(value: Boolean) {
+        hideSongStatus.value = value
+        persistence.saveBoolean(KEY_HIDE_SONG_STATUS, value)
+    }
+
+    fun setSeekButtonMode(value: PlayerSeekButtonMode) {
+        seekButtonMode.value = value
+        persistence.saveString(KEY_SEEK_BUTTON_MODE, value.name)
+    }
+
+    fun setSeekButtonSeconds(value: Int) {
+        val seconds = value.coerceIn(1, 60)
+        seekButtonSeconds.value = seconds
+        persistence.saveInt(KEY_SEEK_BUTTON_SECONDS, seconds)
+    }
+
+    fun setHideSeekSecondsLabel(value: Boolean) {
+        hideSeekSecondsLabel.value = value
+        persistence.saveBoolean(KEY_HIDE_SEEK_SECONDS_LABEL, value)
+    }
+
     fun setLyricsFontScale(value: Float) {
         val normalized = value.coerceIn(0.6f, 1.6f)
         lyricsFontScale.value = normalized
@@ -326,6 +364,12 @@ internal object DesktopPlayerSettings : PlayerSettingsSource {
         persistence.saveString(KEY_MINI_PLAYER_CONTROLS, current.joinToString(",") { it.name })
     }
 
+    fun setMiniPlayerControls(values: List<DesktopMiniPlayerControl>) {
+        val normalized = normalizedMiniPlayerControls(values)
+        miniPlayerControls.value = normalized
+        persistence.saveString(KEY_MINI_PLAYER_CONTROLS, normalized.joinToString(",") { it.name })
+    }
+
     private fun readMiniPlayerControls(): List<DesktopMiniPlayerControl> {
         val stored = persistence.string(KEY_MINI_PLAYER_CONTROLS, "\u0000unset")
         if (stored == "\u0000unset") return defaultMiniPlayerControls
@@ -345,6 +389,10 @@ internal object DesktopPlayerSettings : PlayerSettingsSource {
     private const val KEY_HIDE_UNKNOWN_PLAYER_ARTIST = "hide_unknown_player_artist"
     private const val KEY_CENTER_PLAYER_INFO = "center_player_track_info"
     private const val KEY_HIDE_LYRICS_STATUS = "hide_lyrics_status_text"
+    private const val KEY_HIDE_SONG_STATUS = "hide_song_status"
+    private const val KEY_SEEK_BUTTON_MODE = "seek_button_mode"
+    private const val KEY_SEEK_BUTTON_SECONDS = "seek_button_seconds"
+    private const val KEY_HIDE_SEEK_SECONDS_LABEL = "hide_seek_seconds_label"
     private const val KEY_LYRICS_FONT_SCALE = "lyrics_font_scale"
     private const val KEY_LYRICS_ALIGNMENT = "lyrics_text_alignment"
     private const val KEY_THEME_MODE = "theme_mode"
