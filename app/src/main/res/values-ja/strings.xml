@@ -1,5 +1,8 @@
 <resources>
     <string name="app_name">MusicBeatSP</string>
+    <string name="quick_play_tile_label">MusicBeatSP再生</string>
+    <string name="quick_play_tile_start">MusicBeatSPの再生を開始</string>
+    <string name="quick_play_tile_stop">MusicBeatSPの再生を停止</string>
     <string name="cast_connect_failed">Chromecastに接続できませんでした。</string>
     <string name="cast_track_unsupported">この曲はChromecastで再生できませんでした。</string>
     <string name="playback_channel_name">再生中</string>
@@ -797,6 +800,8 @@
     <string name="lyrics_sync_not_lyric">メタデータ行や空行には時間を設定できません。</string>
     <string name="selection_move_to_top">選択曲を先頭へ</string>
     <string name="selection_move_to_bottom">選択曲を末尾へ</string>
+    <string name="selection_move_up">選択曲を1つ上へ</string>
+    <string name="selection_move_down">選択曲を1つ下へ</string>
     <string name="selection_edit_tags">タグを編集</string>
     <string name="selection_share">共有</string>
     <string name="bulk_tag_edit">選択した曲のタグを編集</string>

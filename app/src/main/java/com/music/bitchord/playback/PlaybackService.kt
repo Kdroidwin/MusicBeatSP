@@ -14,6 +14,7 @@ import android.os.Handler
 import android.os.Looper
 import android.os.SystemClock
 import android.widget.Toast
+import com.music.bitchord.widget.QuickPlayTileState
 import kotlinx.coroutines.sync.Mutex
 import kotlinx.coroutines.sync.withLock
 import android.util.Log
@@ -697,6 +698,7 @@ class PlaybackService : MediaLibraryService() {
         override fun onPlayWhenReadyChanged(playWhenReady: Boolean, reason: Int) {
             handleAudioFocusPlaybackChange(playWhenReady)
             publishWidgetState(playing = playWhenReady)
+            QuickPlayTileState.setActive(this@PlaybackService, playWhenReady)
             if (playWhenReady) player?.let(castPlayback::onLocalStartedPlaying)
         }
 
@@ -1265,6 +1267,7 @@ class PlaybackService : MediaLibraryService() {
             MediaWidgetSnapshot.save(this, MediaWidgetSnapshot.EMPTY)
             MediaWidget.refresh(this)
         }
+        QuickPlayTileState.setActive(this, exoPlayer.playWhenReady)
         // History pings fire once a track is actually audible — both when
         // playback starts and when the queue moves on while already playing.
         lastRepeatMode = exoPlayer.repeatMode
@@ -4248,6 +4251,7 @@ class PlaybackService : MediaLibraryService() {
         // swipe-away, so a widget left on the home screen would sit there with a
         // pause glyph on a service that no longer exists.
         publishWidgetState(playing = false)
+        QuickPlayTileState.setActive(this, false)
         lyricsTickerJob?.cancel()
         lyricsTickerJob = null
         serviceLyricsJob?.cancel()

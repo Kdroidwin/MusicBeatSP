@@ -1,5 +1,8 @@
 <resources>
     <string name="app_name">MusicBeatSP</string>
+    <string name="quick_play_tile_label">MusicBeatSP play</string>
+    <string name="quick_play_tile_start">Start MusicBeatSP playback</string>
+    <string name="quick_play_tile_stop">Stop MusicBeatSP playback</string>
     <string name="cast_connect_failed">Could not connect to Chromecast.</string>
     <string name="cast_track_unsupported">This track could not be played on Chromecast.</string>
     <string name="playback_channel_name">Now playing</string>
@@ -889,6 +892,8 @@
     <string name="lyrics_sync_not_lyric">Metadata and blank lines cannot be time-stamped.</string>
     <string name="selection_move_to_top">Move to top</string>
     <string name="selection_move_to_bottom">Move to bottom</string>
+    <string name="selection_move_up">Move selected songs up one position</string>
+    <string name="selection_move_down">Move selected songs down one position</string>
     <string name="selection_edit_tags">Edit tags</string>
     <string name="selection_share">Share</string>
     <string name="bulk_tag_edit">Edit tags for selected songs</string>

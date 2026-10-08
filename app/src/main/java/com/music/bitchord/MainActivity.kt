@@ -229,6 +229,7 @@ import com.music.bitchord.ui.screens.equalizer.EqualizerSheet
 import androidx.compose.ui.window.Dialog
 import androidx.compose.ui.window.DialogProperties
 import com.music.bitchord.feature.localmusic.ui.components.DrillDownSongList
+import com.music.bitchord.widget.QuickPlayTileState
 import com.music.bitchord.ui.screens.LocalMusicScreen
 import com.music.bitchord.ui.replay.ReplayScreen
 import com.music.bitchord.ui.replay.cards
@@ -257,6 +258,7 @@ private const val INITIAL_RADIO_TRACKS = 24
 class MainActivity : AppCompatActivity() {
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
+        QuickPlayTileState.attach(this)
         enableEdgeToEdge()
         // Before the composition, so a cold launch from a widget's artwork has
         // the request already standing by the time BitChordApp first reads it.
@@ -355,6 +357,11 @@ class MainActivity : AppCompatActivity() {
                 }
             }
         }
+    }
+
+    override fun onDestroy() {
+        QuickPlayTileState.detach(this)
+        super.onDestroy()
     }
 
     override fun onWindowFocusChanged(hasFocus: Boolean) {
