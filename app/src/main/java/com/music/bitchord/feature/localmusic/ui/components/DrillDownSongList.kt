@@ -549,21 +549,24 @@ fun DrillDownSongList(
                     if (reorderEnabled && isPlaylist) {
                         val songKey = song.localUri ?: song.videoId
                         val isDragging = dragState.draggedKey == songKey
-                        val finishDrag by rememberUpdatedState(newValue = {
+                        val isDragGroupMember = dragState.isDragMember(songKey)
+                        val finishDrag by rememberUpdatedState(newValue = { commit: Boolean ->
                             if (dragState.draggedKey == songKey) {
+                                if (commit && dragState.isGroupDrag) {
+                                    dragState.finishGroupedDrag()
+                                }
                                 dragState.onDragEnd()
                                 onReorderComplete?.invoke(displayedSongs)
                             }
                         })
-                        DisposableEffect(songKey) {
-                            onDispose { if (dragState.draggedKey == songKey) finishDrag() }
-                        }
                         Row(
                             modifier = Modifier
-                                .zIndex(if (isDragging) 1f else 0f)
-                                .graphicsLayer { translationY = if (isDragging) dragState.renderOffset else 0f }
+                                .zIndex(if (isDragGroupMember) 1f else 0f)
+                                .graphicsLayer {
+                                    translationY = if (isDragGroupMember) dragState.renderOffset else 0f
+                                }
                                 .background(
-                                    if (isDragging) MaterialTheme.colorScheme.primary.copy(alpha = 0.08f)
+                                    if (isDragGroupMember) MaterialTheme.colorScheme.primary.copy(alpha = 0.08f)
                                     else Color.Transparent,
                                 ),
                             verticalAlignment = Alignment.CenterVertically,
@@ -611,10 +614,10 @@ fun DrillDownSongList(
                                                 } else {
                                                     emptySet()
                                                 }
-                                                dragState.onDragStart(songKey, groupKeys)
+                                                dragState.onDragStart(songKey, groupKeys, index)
                                             },
-                                            onDragEnd = { finishDrag() },
-                                            onDragCancel = { finishDrag() },
+                                            onDragEnd = { finishDrag(true) },
+                                            onDragCancel = { finishDrag(false) },
                                             onDrag = { change, dragAmount ->
                                                 change.consume()
                                                 dragState.onDrag(dragAmount.y)
@@ -715,13 +718,24 @@ private class PlaylistSongDragState(
         private set
     private var heldCenter: Float = Float.NaN
     private var awaiting: Int? = null
+    private var draggedDataIndex: Int = -1
+    private var groupDropTargetIndex: Int? = null
+    private var groupDropAfter: Boolean = false
 
-    fun onDragStart(key: Any, groupedKeys: Set<String> = emptySet()) {
+    val isGroupDrag: Boolean get() = groupedKeys.size > 1
+
+    fun isDragMember(key: String): Boolean =
+        draggedKey == key || (isGroupDrag && key in groupedKeys)
+
+    fun onDragStart(key: Any, groupedKeys: Set<String> = emptySet(), dataIndex: Int = -1) {
         draggedKey = key
         this.groupedKeys = groupedKeys
+        draggedDataIndex = dataIndex
         heldCenter = Float.NaN
         renderOffset = 0f
         awaiting = null
+        groupDropTargetIndex = null
+        groupDropAfter = false
         setAutoScroll(0f)
     }
 
@@ -734,7 +748,17 @@ private class PlaylistSongDragState(
         heldCenter = Float.NaN
         renderOffset = 0f
         awaiting = null
+        draggedDataIndex = -1
+        groupDropTargetIndex = null
+        groupDropAfter = false
         setAutoScroll(0f)
+    }
+
+    fun finishGroupedDrag() {
+        val key = draggedKey as? String ?: return
+        val targetIndex = groupDropTargetIndex ?: return
+        if (draggedDataIndex < 0 || targetIndex < 0) return
+        onMove(draggedDataIndex, targetIndex, key, groupDropAfter, groupedKeys)
     }
 
     private fun settle(deltaY: Float) {
@@ -752,16 +776,27 @@ private class PlaylistSongDragState(
         aimAutoScroll(top, dragged)
         renderOffset = insideViewport(top, dragged.size) - dragged.offset
 
-        awaiting?.let { targetIndex ->
-            if (dragged.index != targetIndex) return
-            awaiting = null
+        if (!isGroupDrag) {
+            awaiting?.let { targetIndex ->
+                if (dragged.index != targetIndex) return
+                awaiting = null
+            }
         }
         val target = items
-            .filter { it.index in lazyRange && it.index != dragged.index }
+            .filter { item ->
+                val itemKey = item.key as? String
+                item.index in lazyRange && item.index != dragged.index &&
+                    (!isGroupDrag || itemKey == null || itemKey !in groupedKeys)
+            }
             .minByOrNull { abs((it.offset + it.size / 2f) - heldCenter ) }
             ?: return
         if (abs(heldCenter - (target.offset + target.size / 2f)) > target.size / 2f) return
         if (target.index == listState.firstVisibleItemIndex && listState.canScrollBackward) return
+        if (isGroupDrag) {
+            groupDropTargetIndex = target.index - lazyOffset
+            groupDropAfter = heldCenter > target.offset + target.size / 2f
+            return
+        }
         val expectedDraggedIndex = onMove(
             dragged.index - lazyOffset,
             target.index - lazyOffset,
