@@ -9,7 +9,8 @@ INPUT_DIR="$BUILD_DIR/package-input"
 JPACKAGE_DIR="$BUILD_DIR/jpackage"
 APP_DIR="$BUILD_DIR/AppDir"
 DIST_DIR="$SCRIPT_DIR/dist"
-APP_NAME="MusicBeat"
+APP_NAME="MusicBeatSP"
+APP_VERSION="2.1.0"
 MAIN_CLASS="com.samuel.musicbeat.desktop.MusicBeatDesktop"
 JAVA_BIN="${JAVA_HOME:-}/bin"
 if [[ ! -x "$JAVA_BIN/javac" ]]; then JAVA_BIN=""; fi
@@ -25,43 +26,43 @@ for tool in "$JAVAC" "$JAR" "$JPACKAGE"; do
 done
 
 rm -rf "$CLASS_DIR" "$INPUT_DIR" "$JPACKAGE_DIR" "$APP_DIR"
-mkdir -p "$CLASS_DIR" "$INPUT_DIR" "$JPACKAGE_DIR" "$APP_DIR/usr/bin" "$APP_DIR/usr/lib/musicbeat" \
+mkdir -p "$CLASS_DIR" "$INPUT_DIR" "$JPACKAGE_DIR" "$APP_DIR/usr/bin" "$APP_DIR/usr/lib/musicbeatsp" \
   "$APP_DIR/usr/share/applications" "$APP_DIR/usr/share/icons/hicolor/256x256/apps" "$DIST_DIR"
 
 mapfile -t SOURCES < <(find "$SCRIPT_DIR/src" -name '*.java' -type f | sort)
 "$JAVAC" --release 17 -encoding UTF-8 -d "$CLASS_DIR" "${SOURCES[@]}"
-"$JAR" --create --file "$BUILD_DIR/musicbeat-linux.jar" \
+"$JAR" --create --file "$BUILD_DIR/musicbeatsp-linux.jar" \
   --main-class "$MAIN_CLASS" -C "$CLASS_DIR" .
-cp "$BUILD_DIR/musicbeat-linux.jar" "$INPUT_DIR/"
+cp "$BUILD_DIR/musicbeatsp-linux.jar" "$INPUT_DIR/"
 
-"$JPACKAGE" --type app-image --name "$APP_NAME" --app-version 0.1.0 \
-  --vendor "MusicBeat" --input "$INPUT_DIR" --main-jar musicbeat-linux.jar \
+"$JPACKAGE" --type app-image --name "$APP_NAME" --app-version "$APP_VERSION" \
+  --vendor "MusicBeatSP" --input "$INPUT_DIR" --main-jar musicbeatsp-linux.jar \
   --main-class "$MAIN_CLASS" --dest "$JPACKAGE_DIR" \
-  --icon "$REPO_DIR/Logo.png" --description "MusicBeat native Linux preview"
+  --icon "$REPO_DIR/Logo.png" --description "MusicBeatSP offline local music player"
 
-cp -a "$JPACKAGE_DIR/$APP_NAME/." "$APP_DIR/usr/lib/musicbeat/"
-ln -s ../lib/musicbeat/bin/$APP_NAME "$APP_DIR/usr/bin/musicbeat"
-cp "$REPO_DIR/Logo.png" "$APP_DIR/usr/share/icons/hicolor/256x256/apps/musicbeat.png"
-cp "$REPO_DIR/Logo.png" "$APP_DIR/musicbeat.png"
-ln -s usr/share/icons/hicolor/256x256/apps/musicbeat.png "$APP_DIR/.DirIcon"
+cp -a "$JPACKAGE_DIR/$APP_NAME/." "$APP_DIR/usr/lib/musicbeatsp/"
+ln -s ../lib/musicbeatsp/bin/$APP_NAME "$APP_DIR/usr/bin/musicbeatsp"
+cp "$REPO_DIR/Logo.png" "$APP_DIR/usr/share/icons/hicolor/256x256/apps/musicbeatsp.png"
+cp "$REPO_DIR/Logo.png" "$APP_DIR/musicbeatsp.png"
+ln -s usr/share/icons/hicolor/256x256/apps/musicbeatsp.png "$APP_DIR/.DirIcon"
 
 cat > "$APP_DIR/AppRun" <<'APPRUN'
 #!/usr/bin/env bash
 HERE="$(dirname -- "$(readlink -f -- "$0")")"
-exec "$HERE/usr/bin/musicbeat" "$@"
+exec "$HERE/usr/bin/musicbeatsp" "$@"
 APPRUN
 chmod +x "$APP_DIR/AppRun"
 
 cat > "$APP_DIR/musicbeat.desktop" <<'DESKTOP'
 [Desktop Entry]
-Name=MusicBeat
-Comment=Local music library and player
-Exec=musicbeat %U
-Icon=musicbeat
+Name=MusicBeatSP
+Comment=Offline local music library and player
+Exec=musicbeatsp %U
+Icon=musicbeatsp
 Terminal=false
 Type=Application
 Categories=AudioVideo;Audio;Player;
-X-AppImage-Version=0.1.0
+X-AppImage-Version=2.1.0
 DESKTOP
 
 APPIMAGETOOL="${APPIMAGETOOL_PATH:-$(command -v appimagetool || true)}"
@@ -71,7 +72,7 @@ if [[ -z "$APPIMAGETOOL" ]]; then
   exit 2
 fi
 
-OUTPUT="$DIST_DIR/MusicBeat-Linux-x86_64.AppImage"
+OUTPUT="$DIST_DIR/MusicBeatSP-Linux-x86_64-$APP_VERSION.AppImage"
 if [[ "$APPIMAGETOOL" == *.AppImage ]]; then
   ARCH=x86_64 "$APPIMAGETOOL" --appimage-extract-and-run "$APP_DIR" "$OUTPUT"
 else

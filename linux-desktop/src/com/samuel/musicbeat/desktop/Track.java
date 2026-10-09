@@ -10,14 +10,22 @@ import java.util.concurrent.TimeUnit;
 
 record Track(Path path, String title, String artist, String album, String duration) {
     static Track read(Path path) {
+        return read(path, null, null);
+    }
+
+    static Track read(Path path, String fallbackTitle, String fallbackArtist) {
         Map<String, String> tags = probe(path);
-        String title = tags.getOrDefault("title", friendlyFileName(path));
-        String artist = tags.getOrDefault("artist", "Unknown artist");
+        String title = tags.getOrDefault("title", nonBlank(fallbackTitle, friendlyFileName(path)));
+        String artist = tags.getOrDefault("artist", nonBlank(fallbackArtist, "Unknown artist"));
         String album = tags.getOrDefault("album", "—");
         return new Track(path, title.isBlank() ? friendlyFileName(path) : title,
                 artist.isBlank() ? "Unknown artist" : artist,
                 album.isBlank() ? "—" : album,
                 formatDuration(tags.get("duration")));
+    }
+
+    private static String nonBlank(String value, String fallback) {
+        return value == null || value.isBlank() ? fallback : value.strip();
     }
 
     private static Map<String, String> probe(Path path) {

@@ -521,6 +521,8 @@ object AppSettings {
     val showLyricsNextControl = MutableStateFlow(false)
     /** Icon size for optional transport controls in the lyrics header, in dp. */
     val lyricsTransportControlSize = MutableStateFlow(22f)
+    /** Centers optional transport controls in the lyrics header instead of aligning them to the close button. */
+    val lyricsTransportControlsCentered = MutableStateFlow(false)
 
     /** Multiplier applied to the lyrics panel's existing synced/unsynced type sizes. */
     val lyricsFontScale = MutableStateFlow(1f)
@@ -935,7 +937,9 @@ object AppSettings {
         showLyricsPreviousControl.value = prefs.getBoolean(KEY_SHOW_LYRICS_PREVIOUS_CONTROL, false)
         showLyricsPlayPauseControl.value = prefs.getBoolean(KEY_SHOW_LYRICS_PLAY_PAUSE_CONTROL, false)
         showLyricsNextControl.value = prefs.getBoolean(KEY_SHOW_LYRICS_NEXT_CONTROL, false)
-        lyricsTransportControlSize.value = prefs.getFloat(KEY_LYRICS_TRANSPORT_CONTROL_SIZE, 22f).coerceIn(14f, 30f)
+        lyricsTransportControlSize.value = prefs.getFloat(KEY_LYRICS_TRANSPORT_CONTROL_SIZE, 22f)
+            .coerceIn(14f, MAX_LYRICS_TRANSPORT_CONTROL_SIZE)
+        lyricsTransportControlsCentered.value = prefs.getBoolean(KEY_LYRICS_TRANSPORT_CONTROLS_CENTERED, false)
         lyricsFontScale.value = prefs.getFloat(KEY_LYRICS_FONT_SCALE, 1f).coerceIn(0.6f, 1.6f)
         lyricsTextAlignment.value = runCatching {
             LyricsTextAlignment.valueOf(
@@ -965,10 +969,7 @@ object AppSettings {
             persistentLocalArtwork.value = true
             prefs.edit().putBoolean(KEY_PERSISTENT_LOCAL_ARTWORK, true).apply()
         }
-        if (highPerformanceMode.value) {
-            reduceAnimation.value = false
-            reduceDynamicBlur.value = false
-        }
+        if (highPerformanceMode.value) reduceAnimation.value = false
         animatedCanvas.value = prefs.getBoolean(KEY_ANIMATED_CANVAS, true)
         canvasOverCellular.value = prefs.getBoolean(KEY_CANVAS_OVER_CELLULAR, false)
         fullBleedArtwork.value = prefs.getBoolean(KEY_FULL_BLEED_ARTWORK, true)
@@ -1260,10 +1261,7 @@ object AppSettings {
 
     fun setReduceDynamicBlur(value: Boolean) {
         reduceDynamicBlur.value = value
-        if (value) highPerformanceMode.value = false
-        val editor = prefs.edit().putBoolean(KEY_REDUCE_BLUR, value)
-        if (value) editor.putBoolean(KEY_HIGH_PERFORMANCE_MODE, false)
-        editor.apply()
+        prefs.edit().putBoolean(KEY_REDUCE_BLUR, value).apply()
     }
 
     fun setLiquidGlass(value: Boolean) {
@@ -1421,12 +1419,10 @@ object AppSettings {
         highPerformanceMode.value = value
         if (value) {
             reduceAnimation.value = false
-            reduceDynamicBlur.value = false
         }
         val editor = prefs.edit().putBoolean(KEY_HIGH_PERFORMANCE_MODE, value)
         if (value) {
             editor.putBoolean(KEY_REDUCE_ANIMATION, false)
-            editor.putBoolean(KEY_REDUCE_BLUR, false)
         }
         editor.apply()
     }
@@ -1478,9 +1474,14 @@ object AppSettings {
     }
 
     fun setLyricsTransportControlSize(value: Float) {
-        val normalized = value.coerceIn(14f, 30f)
+        val normalized = value.coerceIn(14f, MAX_LYRICS_TRANSPORT_CONTROL_SIZE)
         lyricsTransportControlSize.value = normalized
         prefs.edit().putFloat(KEY_LYRICS_TRANSPORT_CONTROL_SIZE, normalized).apply()
+    }
+
+    fun setLyricsTransportControlsCentered(value: Boolean) {
+        lyricsTransportControlsCentered.value = value
+        prefs.edit().putBoolean(KEY_LYRICS_TRANSPORT_CONTROLS_CENTERED, value).apply()
     }
 
     fun setLyricsFontScale(value: Float) {
@@ -2249,6 +2250,7 @@ object AppSettings {
     const val MAX_CACHE_LIMIT_BYTES = 10L * 1024 * 1024 * 1024
 
     private const val DEFAULT_PERFORMANCE_REFRESH_RATE = 120
+    private const val MAX_LYRICS_TRANSPORT_CONTROL_SIZE = 64f
 
     private fun normalizeResamplerCutoffHz(value: Int): Int =
         if (value <= 0) 0 else value.coerceIn(8_000, 22_000)
@@ -2312,6 +2314,7 @@ object AppSettings {
     private const val KEY_SHOW_LYRICS_PLAY_PAUSE_CONTROL = "show_lyrics_play_pause_control"
     private const val KEY_SHOW_LYRICS_NEXT_CONTROL = "show_lyrics_next_control"
     private const val KEY_LYRICS_TRANSPORT_CONTROL_SIZE = "lyrics_transport_control_size"
+    private const val KEY_LYRICS_TRANSPORT_CONTROLS_CENTERED = "lyrics_transport_controls_centered"
     private const val KEY_LYRICS_FONT_SCALE = "lyrics_font_scale"
     private const val KEY_LYRICS_TEXT_ALIGNMENT = "lyrics_text_alignment"
     private const val KEY_ARTWORK_TAP_OPENS_LYRICS = "artwork_tap_opens_lyrics"

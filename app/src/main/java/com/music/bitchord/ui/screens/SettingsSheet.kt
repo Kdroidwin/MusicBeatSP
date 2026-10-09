@@ -261,6 +261,7 @@ fun SettingsScreen(
     val showLyricsPlayPauseControl by AppSettings.showLyricsPlayPauseControl.collectAsStateWithLifecycle()
     val showLyricsNextControl by AppSettings.showLyricsNextControl.collectAsStateWithLifecycle()
     val lyricsTransportControlSize by AppSettings.lyricsTransportControlSize.collectAsStateWithLifecycle()
+    val lyricsTransportControlsCentered by AppSettings.lyricsTransportControlsCentered.collectAsStateWithLifecycle()
     val artworkTapOpensLyrics by AppSettings.artworkTapOpensLyrics.collectAsStateWithLifecycle()
     val showPlayerLyricsStrip by AppSettings.showPlayerLyricsStrip.collectAsStateWithLifecycle()
     val offlineMode by AppSettings.offlineMode.collectAsStateWithLifecycle()
@@ -314,14 +315,15 @@ fun SettingsScreen(
         SettingsSearchEntry(stringResource(R.string.lyrics_show_previous), stringResource(R.string.lyrics_transport_visibility_subtitle), listOf("lyrics", "歌詞", "previous", "前の曲"), showLyricsPreviousControl) { AppSettings.setShowLyricsPreviousControl(!showLyricsPreviousControl) },
         SettingsSearchEntry(stringResource(R.string.lyrics_show_play_pause), stringResource(R.string.lyrics_transport_visibility_subtitle), listOf("lyrics", "歌詞", "play", "pause", "再生", "一時停止"), showLyricsPlayPauseControl) { AppSettings.setShowLyricsPlayPauseControl(!showLyricsPlayPauseControl) },
         SettingsSearchEntry(stringResource(R.string.lyrics_show_next), stringResource(R.string.lyrics_transport_visibility_subtitle), listOf("lyrics", "歌詞", "next", "次の曲"), showLyricsNextControl) { AppSettings.setShowLyricsNextControl(!showLyricsNextControl) },
+        SettingsSearchEntry(stringResource(R.string.lyrics_transport_controls_centered), stringResource(R.string.lyrics_transport_controls_centered_subtitle), listOf("lyrics", "歌詞", "center", "中央揃え", "ボタン"), lyricsTransportControlsCentered) { AppSettings.setLyricsTransportControlsCentered(!lyricsTransportControlsCentered) },
         SettingsSearchEntry(
             title = stringResource(R.string.lyrics_transport_control_size),
             subtitle = stringResource(R.string.lyrics_transport_control_size_subtitle),
             keywords = listOf("lyrics", "歌詞", "button", "ボタン", "size", "サイズ", "transport"),
             valueLabel = stringResource(R.string.lyrics_transport_control_size_value, lyricsTransportControlSize.roundToInt()),
             sliderValue = lyricsTransportControlSize,
-            sliderValueRange = 14f..30f,
-            sliderSteps = 15,
+            sliderValueRange = 14f..64f,
+            sliderSteps = 49,
             onSliderValueChange = AppSettings::setLyricsTransportControlSize,
             activate = {},
         ),
@@ -1865,6 +1867,25 @@ fun SettingsScreen(
                 RowDivider()
                 SettingsRow(
                     icon = Icons.Rounded.Tune,
+                    title = stringResource(R.string.lyrics_transport_controls_centered),
+                    subtitle = stringResource(R.string.lyrics_transport_controls_centered_subtitle),
+                    trailing = {
+                        Switch(
+                            checked = lyricsTransportControlsCentered,
+                            onCheckedChange = AppSettings::setLyricsTransportControlsCentered,
+                            colors = SwitchDefaults.colors(
+                                checkedTrackColor = MaterialTheme.colorScheme.primary,
+                                checkedBorderColor = MaterialTheme.colorScheme.primary,
+                            ),
+                        )
+                    },
+                    onClick = {
+                        AppSettings.setLyricsTransportControlsCentered(!lyricsTransportControlsCentered)
+                    },
+                )
+                RowDivider()
+                SettingsRow(
+                    icon = Icons.Rounded.Tune,
                     title = stringResource(R.string.lyrics_transport_control_size),
                     subtitle = stringResource(R.string.lyrics_transport_control_size_subtitle),
                     trailing = {
@@ -1881,8 +1902,8 @@ fun SettingsScreen(
                 Slider(
                     value = lyricsTransportControlSize,
                     onValueChange = AppSettings::setLyricsTransportControlSize,
-                    steps = 15,
-                    valueRange = 14f..30f,
+                    steps = 49,
+                    valueRange = 14f..64f,
                     modifier = Modifier.padding(start = ROW_INSET, end = ROW_INSET, bottom = 14.dp),
                 )
             }

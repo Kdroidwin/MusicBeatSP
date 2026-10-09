@@ -486,12 +486,33 @@ fun DrillDownSongList(
     } else {
         val listState = rememberLazyListState()
         var displayedSongs by remember(songs) { mutableStateOf(songs) }
-        val dragState = rememberPlaylistSongDragState(listState, displayedSongs.size) { from, to ->
-            if (from in displayedSongs.indices && to in displayedSongs.indices && from != to) {
-                displayedSongs = displayedSongs.toMutableList().also { reordered ->
-                    reordered.add(to, reordered.removeAt(from))
-                }
+        val dragState = rememberPlaylistSongDragState(listState, displayedSongs.size) { from, to, draggedKey, insertAfter, groupedKeys ->
+            val current = displayedSongs
+            if (from !in current.indices || to !in current.indices || from == to) return@rememberPlaylistSongDragState null
+
+            val movingSongs = if (groupedKeys.size > 1 && draggedKey in groupedKeys) {
+                current.filter { (it.localUri ?: it.videoId) in groupedKeys }
+            } else {
+                listOf(current[from])
             }
+            if (movingSongs.isEmpty()) return@rememberPlaylistSongDragState null
+
+            val movingKeys = movingSongs.mapTo(mutableSetOf()) { it.localUri ?: it.videoId }
+            val targetKey = current[to].localUri ?: current[to].videoId
+            if (targetKey in movingKeys) return@rememberPlaylistSongDragState null
+
+            val remaining = current.filterNot { (it.localUri ?: it.videoId) in movingKeys }
+            val targetIndex = remaining.indexOfFirst { (it.localUri ?: it.videoId) == targetKey }
+            if (targetIndex < 0) return@rememberPlaylistSongDragState null
+
+            val anchorOrder = movingSongs.indexOfFirst { (it.localUri ?: it.videoId) == draggedKey }
+                .coerceAtLeast(0)
+            val insertionIndex = (targetIndex + if (insertAfter) 1 else 0).coerceIn(0, remaining.size)
+            val reordered = remaining.toMutableList().apply { addAll(insertionIndex, movingSongs) }
+            if (reordered == current) return@rememberPlaylistSongDragState null
+
+            displayedSongs = reordered
+            insertionIndex + anchorOrder
         }
         Box(modifier = modifier.fillMaxSize()) {
             LazyColumn(
@@ -525,7 +546,7 @@ fun DrillDownSongList(
                 }
                 itemsIndexed(displayedSongs, key = { _, song -> song.localUri ?: song.videoId }) { index, song ->
                     val trackNumber = if (isPlaylist && showArtworkInList) null else index + 1
-                    if (reorderEnabled && isPlaylist && !selectionMode) {
+                    if (reorderEnabled && isPlaylist) {
                         val songKey = song.localUri ?: song.videoId
                         val isDragging = dragState.draggedKey == songKey
                         val finishDrag by rememberUpdatedState(newValue = {
@@ -554,7 +575,10 @@ fun DrillDownSongList(
                                     isCurrent = song.isSameTrackAs(currentSong),
                                     isPlaying = song.isSameTrackAs(currentSong) && isPlaying,
                                     trackNumber = trackNumber,
-                                    onClick = { onSongClick(displayedSongs, index) },
+                                    onClick = {
+                                        if (selectionMode) onSelectionToggle?.invoke(song)
+                                        else onSongClick(displayedSongs, index)
+                                    },
                                     onLongPress = { onSongLongPress(song) },
                                     onMore = onSongMore?.let { more -> { more(song) } },
                                     onSwipeToQueue = null,
@@ -563,15 +587,32 @@ fun DrillDownSongList(
                             }
                             Icon(
                                 imageVector = Icons.Rounded.DragHandle,
-                                contentDescription = stringResource(R.string.drag_to_reorder_song),
+                                contentDescription = stringResource(
+                                    if (selectionMode && (songKey in selectedIds || song.videoId in selectedIds)) {
+                                        R.string.drag_selected_songs_to_reorder
+                                    } else {
+                                        R.string.drag_to_reorder_song
+                                    },
+                                ),
                                 tint = if (isDragging) MaterialTheme.colorScheme.primary
                                     else MaterialTheme.colorScheme.onSurfaceVariant,
                                 modifier = Modifier
                                     .size(48.dp)
                                     .padding(end = PAGE_GUTTER)
-                                    .pointerInput(songKey) {
+                                    .pointerInput(songKey, selectionMode, selectedIds) {
                                         detectDragGestures(
-                                            onDragStart = { dragState.onDragStart(songKey) },
+                                            onDragStart = {
+                                                val draggedIsSelected = songKey in selectedIds || song.videoId in selectedIds
+                                                val groupKeys = if (selectionMode && draggedIsSelected) {
+                                                    displayedSongs
+                                                        .filter { (it.localUri ?: it.videoId) in selectedIds || it.videoId in selectedIds }
+                                                        .map { it.localUri ?: it.videoId }
+                                                        .toSet()
+                                                } else {
+                                                    emptySet()
+                                                }
+                                                dragState.onDragStart(songKey, groupKeys)
+                                            },
                                             onDragEnd = { finishDrag() },
                                             onDragCancel = { finishDrag() },
                                             onDrag = { change, dragAmount ->
@@ -623,7 +664,7 @@ fun DrillDownSongList(
 private fun rememberPlaylistSongDragState(
     listState: androidx.compose.foundation.lazy.LazyListState,
     songCount: Int,
-    onMove: (Int, Int) -> Unit,
+    onMove: (from: Int, to: Int, draggedKey: String, insertAfter: Boolean, groupedKeys: Set<String>) -> Int?,
 ): PlaylistSongDragState {
     val state = remember(listState) { PlaylistSongDragState(listState) }
     state.lazyOffset = 2
@@ -658,12 +699,14 @@ private class PlaylistSongDragState(
 ) {
     var lazyRange: IntRange = IntRange.EMPTY
     var lazyOffset: Int = 2
-    var onMove: (Int, Int) -> Unit = { _, _ -> }
+    var onMove: (from: Int, to: Int, draggedKey: String, insertAfter: Boolean, groupedKeys: Set<String>) -> Int? =
+        { _, _, _, _, _ -> null }
     var edgeZone: Float = 0f
     var edgeSpeed: Float = 0f
 
     var draggedKey by mutableStateOf<Any?>(null)
         private set
+    private var groupedKeys: Set<String> = emptySet()
     var renderOffset by mutableFloatStateOf(0f)
         private set
     var autoScrollDir by mutableIntStateOf(0)
@@ -673,8 +716,9 @@ private class PlaylistSongDragState(
     private var heldCenter: Float = Float.NaN
     private var awaiting: Int? = null
 
-    fun onDragStart(key: Any) {
+    fun onDragStart(key: Any, groupedKeys: Set<String> = emptySet()) {
         draggedKey = key
+        this.groupedKeys = groupedKeys
         heldCenter = Float.NaN
         renderOffset = 0f
         awaiting = null
@@ -686,6 +730,7 @@ private class PlaylistSongDragState(
 
     fun onDragEnd() {
         draggedKey = null
+        groupedKeys = emptySet()
         heldCenter = Float.NaN
         renderOffset = 0f
         awaiting = null
@@ -717,8 +762,14 @@ private class PlaylistSongDragState(
             ?: return
         if (abs(heldCenter - (target.offset + target.size / 2f)) > target.size / 2f) return
         if (target.index == listState.firstVisibleItemIndex && listState.canScrollBackward) return
-        onMove(dragged.index - lazyOffset, target.index - lazyOffset)
-        awaiting = target.index
+        val expectedDraggedIndex = onMove(
+            dragged.index - lazyOffset,
+            target.index - lazyOffset,
+            key as? String ?: return,
+            heldCenter > target.offset + target.size / 2f,
+            groupedKeys,
+        ) ?: return
+        awaiting = expectedDraggedIndex + lazyOffset
     }
 
     private fun aimAutoScroll(top: Float, dragged: androidx.compose.foundation.lazy.LazyListItemInfo) {

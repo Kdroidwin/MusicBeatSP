@@ -44,6 +44,7 @@ import androidx.compose.material.icons.rounded.Edit
 import androidx.compose.material.icons.rounded.KeyboardArrowDown
 import androidx.compose.material.icons.rounded.KeyboardArrowUp
 import androidx.compose.material.icons.rounded.PlaylistAdd
+import androidx.compose.material.icons.rounded.Reorder
 import androidx.compose.material.icons.rounded.Share
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
@@ -92,6 +93,8 @@ private fun PlaylistSelectionToolbar(
     onMoveDown: () -> Unit,
     onMoveToTop: () -> Unit,
     onMoveToBottom: () -> Unit,
+    reorderEnabled: Boolean,
+    onToggleReorder: () -> Unit,
     onCancel: () -> Unit,
 ) {
     Row(
@@ -118,17 +121,26 @@ private fun PlaylistSelectionToolbar(
         IconButton(onClick = onShare) {
             Icon(Icons.Rounded.Share, contentDescription = stringResource(R.string.selection_share))
         }
+        IconButton(onClick = onToggleReorder) {
+            Icon(
+                Icons.Rounded.Reorder,
+                contentDescription = stringResource(R.string.toggle_playlist_reorder),
+                tint = if (reorderEnabled) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurface,
+            )
+        }
         IconButton(onClick = onMoveUp) {
             Icon(Icons.Rounded.KeyboardArrowUp, contentDescription = stringResource(R.string.selection_move_up))
         }
         IconButton(onClick = onMoveDown) {
             Icon(Icons.Rounded.KeyboardArrowDown, contentDescription = stringResource(R.string.selection_move_down))
         }
-        IconButton(onClick = onMoveToTop) {
-            Icon(Icons.Rounded.ArrowUpward, contentDescription = stringResource(R.string.selection_move_to_top))
+        TextButton(onClick = onMoveToTop) {
+            Icon(Icons.Rounded.ArrowUpward, contentDescription = null)
+            Text(stringResource(R.string.selection_move_to_top))
         }
-        IconButton(onClick = onMoveToBottom) {
-            Icon(Icons.Rounded.ArrowDownward, contentDescription = stringResource(R.string.selection_move_to_bottom))
+        TextButton(onClick = onMoveToBottom) {
+            Icon(Icons.Rounded.ArrowDownward, contentDescription = null)
+            Text(stringResource(R.string.selection_move_to_bottom))
         }
         IconButton(onClick = onCancel) {
             Icon(Icons.Rounded.Close, contentDescription = stringResource(R.string.cancel))
@@ -305,23 +317,35 @@ fun LibraryScreen(
         }
         if (selectedPlaylistSongIds.isEmpty()) playlistSelectionMode = false
     }
+    fun isPlaylistSongSelected(song: Song): Boolean =
+        (song.localUri ?: song.videoId) in selectedPlaylistSongIds || song.videoId in selectedPlaylistSongIds
+
     fun persistPlaylistSongOrder(playlistId: String, orderedSongs: List<Song>) {
         val storedIds = LocalPlaylistStore.getPlaylist(playlistId)?.songIds ?: return
-        val usedIds = mutableSetOf<String>()
-        val orderedStoredIds = orderedSongs.mapNotNull { song ->
-            storedIds.firstOrNull { id ->
-                id !in usedIds && (id == song.localUri || id == song.videoId)
-            }?.also(usedIds::add)
+        val usedIndices = mutableSetOf<Int>()
+        val reorderedResolvedIds = orderedSongs.mapNotNull { song ->
+            val storedIndex = storedIds.indices.firstOrNull { index ->
+                index !in usedIndices && storedIds[index] in setOf(song.localUri, song.videoId)
+            } ?: return@mapNotNull null
+            usedIndices += storedIndex
+            storedIds[storedIndex]
         }
-        if (orderedStoredIds.isNotEmpty()) {
-            LocalPlaylistStore.setSongOrder(playlistId, orderedStoredIds)
+        if (reorderedResolvedIds.isNotEmpty()) {
+            // Keep entries that could not be resolved in their existing slots;
+            // reordering playable tracks must never delete inaccessible playlist entries.
+            val resolvedSlots = usedIndices.sorted()
+            val persistedOrder = storedIds.toMutableList()
+            resolvedSlots.forEachIndexed { order, slot ->
+                persistedOrder[slot] = reorderedResolvedIds[order]
+            }
+            if (persistedOrder != storedIds) LocalPlaylistStore.setSongOrder(playlistId, persistedOrder)
         }
     }
     fun persistSelectedOrder(toTop: Boolean) {
         val playlistId = drillDownPlaylistId ?: return
-        val selected = drillDownSongs.filter { (it.localUri ?: it.videoId) in selectedPlaylistSongIds }
+        val selected = drillDownSongs.filter(::isPlaylistSongSelected)
         if (selected.isEmpty()) return
-        val remaining = drillDownSongs.filterNot { (it.localUri ?: it.videoId) in selectedPlaylistSongIds }
+        val remaining = drillDownSongs.filterNot(::isPlaylistSongSelected)
         val reordered = if (toTop) selected + remaining else remaining + selected
         if (reordered == drillDownSongs) return
         drillDownSongs = reordered
@@ -330,14 +354,11 @@ fun LibraryScreen(
     fun moveSelectedSongsByOne(direction: Int) {
         if (direction != -1 && direction != 1) return
         val playlistId = drillDownPlaylistId ?: return
-        val selectedKeys = selectedPlaylistSongIds
-        if (selectedKeys.isEmpty()) return
+        if (selectedPlaylistSongIds.isEmpty()) return
         val reordered = drillDownSongs.toMutableList()
         if (direction < 0) {
             for (index in 1..reordered.lastIndex) {
-                val currentKey = reordered[index].localUri ?: reordered[index].videoId
-                val previousKey = reordered[index - 1].localUri ?: reordered[index - 1].videoId
-                if (currentKey in selectedKeys && previousKey !in selectedKeys) {
+                if (isPlaylistSongSelected(reordered[index]) && !isPlaylistSongSelected(reordered[index - 1])) {
                     val moving = reordered[index]
                     reordered[index] = reordered[index - 1]
                     reordered[index - 1] = moving
@@ -345,9 +366,7 @@ fun LibraryScreen(
             }
         } else {
             for (index in reordered.lastIndex - 1 downTo 0) {
-                val currentKey = reordered[index].localUri ?: reordered[index].videoId
-                val nextKey = reordered[index + 1].localUri ?: reordered[index + 1].videoId
-                if (currentKey in selectedKeys && nextKey !in selectedKeys) {
+                if (isPlaylistSongSelected(reordered[index]) && !isPlaylistSongSelected(reordered[index + 1])) {
                     val moving = reordered[index]
                     reordered[index] = reordered[index + 1]
                     reordered[index + 1] = moving
@@ -426,6 +445,17 @@ fun LibraryScreen(
                                 onMoveDown = { moveSelectedSongsByOne(1) },
                                 onMoveToTop = { persistSelectedOrder(toTop = true) },
                                 onMoveToBottom = { persistSelectedOrder(toTop = false) },
+                                reorderEnabled = playlistReorderEnabled,
+                                onToggleReorder = {
+                                    if (playlistReorderEnabled) {
+                                        playlistReorderEnabled = false
+                                    } else {
+                                        if (songsViewType != LibraryViewType.LIST) {
+                                            AppSettings.setLibrarySongsViewType(LibraryViewType.LIST)
+                                        }
+                                        playlistReorderEnabled = true
+                                    }
+                                },
                                 onCancel = {
                                     playlistSelectionMode = false
                                     selectedPlaylistSongIds = emptySet()

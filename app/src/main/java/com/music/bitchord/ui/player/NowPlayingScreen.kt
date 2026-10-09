@@ -757,6 +757,7 @@ fun NowPlayingScreen(
     val showLyricsPlayPauseControl by AppSettings.showLyricsPlayPauseControl.collectAsStateWithLifecycle()
     val showLyricsNextControl by AppSettings.showLyricsNextControl.collectAsStateWithLifecycle()
     val lyricsTransportControlSize by AppSettings.lyricsTransportControlSize.collectAsStateWithLifecycle()
+    val lyricsTransportControlsCentered by AppSettings.lyricsTransportControlsCentered.collectAsStateWithLifecycle()
     val favoriteUsesStar by AppSettings.favoriteUsesStar.collectAsStateWithLifecycle()
     val playerQuickActions by AppSettings.playerQuickActions.collectAsStateWithLifecycle()
     val keepScreenOn by AppSettings.keepScreenOn.collectAsStateWithLifecycle()
@@ -2614,57 +2615,68 @@ fun NowPlayingScreen(
                     val headerLabelVisible = lyricsSource != null ||
                         (lyrics.isNullOrEmpty() && !hideLyricsUnavailableLabel) ||
                         (!lyrics.isNullOrEmpty() && !hideLyricsSavedMessage)
-                    if (headerLabelVisible) Box(
-                        modifier = Modifier
-                            .weight(1f)
-                            .clip(RoundedCornerShape(percent = 50))
-                            .background(Color.White.copy(alpha = 0.10f))
-                            .padding(horizontal = 18.dp, vertical = 8.dp),
-                        contentAlignment = Alignment.Center,
-                    ) {
-                        Text(
-                            text = when {
-                                lyricsSource != null -> stringResource(R.string.lyrics_by, lyricsSource.label)
-                                lyrics.isNullOrEmpty() -> stringResource(R.string.no_lyrics_found)
-                                else -> stringResource(R.string.lyrics_saved_with_download)
-                            },
-                            style = MaterialTheme.typography.labelLarge,
-                            color = Color.White.copy(alpha = 0.7f),
-                        maxLines = 1,
-                        overflow = TextOverflow.Ellipsis,
-                    )
+                    if (headerLabelVisible) {
+                        Box(
+                            modifier = Modifier
+                                .weight(1f)
+                                .clip(RoundedCornerShape(percent = 50))
+                                .background(Color.White.copy(alpha = 0.10f))
+                                .padding(horizontal = 18.dp, vertical = 8.dp),
+                            contentAlignment = Alignment.Center,
+                        ) {
+                            Text(
+                                text = when {
+                                    lyricsSource != null -> stringResource(R.string.lyrics_by, lyricsSource.label)
+                                    lyrics.isNullOrEmpty() -> stringResource(R.string.no_lyrics_found)
+                                    else -> stringResource(R.string.lyrics_saved_with_download)
+                                },
+                                style = MaterialTheme.typography.labelLarge,
+                                color = Color.White.copy(alpha = 0.7f),
+                                maxLines = 1,
+                                overflow = TextOverflow.Ellipsis,
+                            )
+                        }
                     } else {
-                        // Keep the dismiss affordance pinned to the right even
-                        // when the source/status pill is hidden.
-                        Spacer(Modifier.weight(1f))
-                    }
-                    if (!headerLabelVisible) {
-                        if (showLyricsPreviousControl) {
-                            TransportGlyph(
-                                icon = Icons.Rounded.FastRewind,
-                                contentDescription = stringResource(R.string.widget_previous),
-                                size = lyricsTransportControlSize.dp,
-                                enabled = hasPrevious || positionMs > BACK_RESTARTS_AFTER_MS,
-                                onClick = onPrevious,
-                            )
-                        }
-                        if (showLyricsPlayPauseControl) {
-                            TransportGlyph(
-                                icon = if (isPlaying) Icons.Rounded.Pause else Icons.Rounded.PlayArrow,
-                                contentDescription = stringResource(if (isPlaying) R.string.pause else R.string.play),
-                                size = lyricsTransportControlSize.dp,
-                                enabled = !isLoading,
-                                onClick = onPlayPause,
-                            )
-                        }
-                        if (showLyricsNextControl) {
-                            TransportGlyph(
-                                icon = Icons.Rounded.FastForward,
-                                contentDescription = stringResource(R.string.widget_next),
-                                size = lyricsTransportControlSize.dp,
-                                enabled = hasNext,
-                                onClick = onNext,
-                            )
+                        // The weighted region leaves the close button at the
+                        // trailing edge while allowing the transport group to
+                        // sit either at that edge or at the centre of the row.
+                        Box(
+                            modifier = Modifier.weight(1f),
+                            contentAlignment = if (lyricsTransportControlsCentered) {
+                                Alignment.Center
+                            } else {
+                                Alignment.CenterEnd
+                            },
+                        ) {
+                            Row(verticalAlignment = Alignment.CenterVertically) {
+                                if (showLyricsPreviousControl) {
+                                    TransportGlyph(
+                                        icon = Icons.Rounded.FastRewind,
+                                        contentDescription = stringResource(R.string.widget_previous),
+                                        size = lyricsTransportControlSize.dp,
+                                        enabled = hasPrevious || positionMs > BACK_RESTARTS_AFTER_MS,
+                                        onClick = onPrevious,
+                                    )
+                                }
+                                if (showLyricsPlayPauseControl) {
+                                    TransportGlyph(
+                                        icon = if (isPlaying) Icons.Rounded.Pause else Icons.Rounded.PlayArrow,
+                                        contentDescription = stringResource(if (isPlaying) R.string.pause else R.string.play),
+                                        size = lyricsTransportControlSize.dp,
+                                        enabled = !isLoading,
+                                        onClick = onPlayPause,
+                                    )
+                                }
+                                if (showLyricsNextControl) {
+                                    TransportGlyph(
+                                        icon = Icons.Rounded.FastForward,
+                                        contentDescription = stringResource(R.string.widget_next),
+                                        size = lyricsTransportControlSize.dp,
+                                        enabled = hasNext,
+                                        onClick = onNext,
+                                    )
+                                }
+                            }
                         }
                     }
                     Spacer(Modifier.width(8.dp))
@@ -3319,6 +3331,7 @@ private fun LyricsPanel(
     val reduceDynamicBlur by AppSettings.reduceDynamicBlur.collectAsStateWithLifecycle()
     val lyricsBlur by AppSettings.lyricsBlur.collectAsStateWithLifecycle()
     val hideLyricsGapNote by AppSettings.hideLyricsGapNote.collectAsStateWithLifecycle()
+    val hideLyricsUnavailableLabel by AppSettings.hideLyricsUnavailableLabel.collectAsStateWithLifecycle()
     val reduceAnimation by AppSettings.reduceAnimation.collectAsStateWithLifecycle()
     val lyricsFontScale by AppSettings.lyricsFontScale.collectAsStateWithLifecycle()
     val lyricsTextAlignment by AppSettings.lyricsTextAlignment.collectAsStateWithLifecycle()
@@ -3376,11 +3389,13 @@ private fun LyricsPanel(
 
     if (lines.isEmpty()) {
         Box(modifier, contentAlignment = Alignment.Center) {
-            Text(
-                text = stringResource(R.string.no_lyrics_for_track),
-                style = MaterialTheme.typography.titleMedium,
-                color = Color.White.copy(alpha = 0.6f),
-            )
+            if (!hideLyricsUnavailableLabel) {
+                Text(
+                    text = stringResource(R.string.no_lyrics_for_track),
+                    style = MaterialTheme.typography.titleMedium,
+                    color = Color.White.copy(alpha = 0.6f),
+                )
+            }
         }
         return
     }

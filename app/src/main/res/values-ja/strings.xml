@@ -706,6 +706,7 @@
     <string name="move_playlist_down">下へ移動</string>
     <string name="toggle_playlist_reorder">プレイリスト内の曲の並び替え</string>
     <string name="drag_to_reorder_song">ドラッグして曲を並び替え</string>
+    <string name="drag_selected_songs_to_reorder">選択した曲をまとめてドラッグして並び替え</string>
     <string name="playlist_song_artwork">プレイリストの曲一覧にアートを表示</string>
     <string name="playlist_song_artwork_subtitle">曲番号の代わりに小さなアルバムアートを表示します</string>
     <string name="theme_amoled">AMOLEDブラック</string>
@@ -882,8 +883,8 @@
     <string name="search_settings">設定を検索</string>
     <string name="settings_search_results">該当する設定</string>
     <string name="settings_search_no_results">該当する設定はありません</string>
-    <string name="hide_lyrics_unavailable_label">「歌詞は利用できません」ラベルを隠す</string>
-    <string name="hide_lyrics_unavailable_label_subtitle">プレーヤーの歌詞欄と歌詞画面の歌詞なしメッセージを隠します</string>
+    <string name="hide_lyrics_unavailable_label">「この曲の歌詞はありません」表示を隠す</string>
+    <string name="hide_lyrics_unavailable_label_subtitle">プレーヤーの歌詞欄、歌詞画面のヘッダーと歌詞本文にある歌詞なしメッセージを隠します</string>
     <string name="hide_lyrics_gap_note">歌詞の空白行にある音符を隠す</string>
     <string name="hide_lyrics_gap_note_subtitle">歌詞の間隔を保ったまま、無音・間奏部分の音符マークを隠します</string>
     <string name="lyrics_show_previous">歌詞画面に前の曲ボタンを表示</string>
@@ -891,8 +892,10 @@
     <string name="lyrics_show_next">歌詞画面に次の曲ボタンを表示</string>
     <string name="lyrics_transport_visibility_subtitle">歌詞のステータスラベルを隠したとき、閉じるボタンの横に表示します</string>
     <string name="lyrics_transport_control_size">歌詞画面の操作ボタンサイズ</string>
-    <string name="lyrics_transport_control_size_subtitle">前・再生／一時停止・次ボタンのアイコンとタップ領域を調整します</string>
+    <string name="lyrics_transport_control_size_subtitle">前・再生／一時停止・次ボタンのアイコンとタップ領域を14〜64 dpで調整します</string>
     <string name="lyrics_transport_control_size_value">%1$d dp</string>
+    <string name="lyrics_transport_controls_centered">歌詞操作ボタンを中央揃え</string>
+    <string name="lyrics_transport_controls_centered_subtitle">歌詞画面の前・再生／一時停止・次ボタンを中央に配置します</string>
     <string name="show_status_bar_search_help">Androidの時刻、電池、ステータスアイコンを表示します</string>
     <string name="show_navigation_bar_search_help">Androidの戻る、ホーム、アプリ切り替えボタンを表示します</string>
     <string name="show_tab_setting">%1$sタブを表示</string>
