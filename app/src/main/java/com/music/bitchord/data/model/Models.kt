@@ -74,6 +74,8 @@ data class Song(
     val sourceQuality: String? = null,
     /** Explicit-content state from the catalogue; null when that source does not say. */
     val isExplicit: Boolean? = null,
+    /** A one-item preview queue opened from another Android app. */
+    val isExternalPreview: Boolean = false,
 )
 
 /**
@@ -92,13 +94,26 @@ data class Song(
 fun Song.artworkAt(px: Int): String? {
     val thumbnailUri = thumbnailUrl?.let(Uri::parse)
     val hasRemoteThumbnail = thumbnailUri?.scheme in setOf("http", "https")
+    // File managers often hand us a provider URI such as
+    // content://com.mixplorer.../document/123 with no audio path or filename
+    // extension. It is still the source audio for an external preview, but the
+    // artwork fetcher cannot infer that from the URI alone. Mark only the
+    // artwork request; the playback URI itself remains untouched.
+    val externalPreviewArtwork = if (isExternalPreview) {
+        localUri?.let { raw -> runCatching { Uri.parse(raw) }.getOrNull() }
+            ?.takeIf { it.scheme == "content" || it.scheme == "file" }
+            ?.buildUpon()
+            ?.appendQueryParameter(LOCAL_AUDIO_ARTWORK_PARAMETER, "1")
+            ?.build()
+            ?.toString()
+    } else null
     // A downloaded/local track can still carry the original online thumbnail URL.
     // That URL bypasses LocalAudioArtworkFetcher and the artwork preloader's
     // app-private cache, so the player waits on the network even though the file
     // already contains the cover. Use the local audio source for backed tracks;
     // the player keeps the remote thumbnail as a fallback if the local file has
     // no readable cover.
-    val artworkSource = if ((hasRemoteThumbnail || thumbnailUrl.isNullOrBlank()) &&
+    val artworkSource = externalPreviewArtwork ?: if ((hasRemoteThumbnail || thumbnailUrl.isNullOrBlank()) &&
         (!localUri.isNullOrBlank() || !localPath.isNullOrBlank())
     ) {
         localUri?.takeIf { it.isLocalAudioArtworkUri() }
@@ -142,6 +157,8 @@ private fun String.isLocalAudioArtworkUri(): Boolean {
 
 /** Appended to local audio artwork URIs to distinguish Coil cache sizes. */
 internal const val LOCAL_ARTWORK_SIZE_PARAMETER = "bitchordArtworkPx"
+/** Marks an image request whose content URI is known to be an audio file. */
+internal const val LOCAL_AUDIO_ARTWORK_PARAMETER = "bitchordAudioArtwork"
 
 /**
  * Whether a row is the track the player is on, for the now-playing highlight.

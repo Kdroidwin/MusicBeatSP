@@ -22,6 +22,7 @@ import coil3.request.Options
 import coil3.size.pxOrElse
 import coil3.toAndroidUri
 import com.kyant.taglib.TagLib
+import com.music.bitchord.data.model.LOCAL_AUDIO_ARTWORK_PARAMETER
 import com.music.bitchord.data.model.LOCAL_ARTWORK_SIZE_PARAMETER
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
@@ -52,7 +53,7 @@ class LocalAudioArtworkFetcher(
 
     override suspend fun fetch(): FetchResult? = withContext(Dispatchers.IO) {
         runCatching {
-            val cleanUri = if (uri.scheme == "content") uri.buildUpon().clearQuery().build() else uri
+            val cleanUri = uri.withoutArtworkRequestParameters()
             val requestedPx = maxOf(
                 options.size.width.pxOrElse { 0 },
                 options.size.height.pxOrElse { 0 },
@@ -208,7 +209,7 @@ class LocalAudioArtworkFetcher(
         return runCatching {
             val mmr = MediaMetadataRetriever()
             try {
-                val cleanUri = if (uri.scheme == "content") uri.buildUpon().clearQuery().build() else uri
+                val cleanUri = uri.withoutArtworkRequestParameters()
                 if (cleanUri.scheme == "file") {
                     mmr.setDataSource(cleanUri.path)
                 } else {
@@ -242,7 +243,7 @@ class LocalAudioArtworkFetcher(
     }
 
     private fun openFileDescriptor(context: Context, uri: Uri): ParcelFileDescriptor? {
-        val cleanUri = if (uri.scheme == "content") uri.buildUpon().clearQuery().build() else uri
+        val cleanUri = uri.withoutArtworkRequestParameters()
         val pfd = runCatching {
             if (cleanUri.scheme == "file") {
                 val file = File(cleanUri.path ?: return null)
@@ -299,7 +300,7 @@ class LocalAudioArtworkFetcher(
     private fun resolveFilePath(context: Context, uri: Uri): String? {
         if (uri.scheme == "file") return uri.path
         if (uri.scheme != "content") return null
-        val cleanUri = uri.buildUpon().clearQuery().build()
+        val cleanUri = uri.withoutArtworkRequestParameters()
         val cacheKey = cleanUri.normalizeScheme().toString()
         val now = SystemClock.elapsedRealtime()
         val cached = resolvedPathCache.compute(cacheKey) { _, previous ->
@@ -391,6 +392,8 @@ class LocalAudioArtworkFetcher(
 
         fun isLocalAudioUri(uri: Uri): Boolean {
             val scheme = uri.scheme?.lowercase(Locale.ROOT) ?: return false
+            if (scheme !in setOf("content", "file")) return false
+            if (uri.getQueryParameter(LOCAL_AUDIO_ARTWORK_PARAMETER) == "1") return true
             if (scheme == "content") {
                 val authority = uri.authority?.lowercase(Locale.ROOT) ?: ""
                 val path = uri.path?.lowercase(Locale.ROOT) ?: ""
@@ -435,4 +438,17 @@ class LocalAudioArtworkFetcher(
             return null
         }
     }
+}
+
+/** Removes only Coil hints, preserving query parameters a document provider needs. */
+private fun Uri.withoutArtworkRequestParameters(): Uri {
+    val ownParameters = setOf(LOCAL_ARTWORK_SIZE_PARAMETER, LOCAL_AUDIO_ARTWORK_PARAMETER)
+    val existing = queryParameterNames
+    if (existing.none(ownParameters::contains)) return this
+
+    return buildUpon().clearQuery().apply {
+        existing.filterNot(ownParameters::contains).forEach { name ->
+            getQueryParameters(name).forEach { value -> appendQueryParameter(name, value) }
+        }
+    }.build()
 }

@@ -1,6 +1,7 @@
 package com.music.bitchord.playback
 
 import android.app.SearchManager
+import android.content.Context
 import android.content.Intent
 import android.net.Uri
 import android.provider.MediaStore
@@ -25,6 +26,9 @@ sealed interface LinkRequest {
      * show you.
      */
     data class Search(val query: String, val play: Boolean) : LinkRequest
+
+    /** An audio file handed to the app by a file manager or document provider. */
+    data class ExternalAudio(val uri: String) : LinkRequest
 
     /** "Play music", with nothing said about what. */
     data object Resume : LinkRequest
@@ -65,7 +69,16 @@ object MusicLink {
     fun consume(intent: Intent?): Boolean {
         if (intent == null || intent.getBooleanExtra(EXTRA_CONSUMED, false)) return false
         val request = when (intent.action) {
-            Intent.ACTION_VIEW -> intent.data?.let(::parse)
+            Intent.ACTION_VIEW -> {
+                val uri = intent.data
+                if (uri != null && uri.scheme in setOf("content", "file") &&
+                    isAudioFileIntent(intent.type, uri)
+                ) {
+                    LinkRequest.ExternalAudio(uri.toString())
+                } else {
+                    uri?.let(::parse)
+                }
+            }
             Intent.ACTION_SEND -> intent.getStringExtra(Intent.EXTRA_TEXT)
                 ?.let(::firstUrl)
                 ?.let { parse(Uri.parse(it)) }
@@ -93,6 +106,22 @@ object MusicLink {
      */
     fun handled() {
         _pending.value = null
+    }
+
+    /** Keep SAF grants across process death when the sender offered persistence. */
+    fun retainPersistableAudioPermission(context: Context, intent: Intent?) {
+        val uri = intent?.data ?: return
+        if (!isAudioFileIntent(intent.type, uri) || uri.scheme != "content") return
+        val persistable = intent.flags and Intent.FLAG_GRANT_PERSISTABLE_URI_PERMISSION != 0
+        val readable = intent.flags and Intent.FLAG_GRANT_READ_URI_PERMISSION != 0
+        if (persistable && readable) {
+            runCatching {
+                context.contentResolver.takePersistableUriPermission(
+                    uri,
+                    Intent.FLAG_GRANT_READ_URI_PERMISSION,
+                )
+            }
+        }
     }
 
     /**
@@ -137,6 +166,14 @@ object MusicLink {
         }
     }
 
+    private fun isAudioFileIntent(mimeType: String?, uri: Uri): Boolean {
+        if (mimeType?.substringBefore(';')?.trim()?.lowercase()?.startsWith("audio/") == true) {
+            return true
+        }
+        val name = uri.lastPathSegment.orEmpty().substringBefore('?').lowercase()
+        return AUDIO_EXTENSIONS.any(name::endsWith)
+    }
+
     private fun track(videoId: String): LinkRequest.Track? =
         videoId.trim().takeIf { it.isNotEmpty() }?.let(LinkRequest::Track)
 
@@ -151,6 +188,11 @@ object MusicLink {
         if (listId.isEmpty()) return null
         return LinkRequest.Page(if (listId.startsWith("VL")) listId else "VL$listId")
     }
+
+    private val AUDIO_EXTENSIONS = setOf(
+        ".mp3", ".m4a", ".flac", ".ogg", ".opus", ".aac", ".webm",
+        ".wav", ".aiff", ".aif", ".alac", ".ape", ".wma", ".wv", ".3gp",
+    )
 
     /**
      * The first http(s) URL in shared text.

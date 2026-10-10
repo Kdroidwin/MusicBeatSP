@@ -651,6 +651,10 @@
     <string name="hide_lyrics_saved_message_subtitle">歌詞画面の「このダウンロードに歌詞を保存済み」を隠します</string>
     <string name="hide_lossless_label">音質ラベルを隠す</string>
     <string name="hide_lossless_label_subtitle">ロスレス、高音質、ハイレゾ、音質アップグレード中の表示を隠します</string>
+    <string name="popup_external_audio_player">外部アプリから開いた曲をポップアップ再生</string>
+    <string name="popup_external_audio_player_subtitle">他のアプリから開いた曲を、他アプリ上に小さなプレーヤーとして表示します。Androidの「他のアプリの上に重ねて表示」許可が必要です。</string>
+    <string name="popup_overlay_access_not_granted">重ねて表示の許可が有効になっていません。</string>
+    <string name="popup_player_drag_handle">ポップアッププレーヤーをドラッグ</string>
     <string name="offline_mode">完全オフラインモード</string>
     <string name="offline_mode_subtitle">アプリからの通信を停止します。端末内の曲と保存済みキャッシュは利用できます。</string>
     <string name="player_controls">プレーヤー操作ボタン</string>

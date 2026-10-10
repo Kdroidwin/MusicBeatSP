@@ -743,6 +743,10 @@
     <string name="hide_lyrics_saved_message_subtitle">Hide “Lyrics saved with this download” in the lyrics panel</string>
     <string name="hide_lossless_label">Hide audio quality labels</string>
     <string name="hide_lossless_label_subtitle">Hide Lossless, Hi-Res, High Quality and upgrading labels</string>
+    <string name="popup_external_audio_player">Floating player for opened audio</string>
+    <string name="popup_external_audio_player_subtitle">Show audio opened from another app in a small window above other apps. Android overlay access is required.</string>
+    <string name="popup_overlay_access_not_granted">Overlay access was not enabled.</string>
+    <string name="popup_player_drag_handle">Drag floating player</string>
     <string name="offline_mode">Offline mode</string>
     <string name="offline_mode_subtitle">Block this app’s network requests. Local files and saved caches remain available.</string>
     <string name="player_controls">Player controls</string>

@@ -220,6 +220,31 @@ fun SettingsScreen(
     modifier: Modifier = Modifier,
 ) {
     val context = LocalContext.current
+    val popupOverlayPermissionLauncher = rememberLauncherForActivityResult(
+        ActivityResultContracts.StartActivityForResult(),
+    ) {
+        val granted = Settings.canDrawOverlays(context)
+        AppSettings.setPopupExternalAudioPlayer(granted)
+        if (!granted) {
+            Toast.makeText(context, R.string.popup_overlay_access_not_granted, Toast.LENGTH_SHORT).show()
+        }
+    }
+    val setPopupExternalAudioPlayerWithPermission: (Boolean) -> Unit = { enabled ->
+        when {
+            !enabled -> AppSettings.setPopupExternalAudioPlayer(false)
+            Settings.canDrawOverlays(context) -> AppSettings.setPopupExternalAudioPlayer(true)
+            else -> runCatching {
+                popupOverlayPermissionLauncher.launch(
+                    Intent(
+                        Settings.ACTION_MANAGE_OVERLAY_PERMISSION,
+                        Uri.parse("package:${context.packageName}"),
+                    ),
+                )
+            }.onFailure {
+                Toast.makeText(context, R.string.popup_overlay_access_not_granted, Toast.LENGTH_SHORT).show()
+            }
+        }
+    }
 
     val skipSilence by AppSettings.skipSilence.collectAsStateWithLifecycle()
     val doubleTapToSeek by AppSettings.doubleTapToSeek.collectAsStateWithLifecycle()
@@ -266,6 +291,7 @@ fun SettingsScreen(
     val showPlayerLyricsStrip by AppSettings.showPlayerLyricsStrip.collectAsStateWithLifecycle()
     val offlineMode by AppSettings.offlineMode.collectAsStateWithLifecycle()
     val hideLosslessLabel by AppSettings.hideLosslessLabel.collectAsStateWithLifecycle()
+    val popupExternalAudioPlayer by AppSettings.popupExternalAudioPlayer.collectAsStateWithLifecycle()
     val preventPlayAtZeroVolume by AppSettings.preventPlayAtZeroVolume.collectAsStateWithLifecycle()
     val useLibraryIconForPlaylistControl by AppSettings.useLibraryIconForPlaylistControl.collectAsStateWithLifecycle()
     val visiblePlayerControls by AppSettings.visiblePlayerControls.collectAsStateWithLifecycle()
@@ -328,6 +354,12 @@ fun SettingsScreen(
             activate = {},
         ),
         SettingsSearchEntry(stringResource(R.string.hide_lossless_label), stringResource(R.string.hide_lossless_label_subtitle), listOf("lossless", "quality", "ロスレス", "高音質"), hideLosslessLabel) { AppSettings.setHideLosslessLabel(!hideLosslessLabel) },
+        SettingsSearchEntry(
+            stringResource(R.string.popup_external_audio_player),
+            stringResource(R.string.popup_external_audio_player_subtitle),
+            listOf("popup", "floating", "overlay", "external audio", "ポップアップ", "小窓", "重ねて表示"),
+            popupExternalAudioPlayer,
+        ) { setPopupExternalAudioPlayerWithPermission(!popupExternalAudioPlayer) },
         SettingsSearchEntry(stringResource(R.string.audio_cutter_enabled), stringResource(R.string.audio_cutter_enabled_subtitle), listOf("audio cutter", "cut", "edit", "オーディオカッター", "曲編集"), audioCutterEnabled) { AppSettings.setAudioCutterEnabled(!audioCutterEnabled) },
         SettingsSearchEntry(
             title = stringResource(R.string.artwork_backdrop_blur),
@@ -1077,6 +1109,25 @@ fun SettingsScreen(
                     )
                 },
                 onClick = { AppSettings.setHideLosslessLabel(!hideLosslessLabel) },
+            )
+            RowDivider()
+            SettingsRow(
+                icon = Icons.Rounded.GraphicEq,
+                title = stringResource(R.string.popup_external_audio_player),
+                subtitle = stringResource(R.string.popup_external_audio_player_subtitle),
+                trailing = {
+                    Switch(
+                        checked = popupExternalAudioPlayer,
+                        onCheckedChange = setPopupExternalAudioPlayerWithPermission,
+                        colors = SwitchDefaults.colors(
+                            checkedTrackColor = MaterialTheme.colorScheme.primary,
+                            checkedBorderColor = MaterialTheme.colorScheme.primary,
+                        ),
+                    )
+                },
+                onClick = {
+                    setPopupExternalAudioPlayerWithPermission(!popupExternalAudioPlayer)
+                },
             )
         }
 

@@ -170,6 +170,7 @@ import com.music.bitchord.playback.playSongs
 import com.music.bitchord.playback.toMediaItem
 import com.music.bitchord.playback.toSong
 import com.music.bitchord.playback.toDirectYouTubeMediaItem
+import com.music.bitchord.playback.previewExternalAudio
 import com.music.bitchord.playback.toggleAutoplay
 import com.music.bitchord.playback.upgradeQuality
 import com.music.bitchord.download.DownloadSession
@@ -264,6 +265,7 @@ class MainActivity : AppCompatActivity() {
         // the request already standing by the time BitChordApp first reads it.
         PlayerDeepLink.consume(intent)
         // Likewise for a link tapped or shared from another app — see [MusicLink].
+        MusicLink.retainPersistableAudioPermission(this, intent)
         MusicLink.consume(intent)
         setContent {
             val theme by AppSettings.themeMode.collectAsStateWithLifecycle()
@@ -409,6 +411,7 @@ class MainActivity : AppCompatActivity() {
         // one that just arrived and not the one the task was started with.
         setIntent(intent)
         PlayerDeepLink.consume(intent)
+        MusicLink.retainPersistableAudioPermission(this, intent)
         MusicLink.consume(intent)
     }
 }
@@ -1069,6 +1072,13 @@ private fun BitChordApp(
         // its rows, and half-serving a request would spend it.
         val session = controller ?: return@LaunchedEffect
         when (request) {
+            is LinkRequest.ExternalAudio -> {
+                // The service parks and restores the current queue around this
+                // one-file preview, so opening a file never loses the user's
+                // playlist or its exact playhead.
+                session.previewExternalAudio(request.uri)
+                if (!playerDocked) showNowPlaying = true
+            }
             is LinkRequest.Track -> {
                 val song = YtMusicRepository.trackLinks(request.videoId).getOrNull()
                 if (song == null) {
@@ -1487,6 +1497,12 @@ private fun BitChordApp(
         linksLoading = false
         if (!playerShowing) return@LaunchedEffect
         val current = player.song ?: return@LaunchedEffect
+        // File-manager previews and local-library tracks already have their
+        // metadata on device; never send their content:// or file:// identity
+        // to the online track-link resolver.
+        if (current.isExternalPreview || !current.localUri.isNullOrBlank() || !current.localPath.isNullOrBlank()) {
+            return@LaunchedEffect
+        }
         if (current.albumId != null && current.artistId != null) return@LaunchedEffect
         linksLoading = true
         links = YtMusicRepository.trackLinks(current.videoId).getOrNull()

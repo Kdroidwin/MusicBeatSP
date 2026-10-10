@@ -159,6 +159,10 @@ const val ACTION_COMMIT_RADIO_QUEUE = "com.music.bitchord.action.COMMIT_RADIO_QU
 /** Session command behind the player menu's "Upgrade quality". */
 const val ACTION_UPGRADE_QUALITY = "com.music.bitchord.action.UPGRADE_QUALITY"
 
+/** Opens one local file temporarily without replacing the listener's queue. */
+const val ACTION_PLAY_EXTERNAL_PREVIEW = "com.music.bitchord.action.PLAY_EXTERNAL_PREVIEW"
+const val EXTRA_EXTERNAL_PREVIEW_URI = "bitchord.externalPreviewUri"
+
 /**
  * Session command for single-trip queue rearrangement.
  *
@@ -395,6 +399,29 @@ class PlaybackService : MediaLibraryService() {
      */
     private var player: ExoPlayer? = null
 
+    /**
+     * The queue and playhead parked while a file-manager song is previewed.
+     * The preview temporarily occupies the live player so normal player UI and
+     * media controls work, then this exact queue is restored when it ends.
+     */
+    private data class ExternalPreviewReturnState(
+        val items: List<MediaItem>,
+        val index: Int,
+        val positionMs: Long,
+        val playWhenReady: Boolean,
+        val repeatMode: Int,
+        val shuffleModeEnabled: Boolean,
+        val playlistMetadata: MediaMetadata,
+        val persistedQueueStart: Int,
+    )
+
+    private var externalPreviewReturnState: ExternalPreviewReturnState? = null
+    private var externalPreviewLoadJob: Job? = null
+    private var externalPreviewRequestGeneration = 0L
+    private var suppressRestoredTrackTransition: String? = null
+    private var externalAudioPopupWindow: ExternalAudioPopupWindow? = null
+    private var suppressedExternalPopupUri: String? = null
+
     /** The application owns one platform focus request for whichever player is active. */
     private var audioFocusRequest: AudioFocusRequest? = null
     private var audioFocusGainType: Int? = null
@@ -543,6 +570,7 @@ class PlaybackService : MediaLibraryService() {
     private val commitRadioQueueCommand = SessionCommand(ACTION_COMMIT_RADIO_QUEUE, Bundle.EMPTY)
     private val upgradeQualityCommand = SessionCommand(ACTION_UPGRADE_QUALITY, Bundle.EMPTY)
     private val reorderQueueCommand = SessionCommand(ACTION_REORDER_QUEUE, Bundle.EMPTY)
+    private val externalPreviewCommand = SessionCommand(ACTION_PLAY_EXTERNAL_PREVIEW, Bundle.EMPTY)
 
     private var favoriteActionJob: Job? = null
     private var autoplayLoadJob: Job? = null
@@ -608,6 +636,20 @@ class PlaybackService : MediaLibraryService() {
             // The player this fired on, which is by definition the one the
             // session is currently pointed at.
             val exoPlayer = player ?: return
+            if (isExternalPreviewPlaying(exoPlayer)) {
+                updateExternalAudioPopup(exoPlayer)
+                ListeningRecorder.onStopped()
+                clearDiscordPresence()
+                updateReplayGainForCurrentTrack()
+                publishWidgetState()
+                if (isPlaying) {
+                    loadLyricsForCurrentTrack()
+                    startLyricsTicker()
+                } else {
+                    stopLyricsTicker()
+                }
+                return
+            }
             // The only number that describes what a listener actually
             // waits through. Every other timing in this app measures one
             // leg of getting a track started — a resolve, a client walk, an
@@ -719,6 +761,7 @@ class PlaybackService : MediaLibraryService() {
             reason: Int,
         ) {
             val exoPlayer = player ?: return
+            if (isExternalPreviewPlaying(exoPlayer)) return
             if (reason == Player.DISCONTINUITY_REASON_SEEK) {
                 exoPlayer.currentMediaItem?.toSong()?.let { song ->
                     if (exoPlayer.currentPosition <= LONG_TRACK_RESUME_START_CLEAR_MS) {
@@ -738,6 +781,49 @@ class PlaybackService : MediaLibraryService() {
             // The player this fired on, which is by definition the one the
             // session is currently pointed at.
             val exoPlayer = player ?: return
+            if (suppressRestoredTrackTransition != null) {
+                if (mediaItem?.mediaId == suppressRestoredTrackTransition) {
+                    suppressRestoredTrackTransition = null
+                    updateReplayGainForCurrentTrack(force = true)
+                    loadLyricsForCurrentTrack()
+                    if (exoPlayer.isPlaying) startLyricsTicker() else stopLyricsTicker()
+                    publishWidgetState()
+                    return
+                }
+                suppressRestoredTrackTransition = null
+            }
+            if (externalPreviewReturnState != null) {
+                if (isExternalPreviewPlaying(exoPlayer)) {
+                    updateExternalAudioPopup(exoPlayer)
+                    autoplayLoadJob?.cancel()
+                    autoplayLoadJob = null
+                    autoplaySeed = null
+                    externalPreviewReturnState?.let { parked ->
+                        if (parked.playWhenReady) {
+                            val previous = parked.items.getOrNull(parked.index)?.toSong()
+                            scrobbleManager?.onPlayerStateChanged(
+                                false,
+                                previous,
+                                previous?.durationMillis(),
+                            )
+                            listenBrainzStartMs = 0L
+                            listenBrainzDurationMs = null
+                        }
+                    }
+                    ListeningRecorder.onStopped()
+                    clearDiscordPresence()
+                    updateReplayGainForCurrentTrack(force = true)
+                    loadLyricsForCurrentTrack()
+                    if (exoPlayer.isPlaying) startLyricsTicker() else stopLyricsTicker()
+                    mediaSession?.setCustomLayout(notificationButtons())
+                    publishWidgetState()
+                    return
+                }
+                // A normal play request replaced the preview before it ended.
+                // In that case the new request owns the player from here on.
+                externalAudioPopupWindow?.dismiss()
+                externalPreviewReturnState = null
+            }
             castPlayback.onLocalTransition(mediaItem, reason)
             // A quality swap replaces the playing item, which Media3
             // reports here as a playlist change — indistinguishable, from
@@ -803,6 +889,11 @@ class PlaybackService : MediaLibraryService() {
             // session is currently pointed at.
             val exoPlayer = player ?: return
             try {
+                if (isExternalPreviewPlaying(exoPlayer)) {
+                    restoreExternalPreview(exoPlayer)
+                    Toast.makeText(applicationContext, R.string.couldnt_open_link, Toast.LENGTH_SHORT).show()
+                    return
+                }
                 recoverFrom(error, exoPlayer)
             } catch (recoveryError: Exception) {
                 TrackLog.w(
@@ -820,6 +911,10 @@ class PlaybackService : MediaLibraryService() {
             // The player this fired on, which is by definition the one the
             // session is currently pointed at.
             val exoPlayer = player ?: return
+            if (isExternalPreviewPlaying(exoPlayer)) {
+                if (state == Player.STATE_ENDED) restoreExternalPreview(exoPlayer)
+                return
+            }
             if (state == Player.STATE_ENDED) {
                 SleepTimer.cancel()
                 if (exoPlayer.repeatMode == Player.REPEAT_MODE_OFF || SingleSongPlaybackManager.enabled.value) {
@@ -848,6 +943,10 @@ class PlaybackService : MediaLibraryService() {
         }
 
         override fun onRepeatModeChanged(repeatMode: Int) {
+            if (externalPreviewReturnState != null || suppressRestoredTrackTransition != null) {
+                lastRepeatMode = repeatMode
+                return
+            }
             castPlayback.onLocalRepeatChanged(repeatMode)
             val previous = lastRepeatMode
             lastRepeatMode = repeatMode
@@ -881,6 +980,16 @@ class PlaybackService : MediaLibraryService() {
             // The player this fired on, which is by definition the one the
             // session is currently pointed at.
             val exoPlayer = player ?: return
+            if (externalPreviewReturnState != null) {
+                if (isExternalPreviewPlaying(exoPlayer)) {
+                    retainQueueAddsDuringExternalPreview(exoPlayer)
+                    return
+                }
+                // A new queue replaced the preview; do not later resurrect the
+                // queue that was parked when the preview first opened.
+                externalAudioPopupWindow?.dismiss()
+                externalPreviewReturnState = null
+            }
             castPlayback.onLocalQueueChanged()
             if (exoPlayer.isPlaying) prefetchAround(exoPlayer)
             if (reason == Player.TIMELINE_CHANGE_REASON_PLAYLIST_CHANGED) {
@@ -1056,6 +1165,15 @@ class PlaybackService : MediaLibraryService() {
         scope.launch {
             LikeState.overrides.collectLatest {
                 mediaSession?.setCustomLayout(notificationButtons())
+            }
+        }
+        scope.launch {
+            AppSettings.popupExternalAudioPlayer.collectLatest { enabled ->
+                if (!enabled) {
+                    externalAudioPopupWindow?.dismiss()
+                } else {
+                    player?.let(::updateExternalAudioPopup)
+                }
             }
         }
 
@@ -1447,6 +1565,9 @@ class PlaybackService : MediaLibraryService() {
             return
         }
         val current = exoPlayer.currentMediaItem?.toSong() ?: return
+        // A file opened from a file manager is a one-track preview session.
+        // Do not append unrelated online suggestions when its player activates.
+        if (current.isExternalPreview) return
         if (AppSettings.dontRepeatSuggestions.value) sessionSongHistory += current
         val queuedAutoplay = (exoPlayer.currentMediaItemIndex + 1 until exoPlayer.mediaItemCount)
             .count { exoPlayer.getMediaItemAt(it).fromAutoplay }
@@ -3345,6 +3466,7 @@ class PlaybackService : MediaLibraryService() {
 
     /** Serialize only the bounded window needed for a future cold-start resume. */
     private fun saveQueueSnapshot(player: ExoPlayer) {
+        if (isExternalPreviewPlaying(player)) return
         if (player.mediaItemCount == 0) {
             persistedQueueStart = 0
             LastPlayed.clear()
@@ -3362,6 +3484,7 @@ class PlaybackService : MediaLibraryService() {
 
     /** Make the newly installed radio queue the durable cold-start boundary. */
     private fun saveQueueSnapshotImmediately(player: ExoPlayer) {
+        if (isExternalPreviewPlaying(player)) return
         if (player.mediaItemCount == 0) {
             persistedQueueStart = 0
             LastPlayed.clearImmediately()
@@ -3390,6 +3513,7 @@ class PlaybackService : MediaLibraryService() {
 
     /** Persist index and position without touching or serializing queue contents. */
     private fun savePlaybackState(player: ExoPlayer) {
+        if (isExternalPreviewPlaying(player)) return
         if (player.mediaItemCount == 0) return
         player.currentMediaItem?.toSong()?.let { saveLongTrackPosition(player, it) }
         LastPlayed.savePlaybackState(
@@ -3431,6 +3555,157 @@ class PlaybackService : MediaLibraryService() {
         persistedQueueStart = 0
         player.setMediaItems(last.songs.map { it.toMediaItem() }, last.index, last.positionMs)
         return true
+    }
+
+    /** Starts a temporary, one-file session and keeps the existing queue parked. */
+    private fun startExternalAudioPreview(uriString: String) {
+        suppressedExternalPopupUri = null
+        externalPreviewLoadJob?.cancel()
+        val requestGeneration = ++externalPreviewRequestGeneration
+        externalPreviewLoadJob = scope.launch {
+            val song = try {
+                ExternalAudioPreview.readSong(applicationContext, uriString)
+            } catch (cancelled: CancellationException) {
+                throw cancelled
+            } catch (error: Exception) {
+                TrackLog.w("BitChord", "could not read external audio preview", error)
+                Toast.makeText(applicationContext, R.string.couldnt_open_link, Toast.LENGTH_SHORT).show()
+                return@launch
+            }
+            if (requestGeneration != externalPreviewRequestGeneration) return@launch
+            val active = player ?: return@launch
+
+            if (externalPreviewReturnState == null) {
+                val items = List(active.mediaItemCount) { active.getMediaItemAt(it) }
+                val index = active.currentMediaItemIndex.takeIf { it in items.indices } ?: 0
+                if (items.isNotEmpty()) saveQueueSnapshot(active)
+                externalPreviewReturnState = ExternalPreviewReturnState(
+                    items = items,
+                    index = index,
+                    positionMs = active.currentPosition.coerceAtLeast(0L),
+                    playWhenReady = active.playWhenReady,
+                    repeatMode = active.repeatMode,
+                    shuffleModeEnabled = active.shuffleModeEnabled,
+                    playlistMetadata = active.playlistMetadata,
+                    persistedQueueStart = persistedQueueStart,
+                )
+            }
+
+            autoplayLoadJob?.cancel()
+            autoplayLoadJob = null
+            autoplaySeed = null
+            active.repeatMode = Player.REPEAT_MODE_OFF
+            active.shuffleModeEnabled = false
+            active.setMediaItems(listOf(song.toMediaItem()), 0, 0L)
+            active.prepare()
+            if (!canStartPlaybackAtCurrentVolume()) {
+                restoreExternalPreview(active)
+                return@launch
+            }
+            active.play()
+            updateExternalAudioPopup(active)
+        }
+    }
+
+    /** Shows the optional overlay only while a file-manager preview owns the player. */
+    private fun updateExternalAudioPopup(active: ExoPlayer) {
+        val song = active.currentMediaItem?.toSong()?.takeIf { it.isExternalPreview }
+        if (
+            song == null || !isExternalPreviewPlaying(active) ||
+            !AppSettings.popupExternalAudioPlayer.value ||
+            !android.provider.Settings.canDrawOverlays(applicationContext)
+        ) {
+            externalAudioPopupWindow?.dismiss()
+            return
+        }
+        val popupKey = song.localUri ?: song.videoId
+        if (suppressedExternalPopupUri == popupKey) {
+            externalAudioPopupWindow?.dismiss()
+            return
+        }
+        val popup = externalAudioPopupWindow ?: ExternalAudioPopupWindow(
+            context = this,
+            scope = scope,
+            onPlayPause = ::toggleExternalPreviewPlayback,
+            onClose = ::closeExternalAudioPopup,
+        ).also { externalAudioPopupWindow = it }
+        popup.show(song, active.isPlaying)
+    }
+
+    private fun toggleExternalPreviewPlayback() {
+        val active = player ?: return
+        if (!isExternalPreviewPlaying(active)) return
+        if (active.isPlaying) {
+            active.pause()
+        } else if (canStartPlaybackAtCurrentVolume()) {
+            active.play()
+        }
+    }
+
+    /** Closing the window hides it without pausing or changing the preview. */
+    private fun closeExternalAudioPopup() {
+        val song = player?.currentMediaItem?.toSong()
+        suppressedExternalPopupUri = song?.let { it.localUri ?: it.videoId }
+        externalAudioPopupWindow?.dismiss()
+    }
+
+    /** Restores the listener's parked queue after the preview finishes or fails. */
+    private fun restoreExternalPreview(active: ExoPlayer) {
+        val parked = externalPreviewReturnState ?: return
+        externalAudioPopupWindow?.dismiss()
+        persistedQueueStart = parked.persistedQueueStart
+        val restoredMediaId = parked.items.getOrNull(parked.index)?.mediaId
+        suppressRestoredTrackTransition = restoredMediaId
+
+        active.playWhenReady = false
+        active.stop()
+        active.repeatMode = parked.repeatMode
+        active.shuffleModeEnabled = parked.shuffleModeEnabled
+        active.playlistMetadata = parked.playlistMetadata
+        if (parked.items.isEmpty()) {
+            active.clearMediaItems()
+        } else {
+            active.setMediaItems(
+                parked.items,
+                parked.index.coerceIn(parked.items.indices),
+                parked.positionMs,
+            )
+            active.prepare()
+            active.playWhenReady = parked.playWhenReady
+        }
+        lastRepeatMode = parked.repeatMode
+        if (externalPreviewReturnState == parked) externalPreviewReturnState = null
+        if (parked.items.isEmpty()) suppressRestoredTrackTransition = null
+        updateReplayGainForCurrentTrack(force = true)
+        loadLyricsForCurrentTrack()
+        if (active.isPlaying) startLyricsTicker() else stopLyricsTicker()
+        publishWidgetState()
+    }
+
+    private fun isExternalPreviewPlaying(active: ExoPlayer): Boolean =
+        externalPreviewReturnState != null &&
+            active.currentMediaItem?.toSong()?.isExternalPreview == true
+
+    /** Keeps "add to queue" actions made during the preview in the parked queue. */
+    private fun retainQueueAddsDuringExternalPreview(active: ExoPlayer) {
+        val parked = externalPreviewReturnState ?: return
+        val previewIndex = active.currentMediaItemIndex
+        if (previewIndex != 0 || active.mediaItemCount <= 1) return
+
+        val addedItems = (previewIndex + 1 until active.mediaItemCount)
+            .map(active::getMediaItemAt)
+        if (addedItems.isEmpty()) return
+
+        val insertAt = (parked.index + 1).coerceIn(0, parked.items.size)
+        val mergedItems = buildList(parked.items.size + addedItems.size) {
+            addAll(parked.items.take(insertAt))
+            addAll(addedItems)
+            addAll(parked.items.drop(insertAt))
+        }
+        externalPreviewReturnState = parked.copy(items = mergedItems)
+        // The live timeline is only the preview surface. Queue additions have
+        // been captured above and will appear when the original queue returns.
+        active.removeMediaItems(previewIndex + 1, active.mediaItemCount)
     }
 
     /**
@@ -3535,6 +3810,11 @@ class PlaybackService : MediaLibraryService() {
                 // has been silent since the last crossfade.
                 val player = this@PlaybackService.player
                 if (player != null && player.isPlaying) {
+                    if (isExternalPreviewPlaying(player)) {
+                        publishNerdStats()
+                        delay(PROGRESS_SAMPLE_MS)
+                        continue
+                    }
                     lastPositionSeconds = player.currentPosition / 1000
                     player.currentMediaItem?.mediaId?.let {
                         PlaybackTracker.onProgress(it, lastPositionSeconds)
@@ -4244,6 +4524,8 @@ class PlaybackService : MediaLibraryService() {
 
 
     override fun onDestroy() {
+        externalAudioPopupWindow?.dismiss()
+        externalAudioPopupWindow = null
         audioManager?.unregisterAudioDeviceCallback(outputDeviceCallback)
         abandonAudioFocus()
         player?.let(::savePlaybackState)
@@ -4725,6 +5007,7 @@ class PlaybackService : MediaLibraryService() {
                 .add(commitRadioQueueCommand)
                 .add(upgradeQualityCommand)
                 .add(reorderQueueCommand)
+                .add(externalPreviewCommand)
                 .build()
             return MediaSession.ConnectionResult.AcceptedResultBuilder(session)
                 .setAvailablePlayerCommands(MediaSession.ConnectionResult.DEFAULT_PLAYER_COMMANDS)
@@ -4745,6 +5028,12 @@ class PlaybackService : MediaLibraryService() {
                 ACTION_COMMIT_RADIO_QUEUE -> player?.let(::saveQueueSnapshotImmediately)
                 ACTION_UPGRADE_QUALITY -> upgradeQualityNow()
                 ACTION_REORDER_QUEUE -> player?.let { QueueShuffle.reorderFromCommand(it, args) }
+                ACTION_PLAY_EXTERNAL_PREVIEW -> {
+                    val uri = args.getString(EXTRA_EXTERNAL_PREVIEW_URI)
+                        ?.takeIf(String::isNotBlank)
+                        ?: return Futures.immediateFuture(SessionResult(SessionError.ERROR_NOT_SUPPORTED))
+                    startExternalAudioPreview(uri)
+                }
                 ACTION_TOGGLE_FAVORITE -> session.player.currentMediaItem?.mediaId?.let {
                     toggleFavoriteFromNotification(it)
                 }

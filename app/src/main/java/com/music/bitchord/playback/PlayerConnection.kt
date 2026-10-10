@@ -148,6 +148,14 @@ fun MediaController.upgradeQuality() {
     )
 }
 
+/** Requests a file-manager song as a temporary preview, preserving the queue. */
+fun MediaController.previewExternalAudio(uriString: String) {
+    sendCustomCommand(
+        SessionCommand(ACTION_PLAY_EXTERNAL_PREVIEW, Bundle.EMPTY),
+        bundleOf(EXTRA_EXTERNAL_PREVIEW_URI to uriString),
+    )
+}
+
 /** Flushes the current radio queue to disk before reporting that it started. */
 suspend fun MediaController.commitRadioQueue() {
     sendCustomCommand(
@@ -295,6 +303,7 @@ fun MediaItem.toSong() = Song(
     radioName = mediaMetadata.extras?.getString(EXTRA_RADIO_NAME),
     localUri = mediaMetadata.extras?.getString(EXTRA_LOCAL_URI),
     localPath = mediaMetadata.extras?.getString(EXTRA_LOCAL_PATH),
+    isExternalPreview = mediaMetadata.extras?.getBoolean(EXTRA_EXTERNAL_PREVIEW) == true,
 )
 
 /** @see Song.fromAutoplay */
@@ -333,6 +342,7 @@ internal const val EXTRA_LOCAL_URI = "bitchord.localUri"
 
 /** @see Song.localPath */
 internal const val EXTRA_LOCAL_PATH = "bitchord.localPath"
+internal const val EXTRA_EXTERNAL_PREVIEW = "bitchord.externalPreview"
 
 /**
  * How long the track runs, as the row that queued it said.
@@ -528,7 +538,7 @@ fun Song.toMediaItem(): MediaItem {
             // back a null duration and later matching loses the `&d=` it
             // depends on.
             .apply {
-                if (fromAutoplay || offlineUri != null || durationText != null ||
+                if (fromAutoplay || offlineUri != null || durationText != null || isExternalPreview ||
                     artistId != null || albumId != null || setVideoId != null ||
                     isExplicit != null || isVideo || isVideoOrigin || radioName != null ||
                     thumbnailUrl != null
@@ -547,6 +557,7 @@ fun Song.toMediaItem(): MediaItem {
                             EXTRA_EXPLICIT to isExplicit,
                             EXTRA_IS_VIDEO to isVideo,
                             EXTRA_VIDEO_ORIGIN to isVideoOrigin,
+                            EXTRA_EXTERNAL_PREVIEW to isExternalPreview,
                         ),
                     )
                 }

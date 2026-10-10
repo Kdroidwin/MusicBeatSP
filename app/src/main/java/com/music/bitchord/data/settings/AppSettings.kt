@@ -545,6 +545,9 @@ object AppSettings {
     /** Hides the confirmed lossless quality badge on the player, without affecting audio. */
     val hideLosslessLabel = MutableStateFlow(false)
 
+    /** Shows externally opened audio in a small overlay above other apps. */
+    val popupExternalAudioPlayer = MutableStateFlow(false)
+
     /** Applies ReplayGain metadata to decoded local PCM when enabled. */
     val replayGainEnabled = MutableStateFlow(false)
     val replayGainAlbumMode = MutableStateFlow(false)
@@ -951,6 +954,7 @@ object AppSettings {
         showPlayerLyricsStrip.value = prefs.getBoolean(KEY_SHOW_PLAYER_LYRICS_STRIP, true)
         offlineMode.value = prefs.getBoolean(KEY_OFFLINE_MODE, false)
         hideLosslessLabel.value = prefs.getBoolean(KEY_HIDE_LOSSLESS_LABEL, false)
+        popupExternalAudioPlayer.value = prefs.getBoolean(KEY_POPUP_EXTERNAL_AUDIO_PLAYER, false)
         replayGainEnabled.value = prefs.getBoolean(KEY_REPLAYGAIN_ENABLED, false)
         replayGainAlbumMode.value = prefs.getBoolean(KEY_REPLAYGAIN_ALBUM_MODE, false)
         replayGainPreampDb.value = prefs.getFloat(KEY_REPLAYGAIN_PREAMP_DB, 0f).coerceIn(-12f, 12f)
@@ -1513,6 +1517,11 @@ object AppSettings {
     fun setHideLosslessLabel(value: Boolean) {
         hideLosslessLabel.value = value
         prefs.edit().putBoolean(KEY_HIDE_LOSSLESS_LABEL, value).apply()
+    }
+
+    fun setPopupExternalAudioPlayer(value: Boolean) {
+        popupExternalAudioPlayer.value = value
+        prefs.edit().putBoolean(KEY_POPUP_EXTERNAL_AUDIO_PLAYER, value).apply()
     }
 
     fun setReplayGainEnabled(value: Boolean) {
@@ -2321,6 +2330,7 @@ object AppSettings {
     private const val KEY_SHOW_PLAYER_LYRICS_STRIP = "show_player_lyrics_strip"
     private const val KEY_OFFLINE_MODE = "offline_mode"
     private const val KEY_HIDE_LOSSLESS_LABEL = "hide_lossless_label"
+    private const val KEY_POPUP_EXTERNAL_AUDIO_PLAYER = "popup_external_audio_player"
     private const val KEY_REPLAYGAIN_ENABLED = "replaygain_enabled"
     private const val KEY_REPLAYGAIN_ALBUM_MODE = "replaygain_album_mode"
     private const val KEY_REPLAYGAIN_PREAMP_DB = "replaygain_preamp_db"
