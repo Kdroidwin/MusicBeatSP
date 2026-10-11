@@ -761,6 +761,8 @@ fun NowPlayingScreen(
     val favoriteUsesStar by AppSettings.favoriteUsesStar.collectAsStateWithLifecycle()
     val playerQuickActions by AppSettings.playerQuickActions.collectAsStateWithLifecycle()
     val keepScreenOn by AppSettings.keepScreenOn.collectAsStateWithLifecycle()
+    val keepScreenOnDuringLyrics by AppSettings.keepScreenOnDuringLyrics.collectAsStateWithLifecycle()
+    val showTrackDurationInsteadOfRemaining by AppSettings.showTrackDurationInsteadOfRemaining.collectAsStateWithLifecycle()
     val artworkTapOpensLyrics by AppSettings.artworkTapOpensLyrics.collectAsStateWithLifecycle()
     val showPlayerLyricsStrip by AppSettings.showPlayerLyricsStrip.collectAsStateWithLifecycle()
     val offlineMode by AppSettings.offlineMode.collectAsStateWithLifecycle()
@@ -904,7 +906,7 @@ fun NowPlayingScreen(
     // normal screen timeout only while this panel is visible. SideEffect keeps
     // the view in sync when a new track closes the lyrics panel as well.
     val playerView = LocalView.current
-    SideEffect { playerView.keepScreenOn = lyricsOpen || keepScreenOn }
+    SideEffect { playerView.keepScreenOn = (lyricsOpen && keepScreenOnDuringLyrics) || keepScreenOn }
     DisposableEffect(playerView, keepScreenOn) {
         onDispose { playerView.keepScreenOn = keepScreenOn }
     }
@@ -2549,7 +2551,11 @@ fun NowPlayingScreen(
                         color = Color.White.copy(alpha = 0.55f),
                     )
                     Text(
-                        text = "-" + formatTime(effectiveDurationMs - (shown * effectiveDurationMs).toLong()),
+                        text = if (showTrackDurationInsteadOfRemaining) {
+                            formatTime(effectiveDurationMs)
+                        } else {
+                            "-" + formatTime(effectiveDurationMs - (shown * effectiveDurationMs).toLong())
+                        },
                         style = MaterialTheme.typography.labelMedium,
                         color = Color.White.copy(alpha = 0.55f),
                     )

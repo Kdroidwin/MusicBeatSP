@@ -655,6 +655,8 @@
     <string name="popup_external_audio_player_subtitle">他のアプリから開いた曲を、他アプリ上に小さなプレーヤーとして表示します。Androidの「他のアプリの上に重ねて表示」許可が必要です。</string>
     <string name="popup_overlay_access_not_granted">重ねて表示の許可が有効になっていません。</string>
     <string name="popup_player_drag_handle">ポップアッププレーヤーをドラッグ</string>
+    <string name="show_track_duration_instead_of_remaining">残り時間の代わりに曲の長さを表示</string>
+    <string name="show_track_duration_instead_of_remaining_subtitle">シークバー右側に、残り時間ではなく曲全体の長さを表示します</string>
     <string name="offline_mode">完全オフラインモード</string>
     <string name="offline_mode_subtitle">アプリからの通信を停止します。端末内の曲と保存済みキャッシュは利用できます。</string>
     <string name="player_controls">プレーヤー操作ボタン</string>
@@ -751,6 +753,8 @@
     <string name="chromecast_playback_failed">Chromecastで再生できませんでした。スマートフォンとテレビが同じネットワークにあるか確認してください。</string>
     <string name="keep_screen_on">画面を常にオンにする</string>
     <string name="keep_screen_on_subtitle">MusicBeatSPの使用中に画面が消灯しないようにします</string>
+    <string name="keep_screen_on_during_lyrics">歌詞表示中は画面を常にオンにする</string>
+    <string name="keep_screen_on_during_lyrics_subtitle">歌詞画面を開いている間、画面が自動消灯しないようにします</string>
     <string name="show_status_bar">ステータスバーを表示</string>
     <string name="show_navigation_bar">ナビゲーションバーを表示</string>
     <string name="system_bar_visibility_subtitle">非表示のバーはスワイプすると一時的に表示できます</string>

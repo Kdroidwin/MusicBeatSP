@@ -77,6 +77,7 @@ import androidx.compose.material.icons.rounded.PlayArrow
 import androidx.compose.material.icons.rounded.SmartDisplay
 import androidx.compose.material.icons.rounded.Share
 import androidx.compose.material.icons.rounded.ScreenRotation
+import androidx.compose.material.icons.rounded.Schedule
 import androidx.compose.material.icons.rounded.Speed
 import androidx.compose.material.icons.rounded.SurroundSound
 import androidx.compose.material.icons.rounded.Tune
@@ -266,6 +267,7 @@ fun SettingsScreen(
     val audioCutterEnabled by AppSettings.audioCutterEnabled.collectAsStateWithLifecycle()
     val artworkBackdropBlurDp by AppSettings.artworkBackdropBlurDp.collectAsStateWithLifecycle()
     val keepScreenOn by AppSettings.keepScreenOn.collectAsStateWithLifecycle()
+    val keepScreenOnDuringLyrics by AppSettings.keepScreenOnDuringLyrics.collectAsStateWithLifecycle()
     val showStatusBar by AppSettings.showStatusBar.collectAsStateWithLifecycle()
     val showNavigationBar by AppSettings.showNavigationBar.collectAsStateWithLifecycle()
     val orientationMode by AppSettings.screenOrientationMode.collectAsStateWithLifecycle()
@@ -291,6 +293,7 @@ fun SettingsScreen(
     val showPlayerLyricsStrip by AppSettings.showPlayerLyricsStrip.collectAsStateWithLifecycle()
     val offlineMode by AppSettings.offlineMode.collectAsStateWithLifecycle()
     val hideLosslessLabel by AppSettings.hideLosslessLabel.collectAsStateWithLifecycle()
+    val showTrackDurationInsteadOfRemaining by AppSettings.showTrackDurationInsteadOfRemaining.collectAsStateWithLifecycle()
     val popupExternalAudioPlayer by AppSettings.popupExternalAudioPlayer.collectAsStateWithLifecycle()
     val preventPlayAtZeroVolume by AppSettings.preventPlayAtZeroVolume.collectAsStateWithLifecycle()
     val useLibraryIconForPlaylistControl by AppSettings.useLibraryIconForPlaylistControl.collectAsStateWithLifecycle()
@@ -374,6 +377,18 @@ fun SettingsScreen(
         ),
         SettingsSearchEntry(stringResource(R.string.offline_mode), stringResource(R.string.offline_mode_subtitle), listOf("offline", "オフライン", "通信"), offlineMode) { AppSettings.setOfflineMode(!offlineMode) },
         SettingsSearchEntry(stringResource(R.string.keep_screen_on), stringResource(R.string.keep_screen_on_subtitle), listOf("screen", "display", "画面", "常時"), keepScreenOn) { AppSettings.setKeepScreenOn(!keepScreenOn) },
+        SettingsSearchEntry(
+            stringResource(R.string.keep_screen_on_during_lyrics),
+            stringResource(R.string.keep_screen_on_during_lyrics_subtitle),
+            listOf("lyrics", "screen", "stay awake", "歌詞", "画面", "消灯"),
+            keepScreenOnDuringLyrics,
+        ) { AppSettings.setKeepScreenOnDuringLyrics(!keepScreenOnDuringLyrics) },
+        SettingsSearchEntry(
+            stringResource(R.string.show_track_duration_instead_of_remaining),
+            stringResource(R.string.show_track_duration_instead_of_remaining_subtitle),
+            listOf("duration", "remaining", "time", "再生時間", "残り時間", "曲の長さ"),
+            showTrackDurationInsteadOfRemaining,
+        ) { AppSettings.setShowTrackDurationInsteadOfRemaining(!showTrackDurationInsteadOfRemaining) },
         SettingsSearchEntry(stringResource(R.string.show_status_bar), stringResource(R.string.show_status_bar_search_help), listOf("status bar", "ステータスバー", "battery", "電池"), showStatusBar) { AppSettings.setShowStatusBar(!showStatusBar) },
         SettingsSearchEntry(stringResource(R.string.show_navigation_bar), stringResource(R.string.show_navigation_bar_search_help), listOf("navigation bar", "ナビゲーションバー", "戻る", "home"), showNavigationBar) { AppSettings.setShowNavigationBar(!showNavigationBar) },
         SettingsSearchEntry(stringResource(R.string.hide_player_artist), stringResource(R.string.hide_player_artist_subtitle), listOf("artist", "アーティスト", "player"), hidePlayerArtist) { AppSettings.setHidePlayerArtist(!hidePlayerArtist) },
@@ -1054,6 +1069,25 @@ fun SettingsScreen(
             )
             RowDivider()
             SettingsRow(
+                icon = Icons.Rounded.Schedule,
+                title = stringResource(R.string.show_track_duration_instead_of_remaining),
+                subtitle = stringResource(R.string.show_track_duration_instead_of_remaining_subtitle),
+                trailing = {
+                    Switch(
+                        checked = showTrackDurationInsteadOfRemaining,
+                        onCheckedChange = AppSettings::setShowTrackDurationInsteadOfRemaining,
+                        colors = SwitchDefaults.colors(
+                            checkedTrackColor = MaterialTheme.colorScheme.primary,
+                            checkedBorderColor = MaterialTheme.colorScheme.primary,
+                        ),
+                    )
+                },
+                onClick = {
+                    AppSettings.setShowTrackDurationInsteadOfRemaining(!showTrackDurationInsteadOfRemaining)
+                },
+            )
+            RowDivider()
+            SettingsRow(
                 icon = Icons.Rounded.VisibilityOff,
                 title = stringResource(R.string.hide_seek_button_labels),
                 subtitle = stringResource(R.string.hide_seek_button_labels_subtitle),
@@ -1498,6 +1532,25 @@ fun SettingsScreen(
                     Switch(checked = keepScreenOn, onCheckedChange = AppSettings::setKeepScreenOn)
                 },
                 onClick = { AppSettings.setKeepScreenOn(!keepScreenOn) },
+            )
+            RowDivider()
+            SettingsRow(
+                icon = Icons.Rounded.Fullscreen,
+                title = stringResource(R.string.keep_screen_on_during_lyrics),
+                subtitle = stringResource(R.string.keep_screen_on_during_lyrics_subtitle),
+                trailing = {
+                    Switch(
+                        checked = keepScreenOnDuringLyrics,
+                        onCheckedChange = AppSettings::setKeepScreenOnDuringLyrics,
+                        colors = SwitchDefaults.colors(
+                            checkedTrackColor = MaterialTheme.colorScheme.primary,
+                            checkedBorderColor = MaterialTheme.colorScheme.primary,
+                        ),
+                    )
+                },
+                onClick = {
+                    AppSettings.setKeepScreenOnDuringLyrics(!keepScreenOnDuringLyrics)
+                },
             )
             RowDivider()
             SettingsRow(

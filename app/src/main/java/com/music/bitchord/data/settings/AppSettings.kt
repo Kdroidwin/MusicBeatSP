@@ -490,6 +490,8 @@ object AppSettings {
     val showStatusBar = MutableStateFlow(true)
     val showNavigationBar = MutableStateFlow(true)
     val keepScreenOn = MutableStateFlow(false)
+    /** Keeps the display awake while the full lyrics panel is open. */
+    val keepScreenOnDuringLyrics = MutableStateFlow(true)
     val screenOrientationMode = MutableStateFlow(ScreenOrientationMode.SYSTEM)
     val favoriteUsesStar = MutableStateFlow(false)
     val playerQuickActions = MutableStateFlow<List<PlayerQuickAction>>(emptyList())
@@ -544,6 +546,9 @@ object AppSettings {
 
     /** Hides the confirmed lossless quality badge on the player, without affecting audio. */
     val hideLosslessLabel = MutableStateFlow(false)
+
+    /** Shows the track's full duration instead of the remaining time on the player scrubber. */
+    val showTrackDurationInsteadOfRemaining = MutableStateFlow(false)
 
     /** Shows externally opened audio in a small overlay above other apps. */
     val popupExternalAudioPlayer = MutableStateFlow(false)
@@ -922,6 +927,7 @@ object AppSettings {
         showStatusBar.value = prefs.getBoolean(KEY_SHOW_STATUS_BAR, true)
         showNavigationBar.value = prefs.getBoolean(KEY_SHOW_NAVIGATION_BAR, true)
         keepScreenOn.value = prefs.getBoolean(KEY_KEEP_SCREEN_ON, false)
+        keepScreenOnDuringLyrics.value = prefs.getBoolean(KEY_KEEP_SCREEN_ON_DURING_LYRICS, true)
         screenOrientationMode.value = runCatching {
             ScreenOrientationMode.valueOf(prefs.getString(KEY_SCREEN_ORIENTATION, ScreenOrientationMode.SYSTEM.name) ?: ScreenOrientationMode.SYSTEM.name)
         }.getOrDefault(ScreenOrientationMode.SYSTEM)
@@ -954,6 +960,8 @@ object AppSettings {
         showPlayerLyricsStrip.value = prefs.getBoolean(KEY_SHOW_PLAYER_LYRICS_STRIP, true)
         offlineMode.value = prefs.getBoolean(KEY_OFFLINE_MODE, false)
         hideLosslessLabel.value = prefs.getBoolean(KEY_HIDE_LOSSLESS_LABEL, false)
+        showTrackDurationInsteadOfRemaining.value =
+            prefs.getBoolean(KEY_SHOW_TRACK_DURATION_INSTEAD_OF_REMAINING, false)
         popupExternalAudioPlayer.value = prefs.getBoolean(KEY_POPUP_EXTERNAL_AUDIO_PLAYER, false)
         replayGainEnabled.value = prefs.getBoolean(KEY_REPLAYGAIN_ENABLED, false)
         replayGainAlbumMode.value = prefs.getBoolean(KEY_REPLAYGAIN_ALBUM_MODE, false)
@@ -1333,6 +1341,11 @@ object AppSettings {
         prefs.edit().putBoolean(KEY_KEEP_SCREEN_ON, value).apply()
     }
 
+    fun setKeepScreenOnDuringLyrics(value: Boolean) {
+        keepScreenOnDuringLyrics.value = value
+        prefs.edit().putBoolean(KEY_KEEP_SCREEN_ON_DURING_LYRICS, value).apply()
+    }
+
     fun setScreenOrientationMode(value: ScreenOrientationMode) {
         screenOrientationMode.value = value
         prefs.edit().putString(KEY_SCREEN_ORIENTATION, value.name).apply()
@@ -1517,6 +1530,11 @@ object AppSettings {
     fun setHideLosslessLabel(value: Boolean) {
         hideLosslessLabel.value = value
         prefs.edit().putBoolean(KEY_HIDE_LOSSLESS_LABEL, value).apply()
+    }
+
+    fun setShowTrackDurationInsteadOfRemaining(value: Boolean) {
+        showTrackDurationInsteadOfRemaining.value = value
+        prefs.edit().putBoolean(KEY_SHOW_TRACK_DURATION_INSTEAD_OF_REMAINING, value).apply()
     }
 
     fun setPopupExternalAudioPlayer(value: Boolean) {
@@ -2307,6 +2325,7 @@ object AppSettings {
     private const val KEY_SHOW_STATUS_BAR = "show_status_bar"
     private const val KEY_SHOW_NAVIGATION_BAR = "show_navigation_bar"
     private const val KEY_KEEP_SCREEN_ON = "keep_screen_on"
+    private const val KEY_KEEP_SCREEN_ON_DURING_LYRICS = "keep_screen_on_during_lyrics"
     private const val KEY_SCREEN_ORIENTATION = "screen_orientation_mode"
     private const val KEY_FAVORITE_USES_STAR = "favorite_uses_star"
     private const val KEY_PLAYER_QUICK_ACTIONS = "player_quick_actions"
@@ -2330,6 +2349,7 @@ object AppSettings {
     private const val KEY_SHOW_PLAYER_LYRICS_STRIP = "show_player_lyrics_strip"
     private const val KEY_OFFLINE_MODE = "offline_mode"
     private const val KEY_HIDE_LOSSLESS_LABEL = "hide_lossless_label"
+    private const val KEY_SHOW_TRACK_DURATION_INSTEAD_OF_REMAINING = "show_track_duration_instead_of_remaining"
     private const val KEY_POPUP_EXTERNAL_AUDIO_PLAYER = "popup_external_audio_player"
     private const val KEY_REPLAYGAIN_ENABLED = "replaygain_enabled"
     private const val KEY_REPLAYGAIN_ALBUM_MODE = "replaygain_album_mode"
