@@ -2583,130 +2583,139 @@ fun NowPlayingScreen(
                 // source credit pill in the middle, close circle on the right.
                 // The row stretches edge-to-edge so there is no dangling gap
                 // on either side — the pill just sits between the two icons.
-                Row(
+                val headerLabelVisible = lyricsSource != null ||
+                    (lyrics.isNullOrEmpty() && !hideLyricsUnavailableLabel) ||
+                    (!lyrics.isNullOrEmpty() && !hideLyricsSavedMessage)
+                Box(
                     modifier = Modifier
                         .fillMaxWidth()
                         .height(IntrinsicSize.Min),
-                    verticalAlignment = Alignment.CenterVertically,
                 ) {
-                    // Logs icon — only shown when the debug-log setting is on
-                    // (Advanced Options in Settings). Icon-only, no label.
-                    if (showLyricsLogsEnabled) {
+                    Row(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .height(IntrinsicSize.Min),
+                        verticalAlignment = Alignment.CenterVertically,
+                    ) {
+                        // Logs icon — only shown when the debug-log setting is on
+                        // (Advanced Options in Settings). Icon-only, no label.
+                        if (showLyricsLogsEnabled) {
+                            Box(
+                                modifier = Modifier
+                                    .fillMaxHeight()
+                                    .aspectRatio(1f, matchHeightConstraintsFirst = true)
+                                    .clip(CircleShape)
+                                    .background(if (lyricsLogsOpen) Color.White.copy(alpha = 0.22f) else Color.White.copy(alpha = 0.10f))
+                                    .clickable(
+                                        interactionSource = remember { MutableInteractionSource() },
+                                        indication = null,
+                                    ) {
+                                        haptics.play(Haptic.Tap)
+                                        lyricsLogsOpen = !lyricsLogsOpen
+                                    },
+                                contentAlignment = Alignment.Center,
+                            ) {
+                                Icon(
+                                    imageVector = Icons.Rounded.History,
+                                    contentDescription = "Lyrics Logs",
+                                    tint = if (lyricsLogsOpen) Color(0xFFFFD54F) else Color.White.copy(alpha = 0.8f),
+                                    modifier = Modifier.size(16.dp),
+                                )
+                            }
+                            Spacer(Modifier.width(8.dp))
+                        }
+                        // Source credit pill — same style as original, but sits between
+                        // the two icon buttons and fills leftover horizontal space.
+                        if (headerLabelVisible) {
+                            Box(
+                                modifier = Modifier
+                                    .weight(1f)
+                                    .clip(RoundedCornerShape(percent = 50))
+                                    .background(Color.White.copy(alpha = 0.10f))
+                                    .padding(horizontal = 18.dp, vertical = 8.dp),
+                                contentAlignment = Alignment.Center,
+                            ) {
+                                Text(
+                                    text = when {
+                                        lyricsSource != null -> stringResource(R.string.lyrics_by, lyricsSource.label)
+                                        lyrics.isNullOrEmpty() -> stringResource(R.string.no_lyrics_found)
+                                        else -> stringResource(R.string.lyrics_saved_with_download)
+                                    },
+                                    style = MaterialTheme.typography.labelLarge,
+                                    color = Color.White.copy(alpha = 0.7f),
+                                    maxLines = 1,
+                                    overflow = TextOverflow.Ellipsis,
+                                )
+                            }
+                        } else {
+                            // Keep the X at the trailing edge; the transport row is
+                            // laid over the full-width parent below, so its centered
+                            // position is independent of both the X and the log icon.
+                            Spacer(Modifier.weight(1f))
+                        }
+                        Spacer(Modifier.width(8.dp))
                         Box(
                             modifier = Modifier
-                                .fillMaxHeight()
-                                .aspectRatio(1f, matchHeightConstraintsFirst = true)
+                                .size(48.dp)
                                 .clip(CircleShape)
-                                .background(if (lyricsLogsOpen) Color.White.copy(alpha = 0.22f) else Color.White.copy(alpha = 0.10f))
+                                .background(Color.White.copy(alpha = 0.10f))
                                 .clickable(
                                     interactionSource = remember { MutableInteractionSource() },
                                     indication = null,
                                 ) {
                                     haptics.play(Haptic.Tap)
-                                    lyricsLogsOpen = !lyricsLogsOpen
+                                    lyricsLogsOpen = false
+                                    lyricsOpen = false
                                 },
                             contentAlignment = Alignment.Center,
                         ) {
                             Icon(
-                                imageVector = Icons.Rounded.History,
-                                contentDescription = "Lyrics Logs",
-                                tint = if (lyricsLogsOpen) Color(0xFFFFD54F) else Color.White.copy(alpha = 0.8f),
-                                modifier = Modifier.size(16.dp),
+                                imageVector = Icons.Rounded.Close,
+                                contentDescription = stringResource(R.string.close_lyrics),
+                                tint = Color.White.copy(alpha = 0.7f),
+                                modifier = Modifier.size(22.dp),
                             )
                         }
-                        Spacer(Modifier.width(8.dp))
                     }
-                    // Source credit pill — same style as original, but sits between
-                    // the two icon buttons and fills leftover horizontal space.
-                    val headerLabelVisible = lyricsSource != null ||
-                        (lyrics.isNullOrEmpty() && !hideLyricsUnavailableLabel) ||
-                        (!lyrics.isNullOrEmpty() && !hideLyricsSavedMessage)
-                    if (headerLabelVisible) {
-                        Box(
-                            modifier = Modifier
-                                .weight(1f)
-                                .clip(RoundedCornerShape(percent = 50))
-                                .background(Color.White.copy(alpha = 0.10f))
-                                .padding(horizontal = 18.dp, vertical = 8.dp),
-                            contentAlignment = Alignment.Center,
-                        ) {
-                            Text(
-                                text = when {
-                                    lyricsSource != null -> stringResource(R.string.lyrics_by, lyricsSource.label)
-                                    lyrics.isNullOrEmpty() -> stringResource(R.string.no_lyrics_found)
-                                    else -> stringResource(R.string.lyrics_saved_with_download)
-                                },
-                                style = MaterialTheme.typography.labelLarge,
-                                color = Color.White.copy(alpha = 0.7f),
-                                maxLines = 1,
-                                overflow = TextOverflow.Ellipsis,
-                            )
-                        }
-                    } else {
-                        // The weighted region leaves the close button at the
-                        // trailing edge while allowing the transport group to
-                        // sit either at that edge or at the centre of the row.
-                        Box(
-                            modifier = Modifier.weight(1f),
-                            contentAlignment = if (lyricsTransportControlsCentered) {
-                                Alignment.Center
+                    if (!headerLabelVisible) {
+                        Row(
+                            modifier = if (lyricsTransportControlsCentered) {
+                                Modifier.align(Alignment.Center)
                             } else {
-                                Alignment.CenterEnd
+                                Modifier
+                                    .align(Alignment.CenterEnd)
+                                    .padding(end = 56.dp)
                             },
+                            verticalAlignment = Alignment.CenterVertically,
                         ) {
-                            Row(verticalAlignment = Alignment.CenterVertically) {
-                                if (showLyricsPreviousControl) {
-                                    TransportGlyph(
-                                        icon = Icons.Rounded.FastRewind,
-                                        contentDescription = stringResource(R.string.widget_previous),
-                                        size = lyricsTransportControlSize.dp,
-                                        enabled = hasPrevious || positionMs > BACK_RESTARTS_AFTER_MS,
-                                        onClick = onPrevious,
-                                    )
-                                }
-                                if (showLyricsPlayPauseControl) {
-                                    TransportGlyph(
-                                        icon = if (isPlaying) Icons.Rounded.Pause else Icons.Rounded.PlayArrow,
-                                        contentDescription = stringResource(if (isPlaying) R.string.pause else R.string.play),
-                                        size = lyricsTransportControlSize.dp,
-                                        enabled = !isLoading,
-                                        onClick = onPlayPause,
-                                    )
-                                }
-                                if (showLyricsNextControl) {
-                                    TransportGlyph(
-                                        icon = Icons.Rounded.FastForward,
-                                        contentDescription = stringResource(R.string.widget_next),
-                                        size = lyricsTransportControlSize.dp,
-                                        enabled = hasNext,
-                                        onClick = onNext,
-                                    )
-                                }
+                            if (showLyricsPreviousControl) {
+                                TransportGlyph(
+                                    icon = Icons.Rounded.FastRewind,
+                                    contentDescription = stringResource(R.string.widget_previous),
+                                    size = lyricsTransportControlSize.dp,
+                                    enabled = hasPrevious || positionMs > BACK_RESTARTS_AFTER_MS,
+                                    onClick = onPrevious,
+                                )
+                            }
+                            if (showLyricsPlayPauseControl) {
+                                TransportGlyph(
+                                    icon = if (isPlaying) Icons.Rounded.Pause else Icons.Rounded.PlayArrow,
+                                    contentDescription = stringResource(if (isPlaying) R.string.pause else R.string.play),
+                                    size = lyricsTransportControlSize.dp,
+                                    enabled = !isLoading,
+                                    onClick = onPlayPause,
+                                )
+                            }
+                            if (showLyricsNextControl) {
+                                TransportGlyph(
+                                    icon = Icons.Rounded.FastForward,
+                                    contentDescription = stringResource(R.string.widget_next),
+                                    size = lyricsTransportControlSize.dp,
+                                    enabled = hasNext,
+                                    onClick = onNext,
+                                )
                             }
                         }
-                    }
-                    Spacer(Modifier.width(8.dp))
-                    Box(
-                        modifier = Modifier
-                            .size(48.dp)
-                            .clip(CircleShape)
-                            .background(Color.White.copy(alpha = 0.10f))
-                            .clickable(
-                                interactionSource = remember { MutableInteractionSource() },
-                                indication = null,
-                            ) {
-                                haptics.play(Haptic.Tap)
-                                lyricsLogsOpen = false
-                                lyricsOpen = false
-                            },
-                        contentAlignment = Alignment.Center,
-                    ) {
-                        Icon(
-                            imageVector = Icons.Rounded.Close,
-                            contentDescription = stringResource(R.string.close_lyrics),
-                            tint = Color.White.copy(alpha = 0.7f),
-                            modifier = Modifier.size(22.dp),
-                        )
                     }
                 }
                 Spacer(Modifier.height(20.dp))
