@@ -10,6 +10,7 @@ import androidx.compose.runtime.Composable
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.unit.dp
 import com.music.bitchord.feature.localmusic.domain.model.LocalPlaylist
+import com.music.bitchord.data.model.Song
 
 /**
  * Grid layout presentation of the Library featuring Favorites and Playlists.
@@ -29,6 +30,7 @@ fun LibraryGridContent(
     onResetPlaylistCover: (LocalPlaylist) -> Unit = {},
     onMovePlaylist: (LocalPlaylist, Int) -> Unit,
     onCreatePlaylist: () -> Unit,
+    librarySongs: List<Song> = emptyList(),
     contentPadding: PaddingValues,
     modifier: Modifier = Modifier,
 ) {
@@ -72,6 +74,7 @@ fun LibraryGridContent(
                     canMoveDown = index < playlists.lastIndex,
                     onMoveUp = { onMovePlaylist(playlist, -1) },
                     onMoveDown = { onMovePlaylist(playlist, 1) },
+                    librarySongs = librarySongs,
                 )
             }
 

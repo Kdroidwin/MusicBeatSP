@@ -186,6 +186,10 @@ object SavedQueueStore {
         putNullable("radioName", radioName)
         putNullable("localUri", localUri)
         putNullable("localPath", localPath)
+        putNullable("albumArtist", albumArtist)
+        trackNumber?.let { put("trackNumber", it) }
+        localStartMs?.let { put("localStartMs", it) }
+        localEndMs?.let { put("localEndMs", it) }
         putNullable("downloadFormat", downloadFormat)
         if (isExplicit != null) put("isExplicit", isExplicit)
     }
@@ -208,6 +212,10 @@ object SavedQueueStore {
             radioName = optNullableString("radioName"),
             localUri = optNullableString("localUri"),
             localPath = optNullableString("localPath"),
+            albumArtist = optNullableString("albumArtist"),
+            trackNumber = if (has("trackNumber")) optInt("trackNumber").takeIf { it > 0 } else null,
+            localStartMs = if (has("localStartMs")) optLong("localStartMs").coerceAtLeast(0L) else null,
+            localEndMs = if (has("localEndMs")) optLong("localEndMs").coerceAtLeast(0L) else null,
             downloadFormat = optNullableString("downloadFormat"),
             isExplicit = if (has("isExplicit")) optBoolean("isExplicit") else null,
         )

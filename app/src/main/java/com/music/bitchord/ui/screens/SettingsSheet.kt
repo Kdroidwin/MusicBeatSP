@@ -161,6 +161,7 @@ import com.music.bitchord.data.model.Account
 import com.music.bitchord.data.LocalMediaRepository
 import com.music.bitchord.data.scrobbling.LastFM
 import com.music.bitchord.data.settings.AppSettings
+import com.music.bitchord.data.settings.LocalLibraryTab
 import com.music.bitchord.data.settings.SeekButtonMode
 import com.music.bitchord.data.settings.MAX_PLAYER_ARTWORK_BLUR_DP
 import com.music.bitchord.data.settings.MainNavigationTab
@@ -178,6 +179,7 @@ import com.music.bitchord.feature.localmusic.data.LocalPlaylistStore
 import com.music.bitchord.feature.localmusic.data.M3uImportException
 import com.music.bitchord.feature.localmusic.data.M3uImportFailure
 import com.music.bitchord.feature.localmusic.data.M3uPlaylistImporter
+import com.music.bitchord.feature.localmusic.data.CueSheetImporter
 import com.music.bitchord.feature.localmusic.data.PreparedM3uImport
 import com.music.bitchord.feature.localmusic.data.MusicoletBackupImporter
 import com.music.bitchord.feature.localmusic.data.MusicoletImportException
@@ -217,6 +219,7 @@ fun SettingsScreen(
     onLyricsSources: () -> Unit,
     onAppLanguage: () -> Unit,
     onPreloadArtworkNow: () -> Unit,
+    onPlayCueSheet: (List<com.music.bitchord.data.model.Song>) -> Unit,
     contentPadding: PaddingValues,
     modifier: Modifier = Modifier,
 ) {
@@ -261,6 +264,12 @@ fun SettingsScreen(
     val hideNavBarLabels by AppSettings.hideNavigationBarLabels.collectAsStateWithLifecycle()
     val visibleMainTabs by AppSettings.visibleMainNavigationTabs.collectAsStateWithLifecycle()
     val mainTabOrder by AppSettings.mainNavigationTabOrder.collectAsStateWithLifecycle()
+    val localTabs by AppSettings.visibleLocalLibraryTabs.collectAsStateWithLifecycle()
+    val localTabOrder by AppSettings.localLibraryTabOrder.collectAsStateWithLifecycle()
+    val localFolderHierarchy by AppSettings.localFolderHierarchy.collectAsStateWithLifecycle()
+    val fullScreenCollectionArtwork by AppSettings.fullScreenCollectionArtwork.collectAsStateWithLifecycle()
+    val artistsOpenAlbums by AppSettings.artistsOpenAlbums.collectAsStateWithLifecycle()
+    val shuffleArtistAlbums by AppSettings.shuffleArtistAlbums.collectAsStateWithLifecycle()
     val startupTab by AppSettings.startupTab.collectAsStateWithLifecycle()
     val quickActions by AppSettings.playerQuickActions.collectAsStateWithLifecycle()
     val hiddenPlayerDetailsActions by AppSettings.hiddenPlayerDetailsActions.collectAsStateWithLifecycle()
@@ -669,6 +678,26 @@ fun SettingsScreen(
                     )
                 }
                 Toast.makeText(context, message, Toast.LENGTH_LONG).show()
+            }
+        }
+    }
+    val cuePicker = rememberLauncherForActivityResult(
+        ActivityResultContracts.OpenDocument(),
+    ) { source ->
+        if (source == null) return@rememberLauncherForActivityResult
+        backupScope.launch {
+            runCatching {
+                val availableSongs = LocalMediaRepository.getLocalMusic(context)
+                CueSheetImporter.prepare(context, source, availableSongs)
+            }.onSuccess { prepared ->
+                onPlayCueSheet(prepared.songs)
+                Toast.makeText(
+                    context,
+                    context.getString(R.string.cue_play_result, prepared.songs.size, prepared.skippedCount),
+                    Toast.LENGTH_LONG,
+                ).show()
+            }.onFailure {
+                Toast.makeText(context, R.string.cue_play_failed, Toast.LENGTH_LONG).show()
             }
         }
     }
@@ -2200,6 +2229,104 @@ fun SettingsScreen(
                 onClick = { showManageFoldersSheet = true },
             )
             RowDivider()
+            SettingsRow(
+                icon = Icons.Rounded.Tune,
+                title = stringResource(R.string.local_library_tabs),
+                subtitle = stringResource(R.string.local_library_tabs_subtitle),
+            )
+            localTabOrder.forEachIndexed { index, tab ->
+                if (index > 0) RowDivider()
+                val titleRes = when (tab) {
+                    LocalLibraryTab.SONGS -> R.string.songs
+                    LocalLibraryTab.ALBUMS -> R.string.albums
+                    LocalLibraryTab.ARTISTS -> R.string.artists
+                    LocalLibraryTab.FOLDERS -> R.string.folders
+                    LocalLibraryTab.PLAYLISTS -> R.string.playlists
+                    LocalLibraryTab.ALBUM_ARTISTS -> R.string.album_artists
+                }
+                val tabIcon = when (tab) {
+                    LocalLibraryTab.SONGS -> Icons.Rounded.MusicNote
+                    LocalLibraryTab.ALBUMS -> Icons.Rounded.Album
+                    LocalLibraryTab.ARTISTS, LocalLibraryTab.ALBUM_ARTISTS -> Icons.Rounded.Person
+                    LocalLibraryTab.FOLDERS -> Icons.Rounded.Folder
+                    LocalLibraryTab.PLAYLISTS -> Icons.Rounded.PlaylistPlay
+                }
+                val visible = tab in localTabs
+                SettingsRow(
+                    icon = tabIcon,
+                    title = stringResource(titleRes),
+                    subtitle = stringResource(R.string.navigation_tab_order_subtitle),
+                    enabled = visible || localTabs.size > 1,
+                    trailing = {
+                        Row(verticalAlignment = Alignment.CenterVertically) {
+                            IconButton(
+                                enabled = index > 0,
+                                onClick = { AppSettings.moveLocalLibraryTab(tab, -1) },
+                            ) {
+                                Icon(Icons.Rounded.ArrowUpward, stringResource(R.string.move_up),
+                                    tint = if (index > 0) MaterialTheme.colorScheme.onSurfaceVariant else MaterialTheme.colorScheme.outlineVariant)
+                            }
+                            IconButton(
+                                enabled = index < localTabOrder.lastIndex,
+                                onClick = { AppSettings.moveLocalLibraryTab(tab, 1) },
+                            ) {
+                                Icon(Icons.Rounded.ArrowDownward, stringResource(R.string.move_down),
+                                    tint = if (index < localTabOrder.lastIndex) MaterialTheme.colorScheme.onSurfaceVariant else MaterialTheme.colorScheme.outlineVariant)
+                            }
+                            Switch(
+                                checked = visible,
+                                enabled = visible || localTabs.size > 1,
+                                onCheckedChange = { AppSettings.setLocalLibraryTabVisible(tab, it) },
+                                colors = SwitchDefaults.colors(
+                                    checkedTrackColor = MaterialTheme.colorScheme.primary,
+                                    checkedBorderColor = MaterialTheme.colorScheme.primary,
+                                ),
+                            )
+                        }
+                    },
+                )
+            }
+            RowDivider()
+            SettingsRow(
+                icon = Icons.Rounded.Folder,
+                title = stringResource(R.string.local_folder_hierarchy),
+                subtitle = stringResource(R.string.local_folder_hierarchy_subtitle),
+                trailing = {
+                    Switch(checked = localFolderHierarchy, onCheckedChange = AppSettings::setLocalFolderHierarchy)
+                },
+                onClick = { AppSettings.setLocalFolderHierarchy(!localFolderHierarchy) },
+            )
+            RowDivider()
+            SettingsRow(
+                icon = Icons.Rounded.Album,
+                title = stringResource(R.string.full_screen_collection_artwork),
+                subtitle = stringResource(R.string.full_screen_collection_artwork_subtitle),
+                trailing = {
+                    Switch(checked = fullScreenCollectionArtwork, onCheckedChange = AppSettings::setFullScreenCollectionArtwork)
+                },
+                onClick = { AppSettings.setFullScreenCollectionArtwork(!fullScreenCollectionArtwork) },
+            )
+            RowDivider()
+            SettingsRow(
+                icon = Icons.Rounded.Person,
+                title = stringResource(R.string.artists_open_albums),
+                subtitle = stringResource(R.string.artists_open_albums_subtitle),
+                trailing = {
+                    Switch(checked = artistsOpenAlbums, onCheckedChange = AppSettings::setArtistsOpenAlbums)
+                },
+                onClick = { AppSettings.setArtistsOpenAlbums(!artistsOpenAlbums) },
+            )
+            RowDivider()
+            SettingsRow(
+                icon = Icons.Rounded.Album,
+                title = stringResource(R.string.shuffle_artist_albums),
+                subtitle = stringResource(R.string.shuffle_artist_albums_subtitle),
+                trailing = {
+                    Switch(checked = shuffleArtistAlbums, onCheckedChange = AppSettings::setShuffleArtistAlbums)
+                },
+                onClick = { AppSettings.setShuffleArtistAlbums(!shuffleArtistAlbums) },
+            )
+            RowDivider()
             if (android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.R) {
                 SettingsRow(
                     icon = Icons.Rounded.FolderSpecial,
@@ -2296,6 +2423,15 @@ fun SettingsScreen(
                             "*/*",
                         ),
                     )
+                },
+            )
+            RowDivider()
+            SettingsRow(
+                icon = Icons.Rounded.PlayArrow,
+                title = stringResource(R.string.play_cue_sheet),
+                subtitle = stringResource(R.string.play_cue_sheet_subtitle),
+                onClick = {
+                    cuePicker.launch(arrayOf("application/x-cue", "text/plain", "application/octet-stream", "*/*"))
                 },
             )
             RowDivider()

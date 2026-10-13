@@ -42,6 +42,7 @@ import androidx.compose.ui.res.stringResource
 import com.music.bitchord.R
 import coil3.compose.AsyncImage
 import com.music.bitchord.feature.localmusic.domain.model.LocalPlaylist
+import com.music.bitchord.data.model.Song
 
 /**
  * Item row rendering a user-created local offline playlist.
@@ -60,9 +61,11 @@ fun LocalPlaylistItem(
     canMoveDown: Boolean = false,
     onMoveUp: () -> Unit = {},
     onMoveDown: () -> Unit = {},
+    librarySongs: List<Song> = emptyList(),
     modifier: Modifier = Modifier,
 ) {
     var menuOpen by remember { mutableStateOf(false) }
+    val exportM3u = rememberM3uExportAction(playlist, librarySongs)
 
     Surface(
         modifier = modifier
@@ -157,6 +160,13 @@ fun LocalPlaylistItem(
                             },
                         )
                     }
+                    DropdownMenuItem(
+                        text = { Text(stringResource(R.string.export_m3u)) },
+                        onClick = {
+                            menuOpen = false
+                            exportM3u()
+                        },
+                    )
                     DropdownMenuItem(
                         text = { Text(stringResource(R.string.move_playlist_up)) },
                         enabled = canMoveUp,

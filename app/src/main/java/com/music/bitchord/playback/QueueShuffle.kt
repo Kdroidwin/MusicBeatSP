@@ -46,6 +46,7 @@ object QueueShuffle {
     }
     /** Media ids in their pre-shuffle order. Empty while shuffle is off. */
     private var original: List<String> = emptyList()
+    private var preserveNextQueueOrder = false
 
     fun toggle(player: Player) {
         if (_enabled.value) restore(player) else shuffle(player)
@@ -58,8 +59,9 @@ object QueueShuffle {
      * button on an album or playlist page, where the queue it applies to is the
      * one about to replace this one. [playSongs] builds that one shuffled.
      */
-    fun enableForNextQueue() {
+    fun enableForNextQueue(preserveOrder: Boolean = false) {
         original = emptyList()
+        preserveNextQueueOrder = preserveOrder
         _enabled.value = true
         AppSettings.setShuffleEnabled(true)
     }
@@ -71,6 +73,10 @@ object QueueShuffle {
      */
     fun startingOrder(songs: List<Song>, startIndex: Int): List<Song> {
         original = songs.map { it.videoId }
+        if (preserveNextQueueOrder) {
+            preserveNextQueueOrder = false
+            return songs
+        }
         val rest = songs.filterIndexed { i, _ -> i != startIndex }.shuffled()
         return listOf(songs[startIndex]) + rest
     }

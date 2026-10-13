@@ -72,6 +72,7 @@ import androidx.compose.ui.unit.dp
 import coil3.compose.AsyncImage
 import com.music.bitchord.R
 import com.music.bitchord.data.model.CARD_ART_PX
+import com.music.bitchord.data.model.PLAYER_ART_PX
 import com.music.bitchord.data.model.Song
 import com.music.bitchord.data.model.artworkAt
 import com.music.bitchord.data.model.isSameTrackAs
@@ -412,6 +413,7 @@ fun DrillDownSongList(
     onMore: (() -> Unit)? = null,
     isPlaylist: Boolean = false,
     showArtworkInList: Boolean = false,
+    fullScreenArtwork: Boolean = false,
     reorderEnabled: Boolean = false,
     onReorderToggle: (() -> Unit)? = null,
     onReorderComplete: ((List<Song>) -> Unit)? = null,
@@ -423,6 +425,7 @@ fun DrillDownSongList(
     if (viewType == LibraryViewType.GRID) {
         val gridState = rememberLazyGridState()
         Box(modifier = modifier.fillMaxSize()) {
+            if (fullScreenArtwork) CollectionArtworkBackdrop(artworkUrl, songs)
             LazyVerticalGrid(
                 columns = GridCells.Adaptive(minSize = 140.dp),
                 state = gridState,
@@ -515,6 +518,7 @@ fun DrillDownSongList(
             insertionIndex + anchorOrder
         }
         Box(modifier = modifier.fillMaxSize()) {
+            if (fullScreenArtwork) CollectionArtworkBackdrop(artworkUrl, songs)
             LazyColumn(
                 state = listState,
                 modifier = Modifier.fillMaxSize(),
@@ -659,6 +663,36 @@ fun DrillDownSongList(
                 contentPadding = contentPadding,
             )
         }
+    }
+}
+
+@Composable
+private fun CollectionArtworkBackdrop(artworkUrl: String?, songs: List<Song>) {
+    val artwork = remember(artworkUrl, songs) {
+        (artworkUrl ?: songs.firstNotNullOfOrNull { it.thumbnailUrl })?.artworkAt(PLAYER_ART_PX)
+    }
+    Box(Modifier.fillMaxSize()) {
+        if (!artwork.isNullOrBlank()) {
+            AsyncImage(
+                model = artwork,
+                contentDescription = null,
+                contentScale = ContentScale.Crop,
+                modifier = Modifier.fillMaxSize().graphicsLayer { alpha = 0.30f },
+            )
+        }
+        Box(
+            Modifier
+                .fillMaxSize()
+                .background(
+                    Brush.verticalGradient(
+                        listOf(
+                            MaterialTheme.colorScheme.background.copy(alpha = 0.70f),
+                            MaterialTheme.colorScheme.background.copy(alpha = 0.84f),
+                            MaterialTheme.colorScheme.background.copy(alpha = 0.92f),
+                        ),
+                    ),
+                ),
+        )
     }
 }
 

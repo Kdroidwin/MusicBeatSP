@@ -176,6 +176,7 @@ fun LibraryScreen(
     val libraryViewType by AppSettings.libraryPlaylistsViewType.collectAsStateWithLifecycle()
     val songsViewType by AppSettings.librarySongsViewType.collectAsStateWithLifecycle()
     val showPlaylistSongArtwork by AppSettings.showPlaylistSongArtwork.collectAsStateWithLifecycle()
+    val fullScreenCollectionArtwork by AppSettings.fullScreenCollectionArtwork.collectAsStateWithLifecycle()
     val playStatsRevision by LocalPlayStatsStore.revision.collectAsStateWithLifecycle()
     var recentlyPlayedSongs by remember { mutableStateOf<List<Song>>(emptyList()) }
     var mostPlayedSongs by remember { mutableStateOf<List<Song>>(emptyList()) }
@@ -426,6 +427,7 @@ fun LibraryScreen(
                     isArtist = false,
                     isPlaylist = drillDownPlaylistId != null,
                     showArtworkInList = showPlaylistSongArtwork,
+                    fullScreenArtwork = fullScreenCollectionArtwork,
                     viewType = songsViewType,
                     onViewTypeToggle = {
                         playlistReorderEnabled = false
@@ -541,6 +543,7 @@ fun LibraryScreen(
                             label = stringResource(if (isRecent) R.string.recently_played else R.string.most_played),
                             artworkUrl = null,
                             songs = historySongs,
+                            fullScreenArtwork = fullScreenCollectionArtwork,
                             viewType = songsViewType,
                             onViewTypeToggle = {
                                 val next = if (songsViewType == LibraryViewType.GRID) LibraryViewType.LIST else LibraryViewType.GRID
@@ -623,6 +626,7 @@ fun LibraryScreen(
                             onResetPlaylistCover = { LocalPlaylistStore.setPlaylistCover(it.id, null) },
                             onMovePlaylist = { playlist, offset -> LocalPlaylistStore.movePlaylist(playlist.id, offset) },
                             onCreatePlaylist = { showCreateDialog = true },
+                            librarySongs = songs,
                             contentPadding = PaddingValues(
                                 top = 0.dp,
                                 bottom = contentPadding.calculateBottomPadding(),
@@ -643,6 +647,7 @@ fun LibraryScreen(
                             onResetPlaylistCover = { LocalPlaylistStore.setPlaylistCover(it.id, null) },
                             onMovePlaylist = { playlist, offset -> LocalPlaylistStore.movePlaylist(playlist.id, offset) },
                             onCreatePlaylist = { showCreateDialog = true },
+                            librarySongs = songs,
                             contentPadding = PaddingValues(
                                 top = 0.dp,
                                 bottom = contentPadding.calculateBottomPadding(),

@@ -90,6 +90,11 @@ android {
             applicationId = "com.dev.musicbeat"
             resValue("string", "app_name", "MusicBeatSP Dev")
         }
+        create("noInternet") {
+            dimension = "distribution"
+            applicationId = "io.pockets.musicbestsp.nointernet"
+            resValue("string", "app_name", "MusicBeatSP Offline")
+        }
     }
 
     signingConfigs {

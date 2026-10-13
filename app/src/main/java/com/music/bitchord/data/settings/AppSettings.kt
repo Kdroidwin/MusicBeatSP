@@ -99,6 +99,9 @@ enum class SeekButtonMode {
     LONG_TRACKS_ONLY,
 }
 
+/** Destinations within the device-local music library. */
+enum class LocalLibraryTab { SONGS, ALBUMS, ARTISTS, FOLDERS, PLAYLISTS, ALBUM_ARTISTS }
+
 /**
  * What to keep when a track is saved to the device.
  *
@@ -720,6 +723,12 @@ object AppSettings {
     val localSongsViewType = MutableStateFlow(LibraryViewType.LIST)
     val localAlbumsViewType = MutableStateFlow(LibraryViewType.GRID)
     val localArtistsViewType = MutableStateFlow(LibraryViewType.GRID)
+    val visibleLocalLibraryTabs = MutableStateFlow(LocalLibraryTab.entries.toSet())
+    val localLibraryTabOrder = MutableStateFlow<List<LocalLibraryTab>>(LocalLibraryTab.entries.toList())
+    val localFolderHierarchy = MutableStateFlow(false)
+    val fullScreenCollectionArtwork = MutableStateFlow(false)
+    val artistsOpenAlbums = MutableStateFlow(false)
+    val shuffleArtistAlbums = MutableStateFlow(false)
     val localMusicViewType = MutableStateFlow(LibraryViewType.LIST)
     val downloadedSongsViewType = MutableStateFlow(LibraryViewType.LIST)
     val downloadedAlbumsViewType = MutableStateFlow(LibraryViewType.GRID)
@@ -1032,6 +1041,12 @@ object AppSettings {
         localSongsViewType.value = readLibraryViewType(KEY_LOCAL_SONGS_VIEW_TYPE, localMusicViewType.value)
         localAlbumsViewType.value = readLibraryViewType(KEY_LOCAL_ALBUMS_VIEW_TYPE, LibraryViewType.GRID)
         localArtistsViewType.value = readLibraryViewType(KEY_LOCAL_ARTISTS_VIEW_TYPE, LibraryViewType.GRID)
+        visibleLocalLibraryTabs.value = readVisibleLocalLibraryTabs()
+        localLibraryTabOrder.value = readLocalLibraryTabOrder()
+        localFolderHierarchy.value = prefs.getBoolean(KEY_LOCAL_FOLDER_HIERARCHY, false)
+        fullScreenCollectionArtwork.value = prefs.getBoolean(KEY_FULL_SCREEN_COLLECTION_ARTWORK, false)
+        artistsOpenAlbums.value = prefs.getBoolean(KEY_ARTISTS_OPEN_ALBUMS, false)
+        shuffleArtistAlbums.value = prefs.getBoolean(KEY_SHUFFLE_ARTIST_ALBUMS, false)
         downloadedMusicViewType.value = readLibraryViewType(KEY_DOWNLOADED_MUSIC_VIEW_TYPE, LibraryViewType.LIST)
         downloadedSongsViewType.value = readLibraryViewType(KEY_DOWNLOADED_SONGS_VIEW_TYPE, downloadedMusicViewType.value)
         downloadedAlbumsViewType.value = readLibraryViewType(KEY_DOWNLOADED_ALBUMS_VIEW_TYPE, LibraryViewType.GRID)
@@ -1324,6 +1339,21 @@ object AppSettings {
             ?: MainNavigationTab.SONGS
         return saved.takeIf { it in visibleMainNavigationTabs.value }
             ?: MainNavigationTabs.fallback(saved.index, visibleMainNavigationTabs.value, mainNavigationTabOrder.value)
+    }
+
+    private fun readVisibleLocalLibraryTabs(): Set<LocalLibraryTab> {
+        val stored = prefs.getStringSet(KEY_VISIBLE_LOCAL_LIBRARY_TABS, null)
+            ?.mapNotNull { name -> LocalLibraryTab.entries.firstOrNull { it.name == name } }
+            ?.toSet()
+        return stored?.takeIf { it.isNotEmpty() } ?: LocalLibraryTab.entries.toSet()
+    }
+
+    private fun readLocalLibraryTabOrder(): List<LocalLibraryTab> {
+        val stored = prefs.getString(KEY_LOCAL_LIBRARY_TAB_ORDER, null)
+            ?.split(',')
+            ?.mapNotNull { name -> LocalLibraryTab.entries.firstOrNull { it.name == name } }
+            .orEmpty()
+        return (stored + LocalLibraryTab.entries.filterNot { it in stored }).distinct()
     }
 
     fun setShowStatusBar(value: Boolean) {
@@ -2037,6 +2067,46 @@ object AppSettings {
         prefs.edit().putString(KEY_LOCAL_ARTISTS_VIEW_TYPE, value.name).apply()
     }
 
+    fun setLocalLibraryTabVisible(tab: LocalLibraryTab, visible: Boolean) {
+        val current = visibleLocalLibraryTabs.value
+        if (!visible && current.size <= 1) return
+        val updated = if (visible) current + tab else current - tab
+        if (updated == current) return
+        visibleLocalLibraryTabs.value = updated
+        prefs.edit().putStringSet(KEY_VISIBLE_LOCAL_LIBRARY_TABS, updated.map { it.name }.toSet()).apply()
+    }
+
+    fun moveLocalLibraryTab(tab: LocalLibraryTab, offset: Int) {
+        val current = localLibraryTabOrder.value
+        val from = current.indexOf(tab)
+        if (from < 0) return
+        val to = (from + offset).coerceIn(0, current.lastIndex)
+        if (from == to) return
+        val updated = current.toMutableList().apply { add(to, removeAt(from)) }
+        localLibraryTabOrder.value = updated
+        prefs.edit().putString(KEY_LOCAL_LIBRARY_TAB_ORDER, updated.joinToString(",") { it.name }).apply()
+    }
+
+    fun setLocalFolderHierarchy(value: Boolean) {
+        localFolderHierarchy.value = value
+        prefs.edit().putBoolean(KEY_LOCAL_FOLDER_HIERARCHY, value).apply()
+    }
+
+    fun setFullScreenCollectionArtwork(value: Boolean) {
+        fullScreenCollectionArtwork.value = value
+        prefs.edit().putBoolean(KEY_FULL_SCREEN_COLLECTION_ARTWORK, value).apply()
+    }
+
+    fun setArtistsOpenAlbums(value: Boolean) {
+        artistsOpenAlbums.value = value
+        prefs.edit().putBoolean(KEY_ARTISTS_OPEN_ALBUMS, value).apply()
+    }
+
+    fun setShuffleArtistAlbums(value: Boolean) {
+        shuffleArtistAlbums.value = value
+        prefs.edit().putBoolean(KEY_SHUFFLE_ARTIST_ALBUMS, value).apply()
+    }
+
     fun setLocalMusicViewType(value: LibraryViewType) {
         setLocalSongsViewType(value)
     }
@@ -2394,6 +2464,12 @@ object AppSettings {
     private const val KEY_DOWNLOADED_MUSIC_SORT = "downloaded_music_sort"
     private const val KEY_LOCAL_ARTIST_SORT = "local_artist_sort"
     private const val KEY_DOWNLOADED_ARTIST_SORT = "downloaded_artist_sort"
+    private const val KEY_VISIBLE_LOCAL_LIBRARY_TABS = "visible_local_library_tabs"
+    private const val KEY_LOCAL_LIBRARY_TAB_ORDER = "local_library_tab_order"
+    private const val KEY_LOCAL_FOLDER_HIERARCHY = "local_folder_hierarchy"
+    private const val KEY_FULL_SCREEN_COLLECTION_ARTWORK = "full_screen_collection_artwork"
+    private const val KEY_ARTISTS_OPEN_ALBUMS = "artists_open_albums"
+    private const val KEY_SHUFFLE_ARTIST_ALBUMS = "shuffle_artist_albums"
     private const val KEY_LIBRARY_SORT = "library_sort"
     private const val KEY_DETAIL_SONG_SORTS = "detail_song_sorts"
     private const val KEY_LOCAL_MUSIC_VIEW_TYPE = "local_music_view_type"

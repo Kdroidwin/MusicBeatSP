@@ -59,6 +59,13 @@ data class Song(
     /** MediaStore timestamps used only to sort device and downloaded libraries. */
     val localDateAddedSeconds: Long? = null,
     val localDateModifiedSeconds: Long? = null,
+    /** Album artist read from local audio tags; distinct from track artist. */
+    val albumArtist: String? = null,
+    /** MediaStore track number used to keep album order during artist shuffle. */
+    val trackNumber: Int? = null,
+    /** Start and end boundaries (milliseconds) for a track listed in a CUE sheet. */
+    val localStartMs: Long? = null,
+    val localEndMs: Long? = null,
     /**
      * What a non-YouTube source says it can serve this recording at, as one of
      * `LOSSLESS`, `HIGH` or `LOW` — null for every row that didn't come from

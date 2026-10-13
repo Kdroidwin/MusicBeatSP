@@ -19,6 +19,7 @@ import androidx.core.os.bundleOf
 import androidx.media3.common.MediaItem
 import androidx.media3.common.MediaMetadata
 import androidx.media3.common.Player
+import androidx.media3.common.C
 import androidx.media3.session.MediaController
 import androidx.media3.session.SessionCommand
 import androidx.media3.session.SessionToken
@@ -303,6 +304,10 @@ fun MediaItem.toSong() = Song(
     radioName = mediaMetadata.extras?.getString(EXTRA_RADIO_NAME),
     localUri = mediaMetadata.extras?.getString(EXTRA_LOCAL_URI),
     localPath = mediaMetadata.extras?.getString(EXTRA_LOCAL_PATH),
+    albumArtist = mediaMetadata.extras?.getString(EXTRA_ALBUM_ARTIST),
+    trackNumber = mediaMetadata.extras?.get(EXTRA_TRACK_NUMBER) as? Int,
+    localStartMs = mediaMetadata.extras?.get(EXTRA_LOCAL_START_MS) as? Long,
+    localEndMs = mediaMetadata.extras?.get(EXTRA_LOCAL_END_MS) as? Long,
     isExternalPreview = mediaMetadata.extras?.getBoolean(EXTRA_EXTERNAL_PREVIEW) == true,
 )
 
@@ -330,6 +335,10 @@ private const val EXTRA_RADIO_NAME = "bitchord.radioName"
  */
 private const val EXTRA_ARTIST_ID = "bitchord.artistId"
 private const val EXTRA_ALBUM_ID = "bitchord.albumId"
+private const val EXTRA_ALBUM_ARTIST = "bitchord.albumArtist"
+private const val EXTRA_TRACK_NUMBER = "bitchord.trackNumber"
+private const val EXTRA_LOCAL_START_MS = "bitchord.localStartMs"
+private const val EXTRA_LOCAL_END_MS = "bitchord.localEndMs"
 
 /** @see Song.setVideoId */
 private const val EXTRA_SET_VIDEO_ID = "bitchord.setVideoId"
@@ -490,9 +499,19 @@ fun Song.toMediaItem(): MediaItem {
         // reach.
         else -> "bitchord://watch?v=$videoId${matchQuery()}"
     }
+    val clipping = if (localStartMs != null && localStartMs >= 0L &&
+        (localEndMs == null || localEndMs > localStartMs)
+    ) {
+        MediaItem.ClippingConfiguration.Builder()
+            .setStartPositionMs(localStartMs)
+            .setEndPositionMs(localEndMs ?: C.TIME_END_OF_SOURCE)
+            .build()
+    } else null
+
     return MediaItem.Builder()
         .setMediaId(videoId)
         .setUri(resolvePlaybackUri(uriString, localPath))
+        .apply { clipping?.let(::setClippingConfiguration) }
     .setMediaMetadata(
         MediaMetadata.Builder()
             .setTitle(title)
@@ -549,6 +568,10 @@ fun Song.toMediaItem(): MediaItem {
                             EXTRA_RADIO_NAME to radioName,
                             EXTRA_LOCAL_URI to offlineUri,
                             EXTRA_LOCAL_PATH to localPath,
+                            EXTRA_ALBUM_ARTIST to albumArtist,
+                            EXTRA_TRACK_NUMBER to trackNumber,
+                            EXTRA_LOCAL_START_MS to localStartMs,
+                            EXTRA_LOCAL_END_MS to localEndMs,
                             EXTRA_DURATION to durationText,
                             EXTRA_ARTIST_ID to artistId,
                             EXTRA_ALBUM_ID to albumId,

@@ -44,15 +44,21 @@ object TtmlLyrics {
 
     fun parse(ttml: String): List<LyricLine> = runCatching {
         val factory = DocumentBuilderFactory.newInstance().apply {
-            // The document declares four namespaces and we address attributes
-            // by their qualified names (ttm:agent), so leave prefixes intact.
-            isNamespaceAware = false
-            // Lyrics arrive from a third-party host; refuse to resolve
-            // anything the document asks us to go and fetch.
+            isNamespaceAware = true
+            isXIncludeAware = false
+            isExpandEntityReferences = false
+            // Lyrics come from remote providers. Never allow external entity,
+            // schema, or DTD resolution while parsing a document.
             setFeature("http://apache.org/xml/features/disallow-doctype-decl", true)
+            runCatching { setFeature("http://xml.org/sax/features/external-general-entities", false) }
+            runCatching { setFeature("http://xml.org/sax/features/external-parameter-entities", false) }
+            runCatching { setAttribute("http://javax.xml.XMLConstants/property/accessExternalDTD", "") }
+            runCatching { setAttribute("http://javax.xml.XMLConstants/property/accessExternalSchema", "") }
         }
         val document = factory.newDocumentBuilder().parse(InputSource(StringReader(ttml)))
-        val paragraphs = document.getElementsByTagName("p")
+        val paragraphs = document.getElementsByTagNameNS("*", "p").let { namespaced ->
+            if (namespaced.length > 0) namespaced else document.getElementsByTagName("p")
+        }
 
         val lines = ArrayList<LyricLine>(paragraphs.length)
         for (i in 0 until paragraphs.length) {
@@ -81,18 +87,18 @@ object TtmlLyrics {
             // there is nothing here to hang underneath — the bracket in the
             // text is all the separation the document gave.
             val text = paragraph.textContent?.trim().orEmpty()
-            val begin = time(paragraph.getAttribute("begin")) ?: return null
+            val begin = time(attribute(paragraph, "begin")) ?: return null
             if (text.isEmpty()) return null
             // The paragraph's own end is the only thing that says when the
             // singing stops, so carry it — a break can't be found without it.
-            val end = time(paragraph.getAttribute("end"))?.takeIf { it > begin }
+            val end = time(attribute(paragraph, "end"))?.takeIf { it > begin }
             return LyricLine(timeMs = begin, text = text, sungUntilMs = end)
         }
 
         // Prefer the paragraph's own stamp: Apple sets it a hair before the
         // first syllable on lines that open with a soft consonant, and that
         // lead-in is when the line should appear.
-        val begin = time(paragraph.getAttribute("begin")) ?: words.first().startMs
+        val begin = time(attribute(paragraph, "begin")) ?: words.first().startMs
         return LyricLine(
             timeMs = minOf(begin, words.first().startMs),
             text = words.joinToString(" ") { it.text },
@@ -115,14 +121,14 @@ object TtmlLyrics {
         for (i in 0 until children.length) {
             when (val child = children.item(i)) {
                 is Element -> {
-                    val role = child.getAttribute("ttm:role")
+                    val role = attribute(child, "role")
                     if (role in SKIPPED_ROLES) continue
                     // Inside a backing span every leaf is backing, so the sink
                     // switches for the whole of that subtree — whether the
                     // span holds its own syllables or is a single timed leaf.
                     val sink = if (role == BACKGROUND_ROLE) backing else out
-                    val begin = time(child.getAttribute("begin"))
-                    val end = time(child.getAttribute("end"))
+                    val begin = time(attribute(child, "begin"))
+                    val end = time(attribute(child, "end"))
                     if (begin != null && end != null && !hasTimedChild(child)) {
                         sink += Piece.Timed(child.textContent.orEmpty(), begin, end)
                     } else {
@@ -141,9 +147,23 @@ object TtmlLyrics {
         val children = element.childNodes
         for (i in 0 until children.length) {
             val child = children.item(i) as? Element ?: continue
-            if (child.getAttribute("begin").isNotEmpty() || hasTimedChild(child)) return true
+            if (attribute(child, "begin").isNotEmpty() || hasTimedChild(child)) return true
         }
         return false
+    }
+
+    private fun attribute(element: Element, name: String): String {
+        element.getAttributeNS("http://www.w3.org/ns/ttml#metadata", name)
+            .takeIf(String::isNotEmpty)?.let { return it }
+        element.getAttribute(name).takeIf(String::isNotEmpty)?.let { return it }
+        val attributes = element.attributes
+        for (index in 0 until attributes.length) {
+            val attribute = attributes.item(index)
+            if ((attribute.localName ?: attribute.nodeName.substringAfter(':')) == name) {
+                return attribute.nodeValue.orEmpty()
+            }
+        }
+        return ""
     }
 
     /**

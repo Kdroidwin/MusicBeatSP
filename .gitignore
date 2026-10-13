@@ -38,3 +38,4 @@ keystore.properties
 .shots/
 .tmp_verify/
 .debug/
+linux-desktop/dist/

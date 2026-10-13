@@ -29,6 +29,7 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.unit.dp
 import com.music.bitchord.feature.localmusic.domain.model.LocalPlaylist
+import com.music.bitchord.data.model.Song
 
 /**
  * Tab content rendering user-created local offline playlists.
@@ -44,6 +45,7 @@ fun LocalPlaylistsTab(
     onChangePlaylistCover: (LocalPlaylist) -> Unit = {},
     onResetPlaylistCover: (LocalPlaylist) -> Unit = {},
     onMovePlaylist: (LocalPlaylist, Int) -> Unit,
+    librarySongs: List<Song> = emptyList(),
     contentPadding: PaddingValues,
     modifier: Modifier = Modifier,
 ) {
@@ -143,6 +145,7 @@ fun LocalPlaylistsTab(
                 canMoveDown = index < playlists.lastIndex,
                 onMoveUp = { onMovePlaylist(playlist, -1) },
                 onMoveDown = { onMovePlaylist(playlist, 1) },
+                librarySongs = librarySongs,
             )
         }
     }

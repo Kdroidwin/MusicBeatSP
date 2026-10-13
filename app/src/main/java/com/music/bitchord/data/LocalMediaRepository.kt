@@ -134,15 +134,16 @@ object LocalMediaRepository {
 
         runCatching {
             if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
-                val projection = arrayOf(
-                    MediaStore.Audio.Media._ID,
-                    MediaStore.Audio.Media.DISPLAY_NAME,
-                    MediaStore.Audio.Media.RELATIVE_PATH,
-                    MediaStore.Audio.Media.ALBUM,
-                    MediaStore.Audio.Media.ALBUM_ID,
-                    MediaStore.Audio.Media.DATE_ADDED,
-                    MediaStore.Audio.Media.DATE_MODIFIED,
-                )
+                val projection = buildList {
+                    add(MediaStore.Audio.Media._ID)
+                    add(MediaStore.Audio.Media.DISPLAY_NAME)
+                    add(MediaStore.Audio.Media.RELATIVE_PATH)
+                    add(MediaStore.Audio.Media.ALBUM)
+                    if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) add("album_artist")
+                    add(MediaStore.Audio.Media.ALBUM_ID)
+                    add(MediaStore.Audio.Media.DATE_ADDED)
+                    add(MediaStore.Audio.Media.DATE_MODIFIED)
+                }.toTypedArray()
                 val selection = "${MediaStore.MediaColumns.RELATIVE_PATH} LIKE ?"
                 val selectionArgs = arrayOf("%${DownloadStore.FOLDER}%")
 
@@ -156,6 +157,7 @@ object LocalMediaRepository {
                     val idCol = cursor.getColumnIndexOrThrow(MediaStore.Audio.Media._ID)
                     val nameCol = cursor.getColumnIndexOrThrow(MediaStore.Audio.Media.DISPLAY_NAME)
                     val albumCol = cursor.getColumnIndexOrThrow(MediaStore.Audio.Media.ALBUM)
+                    val albumArtistCol = cursor.getColumnIndex("album_artist")
                     val albumIdCol = cursor.getColumnIndexOrThrow(MediaStore.Audio.Media.ALBUM_ID)
                     val dateAddedCol = cursor.getColumnIndexOrThrow(MediaStore.Audio.Media.DATE_ADDED)
                     val dateModifiedCol = cursor.getColumnIndexOrThrow(MediaStore.Audio.Media.DATE_MODIFIED)
@@ -176,6 +178,9 @@ object LocalMediaRepository {
                             .toString()
                         val tags = ScannedTags(
                             albumName = cursor.getString(albumCol).cleanTag(),
+                            albumArtist = albumArtistCol.takeIf { it >= 0 }
+                                ?.let(cursor::getString)
+                                .cleanTag(),
                             artworkUrl = trackArtworkUri,
                             dateAddedSeconds = cursor.getLong(dateAddedCol),
                             dateModifiedSeconds = dateModified,
@@ -219,6 +224,7 @@ object LocalMediaRepository {
             val tags = scanned[uri] ?: return@map song
             song.copy(
                 albumName = song.albumName ?: tags.albumName,
+                albumArtist = song.albumArtist ?: tags.albumArtist,
                 localDateAddedSeconds = tags.dateAddedSeconds,
                 localDateModifiedSeconds = tags.dateModifiedSeconds,
             )
@@ -236,6 +242,7 @@ object LocalMediaRepository {
         val artworkUrl: String?,
         val dateAddedSeconds: Long?,
         val dateModifiedSeconds: Long?,
+        val albumArtist: String? = null,
     )
 
     /** What MediaStore writes into a column it has nothing for. */
@@ -259,18 +266,23 @@ object LocalMediaRepository {
         // for — a content URI fails its id check on purpose, since most rows
         // here really are just local files with nothing to sync.
         val videoIdByUri = Downloads.saved.value.entries.associate { (id, uri) -> uri to id }
-        val projection = arrayOf(
-            MediaStore.Audio.Media._ID,
-            MediaStore.Audio.Media.DISPLAY_NAME,
-            MediaStore.Audio.Media.TITLE,
-            MediaStore.Audio.Media.ARTIST,
-            MediaStore.Audio.Media.ALBUM,
-            MediaStore.Audio.Media.ALBUM_ID,
-            MediaStore.Audio.Media.DURATION,
-            MediaStore.Audio.Media.DATA,
-            MediaStore.Audio.Media.DATE_ADDED,
-            MediaStore.Audio.Media.DATE_MODIFIED,
-        )
+        val projection = buildList {
+            add(MediaStore.Audio.Media._ID)
+            add(MediaStore.Audio.Media.DISPLAY_NAME)
+            add(MediaStore.Audio.Media.TITLE)
+            add(MediaStore.Audio.Media.ARTIST)
+            // MediaStore exposed ALBUM_ARTIST on newer Android releases. Do
+            // not request the column on older versions: one unsupported
+            // projection would otherwise make the whole local scan fail.
+            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) add("album_artist")
+            add(MediaStore.Audio.Media.ALBUM)
+            add(MediaStore.Audio.Media.TRACK)
+            add(MediaStore.Audio.Media.ALBUM_ID)
+            add(MediaStore.Audio.Media.DURATION)
+            add(MediaStore.Audio.Media.DATA)
+            add(MediaStore.Audio.Media.DATE_ADDED)
+            add(MediaStore.Audio.Media.DATE_MODIFIED)
+        }.toTypedArray()
 
         val filterNonMusic = AppSettings.filterNonMusicAudio.value
         val selection = if (filterNonMusic) {
@@ -306,7 +318,9 @@ object LocalMediaRepository {
                 val displayNameCol = cursor.getColumnIndexOrThrow(MediaStore.Audio.Media.DISPLAY_NAME)
                 val titleCol = cursor.getColumnIndexOrThrow(MediaStore.Audio.Media.TITLE)
                 val artistCol = cursor.getColumnIndexOrThrow(MediaStore.Audio.Media.ARTIST)
+                val albumArtistCol = cursor.getColumnIndex("album_artist")
                 val albumCol = cursor.getColumnIndexOrThrow(MediaStore.Audio.Media.ALBUM)
+                val trackCol = cursor.getColumnIndexOrThrow(MediaStore.Audio.Media.TRACK)
                 val albumIdCol = cursor.getColumnIndexOrThrow(MediaStore.Audio.Media.ALBUM_ID)
                 val durationCol = cursor.getColumnIndexOrThrow(MediaStore.Audio.Media.DURATION)
                 val dataCol = cursor.getColumnIndexOrThrow(MediaStore.Audio.Media.DATA)
@@ -330,6 +344,9 @@ object LocalMediaRepository {
                         ?: displayName.substringBeforeLast('.').takeIf { it.isNotBlank() }
                         ?: "Track $id"
                     val artist = rawArtist.takeUnless { it.isNullOrBlank() || it == "<unknown>" } ?: "Unknown Artist"
+                    val albumArtist = albumArtistCol.takeIf { it >= 0 }
+                        ?.let(cursor::getString)
+                        .cleanTag()
                     val albumName = rawAlbum.takeUnless { it.isNullOrBlank() || it == "<unknown>" }
                     val dateModified = cursor.getLong(dateModifiedCol)
                     val artworkUrl = ContentUris.withAppendedId(MediaStore.Audio.Media.EXTERNAL_CONTENT_URI, id)
@@ -350,6 +367,8 @@ object LocalMediaRepository {
                             thumbnailUrl = artworkUrl,
                             durationText = durationText,
                             albumName = albumName,
+                            albumArtist = albumArtist,
+                            trackNumber = cursor.getInt(trackCol).takeIf { it > 0 },
                             localUri = contentUri,
                             localPath = path,
                             localDateAddedSeconds = cursor.getLong(dateAddedCol),

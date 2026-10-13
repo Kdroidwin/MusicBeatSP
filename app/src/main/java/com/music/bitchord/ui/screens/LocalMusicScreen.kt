@@ -138,6 +138,7 @@ import com.music.bitchord.data.model.isSameTrackAs
 import com.music.bitchord.data.settings.AppSettings
 import com.music.bitchord.data.settings.LibraryViewType
 import com.music.bitchord.data.settings.LocalMusicSort
+import com.music.bitchord.data.settings.LocalLibraryTab
 import com.music.bitchord.download.DownloadedCollection
 import com.music.bitchord.ui.components.MessageState
 import com.music.bitchord.ui.components.PAGE_GUTTER
@@ -167,6 +168,39 @@ const val LOCAL_TAB_ALBUMS = 1
 const val LOCAL_TAB_ARTISTS = 2
 const val LOCAL_TAB_FOLDERS = 3
 const val LOCAL_TAB_PLAYLISTS = 4
+const val LOCAL_TAB_ALBUM_ARTISTS = 5
+
+private fun shuffleAlbumGroupsKeepTrackOrder(songs: List<Song>): List<Song> {
+    val indexed = songs.withIndex()
+    val groups = indexed.groupBy { indexedSong ->
+        val song = indexedSong.value
+        val album = song.albumName?.trim()?.takeIf(String::isNotEmpty)
+        if (album == null) "single:${song.localUri ?: song.videoId}"
+        else "${song.albumArtist.orEmpty().trim().lowercase(Locale.ROOT)}\u0000${album.lowercase(Locale.ROOT)}"
+    }.values.shuffled()
+
+    fun fallbackOrder(song: Song): Long? {
+        song.trackNumber?.takeIf { it > 0 }?.let { return it.toLong() * 1_000_000L }
+        val name = song.localPath?.substringAfterLast('/')
+            ?: song.localUri?.substringAfterLast('/')
+            ?: song.title
+        val match = Regex("^\\s*(\\d+)(?:[-._ ](\\d+))?").find(name) ?: return null
+        val first = match.groupValues[1].toLongOrNull() ?: return null
+        val second = match.groupValues.getOrNull(2)?.toLongOrNull() ?: 0L
+        return first * 1_000_000L + second
+    }
+
+    return groups.flatMap { group ->
+        val numbered = group.map { it to fallbackOrder(it.value) }
+        if (numbered.any { it.second != null }) {
+            numbered.sortedWith(compareBy<Pair<IndexedValue<Song>, Long?>> { it.second ?: Long.MAX_VALUE }
+                .thenBy { it.first.index })
+                .map { it.first.value }
+        } else {
+            group.sortedBy { it.index }.map { it.value }
+        }
+    }
+}
 
 /**
  * Local Music folder view with three tabs: Songs (default), Artists, Albums.
@@ -189,6 +223,7 @@ fun LocalMusicScreen(
     onSongLongPress: (Song) -> Unit,
     onSongSwipe: (Song) -> Unit,
     onShuffle: (List<Song>) -> Unit,
+    onShuffleArtist: ((List<Song>) -> Unit)? = null,
     contentPadding: PaddingValues,
     /**
      * Shown in place of the tab content when there are no songs at all — the
@@ -252,9 +287,24 @@ fun LocalMusicScreen(
 
     // Which top-level tab is selected.
     var selectedTab by rememberSaveable { mutableIntStateOf(initialTab) }
+    val visibleLocalLibraryTabs by AppSettings.visibleLocalLibraryTabs.collectAsStateWithLifecycle()
+    val localLibraryTabOrder by AppSettings.localLibraryTabOrder.collectAsStateWithLifecycle()
+    val displayedLocalTabs = remember(visibleLocalLibraryTabs, localLibraryTabOrder, isDownloads) {
+        localLibraryTabOrder
+            .filter { it in visibleLocalLibraryTabs }
+            .filterNot { isDownloads && it in setOf(LocalLibraryTab.FOLDERS, LocalLibraryTab.PLAYLISTS) }
+            .map(LocalLibraryTab::ordinal)
+    }
 
     LaunchedEffect(initialTab) {
-        selectedTab = initialTab
+        selectedTab = initialTab.takeIf { it in displayedLocalTabs }
+            ?: displayedLocalTabs.firstOrNull()
+            ?: LOCAL_TAB_SONGS
+    }
+    LaunchedEffect(displayedLocalTabs) {
+        if (selectedTab !in displayedLocalTabs) {
+            selectedTab = displayedLocalTabs.firstOrNull() ?: LOCAL_TAB_SONGS
+        }
     }
 
     // Narrows whichever tab is showing — songs by title/artist/album, artists
@@ -284,6 +334,10 @@ fun LocalMusicScreen(
     } else {
         AppSettings.localArtistsViewType.collectAsStateWithLifecycle()
     }
+    val localFolderHierarchy by AppSettings.localFolderHierarchy.collectAsStateWithLifecycle()
+    val fullScreenCollectionArtwork by AppSettings.fullScreenCollectionArtwork.collectAsStateWithLifecycle()
+    val artistsOpenAlbums by AppSettings.artistsOpenAlbums.collectAsStateWithLifecycle()
+    val shuffleArtistAlbums by AppSettings.shuffleArtistAlbums.collectAsStateWithLifecycle()
     val drillDownViewType by if (isDownloads) {
         AppSettings.downloadedDrillDownSongsViewType.collectAsStateWithLifecycle()
     } else {
@@ -339,6 +393,11 @@ fun LocalMusicScreen(
     // album or playlist has one worth showing — a tag-derived grouping's
     // "artwork" is just whichever of its rows happened to be first.
     var drillDownArt by remember { mutableStateOf<String?>(null) }
+    var drillDownIsArtist by remember { mutableStateOf(false) }
+    var drillDownShowsAlbums by remember { mutableStateOf(false) }
+    var drillDownAlbumEntries by remember { mutableStateOf<List<AlbumEntry>?>(null) }
+    var parentArtistAlbums by remember { mutableStateOf<List<AlbumEntry>?>(null) }
+    var parentArtistLabel by remember { mutableStateOf<String?>(null) }
 
     val inDrillDown = drillDownLabel != null
 
@@ -346,21 +405,45 @@ fun LocalMusicScreen(
         drillDownLabel = null
         drillDownSongs = emptyList()
         drillDownArt = null
+        drillDownIsArtist = false
+        drillDownShowsAlbums = false
+        drillDownAlbumEntries = null
+        parentArtistAlbums = null
+        parentArtistLabel = null
         onDrillDownDismiss?.invoke()
     }
 
-    LaunchedEffect(initialDrillDownLabel, songs, selectedTab) {
+    val backFromDrillDown: () -> Unit = {
+        val parent = parentArtistAlbums
+        if (!drillDownShowsAlbums && parent != null) {
+            drillDownShowsAlbums = true
+            drillDownAlbumEntries = parent
+            drillDownSongs = parent.flatMap(AlbumEntry::songs)
+            drillDownLabel = parentArtistLabel
+            drillDownArt = null
+            parentArtistAlbums = null
+        } else {
+            leaveDrillDown()
+        }
+    }
+
+    LaunchedEffect(initialDrillDownLabel, songs, selectedTab, artistsOpenAlbums) {
         if (!initialDrillDownLabel.isNullOrBlank()) {
             val target = initialDrillDownLabel.trim()
             if (selectedTab == LOCAL_TAB_ARTISTS) {
                 drillDownLabel = target
                 drillDownSongs = songs.filter { ArtistSplitter.matchesArtist(it.artist, target) }
                 drillDownArt = null
+                drillDownIsArtist = true
+                drillDownAlbumEntries = albumEntries(drillDownSongs, emptyList())
+                drillDownShowsAlbums = artistsOpenAlbums
+                parentArtistLabel = target
             } else {
                 val matching = songs.filter { it.albumName?.trim().equals(target, ignoreCase = true) }
                 drillDownLabel = target
                 drillDownSongs = matching
                 drillDownArt = matching.firstNotNullOfOrNull { it.thumbnailUrl?.takeIf { url -> url.isNotBlank() } }
+                drillDownIsArtist = false
             }
         }
     }
@@ -390,6 +473,9 @@ fun LocalMusicScreen(
                     drillDownLabel = targetAlbum
                     drillDownSongs = songs.filter { it.albumName == targetAlbum }
                     drillDownArt = songs.find { it.albumName == targetAlbum }?.thumbnailUrl
+                    drillDownIsArtist = false
+                    drillDownShowsAlbums = false
+                    parentArtistAlbums = null
                 }
             } else null,
             onGoToArtist = if (song.artist.isNotBlank()) {
@@ -398,6 +484,11 @@ fun LocalMusicScreen(
                     drillDownLabel = targetArtist
                     drillDownSongs = songs.filter { s -> ArtistSplitter.matchesArtist(s.artist, targetArtist) }
                     drillDownArt = null
+                    drillDownIsArtist = true
+                    drillDownAlbumEntries = albumEntries(drillDownSongs, emptyList())
+                    drillDownShowsAlbums = artistsOpenAlbums
+                    parentArtistLabel = targetArtist
+                    parentArtistAlbums = null
                 }
             } else null,
             onGoToFolder = if (!song.localPath.isNullOrBlank()) {
@@ -431,7 +522,7 @@ fun LocalMusicScreen(
         selectedSongIds = emptySet()
         selectedAlbumKeys = emptySet()
     }
-    BackHandler(enabled = inDrillDown && !selectingSongs) { leaveDrillDown() }
+    BackHandler(enabled = inDrillDown && !selectingSongs) { backFromDrillDown() }
 
     // When tab row is showing, content scrolls beneath it. When tab row is hidden (bottom bar handles tabs),
     // content takes the full content padding including top bar padding.
@@ -477,66 +568,40 @@ fun LocalMusicScreen(
         }
 
         // ── Tab row ──────────────────────────────────────────────────────────
+        val selectedTabIndex = displayedLocalTabs.indexOf(selectedTab).coerceAtLeast(0)
         if (showTabRow) {
             ScrollableTabRow(
-                selectedTabIndex = selectedTab,
+                selectedTabIndex = selectedTabIndex,
                 containerColor = MaterialTheme.colorScheme.background,
                 contentColor = MaterialTheme.colorScheme.primary,
                 edgePadding = PAGE_GUTTER,
                 divider = {},
                 indicator = { tabPositions ->
-                    if (selectedTab < tabPositions.size) {
+                    if (selectedTabIndex in tabPositions.indices) {
                         TabRowDefaults.SecondaryIndicator(
-                            modifier = Modifier.tabIndicatorOffset(tabPositions[selectedTab]),
+                            modifier = Modifier.tabIndicatorOffset(tabPositions[selectedTabIndex]),
                             color = MaterialTheme.colorScheme.primary,
                         )
                     }
                 },
                 modifier = Modifier.padding(top = if (selectingSongs) 0.dp else barHeight + 4.dp),
             ) {
-                LocalTab(
-                    icon = Icons.Rounded.MusicNote,
-                    label = stringResource(R.string.songs),
-                    selected = selectedTab == LOCAL_TAB_SONGS,
-                    onClick = {
-                        selectedTab = LOCAL_TAB_SONGS
-                        leaveDrillDown()
-                    },
-                )
-                LocalTab(
-                    icon = Icons.Rounded.Album,
-                    label = stringResource(R.string.albums),
-                    selected = selectedTab == LOCAL_TAB_ALBUMS,
-                    onClick = {
-                        selectedTab = LOCAL_TAB_ALBUMS
-                        leaveDrillDown()
-                    },
-                )
-                LocalTab(
-                    icon = Icons.Rounded.Person,
-                    label = stringResource(R.string.artists),
-                    selected = selectedTab == LOCAL_TAB_ARTISTS,
-                    onClick = {
-                        selectedTab = LOCAL_TAB_ARTISTS
-                        leaveDrillDown()
-                    },
-                )
-                if (!isDownloads) {
+                displayedLocalTabs.forEach { tab ->
+                    val (icon, label) = when (tab) {
+                        LOCAL_TAB_SONGS -> Icons.Rounded.MusicNote to stringResource(R.string.songs)
+                        LOCAL_TAB_ALBUMS -> Icons.Rounded.Album to stringResource(R.string.albums)
+                        LOCAL_TAB_ARTISTS -> Icons.Rounded.Person to stringResource(R.string.artists)
+                        LOCAL_TAB_FOLDERS -> Icons.Rounded.Folder to stringResource(R.string.folders)
+                        LOCAL_TAB_PLAYLISTS -> Icons.AutoMirrored.Rounded.QueueMusic to stringResource(R.string.playlists)
+                        LOCAL_TAB_ALBUM_ARTISTS -> Icons.Rounded.Person to stringResource(R.string.album_artists)
+                        else -> Icons.Rounded.MusicNote to stringResource(R.string.songs)
+                    }
                     LocalTab(
-                        icon = Icons.Rounded.Folder,
-                        label = "Folders",
-                        selected = selectedTab == LOCAL_TAB_FOLDERS,
+                        icon = icon,
+                        label = label,
+                        selected = selectedTab == tab,
                         onClick = {
-                            selectedTab = LOCAL_TAB_FOLDERS
-                            leaveDrillDown()
-                        },
-                    )
-                    LocalTab(
-                        icon = Icons.AutoMirrored.Rounded.QueueMusic,
-                        label = "Playlists",
-                        selected = selectedTab == LOCAL_TAB_PLAYLISTS,
-                        onClick = {
-                            selectedTab = LOCAL_TAB_PLAYLISTS
+                            selectedTab = tab
                             leaveDrillDown()
                         },
                     )
@@ -611,43 +676,68 @@ fun LocalMusicScreen(
                     }
 
                 key.startsWith("drill:") -> {
-                    // Drill-down song list for artist / album
-                    val isArtist = (selectedTab == LOCAL_TAB_ARTISTS) ||
-                        (drillDownSongs.isNotEmpty() && drillDownArt == null &&
-                            drillDownSongs.all { s -> ArtistSplitter.matchesArtist(s.artist, drillDownLabel ?: "") })
-                    DrillDownSongList(
-                        label = drillDownLabel ?: "",
-                        artworkUrl = drillDownArt,
-                        songs = drillDownSongs,
-                        isArtist = isArtist,
-                        viewType = drillDownViewType,
-                        onViewTypeToggle = {
-                            val next = if (drillDownViewType == LibraryViewType.GRID) LibraryViewType.LIST else LibraryViewType.GRID
-                            if (isDownloads) AppSettings.setDownloadedDrillDownSongsViewType(next)
-                            else AppSettings.setLocalDrillDownSongsViewType(next)
-                        },
-                        selectedIds = selectedSongIds,
-                        currentSong = currentSong,
-                        isPlaying = isPlaying,
-                        onSongClick = { tracks, index ->
-                            val song = tracks[index]
-                            if (selectingSongs) toggleDownloadSelection(song) else onSongClick(tracks, index)
-                        },
-                        onSongLongPress = { song ->
-                            toggleDownloadSelection(song)
-                        },
-                        onSongMore = { song ->
-                            activeMenuSong = song
-                        },
-                        onSongSwipe = onSongSwipe,
-                        onShuffle = onShuffle,
-                        onMore = onCollectionLongPress?.let { more ->
-                            { more(drillDownLabel ?: "", drillDownSongs) }
-                        },
-                        onBack = leaveDrillDown,
-                        contentPadding = bodyContentPadding,
-                        songDropdownMenu = if (isDownloads) null else songDropdownMenu,
-                    )
+                    if (drillDownShowsAlbums) {
+                        val artistAlbums = drillDownAlbumEntries.orEmpty()
+                        AlbumsTab(
+                            albums = artistAlbums,
+                            viewType = albumsViewType,
+                            onViewTypeToggle = {
+                                val next = if (albumsViewType == LibraryViewType.GRID) LibraryViewType.LIST else LibraryViewType.GRID
+                                if (isDownloads) AppSettings.setDownloadedAlbumsViewType(next)
+                                else AppSettings.setLocalAlbumsViewType(next)
+                            },
+                            onAlbumClick = { entry ->
+                                parentArtistAlbums = artistAlbums
+                                parentArtistLabel = drillDownLabel
+                                drillDownLabel = entry.title
+                                drillDownSongs = entry.songs
+                                drillDownArt = entry.thumbnailUrl
+                                drillDownIsArtist = false
+                                drillDownShowsAlbums = false
+                            },
+                            onAlbumLongPress = { entry ->
+                                if (isDownloads) toggleAlbumSelection(entry)
+                                else onCollectionLongPress?.invoke(entry.title, entry.songs)
+                            },
+                            contentPadding = bodyContentPadding,
+                        )
+                    } else {
+                        DrillDownSongList(
+                            label = drillDownLabel ?: "",
+                            artworkUrl = drillDownArt,
+                            songs = drillDownSongs,
+                            isArtist = drillDownIsArtist,
+                            fullScreenArtwork = fullScreenCollectionArtwork,
+                            viewType = drillDownViewType,
+                            onViewTypeToggle = {
+                                val next = if (drillDownViewType == LibraryViewType.GRID) LibraryViewType.LIST else LibraryViewType.GRID
+                                if (isDownloads) AppSettings.setDownloadedDrillDownSongsViewType(next)
+                                else AppSettings.setLocalDrillDownSongsViewType(next)
+                            },
+                            selectedIds = selectedSongIds,
+                            currentSong = currentSong,
+                            isPlaying = isPlaying,
+                            onSongClick = { tracks, index ->
+                                val song = tracks[index]
+                                if (selectingSongs) toggleDownloadSelection(song) else onSongClick(tracks, index)
+                            },
+                            onSongLongPress = { song -> toggleDownloadSelection(song) },
+                            onSongMore = { song -> activeMenuSong = song },
+                            onSongSwipe = onSongSwipe,
+                            onShuffle = if (drillDownIsArtist && shuffleArtistAlbums) {
+                                { tracks ->
+                                    val ordered = shuffleAlbumGroupsKeepTrackOrder(tracks)
+                                    onShuffleArtist?.invoke(ordered) ?: onShuffle(ordered)
+                                }
+                            } else onShuffle,
+                            onMore = onCollectionLongPress?.let { more ->
+                                { more(drillDownLabel ?: "", drillDownSongs) }
+                            },
+                            onBack = backFromDrillDown,
+                            contentPadding = bodyContentPadding,
+                            songDropdownMenu = if (isDownloads) null else songDropdownMenu,
+                        )
+                    }
                 }
 
                 key == "tab:$LOCAL_TAB_SONGS" -> {
@@ -713,6 +803,64 @@ fun LocalMusicScreen(
                             drillDownLabel = artist
                             drillDownSongs = artistSongs
                             drillDownArt = null
+                            drillDownIsArtist = true
+                            val groupedAlbums = albumEntries(artistSongs, emptyList())
+                            drillDownAlbumEntries = groupedAlbums
+                            drillDownShowsAlbums = artistsOpenAlbums
+                            parentArtistAlbums = null
+                            parentArtistLabel = artist
+                        },
+                        onArtistLongPress = onCollectionLongPress,
+                        contentPadding = bodyContentPadding,
+                    )
+                }
+
+                key == "tab:$LOCAL_TAB_ALBUM_ARTISTS" -> {
+                    val albumArtists = remember(sortedSongs, artistSort) {
+                        val grouped = sortedSongs
+                            .filter { !it.albumArtist.isNullOrBlank() }
+                            .groupBy { it.albumArtist!!.trim().lowercase(Locale.ROOT) }
+                            .map { (_, tracks) ->
+                                val displayName = tracks.first().albumArtist!!.trim()
+                                ArtistEntry(
+                                    name = displayName,
+                                    songs = tracks,
+                                    thumbnailUrl = tracks.firstNotNullOfOrNull { it.thumbnailUrl },
+                                    key = "album-artist:${displayName.lowercase(Locale.ROOT)}",
+                                )
+                            }
+                        when (artistSort) {
+                            ArtistSort.MOST_SONGS -> grouped.sortedWith(
+                                compareByDescending<ArtistEntry> { it.songs.size }
+                                    .thenBy { it.name.lowercase(Locale.ROOT) }
+                            )
+                            ArtistSort.NAME_ASC -> grouped.sortedBy { it.name.lowercase(Locale.ROOT) }
+                            ArtistSort.NAME_DESC -> grouped.sortedByDescending { it.name.lowercase(Locale.ROOT) }
+                        }
+                    }
+                    ArtistsTab(
+                        artists = albumArtists,
+                        viewType = artistsViewType,
+                        onViewTypeToggle = {
+                            val next = if (artistsViewType == LibraryViewType.GRID) LibraryViewType.LIST else LibraryViewType.GRID
+                            if (isDownloads) AppSettings.setDownloadedArtistsViewType(next)
+                            else AppSettings.setLocalArtistsViewType(next)
+                        },
+                        artistSort = artistSort,
+                        onArtistSortChange = {
+                            if (isDownloads) AppSettings.setDownloadedArtistSort(it)
+                            else AppSettings.setLocalArtistSort(it)
+                        },
+                        onArtistClick = { artist, artistSongs ->
+                            drillDownLabel = artist
+                            drillDownSongs = artistSongs
+                            drillDownArt = null
+                            drillDownIsArtist = true
+                            val groupedAlbums = albumEntries(artistSongs, emptyList())
+                            drillDownAlbumEntries = groupedAlbums
+                            drillDownShowsAlbums = artistsOpenAlbums
+                            parentArtistAlbums = null
+                            parentArtistLabel = artist
                         },
                         onArtistLongPress = onCollectionLongPress,
                         contentPadding = bodyContentPadding,
@@ -770,6 +918,7 @@ fun LocalMusicScreen(
                         },
                         onOpenManageFolders = { showManageFoldersSheet = true },
                         contentPadding = bodyContentPadding,
+                        hierarchical = localFolderHierarchy,
                     )
                 }
 
@@ -791,6 +940,7 @@ fun LocalMusicScreen(
                         onChangePlaylistCover = { choosePlaylistCover(it.id) },
                         onResetPlaylistCover = { LocalPlaylistStore.setPlaylistCover(it.id, null) },
                         onMovePlaylist = { playlist, offset -> LocalPlaylistStore.movePlaylist(playlist.id, offset) },
+                        librarySongs = songs,
                         contentPadding = bodyContentPadding,
                     )
                 }

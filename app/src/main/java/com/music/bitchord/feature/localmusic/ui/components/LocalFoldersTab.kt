@@ -28,6 +28,7 @@ import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.remember
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.unit.dp
@@ -43,6 +44,7 @@ fun LocalFoldersTab(
     onToggleBlacklist: (String, Boolean) -> Unit,
     onOpenManageFolders: () -> Unit,
     contentPadding: PaddingValues,
+    hierarchical: Boolean = false,
     modifier: Modifier = Modifier,
 ) {
     if (folders.isEmpty()) {
@@ -71,6 +73,9 @@ fun LocalFoldersTab(
     }
 
     val listState = rememberLazyListState()
+    val displayFolders = remember(folders, hierarchical) {
+        if (hierarchical) folders.sortedBy { it.path.replace('\\', '/').lowercase() } else folders
+    }
     val scrollPadding = PaddingValues(
         start = 16.dp,
         end = 16.dp,
@@ -93,7 +98,7 @@ fun LocalFoldersTab(
                     verticalAlignment = Alignment.CenterVertically,
                 ) {
                     Text(
-                        text = "${folders.size} ${if (folders.size == 1) "Folder" else "Folders"}",
+                        text = "${displayFolders.size} ${if (displayFolders.size == 1) "Folder" else "Folders"}",
                         style = MaterialTheme.typography.titleMedium,
                         color = MaterialTheme.colorScheme.onSurfaceVariant,
                     )
@@ -113,9 +118,17 @@ fun LocalFoldersTab(
                 }
             }
 
-            items(folders, key = { it.path }) { folder ->
+            items(displayFolders, key = { it.path }) { folder ->
+                val depth = if (hierarchical) {
+                    displayFolders.count { ancestor ->
+                        val parent = ancestor.path.trimEnd('/', '\\')
+                        parent != folder.path.trimEnd('/', '\\') &&
+                            folder.path.replace('\\', '/').startsWith(parent.replace('\\', '/') + "/")
+                    }
+                } else 0
                 LocalFolderItem(
                     folder = folder,
+                    depth = depth,
                     onClick = { onFolderClick(folder) },
                     onToggleBlacklist = { isBlacklisted ->
                         onToggleBlacklist(folder.path, isBlacklisted)
@@ -125,8 +138,8 @@ fun LocalFoldersTab(
         }
         FastScroller(
             listState = listState,
-            itemCount = folders.size,
-            sectionNameForIndex = { index -> SectionIndexer.getSectionName(folders[index].name) },
+            itemCount = displayFolders.size,
+            sectionNameForIndex = { index -> SectionIndexer.getSectionName(displayFolders[index].name) },
             contentPadding = scrollPadding,
         )
     }

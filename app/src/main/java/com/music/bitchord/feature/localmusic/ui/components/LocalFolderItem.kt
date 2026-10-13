@@ -49,6 +49,7 @@ fun LocalFolderItem(
     folder: LocalFolder,
     onClick: () -> Unit,
     onToggleBlacklist: (Boolean) -> Unit,
+    depth: Int = 0,
     modifier: Modifier = Modifier,
 ) {
     var menuOpen by remember { mutableStateOf(false) }
@@ -56,6 +57,7 @@ fun LocalFolderItem(
     Surface(
         modifier = modifier
             .fillMaxWidth()
+            .padding(start = (depth.coerceAtMost(8) * 18).dp)
             .clip(RoundedCornerShape(16.dp))
             .combinedClickable(
                 onClick = onClick,

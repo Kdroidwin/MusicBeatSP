@@ -1910,6 +1910,7 @@ private fun BitChordApp(
                             onLyricsSources = { showLyricsSources = true },
                             onAppLanguage = { showAppLanguage = true },
                             onPreloadArtworkNow = { viewModel.preloadLocalArtwork() },
+                            onPlayCueSheet = { cueSongs -> play(cueSongs, 0) },
                             contentPadding = listPadding,
                         )
                     } else if (page != null && page.browseId.isDeviceFolder()) {
@@ -1980,6 +1981,10 @@ private fun BitChordApp(
                             onShuffle = { songs ->
                                 QueueShuffle.enableForNextQueue()
                                 play(songs, songs.indices.random())
+                            },
+                            onShuffleArtist = { songs ->
+                                QueueShuffle.enableForNextQueue(preserveOrder = true)
+                                play(songs, 0)
                             },
                             emptyMessage = (localState as? com.music.bitchord.data.model.UiState.Error)
                                 ?.message,
@@ -2437,6 +2442,7 @@ private fun BitChordApp(
                 // the very top, so the sheet's default 28.dp top corners would
                 // only cut two notches out of the artwork behind the status bar.
                 shape = RectangleShape,
+                sheetMaxWidth = Dp.Unspecified,
                 containerColor = Color.Transparent,
                 dragHandle = null,
                 contentWindowInsets = { WindowInsets(0, 0, 0, 0) },

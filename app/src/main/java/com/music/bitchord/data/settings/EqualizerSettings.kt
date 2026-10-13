@@ -6,6 +6,7 @@ import com.music.bitchord.playback.equalizer.EqualizerPreset
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.serialization.Serializable
+import org.json.JSONObject
 
 object EqualizerSettings {
     private const val PREF_FILE = "bitchord_equalizer_settings"
@@ -14,6 +15,8 @@ object EqualizerSettings {
     private const val KEY_BASS_BOOST = "eq_bass_boost"
     private const val KEY_VIRTUALIZER = "eq_virtualizer"
     private const val KEY_BAND_PREFIX = "eq_band_"
+    private const val KEY_ACTIVE_DEVICE = "eq_active_device"
+    private const val PROFILE_PREFIX = "eq_device_profile_"
 
     private lateinit var prefs: SharedPreferences
 
@@ -31,9 +34,13 @@ object EqualizerSettings {
 
     private val _virtualizerStrength = MutableStateFlow(0)
     val virtualizerStrength = _virtualizerStrength.asStateFlow()
+    private val _activeDeviceLabel = MutableStateFlow("This device")
+    val activeDeviceLabel = _activeDeviceLabel.asStateFlow()
+    private var activeDeviceKey = "default"
 
     fun init(context: Context) {
         prefs = context.getSharedPreferences(PREF_FILE, Context.MODE_PRIVATE)
+        activeDeviceKey = prefs.getString(KEY_ACTIVE_DEVICE, "default") ?: "default"
         readAll()
     }
 
@@ -52,13 +59,12 @@ object EqualizerSettings {
             levels[i] = saved
         }
         _bandLevels.value = levels
+        if (activeDeviceKey != "default") loadProfile(activeDeviceKey)
     }
 
     fun setEnabled(value: Boolean) {
         _enabled.value = value
-        if (this::prefs.isInitialized) {
-            prefs.edit().putBoolean(KEY_ENABLED, value).apply()
-        }
+        persistCurrentProfile()
     }
 
     fun selectPreset(id: Int) {
@@ -70,17 +76,9 @@ object EqualizerSettings {
                 newLevels[index] = level
             }
             _bandLevels.value = newLevels
-            if (this::prefs.isInitialized) {
-                val editor = prefs.edit().putInt(KEY_PRESET_ID, id)
-                newLevels.forEach { (band, level) ->
-                    editor.putInt("$KEY_BAND_PREFIX$band", level.toInt())
-                }
-                editor.apply()
-            }
+            persistCurrentProfile()
         } else {
-            if (this::prefs.isInitialized) {
-                prefs.edit().putInt(KEY_PRESET_ID, id).apply()
-            }
+            persistCurrentProfile()
         }
     }
 
@@ -90,34 +88,75 @@ object EqualizerSettings {
         _bandLevels.value = current
         _presetId.value = EqualizerPreset.CUSTOM_PRESET_ID
 
-        if (this::prefs.isInitialized) {
-            prefs.edit()
-                .putInt(KEY_PRESET_ID, EqualizerPreset.CUSTOM_PRESET_ID)
-                .putInt("$KEY_BAND_PREFIX$band", level.toInt())
-                .apply()
-        }
+        persistCurrentProfile()
     }
 
     fun setBassBoostStrength(strength: Int) {
         val clamped = strength.coerceIn(0, 1000)
         _bassBoostStrength.value = clamped
-        if (this::prefs.isInitialized) {
-            prefs.edit().putInt(KEY_BASS_BOOST, clamped).apply()
-        }
+        persistCurrentProfile()
     }
 
     fun setVirtualizerStrength(strength: Int) {
         val clamped = strength.coerceIn(0, 1000)
         _virtualizerStrength.value = clamped
-        if (this::prefs.isInitialized) {
-            prefs.edit().putInt(KEY_VIRTUALIZER, clamped).apply()
-        }
+        persistCurrentProfile()
     }
 
     fun reset() {
         selectPreset(0) // Flat
         setBassBoostStrength(0)
         setVirtualizerStrength(0)
+    }
+
+    /** Persist and activate an EQ profile for the routed output device. */
+    fun activateOutputProfile(deviceKey: String, label: String) {
+        if (!this::prefs.isInitialized) return
+        val key = deviceKey.takeIf { it.matches(Regex("[A-Za-z0-9_-]{1,64}")) } ?: "default"
+        _activeDeviceLabel.value = label.ifBlank { "This device" }
+        if (activeDeviceKey == key) return
+        persistCurrentProfile()
+        activeDeviceKey = key
+        prefs.edit().putString(KEY_ACTIVE_DEVICE, key).apply()
+        if (!loadProfile(key)) persistCurrentProfile()
+    }
+
+    private fun loadProfile(key: String): Boolean {
+        if (!this::prefs.isInitialized) return false
+        val raw = prefs.getString(PROFILE_PREFIX + key, null) ?: return false
+        val profile = runCatching { JSONObject(raw) }.getOrNull() ?: return false
+        _enabled.value = profile.optBoolean("enabled", false)
+        _presetId.value = profile.optInt("preset", 0)
+        _bassBoostStrength.value = profile.optInt("bass", 0).coerceIn(0, 1000)
+        _virtualizerStrength.value = profile.optInt("virtualizer", 0).coerceIn(0, 1000)
+        val bandsJson = profile.optJSONObject("bands")
+        _bandLevels.value = (0 until 5).associateWith { index ->
+            bandsJson?.optInt(index.toString(), 0)?.coerceIn(Short.MIN_VALUE.toInt(), Short.MAX_VALUE.toInt())?.toShort() ?: 0
+        }
+        return true
+    }
+
+    private fun persistCurrentProfile() {
+        if (!this::prefs.isInitialized) return
+        val levels = _bandLevels.value
+        val profileJson = JSONObject().apply {
+            put("enabled", _enabled.value)
+            put("preset", _presetId.value)
+            put("bass", _bassBoostStrength.value)
+            put("virtualizer", _virtualizerStrength.value)
+            put("bands", JSONObject().apply { levels.forEach { (band, level) -> put(band.toString(), level.toInt()) } })
+        }
+        prefs.edit()
+            // Keep the original keys as the migration source for profiles on
+            // a newly attached output and for older versions of the app.
+            .putBoolean(KEY_ENABLED, _enabled.value)
+            .putInt(KEY_PRESET_ID, _presetId.value)
+            .putInt(KEY_BASS_BOOST, _bassBoostStrength.value)
+            .putInt(KEY_VIRTUALIZER, _virtualizerStrength.value)
+            .also { editor -> levels.forEach { (band, level) -> editor.putInt("$KEY_BAND_PREFIX$band", level.toInt()) } }
+            .putString(KEY_ACTIVE_DEVICE, activeDeviceKey)
+            .putString(PROFILE_PREFIX + activeDeviceKey, profileJson.toString())
+            .apply()
     }
 
     fun exportBackup(): EqualizerBackup = EqualizerBackup(
@@ -137,13 +176,7 @@ object EqualizerSettings {
 
         if (backup.bandLevels.isNotEmpty()) {
             _bandLevels.value = backup.bandLevels
-            if (this::prefs.isInitialized) {
-                val editor = prefs.edit().putInt(KEY_PRESET_ID, backup.presetId)
-                backup.bandLevels.forEach { (band, level) ->
-                    editor.putInt("$KEY_BAND_PREFIX$band", level.toInt())
-                }
-                editor.apply()
-            }
+            persistCurrentProfile()
         } else {
             selectPreset(backup.presetId)
         }

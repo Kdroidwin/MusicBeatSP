@@ -55,6 +55,7 @@ fun EqualizerSheet(
     val bandLevels by EqualizerSettings.bandLevels.collectAsStateWithLifecycle()
     val bassBoostStrength by EqualizerSettings.bassBoostStrength.collectAsStateWithLifecycle()
     val virtualizerStrength by EqualizerSettings.virtualizerStrength.collectAsStateWithLifecycle()
+    val activeDeviceLabel by EqualizerSettings.activeDeviceLabel.collectAsStateWithLifecycle()
     val sessionId by AppSettings.audioSessionId.collectAsStateWithLifecycle()
     val replayGainEnabled by AppSettings.replayGainEnabled.collectAsStateWithLifecycle()
     val replayGainAlbumMode by AppSettings.replayGainAlbumMode.collectAsStateWithLifecycle()
@@ -129,6 +130,13 @@ fun EqualizerSheet(
                     )
                 }
             }
+
+            Text(
+                text = stringResource(R.string.equalizer_output_profile, activeDeviceLabel),
+                style = MaterialTheme.typography.bodySmall,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                modifier = Modifier.padding(horizontal = 20.dp, vertical = 4.dp),
+            )
 
             // Presets
             EqualizerPresetChips(

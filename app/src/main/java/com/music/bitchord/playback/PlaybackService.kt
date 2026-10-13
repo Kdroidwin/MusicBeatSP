@@ -10,6 +10,7 @@ import android.media.AudioFocusRequest
 import android.media.AudioManager
 import android.net.Uri
 import android.os.Bundle
+import android.os.Build
 import android.os.Handler
 import android.os.Looper
 import android.os.SystemClock
@@ -4016,12 +4017,58 @@ class PlaybackService : MediaLibraryService() {
         val usb = preferredUsbDevice()
         val preferred = usb.takeIf { AppSettings.preferUsbDac.value }
         eachPlayer { it.setPreferredAudioDevice(preferred) }
+        val routedDevice = currentOutputDevice(manager, preferred)
+        val outputProfileKey = routedDevice?.let { device ->
+            "out-${(device.type.toString() + ":" + device.productName.toString().lowercase()).hashCode().toUInt().toString(16)}"
+        } ?: "default"
+        com.music.bitchord.data.settings.EqualizerSettings.activateOutputProfile(
+            outputProfileKey,
+            routedDevice?.productName?.toString()?.takeIf(String::isNotBlank)
+                ?: routedDevice?.let { getString(outputTypeLabel(it.type)) }
+                ?: getString(R.string.equalizer_this_device),
+        )
         AudioOutputStatus.publish(
             manager = manager,
             requestedPcmMode = AppSettings.outputPcmMode.value,
             preferred = preferred,
             floatEnabled = shouldEnableFloatOutput(),
         )
+    }
+
+    private fun currentOutputDevice(manager: AudioManager, preferredUsb: AudioDeviceInfo?): AudioDeviceInfo? {
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
+            val attributes = android.media.AudioAttributes.Builder()
+                .setUsage(android.media.AudioAttributes.USAGE_MEDIA)
+                .setContentType(android.media.AudioAttributes.CONTENT_TYPE_MUSIC)
+                .build()
+            runCatching { manager.getAudioDevicesForAttributes(attributes).firstOrNull() }
+                .getOrNull()?.let { return it }
+        }
+        if (AppSettings.preferUsbDac.value) preferredUsb?.let { return it }
+        val outputs = manager.getDevices(AudioManager.GET_DEVICES_OUTPUTS)
+        return outputs.firstOrNull { it.type in setOf(
+            AudioDeviceInfo.TYPE_BLUETOOTH_A2DP,
+            AudioDeviceInfo.TYPE_BLE_HEADSET,
+            AudioDeviceInfo.TYPE_BLE_SPEAKER,
+            AudioDeviceInfo.TYPE_WIRED_HEADPHONES,
+            AudioDeviceInfo.TYPE_WIRED_HEADSET,
+            AudioDeviceInfo.TYPE_USB_DEVICE,
+            AudioDeviceInfo.TYPE_USB_HEADSET,
+        ) } ?: outputs.firstOrNull { it.type == AudioDeviceInfo.TYPE_BUILTIN_SPEAKER }
+            ?: outputs.firstOrNull()
+    }
+
+    private fun outputTypeLabel(type: Int): Int = when (type) {
+        AudioDeviceInfo.TYPE_BLUETOOTH_A2DP,
+        AudioDeviceInfo.TYPE_BLE_HEADSET,
+        AudioDeviceInfo.TYPE_BLE_SPEAKER -> R.string.equalizer_bluetooth_output
+        AudioDeviceInfo.TYPE_WIRED_HEADPHONES,
+        AudioDeviceInfo.TYPE_WIRED_HEADSET -> R.string.equalizer_wired_output
+        AudioDeviceInfo.TYPE_USB_DEVICE,
+        AudioDeviceInfo.TYPE_USB_HEADSET,
+        AudioDeviceInfo.TYPE_USB_ACCESSORY -> R.string.equalizer_usb_output
+        AudioDeviceInfo.TYPE_BUILTIN_SPEAKER -> R.string.equalizer_speaker_output
+        else -> R.string.equalizer_other_output
     }
 
     private fun requestOutputReconfiguration() {
