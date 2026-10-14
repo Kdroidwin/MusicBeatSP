@@ -4165,29 +4165,36 @@ class PlaybackService : MediaLibraryService() {
         }
         if (AppSettings.preferUsbDac.value) preferredUsb?.let { return it }
         val outputs = manager.getDevices(AudioManager.GET_DEVICES_OUTPUTS)
-        return outputs.firstOrNull { it.type in setOf(
-            AudioDeviceInfo.TYPE_BLUETOOTH_A2DP,
-            AudioDeviceInfo.TYPE_BLE_HEADSET,
-            AudioDeviceInfo.TYPE_BLE_SPEAKER,
-            AudioDeviceInfo.TYPE_WIRED_HEADPHONES,
-            AudioDeviceInfo.TYPE_WIRED_HEADSET,
-            AudioDeviceInfo.TYPE_USB_DEVICE,
-            AudioDeviceInfo.TYPE_USB_HEADSET,
-        ) } ?: outputs.firstOrNull { it.type == AudioDeviceInfo.TYPE_BUILTIN_SPEAKER }
+        val preferredTypes = buildSet {
+            add(AudioDeviceInfo.TYPE_BLUETOOTH_A2DP)
+            add(AudioDeviceInfo.TYPE_WIRED_HEADPHONES)
+            add(AudioDeviceInfo.TYPE_WIRED_HEADSET)
+            add(AudioDeviceInfo.TYPE_USB_DEVICE)
+            add(AudioDeviceInfo.TYPE_USB_HEADSET)
+            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) {
+                add(AudioDeviceInfo.TYPE_BLE_HEADSET)
+                add(AudioDeviceInfo.TYPE_BLE_SPEAKER)
+            }
+        }
+        return outputs.firstOrNull { it.type in preferredTypes } ?: outputs.firstOrNull { it.type == AudioDeviceInfo.TYPE_BUILTIN_SPEAKER }
             ?: outputs.firstOrNull()
     }
 
-    private fun outputTypeLabel(type: Int): Int = when (type) {
-        AudioDeviceInfo.TYPE_BLUETOOTH_A2DP,
-        AudioDeviceInfo.TYPE_BLE_HEADSET,
-        AudioDeviceInfo.TYPE_BLE_SPEAKER -> R.string.equalizer_bluetooth_output
-        AudioDeviceInfo.TYPE_WIRED_HEADPHONES,
-        AudioDeviceInfo.TYPE_WIRED_HEADSET -> R.string.equalizer_wired_output
-        AudioDeviceInfo.TYPE_USB_DEVICE,
-        AudioDeviceInfo.TYPE_USB_HEADSET,
-        AudioDeviceInfo.TYPE_USB_ACCESSORY -> R.string.equalizer_usb_output
-        AudioDeviceInfo.TYPE_BUILTIN_SPEAKER -> R.string.equalizer_speaker_output
-        else -> R.string.equalizer_other_output
+    private fun outputTypeLabel(type: Int): Int {
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S &&
+            (type == AudioDeviceInfo.TYPE_BLE_HEADSET || type == AudioDeviceInfo.TYPE_BLE_SPEAKER)
+        ) return R.string.equalizer_bluetooth_output
+
+        return when (type) {
+            AudioDeviceInfo.TYPE_BLUETOOTH_A2DP -> R.string.equalizer_bluetooth_output
+            AudioDeviceInfo.TYPE_WIRED_HEADPHONES,
+            AudioDeviceInfo.TYPE_WIRED_HEADSET -> R.string.equalizer_wired_output
+            AudioDeviceInfo.TYPE_USB_DEVICE,
+            AudioDeviceInfo.TYPE_USB_HEADSET,
+            AudioDeviceInfo.TYPE_USB_ACCESSORY -> R.string.equalizer_usb_output
+            AudioDeviceInfo.TYPE_BUILTIN_SPEAKER -> R.string.equalizer_speaker_output
+            else -> R.string.equalizer_other_output
+        }
     }
 
     private fun requestOutputReconfiguration() {

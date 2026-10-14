@@ -65,6 +65,7 @@ object LocalMediaRepository {
     /**
      * Returns an Intent to open system settings for All Files Access.
      */
+    @androidx.annotation.RequiresApi(Build.VERSION_CODES.R)
     fun createAllFilesAccessIntent(context: Context): Intent {
         val appIntent = Intent(Settings.ACTION_MANAGE_APP_ALL_FILES_ACCESS_PERMISSION).apply {
             data = Uri.fromParts("package", context.packageName, null)

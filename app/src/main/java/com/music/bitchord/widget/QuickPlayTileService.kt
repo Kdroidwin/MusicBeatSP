@@ -1,5 +1,6 @@
 package com.music.bitchord.widget
 
+import android.annotation.SuppressLint
 import android.app.Activity
 import android.app.PendingIntent
 import android.content.ComponentName
@@ -99,6 +100,7 @@ class QuickPlayTileService : TileService() {
         }, SERVICE_STOP_DELAY_MS)
     }
 
+    @SuppressLint("StartActivityAndCollapseDeprecated")
     private fun openAppForSetup() {
         val intent = Intent(this, MainActivity::class.java)
             .addFlags(Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_CLEAR_TOP)
@@ -111,6 +113,8 @@ class QuickPlayTileService : TileService() {
             )
             startActivityAndCollapse(pendingIntent)
         } else {
+            // The Intent overload is required on Android 13 and earlier; API 34+
+            // takes the PendingIntent branch above.
             @Suppress("DEPRECATION")
             startActivityAndCollapse(intent)
         }

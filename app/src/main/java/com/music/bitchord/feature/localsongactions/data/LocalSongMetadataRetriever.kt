@@ -54,7 +54,7 @@ object LocalSongMetadataRetriever {
             val rawDuration = if (hasDataSource) retriever.extractMetadata(MediaMetadataRetriever.METADATA_KEY_DURATION) else null
             val rawMimeType = if (hasDataSource) retriever.extractMetadata(MediaMetadataRetriever.METADATA_KEY_MIMETYPE) else null
 
-            val rawSampleRate = if (hasDataSource && Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
+            val rawSampleRate = if (hasDataSource && Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) {
                 retriever.extractMetadata(MediaMetadataRetriever.METADATA_KEY_SAMPLERATE)
             } else null
 

@@ -60,6 +60,7 @@ import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
@@ -90,6 +91,7 @@ import kotlinx.coroutines.withContext
 @Composable
 private fun PlaylistSelectionToolbar(
     count: Int,
+    contentColor: Color,
     onAddToPlaylist: () -> Unit,
     onEditTags: () -> Unit,
     onShare: () -> Unit,
@@ -112,42 +114,42 @@ private fun PlaylistSelectionToolbar(
         Text(
             text = "$count ${stringResource(R.string.selected)}",
             style = MaterialTheme.typography.labelLarge,
-            color = MaterialTheme.colorScheme.primary,
+            color = contentColor,
             modifier = Modifier.padding(end = 4.dp),
             maxLines = 1,
         )
         IconButton(onClick = onAddToPlaylist) {
-            Icon(Icons.Rounded.PlaylistAdd, contentDescription = stringResource(R.string.add_to_playlist))
+            Icon(Icons.Rounded.PlaylistAdd, contentDescription = stringResource(R.string.add_to_playlist), tint = contentColor)
         }
         IconButton(onClick = onEditTags) {
-            Icon(Icons.Rounded.Edit, contentDescription = stringResource(R.string.selection_edit_tags))
+            Icon(Icons.Rounded.Edit, contentDescription = stringResource(R.string.selection_edit_tags), tint = contentColor)
         }
         IconButton(onClick = onShare) {
-            Icon(Icons.Rounded.Share, contentDescription = stringResource(R.string.selection_share))
+            Icon(Icons.Rounded.Share, contentDescription = stringResource(R.string.selection_share), tint = contentColor)
         }
         IconButton(onClick = onToggleReorder) {
             Icon(
                 Icons.Rounded.Reorder,
                 contentDescription = stringResource(R.string.toggle_playlist_reorder),
-                tint = if (reorderEnabled) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurface,
+                tint = contentColor,
             )
         }
         IconButton(onClick = onMoveUp) {
-            Icon(Icons.Rounded.KeyboardArrowUp, contentDescription = stringResource(R.string.selection_move_up))
+            Icon(Icons.Rounded.KeyboardArrowUp, contentDescription = stringResource(R.string.selection_move_up), tint = contentColor)
         }
         IconButton(onClick = onMoveDown) {
-            Icon(Icons.Rounded.KeyboardArrowDown, contentDescription = stringResource(R.string.selection_move_down))
+            Icon(Icons.Rounded.KeyboardArrowDown, contentDescription = stringResource(R.string.selection_move_down), tint = contentColor)
         }
         TextButton(onClick = onMoveToTop) {
-            Icon(Icons.Rounded.ArrowUpward, contentDescription = null)
-            Text(stringResource(R.string.selection_move_to_top))
+            Icon(Icons.Rounded.ArrowUpward, contentDescription = null, tint = contentColor)
+            Text(stringResource(R.string.selection_move_to_top), color = contentColor)
         }
         TextButton(onClick = onMoveToBottom) {
-            Icon(Icons.Rounded.ArrowDownward, contentDescription = null)
-            Text(stringResource(R.string.selection_move_to_bottom))
+            Icon(Icons.Rounded.ArrowDownward, contentDescription = null, tint = contentColor)
+            Text(stringResource(R.string.selection_move_to_bottom), color = contentColor)
         }
         IconButton(onClick = onCancel) {
-            Icon(Icons.Rounded.Close, contentDescription = stringResource(R.string.cancel))
+            Icon(Icons.Rounded.Close, contentDescription = stringResource(R.string.cancel), tint = contentColor)
         }
     }
 }
@@ -287,7 +289,9 @@ fun LibraryScreen(
                 ) != android.content.pm.PackageManager.PERMISSION_GRANTED
             }
         } else emptyList()
-        if (needsApproval.isNotEmpty()) {
+        // Keep the API guard next to the API 30 call as well as around the
+        // query above. This avoids invoking createWriteRequest on API 26–29.
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.R && needsApproval.isNotEmpty()) {
             val request = runCatching { MediaStore.createWriteRequest(context.contentResolver, needsApproval) }.getOrNull()
             if (request != null) {
                 pendingBulkTagSongs = targets
@@ -461,9 +465,10 @@ fun LibraryScreen(
                     selectionMode = playlistSelectionMode && drillDownPlaylistId != null,
                     onSelectionToggle = ::togglePlaylistSongSelection,
                     selectionToolbar = if (playlistSelectionMode && drillDownPlaylistId != null) {
-                        {
+                        { contentColor ->
                             PlaylistSelectionToolbar(
                                 count = selectedPlaylistSongIds.size,
+                                contentColor = contentColor,
                                 onAddToPlaylist = { showAddSelectedToPlaylist = true },
                                 onEditTags = { showBulkTagEditor = true },
                                 onShare = { LocalSongActionsHelper.shareSongs(context, selectedPlaylistSongs) },

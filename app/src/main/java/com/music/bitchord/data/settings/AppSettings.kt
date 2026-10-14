@@ -896,6 +896,13 @@ object AppSettings {
     fun reload() {
         if (!this::prefs.isInitialized) return
         readAll()
+        // The selected lyrics providers are persisted as IDs, while the
+        // available provider objects are loaded asynchronously by the
+        // extension manager. Re-apply imported IDs to the already-loaded list
+        // now; if that list is still empty, the manager will refresh them once
+        // loading completes.
+        val availableLyricsSources = lyricsSourceOrder.value.ifEmpty { lyricsSources.value.toList() }
+        if (availableLyricsSources.isNotEmpty()) refreshLyricsSources(availableLyricsSources)
     }
 
     private fun readAll() {
@@ -2342,10 +2349,10 @@ object AppSettings {
      * flows above, so a setting added in a later build is in the backup the day
      * it is added instead of the day somebody remembers to list it here. What is
      * *left out* is therefore the part worth stating explicitly, and it is
-     * [SECRETS]: an export is a file the user is about to put in Drive or a
-     * chat, and a scrobbler session key or an API secret in it is a credential
-     * that has left the device in plain text. Signing back in after a restore is
-     * a minute; a leaked session key is not recoverable at all.
+     * [SECRETS], [PROFILE_DATA], and [DEVICE_LOCAL]. Credentials stay on the
+     * device because an exported file may be shared. Non-secret integration
+     * preferences, including scrobbling and Discord presence options, are
+     * included with the rest of the settings.
      *
      * The Discord token is not here for the same reason and one more: it never
      * reaches this file. It lives in the encrypted store — see [AuthStore] — and
@@ -2356,37 +2363,31 @@ object AppSettings {
         if (!this::prefs.isInitialized) return emptyMap()
         return prefs.all.filterKeys {
             it !in SECRETS &&
+                it !in PROFILE_DATA &&
                 it !in DEVICE_LOCAL &&
-                it !in OBSOLETE_ONLINE_KEYS &&
-                !it.startsWith("discord_") &&
-                !it.startsWith("lastfm_") &&
-                !it.startsWith("listenbrainz_") &&
-                !it.startsWith("spotify_")
+                it !in OBSOLETE_ONLINE_KEYS
         }
     }
 
     /**
-     * Replaces the preference file with [values] and re-reads it.
+     * Replaces the portable preferences with [values] and re-reads them.
      *
      * A replace, not a merge: a partial restore leaves a device holding half of
      * one configuration and half of another, which is the one outcome nobody
-     * asked for. Keys in [SECRETS] survive untouched — they were never in the
-     * file being restored from, and clearing them would sign the user out of
-     * services the backup has nothing to say about.
+     * asked for. Credentials, account identity, and device-local data survive
+     * untouched; a backup never contains those values and cannot sign the user
+     * out or replace the identity already on this device.
      */
     fun importPrefs(values: Map<String, Any?>) {
         if (!this::prefs.isInitialized) return
-        val kept = prefs.all.filterKeys { it in SECRETS || it in DEVICE_LOCAL }
+        val kept = prefs.all.filterKeys { it in SECRETS || it in PROFILE_DATA || it in DEVICE_LOCAL }
         prefs.edit().apply {
             clear()
             val incoming = values.filterKeys {
                 it !in SECRETS &&
+                    it !in PROFILE_DATA &&
                     it !in DEVICE_LOCAL &&
-                    it !in OBSOLETE_ONLINE_KEYS &&
-                    !it.startsWith("discord_") &&
-                    !it.startsWith("lastfm_") &&
-                    !it.startsWith("listenbrainz_") &&
-                    !it.startsWith("spotify_")
+                    it !in OBSOLETE_ONLINE_KEYS
             }
             (kept + incoming).forEach { (key, value) ->
                 when (value) {
@@ -2415,6 +2416,14 @@ object AppSettings {
         KEY_SPOTIFY_SPDC_TOKEN,
     )
 
+    /** Account identity is kept on this device but is not an application setting. */
+    private val PROFILE_DATA = setOf(
+        KEY_LASTFM_USERNAME,
+        KEY_DISCORD_USERNAME,
+        KEY_DISCORD_NAME,
+        KEY_DISCORD_AVATAR,
+    )
+
     /**
      * Preferences that describe *this device* rather than this configuration,
      * and so are neither exported nor overwritten by an import.
@@ -2437,8 +2446,6 @@ object AppSettings {
         "audio_cache_limit_bytes",
         "animated_canvas",
         "canvas_over_cellular",
-        "lyrics_sources",
-        "lyrics_source_order",
         "lyrics_sourceOrder",
         "downloaded_tracks",
         "downloaded_tracks_metadata",

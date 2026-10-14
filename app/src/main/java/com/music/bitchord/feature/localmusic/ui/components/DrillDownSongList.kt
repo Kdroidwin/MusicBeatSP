@@ -69,6 +69,7 @@ import androidx.compose.ui.draw.drawWithContent
 import androidx.compose.ui.graphics.BlendMode
 import androidx.compose.ui.graphics.CompositingStrategy
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.luminance
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.graphics.graphicsLayer
@@ -105,6 +106,14 @@ import com.music.bitchord.ui.theme.rememberArtworkPalette
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import kotlin.math.abs
 import kotlin.math.roundToInt
+
+/** Chooses the more legible monochrome foreground for the row surface. */
+private fun Color.highContrastBlackOrWhite(): Color {
+    val luminance = luminance()
+    val blackContrast = (luminance + 0.05f) / 0.05f
+    val whiteContrast = 1.05f / (luminance + 0.05f)
+    return if (blackContrast >= whiteContrast) Color.Black else Color.White
+}
 
 @Composable
 fun DrillDownHeader(
@@ -534,7 +543,7 @@ fun DrillDownSongList(
     selectedIds: Set<String> = emptySet(),
     selectionMode: Boolean = false,
     onSelectionToggle: ((Song) -> Unit)? = null,
-    selectionToolbar: (@Composable () -> Unit)? = null,
+    selectionToolbar: (@Composable (Color) -> Unit)? = null,
     currentSong: Song? = null,
     isPlaying: Boolean = false,
     onSongClick: (List<Song>, Int) -> Unit,
@@ -594,6 +603,12 @@ fun DrillDownSongList(
     } else {
         MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.5f)
     }
+    val selectionToolbarBackground = if (fullScreenArtwork) {
+        artworkPalette.wash
+    } else {
+        MaterialTheme.colorScheme.background
+    }
+    val selectionToolbarContentColor = selectionToolbarBackground.highContrastBlackOrWhite()
 
     if (viewType == LibraryViewType.GRID) {
         val gridState = rememberLazyGridState()
@@ -657,7 +672,7 @@ fun DrillDownSongList(
                     )
                 }
                 if (selectionToolbar != null) {
-                    item(span = { GridItemSpan(maxLineSpan) }) { selectionToolbar() }
+                    item(span = { GridItemSpan(maxLineSpan) }) { selectionToolbar(selectionToolbarContentColor) }
                 }
                 itemsIndexed(songs) { index, song ->
                     SongGridCard(
@@ -765,7 +780,7 @@ fun DrillDownSongList(
                     )
                 }
                 if (selectionToolbar != null) {
-                    item { selectionToolbar() }
+                    item { selectionToolbar(selectionToolbarContentColor) }
                 }
                 itemsIndexed(displayedSongs, key = { _, song -> song.localUri ?: song.videoId }) { index, song ->
                     val trackNumber = if (isPlaylist && showArtworkInList) null else index + 1
