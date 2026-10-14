@@ -714,6 +714,7 @@ private fun BitChordApp(
     }
 
     val localSongsState by viewModel.localSongs.collectAsStateWithLifecycle()
+    val youtubeMusicSearchResults by viewModel.results.collectAsStateWithLifecycle()
     val isRefreshingLocalMusic by viewModel.isRefreshingLocalMusic.collectAsStateWithLifecycle()
     val localArtworkPreload by viewModel.localArtworkPreload.collectAsStateWithLifecycle()
     val localSongs = (localSongsState as? UiState.Success)?.data.orEmpty()
@@ -2334,9 +2335,21 @@ private fun BitChordApp(
                                 },
                                 focusTrigger = searchFocusTrigger,
                                 recentSearches = searchHistory,
-                                onRecordSearch = { term -> viewModel.recordSearch() },
+                                onRecordSearch = viewModel::recordSearch,
                                 onRemoveSearch = viewModel::removeSearch,
                                 onClearSearchHistory = viewModel::clearSearchHistory,
+                                youtubeMusicResults = youtubeMusicSearchResults,
+                                onYoutubeMusicSearch = { term -> viewModel.searchFor(term, youtubeMusicOnly = true) },
+                                onYoutubeMusicTrackClick = playRadio,
+                                onYoutubeMusicBrowseClick = { item ->
+                                    viewModel.openDetail(
+                                        browseId = item.browseId,
+                                        title = item.title,
+                                        subtitle = item.subtitle,
+                                        thumbnailUrl = item.thumbnailUrl,
+                                        type = item.type,
+                                    )
+                                },
                                 contentPadding = listPadding,
                             )
                         }

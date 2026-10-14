@@ -9,6 +9,7 @@ import androidx.media3.common.Player
 import com.music.bitchord.BuildConfig
 import com.music.bitchord.auth.AuthStore
 import com.music.bitchord.data.lyrics.LyricsSource
+import com.music.bitchord.data.Http
 import com.music.bitchord.data.sources.SourceKind
 import com.music.bitchord.feature.artistimage.model.ArtistSort
 import kotlinx.coroutines.flow.MutableStateFlow
@@ -401,6 +402,9 @@ object AppSettings {
     /** Requested PCM representation at the Android AudioTrack boundary. */
     val outputPcmMode = MutableStateFlow(OutputPcmMode.PCM_16)
 
+    /** Bypasses app DSP and requests Android's bit-perfect USB mixer when supported. */
+    val bitPerfectPlayback = MutableStateFlow(false)
+
     /** Prefer an attached USB audio output over the system's normal route. */
     val preferUsbDac = MutableStateFlow(false)
 
@@ -559,6 +563,13 @@ object AppSettings {
     /** Blocks app-managed network requests while keeping local and cached media available. */
     val offlineMode = MutableStateFlow(false)
 
+    /** YouTube Music catalog/search/playback is opt-in; fresh installs make no YouTube requests. */
+    val youtubeMusicEnabled = MutableStateFlow(false)
+
+    /** Whether an app-managed YouTube Music request may leave this device. */
+    val youtubeMusicNetworkAllowed: Boolean
+        get() = youtubeMusicEnabled.value && !offlineMode.value
+
     /** Hides the confirmed lossless quality badge on the player, without affecting audio. */
     val hideLosslessLabel = MutableStateFlow(false)
 
@@ -579,6 +590,9 @@ object AppSettings {
 
     /** Refuses a play command while Android's music stream volume is zero. */
     val preventPlayAtZeroVolume = MutableStateFlow(false)
+
+    /** Pauses an already-playing local track when Android's music volume reaches zero. */
+    val pausePlaybackAtZeroVolume = MutableStateFlow(false)
 
     /** Presentation-only visibility for the four secondary player controls. */
     val visiblePlayerControls = MutableStateFlow(DEFAULT_PLAYER_CONTROLS)
@@ -922,6 +936,7 @@ object AppSettings {
                     ?: OutputPcmMode.PCM_16.name,
             )
         }.getOrDefault(OutputPcmMode.PCM_16)
+        bitPerfectPlayback.value = prefs.getBoolean(KEY_BIT_PERFECT_PLAYBACK, false)
         preferUsbDac.value = prefs.getBoolean(KEY_PREFER_USB_DAC, false)
         dolbyAtmos.value = prefs.getBoolean(KEY_DOLBY_ATMOS, true)
         spatialAudio.value = prefs.getBoolean(KEY_SPATIAL_AUDIO, false)
@@ -1000,7 +1015,14 @@ object AppSettings {
         artworkTapOpensLyrics.value = prefs.getBoolean(KEY_ARTWORK_TAP_OPENS_LYRICS, false)
         lyricsReplaceArtworkOnly.value = prefs.getBoolean(KEY_LYRICS_REPLACE_ARTWORK_ONLY, false)
         showPlayerLyricsStrip.value = prefs.getBoolean(KEY_SHOW_PLAYER_LYRICS_STRIP, true)
+        val wasOffline = offlineMode.value
         offlineMode.value = prefs.getBoolean(KEY_OFFLINE_MODE, false)
+        if (!wasOffline && offlineMode.value) Http.cancelYoutubeMusicRequests()
+        val wasYoutubeMusicEnabled = youtubeMusicEnabled.value
+        youtubeMusicEnabled.value = prefs.getBoolean(KEY_YOUTUBE_MUSIC_ENABLED, false)
+        if ((wasYoutubeMusicEnabled && !youtubeMusicEnabled.value) || (!wasOffline && offlineMode.value)) {
+            Http.cancelYoutubeMusicRequests()
+        }
         hideLosslessLabel.value = prefs.getBoolean(KEY_HIDE_LOSSLESS_LABEL, false)
         showTrackDurationInsteadOfRemaining.value =
             prefs.getBoolean(KEY_SHOW_TRACK_DURATION_INSTEAD_OF_REMAINING, false)
@@ -1011,6 +1033,7 @@ object AppSettings {
         replayGainPreventClipping.value = prefs.getBoolean(KEY_REPLAYGAIN_PREVENT_CLIPPING, true)
         favoriteBesideTrackMenu.value = prefs.getBoolean(KEY_FAVORITE_BESIDE_TRACK_MENU, false)
         preventPlayAtZeroVolume.value = prefs.getBoolean(KEY_PREVENT_PLAY_AT_ZERO_VOLUME, false)
+        pausePlaybackAtZeroVolume.value = prefs.getBoolean(KEY_PAUSE_PLAYBACK_AT_ZERO_VOLUME, false)
         visiblePlayerControls.value = readVisiblePlayerControls()
         playerControlOrder.value = readPlayerControlOrder()
         useLibraryIconForPlaylistControl.value = prefs.getBoolean(KEY_LIBRARY_ICON_FOR_PLAYLIST_CONTROL, false)
@@ -1650,8 +1673,17 @@ object AppSettings {
     }
 
     fun setOfflineMode(value: Boolean) {
+        val wasOffline = offlineMode.value
         offlineMode.value = value
         prefs.edit().putBoolean(KEY_OFFLINE_MODE, value).apply()
+        if (!wasOffline && value) Http.cancelYoutubeMusicRequests()
+    }
+
+    fun setYoutubeMusicEnabled(value: Boolean) {
+        val wasEnabled = youtubeMusicEnabled.value
+        youtubeMusicEnabled.value = value
+        prefs.edit().putBoolean(KEY_YOUTUBE_MUSIC_ENABLED, value).apply()
+        if (wasEnabled && !value) Http.cancelYoutubeMusicRequests()
     }
 
     fun setHideLosslessLabel(value: Boolean) {
@@ -1703,6 +1735,11 @@ object AppSettings {
     fun setPreventPlayAtZeroVolume(value: Boolean) {
         preventPlayAtZeroVolume.value = value
         prefs.edit().putBoolean(KEY_PREVENT_PLAY_AT_ZERO_VOLUME, value).apply()
+    }
+
+    fun setPausePlaybackAtZeroVolume(value: Boolean) {
+        pausePlaybackAtZeroVolume.value = value
+        prefs.edit().putBoolean(KEY_PAUSE_PLAYBACK_AT_ZERO_VOLUME, value).apply()
     }
 
     fun setAudioFocusLevel(value: Int) {
@@ -1981,6 +2018,11 @@ object AppSettings {
     fun setOutputPcmMode(value: OutputPcmMode) {
         outputPcmMode.value = value
         prefs.edit().putString(KEY_OUTPUT_PCM_MODE, value.name).apply()
+    }
+
+    fun setBitPerfectPlayback(value: Boolean) {
+        bitPerfectPlayback.value = value
+        prefs.edit().putBoolean(KEY_BIT_PERFECT_PLAYBACK, value).apply()
     }
 
     fun setPreferUsbDac(value: Boolean) {
@@ -2476,6 +2518,7 @@ object AppSettings {
     private const val KEY_CROSSFADE_SECONDS = "crossfade_seconds"
     private const val KEY_RESAMPLER_CUTOFF_HZ = "resampler_cutoff_hz"
     private const val KEY_OUTPUT_PCM_MODE = "output_pcm_mode"
+    private const val KEY_BIT_PERFECT_PLAYBACK = "bit_perfect_playback"
     private const val KEY_PREFER_USB_DAC = "prefer_usb_dac"
     private const val KEY_DOLBY_ATMOS = "dolby_atmos"
     private const val KEY_SPATIAL_AUDIO = "spatial_audio"
@@ -2535,6 +2578,7 @@ object AppSettings {
     private const val KEY_LYRICS_REPLACE_ARTWORK_ONLY = "lyrics_replace_artwork_only"
     private const val KEY_SHOW_PLAYER_LYRICS_STRIP = "show_player_lyrics_strip"
     private const val KEY_OFFLINE_MODE = "offline_mode"
+    private const val KEY_YOUTUBE_MUSIC_ENABLED = "youtube_music_enabled"
     private const val KEY_HIDE_LOSSLESS_LABEL = "hide_lossless_label"
     private const val KEY_SHOW_TRACK_DURATION_INSTEAD_OF_REMAINING = "show_track_duration_instead_of_remaining"
     private const val KEY_POPUP_EXTERNAL_AUDIO_PLAYER = "popup_external_audio_player"
@@ -2544,6 +2588,7 @@ object AppSettings {
     private const val KEY_REPLAYGAIN_PREVENT_CLIPPING = "replaygain_prevent_clipping"
     private const val KEY_FAVORITE_BESIDE_TRACK_MENU = "favorite_beside_track_menu"
     private const val KEY_PREVENT_PLAY_AT_ZERO_VOLUME = "prevent_play_at_zero_volume"
+    private const val KEY_PAUSE_PLAYBACK_AT_ZERO_VOLUME = "pause_playback_at_zero_volume"
     private const val KEY_VISIBLE_PLAYER_CONTROLS = "visible_player_controls"
     private const val KEY_PLAYER_CONTROL_ORDER = "player_control_order"
     private const val KEY_LIBRARY_ICON_FOR_PLAYLIST_CONTROL = "library_icon_for_playlist_control"

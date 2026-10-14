@@ -19,6 +19,8 @@ import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.fillMaxSize
+import androidx.compose.foundation.layout.fillMaxHeight
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.padding
@@ -154,6 +156,7 @@ import coil3.compose.AsyncImage
 import com.music.bitchord.ui.components.isGlassSupported
 import com.music.bitchord.ui.components.languageDisplayNameRes
 import com.music.bitchord.ui.components.thumbnailBorder
+import com.music.bitchord.ui.components.VerticalScrollbar
 import com.music.bitchord.ui.icons.BitChordIcons
 import com.music.bitchord.ui.performance.resolvePerformanceRefreshRate
 import com.music.bitchord.ui.performance.supportedPerformanceRefreshRates
@@ -226,6 +229,7 @@ fun SettingsScreen(
     modifier: Modifier = Modifier,
 ) {
     val context = LocalContext.current
+    val settingsScrollState = rememberScrollState()
     val popupOverlayPermissionLauncher = rememberLauncherForActivityResult(
         ActivityResultContracts.StartActivityForResult(),
     ) {
@@ -310,10 +314,12 @@ fun SettingsScreen(
     val lyricsReplaceArtworkOnly by AppSettings.lyricsReplaceArtworkOnly.collectAsStateWithLifecycle()
     val showPlayerLyricsStrip by AppSettings.showPlayerLyricsStrip.collectAsStateWithLifecycle()
     val offlineMode by AppSettings.offlineMode.collectAsStateWithLifecycle()
+    val youtubeMusicEnabled by AppSettings.youtubeMusicEnabled.collectAsStateWithLifecycle()
     val hideLosslessLabel by AppSettings.hideLosslessLabel.collectAsStateWithLifecycle()
     val showTrackDurationInsteadOfRemaining by AppSettings.showTrackDurationInsteadOfRemaining.collectAsStateWithLifecycle()
     val popupExternalAudioPlayer by AppSettings.popupExternalAudioPlayer.collectAsStateWithLifecycle()
     val preventPlayAtZeroVolume by AppSettings.preventPlayAtZeroVolume.collectAsStateWithLifecycle()
+    val pausePlaybackAtZeroVolume by AppSettings.pausePlaybackAtZeroVolume.collectAsStateWithLifecycle()
     val useLibraryIconForPlaylistControl by AppSettings.useLibraryIconForPlaylistControl.collectAsStateWithLifecycle()
     val visiblePlayerControls by AppSettings.visiblePlayerControls.collectAsStateWithLifecycle()
     val playerControlOrder by AppSettings.playerControlOrder.collectAsStateWithLifecycle()
@@ -335,8 +341,13 @@ fun SettingsScreen(
     val matchButtonAccentToArtwork by AppSettings.matchButtonAccentToArtwork.collectAsStateWithLifecycle()
     val sessionId by AppSettings.audioSessionId.collectAsStateWithLifecycle()
     val outputPcmMode by AppSettings.outputPcmMode.collectAsStateWithLifecycle()
+    val bitPerfectPlayback by AppSettings.bitPerfectPlayback.collectAsStateWithLifecycle()
     val preferUsbDac by AppSettings.preferUsbDac.collectAsStateWithLifecycle()
     val outputStatus by AudioOutputStatus.current.collectAsStateWithLifecycle()
+    val bitPerfectOutputStatus = stringResource(
+        if (outputStatus.bitPerfectMixerActive) R.string.bit_perfect_mixer_requested
+        else R.string.bit_perfect_mixer_unavailable,
+    )
     val audioFocusLevel by AppSettings.audioFocusLevel.collectAsStateWithLifecycle()
     val replayGenres by AppSettings.replayGenres.collectAsStateWithLifecycle()
     val stopOnTaskRemoved by AppSettings.stopOnTaskRemoved.collectAsStateWithLifecycle()
@@ -427,6 +438,12 @@ fun SettingsScreen(
             activate = {},
         ),
         SettingsSearchEntry(stringResource(R.string.offline_mode), stringResource(R.string.offline_mode_subtitle), listOf("offline", "オフライン", "通信"), offlineMode) { AppSettings.setOfflineMode(!offlineMode) },
+        SettingsSearchEntry(
+            stringResource(R.string.youtube_music_enabled),
+            stringResource(R.string.youtube_music_enabled_subtitle),
+            listOf("youtube", "youtube music", "ytmusic", "ネット検索", "オンライン音楽", "通信"),
+            youtubeMusicEnabled,
+        ) { AppSettings.setYoutubeMusicEnabled(!youtubeMusicEnabled) },
         SettingsSearchEntry(stringResource(R.string.keep_screen_on), stringResource(R.string.keep_screen_on_subtitle), listOf("screen", "display", "画面", "常時"), keepScreenOn) { AppSettings.setKeepScreenOn(!keepScreenOn) },
         SettingsSearchEntry(
             stringResource(R.string.keep_screen_on_during_lyrics),
@@ -508,6 +525,8 @@ fun SettingsScreen(
         SettingsSearchEntry(stringResource(R.string.center_player_track_info), stringResource(R.string.center_player_track_info_subtitle), listOf("center", "中央", "曲情報"), centerPlayerTrackInfo) { AppSettings.setCenterPlayerTrackInfo(!centerPlayerTrackInfo) },
         SettingsSearchEntry(stringResource(R.string.player_playlist_library_icon), stringResource(R.string.player_playlist_library_icon_subtitle), listOf("playlist", "library", "プレイリスト", "ライブラリ", "icon"), useLibraryIconForPlaylistControl) { AppSettings.setUseLibraryIconForPlaylistControl(!useLibraryIconForPlaylistControl) },
         SettingsSearchEntry(stringResource(R.string.prevent_play_at_zero_volume), stringResource(R.string.prevent_play_at_zero_volume_subtitle), listOf("volume", "音量", "zero", "0"), preventPlayAtZeroVolume) { AppSettings.setPreventPlayAtZeroVolume(!preventPlayAtZeroVolume) },
+        SettingsSearchEntry(stringResource(R.string.pause_playback_at_zero_volume), stringResource(R.string.pause_playback_at_zero_volume_subtitle), listOf("volume", "音量", "zero", "0", "pause", "一時停止"), pausePlaybackAtZeroVolume) { AppSettings.setPausePlaybackAtZeroVolume(!pausePlaybackAtZeroVolume) },
+        SettingsSearchEntry(stringResource(R.string.bit_perfect_playback), stringResource(R.string.bit_perfect_playback_subtitle), listOf("bitperfect", "bit-perfect", "bit perfect", "USB DAC", "PCM", "ビットパーフェクト", "音質"), bitPerfectPlayback) { AppSettings.setBitPerfectPlayback(!bitPerfectPlayback) },
         SettingsSearchEntry(stringResource(R.string.preload_album_art), stringResource(R.string.preload_album_art_subtitle), listOf("artwork", "album art", "preload", "先読み", "アルバムアート"), preloadAlbumArtOnStartup) { AppSettings.setPreloadAlbumArtOnStartup(!preloadAlbumArtOnStartup) },
         SettingsSearchEntry(stringResource(R.string.persistent_local_artwork), stringResource(R.string.persistent_local_artwork_subtitle), listOf("artwork", "album art", "storage", "画像", "ストレージ"), persistentLocalArtwork) { AppSettings.setPersistentLocalArtwork(!persistentLocalArtwork) },
         SettingsSearchEntry(stringResource(R.string.synced_lyrics), stringResource(R.string.synced_lyrics_subtitle), listOf("lyrics", "歌詞", "同期"), syncedLyrics) { AppSettings.setSyncedLyrics(!syncedLyrics) },
@@ -1183,10 +1202,11 @@ fun SettingsScreen(
         ),
     )
 
+    Box(modifier = modifier.fillMaxSize()) {
     Column(
-        modifier = modifier
-            .fillMaxWidth()
-            .verticalScroll(rememberScrollState())
+        modifier = Modifier
+            .fillMaxSize()
+            .verticalScroll(settingsScrollState)
             .padding(contentPadding),
     ) {
         val originalDeveloperLabel = stringResource(R.string.original_developer)
@@ -1288,6 +1308,10 @@ fun SettingsScreen(
                         ?.let { append(" · ${it / 1000.0} kHz") }
                     append(" · ")
                     append(AudioOutputStatus.encodingLabel(outputStatus))
+                    if (bitPerfectPlayback) {
+                        append(" · ")
+                        append(bitPerfectOutputStatus)
+                    }
                 },
             )
             SegmentedControl(
@@ -1295,6 +1319,23 @@ fun SettingsScreen(
                 selectedIndex = OutputPcmMode.entries.indexOf(outputPcmMode),
                 onSelect = { AppSettings.setOutputPcmMode(OutputPcmMode.entries[it]) },
                 modifier = Modifier.padding(start = TEXT_INSET, end = ROW_INSET, bottom = 14.dp),
+            )
+            RowDivider()
+            SettingsRow(
+                icon = Icons.Rounded.GraphicEq,
+                title = stringResource(R.string.bit_perfect_playback),
+                subtitle = stringResource(R.string.bit_perfect_playback_subtitle),
+                trailing = {
+                    Switch(
+                        checked = bitPerfectPlayback,
+                        onCheckedChange = AppSettings::setBitPerfectPlayback,
+                        colors = SwitchDefaults.colors(
+                            checkedTrackColor = MaterialTheme.colorScheme.primary,
+                            checkedBorderColor = MaterialTheme.colorScheme.primary,
+                        ),
+                    )
+                },
+                onClick = { AppSettings.setBitPerfectPlayback(!bitPerfectPlayback) },
             )
             RowDivider()
             SettingsSubRow(
@@ -1645,6 +1686,23 @@ fun SettingsScreen(
                     )
                 },
                 onClick = { AppSettings.setPreventPlayAtZeroVolume(!preventPlayAtZeroVolume) },
+            )
+            RowDivider()
+            SettingsRow(
+                icon = Icons.Rounded.VolumeOff,
+                title = stringResource(R.string.pause_playback_at_zero_volume),
+                subtitle = stringResource(R.string.pause_playback_at_zero_volume_subtitle),
+                trailing = {
+                    Switch(
+                        checked = pausePlaybackAtZeroVolume,
+                        onCheckedChange = AppSettings::setPausePlaybackAtZeroVolume,
+                        colors = SwitchDefaults.colors(
+                            checkedTrackColor = MaterialTheme.colorScheme.primary,
+                            checkedBorderColor = MaterialTheme.colorScheme.primary,
+                        ),
+                    )
+                },
+                onClick = { AppSettings.setPausePlaybackAtZeroVolume(!pausePlaybackAtZeroVolume) },
             )
             RowDivider()
             SettingsRow(
@@ -3051,6 +3109,23 @@ fun SettingsScreen(
 
         SettingsGroup(header = stringResource(R.string.advanced_options)) {
             SettingsRow(
+                icon = Icons.Rounded.MusicNote,
+                title = stringResource(R.string.youtube_music_enabled),
+                subtitle = stringResource(R.string.youtube_music_enabled_subtitle),
+                trailing = {
+                    Switch(
+                        checked = youtubeMusicEnabled,
+                        onCheckedChange = AppSettings::setYoutubeMusicEnabled,
+                        colors = SwitchDefaults.colors(
+                            checkedTrackColor = MaterialTheme.colorScheme.primary,
+                            checkedBorderColor = MaterialTheme.colorScheme.primary,
+                        ),
+                    )
+                },
+                onClick = { AppSettings.setYoutubeMusicEnabled(!youtubeMusicEnabled) },
+            )
+            RowDivider()
+            SettingsRow(
                 icon = Icons.Rounded.Cloud,
                 title = stringResource(R.string.offline_mode),
                 subtitle = stringResource(R.string.offline_mode_subtitle),
@@ -3223,6 +3298,17 @@ fun SettingsScreen(
                 .padding(top = 24.dp, bottom = 8.dp),
         )
         }
+    }
+    VerticalScrollbar(
+        state = settingsScrollState,
+        modifier = Modifier
+            .align(Alignment.CenterEnd)
+            .fillMaxHeight()
+            .padding(
+                top = contentPadding.calculateTopPadding(),
+                bottom = contentPadding.calculateBottomPadding(),
+            ),
+    )
     }
 
 

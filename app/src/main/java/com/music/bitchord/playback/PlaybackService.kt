@@ -2,6 +2,7 @@ package com.music.bitchord.playback
 
 import android.app.PendingIntent
 import android.content.Context
+import android.database.ContentObserver
 import android.content.Intent
 import android.media.AudioDeviceCallback
 import android.media.AudioDeviceInfo
@@ -14,6 +15,7 @@ import android.os.Build
 import android.os.Handler
 import android.os.Looper
 import android.os.SystemClock
+import android.provider.Settings
 import android.widget.Toast
 import com.music.bitchord.widget.QuickPlayTileState
 import kotlinx.coroutines.sync.Mutex
@@ -326,6 +328,21 @@ class PlaybackService : MediaLibraryService() {
         return manager.getStreamVolume(AudioManager.STREAM_MUSIC) > 0
     }
 
+    private fun pauseLocalPlaybackIfVolumeIsZero() {
+        if (!AppSettings.pausePlaybackAtZeroVolume.value || castPlayback.active) return
+        val manager = audioManager ?: return
+        val active = player ?: return
+        if (!active.playWhenReady) return
+        if (manager.getStreamVolume(AudioManager.STREAM_MUSIC) > 0 &&
+            !manager.isStreamMute(AudioManager.STREAM_MUSIC)
+        ) return
+
+        // A transition can have both players running. Stop its spare leg first
+        // so a muted-volume event cannot leave the incoming track audible.
+        crossfade?.cancelTransition()
+        active.pause()
+    }
+
     /**
      * Requests the focus mode selected in Settings before allowing a new play
      * command to continue. Media3's built-in focus manager only requests normal
@@ -401,6 +418,11 @@ class PlaybackService : MediaLibraryService() {
         override fun onAudioDevicesAdded(addedDevices: Array<AudioDeviceInfo>) = requestOutputReconfiguration()
         override fun onAudioDevicesRemoved(removedDevices: Array<AudioDeviceInfo>) = requestOutputReconfiguration()
     }
+    private val systemVolumeObserver = object : ContentObserver(Handler(Looper.getMainLooper())) {
+        override fun onChange(selfChange: Boolean) {
+            pauseLocalPlaybackIfVolumeIsZero()
+        }
+    }
 
     /**
      * The active ExoPlayer.
@@ -468,6 +490,15 @@ class PlaybackService : MediaLibraryService() {
 
     private var configuredFloatOutput = false
     private var outputReconfigureJob: Job? = null
+    private var lastAudioTrackConfig: AudioSink.AudioTrackConfig? = null
+    private var preferredBitPerfectDevice: AudioDeviceInfo? = null
+    private var preferredBitPerfectFormat: Triple<Int, Int, Int>? = null
+    private val platformMediaAudioAttributes by lazy {
+        android.media.AudioAttributes.Builder()
+            .setUsage(android.media.AudioAttributes.USAGE_MEDIA)
+            .setContentType(android.media.AudioAttributes.CONTENT_TYPE_MUSIC)
+            .build()
+    }
 
     private var activeAudioChain = PlaybackAudioChain()
     private var spareAudioChain = PlaybackAudioChain()
@@ -1109,10 +1140,15 @@ class PlaybackService : MediaLibraryService() {
             eventTime: AnalyticsListener.EventTime,
             audioTrackConfig: AudioSink.AudioTrackConfig,
         ) {
+            lastAudioTrackConfig = audioTrackConfig
             AudioOutputStatus.publishAudioTrack(
                 encoding = audioTrackConfig.encoding,
                 sampleRateHz = audioTrackConfig.sampleRate,
+                channelConfig = audioTrackConfig.channelConfig,
             )
+            if (AppSettings.bitPerfectPlayback.value) {
+                requestBitPerfectMixerAttributes(audioTrackConfig)
+            }
             TrackLog.i(
                 "AUDIO_OUT",
                 "AudioTrack ${audioTrackConfig.sampleRate}Hz encoding=${audioTrackConfig.encoding}",
@@ -1138,6 +1174,11 @@ class PlaybackService : MediaLibraryService() {
 
     override fun onCreate() {
         super.onCreate()
+        contentResolver.registerContentObserver(Settings.System.CONTENT_URI, true, systemVolumeObserver)
+        // The mixer preference is associated with this app UID. Clear any
+        // stale request left by an interrupted process; the active format will
+        // be requested again when Media3 initializes its AudioTrack.
+        clearBitPerfectMixerPreferences()
 
         if (com.music.bitchord.data.innertube.Innertube.cookie == null) {
             com.music.bitchord.data.innertube.Innertube.cookie = com.music.bitchord.auth.AuthStore(this).cookie
@@ -1385,7 +1426,7 @@ class PlaybackService : MediaLibraryService() {
         }
         effectManager.setAudioSessionId(
             sessionId = exoPlayer.audioSessionId,
-            enabled = com.music.bitchord.data.settings.EqualizerSettings.enabled.value,
+            enabled = com.music.bitchord.data.settings.EqualizerSettings.enabled.value && !AppSettings.bitPerfectPlayback.value,
             bandLevels = com.music.bitchord.data.settings.EqualizerSettings.bandLevels.value,
             bassBoostStrength = com.music.bitchord.data.settings.EqualizerSettings.bassBoostStrength.value,
             virtualizerStrength = com.music.bitchord.data.settings.EqualizerSettings.virtualizerStrength.value,
@@ -1393,7 +1434,7 @@ class PlaybackService : MediaLibraryService() {
         spareAudioEffectManager = com.music.bitchord.playback.equalizer.AudioEffectManager(this).also { manager ->
             manager.setAudioSessionId(
                 sessionId = sparePlayer.audioSessionId,
-                enabled = com.music.bitchord.data.settings.EqualizerSettings.enabled.value,
+                enabled = com.music.bitchord.data.settings.EqualizerSettings.enabled.value && !AppSettings.bitPerfectPlayback.value,
                 bandLevels = com.music.bitchord.data.settings.EqualizerSettings.bandLevels.value,
                 bassBoostStrength = com.music.bitchord.data.settings.EqualizerSettings.bassBoostStrength.value,
                 virtualizerStrength = com.music.bitchord.data.settings.EqualizerSettings.virtualizerStrength.value,
@@ -1411,6 +1452,7 @@ class PlaybackService : MediaLibraryService() {
             MediaWidgetSnapshot.save(this, MediaWidgetSnapshot.EMPTY)
             MediaWidget.refresh(this)
         }
+        pauseLocalPlaybackIfVolumeIsZero()
         QuickPlayTileState.setActive(this, exoPlayer.playWhenReady)
         // History pings fire once a track is actually audible — both when
         // playback starts and when the queue moves on while already playing.
@@ -1440,7 +1482,7 @@ class PlaybackService : MediaLibraryService() {
             scope = scope,
             activePlayer = { player },
             standbyPlayer = { spare },
-            fadeSeconds = { AppSettings.crossfadeSeconds.value },
+            fadeSeconds = { if (AppSettings.bitPerfectPlayback.value) 0 else AppSettings.crossfadeSeconds.value },
             onHandoff = ::adoptPlayer,
             onPrepareIncoming = ::prepareCrossfadeIncoming,
             canCrossfade = { item ->
@@ -1762,22 +1804,23 @@ class PlaybackService : MediaLibraryService() {
         val target = spare ?: return
         if (target.currentMediaItem?.mediaId != item.mediaId) return
         val chain = spareAudioChain
-        chain.resampler.cutoffHz = AppSettings.resamplerCutoffHz.value
-        chain.spatial.enabled = AppSettings.spatialAudio.value &&
+        val bitPerfect = AppSettings.bitPerfectPlayback.value
+        chain.resampler.cutoffHz = if (bitPerfect) 0 else AppSettings.resamplerCutoffHz.value
+        chain.spatial.enabled = !bitPerfect && AppSettings.spatialAudio.value &&
             NerdStats.declaredFormat(item.mediaId)?.isDolbyAtmos != true
         val preventClipping = AppSettings.replayGainPreventClipping.value
         chain.replayGain.gainDb = 0f
         chain.replayGain.preventClipping = preventClipping
         spareAudioEffectManager?.setAudioSessionId(
             sessionId = target.audioSessionId,
-            enabled = com.music.bitchord.data.settings.EqualizerSettings.enabled.value,
+            enabled = com.music.bitchord.data.settings.EqualizerSettings.enabled.value && !bitPerfect,
             bandLevels = com.music.bitchord.data.settings.EqualizerSettings.bandLevels.value,
             bassBoostStrength = com.music.bitchord.data.settings.EqualizerSettings.bassBoostStrength.value,
             virtualizerStrength = com.music.bitchord.data.settings.EqualizerSettings.virtualizerStrength.value,
         )
 
         val song = item.toSong()
-        if (!AppSettings.replayGainEnabled.value ||
+        if (bitPerfect || !AppSettings.replayGainEnabled.value ||
             (song.localUri.isNullOrBlank() && song.localPath.isNullOrBlank())
         ) return
 
@@ -1872,10 +1915,11 @@ class PlaybackService : MediaLibraryService() {
         val song = mediaItem?.toSong()
         val mediaId = mediaItem?.mediaId
         val enabled = AppSettings.replayGainEnabled.value
+        val bitPerfect = AppSettings.bitPerfectPlayback.value
         val albumMode = AppSettings.replayGainAlbumMode.value
         val preampDb = AppSettings.replayGainPreampDb.value
         val preventClipping = AppSettings.replayGainPreventClipping.value
-        val token = listOf(mediaId, song?.localUri, song?.localPath, enabled, albumMode, preampDb, preventClipping)
+        val token = listOf(mediaId, song?.localUri, song?.localPath, enabled, bitPerfect, albumMode, preampDb, preventClipping)
             .joinToString("|")
         if (!force && token == replayGainConfigToken) return
 
@@ -1883,7 +1927,7 @@ class PlaybackService : MediaLibraryService() {
         replayGainLookupJob?.cancel()
         activeAudioChain.replayGain.gainDb = 0f
         activeAudioChain.replayGain.preventClipping = preventClipping
-        if (!enabled || song == null || (song.localUri.isNullOrBlank() && song.localPath.isNullOrBlank())) return
+        if (!enabled || bitPerfect || song == null || (song.localUri.isNullOrBlank() && song.localPath.isNullOrBlank())) return
 
         replayGainLookupJob = scope.launch {
             val gain = ReplayGainReader.readGainDb(
@@ -4113,11 +4157,13 @@ class PlaybackService : MediaLibraryService() {
      * cannot be left on stale settings.
      */
     private fun applySettings(player: ExoPlayer, chain: PlaybackAudioChain) {
-        player.skipSilenceEnabled = AppSettings.skipSilence.value
-        chain.resampler.cutoffHz = AppSettings.resamplerCutoffHz.value
+        val bitPerfect = AppSettings.bitPerfectPlayback.value
+        player.skipSilenceEnabled = AppSettings.skipSilence.value && !bitPerfect
+        chain.resampler.cutoffHz = if (bitPerfect) 0 else AppSettings.resamplerCutoffHz.value
+        chain.spatial.enabled = !bitPerfect && AppSettings.spatialAudio.value
         player.playbackParameters = PlaybackParameters(
-            AppSettings.playbackSpeed.value,
-            AppSettings.playbackPitch.value,
+            if (bitPerfect) 1f else AppSettings.playbackSpeed.value,
+            if (bitPerfect) 1f else AppSettings.playbackPitch.value,
         )
         // Restore persisted shuffle and repeat states on startup.
         if (AppSettings.shuffleEnabled.value) {
@@ -4152,7 +4198,106 @@ class PlaybackService : MediaLibraryService() {
             preferred = preferred,
             floatEnabled = shouldEnableFloatOutput(),
         )
+        if (AppSettings.bitPerfectPlayback.value) {
+            lastAudioTrackConfig?.let(::requestBitPerfectMixerAttributes)
+        } else {
+            clearBitPerfectMixerPreferences()
+        }
     }
+
+    private fun requestBitPerfectMixerAttributes(config: AudioSink.AudioTrackConfig): Boolean {
+        if (!AppSettings.bitPerfectPlayback.value || castPlayback.active) {
+            AudioOutputStatus.publishBitPerfectMixer(false)
+            return false
+        }
+        if (Build.VERSION.SDK_INT < Build.VERSION_CODES.UPSIDE_DOWN_CAKE) {
+            AudioOutputStatus.publishBitPerfectMixer(false)
+            return false
+        }
+        val manager = audioManager ?: return false
+        return requestBitPerfectMixerAttributesApi34(manager, config)
+    }
+
+    @androidx.annotation.RequiresApi(Build.VERSION_CODES.UPSIDE_DOWN_CAKE)
+    private fun requestBitPerfectMixerAttributesApi34(
+        manager: AudioManager,
+        config: AudioSink.AudioTrackConfig,
+    ): Boolean {
+        val device = runCatching {
+            currentOutputDevice(manager, preferredUsbDevice())
+        }.getOrNull()?.takeIf(::isUsbOutputDevice)
+        if (device == null) {
+            clearBitPerfectMixerPreferences()
+            return false
+        }
+
+        val signature = Triple(config.sampleRate, config.encoding, config.channelConfig)
+        if (preferredBitPerfectDevice?.id == device.id && preferredBitPerfectFormat == signature) {
+            AudioOutputStatus.publishBitPerfectMixer(true)
+            return true
+        }
+
+        val mixerAttributes = runCatching {
+            manager.getSupportedMixerAttributes(device).firstOrNull { candidate ->
+                val format = candidate.format
+                candidate.mixerBehavior == android.media.AudioMixerAttributes.MIXER_BEHAVIOR_BIT_PERFECT &&
+                    format.sampleRate == config.sampleRate &&
+                    format.encoding == config.encoding &&
+                    format.channelMask == config.channelConfig
+            }
+        }.getOrNull()
+        if (mixerAttributes == null) {
+            clearBitPerfectMixerPreferences()
+            return false
+        }
+
+        if (preferredBitPerfectDevice?.id != null && preferredBitPerfectDevice?.id != device.id) {
+            clearBitPerfectMixerPreferences()
+        }
+
+        val accepted = runCatching {
+            manager.setPreferredMixerAttributes(platformMediaAudioAttributes, device, mixerAttributes)
+        }.getOrDefault(false)
+        if (!accepted) {
+            clearBitPerfectMixerPreferences()
+            return false
+        }
+
+        preferredBitPerfectDevice = device
+        preferredBitPerfectFormat = signature
+        AudioOutputStatus.publishBitPerfectMixer(true)
+        return true
+    }
+
+    private fun clearBitPerfectMixerPreferences() {
+        val manager = audioManager
+        if (manager != null && Build.VERSION.SDK_INT >= Build.VERSION_CODES.UPSIDE_DOWN_CAKE) {
+            clearBitPerfectMixerPreferencesApi34(manager)
+        }
+        preferredBitPerfectDevice = null
+        preferredBitPerfectFormat = null
+        AudioOutputStatus.publishBitPerfectMixer(false)
+    }
+
+    @androidx.annotation.RequiresApi(Build.VERSION_CODES.UPSIDE_DOWN_CAKE)
+    private fun clearBitPerfectMixerPreferencesApi34(manager: AudioManager) {
+        val devices = (manager.getDevices(AudioManager.GET_DEVICES_OUTPUTS).toList() +
+            listOfNotNull(preferredBitPerfectDevice))
+            .filter(::isUsbOutputDevice)
+            .distinctBy(AudioDeviceInfo::getId)
+        devices.forEach { device ->
+            runCatching {
+                manager.clearPreferredMixerAttributes(platformMediaAudioAttributes, device)
+            }
+        }
+    }
+
+    private fun isUsbOutputDevice(device: AudioDeviceInfo): Boolean = device.isSink &&
+        device.type in setOf(
+            AudioDeviceInfo.TYPE_USB_DEVICE,
+            AudioDeviceInfo.TYPE_USB_HEADSET,
+            AudioDeviceInfo.TYPE_USB_ACCESSORY,
+        )
 
     private fun currentOutputDevice(manager: AudioManager, preferredUsb: AudioDeviceInfo?): AudioDeviceInfo? {
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
@@ -4240,14 +4385,14 @@ class PlaybackService : MediaLibraryService() {
         AppSettings.audioSessionId.value = newActive.audioSessionId
         audioEffectManager?.setAudioSessionId(
             sessionId = newActive.audioSessionId,
-            enabled = com.music.bitchord.data.settings.EqualizerSettings.enabled.value,
+            enabled = com.music.bitchord.data.settings.EqualizerSettings.enabled.value && !AppSettings.bitPerfectPlayback.value,
             bandLevels = com.music.bitchord.data.settings.EqualizerSettings.bandLevels.value,
             bassBoostStrength = com.music.bitchord.data.settings.EqualizerSettings.bassBoostStrength.value,
             virtualizerStrength = com.music.bitchord.data.settings.EqualizerSettings.virtualizerStrength.value,
         )
         spareAudioEffectManager?.setAudioSessionId(
             sessionId = newSpare.audioSessionId,
-            enabled = com.music.bitchord.data.settings.EqualizerSettings.enabled.value,
+            enabled = com.music.bitchord.data.settings.EqualizerSettings.enabled.value && !AppSettings.bitPerfectPlayback.value,
             bandLevels = com.music.bitchord.data.settings.EqualizerSettings.bandLevels.value,
             bassBoostStrength = com.music.bitchord.data.settings.EqualizerSettings.bassBoostStrength.value,
             virtualizerStrength = com.music.bitchord.data.settings.EqualizerSettings.virtualizerStrength.value,
@@ -4313,12 +4458,54 @@ class PlaybackService : MediaLibraryService() {
                 }
         }
         scope.launch {
-            AppSettings.skipSilence.collect { on -> eachPlayer { it.skipSilenceEnabled = on } }
+            AppSettings.skipSilence.collect { on ->
+                eachPlayer { it.skipSilenceEnabled = on && !AppSettings.bitPerfectPlayback.value }
+            }
         }
         scope.launch {
             AppSettings.resamplerCutoffHz.collect { cutoff ->
-                activeAudioChain.resampler.cutoffHz = cutoff
-                spareAudioChain.resampler.cutoffHz = cutoff
+                val effectiveCutoff = if (AppSettings.bitPerfectPlayback.value) 0 else cutoff
+                activeAudioChain.resampler.cutoffHz = effectiveCutoff
+                spareAudioChain.resampler.cutoffHz = effectiveCutoff
+            }
+        }
+        scope.launch {
+            AppSettings.pausePlaybackAtZeroVolume.collect { enabled ->
+                if (enabled) pauseLocalPlaybackIfVolumeIsZero()
+            }
+        }
+        scope.launch {
+            AppSettings.bitPerfectPlayback.drop(1).collect { enabled ->
+                crossfade?.cancelTransition()
+                eachPlayer { current ->
+                    current.skipSilenceEnabled = AppSettings.skipSilence.value && !enabled
+                    current.playbackParameters = if (enabled) PlaybackParameters(1f, 1f) else PlaybackParameters(
+                        AppSettings.playbackSpeed.value,
+                        AppSettings.playbackPitch.value,
+                    )
+                }
+                val effectiveCutoff = if (enabled) 0 else AppSettings.resamplerCutoffHz.value
+                activeAudioChain.resampler.cutoffHz = effectiveCutoff
+                spareAudioChain.resampler.cutoffHz = effectiveCutoff
+                activeAudioChain.replayGain.gainDb = 0f
+                spareAudioChain.replayGain.gainDb = 0f
+                applySpatialAudioEnabled()
+                updateAudioEffectsEnabled()
+                updateReplayGainForCurrentTrack(force = true)
+                spare?.currentMediaItem?.let(::prepareCrossfadeIncoming)
+
+                val hadBitPerfectMixer = preferredBitPerfectDevice != null
+                if (enabled) {
+                    val mixerRequested = lastAudioTrackConfig?.let(::requestBitPerfectMixerAttributes) == true
+                    if (mixerRequested && (player?.mediaItemCount ?: 0) > 0) {
+                        rebuildPlayersForOutput(configuredFloatOutput)
+                    }
+                } else {
+                    clearBitPerfectMixerPreferences()
+                    if (hadBitPerfectMixer && !castPlayback.active && (player?.mediaItemCount ?: 0) > 0) {
+                        rebuildPlayersForOutput(configuredFloatOutput)
+                    }
+                }
             }
         }
         scope.launch {
@@ -4345,8 +4532,8 @@ class PlaybackService : MediaLibraryService() {
             // Keep speed and pitch together. At present the player has no
             // secondary speed writer; combine also ensures changing one slider
             // never resets the other parameter back to 1.0.
-            combine(AppSettings.playbackSpeed, AppSettings.playbackPitch) { speed, pitch ->
-                PlaybackParameters(speed, pitch)
+            combine(AppSettings.playbackSpeed, AppSettings.playbackPitch, AppSettings.bitPerfectPlayback) { speed, pitch, bitPerfect ->
+                if (bitPerfect) PlaybackParameters(1f, 1f) else PlaybackParameters(speed, pitch)
             }.collect { parameters ->
                 eachPlayer { it.playbackParameters = parameters }
             }
@@ -4367,9 +4554,8 @@ class PlaybackService : MediaLibraryService() {
             AppSettings.spatialAudio.collect { applySpatialAudioEnabled() }
         }
         scope.launch {
-            com.music.bitchord.data.settings.EqualizerSettings.enabled.collect { enabled ->
-                audioEffectManager?.applyEnabled(enabled)
-                spareAudioEffectManager?.applyEnabled(enabled)
+            com.music.bitchord.data.settings.EqualizerSettings.enabled.collect {
+                updateAudioEffectsEnabled()
             }
         }
         scope.launch {
@@ -4402,11 +4588,21 @@ class PlaybackService : MediaLibraryService() {
      * processors are kept in lockstep rather than tracking a role swap.
      */
     private fun applySpatialAudioEnabled() {
-        val enabled = AppSettings.spatialAudio.value && !activeTrackIsDolbyAtmos
+        val enabled = AppSettings.spatialAudio.value &&
+            !AppSettings.bitPerfectPlayback.value &&
+            !activeTrackIsDolbyAtmos
         activeAudioChain.spatial.enabled = enabled
         val standbyItem = spare?.currentMediaItem
         spareAudioChain.spatial.enabled = AppSettings.spatialAudio.value &&
+            !AppSettings.bitPerfectPlayback.value &&
             NerdStats.declaredFormat(standbyItem?.mediaId)?.isDolbyAtmos != true
+    }
+
+    private fun updateAudioEffectsEnabled() {
+        val enabled = com.music.bitchord.data.settings.EqualizerSettings.enabled.value &&
+            !AppSettings.bitPerfectPlayback.value
+        audioEffectManager?.applyEnabled(enabled)
+        spareAudioEffectManager?.applyEnabled(enabled)
     }
 
     private fun observeScrobbling() {
@@ -4719,7 +4915,9 @@ class PlaybackService : MediaLibraryService() {
     override fun onDestroy() {
         externalAudioPopupWindow?.dismiss()
         externalAudioPopupWindow = null
+        runCatching { contentResolver.unregisterContentObserver(systemVolumeObserver) }
         audioManager?.unregisterAudioDeviceCallback(outputDeviceCallback)
+        clearBitPerfectMixerPreferences()
         abandonAudioFocus()
         player?.let(::savePlaybackState)
         // And to leave the widgets showing a play button. Nothing else reports a

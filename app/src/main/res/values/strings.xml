@@ -758,6 +758,11 @@
     <string name="show_track_duration_instead_of_remaining_subtitle">Show the full track length on the right side of the player seek bar</string>
     <string name="offline_mode">Offline mode</string>
     <string name="offline_mode_subtitle">Block this app’s network requests. Local files and saved caches remain available.</string>
+    <string name="youtube_music_enabled">Enable YouTube Music</string>
+    <string name="youtube_music_enabled_subtitle">Off by default. When off, the app makes no YouTube or YouTube Music requests. Turn on to search and play from the catalog.</string>
+    <string name="search_this_device">This device</string>
+    <string name="search_youtube_music">YouTube Music</string>
+    <string name="youtube_music_disabled_message">Enable YouTube Music in Settings and turn off offline mode to search the catalog.</string>
     <string name="player_controls">Player controls</string>
     <string name="audio_focus_level">Audio focus level</string>
     <string name="audio_focus_level_subtitle">0 Off · 1 Normal · 2 Temporary · 3 Duck other audio · 4 Exclusive temporary</string>
@@ -775,6 +780,8 @@
     <string name="favorite_beside_track_menu_subtitle">Show the heart beside the three-dot menu instead of in the lower controls</string>
     <string name="prevent_play_at_zero_volume">Prevent playback at zero volume</string>
     <string name="prevent_play_at_zero_volume_subtitle">Ignore play commands while Android music volume is muted</string>
+    <string name="pause_playback_at_zero_volume">Pause playback at zero volume</string>
+    <string name="pause_playback_at_zero_volume_subtitle">Pause the current track when Android music volume reaches 0. Raising the volume does not resume playback.</string>
     <string name="player_control_queue">Up next button</string>
     <string name="player_control_visibility_subtitle">Hide only the button; playback behavior stays active</string>
     <string name="main_navigation_tabs">Main navigation tabs</string>
@@ -1010,6 +1017,10 @@
     <string name="lyrics_debug_logs">Lyrics Debug Logs</string>
     <string name="lyrics_debug_logs_subtitle">Show live API queries and scraper activity in the lyrics panel</string>
     <string name="output_precision">Output precision</string>
+    <string name="bit_perfect_playback">Bit-perfect playback</string>
+    <string name="bit_perfect_playback_subtitle">Bypasses app audio processing and requests Android 14+ bit-perfect USB output when the DAC supports the current format. Other routes may still resample or mix; bit-perfect output may disable Android volume control.</string>
+    <string name="bit_perfect_mixer_requested">USB bit-perfect mixer requested</string>
+    <string name="bit_perfect_mixer_unavailable">USB bit-perfect mixer not active</string>
     <string name="prefer_usb_dac">Prefer USB DAC</string>
     <string name="blur_unfocused_lyrics">Blur unfocused lyrics</string>
     <string name="blur_unfocused_lyrics_subtitle">Keeps the spotlight on the current line</string>

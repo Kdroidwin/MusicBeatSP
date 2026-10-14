@@ -8,6 +8,9 @@ import androidx.compose.animation.slideInHorizontally
 import androidx.compose.animation.slideOutHorizontally
 import androidx.compose.animation.togetherWith
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.ui.draw.clip
+import androidx.compose.ui.layout.ContentScale
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -22,6 +25,7 @@ import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
+import androidx.compose.foundation.lazy.itemsIndexed
 import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.rounded.Close
@@ -35,6 +39,8 @@ import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.material3.OutlinedButton
+import androidx.compose.material3.FilterChip
+import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
@@ -45,6 +51,7 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import com.music.bitchord.data.model.Song
@@ -60,6 +67,13 @@ import com.music.bitchord.feature.localsearch.ui.components.LocalSearchResultRow
 import com.music.bitchord.ui.components.PAGE_GUTTER
 import com.music.bitchord.ui.components.ROW_DIVIDER_INSET
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
+import coil3.compose.AsyncImage
+import com.music.bitchord.R
+import com.music.bitchord.data.model.SearchResult
+import com.music.bitchord.data.model.UiState
+import com.music.bitchord.data.model.isSameTrackAs
+import com.music.bitchord.ui.components.SongRow
+import com.music.bitchord.ui.components.VerticalScrollbar
 
 @Composable
 fun LocalSearchScreen(
@@ -78,14 +92,30 @@ fun LocalSearchScreen(
     onRecordSearch: (String) -> Unit = {},
     onRemoveSearch: (String) -> Unit = {},
     onClearSearchHistory: () -> Unit = {},
+    youtubeMusicResults: UiState<List<SearchResult>>? = null,
+    onYoutubeMusicSearch: ((String) -> Unit)? = null,
+    onYoutubeMusicTrackClick: ((Song) -> Unit)? = null,
+    onYoutubeMusicBrowseClick: ((com.music.bitchord.data.model.BrowseItem) -> Unit)? = null,
     contentPadding: PaddingValues = PaddingValues(0.dp),
     modifier: Modifier = Modifier,
 ) {
     val context = LocalContext.current
     val folderHierarchy by AppSettings.localFolderHierarchy.collectAsStateWithLifecycle()
+    val youtubeMusicEnabled by AppSettings.youtubeMusicEnabled.collectAsStateWithLifecycle()
+    val offlineMode by AppSettings.offlineMode.collectAsStateWithLifecycle()
+    val canSearchYoutubeMusic = youtubeMusicEnabled && !offlineMode
     var query by rememberSaveable { mutableStateOf("") }
+    var useYoutubeMusic by rememberSaveable { mutableStateOf(false) }
+    var submittedYoutubeQuery by rememberSaveable { mutableStateOf<String?>(null) }
     var selectedFilter by rememberSaveable { mutableStateOf(LocalSearchFilter.ALL) }
     val listState = rememberLazyListState()
+
+    LaunchedEffect(canSearchYoutubeMusic) {
+        if (!canSearchYoutubeMusic) {
+            useYoutubeMusic = false
+            submittedYoutubeQuery = null
+        }
+    }
 
     var drillDownLabel by rememberSaveable { mutableStateOf<String?>(null) }
     var drillDownSongs by remember { mutableStateOf<List<Song>>(emptyList()) }
@@ -110,6 +140,10 @@ fun LocalSearchScreen(
         if (focusTrigger > 0) {
             leaveDrillDown()
         }
+    }
+
+    LaunchedEffect(useYoutubeMusic, query, selectedFilter, submittedYoutubeQuery) {
+        listState.scrollToItem(0)
     }
 
     val searchResults = remember(query, selectedFilter, songs, folderHierarchy) {
@@ -189,19 +223,50 @@ fun LocalSearchScreen(
                     onQueryChange = { query = it },
                     onSearch = {
                         if (query.isNotBlank()) {
-                            onRecordSearch(query.trim())
+                            val term = query.trim()
+                            if (useYoutubeMusic) {
+                                submittedYoutubeQuery = term
+                                onYoutubeMusicSearch?.invoke(term)
+                            } else {
+                                onRecordSearch(term)
+                            }
                         }
                     },
                     focusTrigger = focusTrigger,
                     modifier = Modifier.padding(horizontal = PAGE_GUTTER, vertical = 6.dp),
                 )
 
-                // Filter Chips
-                LocalSearchFilterChips(
-                    selectedFilter = selectedFilter,
-                    onFilterSelect = { selectedFilter = it },
-                    modifier = Modifier.padding(vertical = 4.dp),
-                )
+                if (canSearchYoutubeMusic) {
+                    Row(
+                        modifier = Modifier.fillMaxWidth().padding(horizontal = PAGE_GUTTER, vertical = 2.dp),
+                        horizontalArrangement = Arrangement.spacedBy(8.dp),
+                    ) {
+                        FilterChip(
+                            selected = !useYoutubeMusic,
+                            onClick = {
+                                useYoutubeMusic = false
+                                submittedYoutubeQuery = null
+                            },
+                            label = { Text(stringResource(R.string.search_this_device)) },
+                        )
+                        FilterChip(
+                            selected = useYoutubeMusic,
+                            onClick = {
+                                useYoutubeMusic = true
+                                submittedYoutubeQuery = null
+                            },
+                            label = { Text(stringResource(R.string.search_youtube_music)) },
+                        )
+                    }
+                }
+
+                if (!useYoutubeMusic) {
+                    LocalSearchFilterChips(
+                        selectedFilter = selectedFilter,
+                        onFilterSelect = { selectedFilter = it },
+                        modifier = Modifier.padding(vertical = 4.dp),
+                    )
+                }
 
                 if (selectedSongIds.isNotEmpty()) {
                     SearchSelectionBar(
@@ -215,14 +280,29 @@ fun LocalSearchScreen(
                 }
 
                 // Content
-                if (query.isBlank()) {
+                if (useYoutubeMusic) {
+                    YoutubeMusicSearchResults(
+                        query = query,
+                        submittedQuery = submittedYoutubeQuery,
+                        state = youtubeMusicResults,
+                        currentSong = currentSong,
+                        isPlaying = isPlaying,
+                        onTrackClick = onYoutubeMusicTrackClick ?: { song -> onSongClick(listOf(song), 0) },
+                        onTrackLongPress = onSongLongPress,
+                        onTrackSwipe = onSongSwipe,
+                        onBrowseClick = { item -> onYoutubeMusicBrowseClick?.invoke(item) },
+                        contentPadding = contentPadding,
+                        listState = listState,
+                        modifier = Modifier.weight(1f),
+                    )
+                } else if (query.isBlank()) {
                     // Recent searches or initial search prompt
                     if (recentSearches.isNotEmpty()) {
+                        Box(Modifier.weight(1f).fillMaxWidth()) {
                         LazyColumn(
+                            state = listState,
                             modifier = Modifier.fillMaxSize(),
-                            contentPadding = PaddingValues(
-                                bottom = contentPadding.calculateBottomPadding() + 16.dp,
-                            ),
+                            contentPadding = PaddingValues(bottom = contentPadding.calculateBottomPadding() + 16.dp),
                         ) {
                             item {
                                 Row(
@@ -252,7 +332,12 @@ fun LocalSearchScreen(
                                         .fillMaxWidth()
                                         .clickable {
                                             query = term
-                                            onRecordSearch(term)
+                                            if (useYoutubeMusic) {
+                                                submittedYoutubeQuery = term
+                                                onYoutubeMusicSearch?.invoke(term)
+                                            } else {
+                                                onRecordSearch(term)
+                                            }
                                         }
                                         .padding(horizontal = PAGE_GUTTER, vertical = 12.dp),
                                     verticalAlignment = Alignment.CenterVertically,
@@ -282,6 +367,11 @@ fun LocalSearchScreen(
                                     )
                                 }
                             }
+                        }
+                        VerticalScrollbar(
+                            state = listState,
+                            modifier = Modifier.align(Alignment.CenterEnd),
+                        )
                         }
                     } else {
                         Box(
@@ -351,6 +441,7 @@ fun LocalSearchScreen(
                     searchResults.filterIsInstance<LocalSearchResult.Folder>()
                 }
 
+                Box(Modifier.weight(1f).fillMaxWidth()) {
                 LazyColumn(
                     state = listState,
                     modifier = Modifier.fillMaxSize(),
@@ -579,8 +670,14 @@ fun LocalSearchScreen(
                         }
                     }
                 }
+                VerticalScrollbar(
+                    state = listState,
+                    modifier = Modifier.align(Alignment.CenterEnd),
+                )
+                }
             }
         }
+    }
     }
 
     songsForPlaylist?.let { selected ->
@@ -593,6 +690,143 @@ fun LocalSearchScreen(
     }
 }
 
+@Composable
+private fun YoutubeMusicSearchResults(
+    query: String,
+    submittedQuery: String?,
+    state: UiState<List<SearchResult>>?,
+    currentSong: Song?,
+    isPlaying: Boolean,
+    onTrackClick: (Song) -> Unit,
+    onTrackLongPress: (Song) -> Unit,
+    onTrackSwipe: (Song) -> Unit,
+    onBrowseClick: (com.music.bitchord.data.model.BrowseItem) -> Unit,
+    contentPadding: PaddingValues,
+    listState: androidx.compose.foundation.lazy.LazyListState,
+    modifier: Modifier = Modifier,
+) {
+    val message = when {
+        query.isBlank() -> "Search the YouTube Music catalog when you are ready."
+        submittedQuery != query.trim() -> "Submit the search to look in YouTube Music."
+        else -> null
+    }
+    if (message != null) {
+        Box(modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
+            Text(message, color = MaterialTheme.colorScheme.onSurfaceVariant)
+        }
+        return
+    }
+
+    when (state) {
+        null, UiState.Loading -> Box(modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
+            CircularProgressIndicator()
+        }
+        is UiState.Error -> Box(
+            modifier.fillMaxSize().padding(horizontal = PAGE_GUTTER),
+            contentAlignment = Alignment.Center,
+        ) {
+            Text(state.message, color = MaterialTheme.colorScheme.onSurfaceVariant)
+        }
+        is UiState.Success -> {
+            val results = state.data
+            if (results.isEmpty()) {
+                Box(modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
+                    Text("No YouTube Music results", color = MaterialTheme.colorScheme.onSurfaceVariant)
+                }
+            } else {
+                Box(modifier.fillMaxSize()) {
+                    LazyColumn(
+                        state = listState,
+                        modifier = Modifier.fillMaxSize(),
+                        contentPadding = PaddingValues(
+                            bottom = contentPadding.calculateBottomPadding() + 16.dp,
+                        ),
+                    ) {
+                        item(key = "youtube_result_count") {
+                            Text(
+                                text = "${results.size} YouTube Music results",
+                                style = MaterialTheme.typography.labelMedium,
+                                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                                modifier = Modifier.padding(horizontal = PAGE_GUTTER, vertical = 8.dp),
+                            )
+                        }
+                        itemsIndexed(results, key = { index, result ->
+                            val identity = when (result) {
+                                is SearchResult.TopTrack -> "top:${result.song.videoId}"
+                                is SearchResult.Track -> "track:${result.song.videoId}"
+                                is SearchResult.Browse -> "browse:${result.item.browseId}"
+                            }
+                            "youtube:$index:$identity"
+                        }) { _, result ->
+                            when (result) {
+                                is SearchResult.TopTrack -> SongRow(
+                                    song = result.song,
+                                    onClick = { onTrackClick(result.song) },
+                                    onLongPress = { onTrackLongPress(result.song) },
+                                    onSwipeToQueue = { onTrackSwipe(result.song) },
+                                    isCurrent = result.song.isSameTrackAs(currentSong),
+                                    isPlaying = result.song.isSameTrackAs(currentSong) && isPlaying,
+                                )
+                                is SearchResult.Track -> SongRow(
+                                    song = result.song,
+                                    onClick = { onTrackClick(result.song) },
+                                    onLongPress = { onTrackLongPress(result.song) },
+                                    onSwipeToQueue = { onTrackSwipe(result.song) },
+                                    isCurrent = result.song.isSameTrackAs(currentSong),
+                                    isPlaying = result.song.isSameTrackAs(currentSong) && isPlaying,
+                                )
+                                is SearchResult.Browse -> YoutubeMusicBrowseRow(result.item) {
+                                    onBrowseClick(result.item)
+                                }
+                            }
+                        }
+                    }
+                    VerticalScrollbar(
+                        state = listState,
+                        modifier = Modifier.align(Alignment.CenterEnd),
+                    )
+                }
+            }
+        }
+    }
+}
+
+@Composable
+private fun YoutubeMusicBrowseRow(
+    item: com.music.bitchord.data.model.BrowseItem,
+    onClick: () -> Unit,
+) {
+    Row(
+        modifier = Modifier
+            .fillMaxWidth()
+            .clickable(onClick = onClick)
+            .padding(horizontal = PAGE_GUTTER, vertical = 8.dp),
+        verticalAlignment = Alignment.CenterVertically,
+    ) {
+        AsyncImage(
+            model = item.thumbnailUrl,
+            contentDescription = null,
+            contentScale = ContentScale.Crop,
+            modifier = Modifier.size(52.dp).clip(RoundedCornerShape(8.dp)),
+        )
+        Spacer(Modifier.width(14.dp))
+        Column(Modifier.weight(1f)) {
+            Text(
+                text = item.title,
+                style = MaterialTheme.typography.titleSmall,
+                color = MaterialTheme.colorScheme.onSurface,
+                maxLines = 1,
+                overflow = TextOverflow.Ellipsis,
+            )
+            Text(
+                text = item.subtitle.ifBlank { item.type.name.lowercase().replaceFirstChar(Char::uppercase) },
+                style = MaterialTheme.typography.bodyMedium,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                maxLines = 1,
+                overflow = TextOverflow.Ellipsis,
+            )
+        }
+    }
 }
 
 @Composable

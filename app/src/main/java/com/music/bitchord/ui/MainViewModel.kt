@@ -1514,6 +1514,8 @@ class MainViewModel(app: Application) : AndroidViewModel(app) {
      */
     fun recordSearch() = SearchHistory.record(_query.value)
 
+    fun recordSearch(term: String) = SearchHistory.record(term)
+
     /**
      * The search button — the keyboard's search action, or the magnifier in
      * the field. The only thing that runs a search for text the user typed:
@@ -1533,10 +1535,18 @@ class MainViewModel(app: Application) : AndroidViewModel(app) {
      * history. Picking is as deliberate as submitting, so it searches on the
      * spot.
      */
-    fun searchFor(term: String) {
+    fun searchFor(term: String, youtubeMusicOnly: Boolean = false) {
         _query.value = term
         _suggestions.value = emptyList()
         SearchHistory.record(term)
+        if (youtubeMusicOnly && !AppSettings.youtubeMusicNetworkAllowed) {
+            newestRequestId.incrementAndGet()
+            searchSession = null
+            _searchLoadingMore.value = false
+            _results.value = UiState.Error(text(R.string.youtube_music_disabled_message))
+            return
+        }
+        forceYoutubeMusicSearch = youtubeMusicOnly
         runSearch()
     }
 
@@ -1561,9 +1571,13 @@ class MainViewModel(app: Application) : AndroidViewModel(app) {
         val query: String,
         val filter: SearchFilter,
         val requestId: Long,
+        val youtubeMusicOnly: Boolean,
     )
 
-    private fun cacheKey(query: String, filter: SearchFilter) = "${filter.name}:$query"
+    private var forceYoutubeMusicSearch = false
+
+    private fun cacheKey(query: String, filter: SearchFilter, youtubeMusicOnly: Boolean) =
+        "${if (youtubeMusicOnly) "youtube:" else "local:"}${filter.name}:$query"
 
     /**
      * The results of the longest earlier query this one starts with — near
@@ -1593,7 +1607,7 @@ class MainViewModel(app: Application) : AndroidViewModel(app) {
         _searchScrollReset.value += 1
         searchSession = null
         _searchLoadingMore.value = false
-        searchRequests.tryEmit(SearchRequest(query, _filter.value, id))
+        searchRequests.tryEmit(SearchRequest(query, _filter.value, id, forceYoutubeMusicSearch))
     }
 
     /**
@@ -1618,7 +1632,7 @@ class MainViewModel(app: Application) : AndroidViewModel(app) {
     private fun startSearchPipeline() = viewModelScope.launch {
         searchRequests
             .collectLatest { request ->
-                val key = cacheKey(request.query, request.filter)
+                val key = cacheKey(request.query, request.filter, request.youtubeMusicOnly)
                 // Something to look at immediately: the exact answer if this
                 // query has been run before, otherwise the closest earlier
                 // one. Only fall back to a spinner with neither.
@@ -1632,7 +1646,7 @@ class MainViewModel(app: Application) : AndroidViewModel(app) {
 
                 // Pure local music search: query cached/loaded local songs
                 val localTracks = (_localSongs.value as? UiState.Success)?.data.orEmpty()
-                val matchingLocal = localTracks.filter {
+                val matchingLocal = if (request.youtubeMusicOnly) emptyList() else localTracks.filter {
                     it.title.contains(request.query, ignoreCase = true) ||
                         it.artist.contains(request.query, ignoreCase = true) ||
                         it.albumName?.contains(request.query, ignoreCase = true) == true ||

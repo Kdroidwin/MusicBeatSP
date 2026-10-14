@@ -37,6 +37,8 @@ object YtMusicRepository {
     private const val TAG = "BitChord"
     private val moodGenreShelfCache = ConcurrentHashMap<String, List<HomeShelf>>()
 
+    class FeatureDisabledException : IllegalStateException("YouTube Music is disabled in settings")
+
     /**
      * The core personalised feed. It stays deliberately independent from the
      * optional shelves below: callers can paint this response immediately,
@@ -740,6 +742,9 @@ object YtMusicRepository {
 
     private suspend fun <T> call(label: String, block: suspend () -> T): Result<T> =
         withContext(Dispatchers.IO) {
+            if (!AppSettings.youtubeMusicNetworkAllowed) {
+                return@withContext Result.failure(FeatureDisabledException())
+            }
             runCatching { block() }.recoverCatching { failure ->
                 // Context cookies can rotate while a process is alive. Refresh
                 // once and retry; never loop or silently sign the listener out.

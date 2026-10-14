@@ -24,7 +24,10 @@ import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.fillMaxHeight
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.lazy.rememberLazyListState
+import androidx.compose.foundation.lazy.grid.rememberLazyGridState
 import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
@@ -85,6 +88,7 @@ import com.music.bitchord.feature.tageditor.data.TagLibWriter
 import kotlinx.coroutines.launch
 import com.music.bitchord.feature.localmusic.ui.components.DrillDownSongList
 import com.music.bitchord.feature.localmusic.ui.components.rememberPlaylistCoverPicker
+import com.music.bitchord.ui.components.VerticalScrollbar
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
 
@@ -208,6 +212,8 @@ fun LibraryScreen(
     }
 
     var selectedFilter by rememberSaveable { mutableStateOf(LibraryFilter.ALL) }
+    val collectionListState = rememberLazyListState()
+    val collectionGridState = rememberLazyGridState()
     var showCreateDialog by remember { mutableStateOf(false) }
     var playlistToRename by remember { mutableStateOf<LocalPlaylist?>(null) }
 
@@ -661,6 +667,7 @@ fun LibraryScreen(
                                 top = 0.dp,
                                 bottom = contentPadding.calculateBottomPadding(),
                             ),
+                            state = collectionGridState,
                         )
                     } else {
                         LibraryListContent(
@@ -682,9 +689,38 @@ fun LibraryScreen(
                                 top = 0.dp,
                                 bottom = contentPadding.calculateBottomPadding(),
                             ),
+                            state = collectionListState,
                         )
                     }
                 }
+            }
+        }
+        val collectionCount =
+            (if (selectedFilter == LibraryFilter.ALL || selectedFilter == LibraryFilter.FAVORITES) 1 else 0) +
+                (if (selectedFilter == LibraryFilter.ALL || selectedFilter == LibraryFilter.PLAYLISTS) playlists.size + 1 else 0)
+        if (!inDrillDown && !inHistoryView && collectionCount > 0) {
+            if (libraryViewType == LibraryViewType.GRID) {
+                VerticalScrollbar(
+                    state = collectionGridState,
+                    modifier = Modifier
+                        .align(Alignment.CenterEnd)
+                        .fillMaxHeight()
+                        .padding(
+                            top = contentPadding.calculateTopPadding(),
+                            bottom = contentPadding.calculateBottomPadding(),
+                        ),
+                )
+            } else {
+                VerticalScrollbar(
+                    state = collectionListState,
+                    modifier = Modifier
+                        .align(Alignment.CenterEnd)
+                        .fillMaxHeight()
+                        .padding(
+                            top = contentPadding.calculateTopPadding(),
+                            bottom = contentPadding.calculateBottomPadding(),
+                        ),
+                )
             }
         }
     }

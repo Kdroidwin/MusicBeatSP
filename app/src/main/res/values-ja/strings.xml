@@ -666,6 +666,11 @@
     <string name="show_track_duration_instead_of_remaining_subtitle">シークバー右側に、残り時間ではなく曲全体の長さを表示します</string>
     <string name="offline_mode">完全オフラインモード</string>
     <string name="offline_mode_subtitle">アプリからの通信を停止します。端末内の曲と保存済みキャッシュは利用できます。</string>
+    <string name="youtube_music_enabled">YouTube Musicを有効にする</string>
+    <string name="youtube_music_enabled_subtitle">初期設定はOFFです。OFFの間はYouTube関連のリクエストを送信しません。有効にするとカタログ検索と再生が使えます。</string>
+    <string name="search_this_device">この端末</string>
+    <string name="search_youtube_music">YouTube Music</string>
+    <string name="youtube_music_disabled_message">設定でYouTube Musicを有効にし、オフラインモードを解除してから検索してください。</string>
     <string name="player_controls">プレーヤー操作ボタン</string>
     <string name="audio_focus_level">オーディオフォーカスレベル</string>
     <string name="audio_focus_level_subtitle">0 オフ・1 通常・2 一時・3 他の音を小さくする・4 一時独占</string>
@@ -682,6 +687,8 @@
     <string name="favorite_beside_track_menu">お気に入りボタンを詳細メニューの横に移動</string>
     <string name="favorite_beside_track_menu_subtitle">下部の操作列ではなく、三点メニューの左側にハートを表示します</string>
     <string name="prevent_play_at_zero_volume">音量0のとき再生しない</string>
+    <string name="pause_playback_at_zero_volume">音量0で再生中の曲を一時停止</string>
+    <string name="pause_playback_at_zero_volume_subtitle">Androidの音楽音量が0になると現在の曲を一時停止します。音量を上げても自動再開しません。</string>
     <string name="prevent_play_at_zero_volume_subtitle">Androidの音楽音量がミュート中は再生操作を無視します</string>
     <string name="player_control_queue">次に再生ボタン</string>
     <string name="player_control_visibility_subtitle">ボタンだけを隠します。再生状態には影響しません</string>
@@ -918,6 +925,10 @@
     <string name="lyrics_debug_logs">歌詞デバッグログ</string>
     <string name="lyrics_debug_logs_subtitle">歌詞画面にAPIリクエストとスクレイピング状況を表示します</string>
     <string name="output_precision">出力精度</string>
+    <string name="bit_perfect_playback">ビットパーフェクト再生</string>
+    <string name="bit_perfect_playback_subtitle">アプリ内の音声処理を停止し、Android 14以降の対応USB DACではビットパーフェクト出力を要求します。その他の経路ではOSが変換・ミキシングする場合があります。また、USB出力では端末の音量調整が効かないことがあります。</string>
+    <string name="bit_perfect_mixer_requested">USBビットパーフェクトミキサー要求中</string>
+    <string name="bit_perfect_mixer_unavailable">USBビットパーフェクトミキサー未適用</string>
     <string name="prefer_usb_dac">USB DACを優先</string>
     <string name="blur_unfocused_lyrics">現在行以外の歌詞をぼかす</string>
     <string name="blur_unfocused_lyrics_subtitle">再生中の行に注目しやすくします</string>

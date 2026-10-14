@@ -12,6 +12,7 @@ import okio.ForwardingSource
 import okio.Source
 import okio.buffer
 import java.util.concurrent.ConcurrentHashMap
+import java.util.Collections
 import java.util.concurrent.TimeUnit
 import java.util.concurrent.atomic.AtomicLong
 import java.io.IOException
@@ -40,6 +41,24 @@ import java.io.IOException
  * request was slow.
  */
 object Http {
+
+    private val activeYoutubeMusicCalls = Collections.newSetFromMap(
+        ConcurrentHashMap<okhttp3.Call, Boolean>(),
+    )
+
+    /** Cancels only active YouTube/YouTube Music traffic when its opt-in is turned off. */
+    fun cancelYoutubeMusicRequests() {
+        activeYoutubeMusicCalls.toList().forEach { call -> runCatching { call.cancel() } }
+    }
+
+    private fun isYoutubeMusicRelatedHost(host: String): Boolean =
+        host == "youtube.com" || host.endsWith(".youtube.com") ||
+            host == "youtu.be" || host.endsWith(".youtu.be") ||
+            host == "youtubei.googleapis.com" ||
+            host == "googlevideo.com" || host.endsWith(".googlevideo.com") ||
+            host == "ytimg.com" || host.endsWith(".ytimg.com") ||
+            host == "ggpht.com" || host.endsWith(".ggpht.com") ||
+            host == "googleusercontent.com" || host.endsWith(".googleusercontent.com")
 
     // ---- Temporary data-usage instrumentation --------------------------
     //
@@ -118,7 +137,26 @@ object Http {
         .connectionPool(ConnectionPool(16, 5, TimeUnit.MINUTES))
         .addInterceptor { chain ->
             if (AppSettings.offlineMode.value) throw IOException("Offline mode is enabled")
-            chain.proceed(chain.request())
+            val request = chain.request()
+            if (!isYoutubeMusicRelatedHost(request.url.host)) {
+                chain.proceed(request)
+            } else {
+                if (!AppSettings.youtubeMusicEnabled.value) {
+                    throw IOException("YouTube Music is disabled")
+                }
+                val call = chain.call()
+                activeYoutubeMusicCalls.add(call)
+                try {
+                    // Recheck after registration so disabling the feature at
+                    // the same time cannot let a queued call slip onto the wire.
+                    if (!AppSettings.youtubeMusicEnabled.value || AppSettings.offlineMode.value) {
+                        throw IOException("YouTube Music is disabled")
+                    }
+                    chain.proceed(request)
+                } finally {
+                    activeYoutubeMusicCalls.remove(call)
+                }
+            }
         }
         .apply { if (USAGE_LOGGING_ENABLED) addNetworkInterceptor(usageInterceptor) }
         .build()

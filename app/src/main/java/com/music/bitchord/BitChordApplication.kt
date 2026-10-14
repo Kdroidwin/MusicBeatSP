@@ -59,7 +59,7 @@ class BitChordApplication : Application(), SingletonImageLoader.Factory {
         // it: a play registered under the wrong account is indistinguishable, to
         // the listener, from one that was never registered at all. Fire and
         // forget — every caller works without it, just less precisely.
-        if (restoredSession != null) {
+        if (restoredSession != null && AppSettings.youtubeMusicNetworkAllowed) {
             // After the cookie, never before: setting the cookie clears any
             // channel the last session was acting as, so restoring the choice
             // first would restore it into the value about to be wiped.

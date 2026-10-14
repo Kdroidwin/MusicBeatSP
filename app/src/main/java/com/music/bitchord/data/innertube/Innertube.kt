@@ -340,6 +340,7 @@ object Innertube {
      * [SessionScope.dataSyncId] — see that field.
      */
     suspend fun ensureSessionScope() {
+        if (!com.music.bitchord.data.settings.AppSettings.youtubeMusicNetworkAllowed) return
         val session = cookie ?: return
         if (scope != null) return
         scopeLock.withLock {

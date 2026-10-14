@@ -22,7 +22,9 @@ object AudioOutputStatus {
         val isUsb: Boolean = false,
         val actualEncoding: Int? = null,
         val actualSampleRateHz: Int? = null,
+        val actualChannelConfig: Int? = null,
         val floatFallback: Boolean = false,
+        val bitPerfectMixerActive: Boolean = false,
     )
 
     val current = MutableStateFlow(Snapshot())
@@ -51,13 +53,18 @@ object AudioOutputStatus {
         )
     }
 
-    fun publishAudioTrack(encoding: Int, sampleRateHz: Int) {
+    fun publishAudioTrack(encoding: Int, sampleRateHz: Int, channelConfig: Int) {
         current.value = current.value.copy(
             actualEncoding = encoding,
             actualSampleRateHz = sampleRateHz,
+            actualChannelConfig = channelConfig,
             floatFallback = current.value.requestedPcmMode == OutputPcmMode.FLOAT_32 &&
                 encoding != AudioFormat.ENCODING_PCM_FLOAT,
         )
+    }
+
+    fun publishBitPerfectMixer(active: Boolean) {
+        current.value = current.value.copy(bitPerfectMixerActive = active)
     }
 
     fun encodingLabel(snapshot: Snapshot): String = when (snapshot.actualEncoding) {

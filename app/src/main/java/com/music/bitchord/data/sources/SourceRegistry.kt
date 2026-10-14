@@ -158,7 +158,10 @@ object SourceRegistry {
      */
     fun active(): List<MusicSource> =
         configs.value
-            .filter { it.enabled && it.isComplete }
+            .filter {
+                it.enabled && it.isComplete &&
+                    (it.kind != SourceKind.YOUTUBE || AppSettings.youtubeMusicNetworkAllowed)
+            }
             .sortedBy { it.kind.rank }
             .mapNotNull { instances[it.id] }
 
