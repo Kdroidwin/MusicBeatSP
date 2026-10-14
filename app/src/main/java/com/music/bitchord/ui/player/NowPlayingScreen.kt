@@ -241,6 +241,7 @@ import com.music.bitchord.data.settings.PlayerQuickAction
 import com.music.bitchord.data.settings.AudioQuality
 import com.music.bitchord.data.model.LikeStatus
 import com.music.bitchord.data.model.PLAYER_ART_PX
+import com.music.bitchord.data.model.ROW_ART_PX
 import com.music.bitchord.data.model.Song
 import com.music.bitchord.data.model.artworkAt
 import com.music.bitchord.feature.localmusic.coil.LocalAudioArtworkFetcher
@@ -921,8 +922,9 @@ fun NowPlayingScreen(
     if (savedQueueManagerOpen) {
         SavedQueuesDialog(
             queues = savedQueues,
-            artworkPalette = artworkPalette,
-            hazeState = playerHaze,
+            // Use the same thumbnail size, source URL and dark palette as the
+            // player-details sheet so the two surfaces share one colour set.
+            artworkPalette = rememberArtworkPalette(song.thumbnailUrl, dark = true, artPx = ROW_ART_PX),
             useFrostedGlass = frostedQueueManager,
             currentSongs = queue,
             currentIndex = queueIndex,

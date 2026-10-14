@@ -703,10 +703,10 @@
     <string name="full_screen_collection_artwork_subtitle">アルバムとライブラリのプレイリスト詳細を、カバーとグラデーションで表示します</string>
     <string name="hide_collection_top_bar">コレクション画面の上部バーを隠す</string>
     <string name="hide_collection_top_bar_subtitle">アルバム・アーティスト・プレイリストの詳細内だけ上部バーを隠します。カテゴリのラベルは表示されます</string>
-    <string name="frosted_queue_manager">再生キュー管理をすりガラス表示</string>
-    <string name="frosted_queue_manager_subtitle">プレーヤーの背景をぼかして透かし、背景色を反映します</string>
-    <string name="frosted_player_details">プレーヤー詳細をすりガラス表示</string>
-    <string name="frosted_player_details_subtitle">詳細シートの背後をぼかして透かし、プレーヤーの色を反映します</string>
+    <string name="frosted_queue_manager">キュー管理にアルバムアートの色を使用</string>
+    <string name="frosted_queue_manager_subtitle">BitChordと同じアート由来のカラーで表示します</string>
+    <string name="frosted_player_details">プレーヤー詳細にアルバムアートの背景を使用</string>
+    <string name="frosted_player_details_subtitle">BitChordと同じぼかしたアートと色の背景で表示します</string>
     <string name="app_icon">アプリアイコン</string>
     <string name="app_icon_subtitle">ホーム画面に表示するアイコンを選択します</string>
     <string name="app_icon_pink">ピンク</string>

@@ -1,8 +1,5 @@
 package com.music.bitchord.ui.player
 
-import android.os.Build
-import android.view.WindowManager
-import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
@@ -21,31 +18,23 @@ import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.runtime.Composable
-import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.platform.LocalDensity
-import androidx.compose.ui.platform.LocalView
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.unit.dp
-import androidx.compose.ui.graphics.Color
-import androidx.compose.ui.window.DialogWindowProvider
-import dev.chrisbanes.haze.HazeState
 import com.music.bitchord.R
 import com.music.bitchord.data.model.Song
 import com.music.bitchord.playback.SavedQueue
-import com.music.bitchord.ui.components.frostedGlassEffect
 import com.music.bitchord.ui.theme.ArtworkPalette
 
 @Composable
 internal fun SavedQueuesDialog(
     queues: List<SavedQueue>,
     artworkPalette: ArtworkPalette,
-    hazeState: HazeState,
     useFrostedGlass: Boolean,
     currentSongs: List<Song>,
     currentIndex: Int,
@@ -59,18 +48,17 @@ internal fun SavedQueuesDialog(
     var name by remember { mutableStateOf("") }
     var saveError by remember { mutableStateOf(false) }
     var deleting by remember { mutableStateOf<SavedQueue?>(null) }
-    val foreground = if (useFrostedGlass) MaterialTheme.colorScheme.onSurface else artworkPalette.onBackground
-    val secondary = if (useFrostedGlass) MaterialTheme.colorScheme.onSurfaceVariant else artworkPalette.onBackgroundVariant
-    val accent = if (useFrostedGlass) MaterialTheme.colorScheme.primary else artworkPalette.accent
+    // Match the player-details sheet: the enabled setting uses the same
+    // BitChord artwork palette, while disabled returns to the app surface.
+    val foreground = if (useFrostedGlass) artworkPalette.onBackground else MaterialTheme.colorScheme.onSurface
+    val secondary = if (useFrostedGlass) artworkPalette.onBackgroundVariant else MaterialTheme.colorScheme.onSurfaceVariant
+    val accent = if (useFrostedGlass) artworkPalette.accent else MaterialTheme.colorScheme.primary
     val container = if (useFrostedGlass) {
-        Color.White.copy(alpha = 0.10f)
-    } else artworkPalette.background
+        artworkPalette.background
+    } else MaterialTheme.colorScheme.surfaceContainerHigh
 
     AlertDialog(
         onDismissRequest = onDismiss,
-        modifier = if (useFrostedGlass) {
-            Modifier.frostedGlassEffect(hazeState, Color.White.copy(alpha = 0.08f))
-        } else Modifier,
         shape = RoundedCornerShape(28.dp),
         title = { Text(stringResource(R.string.manage_queues), color = foreground) },
         containerColor = container,
@@ -78,7 +66,6 @@ internal fun SavedQueuesDialog(
         textContentColor = foreground,
         iconContentColor = accent,
         text = {
-            DialogBackdropBlur(useFrostedGlass)
             Column {
                 OutlinedTextField(
                     value = name,
@@ -93,7 +80,7 @@ internal fun SavedQueuesDialog(
                         unfocusedLabelColor = secondary,
                         cursorColor = accent,
                         focusedBorderColor = accent,
-                        unfocusedBorderColor = if (useFrostedGlass) MaterialTheme.colorScheme.outlineVariant else artworkPalette.divider,
+                        unfocusedBorderColor = if (useFrostedGlass) artworkPalette.divider else MaterialTheme.colorScheme.outlineVariant,
                     ),
                 )
                 Spacer(Modifier.height(6.dp))
@@ -172,12 +159,9 @@ internal fun SavedQueuesDialog(
     deleting?.let { queue ->
         AlertDialog(
             onDismissRequest = { deleting = null },
-            modifier = if (useFrostedGlass) {
-                Modifier.frostedGlassEffect(hazeState, Color.White.copy(alpha = 0.08f))
-            } else Modifier,
             shape = RoundedCornerShape(28.dp),
             title = { Text(stringResource(R.string.delete_saved_queue), color = foreground) },
-            text = { DialogBackdropBlur(useFrostedGlass); Text(queue.name, color = foreground) },
+            text = { Text(queue.name, color = foreground) },
             containerColor = container,
             titleContentColor = foreground,
             textContentColor = foreground,
@@ -193,39 +177,5 @@ internal fun SavedQueuesDialog(
                 }
             },
         )
-    }
-}
-
-@Composable
-private fun DialogBackdropBlur(enabled: Boolean) {
-    val view = LocalView.current
-    val window = androidx.compose.runtime.remember(view) {
-        (view.parent as? DialogWindowProvider)?.window
-    }
-    val radiusPx = with(LocalDensity.current) { 40.dp.roundToPx() }
-    val previousDimAmount = remember(window) { window?.attributes?.dimAmount }
-    DisposableEffect(window, enabled, radiusPx) {
-        if (enabled && window != null) {
-            val attributes = window.attributes
-            attributes.dimAmount = 0.08f
-            window.attributes = attributes
-            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) {
-                window.addFlags(WindowManager.LayoutParams.FLAG_BLUR_BEHIND)
-                window.setBackgroundBlurRadius(radiusPx)
-            }
-        }
-        onDispose {
-            if (enabled && window != null) {
-                if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) {
-                    window.setBackgroundBlurRadius(0)
-                    window.clearFlags(WindowManager.LayoutParams.FLAG_BLUR_BEHIND)
-                }
-                previousDimAmount?.let { previous ->
-                    val attributes = window.attributes
-                    attributes.dimAmount = previous
-                    window.attributes = attributes
-                }
-            }
-        }
     }
 }

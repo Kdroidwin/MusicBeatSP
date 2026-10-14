@@ -2756,7 +2756,6 @@ private fun BitChordApp(
             } else {
                 LocalSongActionsSheet(
                     song = song,
-                    hazeState = if (menuFromPlayer) playerHazeState else hazeState,
                     onDismissRequest = { songActions = null },
                     onGoToAlbum = {
                         songActions = null
