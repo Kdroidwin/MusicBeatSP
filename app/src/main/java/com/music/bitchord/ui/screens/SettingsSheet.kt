@@ -251,6 +251,7 @@ fun SettingsScreen(
     }
 
     val skipSilence by AppSettings.skipSilence.collectAsStateWithLifecycle()
+    val crossfadeSeconds by AppSettings.crossfadeSeconds.collectAsStateWithLifecycle()
     val doubleTapToSeek by AppSettings.doubleTapToSeek.collectAsStateWithLifecycle()
     val seekIntervalSeconds by AppSettings.seekIntervalSeconds.collectAsStateWithLifecycle()
     val seekButtonMode by AppSettings.seekButtonMode.collectAsStateWithLifecycle()
@@ -268,6 +269,7 @@ fun SettingsScreen(
     val localTabOrder by AppSettings.localLibraryTabOrder.collectAsStateWithLifecycle()
     val localFolderHierarchy by AppSettings.localFolderHierarchy.collectAsStateWithLifecycle()
     val fullScreenCollectionArtwork by AppSettings.fullScreenCollectionArtwork.collectAsStateWithLifecycle()
+    val hideCollectionTopBar by AppSettings.hideCollectionTopBar.collectAsStateWithLifecycle()
     val artistsOpenAlbums by AppSettings.artistsOpenAlbums.collectAsStateWithLifecycle()
     val shuffleArtistAlbums by AppSettings.shuffleArtistAlbums.collectAsStateWithLifecycle()
     val startupTab by AppSettings.startupTab.collectAsStateWithLifecycle()
@@ -299,6 +301,7 @@ fun SettingsScreen(
     val lyricsTransportControlSize by AppSettings.lyricsTransportControlSize.collectAsStateWithLifecycle()
     val lyricsTransportControlsCentered by AppSettings.lyricsTransportControlsCentered.collectAsStateWithLifecycle()
     val artworkTapOpensLyrics by AppSettings.artworkTapOpensLyrics.collectAsStateWithLifecycle()
+    val lyricsReplaceArtworkOnly by AppSettings.lyricsReplaceArtworkOnly.collectAsStateWithLifecycle()
     val showPlayerLyricsStrip by AppSettings.showPlayerLyricsStrip.collectAsStateWithLifecycle()
     val offlineMode by AppSettings.offlineMode.collectAsStateWithLifecycle()
     val hideLosslessLabel by AppSettings.hideLosslessLabel.collectAsStateWithLifecycle()
@@ -323,6 +326,7 @@ fun SettingsScreen(
     val lyricsSourceOrder by AppSettings.lyricsSourceOrder.collectAsStateWithLifecycle()
     val showLyricsLogs by AppSettings.showLyricsLogs.collectAsStateWithLifecycle()
     val theme by AppSettings.themeMode.collectAsStateWithLifecycle()
+    val matchButtonAccentToArtwork by AppSettings.matchButtonAccentToArtwork.collectAsStateWithLifecycle()
     val sessionId by AppSettings.audioSessionId.collectAsStateWithLifecycle()
     val outputPcmMode by AppSettings.outputPcmMode.collectAsStateWithLifecycle()
     val preferUsbDac by AppSettings.preferUsbDac.collectAsStateWithLifecycle()
@@ -402,7 +406,25 @@ fun SettingsScreen(
         SettingsSearchEntry(stringResource(R.string.show_navigation_bar), stringResource(R.string.show_navigation_bar_search_help), listOf("navigation bar", "ナビゲーションバー", "戻る", "home"), showNavigationBar) { AppSettings.setShowNavigationBar(!showNavigationBar) },
         SettingsSearchEntry(stringResource(R.string.hide_player_artist), stringResource(R.string.hide_player_artist_subtitle), listOf("artist", "アーティスト", "player"), hidePlayerArtist) { AppSettings.setHidePlayerArtist(!hidePlayerArtist) },
         SettingsSearchEntry(stringResource(R.string.player_lyrics_strip), stringResource(R.string.player_lyrics_strip_subtitle), listOf("lyrics", "歌詞", "strip", "player"), showPlayerLyricsStrip) { AppSettings.setShowPlayerLyricsStrip(!showPlayerLyricsStrip) },
+        SettingsSearchEntry(
+            stringResource(R.string.lyrics_replace_artwork_only),
+            stringResource(R.string.lyrics_replace_artwork_only_subtitle),
+            listOf("lyrics", "歌詞", "artwork", "アルバムアート", "controls", "操作を残す"),
+            lyricsReplaceArtworkOnly,
+        ) { AppSettings.setLyricsReplaceArtworkOnly(!lyricsReplaceArtworkOnly) },
         SettingsSearchEntry(stringResource(R.string.skip_silence), stringResource(R.string.skip_silence_subtitle), listOf("silence", "無音", "再生"), skipSilence) { AppSettings.setSkipSilence(!skipSilence) },
+        SettingsSearchEntry(
+            title = stringResource(R.string.crossfade),
+            subtitle = stringResource(R.string.crossfade_subtitle),
+            keywords = listOf("crossfade", "fade", "transition", "クロスフェード", "曲間"),
+            valueLabel = if (crossfadeSeconds == 0) stringResource(R.string.off)
+                else stringResource(R.string.crossfade_value, crossfadeSeconds),
+            sliderValue = crossfadeSeconds.toFloat(),
+            sliderValueRange = 0f..AppSettings.MAX_CROSSFADE_SECONDS.toFloat(),
+            sliderSteps = AppSettings.MAX_CROSSFADE_SECONDS - 1,
+            onSliderValueChange = { AppSettings.setCrossfadeSeconds(it.roundToInt()) },
+            activate = {},
+        ),
         SettingsSearchEntry(stringResource(R.string.double_tap_to_seek), stringResource(R.string.double_tap_to_seek_subtitle), listOf("seek", "double tap", "シーク", "ダブルタップ"), doubleTapToSeek) { AppSettings.setDoubleTapToSeek(!doubleTapToSeek) },
         SettingsSearchEntry(
             title = stringResource(R.string.seek_interval),
@@ -461,6 +483,12 @@ fun SettingsScreen(
         SettingsSearchEntry(stringResource(R.string.classic_nav_bar), stringResource(R.string.classic_nav_bar_subtitle), listOf("navigation", "nav bar", "ナビゲーション", "classic"), classicNavBar) { AppSettings.setClassicNavBar(!classicNavBar) },
         SettingsSearchEntry(stringResource(R.string.hide_nav_bar_labels), stringResource(R.string.hide_nav_bar_labels_subtitle), listOf("navigation", "nav bar", "label", "ラベル", "ナビゲーション"), hideNavBarLabels) { AppSettings.setHideNavigationBarLabels(!hideNavBarLabels) },
         SettingsSearchEntry(stringResource(R.string.legacy_mesh_gradient), stringResource(R.string.legacy_mesh_gradient_subtitle), listOf("theme", "gradient", "テーマ", "グラデーション"), legacyMeshGradient) { AppSettings.setLegacyMeshGradient(!legacyMeshGradient) },
+        SettingsSearchEntry(
+            stringResource(R.string.match_button_accent_to_artwork),
+            stringResource(R.string.match_button_accent_to_artwork_subtitle),
+            listOf("artwork", "button", "accent", "color", "アートワーク", "ボタン", "アクセント色"),
+            matchButtonAccentToArtwork,
+        ) { AppSettings.setMatchButtonAccentToArtwork(!matchButtonAccentToArtwork) },
         SettingsSearchEntry(stringResource(R.string.filter_non_music_audio), stringResource(R.string.filter_non_music_audio_subtitle), listOf("filter", "audio", "music", "音楽", "フィルター"), filterNonMusicAudio) { AppSettings.setFilterNonMusicAudio(!filterNonMusicAudio) },
         SettingsSearchEntry(stringResource(R.string.playlist_song_artwork), stringResource(R.string.playlist_song_artwork_subtitle), listOf("playlist", "artwork", "プレイリスト", "アルバムアート"), showPlaylistSongArtwork) { AppSettings.setShowPlaylistSongArtwork(!showPlaylistSongArtwork) },
     ) + PlayerDetailsAction.entries.map { action ->
@@ -492,16 +520,70 @@ fun SettingsScreen(
             MainNavigationTab.ARTISTS -> R.string.artists
             MainNavigationTab.LIBRARY -> R.string.library
             MainNavigationTab.SEARCH -> R.string.search
+            MainNavigationTab.ALBUM_ARTISTS -> R.string.album_artists
         })
         SettingsSearchEntry(
             title = stringResource(R.string.show_tab_setting, tabTitle),
             subtitle = stringResource(R.string.show_tab_setting_subtitle, tabTitle),
             keywords = listOf("tab", "タブ", tabTitle),
-            checked = tab in visibleMainTabs,
+            checked = if (tab == MainNavigationTab.ALBUM_ARTISTS) {
+                com.music.bitchord.data.settings.LocalLibraryTab.ALBUM_ARTISTS in localTabs
+            } else tab in visibleMainTabs,
         ) {
-            AppSettings.setMainNavigationTabVisible(tab, tab !in visibleMainTabs)
+            val visible = if (tab == MainNavigationTab.ALBUM_ARTISTS) {
+                com.music.bitchord.data.settings.LocalLibraryTab.ALBUM_ARTISTS in localTabs
+            } else tab in visibleMainTabs
+            AppSettings.setMainNavigationTabVisible(tab, !visible)
         }
-    }
+    } + LocalLibraryTab.entries.map { tab ->
+        val tabTitle = stringResource(when (tab) {
+            LocalLibraryTab.SONGS -> R.string.songs
+            LocalLibraryTab.ALBUMS -> R.string.albums
+            LocalLibraryTab.ARTISTS -> R.string.artists
+            LocalLibraryTab.FOLDERS -> R.string.folders
+            LocalLibraryTab.PLAYLISTS -> R.string.playlists
+            LocalLibraryTab.ALBUM_ARTISTS -> R.string.album_artists
+        })
+        SettingsSearchEntry(
+            title = stringResource(R.string.show_tab_setting, tabTitle),
+            subtitle = stringResource(R.string.local_library_tabs_subtitle),
+            keywords = listOf("local", "library", "tab", "ローカル", "ライブラリ", "タブ", tabTitle),
+            checked = tab in localTabs,
+        ) {
+            AppSettings.setLocalLibraryTabVisible(tab, tab !in localTabs)
+        }
+    } + listOf(
+        SettingsSearchEntry(
+            stringResource(R.string.local_folder_hierarchy),
+            stringResource(R.string.local_folder_hierarchy_subtitle),
+            listOf("folder", "hierarchy", "search", "フォルダ", "階層", "検索"),
+            localFolderHierarchy,
+        ) { AppSettings.setLocalFolderHierarchy(!localFolderHierarchy) },
+        SettingsSearchEntry(
+            stringResource(R.string.full_screen_collection_artwork),
+            stringResource(R.string.full_screen_collection_artwork_subtitle),
+            listOf("artwork", "collection", "library", "album", "全画面", "アート", "背景"),
+            fullScreenCollectionArtwork,
+        ) { AppSettings.setFullScreenCollectionArtwork(!fullScreenCollectionArtwork) },
+        SettingsSearchEntry(
+            stringResource(R.string.hide_collection_top_bar),
+            stringResource(R.string.hide_collection_top_bar_subtitle),
+            listOf("library", "album", "artist", "playlist", "header", "ライブラリ", "アルバム", "アーティスト", "上部バー"),
+            hideCollectionTopBar,
+        ) { AppSettings.setHideCollectionTopBar(!hideCollectionTopBar) },
+        SettingsSearchEntry(
+            stringResource(R.string.artists_open_albums),
+            stringResource(R.string.artists_open_albums_subtitle),
+            listOf("artist", "album", "アーティスト", "アルバム", "曲一覧"),
+            artistsOpenAlbums,
+        ) { AppSettings.setArtistsOpenAlbums(!artistsOpenAlbums) },
+        SettingsSearchEntry(
+            stringResource(R.string.shuffle_artist_albums),
+            stringResource(R.string.shuffle_artist_albums_subtitle),
+            listOf("artist", "album", "shuffle", "アーティスト", "アルバム", "シャッフル"),
+            shuffleArtistAlbums,
+        ) { AppSettings.setShuffleArtistAlbums(!shuffleArtistAlbums) },
+    )
 
     LaunchedEffect(selectedPerformanceRefreshRate, performanceRefreshRate) {
         if (selectedPerformanceRefreshRate != performanceRefreshRate) {
@@ -776,6 +858,14 @@ fun SettingsScreen(
     }
     val settingsActionSearchEntries = listOf(
         SettingsSearchEntry(
+            title = stringResource(R.string.play_cue_sheet),
+            subtitle = stringResource(R.string.play_cue_sheet_subtitle),
+            keywords = listOf("CUE", "sheet", "cue sheet", "CUEシート", "再生"),
+            activate = {
+                cuePicker.launch(arrayOf("application/x-cue", "text/plain", "application/octet-stream", "*/*"))
+            },
+        ),
+        SettingsSearchEntry(
             title = stringResource(R.string.import_m3u_playlist),
             subtitle = stringResource(R.string.import_m3u_subtitle),
             keywords = listOf("M3U", "M3U8", "playlist", "プレイリスト", "取り込み"),
@@ -981,6 +1071,21 @@ fun SettingsScreen(
                     )
                 },
                 onClick = { AppSettings.setSkipSilence(!skipSilence) },
+            )
+            RowDivider()
+            SettingsRow(
+                icon = Icons.Rounded.FastForward,
+                title = stringResource(R.string.crossfade),
+                subtitle = stringResource(R.string.crossfade_subtitle),
+                value = if (crossfadeSeconds == 0) stringResource(R.string.off)
+                    else stringResource(R.string.crossfade_value, crossfadeSeconds),
+            )
+            Slider(
+                value = crossfadeSeconds.toFloat(),
+                onValueChange = { AppSettings.setCrossfadeSeconds(it.roundToInt()) },
+                steps = AppSettings.MAX_CROSSFADE_SECONDS - 1,
+                valueRange = 0f..AppSettings.MAX_CROSSFADE_SECONDS.toFloat(),
+                modifier = Modifier.padding(start = ROW_INSET, end = ROW_INSET, bottom = 14.dp),
             )
             RowDivider()
             SettingsRow(
@@ -1540,6 +1645,23 @@ fun SettingsScreen(
             )
             RowDivider()
             SettingsRow(
+                icon = Icons.Rounded.AutoAwesome,
+                title = stringResource(R.string.match_button_accent_to_artwork),
+                subtitle = stringResource(R.string.match_button_accent_to_artwork_subtitle),
+                trailing = {
+                    Switch(
+                        checked = matchButtonAccentToArtwork,
+                        onCheckedChange = AppSettings::setMatchButtonAccentToArtwork,
+                        colors = SwitchDefaults.colors(
+                            checkedTrackColor = MaterialTheme.colorScheme.primary,
+                            checkedBorderColor = MaterialTheme.colorScheme.primary,
+                        ),
+                    )
+                },
+                onClick = { AppSettings.setMatchButtonAccentToArtwork(!matchButtonAccentToArtwork) },
+            )
+            RowDivider()
+            SettingsRow(
                 icon = Icons.Rounded.BlurOn,
                 title = stringResource(R.string.artwork_backdrop_blur),
                 subtitle = stringResource(R.string.artwork_backdrop_blur_subtitle),
@@ -1872,6 +1994,23 @@ fun SettingsScreen(
                 },
                 onClick = { AppSettings.setArtworkTapOpensLyrics(!artworkTapOpensLyrics) },
             )
+            RowDivider()
+            SettingsRow(
+                icon = Icons.AutoMirrored.Rounded.Notes,
+                title = stringResource(R.string.lyrics_replace_artwork_only),
+                subtitle = stringResource(R.string.lyrics_replace_artwork_only_subtitle),
+                trailing = {
+                    Switch(
+                        checked = lyricsReplaceArtworkOnly,
+                        onCheckedChange = AppSettings::setLyricsReplaceArtworkOnly,
+                        colors = SwitchDefaults.colors(
+                            checkedTrackColor = MaterialTheme.colorScheme.primary,
+                            checkedBorderColor = MaterialTheme.colorScheme.primary,
+                        ),
+                    )
+                },
+                onClick = { AppSettings.setLyricsReplaceArtworkOnly(!lyricsReplaceArtworkOnly) },
+            )
             // Nothing to choose between while the feature is off, and the
             // sources are third-party services being reached on the user's
             // connection — which is the part worth being able to narrow.
@@ -2097,6 +2236,7 @@ fun SettingsScreen(
                 MainNavigationTab.ARTISTS -> R.string.artists
                 MainNavigationTab.LIBRARY -> R.string.library
                 MainNavigationTab.SEARCH -> R.string.search
+                MainNavigationTab.ALBUM_ARTISTS -> R.string.album_artists
             })
             SettingsRow(
                 icon = Icons.Rounded.MusicNote,
@@ -2114,6 +2254,7 @@ fun SettingsScreen(
                     MainNavigationTab.ARTISTS -> R.string.artists
                     MainNavigationTab.LIBRARY -> R.string.library
                     MainNavigationTab.SEARCH -> R.string.search
+                    MainNavigationTab.ALBUM_ARTISTS -> R.string.album_artists
                 }
                 val icon = when (tab) {
                     MainNavigationTab.SONGS -> Icons.Rounded.MusicNote
@@ -2121,13 +2262,19 @@ fun SettingsScreen(
                     MainNavigationTab.ARTISTS -> Icons.Rounded.Person
                     MainNavigationTab.LIBRARY -> Icons.Rounded.LibraryMusic
                     MainNavigationTab.SEARCH -> BitChordIcons.Search
+                    MainNavigationTab.ALBUM_ARTISTS -> Icons.Rounded.Person
                 }
-                val checked = tab in visibleMainTabs
+                val checked = if (tab == MainNavigationTab.ALBUM_ARTISTS) {
+                    com.music.bitchord.data.settings.LocalLibraryTab.ALBUM_ARTISTS in localTabs
+                } else tab in visibleMainTabs
+                val visibleMainCount = visibleMainTabs.size + if (
+                    com.music.bitchord.data.settings.LocalLibraryTab.ALBUM_ARTISTS in localTabs
+                ) 1 else 0
                 SettingsRow(
                     icon = icon,
                     title = stringResource(titleRes),
                     subtitle = stringResource(R.string.navigation_tab_order_subtitle),
-                    enabled = checked || visibleMainTabs.size > 1,
+                    enabled = checked || visibleMainCount > 1,
                     trailing = {
                         Row(verticalAlignment = Alignment.CenterVertically) {
                             IconButton(
@@ -2305,6 +2452,23 @@ fun SettingsScreen(
                     Switch(checked = fullScreenCollectionArtwork, onCheckedChange = AppSettings::setFullScreenCollectionArtwork)
                 },
                 onClick = { AppSettings.setFullScreenCollectionArtwork(!fullScreenCollectionArtwork) },
+            )
+            RowDivider()
+            SettingsRow(
+                icon = Icons.Rounded.VisibilityOff,
+                title = stringResource(R.string.hide_collection_top_bar),
+                subtitle = stringResource(R.string.hide_collection_top_bar_subtitle),
+                trailing = {
+                    Switch(
+                        checked = hideCollectionTopBar,
+                        onCheckedChange = AppSettings::setHideCollectionTopBar,
+                        colors = SwitchDefaults.colors(
+                            checkedTrackColor = MaterialTheme.colorScheme.primary,
+                            checkedBorderColor = MaterialTheme.colorScheme.primary,
+                        ),
+                    )
+                },
+                onClick = { AppSettings.setHideCollectionTopBar(!hideCollectionTopBar) },
             )
             RowDivider()
             SettingsRow(
@@ -2645,13 +2809,19 @@ fun SettingsScreen(
                 title = { Text(stringResource(R.string.startup_tab)) },
                 text = {
                     Column {
-                        mainTabOrder.filter { it in visibleMainTabs }.forEach { tab ->
+                        mainTabOrder.filter {
+                            it in visibleMainTabs || (
+                                it == MainNavigationTab.ALBUM_ARTISTS &&
+                                    com.music.bitchord.data.settings.LocalLibraryTab.ALBUM_ARTISTS in localTabs
+                            )
+                        }.forEach { tab ->
                             val label = when (tab) {
                                 MainNavigationTab.SONGS -> stringResource(R.string.songs)
                                 MainNavigationTab.ALBUMS -> stringResource(R.string.albums)
                                 MainNavigationTab.ARTISTS -> stringResource(R.string.artists)
                                 MainNavigationTab.LIBRARY -> stringResource(R.string.library)
                                 MainNavigationTab.SEARCH -> stringResource(R.string.search)
+                                MainNavigationTab.ALBUM_ARTISTS -> stringResource(R.string.album_artists)
                             }
                             Row(
                                 modifier = Modifier

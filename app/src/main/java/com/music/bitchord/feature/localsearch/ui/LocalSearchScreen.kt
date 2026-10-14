@@ -48,6 +48,7 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import com.music.bitchord.data.model.Song
+import com.music.bitchord.data.settings.AppSettings
 import com.music.bitchord.feature.localmusic.ui.components.DrillDownSongList
 import com.music.bitchord.feature.localsongactions.ui.components.LocalAddToPlaylistSheet
 import com.music.bitchord.feature.localsearch.domain.LocalSearchUseCase
@@ -58,6 +59,7 @@ import com.music.bitchord.feature.localsearch.ui.components.LocalSearchFilterChi
 import com.music.bitchord.feature.localsearch.ui.components.LocalSearchResultRow
 import com.music.bitchord.ui.components.PAGE_GUTTER
 import com.music.bitchord.ui.components.ROW_DIVIDER_INSET
+import androidx.lifecycle.compose.collectAsStateWithLifecycle
 
 @Composable
 fun LocalSearchScreen(
@@ -80,6 +82,7 @@ fun LocalSearchScreen(
     modifier: Modifier = Modifier,
 ) {
     val context = LocalContext.current
+    val folderHierarchy by AppSettings.localFolderHierarchy.collectAsStateWithLifecycle()
     var query by rememberSaveable { mutableStateOf("") }
     var selectedFilter by rememberSaveable { mutableStateOf(LocalSearchFilter.ALL) }
     val listState = rememberLazyListState()
@@ -109,8 +112,8 @@ fun LocalSearchScreen(
         }
     }
 
-    val searchResults = remember(query, selectedFilter, songs) {
-        LocalSearchUseCase.search(query, selectedFilter, songs)
+    val searchResults = remember(query, selectedFilter, songs, folderHierarchy) {
+        LocalSearchUseCase.search(query, selectedFilter, songs, folderHierarchy)
     }
 
     val matchedSongs = remember(searchResults) {
@@ -118,9 +121,9 @@ fun LocalSearchScreen(
     }
 
     AnimatedContent(
-        targetState = if (inDrillDown) "drill:$drillDownLabel" else "search",
+        targetState = if (inDrillDown) "drill" else "search",
         transitionSpec = {
-            if (targetState.startsWith("drill:")) {
+            if (targetState == "drill") {
                 (slideInHorizontally { it } + fadeIn()) togetherWith
                     (slideOutHorizontally { -it / 3 } + fadeOut())
             } else {
@@ -131,7 +134,7 @@ fun LocalSearchScreen(
         label = "local_search_content",
         modifier = modifier.fillMaxSize(),
     ) { target ->
-        if (target.startsWith("drill:")) {
+        if (target == "drill") {
             Column(Modifier.fillMaxSize()) {
                 if (selectedSongIds.isNotEmpty()) {
                     SearchSelectionBar(

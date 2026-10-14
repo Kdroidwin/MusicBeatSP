@@ -165,26 +165,114 @@ object EqualizerSettings {
         bandLevels = _bandLevels.value,
         bassBoostStrength = _bassBoostStrength.value,
         virtualizerStrength = _virtualizerStrength.value,
+        activeDeviceKey = activeDeviceKey,
+        deviceProfiles = readProfilesForBackup() + (activeDeviceKey to currentProfileSnapshot()),
     )
 
     fun importBackup(backup: EqualizerBackup?) {
         if (backup == null) return
-        setEnabled(backup.enabled)
-        _presetId.value = backup.presetId
-        setBassBoostStrength(backup.bassBoostStrength)
-        setVirtualizerStrength(backup.virtualizerStrength)
+        if (!this::prefs.isInitialized) return
 
-        if (backup.bandLevels.isNotEmpty()) {
-            _bandLevels.value = backup.bandLevels
-            persistCurrentProfile()
-        } else {
-            selectPreset(backup.presetId)
-        }
+        val importedKey = backup.activeDeviceKey.takeIf(::isValidDeviceKey) ?: "default"
+        val profiles = backup.deviceProfiles
+            .filterKeys(::isValidDeviceKey)
+            .mapValues { (_, profile) -> profile.sanitized() }
+
+        activeDeviceKey = importedKey
+        _enabled.value = backup.enabled
+        _presetId.value = backup.presetId
+        _bassBoostStrength.value = backup.bassBoostStrength.coerceIn(0, 1000)
+        _virtualizerStrength.value = backup.virtualizerStrength.coerceIn(0, 1000)
+        _bandLevels.value = backup.bandLevels
+            .filterKeys { it in 0 until 5 }
+            .ifEmpty {
+                (0 until 5).associateWith { index ->
+                    EqualizerPreset.getPresetById(backup.presetId)?.bandLevels?.getOrNull(index) ?: 0.toShort()
+                }
+            }
+
+        prefs.edit().apply {
+            putString(KEY_ACTIVE_DEVICE, importedKey)
+            // New backups carry the complete device map. Replace it only when
+            // one is present, so a v1-v3 backup (which had no profiles) does
+            // not silently erase profiles on the device receiving the restore.
+            if (profiles.isNotEmpty()) {
+                prefs.all.keys.filter { it.startsWith(PROFILE_PREFIX) }.forEach(::remove)
+                profiles.forEach { (key, profile) ->
+                    putString(PROFILE_PREFIX + key, profile.toJson().toString())
+                }
+            }
+        }.apply()
+        persistCurrentProfile()
     }
+
+    private fun readProfilesForBackup(): Map<String, EqualizerDeviceProfile> =
+        prefs.all.entries
+            .asSequence()
+            .filter { (key, _) -> key.startsWith(PROFILE_PREFIX) }
+            .mapNotNull { (storedKey, storedValue) ->
+                val key = storedKey.removePrefix(PROFILE_PREFIX)
+                if (!isValidDeviceKey(key)) return@mapNotNull null
+                val json = (storedValue as? String)?.let { runCatching { JSONObject(it) }.getOrNull() }
+                    ?: return@mapNotNull null
+                key to json.toDeviceProfile()
+            }
+            .toMap()
+
+    private fun currentProfileSnapshot() = EqualizerDeviceProfile(
+        enabled = _enabled.value,
+        presetId = _presetId.value,
+        bandLevels = _bandLevels.value,
+        bassBoostStrength = _bassBoostStrength.value,
+        virtualizerStrength = _virtualizerStrength.value,
+    )
+
+    private fun JSONObject.toDeviceProfile() = EqualizerDeviceProfile(
+        enabled = optBoolean("enabled", false),
+        presetId = optInt("preset", 0),
+        bandLevels = (0 until 5).associateWith { index ->
+            optJSONObject("bands")?.optInt(index.toString(), 0)
+                ?.coerceIn(Short.MIN_VALUE.toInt(), Short.MAX_VALUE.toInt())?.toShort() ?: 0
+        },
+        bassBoostStrength = optInt("bass", 0).coerceIn(0, 1000),
+        virtualizerStrength = optInt("virtualizer", 0).coerceIn(0, 1000),
+    )
+
+    private fun EqualizerDeviceProfile.sanitized() = copy(
+        bandLevels = bandLevels.filterKeys { it in 0 until 5 },
+        bassBoostStrength = bassBoostStrength.coerceIn(0, 1000),
+        virtualizerStrength = virtualizerStrength.coerceIn(0, 1000),
+    )
+
+    private fun EqualizerDeviceProfile.toJson() = JSONObject().apply {
+        put("enabled", enabled)
+        put("preset", presetId)
+        put("bass", bassBoostStrength)
+        put("virtualizer", virtualizerStrength)
+        put("bands", JSONObject().apply {
+            bandLevels.forEach { (band, level) ->
+                if (band in 0 until 5) put(band.toString(), level.toInt())
+            }
+        })
+    }
+
+    private fun isValidDeviceKey(key: String): Boolean =
+        key == "default" || key.matches(Regex("[A-Za-z0-9_-]{1,64}"))
 }
 
 @Serializable
 data class EqualizerBackup(
+    val enabled: Boolean = false,
+    val presetId: Int = 0,
+    val bandLevels: Map<Int, Short> = emptyMap(),
+    val bassBoostStrength: Int = 0,
+    val virtualizerStrength: Int = 0,
+    val activeDeviceKey: String = "default",
+    val deviceProfiles: Map<String, EqualizerDeviceProfile> = emptyMap(),
+)
+
+@Serializable
+data class EqualizerDeviceProfile(
     val enabled: Boolean = false,
     val presetId: Int = 0,
     val bandLevels: Map<Int, Short> = emptyMap(),

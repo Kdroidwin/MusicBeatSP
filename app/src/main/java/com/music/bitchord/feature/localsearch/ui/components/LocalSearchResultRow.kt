@@ -249,7 +249,12 @@ private fun FolderResultRow(
         modifier = modifier
             .fillMaxWidth()
             .combinedClickable(onClick = onClick, onLongClick = onLongClick)
-            .padding(horizontal = PAGE_GUTTER, vertical = 8.dp),
+            .padding(
+                start = PAGE_GUTTER + (16.dp * folder.depth.coerceAtLeast(0)),
+                top = 8.dp,
+                end = PAGE_GUTTER,
+                bottom = 8.dp,
+            ),
         verticalAlignment = Alignment.CenterVertically,
     ) {
         val shape = RoundedCornerShape(10.dp)

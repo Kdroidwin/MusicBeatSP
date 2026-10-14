@@ -14,6 +14,7 @@ import androidx.compose.foundation.verticalScroll
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedTextField
+import androidx.compose.material3.OutlinedTextFieldDefaults
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
@@ -28,10 +29,12 @@ import androidx.compose.ui.unit.dp
 import com.music.bitchord.R
 import com.music.bitchord.data.model.Song
 import com.music.bitchord.playback.SavedQueue
+import com.music.bitchord.ui.theme.ArtworkPalette
 
 @Composable
 internal fun SavedQueuesDialog(
     queues: List<SavedQueue>,
+    artworkPalette: ArtworkPalette,
     currentSongs: List<Song>,
     currentIndex: Int,
     positionMs: Long,
@@ -47,7 +50,11 @@ internal fun SavedQueuesDialog(
 
     AlertDialog(
         onDismissRequest = onDismiss,
-        title = { Text(stringResource(R.string.manage_queues)) },
+        title = { Text(stringResource(R.string.manage_queues), color = artworkPalette.onBackground) },
+        containerColor = artworkPalette.background,
+        titleContentColor = artworkPalette.onBackground,
+        textContentColor = artworkPalette.onBackground,
+        iconContentColor = artworkPalette.accent,
         text = {
             Column {
                 OutlinedTextField(
@@ -56,6 +63,15 @@ internal fun SavedQueuesDialog(
                     label = { Text(stringResource(R.string.queue_name)) },
                     singleLine = true,
                     modifier = Modifier.fillMaxWidth(),
+                    colors = OutlinedTextFieldDefaults.colors(
+                        focusedTextColor = artworkPalette.onBackground,
+                        unfocusedTextColor = artworkPalette.onBackground,
+                        focusedLabelColor = artworkPalette.accent,
+                        unfocusedLabelColor = artworkPalette.onBackgroundVariant,
+                        cursorColor = artworkPalette.accent,
+                        focusedBorderColor = artworkPalette.accent,
+                        unfocusedBorderColor = artworkPalette.divider,
+                    ),
                 )
                 Spacer(Modifier.height(6.dp))
                 TextButton(
@@ -66,11 +82,16 @@ internal fun SavedQueuesDialog(
                             saveError = false
                         } else saveError = true
                     },
-                ) { Text(stringResource(R.string.save_current_queue)) }
+                ) {
+                    Text(
+                        stringResource(R.string.save_current_queue),
+                        color = artworkPalette.accent,
+                    )
+                }
                 if (saveError) {
                     Text(
                         text = stringResource(R.string.queue_save_failed),
-                        color = MaterialTheme.colorScheme.error,
+                        color = artworkPalette.accent,
                         style = MaterialTheme.typography.bodySmall,
                     )
                 }
@@ -85,16 +106,16 @@ internal fun SavedQueuesDialog(
                     if (queues.isEmpty()) {
                         Text(
                             stringResource(R.string.no_saved_queues),
-                            color = MaterialTheme.colorScheme.onSurfaceVariant,
+                            color = artworkPalette.onBackgroundVariant,
                             style = MaterialTheme.typography.bodyMedium,
                         )
                     }
                     queues.forEach { queue ->
                         Column(Modifier.fillMaxWidth()) {
-                            Text(queue.name, style = MaterialTheme.typography.titleSmall)
+                            Text(queue.name, style = MaterialTheme.typography.titleSmall, color = artworkPalette.onBackground)
                             Text(
                                 stringResource(R.string.queue_track_count, queue.songs.size),
-                                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                                color = artworkPalette.onBackgroundVariant,
                                 style = MaterialTheme.typography.bodySmall,
                             )
                             Row(
@@ -103,16 +124,16 @@ internal fun SavedQueuesDialog(
                                 verticalAlignment = Alignment.CenterVertically,
                             ) {
                                 TextButton(onClick = { onLoad(queue); onDismiss() }) {
-                                    Text(stringResource(R.string.load_queue))
+                                    Text(stringResource(R.string.load_queue), color = artworkPalette.accent)
                                 }
                                 TextButton(
                                     onClick = {
                                         if (!onReplace(queue.id, currentSongs, currentIndex, positionMs)) saveError = true
                                     },
                                     enabled = currentSongs.isNotEmpty(),
-                                ) { Text(stringResource(R.string.replace_queue)) }
+                                ) { Text(stringResource(R.string.replace_queue), color = artworkPalette.accent) }
                                 TextButton(onClick = { deleting = queue }) {
-                                    Text(stringResource(R.string.delete))
+                                    Text(stringResource(R.string.delete), color = artworkPalette.accent)
                                 }
                             }
                         }
@@ -121,23 +142,27 @@ internal fun SavedQueuesDialog(
             }
         },
         confirmButton = {
-            TextButton(onClick = onDismiss) { Text(stringResource(R.string.done)) }
+            TextButton(onClick = onDismiss) { Text(stringResource(R.string.done), color = artworkPalette.accent) }
         },
     )
 
     deleting?.let { queue ->
         AlertDialog(
             onDismissRequest = { deleting = null },
-            title = { Text(stringResource(R.string.delete_saved_queue)) },
-            text = { Text(queue.name) },
+            title = { Text(stringResource(R.string.delete_saved_queue), color = artworkPalette.onBackground) },
+            text = { Text(queue.name, color = artworkPalette.onBackground) },
+            containerColor = artworkPalette.background,
+            titleContentColor = artworkPalette.onBackground,
+            textContentColor = artworkPalette.onBackground,
+            iconContentColor = artworkPalette.accent,
             confirmButton = {
                 TextButton(onClick = { onDelete(queue); deleting = null }) {
-                    Text(stringResource(R.string.delete))
+                    Text(stringResource(R.string.delete), color = artworkPalette.accent)
                 }
             },
             dismissButton = {
                 TextButton(onClick = { deleting = null }) {
-                    Text(stringResource(R.string.cancel))
+                    Text(stringResource(R.string.cancel), color = artworkPalette.accent)
                 }
             },
         )

@@ -92,6 +92,7 @@ import com.music.bitchord.feature.library.ui.LibraryScreen
 import com.music.bitchord.feature.library.ui.components.LibraryFilter
 import com.music.bitchord.ui.screens.LOCAL_TAB_SONGS
 import com.music.bitchord.ui.screens.LOCAL_TAB_ALBUMS
+import com.music.bitchord.ui.screens.LOCAL_TAB_ALBUM_ARTISTS
 import com.music.bitchord.ui.screens.LOCAL_TAB_ARTISTS
 import com.music.bitchord.ui.screens.LOCAL_TAB_FOLDERS
 import com.music.bitchord.ui.screens.LOCAL_TAB_PLAYLISTS
@@ -239,6 +240,7 @@ import com.music.bitchord.ui.replay.ReplayStories
 import com.music.bitchord.ui.replay.ReplayStoryPage
 import com.music.bitchord.ui.replay.rememberReplayState
 import com.music.bitchord.ui.theme.BitChordTheme
+import com.music.bitchord.ui.theme.ArtworkPalette
 import com.music.bitchord.ui.theme.rememberArtworkPalette
 import com.music.bitchord.ui.theme.SystemBarIcons
 import com.music.bitchord.ui.utils.rememberIosOverscrollFactory
@@ -269,9 +271,10 @@ class MainActivity : AppCompatActivity() {
         MusicLink.consume(intent)
         setContent {
             val theme by AppSettings.themeMode.collectAsStateWithLifecycle()
+            val matchButtonAccentToArtwork by AppSettings.matchButtonAccentToArtwork.collectAsStateWithLifecycle()
             val controller = rememberMediaController()
             val player = rememberPlayerState(controller)
-            val currentArtwork = if (theme == ThemeMode.ARTWORK) {
+            val currentArtwork = if (theme == ThemeMode.ARTWORK || matchButtonAccentToArtwork) {
                 player.song?.artworkAt(PLAYER_ART_PX)
             } else {
                 null
@@ -313,6 +316,7 @@ class MainActivity : AppCompatActivity() {
                 amoledBlack = theme == ThemeMode.AMOLED,
                 artworkUrl = currentArtwork,
                 matchArtwork = theme == ThemeMode.ARTWORK,
+                matchButtonAccentToArtwork = matchButtonAccentToArtwork,
             ) {
                 // The glass surfaces sample this layer, and a layer records only
                 // what is drawn into it — which, for BitChord, is a page that
@@ -444,18 +448,31 @@ private fun BitChordApp(
     val useCollapsibleNavBar = !classicNavBar
     val glassSamplesBackdrop = glassActive && !reduceDynamicBlur
     var selectedTab by rememberSaveable { mutableIntStateOf(AppSettings.startupTab.value.index) }
+    val hideCollectionTopBar by AppSettings.hideCollectionTopBar.collectAsStateWithLifecycle()
+    var localCollectionArtwork by remember { mutableStateOf<Pair<Int, ArtworkPalette>?>(null) }
+    val onLocalArtworkPaletteChanged: (ArtworkPalette?) -> Unit = remember(selectedTab) {
+        { palette -> localCollectionArtwork = palette?.let { selectedTab to it } }
+    }
     val visibleMainNavigationTabs by AppSettings.visibleMainNavigationTabs.collectAsStateWithLifecycle()
+    val visibleLocalLibraryTabs by AppSettings.visibleLocalLibraryTabs.collectAsStateWithLifecycle()
     val mainNavigationTabOrder by AppSettings.mainNavigationTabOrder.collectAsStateWithLifecycle()
-    val visibleTabIndices = remember(visibleMainNavigationTabs, mainNavigationTabOrder) {
+    val effectiveVisibleMainTabs = remember(visibleMainNavigationTabs, visibleLocalLibraryTabs) {
+        if (com.music.bitchord.data.settings.LocalLibraryTab.ALBUM_ARTISTS in visibleLocalLibraryTabs) {
+            visibleMainNavigationTabs + MainNavigationTab.ALBUM_ARTISTS
+        } else {
+            visibleMainNavigationTabs - MainNavigationTab.ALBUM_ARTISTS
+        }
+    }
+    val visibleTabIndices = remember(effectiveVisibleMainTabs, mainNavigationTabOrder) {
         mainNavigationTabOrder
-            .filter { it in visibleMainNavigationTabs }
+            .filter { it in effectiveVisibleMainTabs }
             .map(MainNavigationTab::index)
     }
     LaunchedEffect(visibleTabIndices, mainNavigationTabOrder) {
         if (selectedTab !in visibleTabIndices && visibleTabIndices.isNotEmpty()) {
             selectedTab = MainNavigationTabs.fallback(
                 selectedTab,
-                visibleMainNavigationTabs,
+                effectiveVisibleMainTabs,
                 mainNavigationTabOrder,
             ).index
             viewModel.clearDetail()
@@ -785,15 +802,17 @@ private fun BitChordApp(
     val songsLabel = stringResource(R.string.songs)
     val albumsLabel = stringResource(R.string.albums)
     val artistsLabel = stringResource(R.string.artists)
+    val albumArtistsLabel = stringResource(R.string.album_artists)
     val libraryLabel = stringResource(R.string.library)
     val searchLabel = stringResource(R.string.search)
-    val allTabs = remember(songsLabel, albumsLabel, artistsLabel, libraryLabel, searchLabel) {
+    val allTabs = remember(songsLabel, albumsLabel, artistsLabel, albumArtistsLabel, libraryLabel, searchLabel) {
         listOf(
             BottomTab(songsLabel, Icons.Rounded.MusicNote),
             BottomTab(albumsLabel, Icons.Rounded.Album),
             BottomTab(artistsLabel, Icons.Rounded.Person),
             BottomTab(libraryLabel, Icons.Rounded.LibraryMusic),
             BottomTab(searchLabel, BitChordIcons.Search),
+            BottomTab(albumArtistsLabel, Icons.Rounded.Person),
         )
     }
     val tabs = remember(allTabs, visibleTabIndices) {
@@ -1473,6 +1492,9 @@ private fun BitChordApp(
     // washed in an artwork's colour instead. Off a detail page this resolves
     // to the theme's background anyway, which is exactly right there.
     val detailPalette = rememberArtworkPalette(detail?.thumbnailUrl)
+    val localCollectionPalette = localCollectionArtwork
+        ?.takeIf { (tab, _) -> tab == selectedTab }
+        ?.second
 
     // One set of numbers for the cards, the page, the stories and the shared
     // picture, so they cannot disagree. Read while any of them is on screen —
@@ -2012,6 +2034,8 @@ private fun BitChordApp(
                             },
                             onSongTagsOrLyricsSaved = { viewModel.reloadLyrics(it) },
                             contentPadding = listPadding,
+                            showTabRow = true,
+                            onArtworkPaletteChanged = onLocalArtworkPaletteChanged,
                         )
                     } else if (page != null) {
                         val withAlbum: (Song) -> Song = { song ->
@@ -2093,6 +2117,7 @@ private fun BitChordApp(
                                 contentPadding = listPadding,
                                 initialTab = LOCAL_TAB_SONGS,
                                 showTabRow = false,
+                                onArtworkPaletteChanged = onLocalArtworkPaletteChanged,
                                 onPlayNext = playNext,
                                 onAddToQueue = addToQueue,
                                 onDeleteSong = { viewModel.loadLocalMusic() },
@@ -2138,6 +2163,7 @@ private fun BitChordApp(
                                 contentPadding = listPadding,
                                 initialTab = LOCAL_TAB_ALBUMS,
                                 showTabRow = false,
+                                onArtworkPaletteChanged = onLocalArtworkPaletteChanged,
                                 initialDrillDownLabel = targetAlbumDrillDown,
                                 onDrillDownDismiss = { targetAlbumDrillDown = null },
                                 onPlayNext = playNext,
@@ -2185,8 +2211,55 @@ private fun BitChordApp(
                                 contentPadding = listPadding,
                                 initialTab = LOCAL_TAB_ARTISTS,
                                 showTabRow = false,
+                                onArtworkPaletteChanged = onLocalArtworkPaletteChanged,
                                 initialDrillDownLabel = targetArtistDrillDown,
                                 onDrillDownDismiss = { targetArtistDrillDown = null },
+                                onPlayNext = playNext,
+                                onAddToQueue = addToQueue,
+                                onDeleteSong = { viewModel.loadLocalMusic() },
+                                onSongTagsOrLyricsSaved = { viewModel.reloadLyrics(it) },
+                            )
+                        }
+                        TAB_ALBUM_ARTISTS -> if (!hasStoragePermission) {
+                            Box(modifier = Modifier.fillMaxSize().padding(listPadding), contentAlignment = Alignment.Center) {
+                                LocalPermissionCard(
+                                    onRequestPermission = requestDefaultPermission,
+                                    onFallbackPermission = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.R) requestAudioPermission else null,
+                                )
+                            }
+                        } else {
+                            LocalMusicScreen(
+                                songs = localSongs,
+                                collections = emptyList(),
+                                isDownloads = false,
+                                currentSong = player.song,
+                                isPlaying = player.isPlaying,
+                                isRefreshing = isRefreshingLocalMusic,
+                                onRefresh = { viewModel.loadLocalMusic(isPullToRefresh = true) },
+                                onSongClick = play,
+                                onSongLongPress = openSongMenu,
+                                onSongSwipe = onSongSwipe,
+                                onShuffle = { songs ->
+                                    QueueShuffle.enableForNextQueue()
+                                    play(songs, songs.indices.random())
+                                },
+                                emptyMessage = localEmptyMessage,
+                                onCollectionLongPress = { label, grouped ->
+                                    browseActions = BrowseTarget(
+                                        browseId = null,
+                                        title = label,
+                                        subtitle = grouped.firstOrNull()?.artist.orEmpty()
+                                            .takeUnless { it == label }
+                                            .orEmpty(),
+                                        thumbnailUrl = grouped.firstOrNull()?.thumbnailUrl,
+                                        songs = grouped,
+                                        downloadId = null,
+                                    )
+                                },
+                                contentPadding = listPadding,
+                                initialTab = LOCAL_TAB_ALBUM_ARTISTS,
+                                showTabRow = false,
+                                onArtworkPaletteChanged = onLocalArtworkPaletteChanged,
                                 onPlayNext = playNext,
                                 onAddToQueue = addToQueue,
                                 onDeleteSong = { viewModel.loadLocalMusic() },
@@ -2219,6 +2292,7 @@ private fun BitChordApp(
                                 onSongTagsOrLyricsSaved = { viewModel.reloadLyrics(it) },
                                 initialFilterRequest = libraryFilterRequest,
                                 onInitialFilterApplied = { libraryFilterRequest = null },
+                                onArtworkPaletteChanged = onLocalArtworkPaletteChanged,
                             )
                         }
                         TAB_SEARCH -> if (!hasStoragePermission) {
@@ -2255,22 +2329,35 @@ private fun BitChordApp(
                 // Every top bar is a fade rather than a pane — see [TopFadeBlur].
                 // Drawn before the bar so the bar's own content sits on top of it.
                 val isDetailVisible = detail != null && !isLocalDetail && !showSettings && !showReplay
-                TopFadeBlur(
-                    hazeState = hazeState,
-                    // Replay paints its own full-bleed black backdrop up under the
-                    // status bar, exactly as a release page's artwork does.
-                    pageColor = when {
-                        showReplay -> Color.Black
-                        isDetailVisible -> detailPalette.wash
-                        else -> MaterialTheme.colorScheme.background
-                    },
-                    scrimColor = when {
-                        showReplay -> Color.Black
-                        isDetailVisible -> detailPalette.background
-                        else -> MaterialTheme.colorScheme.background
-                    },
-                    modifier = Modifier.align(Alignment.TopCenter),
-                )
+                val isLocalCollectionArtworkVisible = localCollectionPalette != null &&
+                    detail == null && !showSettings && !showReplay
+                val collectionPageSelected = selectedTab == TAB_ALBUMS ||
+                    selectedTab == TAB_ARTISTS || selectedTab == TAB_ALBUM_ARTISTS ||
+                    selectedTab == TAB_LIBRARY
+                val collectionDetailSelected = detail?.type == BrowseType.ALBUM ||
+                    detail?.type == BrowseType.ARTIST || detail?.type == BrowseType.PLAYLIST
+                val hideCollectionHeaderNow = hideCollectionTopBar && !showSettings && !showReplay &&
+                    (collectionPageSelected || collectionDetailSelected)
+                if (!hideCollectionHeaderNow) {
+                    TopFadeBlur(
+                        hazeState = hazeState,
+                        // Replay paints its own full-bleed black backdrop up under the
+                        // status bar, exactly as a release page's artwork does.
+                        pageColor = when {
+                            showReplay -> Color.Black
+                            isDetailVisible -> detailPalette.wash
+                            isLocalCollectionArtworkVisible -> localCollectionPalette!!.wash
+                            else -> MaterialTheme.colorScheme.background
+                        },
+                        scrimColor = when {
+                            showReplay -> Color.Black
+                            isDetailVisible -> detailPalette.background
+                            isLocalCollectionArtworkVisible -> localCollectionPalette!!.background
+                            else -> MaterialTheme.colorScheme.background
+                        },
+                        modifier = Modifier.align(Alignment.TopCenter),
+                    )
+                }
 
                 FrostedTopBar(
                     title = when {
@@ -2287,6 +2374,12 @@ private fun BitChordApp(
                     },
                     refreshing = isRefreshingLocalMusic,
                     pullFraction = { 0f },
+                    artworkTint = when {
+                        isLocalCollectionArtworkVisible -> localCollectionPalette?.wash
+                        isDetailVisible -> detailPalette.wash
+                        else -> null
+                    },
+                    floatingOnly = hideCollectionHeaderNow,
                     onBack = when {
                         showSettings -> ({ showSettings = false })
                         showReplay -> ({ showReplay = false })
@@ -2301,7 +2394,7 @@ private fun BitChordApp(
                                     Icon(
                                         Icons.Rounded.Sort,
                                         contentDescription = stringResource(R.string.sort_songs),
-                                        tint = MaterialTheme.colorScheme.onSurface,
+                                        tint = if (hideCollectionHeaderNow) Color.White else MaterialTheme.colorScheme.onSurface,
                                     )
                                 }
                             }
@@ -2309,7 +2402,7 @@ private fun BitChordApp(
                                 Icon(
                                     Icons.Rounded.Settings,
                                     contentDescription = stringResource(R.string.settings),
-                                    tint = MaterialTheme.colorScheme.onSurface,
+                                    tint = if (hideCollectionHeaderNow) Color.White else MaterialTheme.colorScheme.onSurface,
                                 )
                             }
                         }
@@ -3387,6 +3480,7 @@ private const val TAB_ALBUMS = 1
 private const val TAB_ARTISTS = 2
 private const val TAB_LIBRARY = 3
 private const val TAB_SEARCH = 4
+private const val TAB_ALBUM_ARTISTS = 5
 
 
 

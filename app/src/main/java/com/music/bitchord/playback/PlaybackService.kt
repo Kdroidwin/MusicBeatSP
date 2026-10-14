@@ -177,6 +177,13 @@ const val ACTION_REORDER_QUEUE = "com.music.bitchord.action.REORDER_QUEUE"
 const val EXTRA_REORDER_FROM = "bitchord.reorder.from"
 const val EXTRA_REORDER_ORDER = "bitchord.reorder.order"
 
+/** Each decoder owns its own mutable PCM processor state while two tracks overlap. */
+private data class PlaybackAudioChain(
+    val spatial: SpatialAudioProcessor = SpatialAudioProcessor(),
+    val replayGain: ReplayGainAudioProcessor = ReplayGainAudioProcessor(),
+    val resampler: ResamplerCutoffAudioProcessor = ResamplerCutoffAudioProcessor(),
+)
+
 /**
  * Background playback via Media3. A [MediaLibraryService] gives us the media
  * notification, lockscreen/Bluetooth controls, and Android Auto surface for
@@ -187,8 +194,8 @@ const val EXTRA_REORDER_ORDER = "bitchord.reorder.order"
  * the item — stream URLs expire after a few hours, so resolving at play time
  * (on Media3's loader thread, hence runBlocking is safe) keeps queues valid.
  *
- * A single ExoPlayer owns the queue and backs the session for the service's
- * whole life; [CrossfadeController] rides on top of it as volume automation.
+ * Two ExoPlayers share the same media source cache; one backs the session while
+ * the other can be prepared for an optional overlap at track boundaries.
  */
 @UnstableApi
 class PlaybackService : MediaLibraryService() {
@@ -400,6 +407,11 @@ class PlaybackService : MediaLibraryService() {
      */
     private var player: ExoPlayer? = null
 
+    /** Idle peer, used only while the active track is nearing its end. */
+    private var spare: ExoPlayer? = null
+
+    private var crossfade: CrossfadeController? = null
+
     /**
      * The queue and playhead parked while a file-manager song is previewed.
      * The preview temporarily occupies the live player so normal player UI and
@@ -457,10 +469,10 @@ class PlaybackService : MediaLibraryService() {
     private var configuredFloatOutput = false
     private var outputReconfigureJob: Job? = null
 
-    private val spatialAudioProcessor = SpatialAudioProcessor()
-    private val replayGainAudioProcessor = ReplayGainAudioProcessor()
-    private val resamplerCutoffAudioProcessor = ResamplerCutoffAudioProcessor()
+    private var activeAudioChain = PlaybackAudioChain()
+    private var spareAudioChain = PlaybackAudioChain()
     private var replayGainLookupJob: Job? = null
+    private var spareReplayGainJob: Job? = null
     private var replayGainConfigToken: String? = null
 
     /**
@@ -523,6 +535,7 @@ class PlaybackService : MediaLibraryService() {
      */
     private var discordRpc: DiscordRPC? = null
     private var audioEffectManager: com.music.bitchord.playback.equalizer.AudioEffectManager? = null
+    private var spareAudioEffectManager: com.music.bitchord.playback.equalizer.AudioEffectManager? = null
 
     /**
      * The in-flight presence push. Held so the next one can cancel it: the
@@ -1359,8 +1372,10 @@ class PlaybackService : MediaLibraryService() {
             .setLoadErrorHandlingPolicy(PermanentAwareLoadErrorPolicy())
 
         configuredFloatOutput = shouldEnableFloatOutput()
-        val exoPlayer = buildPlayer(spatialAudioProcessor, ownsSession = true)
+        val exoPlayer = buildPlayer(activeAudioChain, ownsSession = true)
+        val sparePlayer = buildPlayer(spareAudioChain, ownsSession = false)
         player = exoPlayer
+        spare = sparePlayer
         audioManager?.registerAudioDeviceCallback(outputDeviceCallback, null)
         applyOutputRoute()
 
@@ -1375,7 +1390,17 @@ class PlaybackService : MediaLibraryService() {
             bassBoostStrength = com.music.bitchord.data.settings.EqualizerSettings.bassBoostStrength.value,
             virtualizerStrength = com.music.bitchord.data.settings.EqualizerSettings.virtualizerStrength.value,
         )
-        applySettings(exoPlayer)
+        spareAudioEffectManager = com.music.bitchord.playback.equalizer.AudioEffectManager(this).also { manager ->
+            manager.setAudioSessionId(
+                sessionId = sparePlayer.audioSessionId,
+                enabled = com.music.bitchord.data.settings.EqualizerSettings.enabled.value,
+                bandLevels = com.music.bitchord.data.settings.EqualizerSettings.bandLevels.value,
+                bassBoostStrength = com.music.bitchord.data.settings.EqualizerSettings.bassBoostStrength.value,
+                virtualizerStrength = com.music.bitchord.data.settings.EqualizerSettings.virtualizerStrength.value,
+            )
+        }
+        applySettings(exoPlayer, activeAudioChain)
+        applySettings(sparePlayer, spareAudioChain)
         observeSettings()
         observeScrobbling()
         observeDiscord()
@@ -1403,14 +1428,7 @@ class PlaybackService : MediaLibraryService() {
 
         mediaSession = MediaLibrarySession.Builder(
             this,
-            SessionPlayer(
-                exoPlayer,
-                { lastPublishedSubtitle },
-                ::canStartPlaybackAtCurrentVolume,
-                { savePlaybackState(exoPlayer) },
-                castPlayback,
-                ::closeLocalCastServers,
-            ),
+            newSessionPlayer(exoPlayer),
             MediaLibraryCallback(),
         )
             .setId(SESSION_ID)
@@ -1418,6 +1436,19 @@ class PlaybackService : MediaLibraryService() {
             .setBitmapLoader(CoilBitmapLoader(this, scope))
             .build()
         mediaSession?.setCustomLayout(notificationButtons())
+        crossfade = CrossfadeController(
+            scope = scope,
+            activePlayer = { player },
+            standbyPlayer = { spare },
+            fadeSeconds = { AppSettings.crossfadeSeconds.value },
+            onHandoff = ::adoptPlayer,
+            onPrepareIncoming = ::prepareCrossfadeIncoming,
+            canCrossfade = { item ->
+                !castPlayback.active &&
+                    player?.let { !isExternalPreviewPlaying(it) } == true &&
+                    item.mediaId != suppressRestoredTrackTransition
+            },
+        ).also { it.start() }
         CastController.ensureStarted(this)
         CastController.attach(castPlayback)
     }
@@ -1698,11 +1729,11 @@ class PlaybackService : MediaLibraryService() {
      * re-resolving a stream URL for audio that is already local.
      */
     private fun buildPlayer(
-        spatial: SpatialAudioProcessor,
+        chain: PlaybackAudioChain,
         ownsSession: Boolean = true,
     ): ExoPlayer = ExoPlayer.Builder(this)
         .setRenderersFactory(
-            silenceSkippingRenderers(spatial, replayGainAudioProcessor, resamplerCutoffAudioProcessor),
+            silenceSkippingRenderers(chain.spatial, chain.replayGain, chain.resampler),
         )
         .setMediaSourceFactory(requireNotNull(mediaSourceFactory))
         .setLoadControl(farBufferingLoadControl())
@@ -1715,6 +1746,94 @@ class PlaybackService : MediaLibraryService() {
         // press before that steps to the previous one.
         .setMaxSeekToPreviousPositionMs(BACK_RESTARTS_AFTER_MS)
         .build()
+
+    private fun newSessionPlayer(target: ExoPlayer) = SessionPlayer(
+        target,
+        { lastPublishedSubtitle },
+        ::canStartPlaybackAtCurrentVolume,
+        { savePlaybackState(target) },
+        castPlayback,
+        ::closeLocalCastServers,
+        onBeforeManualNavigation = { crossfade?.cancelTransition() },
+    )
+
+    /** Configure the silent peer before it starts rendering the incoming file. */
+    private fun prepareCrossfadeIncoming(item: MediaItem) {
+        val target = spare ?: return
+        if (target.currentMediaItem?.mediaId != item.mediaId) return
+        val chain = spareAudioChain
+        chain.resampler.cutoffHz = AppSettings.resamplerCutoffHz.value
+        chain.spatial.enabled = AppSettings.spatialAudio.value &&
+            NerdStats.declaredFormat(item.mediaId)?.isDolbyAtmos != true
+        val preventClipping = AppSettings.replayGainPreventClipping.value
+        chain.replayGain.gainDb = 0f
+        chain.replayGain.preventClipping = preventClipping
+        spareAudioEffectManager?.setAudioSessionId(
+            sessionId = target.audioSessionId,
+            enabled = com.music.bitchord.data.settings.EqualizerSettings.enabled.value,
+            bandLevels = com.music.bitchord.data.settings.EqualizerSettings.bandLevels.value,
+            bassBoostStrength = com.music.bitchord.data.settings.EqualizerSettings.bassBoostStrength.value,
+            virtualizerStrength = com.music.bitchord.data.settings.EqualizerSettings.virtualizerStrength.value,
+        )
+
+        val song = item.toSong()
+        if (!AppSettings.replayGainEnabled.value ||
+            (song.localUri.isNullOrBlank() && song.localPath.isNullOrBlank())
+        ) return
+
+        spareReplayGainJob?.cancel()
+        spareReplayGainJob = scope.launch {
+            val gain = withContext(Dispatchers.IO) {
+                ReplayGainReader.readGainDb(
+                    context = applicationContext,
+                    song = song,
+                    useAlbumGain = AppSettings.replayGainAlbumMode.value,
+                    preampDb = AppSettings.replayGainPreampDb.value,
+                    preventClipping = preventClipping,
+                )
+            }
+            if (isActive && spare === target && target.currentMediaItem?.mediaId == item.mediaId) {
+                chain.replayGain.gainDb = gain
+            }
+        }
+    }
+
+    /** Moves the session onto the already-playing incoming decoder at mid-fade. */
+    private fun adoptPlayer(outgoing: ExoPlayer, incoming: ExoPlayer) {
+        if (player !== outgoing || spare !== incoming) return
+        outgoing.setHandleAudioBecomingNoisy(false)
+        incoming.setHandleAudioBecomingNoisy(true)
+        outgoing.removeListener(playbackListener)
+        outgoing.removeAnalyticsListener(formatListener)
+
+        player = incoming
+        spare = outgoing
+        val previousChain = activeAudioChain
+        activeAudioChain = spareAudioChain
+        spareAudioChain = previousChain
+        val previousEffects = audioEffectManager
+        audioEffectManager = spareAudioEffectManager
+        spareAudioEffectManager = previousEffects
+        incoming.addListener(playbackListener)
+        incoming.addAnalyticsListener(formatListener)
+        AppSettings.audioSessionId.value = incoming.audioSessionId
+        mediaSession?.player = newSessionPlayer(incoming)
+
+        onTrackBecameCurrent(
+            incoming.currentMediaItem,
+            previousEnded = true,
+            reason = Player.MEDIA_ITEM_TRANSITION_REASON_AUTO,
+            alreadyAudible = true,
+        )
+        autoplayLoadJob?.cancel()
+        autoplayLoadJob = null
+        autoplaySeed = null
+        loadAutoplayForCurrentTrack()
+        loadLyricsForCurrentTrack()
+        if (incoming.isPlaying) startLyricsTicker() else stopLyricsTicker()
+        mediaSession?.setCustomLayout(notificationButtons())
+        publishWidgetState()
+    }
 
     /**
      * Where a tap on the session lands. Media3 uses this both as the media
@@ -1762,8 +1881,8 @@ class PlaybackService : MediaLibraryService() {
 
         replayGainConfigToken = token
         replayGainLookupJob?.cancel()
-        replayGainAudioProcessor.gainDb = 0f
-        replayGainAudioProcessor.preventClipping = preventClipping
+        activeAudioChain.replayGain.gainDb = 0f
+        activeAudioChain.replayGain.preventClipping = preventClipping
         if (!enabled || song == null || (song.localUri.isNullOrBlank() && song.localPath.isNullOrBlank())) return
 
         replayGainLookupJob = scope.launch {
@@ -1775,7 +1894,7 @@ class PlaybackService : MediaLibraryService() {
                 preventClipping = preventClipping,
             )
             if (isActive && player?.currentMediaItem?.mediaId == mediaId && replayGainConfigToken == token) {
-                replayGainAudioProcessor.gainDb = gain
+                activeAudioChain.replayGain.gainDb = gain
             }
         }
     }
@@ -3993,9 +4112,9 @@ class PlaybackService : MediaLibraryService() {
      * idle right now is the one the next transition will start a song on, so it
      * cannot be left on stale settings.
      */
-    private fun applySettings(player: ExoPlayer) {
+    private fun applySettings(player: ExoPlayer, chain: PlaybackAudioChain) {
         player.skipSilenceEnabled = AppSettings.skipSilence.value
-        resamplerCutoffAudioProcessor.cutoffHz = AppSettings.resamplerCutoffHz.value
+        chain.resampler.cutoffHz = AppSettings.resamplerCutoffHz.value
         player.playbackParameters = PlaybackParameters(
             AppSettings.playbackSpeed.value,
             AppSettings.playbackPitch.value,
@@ -4102,9 +4221,15 @@ class PlaybackService : MediaLibraryService() {
         oldActive.removeListener(playbackListener)
         oldActive.removeAnalyticsListener(formatListener)
 
+        val oldSpare = spare
+        crossfade?.cancelTransition()
         configuredFloatOutput = enableFloat
-        val newActive = buildPlayer(spatialAudioProcessor, ownsSession = true)
+        activeAudioChain = PlaybackAudioChain()
+        spareAudioChain = PlaybackAudioChain()
+        val newActive = buildPlayer(activeAudioChain, ownsSession = true)
+        val newSpare = buildPlayer(spareAudioChain, ownsSession = false)
         player = newActive
+        spare = newSpare
         AppSettings.audioSessionId.value = newActive.audioSessionId
         audioEffectManager?.setAudioSessionId(
             sessionId = newActive.audioSessionId,
@@ -4113,7 +4238,15 @@ class PlaybackService : MediaLibraryService() {
             bassBoostStrength = com.music.bitchord.data.settings.EqualizerSettings.bassBoostStrength.value,
             virtualizerStrength = com.music.bitchord.data.settings.EqualizerSettings.virtualizerStrength.value,
         )
-        applySettings(newActive)
+        spareAudioEffectManager?.setAudioSessionId(
+            sessionId = newSpare.audioSessionId,
+            enabled = com.music.bitchord.data.settings.EqualizerSettings.enabled.value,
+            bandLevels = com.music.bitchord.data.settings.EqualizerSettings.bandLevels.value,
+            bassBoostStrength = com.music.bitchord.data.settings.EqualizerSettings.bassBoostStrength.value,
+            virtualizerStrength = com.music.bitchord.data.settings.EqualizerSettings.virtualizerStrength.value,
+        )
+        applySettings(newActive, activeAudioChain)
+        applySettings(newSpare, spareAudioChain)
         newActive.repeatMode = repeatMode
         newActive.shuffleModeEnabled = shuffleMode
         if (items.isNotEmpty()) {
@@ -4122,19 +4255,13 @@ class PlaybackService : MediaLibraryService() {
         newActive.addListener(playbackListener)
         newActive.addAnalyticsListener(formatListener)
 
-        mediaSession?.player = SessionPlayer(
-            newActive,
-            { lastPublishedSubtitle },
-            ::canStartPlaybackAtCurrentVolume,
-            { savePlaybackState(newActive) },
-            castPlayback,
-            ::closeLocalCastServers,
-        )
+        mediaSession?.player = newSessionPlayer(newActive)
         applyOutputRoute()
         if (items.isNotEmpty()) newActive.prepare()
         newActive.playWhenReady = playWhenReady
 
         oldActive.release()
+        oldSpare?.release()
         TrackLog.i(
             "AUDIO_OUT",
             "live output switch: ${if (enableFloat) "PCM_FLOAT" else "PCM_16BIT"}",
@@ -4161,6 +4288,7 @@ class PlaybackService : MediaLibraryService() {
 
     private inline fun eachPlayer(body: (ExoPlayer) -> Unit) {
         player?.let(body)
+        spare?.takeIf { it !== player }?.let(body)
     }
 
     private fun observeSettings() {
@@ -4172,14 +4300,18 @@ class PlaybackService : MediaLibraryService() {
                 AppSettings.replayGainPreventClipping,
             ) { enabled, album, preamp, clipping -> listOf(enabled, album, preamp, clipping) }
                 .distinctUntilChanged()
-                .collect { updateReplayGainForCurrentTrack(force = true) }
+                .collect {
+                    updateReplayGainForCurrentTrack(force = true)
+                    spare?.currentMediaItem?.let(::prepareCrossfadeIncoming)
+                }
         }
         scope.launch {
             AppSettings.skipSilence.collect { on -> eachPlayer { it.skipSilenceEnabled = on } }
         }
         scope.launch {
             AppSettings.resamplerCutoffHz.collect { cutoff ->
-                resamplerCutoffAudioProcessor.cutoffHz = cutoff
+                activeAudioChain.resampler.cutoffHz = cutoff
+                spareAudioChain.resampler.cutoffHz = cutoff
             }
         }
         scope.launch {
@@ -4209,7 +4341,7 @@ class PlaybackService : MediaLibraryService() {
             combine(AppSettings.playbackSpeed, AppSettings.playbackPitch) { speed, pitch ->
                 PlaybackParameters(speed, pitch)
             }.collect { parameters ->
-                player?.playbackParameters = parameters
+                eachPlayer { it.playbackParameters = parameters }
             }
         }
         scope.launch {
@@ -4230,23 +4362,27 @@ class PlaybackService : MediaLibraryService() {
         scope.launch {
             com.music.bitchord.data.settings.EqualizerSettings.enabled.collect { enabled ->
                 audioEffectManager?.applyEnabled(enabled)
+                spareAudioEffectManager?.applyEnabled(enabled)
             }
         }
         scope.launch {
             com.music.bitchord.data.settings.EqualizerSettings.bandLevels.collect { bands ->
                 bands.forEach { (band, level) ->
                     audioEffectManager?.applyBandLevel(band, level)
+                    spareAudioEffectManager?.applyBandLevel(band, level)
                 }
             }
         }
         scope.launch {
             com.music.bitchord.data.settings.EqualizerSettings.bassBoostStrength.collect { strength ->
                 audioEffectManager?.applyBassBoost(strength)
+                spareAudioEffectManager?.applyBassBoost(strength)
             }
         }
         scope.launch {
             com.music.bitchord.data.settings.EqualizerSettings.virtualizerStrength.collect { strength ->
                 audioEffectManager?.applyVirtualizer(strength)
+                spareAudioEffectManager?.applyVirtualizer(strength)
             }
         }
     }
@@ -4260,7 +4396,10 @@ class PlaybackService : MediaLibraryService() {
      */
     private fun applySpatialAudioEnabled() {
         val enabled = AppSettings.spatialAudio.value && !activeTrackIsDolbyAtmos
-        spatialAudioProcessor.enabled = enabled
+        activeAudioChain.spatial.enabled = enabled
+        val standbyItem = spare?.currentMediaItem
+        spareAudioChain.spatial.enabled = AppSettings.spatialAudio.value &&
+            NerdStats.declaredFormat(standbyItem?.mediaId)?.isDolbyAtmos != true
     }
 
     private fun observeScrobbling() {
@@ -4638,6 +4777,8 @@ class PlaybackService : MediaLibraryService() {
         CastController.detach(castPlayback)
         castPlayback.release()
         closeLocalCastServers()
+        crossfade?.release()
+        crossfade = null
         scope.cancel()
         mediaSession?.release()
         mediaSession = null
@@ -4645,8 +4786,12 @@ class PlaybackService : MediaLibraryService() {
         player?.removeAnalyticsListener(formatListener)
         player?.release()
         player = null
+        spare?.release()
+        spare = null
         audioEffectManager?.release()
         audioEffectManager = null
+        spareAudioEffectManager?.release()
+        spareAudioEffectManager = null
         super.onDestroy()
     }
 
@@ -4796,6 +4941,7 @@ class PlaybackService : MediaLibraryService() {
         private val beforeStop: () -> Unit,
         private val cast: CastPlayback,
         private val onCastEnded: () -> Unit,
+        private val onBeforeManualNavigation: () -> Unit,
     ) : ForwardingPlayer(player), CastSink {
 
         private val listeners = CopyOnWriteArraySet<Player.Listener>()
@@ -4901,6 +5047,7 @@ class PlaybackService : MediaLibraryService() {
         }
 
         override fun stop() {
+            onBeforeManualNavigation()
             beforeStop()
             if (cast.active) cast.pause()
             wrappedPlayer.stop()
@@ -4917,6 +5064,7 @@ class PlaybackService : MediaLibraryService() {
         }
 
         override fun seekTo(mediaItemIndex: Int, positionMs: Long) {
+            onBeforeManualNavigation()
             if (cast.active && mediaItemIndex == currentMediaItemIndex) {
                 cast.seekTo(positionMs)
                 return
@@ -4936,34 +5084,42 @@ class PlaybackService : MediaLibraryService() {
         }
 
         override fun seekTo(positionMs: Long) {
+            onBeforeManualNavigation()
             if (cast.active) cast.seekTo(positionMs) else super.seekTo(positionMs)
         }
 
         override fun seekBack() {
+            onBeforeManualNavigation()
             if (cast.active) cast.seekTo(cast.positionMs - seekBackIncrement) else super.seekBack()
         }
 
         override fun seekForward() {
+            onBeforeManualNavigation()
             if (cast.active) cast.seekTo(cast.positionMs + seekForwardIncrement) else super.seekForward()
         }
 
         override fun seekToPrevious() {
+            onBeforeManualNavigation()
             if (cast.active) castPrevious() else super.seekToPrevious()
         }
 
         override fun seekToPreviousMediaItem() {
+            onBeforeManualNavigation()
             if (cast.active) castPrevious() else wrappedPlayer.seekToPrevious()
         }
 
         override fun seekToNextMediaItem() {
+            onBeforeManualNavigation()
             wrappedPlayer.seekToNextMediaItem()
         }
 
         override fun seekToNext() {
+            onBeforeManualNavigation()
             wrappedPlayer.seekToNext()
         }
 
         override fun seekToDefaultPosition() {
+            onBeforeManualNavigation()
             if (cast.active) cast.seekTo(0L) else super.seekToDefaultPosition()
         }
 

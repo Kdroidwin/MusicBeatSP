@@ -175,7 +175,7 @@ private const val TINT_FADE_MS = 260
  * The raw artwork colours: what the page is mostly made of, its brightest
  * note, and what its bottom edge averages out to.
  */
-private data class Seed(val dominant: Color, val vibrant: Color, val edge: Color)
+private data class Seed(val dominant: Color, val vibrant: Color?, val edge: Color)
 
 private fun seedOf(bitmap: Bitmap): Seed? {
     fun swatches(builder: Palette.Builder) =
@@ -190,18 +190,31 @@ private fun seedOf(bitmap: Bitmap): Seed? {
     if (found.isEmpty()) return null
 
     val dominant = found.maxBy { it.population }
-    // The accent has to earn its place twice over: a colour nobody sees enough
-    // of reads as arbitrary, and a grey one isn't an accent at all. Scoring on
-    // saturation against the *square root* of population is what stops a sleeve
-    // that is four-fifths black sky from accenting in black.
-    val vibrant = found.maxBy { swatch ->
-        val hsl = FloatArray(3).also { ColorUtils.colorToHSL(swatch.rgb, it) }
-        hsl[1] * sqrt(swatch.population.toFloat())
-    }
-    return Seed(Color(dominant.rgb), Color(vibrant.rgb), bitmap.bottomEdgeColor())
+    // Ignore small saturated specks before ranking. Scoring every swatch by
+    // saturation alone lets a tiny pink logo or ribbon tint an entire screen.
+    // Near-grays are excluded too: their hue is arbitrary (often zero/red),
+    // and forcing saturation on those swatches produced unexplained pink for
+    // monochrome and muted album covers.
+    val strongestPopulation = found.maxOf { it.population }
+    val vibrant = found.asSequence()
+        .filter { it.population >= strongestPopulation * MIN_ACCENT_POPULATION_RATIO }
+        .mapNotNull { swatch ->
+            val hsl = FloatArray(3).also { ColorUtils.colorToHSL(swatch.rgb, it) }
+            if (hsl[1] < MIN_ACCENT_SATURATION) null
+            else swatch to (hsl[1] * sqrt(swatch.population.toFloat()))
+        }
+        .maxByOrNull { it.second }
+        ?.first
+        ?.let { Color(it.rgb) }
+        ?: Color(dominant.rgb).takeIf { color ->
+            FloatArray(3).also { hsl -> ColorUtils.colorToHSL(color.toArgb(), hsl) }[1] >= MIN_ACCENT_SATURATION
+        }
+    return Seed(Color(dominant.rgb), vibrant, bitmap.bottomEdgeColor())
 }
 
 private const val SWATCH_COUNT = 24
+private const val MIN_ACCENT_POPULATION_RATIO = 0.12f
+private const val MIN_ACCENT_SATURATION = 0.18f
 
 /**
  * The mean of the artwork's bottom band — what a blur wide enough to lose the
@@ -236,6 +249,7 @@ private fun Bitmap.bottomEdgeColor(): Color {
 private const val EDGE_BAND = 0.18f
 
 private fun Seed.toPalette(dark: Boolean): ArtworkPalette = if (dark) {
+    val accent = vibrant ?: Color(0xFFE0E0E0)
     ArtworkPalette(
         // Deep enough that white body text clears contrast on any sleeve, but
         // not so deep the hue is gone — the whole point is that the page is
@@ -250,8 +264,8 @@ private fun Seed.toPalette(dark: Boolean): ArtworkPalette = if (dark) {
             lightness = { it.coerceIn(0.14f, 0.24f) },
         ),
         elevated = dominant.withHsl(saturation = { it.coerceIn(0.20f, 0.62f) }, lightness = { 0.22f }),
-        accent = vibrant.withHsl(
-            saturation = { it.coerceAtLeast(0.55f) },
+        accent = accent.withHsl(
+            saturation = { it.coerceIn(MIN_ACCENT_SATURATION, 0.78f) },
             lightness = { it.coerceIn(0.62f, 0.78f) },
         ),
         onBackground = Color.White,
@@ -263,6 +277,7 @@ private fun Seed.toPalette(dark: Boolean): ArtworkPalette = if (dark) {
         divider = Color.White.copy(alpha = 0.12f),
     )
 } else {
+    val accent = vibrant ?: Color(0xFF424242)
     ArtworkPalette(
         background = dominant.withHsl(saturation = { it.coerceIn(0.14f, 0.50f) }, lightness = { 0.91f }),
         wash = edge.withHsl(
@@ -270,8 +285,8 @@ private fun Seed.toPalette(dark: Boolean): ArtworkPalette = if (dark) {
             lightness = { it.coerceIn(0.78f, 0.90f) },
         ),
         elevated = dominant.withHsl(saturation = { it.coerceIn(0.14f, 0.50f) }, lightness = { 0.83f }),
-        accent = vibrant.withHsl(
-            saturation = { it.coerceAtLeast(0.55f) },
+        accent = accent.withHsl(
+            saturation = { it.coerceIn(MIN_ACCENT_SATURATION, 0.78f) },
             lightness = { it.coerceIn(0.30f, 0.44f) },
         ),
         onBackground = Color.Black,

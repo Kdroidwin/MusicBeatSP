@@ -8,6 +8,7 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.material3.Icon
+import androidx.compose.material3.LocalContentColor
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
@@ -38,6 +39,7 @@ fun LocalSongActionItem(
     enabled: Boolean = true,
 ) {
     val contentAlpha = if (enabled) 1f else 0.4f
+    val contentColor = LocalContentColor.current
     Row(
         modifier = modifier
             .fillMaxWidth()
@@ -48,14 +50,14 @@ fun LocalSongActionItem(
         Icon(
             imageVector = icon,
             contentDescription = null,
-            tint = MaterialTheme.colorScheme.onSurface.copy(alpha = contentAlpha),
+            tint = contentColor.copy(alpha = contentAlpha),
             modifier = Modifier.size(24.dp),
         )
         Spacer(Modifier.width(18.dp))
         Text(
             text = label,
             style = MaterialTheme.typography.bodyLarge,
-            color = MaterialTheme.colorScheme.onSurface.copy(alpha = contentAlpha),
+            color = contentColor.copy(alpha = contentAlpha),
             modifier = Modifier.weight(1f),
         )
         if (!value.isNullOrBlank()) {
@@ -64,7 +66,7 @@ fun LocalSongActionItem(
                 text = value,
                 style = MaterialTheme.typography.bodyMedium,
                 fontWeight = FontWeight.Medium,
-                color = MaterialTheme.colorScheme.primary.copy(alpha = contentAlpha),
+                color = contentColor.copy(alpha = 0.78f * contentAlpha),
             )
         }
         if (trailingIcon != null) {
@@ -72,7 +74,7 @@ fun LocalSongActionItem(
             Icon(
                 imageVector = trailingIcon,
                 contentDescription = null,
-                tint = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.6f * contentAlpha),
+                tint = contentColor.copy(alpha = 0.6f * contentAlpha),
                 modifier = Modifier.size(20.dp),
             )
         }

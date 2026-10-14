@@ -11,6 +11,7 @@ object LocalSearchUseCase {
         query: String,
         filter: LocalSearchFilter,
         allSongs: List<Song>,
+        folderHierarchy: Boolean = false,
     ): List<LocalSearchResult> {
         val trimmed = query.trim()
         if (trimmed.isEmpty()) return emptyList()
@@ -72,7 +73,7 @@ object LocalSearchUseCase {
         }
 
         // Find matching folders
-        val matchedFolders = if (filter == LocalSearchFilter.ALL || filter == LocalSearchFilter.FOLDERS) {
+        val matchingFolderSongs = if (filter == LocalSearchFilter.ALL || filter == LocalSearchFilter.FOLDERS) {
             allSongs
                 .filter { !it.localPath.isNullOrBlank() }
                 .groupBy { song ->
@@ -83,7 +84,32 @@ object LocalSearchUseCase {
                     val folderName = dir.substringAfterLast('/')
                     folderName.lowercase(Locale.ROOT).contains(q) || dir.lowercase(Locale.ROOT).contains(q)
                 }
-                .map { (dir, songs) ->
+        } else {
+            emptyMap()
+        }
+        val matchedFolders = if (folderHierarchy) {
+            val matchingPaths = matchingFolderSongs.keys
+                .map { it.replace('\\', '/').trimEnd('/') }
+                .toSet()
+            matchingFolderSongs.map { (dir, songs) ->
+                val normalizedPath = dir.replace('\\', '/').trimEnd('/')
+                var ancestor = normalizedPath.substringBeforeLast('/', "")
+                var depth = 0
+                while (ancestor.isNotBlank() && ancestor != normalizedPath) {
+                    if (ancestor in matchingPaths) depth++
+                    val parent = ancestor.substringBeforeLast('/', "")
+                    if (parent == ancestor) break
+                    ancestor = parent
+                }
+                LocalSearchResult.Folder(
+                    name = dir.substringAfterLast('/'),
+                    path = dir,
+                    songs = LocalFileNameOrdering.sort(songs),
+                    depth = depth,
+                )
+            }.sortedBy { it.path.replace('\\', '/').lowercase(Locale.ROOT) }
+        } else {
+            matchingFolderSongs.map { (dir, songs) ->
                     LocalSearchResult.Folder(
                         name = dir.substringAfterLast('/'),
                         path = dir,
@@ -94,8 +120,6 @@ object LocalSearchUseCase {
                     compareByDescending<LocalSearchResult.Folder> { it.name.lowercase(Locale.ROOT).startsWith(q) }
                         .thenByDescending { it.songs.size }
                 )
-        } else {
-            emptyList()
         }
 
         when (filter) {

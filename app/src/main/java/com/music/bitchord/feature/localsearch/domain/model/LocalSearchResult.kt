@@ -19,5 +19,6 @@ sealed interface LocalSearchResult {
         val name: String,
         val path: String,
         val songs: List<Song>,
+        val depth: Int = 0,
     ) : LocalSearchResult
 }

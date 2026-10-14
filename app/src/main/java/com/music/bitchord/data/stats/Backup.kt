@@ -36,7 +36,7 @@ import java.time.format.DateTimeFormatter
 object Backup {
 
     private const val APP_TAG = "musicbeat"
-    private const val SCHEMA_VERSION = 3
+    private const val SCHEMA_VERSION = 4
 
     private val json = Json {
         ignoreUnknownKeys = true
@@ -211,6 +211,10 @@ object Backup {
         val radioName: String? = null,
         val localUri: String? = null,
         val localPath: String? = null,
+        val albumArtist: String? = null,
+        val trackNumber: Int? = null,
+        val localStartMs: Long? = null,
+        val localEndMs: Long? = null,
         val downloadFormat: String? = null,
         val isExplicit: Boolean? = null,
     ) {
@@ -230,6 +234,10 @@ object Backup {
             radioName = radioName,
             localUri = localUri,
             localPath = localPath,
+            albumArtist = albumArtist,
+            trackNumber = trackNumber?.takeIf { it > 0 },
+            localStartMs = localStartMs?.coerceAtLeast(0L),
+            localEndMs = localEndMs?.coerceAtLeast(0L),
             downloadFormat = downloadFormat,
             isExplicit = isExplicit,
         )
@@ -291,6 +299,10 @@ object Backup {
                 radioName = song.radioName,
                 localUri = song.localUri,
                 localPath = song.localPath,
+                albumArtist = song.albumArtist,
+                trackNumber = song.trackNumber,
+                localStartMs = song.localStartMs,
+                localEndMs = song.localEndMs,
                 downloadFormat = song.downloadFormat,
                 isExplicit = song.isExplicit,
             )

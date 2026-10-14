@@ -82,6 +82,7 @@ import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.rounded.Folder
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.SideEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.mutableStateOf
@@ -92,6 +93,7 @@ import androidx.compose.runtime.setValue
 import kotlinx.coroutines.launch
 import com.music.bitchord.data.LocalMediaRepository
 import com.music.bitchord.data.model.durationMillis
+import com.music.bitchord.data.model.artworkAt
 import com.music.bitchord.feature.artistimage.model.ArtistEntry
 import com.music.bitchord.feature.artistimage.model.ArtistImage
 import com.music.bitchord.feature.artistimage.model.ArtistSort
@@ -137,6 +139,7 @@ import com.music.bitchord.data.model.artworkAt
 import com.music.bitchord.data.model.isSameTrackAs
 import com.music.bitchord.data.settings.AppSettings
 import com.music.bitchord.data.settings.LibraryViewType
+import com.music.bitchord.ui.theme.ArtworkPalette
 import com.music.bitchord.data.settings.LocalMusicSort
 import com.music.bitchord.data.settings.LocalLibraryTab
 import com.music.bitchord.download.DownloadedCollection
@@ -260,6 +263,7 @@ fun LocalMusicScreen(
     onLyricsEditorSeek: ((Long) -> Unit)? = null,
     onLyricsEditorPrevious: (() -> Unit)? = null,
     onLyricsEditorNext: (() -> Unit)? = null,
+    onArtworkPaletteChanged: ((ArtworkPalette?) -> Unit)? = null,
     /** Deletes the Downloads rows selected through this screen's long-press mode. */
     onDeleteDownloads: ((List<Song>) -> Unit)? = null,
     initialTab: Int = LOCAL_TAB_SONGS,
@@ -289,9 +293,10 @@ fun LocalMusicScreen(
     var selectedTab by rememberSaveable { mutableIntStateOf(initialTab) }
     val visibleLocalLibraryTabs by AppSettings.visibleLocalLibraryTabs.collectAsStateWithLifecycle()
     val localLibraryTabOrder by AppSettings.localLibraryTabOrder.collectAsStateWithLifecycle()
-    val displayedLocalTabs = remember(visibleLocalLibraryTabs, localLibraryTabOrder, isDownloads) {
+    val displayedLocalTabs = remember(visibleLocalLibraryTabs, localLibraryTabOrder, isDownloads, showTabRow) {
+        val allowedTabs = if (showTabRow) visibleLocalLibraryTabs else LocalLibraryTab.entries.toSet()
         localLibraryTabOrder
-            .filter { it in visibleLocalLibraryTabs }
+            .filter { it in allowedTabs }
             .filterNot { isDownloads && it in setOf(LocalLibraryTab.FOLDERS, LocalLibraryTab.PLAYLISTS) }
             .map(LocalLibraryTab::ordinal)
     }
@@ -395,18 +400,24 @@ fun LocalMusicScreen(
     var drillDownArt by remember { mutableStateOf<String?>(null) }
     var drillDownIsArtist by remember { mutableStateOf(false) }
     var drillDownShowsAlbums by remember { mutableStateOf(false) }
+    var drillDownFullScreenArtwork by remember { mutableStateOf(false) }
     var drillDownAlbumEntries by remember { mutableStateOf<List<AlbumEntry>?>(null) }
     var parentArtistAlbums by remember { mutableStateOf<List<AlbumEntry>?>(null) }
     var parentArtistLabel by remember { mutableStateOf<String?>(null) }
 
     val inDrillDown = drillDownLabel != null
-
+    SideEffect {
+        if (!inDrillDown || drillDownShowsAlbums || !fullScreenCollectionArtwork || !drillDownFullScreenArtwork) {
+            onArtworkPaletteChanged?.invoke(null)
+        }
+    }
     val leaveDrillDown: () -> Unit = {
         drillDownLabel = null
         drillDownSongs = emptyList()
         drillDownArt = null
         drillDownIsArtist = false
         drillDownShowsAlbums = false
+        drillDownFullScreenArtwork = false
         drillDownAlbumEntries = null
         parentArtistAlbums = null
         parentArtistLabel = null
@@ -421,6 +432,7 @@ fun LocalMusicScreen(
             drillDownSongs = parent.flatMap(AlbumEntry::songs)
             drillDownLabel = parentArtistLabel
             drillDownArt = null
+            drillDownFullScreenArtwork = false
             parentArtistAlbums = null
         } else {
             leaveDrillDown()
@@ -435,6 +447,7 @@ fun LocalMusicScreen(
                 drillDownSongs = songs.filter { ArtistSplitter.matchesArtist(it.artist, target) }
                 drillDownArt = null
                 drillDownIsArtist = true
+                drillDownFullScreenArtwork = false
                 drillDownAlbumEntries = albumEntries(drillDownSongs, emptyList())
                 drillDownShowsAlbums = artistsOpenAlbums
                 parentArtistLabel = target
@@ -444,6 +457,7 @@ fun LocalMusicScreen(
                 drillDownSongs = matching
                 drillDownArt = matching.firstNotNullOfOrNull { it.thumbnailUrl?.takeIf { url -> url.isNotBlank() } }
                 drillDownIsArtist = false
+                drillDownFullScreenArtwork = true
             }
         }
     }
@@ -475,6 +489,7 @@ fun LocalMusicScreen(
                     drillDownArt = songs.find { it.albumName == targetAlbum }?.thumbnailUrl
                     drillDownIsArtist = false
                     drillDownShowsAlbums = false
+                    drillDownFullScreenArtwork = true
                     parentArtistAlbums = null
                 }
             } else null,
@@ -485,6 +500,7 @@ fun LocalMusicScreen(
                     drillDownSongs = songs.filter { s -> ArtistSplitter.matchesArtist(s.artist, targetArtist) }
                     drillDownArt = null
                     drillDownIsArtist = true
+                    drillDownFullScreenArtwork = false
                     drillDownAlbumEntries = albumEntries(drillDownSongs, emptyList())
                     drillDownShowsAlbums = artistsOpenAlbums
                     parentArtistLabel = targetArtist
@@ -497,6 +513,7 @@ fun LocalMusicScreen(
                     drillDownLabel = targetFolder.substringAfterLast('/')
                     drillDownSongs = songs.filter { (it.localPath ?: "").substringBeforeLast('/') == targetFolder }
                     drillDownArt = null
+                    drillDownFullScreenArtwork = false
                 }
             } else null,
             onTagEditor = {
@@ -634,9 +651,9 @@ fun LocalMusicScreen(
             val maxPullDistancePx = with(density) { 80.dp.toPx() }
 
             AnimatedContent(
-                targetState = if (inDrillDown) "drill:$drillDownLabel" else "tab:$selectedTab",
+                targetState = if (inDrillDown) "drill" else "tab:$selectedTab",
                 transitionSpec = {
-                    if (targetState.startsWith("drill:")) {
+                    if (targetState == "drill") {
                         (slideInHorizontally { it } + fadeIn()) togetherWith
                             (slideOutHorizontally { -it / 3 } + fadeOut())
                     } else {
@@ -675,7 +692,7 @@ fun LocalMusicScreen(
                         }
                     }
 
-                key.startsWith("drill:") -> {
+                key == "drill" -> {
                     if (drillDownShowsAlbums) {
                         val artistAlbums = drillDownAlbumEntries.orEmpty()
                         AlbumsTab(
@@ -694,6 +711,7 @@ fun LocalMusicScreen(
                                 drillDownArt = entry.thumbnailUrl
                                 drillDownIsArtist = false
                                 drillDownShowsAlbums = false
+                                drillDownFullScreenArtwork = true
                             },
                             onAlbumLongPress = { entry ->
                                 if (isDownloads) toggleAlbumSelection(entry)
@@ -707,7 +725,7 @@ fun LocalMusicScreen(
                             artworkUrl = drillDownArt,
                             songs = drillDownSongs,
                             isArtist = drillDownIsArtist,
-                            fullScreenArtwork = fullScreenCollectionArtwork,
+                            fullScreenArtwork = fullScreenCollectionArtwork && drillDownFullScreenArtwork,
                             viewType = drillDownViewType,
                             onViewTypeToggle = {
                                 val next = if (drillDownViewType == LibraryViewType.GRID) LibraryViewType.LIST else LibraryViewType.GRID
@@ -736,6 +754,7 @@ fun LocalMusicScreen(
                             onBack = backFromDrillDown,
                             contentPadding = bodyContentPadding,
                             songDropdownMenu = if (isDownloads) null else songDropdownMenu,
+                            onArtworkPaletteChanged = onArtworkPaletteChanged,
                         )
                     }
                 }
@@ -804,6 +823,7 @@ fun LocalMusicScreen(
                             drillDownSongs = artistSongs
                             drillDownArt = null
                             drillDownIsArtist = true
+                            drillDownFullScreenArtwork = false
                             val groupedAlbums = albumEntries(artistSongs, emptyList())
                             drillDownAlbumEntries = groupedAlbums
                             drillDownShowsAlbums = artistsOpenAlbums
@@ -856,6 +876,7 @@ fun LocalMusicScreen(
                             drillDownSongs = artistSongs
                             drillDownArt = null
                             drillDownIsArtist = true
+                            drillDownFullScreenArtwork = false
                             val groupedAlbums = albumEntries(artistSongs, emptyList())
                             drillDownAlbumEntries = groupedAlbums
                             drillDownShowsAlbums = artistsOpenAlbums
@@ -887,6 +908,8 @@ fun LocalMusicScreen(
                                 drillDownLabel = entry.title
                                 drillDownSongs = entry.songs
                                 drillDownArt = entry.thumbnailUrl
+                                drillDownIsArtist = false
+                                drillDownFullScreenArtwork = true
                             }
                         },
                         onAlbumLongPress = { entry ->
@@ -909,6 +932,7 @@ fun LocalMusicScreen(
                             drillDownLabel = folder.name
                             drillDownSongs = songs.filter { (it.localPath ?: "").substringBeforeLast('/') == folder.path }
                             drillDownArt = null
+                            drillDownFullScreenArtwork = false
                         },
                         onToggleBlacklist = { path, isBlacklisted ->
                             AppSettings.setFolderBlacklisted(path, isBlacklisted)
@@ -929,6 +953,10 @@ fun LocalMusicScreen(
                             drillDownLabel = playlist.name
                             drillDownSongs = resolvePlaylistSongs(playlist, songs)
                             drillDownArt = playlist.customCoverUrl ?: playlist.coverUrl
+                            // The art-led layout is scoped to album details and
+                            // the dedicated Library screen, not this playlist
+                            // browser or other local music lists.
+                            drillDownFullScreenArtwork = false
                         },
                         onPlaylistPlay = { playlist ->
                             val pSongs = resolvePlaylistSongs(playlist, songs)

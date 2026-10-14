@@ -1,3 +1,11 @@
+<div align="center">
+
+<br/>
+
+<img src="Logo.png" alt="MusicBeatSP app icon" width="160" />
+
+# MusicBeatSP
+
 ### A local-first music player for Android
 **Lossless audio · Synchronized lyrics · Customizable library and player · ReplayGain · Google Cast**
 
@@ -21,15 +29,9 @@
 
 The standard Android package is `io.pockets.musicbestsp`. Because this differs from the previous MusicBeat package, Android installs MusicBeatSP as a separate app; app-private settings and data are not migrated automatically.
 
-
-
-<p align="center">
-  <img src="https://github.com/user-attachments/assets/78ece8eb-eb59-4c7f-b8ea-01b7f76a84d7" width="180" alt="アプリのスクリーンショット 1">
-  <img src="https://github.com/user-attachments/assets/d47794ad-375c-4edd-85c7-4b4ac70727f0" width="180" alt="アプリのスクリーンショット 2">
-  <img src="https://github.com/user-attachments/assets/f8b7daf2-2242-427e-b287-e20e1e2e7b8c" width="180" alt="アプリのスクリーンショット 3">
-  <img src="https://github.com/user-attachments/assets/a1ec0406-1f9e-4416-8cce-5a9cf62da609" width="180" alt="アプリのスクリーンショット 4">
-</p>
-
+<div align="center">
+<img src="Banner.png" alt="MusicBeatSP banner" width="100%" />
+</div>
 
 ## Features
 

@@ -9,6 +9,7 @@ import androidx.compose.animation.core.tween
 import androidx.compose.animation.fadeIn
 import androidx.compose.animation.fadeOut
 import androidx.compose.foundation.Image
+import androidx.compose.foundation.background
 import androidx.compose.foundation.gestures.detectVerticalDragGestures
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Box
@@ -124,6 +125,9 @@ fun FrostedTopBar(
     pullFraction: () -> Float = { 0f },
     actions: @Composable () -> Unit = {},
     alwaysShowTitle: Boolean = true,
+    artworkTint: Color? = null,
+    /** Draws only floating navigation/actions over collection artwork. */
+    floatingOnly: Boolean = false,
 ) {
     val reduceDynamicBlur by AppSettings.reduceDynamicBlur.collectAsStateWithLifecycle()
     val titleAlpha by animateFloatAsState(
@@ -136,7 +140,7 @@ fun FrostedTopBar(
     // the fade exists to remove.
     val dividerColor by animateColorAsState(
         targetValue = MaterialTheme.colorScheme.outline.copy(
-            alpha = if (scrolled && reduceDynamicBlur) 0.6f else 0f,
+            alpha = if (!floatingOnly && scrolled && reduceDynamicBlur) 0.6f else 0f,
         ),
         animationSpec = tween(220),
         label = "topBarDivider",
@@ -146,8 +150,13 @@ fun FrostedTopBar(
         modifier = modifier
             .fillMaxWidth()
             .then(
-                if (reduceDynamicBlur) Modifier.background(MaterialTheme.colorScheme.surface)
-                else Modifier.background(MaterialTheme.colorScheme.background.copy(alpha = 0.92f)),
+                when {
+                    floatingOnly -> Modifier.background(Color.Transparent)
+                    artworkTint != null && reduceDynamicBlur -> Modifier.background(artworkTint)
+                    artworkTint != null -> Modifier.background(Color.Transparent)
+                    reduceDynamicBlur -> Modifier.background(MaterialTheme.colorScheme.surface)
+                    else -> Modifier.background(MaterialTheme.colorScheme.background.copy(alpha = 0.92f))
+                },
             ),
     ) {
         Box(
@@ -156,35 +165,40 @@ fun FrostedTopBar(
                 .statusBarsPadding()
                 .height(TopBarContentHeight),
         ) {
-            Text(
-                text = title,
-                style = MaterialTheme.typography.titleMedium.copy(fontWeight = androidx.compose.ui.text.font.FontWeight.SemiBold),
-                color = MaterialTheme.colorScheme.onSurface,
-                maxLines = 1,
-                overflow = TextOverflow.Ellipsis,
-                textAlign = TextAlign.Center,
-                modifier = Modifier
-                    .align(Alignment.Center)
-                    // Reserve room for the back button and the actions so a
-                    // long title truncates instead of running under them.
-                    .padding(horizontal = 96.dp)
-                    .fillMaxWidth()
-                    .graphicsLayer { alpha = titleAlpha },
-            )
+            if (!floatingOnly) {
+                Text(
+                    text = title,
+                    style = MaterialTheme.typography.titleMedium.copy(fontWeight = androidx.compose.ui.text.font.FontWeight.SemiBold),
+                    color = MaterialTheme.colorScheme.onSurface,
+                    maxLines = 1,
+                    overflow = TextOverflow.Ellipsis,
+                    textAlign = TextAlign.Center,
+                    modifier = Modifier
+                        .align(Alignment.Center)
+                        // Reserve room for the back button and the actions so a
+                        // long title truncates instead of running under them.
+                        .padding(horizontal = 96.dp)
+                        .fillMaxWidth()
+                        .graphicsLayer { alpha = titleAlpha },
+                )
+            }
             // On a pushed page the back affordance is always visible, since
             // there is no large in-list header to fall back on.
             if (onBack != null) {
                 IconButton(
                     onClick = onBack,
-                    modifier = Modifier.align(Alignment.CenterStart).padding(start = 4.dp),
+                    modifier = Modifier
+                        .align(Alignment.CenterStart)
+                        .padding(start = 4.dp)
+                        .then(if (floatingOnly) Modifier.background(Color.Black.copy(alpha = 0.42f), CircleShape) else Modifier),
                 ) {
                     Icon(
                         Icons.AutoMirrored.Rounded.ArrowBack,
                         contentDescription = stringResource(R.string.back),
-                        tint = MaterialTheme.colorScheme.onSurface,
+                        tint = if (floatingOnly) Color.White else MaterialTheme.colorScheme.onSurface,
                     )
                 }
-            } else {
+            } else if (!floatingOnly) {
                 Row(
                     modifier = Modifier
                         .align(Alignment.CenterStart)
@@ -214,7 +228,13 @@ fun FrostedTopBar(
             Row(
                 modifier = Modifier
                     .align(Alignment.CenterEnd)
-                    .padding(end = 4.dp),
+                    .padding(end = 4.dp)
+                    .then(
+                        if (floatingOnly) {
+                            Modifier.background(Color.Black.copy(alpha = 0.42f), CircleShape)
+                                .padding(horizontal = 2.dp)
+                        } else Modifier,
+                    ),
                 verticalAlignment = Alignment.CenterVertically,
             ) {
                 actions()

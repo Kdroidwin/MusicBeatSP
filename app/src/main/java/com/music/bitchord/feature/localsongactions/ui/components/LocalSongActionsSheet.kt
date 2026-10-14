@@ -5,14 +5,18 @@ import androidx.compose.animation.fadeIn
 import androidx.compose.animation.fadeOut
 import androidx.compose.animation.togetherWith
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.navigationBarsPadding
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
+import androidx.compose.foundation.background
+import androidx.compose.ui.draw.clip
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.rounded.KeyboardArrowRight
 import androidx.compose.material.icons.automirrored.rounded.Notes
@@ -26,28 +30,35 @@ import androidx.compose.material.icons.rounded.Person
 import androidx.compose.material.icons.rounded.Share
 import androidx.compose.material.icons.rounded.Speed
 import androidx.compose.material3.ExperimentalMaterial3Api
+import androidx.compose.material3.BottomSheetDefaults
 import androidx.compose.material3.HorizontalDivider
+import androidx.compose.material3.LocalContentColor
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.ModalBottomSheet
 import androidx.compose.material3.rememberModalBottomSheetState
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.produceState
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.music.bitchord.R
 import com.music.bitchord.data.model.Song
+import com.music.bitchord.data.model.ROW_ART_PX
 import com.music.bitchord.data.settings.AppSettings
 import com.music.bitchord.data.settings.PlayerDetailsAction
 import com.music.bitchord.playback.cast.CastActionItem
 import com.music.bitchord.playback.SleepTimer
 import kotlinx.coroutines.delay
 import com.music.bitchord.feature.artistimage.util.ArtistSplitter
+import com.music.bitchord.ui.components.ArtworkBackdrop
+import com.music.bitchord.ui.theme.rememberArtworkPalette
 import java.util.Locale
 
 /**
@@ -81,6 +92,8 @@ fun LocalSongActionsSheet(
     modifier: Modifier = Modifier,
 ) {
     val sheetState = rememberModalBottomSheetState(skipPartiallyExpanded = true)
+    val sheetShape = RoundedCornerShape(topStart = 24.dp, topEnd = 24.dp)
+    val artworkPalette = rememberArtworkPalette(song.thumbnailUrl, artPx = ROW_ART_PX)
     var pickingSleepTimer by remember { mutableStateOf(false) }
     val hiddenActions by AppSettings.hiddenPlayerDetailsActions.collectAsStateWithLifecycle()
 
@@ -107,34 +120,74 @@ fun LocalSongActionsSheet(
     ModalBottomSheet(
         onDismissRequest = onDismissRequest,
         sheetState = sheetState,
-        shape = RoundedCornerShape(topStart = 24.dp, topEnd = 24.dp),
-        containerColor = MaterialTheme.colorScheme.surfaceContainerHigh,
+        shape = sheetShape,
+        containerColor = if (showPlayerActions) Color.Transparent else MaterialTheme.colorScheme.surfaceContainerHigh,
+        dragHandle = if (showPlayerActions) {
+            {
+                Box(
+                    Modifier
+                        .fillMaxWidth()
+                        .padding(top = 8.dp, bottom = 4.dp),
+                    contentAlignment = androidx.compose.ui.Alignment.Center,
+                ) {
+                    Box(
+                        Modifier
+                            .size(width = 34.dp, height = 4.dp)
+                            .clip(RoundedCornerShape(50))
+                            .background(artworkPalette.onBackground.copy(alpha = 0.38f)),
+                    )
+                }
+            }
+        } else {
+            { BottomSheetDefaults.DragHandle() }
+        },
         modifier = modifier,
     ) {
-        AnimatedContent(
-            targetState = pickingSleepTimer,
-            transitionSpec = { fadeIn() togetherWith fadeOut() },
-            label = "SheetContentTransition",
-        ) { inSleepTimerPicker ->
-            if (inSleepTimerPicker) {
-                LocalSleepTimerPicker(
-                    onBack = { pickingSleepTimer = false },
+        Box(
+            Modifier
+                .fillMaxWidth()
+                .clip(sheetShape),
+        ) {
+            if (showPlayerActions) {
+                ArtworkBackdrop(
+                    palette = artworkPalette,
+                    imageUrl = song.thumbnailUrl,
+                    modifier = Modifier.matchParentSize(),
+                    washFraction = 0.75f,
+                    artPx = ROW_ART_PX,
                 )
-            } else {
-                Column(
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .navigationBarsPadding()
-                        .verticalScroll(rememberScrollState())
-                        .padding(bottom = 16.dp),
-                ) {
-                    LocalSongActionsHeader(song = song)
+            }
+            CompositionLocalProvider(
+                LocalContentColor provides if (showPlayerActions) {
+                    artworkPalette.onBackground
+                } else MaterialTheme.colorScheme.onSurface,
+            ) {
+                AnimatedContent(
+                    targetState = pickingSleepTimer,
+                    transitionSpec = { fadeIn() togetherWith fadeOut() },
+                    label = "SheetContentTransition",
+                ) { inSleepTimerPicker ->
+                    if (inSleepTimerPicker) {
+                        LocalSleepTimerPicker(
+                            onBack = { pickingSleepTimer = false },
+                        )
+                    } else {
+                        Column(
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .navigationBarsPadding()
+                                .verticalScroll(rememberScrollState())
+                                .padding(bottom = 16.dp),
+                        ) {
+                            LocalSongActionsHeader(song = song)
 
-                    HorizontalDivider(
-                        modifier = Modifier.padding(horizontal = 20.dp, vertical = 8.dp),
-                        thickness = 0.5.dp,
-                        color = MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.5f),
-                    )
+                            HorizontalDivider(
+                                modifier = Modifier.padding(horizontal = 20.dp, vertical = 8.dp),
+                                thickness = 0.5.dp,
+                                color = if (showPlayerActions) {
+                                    artworkPalette.divider.copy(alpha = 0.7f)
+                                } else MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.5f),
+                            )
 
                     // 1. Go to Album
                     if (PlayerDetailsAction.ALBUM !in hiddenActions) {
@@ -230,7 +283,9 @@ fun LocalSongActionsSheet(
                         )
                     }
 
-                    Spacer(Modifier.height(8.dp))
+                            Spacer(Modifier.height(8.dp))
+                        }
+                    }
                 }
             }
         }

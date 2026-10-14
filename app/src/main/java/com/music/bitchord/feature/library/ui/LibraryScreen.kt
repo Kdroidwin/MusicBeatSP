@@ -48,6 +48,7 @@ import androidx.compose.material.icons.rounded.Reorder
 import androidx.compose.material.icons.rounded.Share
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.SideEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
@@ -64,6 +65,7 @@ import com.music.bitchord.R
 import com.music.bitchord.data.model.Song
 import com.music.bitchord.data.settings.AppSettings
 import com.music.bitchord.data.settings.LibraryViewType
+import com.music.bitchord.ui.theme.ArtworkPalette
 import com.music.bitchord.feature.library.ui.components.LibraryFilter
 import com.music.bitchord.feature.library.ui.components.LibraryGridContent
 import com.music.bitchord.feature.library.ui.components.LibraryHeaderBar
@@ -169,6 +171,7 @@ fun LibraryScreen(
     songDropdownMenu: (@Composable (Song) -> Unit)? = null,
     initialFilterRequest: LibraryFilter? = null,
     onInitialFilterApplied: () -> Unit = {},
+    onArtworkPaletteChanged: ((ArtworkPalette?) -> Unit)? = null,
 ) {
     val context = LocalContext.current.applicationContext
     val playlists by LocalPlaylistStore.playlists.collectAsStateWithLifecycle()
@@ -304,6 +307,11 @@ fun LibraryScreen(
     }
 
     val inDrillDown = drillDownLabel != null
+    SideEffect {
+        if (!inDrillDown || !fullScreenCollectionArtwork) {
+            onArtworkPaletteChanged?.invoke(null)
+        }
+    }
     val inHistoryView = selectedFilter == LibraryFilter.RECENTLY_PLAYED ||
         selectedFilter == LibraryFilter.MOST_PLAYED
     val selectedPlaylistSongs = remember(drillDownSongs, selectedPlaylistSongIds) {
@@ -512,6 +520,7 @@ fun LibraryScreen(
                     onBack = leaveDrillDown,
                     contentPadding = contentPadding,
                     songDropdownMenu = songDropdownMenu,
+                    onArtworkPaletteChanged = onArtworkPaletteChanged,
                 )
             } else if (key.startsWith("history:")) {
                 val isRecent = key == "history:recent"
@@ -543,7 +552,7 @@ fun LibraryScreen(
                             label = stringResource(if (isRecent) R.string.recently_played else R.string.most_played),
                             artworkUrl = null,
                             songs = historySongs,
-                            fullScreenArtwork = fullScreenCollectionArtwork,
+                            fullScreenArtwork = false,
                             viewType = songsViewType,
                             onViewTypeToggle = {
                                 val next = if (songsViewType == LibraryViewType.GRID) LibraryViewType.LIST else LibraryViewType.GRID

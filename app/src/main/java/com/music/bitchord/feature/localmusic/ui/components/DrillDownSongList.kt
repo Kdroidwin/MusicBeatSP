@@ -1,5 +1,6 @@
 package com.music.bitchord.feature.localmusic.ui.components
 
+import android.os.Build
 import androidx.compose.foundation.ExperimentalFoundationApi
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
@@ -9,6 +10,7 @@ import androidx.compose.foundation.gestures.detectDragGestures
 import com.music.bitchord.ui.utils.debouncedCombinedClickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.BoxWithConstraints
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
@@ -18,6 +20,7 @@ import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.offset
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyColumn
@@ -47,6 +50,7 @@ import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.SideEffect
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.getValue
@@ -58,6 +62,12 @@ import androidx.compose.runtime.withFrameNanos
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.draw.clipToBounds
+import androidx.compose.ui.draw.BlurredEdgeTreatment
+import androidx.compose.ui.draw.blur
+import androidx.compose.ui.draw.drawWithContent
+import androidx.compose.ui.graphics.BlendMode
+import androidx.compose.ui.graphics.CompositingStrategy
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.input.pointer.pointerInput
@@ -69,14 +79,18 @@ import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
+import androidx.compose.ui.unit.Dp
+import androidx.compose.ui.unit.IntOffset
 import coil3.compose.AsyncImage
 import com.music.bitchord.R
 import com.music.bitchord.data.model.CARD_ART_PX
-import com.music.bitchord.data.model.PLAYER_ART_PX
+import com.music.bitchord.data.model.HEADER_ART_PX
 import com.music.bitchord.data.model.Song
 import com.music.bitchord.data.model.artworkAt
+import com.music.bitchord.data.model.durationMillis
 import com.music.bitchord.data.model.isSameTrackAs
 import com.music.bitchord.data.settings.LibraryViewType
+import com.music.bitchord.data.settings.AppSettings
 import com.music.bitchord.ui.components.FastScroller
 import com.music.bitchord.ui.components.SectionIndexer
 import com.music.bitchord.feature.artistimage.model.ArtistImage
@@ -86,7 +100,11 @@ import com.music.bitchord.ui.components.ROW_DIVIDER_INSET
 import com.music.bitchord.ui.components.SongRow
 import com.music.bitchord.ui.components.thumbnailBorder
 import com.music.bitchord.ui.icons.BitChordIcons
+import com.music.bitchord.ui.theme.ArtworkPalette
+import com.music.bitchord.ui.theme.rememberArtworkPalette
+import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import kotlin.math.abs
+import kotlin.math.roundToInt
 
 @Composable
 fun DrillDownHeader(
@@ -95,7 +113,41 @@ fun DrillDownHeader(
     songs: List<Song>,
     isArtist: Boolean = false,
     onBack: (() -> Unit)? = null,
+    isPlaylist: Boolean = false,
+    fullScreenArtwork: Boolean = false,
+    artHeight: Dp? = null,
+    palette: ArtworkPalette? = null,
     modifier: Modifier = Modifier,
+) {
+    if (fullScreenArtwork && artHeight != null && palette != null) {
+        FullScreenCollectionHeader(
+            label = label,
+            songs = songs,
+            isPlaylist = isPlaylist || label.equals("Favorites", ignoreCase = true) || artworkUrl == "favorites",
+            artHeight = artHeight,
+            palette = palette,
+            modifier = modifier,
+        )
+    } else {
+        CompactDrillDownHeader(
+            label = label,
+            artworkUrl = artworkUrl,
+            songs = songs,
+            isArtist = isArtist,
+            onBack = onBack,
+            modifier = modifier,
+        )
+    }
+}
+
+@Composable
+private fun CompactDrillDownHeader(
+    label: String,
+    artworkUrl: String?,
+    songs: List<Song>,
+    isArtist: Boolean,
+    onBack: (() -> Unit)?,
+    modifier: Modifier,
 ) {
     Column(
         modifier = modifier
@@ -192,6 +244,86 @@ fun DrillDownHeader(
             textAlign = TextAlign.Center,
             modifier = Modifier.fillMaxWidth(),
         )
+    }
+}
+
+private const val COLLECTION_ART_RATIO = 0.92f
+private val COLLECTION_HEADER_DROP = 44.dp
+
+@Composable
+private fun FullScreenCollectionHeader(
+    label: String,
+    songs: List<Song>,
+    isPlaylist: Boolean,
+    artHeight: Dp,
+    palette: ArtworkPalette,
+    modifier: Modifier,
+) {
+    val artists = remember(songs) {
+        songs.asSequence()
+            .map { it.artist.trim() }
+            .filter { it.isNotBlank() && !it.equals("Unknown artist", ignoreCase = true) }
+            .distinctBy { it.lowercase() }
+            .take(4)
+            .joinToString(", ")
+    }
+    val totalMinutes = remember(songs) {
+        songs.sumOf { it.durationMillis().coerceAtLeast(0L) } / 60_000L
+    }
+    val duration = when {
+        totalMinutes >= 60L -> stringResource(
+            R.string.collection_duration_hours_minutes,
+            (totalMinutes / 60L).toInt(),
+            (totalMinutes % 60L).toInt(),
+        )
+        totalMinutes > 0L -> stringResource(R.string.collection_duration_minutes, totalMinutes.toInt())
+        else -> null
+    }
+    val kind = stringResource(if (isPlaylist) R.string.playlist else R.string.album)
+    val count = pluralStringResource(R.plurals.track_count_plural, songs.size, songs.size)
+    val metadata = listOfNotNull(kind, count, duration).joinToString(" · ")
+
+    Box(
+        modifier = modifier
+            .fillMaxWidth()
+            .height(artHeight + COLLECTION_HEADER_DROP),
+    ) {
+        Column(
+            modifier = Modifier
+                .align(Alignment.BottomCenter)
+                .fillMaxWidth()
+                .padding(start = PAGE_GUTTER + 8.dp, end = PAGE_GUTTER + 8.dp, bottom = 14.dp),
+            horizontalAlignment = Alignment.CenterHorizontally,
+        ) {
+            Text(
+                text = label,
+                style = MaterialTheme.typography.headlineMedium,
+                color = palette.onBackground,
+                textAlign = TextAlign.Center,
+                maxLines = 2,
+                overflow = TextOverflow.Ellipsis,
+            )
+            if (artists.isNotBlank()) {
+                Spacer(Modifier.height(3.dp))
+                Text(
+                    text = artists,
+                    style = MaterialTheme.typography.titleMedium,
+                    color = palette.accent,
+                    textAlign = TextAlign.Center,
+                    maxLines = 2,
+                    overflow = TextOverflow.Ellipsis,
+                )
+            }
+            Spacer(Modifier.height(6.dp))
+            Text(
+                text = metadata,
+                style = MaterialTheme.typography.labelLarge,
+                color = palette.onBackgroundVariant,
+                textAlign = TextAlign.Center,
+                maxLines = 1,
+                overflow = TextOverflow.Ellipsis,
+            )
+        }
     }
 }
 
@@ -420,12 +552,72 @@ fun DrillDownSongList(
     onBack: (() -> Unit)? = null,
     contentPadding: PaddingValues = PaddingValues(0.dp),
     songDropdownMenu: (@Composable (Song) -> Unit)? = null,
+    onArtworkPaletteChanged: ((ArtworkPalette?) -> Unit)? = null,
     modifier: Modifier = Modifier,
 ) {
+    val pageArtworkUrl = remember(fullScreenArtwork, artworkUrl, songs) {
+        if (!fullScreenArtwork) {
+            null
+        } else {
+            artworkUrl
+                ?.takeIf { it.isNotBlank() && it != "favorites" }
+                ?.artworkAt(HEADER_ART_PX)
+                ?: songs.firstNotNullOfOrNull { it.artworkAt(HEADER_ART_PX) }
+        }
+    }
+    val artworkPalette = rememberArtworkPalette(
+        imageUrl = pageArtworkUrl,
+        artPx = HEADER_ART_PX,
+    )
+    SideEffect {
+        onArtworkPaletteChanged?.invoke(artworkPalette.takeIf { fullScreenArtwork })
+    }
+    // Detail pages draw their artwork behind the translucent app bar. Keep the
+    // normal top inset for every other list, but let eligible collection art
+    // begin at the top edge so it fills the space underneath that bar.
+    val pageContentPadding = if (fullScreenArtwork) {
+        PaddingValues(bottom = contentPadding.calculateBottomPadding())
+    } else {
+        contentPadding
+    }
+    // Release pages in BitChord leave rows transparent so the artwork-derived
+    // wash continues behind the track list instead of snapping back to black.
+    val rowBackground = if (fullScreenArtwork) Color.Transparent else MaterialTheme.colorScheme.background
+    val rowSubtitleColor = if (fullScreenArtwork) {
+        artworkPalette.onBackgroundVariant
+    } else {
+        MaterialTheme.colorScheme.onSurfaceVariant
+    }
+    val rowAccent = if (fullScreenArtwork) artworkPalette.accent else MaterialTheme.colorScheme.primary
+    val rowDividerColor = if (fullScreenArtwork) {
+        artworkPalette.divider
+    } else {
+        MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.5f)
+    }
+
     if (viewType == LibraryViewType.GRID) {
         val gridState = rememberLazyGridState()
-        Box(modifier = modifier.fillMaxSize()) {
-            if (fullScreenArtwork) CollectionArtworkBackdrop(artworkUrl, songs)
+        BoxWithConstraints(
+            modifier = modifier
+                .fillMaxSize()
+                .background(if (fullScreenArtwork) artworkPalette.wash else MaterialTheme.colorScheme.background),
+        ) {
+            val artHeight = (maxWidth / COLLECTION_ART_RATIO).coerceAtMost(maxHeight * 0.6f)
+            val artHeightPx = with(LocalDensity.current) { artHeight.toPx() }
+            if (fullScreenArtwork) {
+                CollectionPageBackground(
+                    imageUrl = pageArtworkUrl,
+                    palette = artworkPalette,
+                    artHeight = artHeight,
+                    artTopPx = {
+                        if (gridState.firstVisibleItemIndex == 0) {
+                            -gridState.firstVisibleItemScrollOffset.toFloat()
+                        } else {
+                            -artHeightPx * 2f
+                        }
+                    },
+                )
+            }
             LazyVerticalGrid(
                 columns = GridCells.Adaptive(minSize = 140.dp),
                 state = gridState,
@@ -433,8 +625,8 @@ fun DrillDownSongList(
                 contentPadding = PaddingValues(
                     start = PAGE_GUTTER,
                     end = PAGE_GUTTER,
-                    top = contentPadding.calculateTopPadding(),
-                    bottom = contentPadding.calculateBottomPadding() + 8.dp,
+                    top = pageContentPadding.calculateTopPadding(),
+                    bottom = pageContentPadding.calculateBottomPadding() + 8.dp,
                 ),
                 horizontalArrangement = Arrangement.spacedBy(12.dp),
                 verticalArrangement = Arrangement.spacedBy(16.dp),
@@ -446,6 +638,10 @@ fun DrillDownSongList(
                         songs = songs,
                         isArtist = isArtist,
                         onBack = onBack,
+                        isPlaylist = isPlaylist,
+                        fullScreenArtwork = fullScreenArtwork,
+                        artHeight = artHeight,
+                        palette = artworkPalette,
                     )
                 }
                 if (!selectionMode) item(span = { GridItemSpan(maxLineSpan) }) {
@@ -481,8 +677,8 @@ fun DrillDownSongList(
                 headerCount = 2,
                 sectionNameForIndex = { index -> SectionIndexer.getSectionName(songs[index].title) },
                 contentPadding = PaddingValues(
-                    top = contentPadding.calculateTopPadding(),
-                    bottom = contentPadding.calculateBottomPadding() + 8.dp,
+                    top = pageContentPadding.calculateTopPadding(),
+                    bottom = pageContentPadding.calculateBottomPadding() + 8.dp,
                 ),
             )
         }
@@ -517,12 +713,31 @@ fun DrillDownSongList(
             displayedSongs = reordered
             insertionIndex + anchorOrder
         }
-        Box(modifier = modifier.fillMaxSize()) {
-            if (fullScreenArtwork) CollectionArtworkBackdrop(artworkUrl, songs)
+        BoxWithConstraints(
+            modifier = modifier
+                .fillMaxSize()
+                .background(if (fullScreenArtwork) artworkPalette.wash else MaterialTheme.colorScheme.background),
+        ) {
+            val artHeight = (maxWidth / COLLECTION_ART_RATIO).coerceAtMost(maxHeight * 0.6f)
+            val artHeightPx = with(LocalDensity.current) { artHeight.toPx() }
+            if (fullScreenArtwork) {
+                CollectionPageBackground(
+                    imageUrl = pageArtworkUrl,
+                    palette = artworkPalette,
+                    artHeight = artHeight,
+                    artTopPx = {
+                        if (listState.firstVisibleItemIndex == 0) {
+                            -listState.firstVisibleItemScrollOffset.toFloat()
+                        } else {
+                            -artHeightPx * 2f
+                        }
+                    },
+                )
+            }
             LazyColumn(
                 state = listState,
                 modifier = Modifier.fillMaxSize(),
-                contentPadding = contentPadding,
+                contentPadding = pageContentPadding,
             ) {
                 item {
                     DrillDownHeader(
@@ -531,6 +746,10 @@ fun DrillDownSongList(
                         songs = songs,
                         isArtist = isArtist,
                         onBack = onBack,
+                        isPlaylist = isPlaylist,
+                        fullScreenArtwork = fullScreenArtwork,
+                        artHeight = artHeight,
+                        palette = artworkPalette,
                     )
                 }
                 if (!selectionMode) item {
@@ -578,9 +797,13 @@ fun DrillDownSongList(
                             Box(Modifier.weight(1f)) {
                                 SongRow(
                                     song = song,
+                                    rowBackground = rowBackground,
+                                    subtitleColor = rowSubtitleColor,
+                                    downloadedTint = rowAccent,
                                     selected = song.videoId in selectedIds || (song.localUri ?: song.videoId) in selectedIds,
                                     isCurrent = song.isSameTrackAs(currentSong),
                                     isPlaying = song.isSameTrackAs(currentSong) && isPlaying,
+                                    activeTint = rowAccent,
                                     trackNumber = trackNumber,
                                     onClick = {
                                         if (selectionMode) onSelectionToggle?.invoke(song)
@@ -633,9 +856,13 @@ fun DrillDownSongList(
                     } else {
                         SongRow(
                             song = song,
+                            rowBackground = rowBackground,
+                            subtitleColor = rowSubtitleColor,
+                            downloadedTint = rowAccent,
                             selected = song.videoId in selectedIds || (song.localUri ?: song.videoId) in selectedIds,
                             isCurrent = song.isSameTrackAs(currentSong),
                             isPlaying = song.isSameTrackAs(currentSong) && isPlaying,
+                            activeTint = rowAccent,
                             trackNumber = trackNumber,
                             onClick = {
                                 if (selectionMode) onSelectionToggle?.invoke(song) else onSongClick(displayedSongs, index)
@@ -650,7 +877,7 @@ fun DrillDownSongList(
                         HorizontalDivider(
                             modifier = Modifier.padding(start = ROW_DIVIDER_INSET),
                             thickness = 0.5.dp,
-                            color = MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.5f),
+                            color = rowDividerColor,
                         )
                     }
                 }
@@ -660,41 +887,80 @@ fun DrillDownSongList(
                 itemCount = songs.size,
                 headerCount = 2,
                 sectionNameForIndex = { index -> SectionIndexer.getSectionName(songs[index].title) },
-                contentPadding = contentPadding,
+                contentPadding = pageContentPadding,
             )
         }
     }
 }
 
 @Composable
-private fun CollectionArtworkBackdrop(artworkUrl: String?, songs: List<Song>) {
-    val artwork = remember(artworkUrl, songs) {
-        (artworkUrl ?: songs.firstNotNullOfOrNull { it.thumbnailUrl })?.artworkAt(PLAYER_ART_PX)
-    }
-    Box(Modifier.fillMaxSize()) {
-        if (!artwork.isNullOrBlank()) {
-            AsyncImage(
-                model = artwork,
-                contentDescription = null,
-                contentScale = ContentScale.Crop,
-                modifier = Modifier.fillMaxSize().graphicsLayer { alpha = 0.30f },
-            )
-        }
-        Box(
-            Modifier
-                .fillMaxSize()
-                .background(
-                    Brush.verticalGradient(
-                        listOf(
-                            MaterialTheme.colorScheme.background.copy(alpha = 0.70f),
-                            MaterialTheme.colorScheme.background.copy(alpha = 0.84f),
-                            MaterialTheme.colorScheme.background.copy(alpha = 0.92f),
+private fun CollectionPageBackground(
+    imageUrl: String?,
+    palette: ArtworkPalette,
+    artHeight: Dp,
+    artTopPx: () -> Float,
+) {
+    val reduceDynamicBlur by AppSettings.reduceDynamicBlur.collectAsStateWithLifecycle()
+    val softenFoot = !reduceDynamicBlur && Build.VERSION.SDK_INT >= Build.VERSION_CODES.S
+
+    Box(Modifier.fillMaxSize().clipToBounds()) {
+        if (!imageUrl.isNullOrBlank()) {
+            Box(
+                Modifier
+                    .fillMaxWidth()
+                    .height(artHeight)
+                    .offset { IntOffset(0, artTopPx().roundToInt()) },
+            ) {
+                AsyncImage(
+                    model = imageUrl,
+                    contentDescription = null,
+                    contentScale = ContentScale.Crop,
+                    modifier = Modifier
+                        .fillMaxSize()
+                        .background(palette.elevated),
+                )
+                // Follow BitChord's release-page treatment: keep the sleeve
+                // sharp above, and blend in a blurred copy toward its lower
+                // fifth so it merges naturally into the artwork-derived wash.
+                if (softenFoot) {
+                    AsyncImage(
+                        model = imageUrl,
+                        contentDescription = null,
+                        contentScale = ContentScale.Crop,
+                        modifier = Modifier
+                            .fillMaxSize()
+                            .graphicsLayer { compositingStrategy = CompositingStrategy.Offscreen }
+                            .drawWithContent {
+                                drawContent()
+                                drawRect(SOFT_FOOT_MASK, blendMode = BlendMode.DstIn)
+                            }
+                            .blur(SOFT_FOOT_BLUR, BlurredEdgeTreatment.Rectangle),
+                    )
+                }
+                Box(
+                    Modifier
+                        .fillMaxSize()
+                        .background(
+                            Brush.verticalGradient(
+                                0.45f to Color.Transparent,
+                                0.65f to palette.wash.copy(alpha = 0.30f),
+                                0.82f to palette.wash.copy(alpha = 0.72f),
+                                0.94f to palette.wash.copy(alpha = 0.95f),
+                                1.00f to palette.wash,
+                            ),
                         ),
-                    ),
-                ),
-        )
+                )
+            }
+        }
     }
 }
+
+private val SOFT_FOOT_MASK = Brush.verticalGradient(
+    0.35f to Color.Transparent,
+    0.75f to Color.Black,
+)
+
+private val SOFT_FOOT_BLUR = 48.dp
 
 /** Drag-to-reorder state for the song section below the two static header rows. */
 @Composable

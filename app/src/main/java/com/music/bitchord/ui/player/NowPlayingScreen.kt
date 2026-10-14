@@ -117,6 +117,7 @@ import androidx.compose.material.icons.rounded.Videocam
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.Icon
+import androidx.compose.material3.IconButton
 import androidx.compose.material3.ModalBottomSheet
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
@@ -215,6 +216,7 @@ import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
 import com.music.bitchord.ui.theme.SystemBarIcons
 import com.music.bitchord.ui.rememberIsForeground
+import com.music.bitchord.ui.theme.rememberArtworkPalette
 import com.music.bitchord.ui.components.thumbnailBorder
 import com.music.bitchord.ui.components.optimizedHazeEffect
 import com.music.bitchord.ui.haptics.Haptic
@@ -711,6 +713,7 @@ fun NowPlayingScreen(
     val density = LocalDensity.current
     val haptics = rememberHaptics()
     val artUrl = song.artworkAt(ART_PX)
+    val artworkPalette = rememberArtworkPalette(artUrl, dark = true, artPx = ART_PX)
     // Ask MediaStore for its already-indexed thumbnail while the full-size
     // embedded cover is being read and decoded. The player keeps the sharp
     // request below and swaps it in as soon as it is ready.
@@ -764,6 +767,7 @@ fun NowPlayingScreen(
     val keepScreenOnDuringLyrics by AppSettings.keepScreenOnDuringLyrics.collectAsStateWithLifecycle()
     val showTrackDurationInsteadOfRemaining by AppSettings.showTrackDurationInsteadOfRemaining.collectAsStateWithLifecycle()
     val artworkTapOpensLyrics by AppSettings.artworkTapOpensLyrics.collectAsStateWithLifecycle()
+    val lyricsReplaceArtworkOnly by AppSettings.lyricsReplaceArtworkOnly.collectAsStateWithLifecycle()
     val showPlayerLyricsStrip by AppSettings.showPlayerLyricsStrip.collectAsStateWithLifecycle()
     val offlineMode by AppSettings.offlineMode.collectAsStateWithLifecycle()
     val visiblePlayerControls by AppSettings.visiblePlayerControls.collectAsStateWithLifecycle()
@@ -914,6 +918,7 @@ fun NowPlayingScreen(
     if (savedQueueManagerOpen) {
         SavedQueuesDialog(
             queues = savedQueues,
+            artworkPalette = artworkPalette,
             currentSongs = queue,
             currentIndex = queueIndex,
             positionMs = positionMs,
@@ -1144,7 +1149,7 @@ fun NowPlayingScreen(
     // half of the artwork jumped, the other half glided after it, and the pair
     // read as a stutter rather than as either. One animation, both surfaces.
     val p by animateFloatAsState(
-        targetValue = if (lyricsOpen || queueOpen) 1f else 0f,
+        targetValue = if (queueOpen || (lyricsOpen && !lyricsReplaceArtworkOnly)) 1f else 0f,
         animationSpec = tween(durationMillis = 420, easing = FastOutSlowInEasing),
         label = "sleeveCollapse",
     )
@@ -1757,7 +1762,8 @@ fun NowPlayingScreen(
                 // or coming back from the lyrics panel, where the strip is
                 // rebuilt from scratch) was pocketed for good. The gaps
                 // ratcheted open a little at a time and the sleeve paid for it.
-                val roomy = maxHeight + if (lyricsOpen) 0.dp else controlSpread
+                val compactLyrics = lyricsOpen && lyricsReplaceArtworkOnly
+                val roomy = maxHeight + if (lyricsOpen && !compactLyrics) 0.dp else controlSpread
                 // The sleeve is square, so it is bounded by whichever of the
                 // two axes runs out first: the player's width on a phone, or —
                 // on a tablet, where there is width to spare — the height left
@@ -1802,7 +1808,7 @@ fun NowPlayingScreen(
                 // of settling — a full-amplitude standing oscillation, not the
                 // single-pixel shiver this rounding alone was built to absorb.
                 // See [granted] below for the fix.
-                if (!lyricsOpen) {
+                if (!lyricsOpen || compactLyrics) {
                     val target = with(density) {
                         val half = slack
                             .coerceAtMost(CONTROL_GAP_SPREAD_MAX * 2)
@@ -2373,7 +2379,47 @@ fun NowPlayingScreen(
                 }
 
                 if (lyricsOpen) {
-                    if (lyricsLogsOpen) {
+                    if (lyricsReplaceArtworkOnly) {
+                        Box(
+                            modifier = Modifier
+                                .offset { IntOffset(artStart.roundToPx(), artTop.roundToPx()) }
+                                .size(width = artWidth, height = artHeight)
+                                .zIndex(2f)
+                                .clip(RoundedCornerShape(lerp(10.dp, 7.dp, p)))
+                                .background(artworkPalette.background),
+                        ) {
+                            if (lyricsLogsOpen) {
+                                LyricsLogConsole(Modifier.fillMaxSize().padding(top = 44.dp))
+                            } else {
+                                LyricsPanel(
+                                    lines = lyrics.orEmpty(),
+                                    positionMs = positionMs,
+                                    isPlaying = isPlaying,
+                                    onSeekToLine = onSeek,
+                                    modifier = Modifier.fillMaxSize().padding(top = 44.dp),
+                                )
+                            }
+                            IconButton(
+                                onClick = {
+                                    lyricsLogsOpen = false
+                                    lyricsOpen = false
+                                },
+                                modifier = Modifier
+                                    .align(Alignment.TopEnd)
+                                    .padding(4.dp)
+                                    .size(40.dp)
+                                    .clip(CircleShape)
+                                    .background(Color.Black.copy(alpha = 0.45f)),
+                            ) {
+                                Icon(
+                                    imageVector = Icons.Rounded.Close,
+                                    contentDescription = stringResource(R.string.close_lyrics),
+                                    tint = Color.White,
+                                    modifier = Modifier.size(21.dp),
+                                )
+                            }
+                        }
+                    } else if (lyricsLogsOpen) {
                         // Full-screen log console — replaces the lyrics list while
                         // the debug panel is open. Same fade-in timing as the lyrics
                         // panel so the transition is identical from the user's side.
@@ -2577,7 +2623,7 @@ fun NowPlayingScreen(
                 )
             }
 
-            if (lyricsOpen) {
+            if (lyricsOpen && !lyricsReplaceArtworkOnly) {
                 Spacer(Modifier.height(16.dp))
                 // Full-width header row: optional logs icon on the far left,
                 // source credit pill in the middle, close circle on the right.

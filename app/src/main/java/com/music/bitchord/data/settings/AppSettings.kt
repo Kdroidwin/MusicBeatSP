@@ -227,6 +227,7 @@ enum class MainNavigationTab(val index: Int) {
     ARTISTS(2),
     LIBRARY(3),
     SEARCH(4),
+    ALBUM_ARTISTS(5),
 }
 
 enum class ScreenOrientationMode { SYSTEM, PORTRAIT, LANDSCAPE }
@@ -388,6 +389,7 @@ object AppSettings {
     // [SourceResolver.requestForNow][com.music.bitchord.data.sources.SourceResolver.requestForNow],
     // which now reads [effectiveAudioQuality] and nothing else.
 
+    /** Equal-power overlap between consecutive tracks; zero keeps current transitions unchanged. */
     val crossfadeSeconds = MutableStateFlow(0)
 
     /** Optional high-frequency cutoff for PCM playback. Zero leaves audio untouched. */
@@ -435,6 +437,8 @@ object AppSettings {
     val playbackSpeed = MutableStateFlow(1.0f)
     val playbackPitch = MutableStateFlow(1.0f)
     val themeMode = MutableStateFlow(ThemeMode.DARK)
+    /** Uses the current track artwork for Material accents without recolouring app surfaces. */
+    val matchButtonAccentToArtwork = MutableStateFlow(false)
 
     /** Keep playing similar music once the queue runs out. */
     val autoplay = MutableStateFlow(true)
@@ -540,6 +544,9 @@ object AppSettings {
 
     /** Whether a tap on the player artwork opens the full lyrics panel. */
     val artworkTapOpensLyrics = MutableStateFlow(false)
+
+    /** Replaces only the player artwork tile with lyrics while leaving controls visible. */
+    val lyricsReplaceArtworkOnly = MutableStateFlow(false)
 
     /** Presentation-only switch for the one-line lyric above the seek bar. */
     val showPlayerLyricsStrip = MutableStateFlow(true)
@@ -727,6 +734,8 @@ object AppSettings {
     val localLibraryTabOrder = MutableStateFlow<List<LocalLibraryTab>>(LocalLibraryTab.entries.toList())
     val localFolderHierarchy = MutableStateFlow(false)
     val fullScreenCollectionArtwork = MutableStateFlow(false)
+    /** Hides collection page titles while keeping floating back/settings actions available. */
+    val hideCollectionTopBar = MutableStateFlow(false)
     val artistsOpenAlbums = MutableStateFlow(false)
     val shuffleArtistAlbums = MutableStateFlow(false)
     val localMusicViewType = MutableStateFlow(LibraryViewType.LIST)
@@ -892,6 +901,7 @@ object AppSettings {
         wifiOnlyDownloads.value = prefs.getBoolean(KEY_WIFI_ONLY_DOWNLOADS, true)
         exportDownloads.value = prefs.getBoolean(KEY_EXPORT_DOWNLOADS, false)
         skipSilence.value = prefs.getBoolean(KEY_SKIP_SILENCE, false)
+        crossfadeSeconds.value = prefs.getInt(KEY_CROSSFADE_SECONDS, 0).coerceIn(0, MAX_CROSSFADE_SECONDS)
         resamplerCutoffHz.value = normalizeResamplerCutoffHz(prefs.getInt(KEY_RESAMPLER_CUTOFF_HZ, 0))
         outputPcmMode.value = runCatching {
             OutputPcmMode.valueOf(
@@ -912,6 +922,7 @@ object AppSettings {
         themeMode.value = if (
             savedThemeMode == ThemeMode.ARTWORK || prefs.getBoolean(KEY_THEME_MATCHES_ARTWORK, false)
         ) ThemeMode.ARTWORK else savedThemeMode
+        matchButtonAccentToArtwork.value = prefs.getBoolean(KEY_MATCH_BUTTON_ACCENT_TO_ARTWORK, false)
         autoplay.value = prefs.getBoolean(KEY_AUTOPLAY, true)
         shuffleEnabled.value = prefs.getBoolean(KEY_SHUFFLE_ENABLED, false)
         audioFocusLevel.value = prefs.getInt(KEY_AUDIO_FOCUS_LEVEL, 1).coerceIn(0, 4)
@@ -930,6 +941,8 @@ object AppSettings {
         liquidGlass.value = prefs.getBoolean(KEY_LIQUID_GLASS, false)
         classicNavBar.value = prefs.getBoolean(KEY_CLASSIC_NAV_BAR, false)
         hideNavigationBarLabels.value = prefs.getBoolean(KEY_HIDE_NAVIGATION_BAR_LABELS, false)
+        visibleLocalLibraryTabs.value = readVisibleLocalLibraryTabs()
+        localLibraryTabOrder.value = readLocalLibraryTabOrder()
         visibleMainNavigationTabs.value = readVisibleMainNavigationTabs()
         mainNavigationTabOrder.value = readMainNavigationTabOrder()
         startupTab.value = readStartupTab()
@@ -966,6 +979,7 @@ object AppSettings {
             )
         }.getOrDefault(LyricsTextAlignment.CENTER)
         artworkTapOpensLyrics.value = prefs.getBoolean(KEY_ARTWORK_TAP_OPENS_LYRICS, false)
+        lyricsReplaceArtworkOnly.value = prefs.getBoolean(KEY_LYRICS_REPLACE_ARTWORK_ONLY, false)
         showPlayerLyricsStrip.value = prefs.getBoolean(KEY_SHOW_PLAYER_LYRICS_STRIP, true)
         offlineMode.value = prefs.getBoolean(KEY_OFFLINE_MODE, false)
         hideLosslessLabel.value = prefs.getBoolean(KEY_HIDE_LOSSLESS_LABEL, false)
@@ -1041,10 +1055,9 @@ object AppSettings {
         localSongsViewType.value = readLibraryViewType(KEY_LOCAL_SONGS_VIEW_TYPE, localMusicViewType.value)
         localAlbumsViewType.value = readLibraryViewType(KEY_LOCAL_ALBUMS_VIEW_TYPE, LibraryViewType.GRID)
         localArtistsViewType.value = readLibraryViewType(KEY_LOCAL_ARTISTS_VIEW_TYPE, LibraryViewType.GRID)
-        visibleLocalLibraryTabs.value = readVisibleLocalLibraryTabs()
-        localLibraryTabOrder.value = readLocalLibraryTabOrder()
         localFolderHierarchy.value = prefs.getBoolean(KEY_LOCAL_FOLDER_HIERARCHY, false)
         fullScreenCollectionArtwork.value = prefs.getBoolean(KEY_FULL_SCREEN_COLLECTION_ARTWORK, false)
+        hideCollectionTopBar.value = prefs.getBoolean(KEY_HIDE_COLLECTION_TOP_BAR, false)
         artistsOpenAlbums.value = prefs.getBoolean(KEY_ARTISTS_OPEN_ALBUMS, false)
         shuffleArtistAlbums.value = prefs.getBoolean(KEY_SHUFFLE_ARTIST_ALBUMS, false)
         downloadedMusicViewType.value = readLibraryViewType(KEY_DOWNLOADED_MUSIC_VIEW_TYPE, LibraryViewType.LIST)
@@ -1217,6 +1230,12 @@ object AppSettings {
         prefs.edit().putBoolean(KEY_SKIP_SILENCE, value).apply()
     }
 
+    fun setCrossfadeSeconds(value: Int) {
+        val normalized = value.coerceIn(0, MAX_CROSSFADE_SECONDS)
+        crossfadeSeconds.value = normalized
+        prefs.edit().putInt(KEY_CROSSFADE_SECONDS, normalized).apply()
+    }
+
     fun setResamplerCutoffHz(value: Int) {
         val normalized = normalizeResamplerCutoffHz(value)
         resamplerCutoffHz.value = normalized
@@ -1256,6 +1275,11 @@ object AppSettings {
             .putString(KEY_THEME, value.name)
             .putBoolean(KEY_THEME_MATCHES_ARTWORK, value == ThemeMode.ARTWORK)
             .apply()
+    }
+
+    fun setMatchButtonAccentToArtwork(value: Boolean) {
+        matchButtonAccentToArtwork.value = value
+        prefs.edit().putBoolean(KEY_MATCH_BUTTON_ACCENT_TO_ARTWORK, value).apply()
     }
 
     fun setReduceAnimation(value: Boolean) {
@@ -1308,15 +1332,26 @@ object AppSettings {
 
     /** Keeps at least one destination available for navigation. */
     fun setMainNavigationTabVisible(tab: MainNavigationTab, visible: Boolean) {
+        if (tab == MainNavigationTab.ALBUM_ARTISTS) {
+            setLocalLibraryTabVisible(LocalLibraryTab.ALBUM_ARTISTS, visible)
+            return
+        }
         val current = visibleMainNavigationTabs.value
         val updated = MainNavigationTabs.setVisible(current, tab, visible)
         if (updated == current) return
         visibleMainNavigationTabs.value = updated
         prefs.edit().putStringSet(KEY_VISIBLE_MAIN_NAVIGATION_TABS, updated.map { it.name }.toSet()).apply()
-        if (startupTab.value !in updated) setStartupTab(MainNavigationTabs.fallback(
-            startupTab.value.index, updated, mainNavigationTabOrder.value,
+        if (startupTab.value !in effectiveMainNavigationTabs()) setStartupTab(MainNavigationTabs.fallback(
+            startupTab.value.index, effectiveMainNavigationTabs(), mainNavigationTabOrder.value,
         ))
     }
+
+    fun effectiveMainNavigationTabs(): Set<MainNavigationTab> =
+        if (LocalLibraryTab.ALBUM_ARTISTS in visibleLocalLibraryTabs.value) {
+            visibleMainNavigationTabs.value + MainNavigationTab.ALBUM_ARTISTS
+        } else {
+            visibleMainNavigationTabs.value - MainNavigationTab.ALBUM_ARTISTS
+        }
 
     fun moveMainNavigationTab(tab: MainNavigationTab, offset: Int) {
         val updated = MainNavigationTabs.move(mainNavigationTabOrder.value, tab, offset)
@@ -1326,8 +1361,9 @@ object AppSettings {
     }
 
     fun setStartupTab(tab: MainNavigationTab) {
-        val normalized = tab.takeIf { it in visibleMainNavigationTabs.value } ?: MainNavigationTabs.fallback(
-            tab.index, visibleMainNavigationTabs.value, mainNavigationTabOrder.value,
+        val visible = effectiveMainNavigationTabs()
+        val normalized = tab.takeIf { it in visible } ?: MainNavigationTabs.fallback(
+            tab.index, visible, mainNavigationTabOrder.value,
         )
         startupTab.value = normalized
         prefs.edit().putString(KEY_STARTUP_TAB, normalized.name).apply()
@@ -1337,12 +1373,27 @@ object AppSettings {
         val saved = prefs.getString(KEY_STARTUP_TAB, MainNavigationTab.SONGS.name)
             ?.let { name -> MainNavigationTab.entries.firstOrNull { it.name == name } }
             ?: MainNavigationTab.SONGS
-        return saved.takeIf { it in visibleMainNavigationTabs.value }
-            ?: MainNavigationTabs.fallback(saved.index, visibleMainNavigationTabs.value, mainNavigationTabOrder.value)
+        val visible = effectiveMainNavigationTabs()
+        return saved.takeIf { it in visible }
+            ?: MainNavigationTabs.fallback(saved.index, visible, mainNavigationTabOrder.value)
     }
 
     private fun readVisibleLocalLibraryTabs(): Set<LocalLibraryTab> {
-        val stored = prefs.getStringSet(KEY_VISIBLE_LOCAL_LIBRARY_TABS, null)
+        var storedNames: Set<String>? = prefs.getStringSet(KEY_VISIBLE_LOCAL_LIBRARY_TABS, null)?.toSet()
+        if (!prefs.getBoolean(KEY_ALBUM_ARTISTS_TAB_MIGRATED, false)) {
+            // Album Artists was added after local-tab visibility had already
+            // been persisted on existing installs. It should appear on upgrade
+            // once, while a later explicit hide remains respected.
+            val currentNames = storedNames.orEmpty()
+            if (currentNames.isNotEmpty() && LocalLibraryTab.ALBUM_ARTISTS.name !in currentNames) {
+                storedNames = currentNames + LocalLibraryTab.ALBUM_ARTISTS.name
+                prefs.edit()
+                    .putStringSet(KEY_VISIBLE_LOCAL_LIBRARY_TABS, storedNames)
+                    .apply()
+            }
+            prefs.edit().putBoolean(KEY_ALBUM_ARTISTS_TAB_MIGRATED, true).apply()
+        }
+        val stored = storedNames
             ?.mapNotNull { name -> LocalLibraryTab.entries.firstOrNull { it.name == name } }
             ?.toSet()
         return stored?.takeIf { it.isNotEmpty() } ?: LocalLibraryTab.entries.toSet()
@@ -1545,6 +1596,11 @@ object AppSettings {
     fun setArtworkTapOpensLyrics(value: Boolean) {
         artworkTapOpensLyrics.value = value
         prefs.edit().putBoolean(KEY_ARTWORK_TAP_OPENS_LYRICS, value).apply()
+    }
+
+    fun setLyricsReplaceArtworkOnly(value: Boolean) {
+        lyricsReplaceArtworkOnly.value = value
+        prefs.edit().putBoolean(KEY_LYRICS_REPLACE_ARTWORK_ONLY, value).apply()
     }
 
     fun setShowPlayerLyricsStrip(value: Boolean) {
@@ -2074,6 +2130,13 @@ object AppSettings {
         if (updated == current) return
         visibleLocalLibraryTabs.value = updated
         prefs.edit().putStringSet(KEY_VISIBLE_LOCAL_LIBRARY_TABS, updated.map { it.name }.toSet()).apply()
+        if (tab == LocalLibraryTab.ALBUM_ARTISTS && !visible && startupTab.value == MainNavigationTab.ALBUM_ARTISTS) {
+            setStartupTab(MainNavigationTabs.fallback(
+                startupTab.value.index,
+                effectiveMainNavigationTabs(),
+                mainNavigationTabOrder.value,
+            ))
+        }
     }
 
     fun moveLocalLibraryTab(tab: LocalLibraryTab, offset: Int) {
@@ -2095,6 +2158,11 @@ object AppSettings {
     fun setFullScreenCollectionArtwork(value: Boolean) {
         fullScreenCollectionArtwork.value = value
         prefs.edit().putBoolean(KEY_FULL_SCREEN_COLLECTION_ARTWORK, value).apply()
+    }
+
+    fun setHideCollectionTopBar(value: Boolean) {
+        hideCollectionTopBar.value = value
+        prefs.edit().putBoolean(KEY_HIDE_COLLECTION_TOP_BAR, value).apply()
     }
 
     fun setArtistsOpenAlbums(value: Boolean) {
@@ -2348,6 +2416,7 @@ object AppSettings {
 
     private const val DEFAULT_PERFORMANCE_REFRESH_RATE = 120
     private const val MAX_LYRICS_TRANSPORT_CONTROL_SIZE = 64f
+    const val MAX_CROSSFADE_SECONDS = 12
 
     private fun normalizeResamplerCutoffHz(value: Int): Int =
         if (value <= 0) 0 else value.coerceIn(8_000, 22_000)
@@ -2363,6 +2432,7 @@ object AppSettings {
     private const val KEY_EXPORT_DOWNLOADS = "export_downloads"
     private const val KEY_LOSSLESS = "lossless_audio"
     private const val KEY_SKIP_SILENCE = "skip_silence"
+    private const val KEY_CROSSFADE_SECONDS = "crossfade_seconds"
     private const val KEY_RESAMPLER_CUTOFF_HZ = "resampler_cutoff_hz"
     private const val KEY_OUTPUT_PCM_MODE = "output_pcm_mode"
     private const val KEY_PREFER_USB_DAC = "prefer_usb_dac"
@@ -2372,6 +2442,7 @@ object AppSettings {
     private const val KEY_PITCH = "playback_pitch"
     private const val KEY_THEME = "theme_mode"
     private const val KEY_THEME_MATCHES_ARTWORK = "theme_matches_artwork"
+    private const val KEY_MATCH_BUTTON_ACCENT_TO_ARTWORK = "match_button_accent_to_artwork"
     private const val KEY_AUTOPLAY = "autoplay"
     private const val KEY_SHUFFLE_ENABLED = "shuffle_enabled"
     private const val KEY_AUDIO_FOCUS_LEVEL = "audio_focus_level"
@@ -2416,6 +2487,7 @@ object AppSettings {
     private const val KEY_LYRICS_FONT_SCALE = "lyrics_font_scale"
     private const val KEY_LYRICS_TEXT_ALIGNMENT = "lyrics_text_alignment"
     private const val KEY_ARTWORK_TAP_OPENS_LYRICS = "artwork_tap_opens_lyrics"
+    private const val KEY_LYRICS_REPLACE_ARTWORK_ONLY = "lyrics_replace_artwork_only"
     private const val KEY_SHOW_PLAYER_LYRICS_STRIP = "show_player_lyrics_strip"
     private const val KEY_OFFLINE_MODE = "offline_mode"
     private const val KEY_HIDE_LOSSLESS_LABEL = "hide_lossless_label"
@@ -2465,9 +2537,11 @@ object AppSettings {
     private const val KEY_LOCAL_ARTIST_SORT = "local_artist_sort"
     private const val KEY_DOWNLOADED_ARTIST_SORT = "downloaded_artist_sort"
     private const val KEY_VISIBLE_LOCAL_LIBRARY_TABS = "visible_local_library_tabs"
+    private const val KEY_ALBUM_ARTISTS_TAB_MIGRATED = "album_artists_tab_migrated"
     private const val KEY_LOCAL_LIBRARY_TAB_ORDER = "local_library_tab_order"
     private const val KEY_LOCAL_FOLDER_HIERARCHY = "local_folder_hierarchy"
     private const val KEY_FULL_SCREEN_COLLECTION_ARTWORK = "full_screen_collection_artwork"
+    private const val KEY_HIDE_COLLECTION_TOP_BAR = "hide_collection_top_bar"
     private const val KEY_ARTISTS_OPEN_ALBUMS = "artists_open_albums"
     private const val KEY_SHUFFLE_ARTIST_ALBUMS = "shuffle_artist_albums"
     private const val KEY_LIBRARY_SORT = "library_sort"

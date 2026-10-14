@@ -10,6 +10,7 @@ import androidx.compose.runtime.Composable
 import androidx.compose.runtime.SideEffect
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.lerp
+import androidx.compose.ui.graphics.luminance
 import androidx.compose.ui.platform.LocalView
 import androidx.core.view.WindowCompat
 import androidx.compose.ui.text.TextStyle
@@ -110,6 +111,7 @@ fun BitChordTheme(
     amoledBlack: Boolean = false,
     artworkUrl: String? = null,
     matchArtwork: Boolean = false,
+    matchButtonAccentToArtwork: Boolean = false,
     content: @Composable () -> Unit,
 ) {
     MaterialTheme(
@@ -159,9 +161,29 @@ fun BitChordTheme(
                 surfaceContainerHigh = lerp(artwork.background, artwork.elevated, 0.62f),
                 surfaceContainerHighest = artwork.elevated,
             )
-        } else {
-            base
-        }
+        } else if (matchButtonAccentToArtwork && artworkUrl != null) {
+            // A separate, smaller option for people who want artwork-coloured
+            // buttons and selection indicators while keeping the chosen theme's
+            // backgrounds, cards, and text colours intact.
+            val accent = artwork.accent
+            val onAccent = if (accent.luminance() > 0.52f) Color.Black else Color.White
+            val accentContainer = lerp(base.surface, accent, 0.24f)
+            base.copy(
+                primary = accent,
+                onPrimary = onAccent,
+                primaryContainer = accentContainer,
+                onPrimaryContainer = base.onSurface,
+                secondary = accent,
+                onSecondary = onAccent,
+                secondaryContainer = accentContainer,
+                onSecondaryContainer = base.onSurface,
+                tertiary = accent,
+                onTertiary = onAccent,
+                tertiaryContainer = accentContainer,
+                onTertiaryContainer = base.onSurface,
+                surfaceTint = accent,
+            )
+        } else base
         MaterialTheme(colorScheme = colors, typography = BitChordTypography, content = content)
     }
 }
