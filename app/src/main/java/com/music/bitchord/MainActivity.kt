@@ -434,6 +434,7 @@ private fun BitChordApp(
     val context = LocalContext.current
     val clipboard = LocalClipboardManager.current
     val hazeState = remember { HazeState() }
+    val playerHazeState = remember { HazeState() }
     // Recording the backdrop layer costs a draw pass, so it only runs when the
     // nav bar's glass surface actually has something to sample.
     val glassActive = LocalLiquidGlassEnabled.current && isGlassSupported()
@@ -1574,6 +1575,7 @@ private fun BitChordApp(
             ?: song
         NowPlayingScreen(
             song = displayedSong,
+            playerHaze = playerHazeState,
             windowWidth = windowWidth,
             isPlaying = player.isPlaying,
             isLoading = player.isLoading,
@@ -2331,13 +2333,10 @@ private fun BitChordApp(
                 val isDetailVisible = detail != null && !isLocalDetail && !showSettings && !showReplay
                 val isLocalCollectionArtworkVisible = localCollectionPalette != null &&
                     detail == null && !showSettings && !showReplay
-                val collectionPageSelected = selectedTab == TAB_ALBUMS ||
-                    selectedTab == TAB_ARTISTS || selectedTab == TAB_ALBUM_ARTISTS ||
-                    selectedTab == TAB_LIBRARY
                 val collectionDetailSelected = detail?.type == BrowseType.ALBUM ||
                     detail?.type == BrowseType.ARTIST || detail?.type == BrowseType.PLAYLIST
                 val hideCollectionHeaderNow = hideCollectionTopBar && !showSettings && !showReplay &&
-                    (collectionPageSelected || collectionDetailSelected)
+                    collectionDetailSelected
                 if (!hideCollectionHeaderNow) {
                     TopFadeBlur(
                         hazeState = hazeState,
@@ -2736,6 +2735,7 @@ private fun BitChordApp(
             } else {
                 LocalSongActionsSheet(
                     song = song,
+                    hazeState = if (menuFromPlayer) playerHazeState else hazeState,
                     onDismissRequest = { songActions = null },
                     onGoToAlbum = {
                         songActions = null

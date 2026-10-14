@@ -744,6 +744,8 @@
     <string name="artwork_tap_opens_lyrics_subtitle">A single tap on the player artwork opens the lyrics panel</string>
     <string name="lyrics_replace_artwork_only">Show lyrics in the artwork area</string>
     <string name="lyrics_replace_artwork_only_subtitle">Replace only the album art with lyrics and keep the player controls, seek bar, volume, and bottom buttons visible</string>
+    <string name="frosted_compact_lyrics">Frosted glass for lyrics over artwork</string>
+    <string name="frosted_compact_lyrics_subtitle">Blur the artwork behind compact lyrics and let its colors show through</string>
     <string name="hide_lyrics_saved_message">Hide saved lyrics message</string>
     <string name="hide_lyrics_saved_message_subtitle">Hide “Lyrics saved with this download” in the lyrics panel</string>
     <string name="hide_lossless_label">Hide audio quality labels</string>
@@ -792,7 +794,16 @@
     <string name="full_screen_collection_artwork">Full-screen album and library artwork</string>
     <string name="full_screen_collection_artwork_subtitle">Show a full-bleed cover on album and library playlist detail pages</string>
     <string name="hide_collection_top_bar">Hide the collection page header</string>
-    <string name="hide_collection_top_bar_subtitle">Hide the title bar on library, album, artist, album artist, and playlist pages while keeping Settings and Back available</string>
+    <string name="hide_collection_top_bar_subtitle">Hide the header only inside an album, artist, or playlist; category labels remain visible</string>
+    <string name="frosted_queue_manager">Frosted glass for queue management</string>
+    <string name="frosted_queue_manager_subtitle">Blur the player behind the dialog and let its colors show through</string>
+    <string name="frosted_player_details">Frosted glass for player details</string>
+    <string name="frosted_player_details_subtitle">Blur the player behind the details sheet and let its colors show through</string>
+    <string name="app_icon">App icon</string>
+    <string name="app_icon_subtitle">Choose the icon shown on the home screen</string>
+    <string name="app_icon_pink">Pink</string>
+    <string name="app_icon_black">Black</string>
+    <string name="app_icon_green">Green</string>
     <string name="collection_duration_minutes">%1$d min</string>
     <string name="collection_duration_hours_minutes">%1$d hr %2$d min</string>
     <string name="artists_open_albums">Show albums when opening an artist</string>

@@ -218,6 +218,7 @@ import com.music.bitchord.ui.theme.SystemBarIcons
 import com.music.bitchord.ui.rememberIsForeground
 import com.music.bitchord.ui.theme.rememberArtworkPalette
 import com.music.bitchord.ui.components.thumbnailBorder
+import com.music.bitchord.ui.components.FrostedGlassBackdrop
 import com.music.bitchord.ui.components.optimizedHazeEffect
 import com.music.bitchord.ui.haptics.Haptic
 import com.music.bitchord.ui.haptics.rememberHaptics
@@ -697,6 +698,8 @@ fun NowPlayingScreen(
     lyricsUnavailable: Boolean,
     /** The width of the window the player is in — see [fullBleedArtworkAvailable]. */
     windowWidth: Dp,
+    /** Shared with player overlays so their glass samples the visible player artwork. */
+    playerHaze: HazeState,
     /**
      * Whether the player is a pane the page sits beside rather than a sheet
      * raised over it — see [dockedPlayerAvailable].
@@ -750,8 +753,6 @@ fun NowPlayingScreen(
     // Kept local to the player: a modal player is not in the page's Haze
     // source tree, so it needs its own source for the same frosted material as
     // the bottom navigation pill.
-    val playerHaze = remember { HazeState() }
-
     val syncedLyricsEnabled by AppSettings.syncedLyrics.collectAsStateWithLifecycle()
     val hideLyricsStatusText by AppSettings.hideLyricsStatusText.collectAsStateWithLifecycle()
     val hideLyricsSavedMessage by AppSettings.hideLyricsSavedMessage.collectAsStateWithLifecycle()
@@ -768,6 +769,8 @@ fun NowPlayingScreen(
     val showTrackDurationInsteadOfRemaining by AppSettings.showTrackDurationInsteadOfRemaining.collectAsStateWithLifecycle()
     val artworkTapOpensLyrics by AppSettings.artworkTapOpensLyrics.collectAsStateWithLifecycle()
     val lyricsReplaceArtworkOnly by AppSettings.lyricsReplaceArtworkOnly.collectAsStateWithLifecycle()
+    val frostedQueueManager by AppSettings.frostedQueueManager.collectAsStateWithLifecycle()
+    val frostedCompactLyrics by AppSettings.frostedCompactLyrics.collectAsStateWithLifecycle()
     val showPlayerLyricsStrip by AppSettings.showPlayerLyricsStrip.collectAsStateWithLifecycle()
     val offlineMode by AppSettings.offlineMode.collectAsStateWithLifecycle()
     val visiblePlayerControls by AppSettings.visiblePlayerControls.collectAsStateWithLifecycle()
@@ -919,6 +922,8 @@ fun NowPlayingScreen(
         SavedQueuesDialog(
             queues = savedQueues,
             artworkPalette = artworkPalette,
+            hazeState = playerHaze,
+            useFrostedGlass = frostedQueueManager,
             currentSongs = queue,
             currentIndex = queueIndex,
             positionMs = positionMs,
@@ -2385,9 +2390,18 @@ fun NowPlayingScreen(
                                 .offset { IntOffset(artStart.roundToPx(), artTop.roundToPx()) }
                                 .size(width = artWidth, height = artHeight)
                                 .zIndex(2f)
-                                .clip(RoundedCornerShape(lerp(10.dp, 7.dp, p)))
-                                .background(artworkPalette.background),
+                                .clip(RoundedCornerShape(lerp(10.dp, 7.dp, p))),
                         ) {
+                            if (frostedCompactLyrics) {
+                                FrostedGlassBackdrop(
+                                    hazeState = playerHaze,
+                                    modifier = Modifier.matchParentSize(),
+                                    tint = MaterialTheme.colorScheme.surface,
+                                    tintAlpha = 0.18f,
+                                )
+                            } else {
+                                Box(Modifier.matchParentSize().background(artworkPalette.background))
+                            }
                             if (lyricsLogsOpen) {
                                 LyricsLogConsole(Modifier.fillMaxSize().padding(top = 44.dp))
                             } else {

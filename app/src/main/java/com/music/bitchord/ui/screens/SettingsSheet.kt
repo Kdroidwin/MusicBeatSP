@@ -162,6 +162,7 @@ import com.music.bitchord.data.LocalMediaRepository
 import com.music.bitchord.data.scrobbling.LastFM
 import com.music.bitchord.data.settings.AppSettings
 import com.music.bitchord.data.settings.LocalLibraryTab
+import com.music.bitchord.data.settings.LauncherIcon
 import com.music.bitchord.data.settings.SeekButtonMode
 import com.music.bitchord.data.settings.MAX_PLAYER_ARTWORK_BLUR_DP
 import com.music.bitchord.data.settings.MainNavigationTab
@@ -270,6 +271,10 @@ fun SettingsScreen(
     val localFolderHierarchy by AppSettings.localFolderHierarchy.collectAsStateWithLifecycle()
     val fullScreenCollectionArtwork by AppSettings.fullScreenCollectionArtwork.collectAsStateWithLifecycle()
     val hideCollectionTopBar by AppSettings.hideCollectionTopBar.collectAsStateWithLifecycle()
+    val frostedQueueManager by AppSettings.frostedQueueManager.collectAsStateWithLifecycle()
+    val frostedPlayerDetails by AppSettings.frostedPlayerDetails.collectAsStateWithLifecycle()
+    val frostedCompactLyrics by AppSettings.frostedCompactLyrics.collectAsStateWithLifecycle()
+    val launcherIcon by AppSettings.launcherIcon.collectAsStateWithLifecycle()
     val artistsOpenAlbums by AppSettings.artistsOpenAlbums.collectAsStateWithLifecycle()
     val shuffleArtistAlbums by AppSettings.shuffleArtistAlbums.collectAsStateWithLifecycle()
     val startupTab by AppSettings.startupTab.collectAsStateWithLifecycle()
@@ -348,6 +353,7 @@ fun SettingsScreen(
         currentDisplay.resolvePerformanceRefreshRate(performanceRefreshRate)
     }
     var settingsSearchQuery by rememberSaveable { mutableStateOf("") }
+    var showLauncherIconPicker by rememberSaveable { mutableStateOf(false) }
 
     val settingsSearchEntries = listOf(
         SettingsSearchEntry(stringResource(R.string.hide_lyrics_status_text), stringResource(R.string.hide_lyrics_status_text_subtitle), listOf("lyrics", "歌詞", "状態", "status"), hideLyricsStatusText) { AppSettings.setHideLyricsStatusText(!hideLyricsStatusText) },
@@ -370,6 +376,35 @@ fun SettingsScreen(
             activate = {},
         ),
         SettingsSearchEntry(stringResource(R.string.hide_lossless_label), stringResource(R.string.hide_lossless_label_subtitle), listOf("lossless", "quality", "ロスレス", "高音質"), hideLosslessLabel) { AppSettings.setHideLosslessLabel(!hideLosslessLabel) },
+        SettingsSearchEntry(
+            stringResource(R.string.frosted_queue_manager),
+            stringResource(R.string.frosted_queue_manager_subtitle),
+            listOf("queue", "glass", "frosted", "blur", "再生キュー", "すりガラス", "ぼかし"),
+            frostedQueueManager,
+        ) { AppSettings.setFrostedQueueManager(!frostedQueueManager) },
+        SettingsSearchEntry(
+            stringResource(R.string.frosted_player_details),
+            stringResource(R.string.frosted_player_details_subtitle),
+            listOf("player", "details", "glass", "frosted", "プレーヤー", "詳細", "すりガラス"),
+            frostedPlayerDetails,
+        ) { AppSettings.setFrostedPlayerDetails(!frostedPlayerDetails) },
+        SettingsSearchEntry(
+            stringResource(R.string.frosted_compact_lyrics),
+            stringResource(R.string.frosted_compact_lyrics_subtitle),
+            listOf("lyrics", "glass", "frosted", "歌詞", "すりガラス", "ぼかし"),
+            frostedCompactLyrics,
+        ) { AppSettings.setFrostedCompactLyrics(!frostedCompactLyrics) },
+        SettingsSearchEntry(
+            title = stringResource(R.string.app_icon),
+            subtitle = stringResource(R.string.app_icon_subtitle),
+            keywords = listOf("app icon", "launcher", "pink", "black", "green", "アプリアイコン", "ホーム画面", "ピンク", "黒", "緑"),
+            valueLabel = stringResource(when (launcherIcon) {
+                LauncherIcon.PINK -> R.string.app_icon_pink
+                LauncherIcon.BLACK -> R.string.app_icon_black
+                LauncherIcon.GREEN -> R.string.app_icon_green
+            }),
+            activate = { showLauncherIconPicker = true },
+        ),
         SettingsSearchEntry(
             stringResource(R.string.popup_external_audio_player),
             stringResource(R.string.popup_external_audio_player_subtitle),
@@ -1633,6 +1668,19 @@ fun SettingsScreen(
                 trailing = { Switch(checked = autoFitOneLineLyrics, onCheckedChange = AppSettings::setAutoFitOneLineLyrics) },
                 onClick = { AppSettings.setAutoFitOneLineLyrics(!autoFitOneLineLyrics) },
             )
+            RowDivider()
+            SettingsRow(
+                icon = Icons.Rounded.BlurOn,
+                title = stringResource(R.string.frosted_compact_lyrics),
+                subtitle = stringResource(R.string.frosted_compact_lyrics_subtitle),
+                trailing = {
+                    Switch(
+                        checked = frostedCompactLyrics,
+                        onCheckedChange = AppSettings::setFrostedCompactLyrics,
+                    )
+                },
+                onClick = { AppSettings.setFrostedCompactLyrics(!frostedCompactLyrics) },
+            )
         }
 
         SettingsGroup(header = stringResource(R.string.appearance)) {
@@ -1642,6 +1690,18 @@ fun SettingsScreen(
                 selectedIndex = ThemeMode.entries.indexOf(theme),
                 onSelect = { AppSettings.setThemeMode(ThemeMode.entries[it]) },
                 modifier = Modifier.padding(start = ROW_INSET, end = ROW_INSET, bottom = 14.dp),
+            )
+            RowDivider()
+            SettingsRow(
+                icon = Icons.Rounded.AutoAwesome,
+                title = stringResource(R.string.app_icon),
+                subtitle = stringResource(R.string.app_icon_subtitle),
+                value = stringResource(when (launcherIcon) {
+                    LauncherIcon.PINK -> R.string.app_icon_pink
+                    LauncherIcon.BLACK -> R.string.app_icon_black
+                    LauncherIcon.GREEN -> R.string.app_icon_green
+                }),
+                onClick = { showLauncherIconPicker = true },
             )
             RowDivider()
             SettingsRow(
@@ -1659,6 +1719,32 @@ fun SettingsScreen(
                     )
                 },
                 onClick = { AppSettings.setMatchButtonAccentToArtwork(!matchButtonAccentToArtwork) },
+            )
+            RowDivider()
+            SettingsRow(
+                icon = Icons.Rounded.BlurOn,
+                title = stringResource(R.string.frosted_queue_manager),
+                subtitle = stringResource(R.string.frosted_queue_manager_subtitle),
+                trailing = {
+                    Switch(
+                        checked = frostedQueueManager,
+                        onCheckedChange = AppSettings::setFrostedQueueManager,
+                    )
+                },
+                onClick = { AppSettings.setFrostedQueueManager(!frostedQueueManager) },
+            )
+            RowDivider()
+            SettingsRow(
+                icon = Icons.Rounded.BlurOn,
+                title = stringResource(R.string.frosted_player_details),
+                subtitle = stringResource(R.string.frosted_player_details_subtitle),
+                trailing = {
+                    Switch(
+                        checked = frostedPlayerDetails,
+                        onCheckedChange = AppSettings::setFrostedPlayerDetails,
+                    )
+                },
+                onClick = { AppSettings.setFrostedPlayerDetails(!frostedPlayerDetails) },
             )
             RowDivider()
             SettingsRow(
@@ -2800,6 +2886,48 @@ fun SettingsScreen(
                     )
                 },
                 onClick = { AppSettings.setShowLyricsLogs(!showLyricsLogs) },
+            )
+        }
+
+        if (showLauncherIconPicker) {
+            AlertDialog(
+                onDismissRequest = { showLauncherIconPicker = false },
+                title = { Text(stringResource(R.string.app_icon)) },
+                text = {
+                    Column {
+                        LauncherIcon.entries.forEach { icon ->
+                            val label = stringResource(when (icon) {
+                                LauncherIcon.PINK -> R.string.app_icon_pink
+                                LauncherIcon.BLACK -> R.string.app_icon_black
+                                LauncherIcon.GREEN -> R.string.app_icon_green
+                            })
+                            Row(
+                                modifier = Modifier
+                                    .fillMaxWidth()
+                                    .clickable {
+                                        AppSettings.setLauncherIcon(icon)
+                                        showLauncherIconPicker = false
+                                    }
+                                    .padding(vertical = 6.dp),
+                                verticalAlignment = Alignment.CenterVertically,
+                            ) {
+                                RadioButton(
+                                    selected = launcherIcon == icon,
+                                    onClick = {
+                                        AppSettings.setLauncherIcon(icon)
+                                        showLauncherIconPicker = false
+                                    },
+                                )
+                                Text(label, modifier = Modifier.padding(start = 8.dp))
+                            }
+                        }
+                    }
+                },
+                confirmButton = {
+                    TextButton(onClick = { showLauncherIconPicker = false }) {
+                        Text(stringResource(R.string.done))
+                    }
+                },
             )
         }
 

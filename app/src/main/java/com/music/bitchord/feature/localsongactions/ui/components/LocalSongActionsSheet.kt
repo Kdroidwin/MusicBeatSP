@@ -58,6 +58,8 @@ import com.music.bitchord.playback.SleepTimer
 import kotlinx.coroutines.delay
 import com.music.bitchord.feature.artistimage.util.ArtistSplitter
 import com.music.bitchord.ui.components.ArtworkBackdrop
+import com.music.bitchord.ui.components.FrostedGlassBackdrop
+import dev.chrisbanes.haze.HazeState
 import com.music.bitchord.ui.theme.rememberArtworkPalette
 import java.util.Locale
 
@@ -89,11 +91,13 @@ fun LocalSongActionsSheet(
     onDetails: () -> Unit,
     onShareFile: () -> Unit,
     onDismissRequest: () -> Unit,
+    hazeState: HazeState,
     modifier: Modifier = Modifier,
 ) {
     val sheetState = rememberModalBottomSheetState(skipPartiallyExpanded = true)
     val sheetShape = RoundedCornerShape(topStart = 24.dp, topEnd = 24.dp)
     val artworkPalette = rememberArtworkPalette(song.thumbnailUrl, artPx = ROW_ART_PX)
+    val frostedPlayerDetails by AppSettings.frostedPlayerDetails.collectAsStateWithLifecycle()
     var pickingSleepTimer by remember { mutableStateOf(false) }
     val hiddenActions by AppSettings.hiddenPlayerDetailsActions.collectAsStateWithLifecycle()
 
@@ -134,7 +138,10 @@ fun LocalSongActionsSheet(
                         Modifier
                             .size(width = 34.dp, height = 4.dp)
                             .clip(RoundedCornerShape(50))
-                            .background(artworkPalette.onBackground.copy(alpha = 0.38f)),
+                            .background(
+                                (if (frostedPlayerDetails) MaterialTheme.colorScheme.onSurface else artworkPalette.onBackground)
+                                    .copy(alpha = 0.38f),
+                            ),
                     )
                 }
             }
@@ -148,7 +155,14 @@ fun LocalSongActionsSheet(
                 .fillMaxWidth()
                 .clip(sheetShape),
         ) {
-            if (showPlayerActions) {
+            if (showPlayerActions && frostedPlayerDetails) {
+                FrostedGlassBackdrop(
+                    hazeState = hazeState,
+                    modifier = Modifier.matchParentSize(),
+                    tint = MaterialTheme.colorScheme.surface,
+                    tintAlpha = 0.18f,
+                )
+            } else if (showPlayerActions) {
                 ArtworkBackdrop(
                     palette = artworkPalette,
                     imageUrl = song.thumbnailUrl,
@@ -159,7 +173,7 @@ fun LocalSongActionsSheet(
             }
             CompositionLocalProvider(
                 LocalContentColor provides if (showPlayerActions) {
-                    artworkPalette.onBackground
+                    if (frostedPlayerDetails) MaterialTheme.colorScheme.onSurface else artworkPalette.onBackground
                 } else MaterialTheme.colorScheme.onSurface,
             ) {
                 AnimatedContent(
@@ -184,7 +198,9 @@ fun LocalSongActionsSheet(
                             HorizontalDivider(
                                 modifier = Modifier.padding(horizontal = 20.dp, vertical = 8.dp),
                                 thickness = 0.5.dp,
-                                color = if (showPlayerActions) {
+                                color = if (showPlayerActions && frostedPlayerDetails) {
+                                    MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.65f)
+                                } else if (showPlayerActions) {
                                     artworkPalette.divider.copy(alpha = 0.7f)
                                 } else MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.5f),
                             )

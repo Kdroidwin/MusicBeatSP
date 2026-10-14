@@ -1,5 +1,7 @@
 package com.music.bitchord.ui.player
 
+import android.os.Build
+import android.view.WindowManager
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
@@ -18,23 +20,31 @@ import androidx.compose.material3.OutlinedTextFieldDefaults
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.platform.LocalDensity
+import androidx.compose.ui.platform.LocalView
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.unit.dp
+import androidx.compose.ui.window.DialogWindowProvider
+import dev.chrisbanes.haze.HazeState
 import com.music.bitchord.R
 import com.music.bitchord.data.model.Song
 import com.music.bitchord.playback.SavedQueue
+import com.music.bitchord.ui.components.frostedGlassEffect
 import com.music.bitchord.ui.theme.ArtworkPalette
 
 @Composable
 internal fun SavedQueuesDialog(
     queues: List<SavedQueue>,
     artworkPalette: ArtworkPalette,
+    hazeState: HazeState,
+    useFrostedGlass: Boolean,
     currentSongs: List<Song>,
     currentIndex: Int,
     positionMs: Long,
@@ -47,15 +57,25 @@ internal fun SavedQueuesDialog(
     var name by remember { mutableStateOf("") }
     var saveError by remember { mutableStateOf(false) }
     var deleting by remember { mutableStateOf<SavedQueue?>(null) }
+    val foreground = if (useFrostedGlass) MaterialTheme.colorScheme.onSurface else artworkPalette.onBackground
+    val secondary = if (useFrostedGlass) MaterialTheme.colorScheme.onSurfaceVariant else artworkPalette.onBackgroundVariant
+    val accent = if (useFrostedGlass) MaterialTheme.colorScheme.primary else artworkPalette.accent
+    val container = if (useFrostedGlass) {
+        MaterialTheme.colorScheme.surface.copy(alpha = 0.52f)
+    } else artworkPalette.background
 
     AlertDialog(
         onDismissRequest = onDismiss,
-        title = { Text(stringResource(R.string.manage_queues), color = artworkPalette.onBackground) },
-        containerColor = artworkPalette.background,
-        titleContentColor = artworkPalette.onBackground,
-        textContentColor = artworkPalette.onBackground,
-        iconContentColor = artworkPalette.accent,
+        modifier = if (useFrostedGlass) {
+            Modifier.frostedGlassEffect(hazeState, MaterialTheme.colorScheme.surface.copy(alpha = 0.18f))
+        } else Modifier,
+        title = { Text(stringResource(R.string.manage_queues), color = foreground) },
+        containerColor = container,
+        titleContentColor = foreground,
+        textContentColor = foreground,
+        iconContentColor = accent,
         text = {
+            DialogBackdropBlur(useFrostedGlass)
             Column {
                 OutlinedTextField(
                     value = name,
@@ -64,13 +84,13 @@ internal fun SavedQueuesDialog(
                     singleLine = true,
                     modifier = Modifier.fillMaxWidth(),
                     colors = OutlinedTextFieldDefaults.colors(
-                        focusedTextColor = artworkPalette.onBackground,
-                        unfocusedTextColor = artworkPalette.onBackground,
-                        focusedLabelColor = artworkPalette.accent,
-                        unfocusedLabelColor = artworkPalette.onBackgroundVariant,
-                        cursorColor = artworkPalette.accent,
-                        focusedBorderColor = artworkPalette.accent,
-                        unfocusedBorderColor = artworkPalette.divider,
+                        focusedTextColor = foreground,
+                        unfocusedTextColor = foreground,
+                        focusedLabelColor = accent,
+                        unfocusedLabelColor = secondary,
+                        cursorColor = accent,
+                        focusedBorderColor = accent,
+                        unfocusedBorderColor = if (useFrostedGlass) MaterialTheme.colorScheme.outlineVariant else artworkPalette.divider,
                     ),
                 )
                 Spacer(Modifier.height(6.dp))
@@ -85,13 +105,13 @@ internal fun SavedQueuesDialog(
                 ) {
                     Text(
                         stringResource(R.string.save_current_queue),
-                        color = artworkPalette.accent,
+                        color = accent,
                     )
                 }
                 if (saveError) {
                     Text(
                         text = stringResource(R.string.queue_save_failed),
-                        color = artworkPalette.accent,
+                        color = accent,
                         style = MaterialTheme.typography.bodySmall,
                     )
                 }
@@ -106,16 +126,16 @@ internal fun SavedQueuesDialog(
                     if (queues.isEmpty()) {
                         Text(
                             stringResource(R.string.no_saved_queues),
-                            color = artworkPalette.onBackgroundVariant,
+                            color = secondary,
                             style = MaterialTheme.typography.bodyMedium,
                         )
                     }
                     queues.forEach { queue ->
                         Column(Modifier.fillMaxWidth()) {
-                            Text(queue.name, style = MaterialTheme.typography.titleSmall, color = artworkPalette.onBackground)
+                            Text(queue.name, style = MaterialTheme.typography.titleSmall, color = foreground)
                             Text(
                                 stringResource(R.string.queue_track_count, queue.songs.size),
-                                color = artworkPalette.onBackgroundVariant,
+                                color = secondary,
                                 style = MaterialTheme.typography.bodySmall,
                             )
                             Row(
@@ -124,16 +144,16 @@ internal fun SavedQueuesDialog(
                                 verticalAlignment = Alignment.CenterVertically,
                             ) {
                                 TextButton(onClick = { onLoad(queue); onDismiss() }) {
-                                    Text(stringResource(R.string.load_queue), color = artworkPalette.accent)
+                                    Text(stringResource(R.string.load_queue), color = accent)
                                 }
                                 TextButton(
                                     onClick = {
                                         if (!onReplace(queue.id, currentSongs, currentIndex, positionMs)) saveError = true
                                     },
                                     enabled = currentSongs.isNotEmpty(),
-                                ) { Text(stringResource(R.string.replace_queue), color = artworkPalette.accent) }
+                                ) { Text(stringResource(R.string.replace_queue), color = accent) }
                                 TextButton(onClick = { deleting = queue }) {
-                                    Text(stringResource(R.string.delete), color = artworkPalette.accent)
+                                    Text(stringResource(R.string.delete), color = accent)
                                 }
                             }
                         }
@@ -142,29 +162,53 @@ internal fun SavedQueuesDialog(
             }
         },
         confirmButton = {
-            TextButton(onClick = onDismiss) { Text(stringResource(R.string.done), color = artworkPalette.accent) }
+            TextButton(onClick = onDismiss) { Text(stringResource(R.string.done), color = accent) }
         },
     )
 
     deleting?.let { queue ->
         AlertDialog(
             onDismissRequest = { deleting = null },
-            title = { Text(stringResource(R.string.delete_saved_queue), color = artworkPalette.onBackground) },
-            text = { Text(queue.name, color = artworkPalette.onBackground) },
-            containerColor = artworkPalette.background,
-            titleContentColor = artworkPalette.onBackground,
-            textContentColor = artworkPalette.onBackground,
-            iconContentColor = artworkPalette.accent,
+            modifier = if (useFrostedGlass) {
+                Modifier.frostedGlassEffect(hazeState, MaterialTheme.colorScheme.surface.copy(alpha = 0.18f))
+            } else Modifier,
+            title = { Text(stringResource(R.string.delete_saved_queue), color = foreground) },
+            text = { DialogBackdropBlur(useFrostedGlass); Text(queue.name, color = foreground) },
+            containerColor = container,
+            titleContentColor = foreground,
+            textContentColor = foreground,
+            iconContentColor = accent,
             confirmButton = {
                 TextButton(onClick = { onDelete(queue); deleting = null }) {
-                    Text(stringResource(R.string.delete), color = artworkPalette.accent)
+                    Text(stringResource(R.string.delete), color = accent)
                 }
             },
             dismissButton = {
                 TextButton(onClick = { deleting = null }) {
-                    Text(stringResource(R.string.cancel), color = artworkPalette.accent)
+                    Text(stringResource(R.string.cancel), color = accent)
                 }
             },
         )
+    }
+}
+
+@Composable
+private fun DialogBackdropBlur(enabled: Boolean) {
+    val view = LocalView.current
+    val window = androidx.compose.runtime.remember(view) {
+        (view.parent as? DialogWindowProvider)?.window
+    }
+    val radiusPx = with(LocalDensity.current) { 40.dp.roundToPx() }
+    DisposableEffect(window, enabled, radiusPx) {
+        if (enabled && Build.VERSION.SDK_INT >= Build.VERSION_CODES.S && window != null) {
+            window.addFlags(WindowManager.LayoutParams.FLAG_BLUR_BEHIND)
+            window.setBackgroundBlurRadius(radiusPx)
+        }
+        onDispose {
+            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S && window != null) {
+                window.setBackgroundBlurRadius(0)
+                window.clearFlags(WindowManager.LayoutParams.FLAG_BLUR_BEHIND)
+            }
+        }
     }
 }

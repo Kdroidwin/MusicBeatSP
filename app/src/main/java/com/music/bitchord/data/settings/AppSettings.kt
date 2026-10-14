@@ -322,6 +322,7 @@ object MainNavigationTabs {
 object AppSettings {
 
     private lateinit var prefs: SharedPreferences
+    private lateinit var appContext: Context
 
     /** Only for the Discord token — everything else on here is plain prefs. */
     private lateinit var authStore: AuthStore
@@ -439,6 +440,10 @@ object AppSettings {
     val themeMode = MutableStateFlow(ThemeMode.DARK)
     /** Uses the current track artwork for Material accents without recolouring app surfaces. */
     val matchButtonAccentToArtwork = MutableStateFlow(false)
+    val launcherIcon = MutableStateFlow(LauncherIcon.PINK)
+    val frostedQueueManager = MutableStateFlow(true)
+    val frostedPlayerDetails = MutableStateFlow(true)
+    val frostedCompactLyrics = MutableStateFlow(true)
 
     /** Keep playing similar music once the queue runs out. */
     val autoplay = MutableStateFlow(true)
@@ -735,7 +740,7 @@ object AppSettings {
     val localFolderHierarchy = MutableStateFlow(false)
     val fullScreenCollectionArtwork = MutableStateFlow(false)
     /** Hides collection page titles while keeping floating back/settings actions available. */
-    val hideCollectionTopBar = MutableStateFlow(false)
+    val hideCollectionTopBar = MutableStateFlow(true)
     val artistsOpenAlbums = MutableStateFlow(false)
     val shuffleArtistAlbums = MutableStateFlow(false)
     val localMusicViewType = MutableStateFlow(LibraryViewType.LIST)
@@ -870,8 +875,9 @@ object AppSettings {
         get() = !wifiOnlyDownloads.value || meteredConnection.value != true
 
     fun init(context: Context) {
-        prefs = context.getSharedPreferences("bitchord_settings", Context.MODE_PRIVATE)
-        authStore = AuthStore(context)
+        appContext = context.applicationContext
+        prefs = appContext.getSharedPreferences("bitchord_settings", Context.MODE_PRIVATE)
+        authStore = AuthStore(appContext)
         readAll()
         watchConnection(context)
     }
@@ -923,6 +929,12 @@ object AppSettings {
             savedThemeMode == ThemeMode.ARTWORK || prefs.getBoolean(KEY_THEME_MATCHES_ARTWORK, false)
         ) ThemeMode.ARTWORK else savedThemeMode
         matchButtonAccentToArtwork.value = prefs.getBoolean(KEY_MATCH_BUTTON_ACCENT_TO_ARTWORK, false)
+        launcherIcon.value = runCatching {
+            LauncherIcon.valueOf(prefs.getString(KEY_LAUNCHER_ICON, LauncherIcon.PINK.name) ?: LauncherIcon.PINK.name)
+        }.getOrDefault(LauncherIcon.PINK)
+        frostedQueueManager.value = prefs.getBoolean(KEY_FROSTED_QUEUE_MANAGER, true)
+        frostedPlayerDetails.value = prefs.getBoolean(KEY_FROSTED_PLAYER_DETAILS, true)
+        frostedCompactLyrics.value = prefs.getBoolean(KEY_FROSTED_COMPACT_LYRICS, true)
         autoplay.value = prefs.getBoolean(KEY_AUTOPLAY, true)
         shuffleEnabled.value = prefs.getBoolean(KEY_SHUFFLE_ENABLED, false)
         audioFocusLevel.value = prefs.getInt(KEY_AUDIO_FOCUS_LEVEL, 1).coerceIn(0, 4)
@@ -1057,7 +1069,7 @@ object AppSettings {
         localArtistsViewType.value = readLibraryViewType(KEY_LOCAL_ARTISTS_VIEW_TYPE, LibraryViewType.GRID)
         localFolderHierarchy.value = prefs.getBoolean(KEY_LOCAL_FOLDER_HIERARCHY, false)
         fullScreenCollectionArtwork.value = prefs.getBoolean(KEY_FULL_SCREEN_COLLECTION_ARTWORK, false)
-        hideCollectionTopBar.value = prefs.getBoolean(KEY_HIDE_COLLECTION_TOP_BAR, false)
+        hideCollectionTopBar.value = prefs.getBoolean(KEY_HIDE_COLLECTION_TOP_BAR, true)
         artistsOpenAlbums.value = prefs.getBoolean(KEY_ARTISTS_OPEN_ALBUMS, false)
         shuffleArtistAlbums.value = prefs.getBoolean(KEY_SHUFFLE_ARTIST_ALBUMS, false)
         downloadedMusicViewType.value = readLibraryViewType(KEY_DOWNLOADED_MUSIC_VIEW_TYPE, LibraryViewType.LIST)
@@ -1073,6 +1085,7 @@ object AppSettings {
             ?.let { saved -> LibrarySort.entries.firstOrNull { it.name == saved } }
             ?: LibrarySort.DEFAULT
         detailSongSorts.value = readDetailSongSorts()
+        LauncherIconManager.apply(appContext, launcherIcon.value)
         blacklistedFolders.value = prefs.getStringSet(KEY_BLACKLISTED_FOLDERS, emptySet()).orEmpty()
         pinnedPlaylists.value = readPinnedPlaylists()
         discordToken.value = authStore.discordToken.orEmpty()
@@ -1280,6 +1293,27 @@ object AppSettings {
     fun setMatchButtonAccentToArtwork(value: Boolean) {
         matchButtonAccentToArtwork.value = value
         prefs.edit().putBoolean(KEY_MATCH_BUTTON_ACCENT_TO_ARTWORK, value).apply()
+    }
+
+    fun setLauncherIcon(value: LauncherIcon) {
+        launcherIcon.value = value
+        prefs.edit().putString(KEY_LAUNCHER_ICON, value.name).apply()
+        if (this::appContext.isInitialized) LauncherIconManager.apply(appContext, value)
+    }
+
+    fun setFrostedQueueManager(value: Boolean) {
+        frostedQueueManager.value = value
+        prefs.edit().putBoolean(KEY_FROSTED_QUEUE_MANAGER, value).apply()
+    }
+
+    fun setFrostedPlayerDetails(value: Boolean) {
+        frostedPlayerDetails.value = value
+        prefs.edit().putBoolean(KEY_FROSTED_PLAYER_DETAILS, value).apply()
+    }
+
+    fun setFrostedCompactLyrics(value: Boolean) {
+        frostedCompactLyrics.value = value
+        prefs.edit().putBoolean(KEY_FROSTED_COMPACT_LYRICS, value).apply()
     }
 
     fun setReduceAnimation(value: Boolean) {
@@ -2443,6 +2477,10 @@ object AppSettings {
     private const val KEY_THEME = "theme_mode"
     private const val KEY_THEME_MATCHES_ARTWORK = "theme_matches_artwork"
     private const val KEY_MATCH_BUTTON_ACCENT_TO_ARTWORK = "match_button_accent_to_artwork"
+    private const val KEY_LAUNCHER_ICON = "launcher_icon"
+    private const val KEY_FROSTED_QUEUE_MANAGER = "frosted_queue_manager"
+    private const val KEY_FROSTED_PLAYER_DETAILS = "frosted_player_details"
+    private const val KEY_FROSTED_COMPACT_LYRICS = "frosted_compact_lyrics"
     private const val KEY_AUTOPLAY = "autoplay"
     private const val KEY_SHUFFLE_ENABLED = "shuffle_enabled"
     private const val KEY_AUDIO_FOCUS_LEVEL = "audio_focus_level"
