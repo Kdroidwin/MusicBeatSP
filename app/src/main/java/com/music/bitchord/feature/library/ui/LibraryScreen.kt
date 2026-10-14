@@ -47,11 +47,13 @@ import androidx.compose.material.icons.rounded.PlaylistAdd
 import androidx.compose.material.icons.rounded.Reorder
 import androidx.compose.material.icons.rounded.Share
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.SideEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.rememberUpdatedState
 import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.runtime.rememberCoroutineScope
@@ -172,6 +174,7 @@ fun LibraryScreen(
     initialFilterRequest: LibraryFilter? = null,
     onInitialFilterApplied: () -> Unit = {},
     onArtworkPaletteChanged: ((ArtworkPalette?) -> Unit)? = null,
+    onCollectionNavigationChanged: ((Boolean, (() -> Unit)?) -> Unit)? = null,
 ) {
     val context = LocalContext.current.applicationContext
     val playlists by LocalPlaylistStore.playlists.collectAsStateWithLifecycle()
@@ -394,6 +397,19 @@ fun LibraryScreen(
         playlistReorderEnabled = false
         playlistSelectionMode = false
         selectedPlaylistSongIds = emptySet()
+    }
+
+    val collectionNavigationCallback = rememberUpdatedState(onCollectionNavigationChanged)
+    val currentCollectionBackHandler = rememberUpdatedState(leaveDrillDown)
+    val collectionBackHandler = remember { { currentCollectionBackHandler.value() } }
+    LaunchedEffect(inDrillDown) {
+        collectionNavigationCallback.value?.invoke(
+            inDrillDown,
+            collectionBackHandler.takeIf { inDrillDown },
+        )
+    }
+    DisposableEffect(Unit) {
+        onDispose { collectionNavigationCallback.value?.invoke(false, null) }
     }
 
     BackHandler(enabled = inDrillDown || inHistoryView) {

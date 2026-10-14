@@ -112,6 +112,7 @@ import androidx.lifecycle.compose.LocalLifecycleOwner
 import com.music.bitchord.feature.localmusic.ui.components.AllFilesPermissionDialog
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableIntStateOf
+import androidx.compose.runtime.mutableStateMapOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
@@ -450,6 +451,7 @@ private fun BitChordApp(
     val glassSamplesBackdrop = glassActive && !reduceDynamicBlur
     var selectedTab by rememberSaveable { mutableIntStateOf(AppSettings.startupTab.value.index) }
     val hideCollectionTopBar by AppSettings.hideCollectionTopBar.collectAsStateWithLifecycle()
+    val collectionBackHandlers = remember { mutableStateMapOf<String, () -> Unit>() }
     var localCollectionArtwork by remember { mutableStateOf<Pair<Int, ArtworkPalette>?>(null) }
     val onLocalArtworkPaletteChanged: (ArtworkPalette?) -> Unit = remember(selectedTab) {
         { palette -> localCollectionArtwork = palette?.let { selectedTab to it } }
@@ -1882,6 +1884,14 @@ private fun BitChordApp(
                         ),
                     label = "content",
                 ) { key ->
+                    val onCollectionNavigationChanged: (Boolean, (() -> Unit)?) -> Unit = { isOpen, backHandler ->
+                        val routeKey = key.toString()
+                        if (isOpen && backHandler != null) {
+                            collectionBackHandlers[routeKey] = backHandler
+                        } else {
+                            collectionBackHandlers.remove(routeKey)
+                        }
+                    }
                     val live = detailStack.lastOrNull()?.takeIf {
                         it.browseId == key && key != "settings" && key != "replay"
                     }
@@ -2038,6 +2048,7 @@ private fun BitChordApp(
                             contentPadding = listPadding,
                             showTabRow = true,
                             onArtworkPaletteChanged = onLocalArtworkPaletteChanged,
+                            onCollectionNavigationChanged = onCollectionNavigationChanged,
                         )
                     } else if (page != null) {
                         val withAlbum: (Song) -> Song = { song ->
@@ -2124,6 +2135,7 @@ private fun BitChordApp(
                                 onAddToQueue = addToQueue,
                                 onDeleteSong = { viewModel.loadLocalMusic() },
                                 onSongTagsOrLyricsSaved = { viewModel.reloadLyrics(it) },
+                                onCollectionNavigationChanged = onCollectionNavigationChanged,
                             )
                         }
                         TAB_ALBUMS -> if (!hasStoragePermission) {
@@ -2172,6 +2184,7 @@ private fun BitChordApp(
                                 onAddToQueue = addToQueue,
                                 onDeleteSong = { viewModel.loadLocalMusic() },
                                 onSongTagsOrLyricsSaved = { viewModel.reloadLyrics(it) },
+                                onCollectionNavigationChanged = onCollectionNavigationChanged,
                             )
                         }
                         TAB_ARTISTS -> if (!hasStoragePermission) {
@@ -2220,6 +2233,7 @@ private fun BitChordApp(
                                 onAddToQueue = addToQueue,
                                 onDeleteSong = { viewModel.loadLocalMusic() },
                                 onSongTagsOrLyricsSaved = { viewModel.reloadLyrics(it) },
+                                onCollectionNavigationChanged = onCollectionNavigationChanged,
                             )
                         }
                         TAB_ALBUM_ARTISTS -> if (!hasStoragePermission) {
@@ -2266,6 +2280,7 @@ private fun BitChordApp(
                                 onAddToQueue = addToQueue,
                                 onDeleteSong = { viewModel.loadLocalMusic() },
                                 onSongTagsOrLyricsSaved = { viewModel.reloadLyrics(it) },
+                                onCollectionNavigationChanged = onCollectionNavigationChanged,
                             )
                         }
                         TAB_LIBRARY -> if (!hasStoragePermission) {
@@ -2295,6 +2310,7 @@ private fun BitChordApp(
                                 initialFilterRequest = libraryFilterRequest,
                                 onInitialFilterApplied = { libraryFilterRequest = null },
                                 onArtworkPaletteChanged = onLocalArtworkPaletteChanged,
+                                onCollectionNavigationChanged = onCollectionNavigationChanged,
                             )
                         }
                         TAB_SEARCH -> if (!hasStoragePermission) {
@@ -2333,12 +2349,14 @@ private fun BitChordApp(
                 val isDetailVisible = detail != null && !isLocalDetail && !showSettings && !showReplay
                 val isLocalCollectionArtworkVisible = localCollectionPalette != null &&
                     detail == null && !showSettings && !showReplay
-                // Hide chrome only after opening a real collection detail. The
-                // local album/artist/playlist routes can use BrowseType.OTHER,
-                // so filtering by type left their header visible. The two local
-                // library roots are excluded to preserve the category labels.
+                val currentCollectionRouteKey = detail?.browseId ?: "$TAB_KEY$selectedTab"
+                val localCollectionBackHandler = collectionBackHandlers[currentCollectionRouteKey]
+                // Local collection details are drilled down inside their tab
+                // screen rather than pushed onto detailStack, so include the
+                // back handler reported by that screen. Root category pages do
+                // not report one and keep their labels visible.
                 val hideCollectionHeaderNow = hideCollectionTopBar && !showSettings && !showReplay &&
-                    detail != null && !isLocalDetail
+                    ((detail != null && !isLocalDetail) || localCollectionBackHandler != null)
                 if (!hideCollectionHeaderNow) {
                     TopFadeBlur(
                         hazeState = hazeState,
@@ -2384,6 +2402,7 @@ private fun BitChordApp(
                     onBack = when {
                         showSettings -> ({ showSettings = false })
                         showReplay -> ({ showReplay = false })
+                        localCollectionBackHandler != null -> localCollectionBackHandler
                         detail != null -> ({ viewModel.closeDetail(); Unit })
                         else -> null
                     },

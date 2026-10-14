@@ -81,12 +81,14 @@ import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.rounded.Folder
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.SideEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.rememberUpdatedState
 import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
@@ -277,6 +279,7 @@ fun LocalMusicScreen(
     onRefresh: (() -> Unit)? = null,
     initialDrillDownLabel: String? = null,
     onDrillDownDismiss: (() -> Unit)? = null,
+    onCollectionNavigationChanged: ((Boolean, (() -> Unit)?) -> Unit)? = null,
 ) {
     val context = LocalContext.current
     val choosePlaylistCover = rememberPlaylistCoverPicker { playlistId, uri ->
@@ -437,6 +440,19 @@ fun LocalMusicScreen(
         } else {
             leaveDrillDown()
         }
+    }
+
+    val collectionNavigationCallback = rememberUpdatedState(onCollectionNavigationChanged)
+    val currentCollectionBackHandler = rememberUpdatedState(backFromDrillDown)
+    val collectionBackHandler = remember { { currentCollectionBackHandler.value() } }
+    LaunchedEffect(inDrillDown) {
+        collectionNavigationCallback.value?.invoke(
+            inDrillDown,
+            collectionBackHandler.takeIf { inDrillDown },
+        )
+    }
+    DisposableEffect(Unit) {
+        onDispose { collectionNavigationCallback.value?.invoke(false, null) }
     }
 
     LaunchedEffect(initialDrillDownLabel, songs, selectedTab, artistsOpenAlbums) {

@@ -6,8 +6,10 @@ import com.dokar.quickjs.binding.AsyncFunctionBinding
 import com.dokar.quickjs.binding.FunctionBinding
 import com.dokar.quickjs.binding.define
 import com.music.bitchord.data.Http
+import com.music.bitchord.data.quickjs.QuickJsLifecycle
 import com.music.bitchord.data.lyrics.LyricsLog
-import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.CompletableDeferred
+import kotlinx.coroutines.asCoroutineDispatcher
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.sync.Mutex
 import kotlinx.coroutines.sync.withLock
@@ -18,8 +20,9 @@ import okhttp3.Request
 import okhttp3.RequestBody.Companion.toRequestBody
 import org.json.JSONObject
 import java.io.File
-import java.util.concurrent.ConcurrentHashMap
+import java.util.concurrent.Executors
 import java.util.concurrent.TimeUnit
+import java.util.concurrent.atomic.AtomicLong
 
 /**
  * Sandboxed QuickJS VM executor for dynamic lyrics extensions.
@@ -30,8 +33,28 @@ object LyricsExtensionExecutor {
     private const val EXECUTION_TIMEOUT_MS = 15_000L
     private const val SEARCH_TIMEOUT_MS = 30_000L
 
-    private val engineMap = ConcurrentHashMap<String, QuickJs>()
-    private val engineLocks = ConcurrentHashMap<String, Mutex>()
+    // QuickJS' Android JNI layer keeps process-global references. Creating or
+    // disposing contexts concurrently (or from different Default dispatcher
+    // workers) can leave one context with a stale JNI global and abort ART.
+    // Keep one VM on one thread and serialize its complete request lifecycle.
+    private val quickJsDispatcher = Executors.newSingleThreadExecutor { task ->
+        Thread(task, "LyricsQuickJs").apply { isDaemon = true }
+    }.asCoroutineDispatcher()
+    private val engineLock = Mutex()
+    private var engine: QuickJs? = null
+    private var engineSetupFailed = false
+    private var loadedExtensionId: String? = null
+    private val invalidatedExtensions = java.util.concurrent.ConcurrentHashMap.newKeySet<String>()
+    @Volatile private var invalidateLoadedExtension = false
+    @Volatile private var activeExtensionId: String? = null
+    @Volatile private var activeRequest: ActiveRequest? = null
+    private val requestIds = AtomicLong()
+
+    private data class ActiveRequest(
+        val id: Long,
+        val extensionId: String,
+        val result: CompletableDeferred<String?>,
+    )
 
     private val httpClient by lazy {
         Http.client.newBuilder()
@@ -39,11 +62,6 @@ object LyricsExtensionExecutor {
             .connectTimeout(5, TimeUnit.SECONDS)
             .build()
     }
-
-    private val activeDeferreds = ConcurrentHashMap<String, kotlinx.coroutines.CompletableDeferred<String?>>()
-
-    private fun getLock(extensionId: String): Mutex =
-        engineLocks.computeIfAbsent(extensionId) { Mutex() }
 
     /**
      * Executes the `getLyrics` export of the specified extension.
@@ -65,9 +83,8 @@ object LyricsExtensionExecutor {
         durationMs: Long,
         album: String? = null,
         videoId: String? = null,
-    ): String? = withContext(Dispatchers.Default) {
-        val lock = getLock(extensionId)
-        lock.withLock {
+    ): String? = withContext(quickJsDispatcher) {
+        engineLock.withLock {
             withTimeoutOrNull(EXECUTION_TIMEOUT_MS) {
                 try {
                     val qjs = getOrInitEngine(extensionId, scriptFile) ?: return@withTimeoutOrNull null
@@ -81,35 +98,37 @@ object LyricsExtensionExecutor {
 
                     LyricsLog.i(extensionId, "getLyrics query: title='$title', artist='$artist'")
 
-                    val deferred = kotlinx.coroutines.CompletableDeferred<String?>()
-                    activeDeferreds[extensionId] = deferred
+                    val request = ActiveRequest(requestIds.incrementAndGet(), extensionId, CompletableDeferred())
+                    activeExtensionId = extensionId
+                    activeRequest = request
 
                     try {
                         qjs.evaluate<String>(
                             """
                             (async function() {
                                 try {
-                                    if (module.exports && typeof module.exports.getLyrics === 'function') {
-                                        var r = await module.exports.getLyrics($trackJson);
-                                        __native_bridge.sendResult((r !== undefined && r !== null) ? String(r) : 'null');
+                                    if (__lyricsExtensionModule && typeof __lyricsExtensionModule.getLyrics === 'function') {
+                                        var r = await __lyricsExtensionModule.getLyrics($trackJson);
+                                        __native_bridge.sendResult((r !== undefined && r !== null) ? String(r) : 'null', ${request.id});
                                     } else {
                                         console.warn('[LyricsExt] getLyrics not found on module.exports');
-                                        __native_bridge.sendResult('null');
+                                        __native_bridge.sendResult('null', ${request.id});
                                     }
                                 } catch(e) {
                                     console.error('[LyricsExt Error] ' + (e && e.message ? e.message : String(e)));
-                                    __native_bridge.sendResult('null');
+                                    __native_bridge.sendResult('null', ${request.id});
                                 }
                             })();
                             'ok';
                             """.trimIndent()
                         )
 
-                        val result = deferred.await()
+                        val result = request.result.await()
                         LyricsLog.i(extensionId, "getLyrics result: ${result?.take(100)}")
                         if (result == "null" || result.isNullOrBlank()) null else result
                     } finally {
-                        activeDeferreds.remove(extensionId)
+                        if (activeRequest?.id == request.id) activeRequest = null
+                        if (activeExtensionId == extensionId) activeExtensionId = null
                     }
                 } catch (e: Throwable) {
                     LyricsLog.w(extensionId, "Execution failed: ${e.message}")
@@ -128,9 +147,8 @@ object LyricsExtensionExecutor {
         title: String,
         artist: String,
         album: String? = null,
-    ): String? = withContext(Dispatchers.Default) {
-        val lock = getLock(extensionId)
-        lock.withLock {
+    ): String? = withContext(quickJsDispatcher) {
+        engineLock.withLock {
             withTimeoutOrNull(SEARCH_TIMEOUT_MS) {
                 try {
                     val qjs = getOrInitEngine(extensionId, scriptFile) ?: return@withTimeoutOrNull null
@@ -142,35 +160,37 @@ object LyricsExtensionExecutor {
 
                     LyricsLog.i(extensionId, "searchLyrics query: title='$title', artist='$artist'")
 
-                    val deferred = kotlinx.coroutines.CompletableDeferred<String?>()
-                    activeDeferreds[extensionId] = deferred
+                    val request = ActiveRequest(requestIds.incrementAndGet(), extensionId, CompletableDeferred())
+                    activeExtensionId = extensionId
+                    activeRequest = request
 
                     try {
                         qjs.evaluate<String>(
                             """
                             (async function() {
                                 try {
-                                    if (module.exports && typeof module.exports.searchLyrics === 'function') {
-                                        var r = await module.exports.searchLyrics($queryJson);
-                                        __native_bridge.sendResult((r !== undefined && r !== null) ? JSON.stringify(r) : '[]');
+                                    if (__lyricsExtensionModule && typeof __lyricsExtensionModule.searchLyrics === 'function') {
+                                        var r = await __lyricsExtensionModule.searchLyrics($queryJson);
+                                        __native_bridge.sendResult((r !== undefined && r !== null) ? JSON.stringify(r) : '[]', ${request.id});
                                     } else {
                                         console.warn('[LyricsExt] searchLyrics not found on module.exports');
-                                        __native_bridge.sendResult('[]');
+                                        __native_bridge.sendResult('[]', ${request.id});
                                     }
                                 } catch(e) {
                                     console.error('[LyricsExt search error] ' + (e && e.message ? e.message : String(e)));
-                                    __native_bridge.sendResult('[]');
+                                    __native_bridge.sendResult('[]', ${request.id});
                                 }
                             })();
                             'ok';
                             """.trimIndent()
                         )
 
-                        val result = deferred.await()
+                        val result = request.result.await()
                         LyricsLog.i(extensionId, "searchLyrics result: ${result?.take(200)}")
                         if (result == "[]" || result.isNullOrBlank()) null else result
                     } finally {
-                        activeDeferreds.remove(extensionId)
+                        if (activeRequest?.id == request.id) activeRequest = null
+                        if (activeExtensionId == extensionId) activeExtensionId = null
                     }
                 } catch (e: Throwable) {
                     LyricsLog.e(extensionId, "searchLyrics exception: ${e.message}")
@@ -184,92 +204,106 @@ object LyricsExtensionExecutor {
      * Unloads and closes an engine when an extension is updated or disabled.
      */
     fun unload(extensionId: String) {
-        val lock = getLock(extensionId)
-        val qjs = engineMap.remove(extensionId)
-        qjs?.let {
-            runCatching { it.close() }
-        }
+        // Invalidate synchronously so a request that starts immediately after
+        // an extension update cannot reuse its old exports. Never close a JNI
+        // VM from this caller thread; the single VM is reused until process exit.
+        invalidatedExtensions += extensionId
     }
 
     /**
      * Unloads and closes all engines.
      */
     fun unloadAll() {
-        engineMap.keys.toList().forEach { unload(it) }
+        invalidateLoadedExtension = true
     }
 
     private suspend fun getOrInitEngine(extensionId: String, scriptFile: File): QuickJs? {
-        engineMap[extensionId]?.let { return it }
         if (!scriptFile.exists() || !scriptFile.canRead()) {
             LyricsLog.w(extensionId, "Script file not found: ${scriptFile.absolutePath}")
             return null
         }
 
-        val code = runCatching { scriptFile.readText() }.getOrNull() ?: return null
-        val qjs = QuickJs.create(Dispatchers.Default)
-        qjs.maxStackSize = 512 * 1024L
+        var qjs = engine
+        if (qjs == null) {
+            if (engineSetupFailed) return null
+            qjs = try {
+                QuickJsLifecycle.create(quickJsDispatcher).also { created ->
+                    engine = created
+                    created.maxStackSize = 512 * 1024L
+                    bindConsole(created)
+                    bindHttp(created)
+                    bindBase64(created)
+                    bindBridge(created)
+                    created.evaluate<String>("'ok';")
+                }
+            } catch (e: Throwable) {
+                engineSetupFailed = true
+                LyricsLog.e(extensionId, "Failed to initialize QuickJS: ${e.message}")
+                return null
+            }
+        }
 
-        try {
-            bindConsole(qjs, extensionId)
-            bindHttp(qjs)
-            bindBase64(qjs)
-            bindBridge(qjs, extensionId)
-
-            // Setup CommonJS module environment
-            qjs.evaluate<String>(
-                """
-                var module = { exports: {} };
-                var exports = module.exports;
-                'ok';
-                """.trimIndent()
-            )
-
-            qjs.evaluate<String>(
-                """
-                $code
-                ; 'ok';
-                """.trimIndent()
-            )
-            engineMap[extensionId] = qjs
+        if (loadedExtensionId == extensionId && extensionId !in invalidatedExtensions && !invalidateLoadedExtension) {
             return qjs
+        }
+
+        val code = runCatching { scriptFile.readText() }.getOrNull() ?: return null
+        activeExtensionId = extensionId
+        return try {
+            qjs.evaluate<String>(
+                """
+                globalThis.__lyricsExtensionModule = (function() {
+                    var module = { exports: {} };
+                    var exports = module.exports;
+                    $code
+                    return module.exports;
+                })();
+                'ok';
+                """.trimIndent(),
+            )
+            loadedExtensionId = extensionId
+            invalidatedExtensions.remove(extensionId)
+            invalidateLoadedExtension = false
+            qjs
         } catch (e: Throwable) {
+            loadedExtensionId = null
             LyricsLog.e(extensionId, "Failed to initialize extension JS: ${e.message}")
-            runCatching { qjs.close() }
-            return null
+            null
         }
     }
 
-    private fun bindConsole(qjs: QuickJs, extensionId: String) {
+    private fun bindConsole(qjs: QuickJs) {
         qjs.define("console") {
             function("log", object : FunctionBinding<Unit> {
                 override fun invoke(args: Array<Any?>) {
-                    LyricsLog.i(extensionId, args.joinToString(" ") { it?.toString() ?: "null" })
+                    LyricsLog.i(activeExtensionId ?: TAG, args.joinToString(" ") { it?.toString() ?: "null" })
                 }
             })
             function("error", object : FunctionBinding<Unit> {
                 override fun invoke(args: Array<Any?>) {
-                    LyricsLog.e(extensionId, args.joinToString(" ") { it?.toString() ?: "null" })
+                    LyricsLog.e(activeExtensionId ?: TAG, args.joinToString(" ") { it?.toString() ?: "null" })
                 }
             })
             function("warn", object : FunctionBinding<Unit> {
                 override fun invoke(args: Array<Any?>) {
-                    LyricsLog.w(extensionId, args.joinToString(" ") { it?.toString() ?: "null" })
+                    LyricsLog.w(activeExtensionId ?: TAG, args.joinToString(" ") { it?.toString() ?: "null" })
                 }
             })
             function("info", object : FunctionBinding<Unit> {
                 override fun invoke(args: Array<Any?>) {
-                    LyricsLog.i(extensionId, args.joinToString(" ") { it?.toString() ?: "null" })
+                    LyricsLog.i(activeExtensionId ?: TAG, args.joinToString(" ") { it?.toString() ?: "null" })
                 }
             })
         }
     }
 
-    private fun bindBridge(qjs: QuickJs, extensionId: String) {
+    private fun bindBridge(qjs: QuickJs) {
         qjs.define("__native_bridge") {
             function("sendResult", object : FunctionBinding<Unit> {
                 override fun invoke(args: Array<Any?>) {
                     val result = args.firstOrNull()?.toString()
-                    activeDeferreds[extensionId]?.complete(result)
+                    val requestId = args.getOrNull(1)?.toString()?.toLongOrNull() ?: return
+                    activeRequest?.takeIf { it.id == requestId }?.result?.complete(result)
                 }
             })
         }

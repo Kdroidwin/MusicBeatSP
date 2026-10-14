@@ -7,6 +7,7 @@ import com.dokar.quickjs.QuickJs
 import com.dokar.quickjs.binding.AsyncFunctionBinding
 import com.dokar.quickjs.binding.FunctionBinding
 import com.dokar.quickjs.binding.define
+import com.music.bitchord.data.quickjs.QuickJsLifecycle
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.channels.Channel
 import kotlinx.coroutines.sync.Mutex
@@ -130,7 +131,7 @@ internal object QuickJsExecutor {
                 }
             }
         }
-        evicted.forEach { runCatching { it.close() } }
+        evicted.forEach { runCatching { QuickJsLifecycle.close(it) } }
 
         TrackLog.d(TAG, "QuickJsExecutor.loadModule($moduleId) fetchBase=$fetchBase jsCodeLength=${jsCode.length}")
         return withContext(Dispatchers.Default) {
@@ -152,7 +153,7 @@ internal object QuickJsExecutor {
 
     /** A fresh interpreter with [jsCode] evaluated into it, or a throw saying why not. */
     private suspend fun newEngine(jsCode: String, fetchBase: String): QuickJs {
-        val qjs = QuickJs.create(Dispatchers.Default)
+        val qjs = QuickJsLifecycle.create(Dispatchers.Default)
         qjs.maxStackSize = 512 * 1024L
         try {
             bindConsole(qjs)
@@ -190,7 +191,7 @@ internal object QuickJsExecutor {
             TrackLog.d(TAG, "  Module exports: [$keys]")
             return qjs
         } catch (e: Throwable) {
-            qjs.close()
+            QuickJsLifecycle.close(qjs)
             throw e
         }
     }
@@ -300,7 +301,7 @@ internal object QuickJsExecutor {
 
     fun unload(moduleId: String) {
         val closing = synchronized(engineLock) { pools.remove(moduleId) }?.made.orEmpty()
-        closing.forEach { runCatching { it.close() } }
+        closing.forEach { runCatching { QuickJsLifecycle.close(it) } }
         TrackLog.d(TAG, "QuickJsExecutor.unload($moduleId)")
     }
 
@@ -310,7 +311,7 @@ internal object QuickJsExecutor {
             pools.clear()
             values
         }
-        all.forEach { runCatching { it.close() } }
+        all.forEach { runCatching { QuickJsLifecycle.close(it) } }
         TrackLog.d(TAG, "QuickJsExecutor.unloadAll()")
     }
 
