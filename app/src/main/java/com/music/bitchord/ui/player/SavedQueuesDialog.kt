@@ -19,6 +19,7 @@ import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.OutlinedTextFieldDefaults
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
+import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.getValue
@@ -31,6 +32,7 @@ import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.platform.LocalView
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.unit.dp
+import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.window.DialogWindowProvider
 import dev.chrisbanes.haze.HazeState
 import com.music.bitchord.R
@@ -61,14 +63,15 @@ internal fun SavedQueuesDialog(
     val secondary = if (useFrostedGlass) MaterialTheme.colorScheme.onSurfaceVariant else artworkPalette.onBackgroundVariant
     val accent = if (useFrostedGlass) MaterialTheme.colorScheme.primary else artworkPalette.accent
     val container = if (useFrostedGlass) {
-        MaterialTheme.colorScheme.surface.copy(alpha = 0.52f)
+        Color.White.copy(alpha = 0.10f)
     } else artworkPalette.background
 
     AlertDialog(
         onDismissRequest = onDismiss,
         modifier = if (useFrostedGlass) {
-            Modifier.frostedGlassEffect(hazeState, MaterialTheme.colorScheme.surface.copy(alpha = 0.18f))
+            Modifier.frostedGlassEffect(hazeState, Color.White.copy(alpha = 0.08f))
         } else Modifier,
+        shape = RoundedCornerShape(28.dp),
         title = { Text(stringResource(R.string.manage_queues), color = foreground) },
         containerColor = container,
         titleContentColor = foreground,
@@ -170,8 +173,9 @@ internal fun SavedQueuesDialog(
         AlertDialog(
             onDismissRequest = { deleting = null },
             modifier = if (useFrostedGlass) {
-                Modifier.frostedGlassEffect(hazeState, MaterialTheme.colorScheme.surface.copy(alpha = 0.18f))
+                Modifier.frostedGlassEffect(hazeState, Color.White.copy(alpha = 0.08f))
             } else Modifier,
+            shape = RoundedCornerShape(28.dp),
             title = { Text(stringResource(R.string.delete_saved_queue), color = foreground) },
             text = { DialogBackdropBlur(useFrostedGlass); Text(queue.name, color = foreground) },
             containerColor = container,
@@ -199,15 +203,28 @@ private fun DialogBackdropBlur(enabled: Boolean) {
         (view.parent as? DialogWindowProvider)?.window
     }
     val radiusPx = with(LocalDensity.current) { 40.dp.roundToPx() }
+    val previousDimAmount = remember(window) { window?.attributes?.dimAmount }
     DisposableEffect(window, enabled, radiusPx) {
-        if (enabled && Build.VERSION.SDK_INT >= Build.VERSION_CODES.S && window != null) {
-            window.addFlags(WindowManager.LayoutParams.FLAG_BLUR_BEHIND)
-            window.setBackgroundBlurRadius(radiusPx)
+        if (enabled && window != null) {
+            val attributes = window.attributes
+            attributes.dimAmount = 0.08f
+            window.attributes = attributes
+            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) {
+                window.addFlags(WindowManager.LayoutParams.FLAG_BLUR_BEHIND)
+                window.setBackgroundBlurRadius(radiusPx)
+            }
         }
         onDispose {
-            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S && window != null) {
-                window.setBackgroundBlurRadius(0)
-                window.clearFlags(WindowManager.LayoutParams.FLAG_BLUR_BEHIND)
+            if (enabled && window != null) {
+                if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) {
+                    window.setBackgroundBlurRadius(0)
+                    window.clearFlags(WindowManager.LayoutParams.FLAG_BLUR_BEHIND)
+                }
+                previousDimAmount?.let { previous ->
+                    val attributes = window.attributes
+                    attributes.dimAmount = previous
+                    window.attributes = attributes
+                }
             }
         }
     }

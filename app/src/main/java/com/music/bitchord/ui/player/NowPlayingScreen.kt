@@ -2396,8 +2396,10 @@ fun NowPlayingScreen(
                                 FrostedGlassBackdrop(
                                     hazeState = playerHaze,
                                     modifier = Modifier.matchParentSize(),
-                                    tint = MaterialTheme.colorScheme.surface,
-                                    tintAlpha = 0.18f,
+                                    // Keep the lyrics replacement readable while
+                                    // letting the blurred player artwork show through.
+                                    tint = Color.White.copy(alpha = 0.08f),
+                                    tintAlpha = 0.06f,
                                 )
                             } else {
                                 Box(Modifier.matchParentSize().background(artworkPalette.background))

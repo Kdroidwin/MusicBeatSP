@@ -159,8 +159,10 @@ fun LocalSongActionsSheet(
                 FrostedGlassBackdrop(
                     hazeState = hazeState,
                     modifier = Modifier.matchParentSize(),
-                    tint = MaterialTheme.colorScheme.surface,
-                    tintAlpha = 0.18f,
+                    // The theme surface is pure black in AMOLED mode; using it
+                    // as a glass tint made the sampled artwork disappear.
+                    tint = Color.White.copy(alpha = 0.08f),
+                    tintAlpha = 0.06f,
                 )
             } else if (showPlayerActions) {
                 ArtworkBackdrop(

@@ -5,7 +5,6 @@ import androidx.compose.foundation.layout.Box
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
-import androidx.compose.material3.MaterialTheme
 import dev.chrisbanes.haze.ExperimentalHazeApi
 import dev.chrisbanes.haze.HazeInputScale
 import dev.chrisbanes.haze.HazeState
@@ -27,8 +26,8 @@ fun Modifier.frostedGlassEffect(hazeState: HazeState, tint: Color): Modifier =
 fun FrostedGlassBackdrop(
     hazeState: HazeState,
     modifier: Modifier = Modifier,
-    tint: Color = MaterialTheme.colorScheme.surface,
-    tintAlpha: Float = 0.22f,
+    tint: Color = Color.White.copy(alpha = 0.08f),
+    tintAlpha: Float = 0.06f,
 ) {
     Box(modifier) {
         Box(

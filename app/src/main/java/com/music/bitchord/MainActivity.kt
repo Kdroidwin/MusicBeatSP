@@ -2333,10 +2333,12 @@ private fun BitChordApp(
                 val isDetailVisible = detail != null && !isLocalDetail && !showSettings && !showReplay
                 val isLocalCollectionArtworkVisible = localCollectionPalette != null &&
                     detail == null && !showSettings && !showReplay
-                val collectionDetailSelected = detail?.type == BrowseType.ALBUM ||
-                    detail?.type == BrowseType.ARTIST || detail?.type == BrowseType.PLAYLIST
+                // Hide chrome only after opening a real collection detail. The
+                // local album/artist/playlist routes can use BrowseType.OTHER,
+                // so filtering by type left their header visible. The two local
+                // library roots are excluded to preserve the category labels.
                 val hideCollectionHeaderNow = hideCollectionTopBar && !showSettings && !showReplay &&
-                    collectionDetailSelected
+                    detail != null && !isLocalDetail
                 if (!hideCollectionHeaderNow) {
                     TopFadeBlur(
                         hazeState = hazeState,
