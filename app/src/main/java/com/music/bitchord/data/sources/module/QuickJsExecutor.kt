@@ -1,6 +1,5 @@
 package com.music.bitchord.data.sources.module
 
-import android.util.Log
 import com.music.bitchord.data.TrackLog
 import com.music.bitchord.data.Http
 import com.dokar.quickjs.QuickJs
@@ -10,8 +9,6 @@ import com.dokar.quickjs.binding.define
 import com.music.bitchord.data.quickjs.QuickJsLifecycle
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.channels.Channel
-import kotlinx.coroutines.sync.Mutex
-import kotlinx.coroutines.sync.withLock
 import kotlinx.coroutines.withContext
 import okhttp3.MediaType.Companion.toMediaType
 import okhttp3.Request
@@ -92,11 +89,15 @@ internal object QuickJsExecutor {
      */
     private class Pool(val jsCode: String, val fetchBase: String) {
         val free = Channel<QuickJs>(Channel.UNLIMITED)
-        val lock = Mutex()
+        val lock = Any()
         /** Engines made or being made — the claim that stops two callers both growing the pool. */
         var started = 0
-        /** Engines actually made, for closing them on unload. Guarded by [lock]. */
+        /** Engines actually made, for closing idle contexts on unload. Guarded by [lock]. */
         val made = mutableListOf<QuickJs>()
+        /** Engines currently in callExport. Guarded by [lock]. */
+        val inUse = mutableSetOf<QuickJs>()
+        /** Retired pools cannot hand out or accept engines. Guarded by [lock]. */
+        var retired = false
     }
 
     /** Whether [moduleId] still has a live pool, i.e. hasn't been evicted. */
@@ -123,15 +124,15 @@ internal object QuickJsExecutor {
                 TrackLog.d(TAG, "QuickJsExecutor.loadModule($moduleId) — ENGINE CACHE HIT")
                 return Result.success(Unit)
             }
-            buildList {
+            buildList<Pool> {
                 while (pools.size >= MAX_MODULES) {
                     val lruId = pools.keys.firstOrNull() ?: break
                     TrackLog.d(TAG, "  Evicting LRU module engine: $lruId")
-                    pools.remove(lruId)?.let { addAll(it.made) }
+                    pools.remove(lruId)?.let(::add)
                 }
             }
         }
-        evicted.forEach { runCatching { QuickJsLifecycle.close(it) } }
+        evicted.forEach(::retirePool)
 
         TrackLog.d(TAG, "QuickJsExecutor.loadModule($moduleId) fetchBase=$fetchBase jsCodeLength=${jsCode.length}")
         return withContext(Dispatchers.Default) {
@@ -208,21 +209,56 @@ internal object QuickJsExecutor {
      * in the pool it never joined.
      */
     private suspend fun acquire(moduleId: String, pool: Pool): QuickJs {
-        pool.free.tryReceive().getOrNull()?.let { return it }
-
-        val mine = pool.lock.withLock {
-            if (pool.started >= ENGINES_PER_MODULE) return@withLock false
-            pool.started++
-            true
+        val available = synchronized(pool.lock) {
+            check(!pool.retired) { "Module $moduleId was unloaded" }
+            pool.free.tryReceive().getOrNull()?.also { pool.inUse += it }
         }
-        if (!mine) return pool.free.receive()
+        if (available != null) return available
+
+        val mine = synchronized(pool.lock) {
+            check(!pool.retired) { "Module $moduleId was unloaded" }
+            if (pool.started >= ENGINES_PER_MODULE) {
+                false
+            } else {
+                pool.started++
+                true
+            }
+        }
+        if (!mine) {
+            val waiting = pool.free.receive()
+            val accepted = synchronized(pool.lock) {
+                if (pool.retired) false else {
+                    pool.inUse += waiting
+                    true
+                }
+            }
+            check(accepted) { "Module $moduleId was unloaded" }
+            return waiting
+        }
 
         return try {
-            newEngine(pool.jsCode, pool.fetchBase).also { fresh ->
-                pool.lock.withLock { pool.made += fresh }
+            val fresh = newEngine(pool.jsCode, pool.fetchBase)
+            val accepted = synchronized(pool.lock) {
+                if (pool.retired) {
+                    pool.started--
+                    false
+                } else {
+                    pool.made += fresh
+                    pool.inUse += fresh
+                    true
+                }
             }
+            if (!accepted) {
+                QuickJsLifecycle.close(fresh)
+                error("Module $moduleId was unloaded")
+            }
+            fresh
         } catch (e: Throwable) {
-            pool.lock.withLock { pool.started-- }
+            synchronized(pool.lock) {
+                // If the pool retired after this build slot was reserved, the
+                // retirement branch already released it above.
+                if (!pool.retired) pool.started--
+            }
             throw e
         }
     }
@@ -247,9 +283,41 @@ internal object QuickJsExecutor {
                 // Back into circulation on every path, including a throw: an
                 // engine that is never returned is a slot the pool can never
                 // hand out again, and three of those would deadlock the module.
-                pool.free.trySend(qjs)
+                release(pool, qjs)
             }
         }
+    }
+
+    private fun release(pool: Pool, engine: QuickJs) {
+        val closeNow = synchronized(pool.lock) {
+            pool.inUse.remove(engine)
+            if (pool.retired) {
+                pool.made.remove(engine)
+                true
+            } else {
+                val returned = pool.free.trySend(engine).isSuccess
+                if (!returned) {
+                    pool.made.remove(engine)
+                    pool.started--
+                    true
+                } else {
+                    false
+                }
+            }
+        }
+        if (closeNow) runCatching { QuickJsLifecycle.close(engine) }
+    }
+
+    private fun retirePool(pool: Pool) {
+        val idleEngines = synchronized(pool.lock) {
+            if (pool.retired) return
+            pool.retired = true
+            pool.free.close()
+            val idle = pool.made.filterNot { it in pool.inUse }
+            pool.made.removeAll(idle.toSet())
+            idle
+        }
+        idleEngines.forEach { runCatching { QuickJsLifecycle.close(it) } }
     }
 
     private suspend fun callOn(
@@ -300,18 +368,18 @@ internal object QuickJsExecutor {
     // ── Unload ───────────────────────────────────────────────────────────
 
     fun unload(moduleId: String) {
-        val closing = synchronized(engineLock) { pools.remove(moduleId) }?.made.orEmpty()
-        closing.forEach { runCatching { QuickJsLifecycle.close(it) } }
+        val pool = synchronized(engineLock) { pools.remove(moduleId) }
+        pool?.let(::retirePool)
         TrackLog.d(TAG, "QuickJsExecutor.unload($moduleId)")
     }
 
     fun unloadAll() {
         val all = synchronized(engineLock) {
-            val values = pools.values.flatMap { it.made }
+            val values = pools.values.toList()
             pools.clear()
             values
         }
-        all.forEach { runCatching { QuickJsLifecycle.close(it) } }
+        all.forEach(::retirePool)
         TrackLog.d(TAG, "QuickJsExecutor.unloadAll()")
     }
 
