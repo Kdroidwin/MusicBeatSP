@@ -1,9 +1,3 @@
-<div align="center">
-
-<br/>
-
-<img src="Logo.png" alt="MusicBeatSP app icon" width="160" />
-
 # MusicBeatSP
 
 ### A local-first music player for Android
