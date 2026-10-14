@@ -1,5 +1,3 @@
-# MusicBeatSP
-
 ### A local-first music player for Android
 **Lossless audio · Synchronized lyrics · Customizable library and player · ReplayGain · Google Cast**
 
