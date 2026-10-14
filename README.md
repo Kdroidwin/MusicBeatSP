@@ -1,9 +1,3 @@
-<div align="center">
-
-<br/>
-
-<img src="Logo.png" alt="MusicBeatSP app icon" width="160" />
-
 # MusicBeatSP
 
 ### A local-first music player for Android
@@ -29,8 +23,13 @@
 
 The standard Android package is `io.pockets.musicbestsp`. Because this differs from the previous MusicBeat package, Android installs MusicBeatSP as a separate app; app-private settings and data are not migrated automatically.
 
-<div align="center">
-<img src="Banner.png" alt="MusicBeatSP banner" width="100%" />
+<p align="center">
+  <img src="https://github.com/user-attachments/assets/eb91f149-c953-4822-8657-65c0e2f7cffb" width="180" alt="スクリーンショット 1">
+  <img src="https://github.com/user-attachments/assets/fdff22a9-5dfa-4959-a016-1b59c32a088f" width="180" alt="スクリーンショット 2">
+  <img src="https://github.com/user-attachments/assets/4efcc926-dcba-4c3f-b715-df88d307d97c" width="180" alt="スクリーンショット 3">
+  <img src="https://github.com/user-attachments/assets/900c3159-619c-49d6-a2fc-e10c3ebd447c" width="180" alt="スクリーンショット 4">
+</p>
+
 </div>
 
 ## Features
