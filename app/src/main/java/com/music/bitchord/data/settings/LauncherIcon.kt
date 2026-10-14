@@ -22,8 +22,16 @@ internal object LauncherIconManager {
 
     fun apply(context: Context, selected: LauncherIcon) {
         val packageManager = context.packageManager
+        // Manifest-relative alias names are resolved against the app's code
+        // namespace (com.music.bitchord), while context.packageName is the
+        // flavor applicationId (io.pockets.musicbestsp). ComponentName needs
+        // both values separately.
+        val componentNamespace = context.applicationInfo.className
+            ?.substringBeforeLast('.')
+            ?.takeIf(String::isNotBlank)
+            ?: context.packageName
         val states = aliases.map { (icon, className) ->
-            val component = ComponentName(context.packageName, context.packageName + className)
+            val component = ComponentName(context.packageName, componentNamespace + className)
             val state = if (icon == selected) {
                 PackageManager.COMPONENT_ENABLED_STATE_ENABLED
             } else {
@@ -51,10 +59,14 @@ internal object LauncherIconManager {
         // Enable the destination first so the launcher never briefly loses the app.
         states.firstOrNull { it.second == PackageManager.COMPONENT_ENABLED_STATE_ENABLED }
             ?.let { (component, state) ->
-                packageManager.setComponentEnabledSetting(component, state, PackageManager.DONT_KILL_APP)
+                runCatching {
+                    packageManager.setComponentEnabledSetting(component, state, PackageManager.DONT_KILL_APP)
+                }
             }
         states.filter { it.second != PackageManager.COMPONENT_ENABLED_STATE_ENABLED }.forEach { (component, state) ->
-            packageManager.setComponentEnabledSetting(component, state, PackageManager.DONT_KILL_APP)
+            runCatching {
+                packageManager.setComponentEnabledSetting(component, state, PackageManager.DONT_KILL_APP)
+            }
         }
     }
 }
