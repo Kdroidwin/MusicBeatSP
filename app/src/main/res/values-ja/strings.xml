@@ -211,6 +211,17 @@
     <string name="crossfade_value">%1$d秒</string>
     <string name="equalizer">イコライザー</string>
     <string name="equalizer_subtitle">デバイスのシステムパネル</string>
+    <string name="parametric_eq">パラメトリックEQ</string>
+    <string name="parametric_eq_subtitle">調整可能なピーキングフィルター3本。初期設定はオフで、ビットパーフェクト再生中は無効です</string>
+    <string name="parametric_eq_band_number">バンド %1$d</string>
+    <string name="parametric_eq_frequency">中心周波数</string>
+    <string name="parametric_eq_frequency_hz">%1$d Hz</string>
+    <string name="parametric_eq_frequency_khz">%1$.1f kHz</string>
+    <string name="parametric_eq_q">帯域幅（Q）</string>
+    <string name="parametric_eq_gain">ゲイン</string>
+    <string name="reverb">残響</string>
+    <string name="reverb_subtitle">部屋の残響を調整します。初期設定はオフです。端末で非対応の場合は適用されません</string>
+    <string name="reverb_amount">残響量</string>
     <string name="show_nerd_stats">技術情報を表示</string>
     <string name="show_nerd_stats_subtitle">プレイヤーにコーデック、ビットレート、サンプルレートを表示</string>
     <string name="theme">テーマ</string>
@@ -773,6 +784,8 @@
     <string name="theme_match_artwork_subtitle">再生中の曲のアートカラーをアプリのアクセントに使います</string>
     <string name="match_button_accent_to_artwork">ボタンのアクセント色をアートワークに合わせる</string>
     <string name="match_button_accent_to_artwork_subtitle">アプリの背景色は変えず、現在の曲のアートワーク色をボタンや選択状態に使います</string>
+    <string name="mini_player_artwork_color">ミニプレイヤーをアートワークの色に合わせる</string>
+    <string name="mini_player_artwork_color_subtitle">現在の曲のアートワーク色をミニプレイヤーに使います。初期設定はオフです</string>
     <string name="preload_album_art">起動時にローカルのアートを読み込む</string>
     <string name="preload_album_art_subtitle">起動時に端末内の全曲のアートを先読みし、取得画像をアプリ内ストレージに保存します</string>
     <string name="preload_album_art_now">今すぐアートを先読み</string>
@@ -837,6 +850,9 @@
     <string name="seek_interval">シーク秒数</string>
     <string name="seek_interval_subtitle">ダブルタップとシークボタンで移動する秒数</string>
     <string name="seek_interval_value">%1$d秒</string>
+    <string name="recent_play_threshold">最近再生した曲として記録するまでの再生時間</string>
+    <string name="recent_play_threshold_subtitle">設定した秒数以上再生された曲を、最近再生した曲と再生回数に記録します。0秒なら再生開始時に記録します。</string>
+    <string name="recent_play_threshold_value">%1$d秒</string>
     <string name="seek_button_mode">シークボタン</string>
     <string name="seek_button_mode_subtitle">前後の曲ボタンの外側にシークボタンを表示</string>
     <string name="hide_seek_button_labels">シーク秒数ラベルを隠す</string>

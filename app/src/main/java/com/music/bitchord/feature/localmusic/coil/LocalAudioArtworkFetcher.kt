@@ -24,7 +24,10 @@ import coil3.toAndroidUri
 import com.kyant.taglib.TagLib
 import com.music.bitchord.data.model.LOCAL_AUDIO_ARTWORK_PARAMETER
 import com.music.bitchord.data.model.LOCAL_ARTWORK_SIZE_PARAMETER
+import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.sync.Semaphore
+import kotlinx.coroutines.sync.withPermit
 import kotlinx.coroutines.withContext
 import java.io.ByteArrayOutputStream
 import java.io.File
@@ -36,6 +39,7 @@ private const val DEFAULT_THUMBNAIL_PX = 256
 private const val MEDIASTORE_THUMBNAIL_MAX_PX = 512
 private const val MAX_ARTWORK_PX = 1600
 private const val MAX_CACHED_ARTWORK_BYTES = 8 * 1024 * 1024
+private val mediaThumbnailSemaphore = Semaphore(4)
 
 /**
  * Coil 3 Fetcher that extracts genuine track-level embedded artwork directly
@@ -52,7 +56,18 @@ class LocalAudioArtworkFetcher(
 ) : Fetcher {
 
     override suspend fun fetch(): FetchResult? = withContext(Dispatchers.IO) {
-        runCatching {
+        try {
+            fetchArtwork()
+        } catch (cancelled: CancellationException) {
+            // Coil cancels requests as list rows leave the viewport. Do not turn
+            // that into a failed image and continue parsing the audio file.
+            throw cancelled
+        } catch (_: Exception) {
+            null
+        }
+    }
+
+    private suspend fun fetchArtwork(): FetchResult? {
             val cleanUri = uri.withoutArtworkRequestParameters()
             val requestedPx = maxOf(
                 options.size.width.pxOrElse { 0 },
@@ -60,29 +75,75 @@ class LocalAudioArtworkFetcher(
                 uri.getQueryParameter(LOCAL_ARTWORK_SIZE_PARAMETER)?.toIntOrNull() ?: 0,
             ).takeIf { it > 0 }?.coerceIn(256, MAX_ARTWORK_PX) ?: DEFAULT_THUMBNAIL_PX
             val needsFullArtwork = requestedPx > MEDIASTORE_THUMBNAIL_MAX_PX
+            val albumId = uri.getQueryParameter("albumId")?.toLongOrNull()
+                ?: if (uri.path?.contains("/audio/albumart") == true) {
+                    uri.lastPathSegment?.toLongOrNull()
+                } else null
 
             // Small library rows and playlist covers use MediaStore's fast cached
             // thumbnail. Larger requests (the player and expanded artwork) must
             // continue to the embedded/original cover below; returning this
             // thumbnail first was the source of the visibly blurry player art.
             if (!needsFullArtwork && Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
-                val thumb = runCatching {
-                    val thumbPx = requestedPx.coerceAtLeast(DEFAULT_THUMBNAIL_PX)
-                    val targetSize = Size(thumbPx, thumbPx)
-                    when (cleanUri.scheme) {
-                        "content" -> context.contentResolver.loadThumbnail(cleanUri, targetSize, null)
-                        "file" -> cleanUri.path?.let { path ->
-                            // Accord-alpha also uses Android's file thumbnail API for
-                            // directly accessible files. This avoids opening/parsing
-                            // the full audio file just to paint the player's preview.
-                            ThumbnailUtils.createAudioThumbnail(File(path), targetSize, null)
+                val thumb = mediaThumbnailSemaphore.withPermit {
+                    runCatching {
+                        val thumbPx = requestedPx.coerceAtLeast(DEFAULT_THUMBNAIL_PX)
+                        val targetSize = Size(thumbPx, thumbPx)
+                        when (cleanUri.scheme) {
+                            "content" -> context.contentResolver.loadThumbnail(cleanUri, targetSize, null)
+                            "file" -> cleanUri.path?.let { path ->
+                                ThumbnailUtils.createAudioThumbnail(File(path), targetSize, null)
+                            }
+                            else -> null
                         }
-                        else -> null
-                    }
-                }.getOrNull()
+                    }.getOrNull()
+                }
                 if (thumb != null) {
-                    return@withContext ImageFetchResult(
+                    return ImageFetchResult(
                         image = thumb.asImage(),
+                        isSampled = false,
+                        dataSource = DataSource.DISK,
+                    )
+                }
+            }
+
+            // BitChord's local-library path uses MediaStore's album-art URI
+            // directly. Keep that fast shared path ahead of TagLib/MMR for list
+            // sizes: parsing every audio file before using the same album cover
+            // made playlist artwork arrive late and could flood the native
+            // extractors when a long list entered composition at once. Track
+            // thumbnails still win above, and player-size requests still use
+            // the exact embedded cover below.
+            if (!needsFullArtwork && albumId != null && albumId > 0) {
+                val albumUri = ContentUris.withAppendedId(MediaStore.Audio.Albums.EXTERNAL_CONTENT_URI, albumId)
+                val thumbPx = requestedPx.coerceAtLeast(DEFAULT_THUMBNAIL_PX)
+                    .coerceAtMost(MEDIASTORE_THUMBNAIL_MAX_PX)
+                val albumThumb = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
+                    LocalArtworkCache.albumThumbnail(albumId, thumbPx) {
+                        runCatching {
+                            context.contentResolver.loadThumbnail(albumUri, Size(thumbPx, thumbPx), null)
+                        }.getOrNull()
+                    }
+                } else null
+                if (albumThumb != null) {
+                    return ImageFetchResult(
+                        image = albumThumb.asImage(),
+                        isSampled = false,
+                        dataSource = DataSource.DISK,
+                    )
+                }
+
+                val albumArtUri = Uri.parse("content://media/external/audio/albumart/$albumId")
+                val albumBitmap = LocalArtworkCache.albumBitmap(
+                    context = context,
+                    albumId = albumId,
+                    maxDim = requestedPx,
+                    loadEncoded = { readCoverBytes(context, albumArtUri) },
+                    decode = ::decodeCoverBitmap,
+                )
+                if (albumBitmap != null) {
+                    return ImageFetchResult(
+                        image = albumBitmap.asImage(),
                         isSampled = false,
                         dataSource = DataSource.DISK,
                     )
@@ -104,38 +165,16 @@ class LocalAudioArtworkFetcher(
                 }
             }
             if (embeddedBitmap != null) {
-                return@withContext ImageFetchResult(
+                return ImageFetchResult(
                     image = embeddedBitmap.asImage(),
                     isSampled = false,
                     dataSource = DataSource.DISK,
                 )
             }
 
-            // 3. Fallback to albumart/<albumId> if albumId query param is provided or if URI is albumart
-            val albumId = uri.getQueryParameter("albumId")?.toLongOrNull()
-                ?: if (uri.path?.contains("/audio/albumart") == true) {
-                    uri.lastPathSegment?.toLongOrNull()
-                } else null
-            if (albumId != null && albumId > 0) {
-                // Album thumbnails are useful at row size. A large player request
-                // reads the album-art provider's original bytes and downsamples
-                // once to the requested decode size instead of enlarging 512px art.
-                if (!needsFullArtwork && Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
-                    val albumUri = ContentUris.withAppendedId(MediaStore.Audio.Albums.EXTERNAL_CONTENT_URI, albumId)
-                    val albumThumb = runCatching {
-                        val thumbPx = requestedPx.coerceAtLeast(DEFAULT_THUMBNAIL_PX)
-                            .coerceAtMost(MEDIASTORE_THUMBNAIL_MAX_PX)
-                        context.contentResolver.loadThumbnail(albumUri, Size(thumbPx, thumbPx), null)
-                    }.getOrNull()
-                    if (albumThumb != null) {
-                        return@withContext ImageFetchResult(
-                            image = albumThumb.asImage(),
-                            isSampled = false,
-                            dataSource = DataSource.DISK,
-                        )
-                    }
-                }
-
+            // For player-size requests, preserve the original album art as a
+            // fallback after trying this track's embedded cover at full quality.
+            if (needsFullArtwork && albumId != null && albumId > 0) {
                 // Try legacy albumart ContentProvider URI
                 val albumArtUri = Uri.parse("content://media/external/audio/albumart/$albumId")
                 val albumBitmap = LocalArtworkCache.albumBitmap(
@@ -146,7 +185,7 @@ class LocalAudioArtworkFetcher(
                     decode = ::decodeCoverBitmap,
                 ) ?: decodeCoverStream(context, albumArtUri, requestedPx)
                 if (albumBitmap != null) {
-                    return@withContext ImageFetchResult(
+                    return ImageFetchResult(
                         image = albumBitmap.asImage(),
                         isSampled = false,
                         dataSource = DataSource.DISK,
@@ -157,15 +196,14 @@ class LocalAudioArtworkFetcher(
             // 4. Fallback to directory cover image sidecars (cover.jpg, folder.jpg, etc.)
             val folderBitmap = findFolderCover(context, uri, requestedPx)
             if (folderBitmap != null) {
-                return@withContext ImageFetchResult(
+                return ImageFetchResult(
                     image = folderBitmap.asImage(),
                     isSampled = false,
                     dataSource = DataSource.DISK,
                 )
             }
 
-            null
-        }.getOrNull()
+            return null
     }
 
     private fun embeddedCacheKey(context: Context, uri: Uri, cleanUri: Uri): String {

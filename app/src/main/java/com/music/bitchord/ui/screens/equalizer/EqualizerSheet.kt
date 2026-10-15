@@ -42,6 +42,8 @@ import com.music.bitchord.ui.screens.equalizer.components.AudioEnhancements
 import com.music.bitchord.ui.screens.equalizer.components.EqualizerBandSliders
 import com.music.bitchord.ui.screens.equalizer.components.EqualizerPresetChips
 import com.music.bitchord.ui.screens.equalizer.components.ReplayGainControls
+import com.music.bitchord.ui.screens.equalizer.components.ParametricEqControls
+import com.music.bitchord.ui.screens.equalizer.components.ReverbControls
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -61,6 +63,10 @@ fun EqualizerSheet(
     val replayGainAlbumMode by AppSettings.replayGainAlbumMode.collectAsStateWithLifecycle()
     val replayGainPreampDb by AppSettings.replayGainPreampDb.collectAsStateWithLifecycle()
     val replayGainPreventClipping by AppSettings.replayGainPreventClipping.collectAsStateWithLifecycle()
+    val parametricEqEnabled by AppSettings.parametricEqEnabled.collectAsStateWithLifecycle()
+    val parametricEqBands by AppSettings.parametricEqBands.collectAsStateWithLifecycle()
+    val reverbEnabled by AppSettings.reverbEnabled.collectAsStateWithLifecycle()
+    val reverbAmount by AppSettings.reverbAmount.collectAsStateWithLifecycle()
     val replayGainScanState by ReplayGainScanner.state.collectAsStateWithLifecycle()
     val context = LocalContext.current
 
@@ -152,6 +158,20 @@ fun EqualizerSheet(
                 onBandLevelChange = { band, level ->
                     EqualizerSettings.setBandLevel(band, level)
                 },
+            )
+
+            ParametricEqControls(
+                enabled = parametricEqEnabled,
+                bands = parametricEqBands,
+                onEnabledChange = AppSettings::setParametricEqEnabled,
+                onBandChange = AppSettings::setParametricEqBand,
+            )
+
+            ReverbControls(
+                enabled = reverbEnabled,
+                amount = reverbAmount,
+                onEnabledChange = AppSettings::setReverbEnabled,
+                onAmountChange = AppSettings::setReverbAmount,
             )
 
             // Bass Boost, Virtualizer & System Equalizer action

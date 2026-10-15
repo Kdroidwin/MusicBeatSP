@@ -49,6 +49,7 @@ import com.music.bitchord.data.model.Song
 import com.music.bitchord.data.model.artworkAt
 import com.music.bitchord.data.settings.AppSettings
 import com.music.bitchord.ui.components.thumbnailBorder
+import com.music.bitchord.ui.theme.rememberArtworkPalette
 import com.music.bitchord.ui.haptics.Haptic
 import com.music.bitchord.ui.haptics.rememberHaptics
 import dev.chrisbanes.haze.HazeState
@@ -133,6 +134,14 @@ fun MiniPlayer(
     modifier: Modifier = Modifier,
 ) {
     val reduceDynamicBlur by AppSettings.reduceDynamicBlur.collectAsStateWithLifecycle()
+    val useArtworkColor by AppSettings.miniPlayerArtworkColor.collectAsStateWithLifecycle()
+    val artworkPalette = rememberArtworkPalette(
+        imageUrl = song.thumbnailUrl.takeIf { useArtworkColor },
+        artPx = ROW_ART_PX,
+    )
+    val surfaceColor = if (useArtworkColor) artworkPalette.background else MaterialTheme.colorScheme.surface
+    val primaryContentColor = if (useArtworkColor) artworkPalette.onBackground else MaterialTheme.colorScheme.onBackground
+    val secondaryContentColor = if (useArtworkColor) artworkPalette.onBackgroundVariant else MaterialTheme.colorScheme.onSurfaceVariant
     val haptics = rememberHaptics()
     val density = LocalDensity.current
     val dismissThresholdPx = with(density) { 48.dp.toPx() }
@@ -182,15 +191,19 @@ fun MiniPlayer(
             .clip(shape)
             .then(
                 if (reduceDynamicBlur) {
-                    Modifier.background(MaterialTheme.colorScheme.surface)
+                    Modifier.background(surfaceColor)
                 } else {
                     Modifier.optimizedHazeEffect(
                         state = hazeState,
-                        style = HazeMaterials.thin(MaterialTheme.colorScheme.surface),
+                        style = HazeMaterials.thin(surfaceColor),
                     )
                 },
             )
-            .border(0.5.dp, Color.White.copy(alpha = 0.10f), shape)
+            .border(
+                0.5.dp,
+                if (useArtworkColor) artworkPalette.divider.copy(alpha = 0.55f) else Color.White.copy(alpha = 0.10f),
+                shape,
+            )
             // Deliberately silent: the whole bar is the target, so it catches
             // stray taps meant for the page behind it, and the sheet rising is
             // its own confirmation. The glyphs on it still buzz.
@@ -219,12 +232,12 @@ fun MiniPlayer(
                 ExplicitSongTitle(
                     song = song,
                     style = MaterialTheme.typography.titleMedium,
-                    color = MaterialTheme.colorScheme.onBackground,
+                    color = primaryContentColor,
                 )
                 Text(
                     text = song.artist,
                     style = MaterialTheme.typography.bodyMedium,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    color = secondaryContentColor,
                     maxLines = 1,
                     overflow = TextOverflow.Ellipsis,
                 )
@@ -232,7 +245,7 @@ fun MiniPlayer(
             if (isLoading) {
                 Box(Modifier.size(GLYPH_SLOT), contentAlignment = Alignment.Center) {
                     CircularProgressIndicator(
-                        color = MaterialTheme.colorScheme.onBackground,
+                        color = primaryContentColor,
                         strokeWidth = 2.dp,
                         modifier = Modifier.size(SPINNER_SIZE),
                     )
@@ -248,7 +261,7 @@ fun MiniPlayer(
                     Icon(
                         imageVector = if (isPlaying) Icons.Rounded.Pause else Icons.Rounded.PlayArrow,
                         contentDescription = stringResource(if (isPlaying) R.string.pause else R.string.play),
-                        tint = MaterialTheme.colorScheme.onBackground,
+                        tint = primaryContentColor,
                         modifier = Modifier.size(GLYPH_SIZE),
                     )
                 }
@@ -264,7 +277,7 @@ fun MiniPlayer(
                 Icon(
                     Icons.Rounded.SkipNext,
                     contentDescription = stringResource(R.string.widget_next),
-                    tint = MaterialTheme.colorScheme.onBackground,
+                    tint = primaryContentColor,
                     modifier = Modifier.size(GLYPH_SIZE),
                 )
             }

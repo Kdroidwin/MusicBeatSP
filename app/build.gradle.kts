@@ -33,6 +33,11 @@ val lastfmSecret: String = (
         ?: System.getenv("LASTFM_SECRET")
         ?: ""
     ).trim()
+val youtubePoTokenApiKey: String = (
+    localProps.getProperty("YOUTUBE_PO_TOKEN_API_KEY")
+        ?: System.getenv("YOUTUBE_PO_TOKEN_API_KEY")
+        ?: ""
+    ).trim()
 
 android {
     // Keep the Kotlin/R resource namespace stable; applicationId below is the
@@ -46,14 +51,16 @@ android {
         // Haze falls back to a translucent scrim below that.
         minSdk = 26
         targetSdk = 36
-        versionCode = 37
-        versionName = "2.2.0"
+        versionCode = 38
+        versionName = "2.3.0"
 
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
 
         // Last.fm credentials are supplied locally and never committed.
         buildConfigField("String", "LASTFM_API_KEY", "\"${lastfmApiKey.replace("\\", "\\\\").replace("\"", "\\\"")}\"")
         buildConfigField("String", "LASTFM_SECRET", "\"${lastfmSecret.replace("\\", "\\\\").replace("\"", "\\\"")}\"")
+        // YouTube's public-client key is supplied locally and never committed.
+        buildConfigField("String", "YOUTUBE_PO_TOKEN_API_KEY", "\"${youtubePoTokenApiKey.replace("\\", "\\\\").replace("\"", "\\\"")}\"")
     }
 
     splits {
@@ -232,17 +239,17 @@ dependencies {
 
 
     // ---- Innertube (YouTube Music) client: Ktor + kotlinx.serialization ----
-    implementation("io.ktor:ktor-client-core:3.0.3")
-    implementation("io.ktor:ktor-client-okhttp:3.0.3")
-    implementation("io.ktor:ktor-client-content-negotiation:3.0.3")
-    implementation("io.ktor:ktor-serialization-kotlinx-json:3.0.3")
-    implementation("org.jetbrains.kotlinx:kotlinx-serialization-json:1.7.3")
+    implementation("io.ktor:ktor-client-core:3.5.2")
+    implementation("io.ktor:ktor-client-okhttp:3.5.2")
+    implementation("io.ktor:ktor-client-content-negotiation:3.5.2")
+    implementation("io.ktor:ktor-serialization-kotlinx-json:3.5.2")
+    implementation("org.jetbrains.kotlinx:kotlinx-serialization-json:1.11.0")
 
     // HTML parsing for Genius lyrics scraper
-    implementation("org.jsoup:jsoup:1.18.3")
+    implementation("org.jsoup:jsoup:1.22.2")
 
     // ---- Discord Rich Presence: the gateway is a WebSocket, so Ktor needs the plugin ----
-    implementation("io.ktor:ktor-client-websockets:3.0.3")
+    implementation("io.ktor:ktor-client-websockets:3.5.2")
 
     // Used by SpotifyCanvas for binary protobuf parsing
     implementation("com.google.protobuf:protobuf-javalite:4.35.0")
@@ -254,7 +261,18 @@ dependencies {
     implementation("org.bouncycastle:bcprov-jdk18on:1.85")
 
     // ---- JS module execution: QuickJS VM for style source plugins ----
-    implementation("io.github.dokar3:quickjs-kt-android:1.0.5")
+    implementation("io.github.dokar3:quickjs-kt-android:1.0.14")
+
+    // YouTube playback follows BitChord's extraction order: InnerTubeX's
+    // client/cipher catalog first, then NewPipe's signature + `n` fallback.
+    // NewPipe v0.26.3 is pinned because v0.26.4's parser fails on the current
+    // YouTube player JavaScript used by this fork.
+    implementation("com.github.MetrolistGroup.innertubex:innertubex-android:v0.7.0")
+    implementation("com.github.TeamNewPipe:NewPipeExtractor:v0.26.3")
+    implementation("com.github.TeamNewPipe:nanojson:e9d656ddb49a412a5a0a5d5ef20ca7ef09549996")
+    implementation("com.google.code.findbugs:jsr305:3.0.2")
+    implementation("org.mozilla:rhino:1.8.1")
+    implementation("org.mozilla:rhino-engine:1.8.1")
 
     // ---- Audio tag & cover editing: Native TagLib ----
     implementation("io.github.kyant0:taglib:1.0.6")

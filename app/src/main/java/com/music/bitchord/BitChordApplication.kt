@@ -18,6 +18,7 @@ import com.music.bitchord.playback.LastPlayed
 import com.music.bitchord.playback.OriginalVersion
 import com.music.bitchord.playback.SavedQueueStore
 import com.music.bitchord.data.innertube.Innertube
+import com.music.bitchord.data.innertube.YoutubeStreamBootstrap
 import com.music.bitchord.data.scrobbling.LastFM
 import com.music.bitchord.data.settings.AppSettings
 import com.music.bitchord.data.settings.SearchHistory
@@ -67,6 +68,9 @@ class BitChordApplication : Application(), SingletonImageLoader.Factory {
                 ?.let { Innertube.selectChannel(it.pageId, it.dataSyncId, it.authUser) }
             CoroutineScope(Dispatchers.IO).launch { Innertube.ensureSessionScope() }
         }
+        // YT Music is opt-in. Install and prewarm the upstream BitChord
+        // resolver only when the saved setting permits network access.
+        YoutubeStreamBootstrap.initializeIfAllowed(this)
         com.music.bitchord.feature.lyrics.manager.LyricsExtensionManager.init(this)
         com.music.bitchord.data.settings.EqualizerSettings.init(this)
         SourceRegistry.init(this)

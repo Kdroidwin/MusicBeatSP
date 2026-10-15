@@ -19,7 +19,7 @@
 
 ---
 
-> **MusicBeatSP** is the MusicBeat fork under a new name and Android application ID. It builds on the open-source BitChord foundation and adds an extensive local music library, playlist, playback, lyrics, artwork, and customization feature set.
+> **MusicBeatSP 2.3.0** is the MusicBeat fork under a new name and Android application ID. It builds on the open-source BitChord foundation and adds an extensive local music library, playlist, playback, lyrics, artwork, and customization feature set.
 
 The standard Android package is `io.pockets.musicbestsp`. Because this differs from the previous MusicBeat package, Android installs MusicBeatSP as a separate app; app-private settings and data are not migrated automatically.
 
@@ -39,6 +39,9 @@ The standard Android package is `io.pockets.musicbestsp`. Because this differs f
 - Play local high-resolution audio including FLAC, ALAC, WAV, AAC, MP3, OPUS, and OGG Vorbis.
 - Use gapless playback and configurable crossfade, playback speed, and pitch controls.
 - Adjust audio focus from level 0 to 4, control whether playback can start at zero volume, and apply ReplayGain metadata.
+- Optionally pause playback when the volume reaches zero.
+- Play CUE sheets as separate tracks when their referenced local audio is available.
+- Choose bit-perfect output on supported Android 14+ USB DAC paths. Optional parametric EQ and reverb default to off; equalizer profiles can be saved per output device.
 - Save and restore the position of tracks that are at least 15 minutes long, including when switching tracks or stopping playback.
 - Open the playback queue with both upcoming tracks and recently played tracks.
 - Save named queue snapshots, switch between them, replace or remove them, and load their saved current track and position after a restart.
@@ -52,22 +55,32 @@ The standard Android package is `io.pockets.musicbestsp`. Because this differs f
 - Show, hide, and reorder available player actions, including Shuffle, Repeat, Like, Playlist/Library, Search, and Queue. Hiding a control does not change its playback state; the Playlist control can use a Library icon.
 - Choose and reorder player shortcuts beside the favorite button, including Lyrics, Add to Playlist, Speed and Pitch, Queue, Playlists, Search, Chromecast, and track details. The favorite button can also be reordered.
 - Adjust the player background blur independently of the app-wide theme, up to 128 dp.
+- Optionally use full-bleed artwork in the player and keep the cover at full size while playback is paused.
+- Use translucent frosted-glass surfaces for the queue manager, player details, and compact lyrics artwork area; each has its own setting.
+- Match player action accents and the mini-player surface to the current album art.
+- Replace only the artwork area with lyrics while keeping playback controls, progress, volume, and player shortcuts visible.
 - Choose whether the favorite button appears beside the More menu, keep artwork full-size while paused, and open lyrics by tapping the cover.
 - Switch the player favorite glyph between a heart and a star.
 - Show or hide the artist name, automatically hide “Unknown Artist,” and center the track information.
 - Keep the screen awake, independently show or hide the Android status and navigation bars, choose portrait, landscape, or system orientation, and select the tab opened at startup.
+- Select a pink, black, or green launcher icon.
 - Use Japanese translations for the Settings screen and player More menu; additional app languages fall back to English where translations are not available.
 
 ### Library and playlists
 
 - Browse Songs, Albums, Artists, Genres, Playlists, Folders, and other available library sections. Reorder tabs and hide individual tabs from navigation.
+- Add an Album Artists tab alongside Artists, choose to browse an artist's albums before its tracks, and reorder or hide available library tabs.
+- Choose whether artist pages open to albums, use a folder hierarchy in search results, and hide the collection top bar on detail pages.
 - Long-press to select multiple tracks and add them to a playlist in one action. Search folder results can act on all tracks in that folder.
 - Sort folder search results by filename, including numbered names such as `1-01. example.flac`, while displaying the track title and artist from metadata.
 - Import `.m3u` and `.m3u8` playlists through Android's file picker. Import playlists from Musicolet backup ZIP files; unavailable tracks are skipped so the rest can still be imported.
+- Export playlists as M3U from the playlist menu.
+- Open audio files from file managers such as MiXplorer. Optionally show a floating player over other apps for files opened this way.
 - Choose a persistent app-private storage location for extracted local album artwork so it survives cache cleanup and app restarts, without requesting additional storage access.
 - Drag to reorder playlists and reorder tracks within a playlist independently.
+- Reorder tracks in a playlist by dragging, select tracks in bulk, and adapt selection action contrast to the current surface.
 - Choose a custom image for a playlist cover, and use list or grid layouts with optional small album artwork in list view.
-- Browse listening history and most-played tracks. App backup and restore includes settings, playlist data, and saved queue snapshots.
+- Browse listening history and most-played tracks. Search settings by name and include settings, playlist data, and saved queue snapshots in app backup and restore.
 
 ### Lyrics and artwork
 
@@ -85,6 +98,7 @@ The standard Android package is `io.pockets.musicbestsp`. Because this differs f
 - Expose playback state, track metadata, and artwork through Android's standard media session for external music widgets such as KWGT.
 - Use the album-art color theme throughout the app, in addition to the System, Light, Dark, and AMOLED Black themes.
 - Enable Offline Mode to block the app's network requests; local files and saved caches remain available. Online catalog, lyrics, casting, and connected services need their respective network or device connections.
+- YouTube Music search and playback are opt-in and disabled by default; the app does not make YouTube Music requests while the feature is disabled or Offline Mode is active.
 
 ### Lyrics and metadata tools
 
@@ -130,6 +144,9 @@ cd MusicBeatSP
 # Standard release APK
 ./gradlew assembleStandardRelease
 
+# Offline release APK without the INTERNET permission
+./gradlew assembleNoInternetRelease
+
 # OnePlus / OPPO compatibility editions
 ./gradlew assembleQqmusicRelease
 ./gradlew assembleKugouRelease
@@ -139,6 +156,8 @@ cd MusicBeatSP
 ```
 
 APK files are written to `app/build/outputs/apk/<flavor>/<build-type>/`. Release signing is configured locally through `keystore.properties`; do not commit the keystore or its passwords.
+
+YouTube Music PoToken support requires `YOUTUBE_PO_TOKEN_API_KEY` in `local.properties` or the build environment. Keep the key out of source control. Android client keys are included in the resulting APK, so restrict them to the intended API and client where possible.
 
 ## Linux desktop
 

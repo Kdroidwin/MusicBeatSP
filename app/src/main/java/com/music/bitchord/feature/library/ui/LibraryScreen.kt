@@ -24,7 +24,6 @@ import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
-import androidx.compose.foundation.layout.fillMaxHeight
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.foundation.lazy.grid.rememberLazyGridState
@@ -88,7 +87,8 @@ import com.music.bitchord.feature.tageditor.data.TagLibWriter
 import kotlinx.coroutines.launch
 import com.music.bitchord.feature.localmusic.ui.components.DrillDownSongList
 import com.music.bitchord.feature.localmusic.ui.components.rememberPlaylistCoverPicker
-import com.music.bitchord.ui.components.VerticalScrollbar
+import com.music.bitchord.ui.components.FastScroller
+import com.music.bitchord.ui.components.SectionIndexer
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
 
@@ -695,31 +695,47 @@ fun LibraryScreen(
                 }
             }
         }
-        val collectionCount =
-            (if (selectedFilter == LibraryFilter.ALL || selectedFilter == LibraryFilter.FAVORITES) 1 else 0) +
-                (if (selectedFilter == LibraryFilter.ALL || selectedFilter == LibraryFilter.PLAYLISTS) playlists.size + 1 else 0)
-        if (!inDrillDown && !inHistoryView && collectionCount > 0) {
+        val showFavoriteCollection = selectedFilter == LibraryFilter.ALL || selectedFilter == LibraryFilter.FAVORITES
+        val showPlaylistCollections = selectedFilter == LibraryFilter.ALL || selectedFilter == LibraryFilter.PLAYLISTS
+        val favoriteLabel = stringResource(R.string.favorites)
+        val createPlaylistLabel = stringResource(R.string.new_playlist)
+        val listCollectionLabels = buildList {
+            if (showFavoriteCollection) add(favoriteLabel)
+            if (showPlaylistCollections) addAll(playlists.map { it.name })
+        }
+        val gridCollectionLabels = buildList {
+            addAll(listCollectionLabels)
+            if (showPlaylistCollections) add(createPlaylistLabel)
+        }
+        if (!inDrillDown && !inHistoryView && listCollectionLabels.isNotEmpty()) {
             if (libraryViewType == LibraryViewType.GRID) {
-                VerticalScrollbar(
-                    state = collectionGridState,
+                FastScroller(
+                    gridState = collectionGridState,
+                    itemCount = gridCollectionLabels.size,
+                    sectionNameForIndex = { index ->
+                        SectionIndexer.getSectionName(gridCollectionLabels.getOrNull(index))
+                    },
                     modifier = Modifier
-                        .align(Alignment.CenterEnd)
-                        .fillMaxHeight()
-                        .padding(
-                            top = contentPadding.calculateTopPadding(),
-                            bottom = contentPadding.calculateBottomPadding(),
-                        ),
+                        .align(Alignment.CenterEnd),
+                    contentPadding = PaddingValues(
+                        top = contentPadding.calculateTopPadding() + 8.dp,
+                        bottom = contentPadding.calculateBottomPadding() + 80.dp,
+                    ),
                 )
             } else {
-                VerticalScrollbar(
-                    state = collectionListState,
+                FastScroller(
+                    listState = collectionListState,
+                    itemCount = listCollectionLabels.size,
+                    headerCount = 1,
+                    sectionNameForIndex = { index ->
+                        SectionIndexer.getSectionName(listCollectionLabels.getOrNull(index))
+                    },
                     modifier = Modifier
-                        .align(Alignment.CenterEnd)
-                        .fillMaxHeight()
-                        .padding(
-                            top = contentPadding.calculateTopPadding(),
-                            bottom = contentPadding.calculateBottomPadding(),
-                        ),
+                        .align(Alignment.CenterEnd),
+                    contentPadding = PaddingValues(
+                        top = contentPadding.calculateTopPadding() + 8.dp,
+                        bottom = contentPadding.calculateBottomPadding() + 80.dp,
+                    ),
                 )
             }
         }

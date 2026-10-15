@@ -61,6 +61,13 @@ import java.util.Locale
  */
 object Innertube {
 
+    /** Locale used by the playback extractor; keep it in step with the device. */
+    val currentRegion: String
+        get() = Locale.getDefault().country.takeIf(String::isNotBlank) ?: "US"
+
+    val currentLanguage: String
+        get() = Locale.getDefault().language.takeIf(String::isNotBlank) ?: "en"
+
     private const val MUSIC_BASE = "https://music.youtube.com/youtubei/v1"
     private const val YT_BASE = "https://www.youtube.com/youtubei/v1"
     private const val MUSIC_ORIGIN = "https://music.youtube.com"

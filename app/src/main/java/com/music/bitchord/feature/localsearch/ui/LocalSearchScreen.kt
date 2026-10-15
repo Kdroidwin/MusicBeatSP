@@ -66,6 +66,8 @@ import com.music.bitchord.feature.localsearch.ui.components.LocalSearchFilterChi
 import com.music.bitchord.feature.localsearch.ui.components.LocalSearchResultRow
 import com.music.bitchord.ui.components.PAGE_GUTTER
 import com.music.bitchord.ui.components.ROW_DIVIDER_INSET
+import com.music.bitchord.ui.components.FastScroller
+import com.music.bitchord.ui.components.SectionIndexer
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import coil3.compose.AsyncImage
 import com.music.bitchord.R
@@ -73,7 +75,6 @@ import com.music.bitchord.data.model.SearchResult
 import com.music.bitchord.data.model.UiState
 import com.music.bitchord.data.model.isSameTrackAs
 import com.music.bitchord.ui.components.SongRow
-import com.music.bitchord.ui.components.VerticalScrollbar
 
 @Composable
 fun LocalSearchScreen(
@@ -153,6 +154,8 @@ fun LocalSearchScreen(
     val matchedSongs = remember(searchResults) {
         searchResults.filterIsInstance<LocalSearchResult.Track>().map { it.song }
     }
+    val showSearchHistory = query.isBlank() ||
+        (useYoutubeMusic && submittedYoutubeQuery.isNullOrBlank())
 
     AnimatedContent(
         targetState = if (inDrillDown) "drill" else "search",
@@ -280,22 +283,10 @@ fun LocalSearchScreen(
                 }
 
                 // Content
-                if (useYoutubeMusic) {
-                    YoutubeMusicSearchResults(
-                        query = query,
-                        submittedQuery = submittedYoutubeQuery,
-                        state = youtubeMusicResults,
-                        currentSong = currentSong,
-                        isPlaying = isPlaying,
-                        onTrackClick = onYoutubeMusicTrackClick ?: { song -> onSongClick(listOf(song), 0) },
-                        onTrackLongPress = onSongLongPress,
-                        onTrackSwipe = onSongSwipe,
-                        onBrowseClick = { item -> onYoutubeMusicBrowseClick?.invoke(item) },
-                        contentPadding = contentPadding,
-                        listState = listState,
-                        modifier = Modifier.weight(1f),
-                    )
-                } else if (query.isBlank()) {
+                if (showSearchHistory) {
+                    // Search history is shared by local and YouTube Music
+                    // searches. Keep it visible after switching providers too.
+                    // The selected provider is still used when a row is tapped.
                     // Recent searches or initial search prompt
                     if (recentSearches.isNotEmpty()) {
                         Box(Modifier.weight(1f).fillMaxWidth()) {
@@ -368,8 +359,13 @@ fun LocalSearchScreen(
                                 }
                             }
                         }
-                        VerticalScrollbar(
-                            state = listState,
+                        FastScroller(
+                            listState = listState,
+                            itemCount = recentSearches.size,
+                            headerCount = 1,
+                            sectionNameForIndex = { index ->
+                                SectionIndexer.getSectionName(recentSearches.getOrNull(index))
+                            },
                             modifier = Modifier.align(Alignment.CenterEnd),
                         )
                         }
@@ -392,19 +388,34 @@ fun LocalSearchScreen(
                                 )
                                 Spacer(modifier = Modifier.height(12.dp))
                                 Text(
-                                    text = "Search offline music",
+                                    text = if (useYoutubeMusic) "Search YouTube Music" else "Search offline music",
                                     style = MaterialTheme.typography.titleMedium,
                                     color = MaterialTheme.colorScheme.onSurfaceVariant,
                                 )
                                 Spacer(modifier = Modifier.height(4.dp))
                                 Text(
-                                    text = "Type a title, artist, album, or folder name",
+                                    text = if (useYoutubeMusic) "Type a song, artist, album, or playlist" else "Type a title, artist, album, or folder name",
                                     style = MaterialTheme.typography.bodySmall,
                                     color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.7f),
                                 )
                             }
                         }
                     }
+                } else if (useYoutubeMusic) {
+                    YoutubeMusicSearchResults(
+                        query = query,
+                        submittedQuery = submittedYoutubeQuery,
+                        state = youtubeMusicResults,
+                        currentSong = currentSong,
+                        isPlaying = isPlaying,
+                        onTrackClick = onYoutubeMusicTrackClick ?: { song -> onSongClick(listOf(song), 0) },
+                        onTrackLongPress = onSongLongPress,
+                        onTrackSwipe = onSongSwipe,
+                        onBrowseClick = { item -> onYoutubeMusicBrowseClick?.invoke(item) },
+                        contentPadding = contentPadding,
+                        listState = listState,
+                        modifier = Modifier.weight(1f),
+                    )
                 } else if (searchResults.isEmpty()) {
                     Box(
                         modifier = Modifier
@@ -670,9 +681,23 @@ fun LocalSearchScreen(
                         }
                     }
                 }
-                VerticalScrollbar(
-                    state = listState,
+                FastScroller(
+                    listState = listState,
+                    itemCount = searchResults.size,
+                    sectionNameForIndex = { index ->
+                        val result = searchResults.getOrNull(index)
+                        SectionIndexer.getSectionName(
+                            when (result) {
+                                is LocalSearchResult.Track -> result.song.title
+                                is LocalSearchResult.Album -> result.title
+                                is LocalSearchResult.Artist -> result.name
+                                is LocalSearchResult.Folder -> result.name
+                                null -> null
+                            },
+                        )
+                    },
                     modifier = Modifier.align(Alignment.CenterEnd),
+                    contentPadding = PaddingValues(bottom = contentPadding.calculateBottomPadding() + 16.dp),
                 )
                 }
             }
@@ -781,9 +806,23 @@ private fun YoutubeMusicSearchResults(
                             }
                         }
                     }
-                    VerticalScrollbar(
-                        state = listState,
+                    FastScroller(
+                        listState = listState,
+                        itemCount = results.size,
+                        headerCount = 1,
+                        sectionNameForIndex = { index ->
+                            val result = results.getOrNull(index)
+                            SectionIndexer.getSectionName(
+                                when (result) {
+                                    is SearchResult.TopTrack -> result.song.title
+                                    is SearchResult.Track -> result.song.title
+                                    is SearchResult.Browse -> result.item.title
+                                    null -> null
+                                },
+                            )
+                        },
                         modifier = Modifier.align(Alignment.CenterEnd),
+                        contentPadding = PaddingValues(bottom = contentPadding.calculateBottomPadding() + 16.dp),
                     )
                 }
             }

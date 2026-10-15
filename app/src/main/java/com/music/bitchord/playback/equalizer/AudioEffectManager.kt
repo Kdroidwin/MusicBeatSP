@@ -5,6 +5,7 @@ import android.content.Intent
 import android.media.audiofx.AudioEffect
 import android.media.audiofx.BassBoost
 import android.media.audiofx.Equalizer
+import android.media.audiofx.EnvironmentalReverb
 import android.media.audiofx.Virtualizer
 import android.util.Log
 
@@ -22,6 +23,7 @@ class AudioEffectManager(private val context: Context) {
     private var equalizer: Equalizer? = null
     private var bassBoost: BassBoost? = null
     private var virtualizer: Virtualizer? = null
+    private var environmentalReverb: EnvironmentalReverb? = null
 
     // Cached hardware limits (or safe defaults if effect cannot be initialized)
     var bandLevelRange: Pair<Short, Short> = Pair((-1500).toShort(), 1500.toShort())
@@ -83,6 +85,7 @@ class AudioEffectManager(private val context: Context) {
             Log.w(TAG, "Failed to initialize Virtualizer: ${e.message}")
             virtualizer = null
         }
+
     }
 
     fun applyAll(
@@ -134,6 +137,43 @@ class AudioEffectManager(private val context: Context) {
         }
     }
 
+    /** Applies a conservative room reverb preset, with all failures contained. */
+    fun applyReverb(enabled: Boolean, amount: Int) {
+        val safeAmount = amount.coerceIn(0, 100)
+        val shouldEnable = enabled && safeAmount > 0
+        if (!shouldEnable) {
+            runCatching { environmentalReverb?.enabled = false }
+            return
+        }
+        val effect = environmentalReverb ?: runCatching {
+            if (currentSessionId <= 0) return
+            EnvironmentalReverb(0, currentSessionId).also { environmentalReverb = it }
+        }.getOrElse { error ->
+            // This optional platform effect is absent on some devices. Keep the
+            // setting saved, but don't interfere with playback if unavailable.
+            Log.w(TAG, "Environmental reverb is unavailable: ${error.message}")
+            return
+        }
+        runCatching {
+            effect.properties = EnvironmentalReverb.Settings().apply {
+                roomLevel = (-8_000 + safeAmount * 55).toShort()
+                roomHFLevel = (-8_000 + safeAmount * 55).toShort()
+                decayTime = 300 + safeAmount * 40
+                decayHFRatio = 1_000.toShort()
+                reflectionsLevel = (-8_500 + safeAmount * 50).toShort()
+                reflectionsDelay = 10
+                reverbDelay = 20
+                reverbLevel = (-8_500 + safeAmount * 55).toShort()
+                diffusion = 850.toShort()
+                density = 850.toShort()
+            }
+            effect.enabled = true
+        }.onFailure { error ->
+            runCatching { effect.enabled = false }
+            Log.w(TAG, "Failed to apply environmental reverb: ${error.message}")
+        }
+    }
+
     fun getCenterFreq(band: Int): Int {
         return centerFreqs[band] ?: when (band) {
             0 -> 60_000
@@ -174,6 +214,12 @@ class AudioEffectManager(private val context: Context) {
             virtualizer?.release()
         }
         virtualizer = null
+
+        runCatching {
+            environmentalReverb?.enabled = false
+            environmentalReverb?.release()
+        }
+        environmentalReverb = null
     }
 
     fun release() {

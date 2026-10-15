@@ -81,6 +81,7 @@ import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.material3.Slider
 import kotlinx.coroutines.Job
+import kotlinx.coroutines.CancellationException
 import androidx.compose.material.icons.automirrored.rounded.QueueMusic
 import androidx.compose.material.icons.rounded.Album
 import androidx.compose.material.icons.rounded.Folder
@@ -830,22 +831,48 @@ private fun BitChordApp(
         playRequestGeneration++
         activeRadioSeed = null
         playJob = scope.launch {
-            val resolvedSongs = songs.map { s ->
-                if (s.localUri != null && !Downloads.isMissingLocalFile(s.localUri)) {
-                    s
-                } else if (!s.localPath.isNullOrBlank() && java.io.File(s.localPath).exists()) {
-                    s.copy(localUri = android.net.Uri.fromFile(java.io.File(s.localPath)).toString())
-                } else {
-                    localSongs.firstOrNull { local ->
-                        local.videoId == s.videoId ||
-                        (local.title.equals(s.title, ignoreCase = true) &&
-                         (s.artist.isBlank() || local.artist.equals(s.artist, ignoreCase = true)))
-                    } ?: s
+            if (songs.isEmpty()) return@launch
+            try {
+                val resolvedSongs = songs.map { s ->
+                    if (s.localUri != null && !Downloads.isMissingLocalFile(s.localUri)) {
+                        s
+                    } else if (!s.localPath.isNullOrBlank() && java.io.File(s.localPath).isFile) {
+                        s.copy(localUri = android.net.Uri.fromFile(java.io.File(s.localPath)).toString())
+                    } else {
+                        localSongs.firstOrNull { local ->
+                            local.videoId == s.videoId ||
+                            (local.title.equals(s.title, ignoreCase = true) &&
+                             (s.artist.isBlank() || local.artist.equals(s.artist, ignoreCase = true)))
+                        } ?: s
+                    }
                 }
+
+                // A stale file:// entry can survive in an imported/saved playlist.
+                // Do not hand that known-missing URI to Media3, where it can fail
+                // while the rest of the queue is being prepared. Keep the clicked
+                // row's position by starting at the next remaining track.
+                val playable = resolvedSongs.mapIndexedNotNull { originalIndex, song ->
+                    val fileUri = song.localUri?.takeIf { it.startsWith("file://") }
+                        ?: song.videoId.takeIf { it.startsWith("file://") }
+                    if (fileUri != null && Downloads.isMissingLocalFile(fileUri)) null
+                    else originalIndex to song
+                }
+                if (playable.isEmpty()) {
+                    Toast.makeText(context, R.string.couldnt_load_tracks, Toast.LENGTH_SHORT).show()
+                    return@launch
+                }
+                val requestedIndex = index.coerceIn(songs.indices)
+                val startIndex = playable.indexOfFirst { (originalIndex, _) -> originalIndex >= requestedIndex }
+                    .takeIf { it >= 0 } ?: 0
+                controller?.playSongs(playable.map { it.second }, startIndex)
+                // Nothing to raise where the player is already open beside the page.
+                if (!playerDocked) showNowPlaying = true
+            } catch (cancelled: CancellationException) {
+                throw cancelled
+            } catch (error: Exception) {
+                TrackLog.e("Player", "Could not start the selected queue", error)
+                Toast.makeText(context, R.string.couldnt_load_tracks, Toast.LENGTH_SHORT).show()
             }
-            controller?.playSongs(resolvedSongs, index)
-            // Nothing to raise where the player is already open beside the page.
-            if (!playerDocked) showNowPlaying = true
         }
     }
     LaunchedEffect(player.song?.videoId) {

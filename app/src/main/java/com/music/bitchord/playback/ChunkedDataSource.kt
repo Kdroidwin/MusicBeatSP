@@ -3,6 +3,7 @@ package com.music.bitchord.playback
 import android.net.Uri
 import android.util.Log
 import com.music.bitchord.data.TrackLog
+import com.music.bitchord.data.innertube.StreamResolver
 import androidx.media3.common.C
 import androidx.media3.common.util.UnstableApi
 import androidx.media3.datasource.DataSource
@@ -137,7 +138,8 @@ class ChunkedDataSource(
      * isn't from a client it models, costs nothing here.
      */
     private fun report(spec: DataSpec, e: Exception) {
-        // No-op: YouTube stream resolution retired
+        val responseCode = (e as? HttpDataSource.InvalidResponseCodeException)?.responseCode ?: return
+        StreamResolver.onPlaybackRefused(spec.uri.toString(), responseCode)
     }
 
     override fun read(buffer: ByteArray, offset: Int, length: Int): Int {

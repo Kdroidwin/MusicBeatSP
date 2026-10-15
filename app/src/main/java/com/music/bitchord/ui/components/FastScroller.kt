@@ -2,6 +2,7 @@ package com.music.bitchord.ui.components
 
 import androidx.compose.animation.core.animateFloatAsState
 import androidx.compose.animation.core.tween
+import androidx.compose.foundation.ScrollState
 import androidx.compose.foundation.gestures.awaitEachGesture
 import androidx.compose.foundation.gestures.awaitFirstDown
 import androidx.compose.foundation.layout.Box
@@ -204,6 +205,41 @@ fun FastScroller(
         contentPadding = contentPadding,
         headerCount = headerCount,
         minItemsForFastScroll = minItemsForFastScroll,
+    )
+}
+
+/** Fast-scroller overlay for a vertically scrolling, non-lazy settings column. */
+@Composable
+fun FastScroller(
+    scrollState: ScrollState,
+    modifier: Modifier = Modifier,
+    contentPadding: PaddingValues = PaddingValues(),
+) {
+    if (scrollState.maxValue <= 0) return
+    val lastPercent = 100
+    FastScrollerCore(
+        itemCount = lastPercent + 1,
+        scrollProgress = {
+            (scrollState.value.toFloat() / scrollState.maxValue.coerceAtLeast(1)).coerceIn(0f, 1f)
+        },
+        isScrollInProgress = { scrollState.isScrollInProgress },
+        onScrollToFraction = { fraction ->
+            scrollState.scrollTo(
+                (fraction * scrollState.maxValue).roundToInt().coerceIn(0, scrollState.maxValue),
+            )
+        },
+        sectionNameForIndex = { "${it.coerceIn(0, lastPercent)}%" },
+        modifier = modifier,
+        activeTopItemIndex = {
+            (scrollState.value.toFloat() / scrollState.maxValue.coerceAtLeast(1) * lastPercent)
+                .roundToInt()
+                .coerceIn(0, lastPercent)
+        },
+        targetItemIndexForFraction = { fraction ->
+            (fraction * lastPercent).roundToInt().coerceIn(0, lastPercent)
+        },
+        contentPadding = contentPadding,
+        headerCount = 0,
     )
 }
 

@@ -69,6 +69,7 @@ import com.music.bitchord.data.settings.AppSettings
 import com.music.bitchord.ui.components.floatingtabbar.FloatingTabBar
 import com.music.bitchord.ui.components.floatingtabbar.FloatingTabBarDefaults
 import com.music.bitchord.ui.components.floatingtabbar.FloatingTabBarScrollConnection
+import com.music.bitchord.ui.theme.rememberArtworkPalette
 import com.music.bitchord.ui.haptics.Haptic
 import com.music.bitchord.ui.haptics.rememberHaptics
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
@@ -119,8 +120,15 @@ fun GlassNavBar(
     val borderColor = if (isDark) GLASS_EDGE_COLOR else Color.Black.copy(alpha = 0.08f)
     val reduceDynamicBlur by AppSettings.reduceDynamicBlur.collectAsStateWithLifecycle()
     val hideNavigationBarLabels by AppSettings.hideNavigationBarLabels.collectAsStateWithLifecycle()
+    val useArtworkColor by AppSettings.miniPlayerArtworkColor.collectAsStateWithLifecycle()
+    val miniArtworkPalette = rememberArtworkPalette(
+        imageUrl = song?.thumbnailUrl?.takeIf { useArtworkColor },
+        artPx = ROW_ART_PX,
+    )
 
     val contentColor = if (useGlass) glassContentColor() else MaterialTheme.colorScheme.onSurface
+    val miniContentColor = if (useArtworkColor) miniArtworkPalette.onBackground else contentColor
+    val miniSecondaryColor = if (useArtworkColor) miniArtworkPalette.onBackgroundVariant else null
     val selectedColor = if (useGlass) contentColor else MaterialTheme.colorScheme.primary
     val unselectedColor = if (useGlass) contentColor.copy(alpha = 0.65f) else MaterialTheme.colorScheme.onSurfaceVariant
     val indicatorColor = if (useGlass) glassIndicatorColor().copy(alpha = 0.5f) else MaterialTheme.colorScheme.primary.copy(alpha = 0.14f)
@@ -154,6 +162,27 @@ fun GlassNavBar(
             }
         }
     }
+    val miniSurfaceModifier: @Composable () -> Modifier = if (!useArtworkColor) {
+        surfaceModifier
+    } else {
+        {
+            when {
+                useGlass -> Modifier
+                    .liquidGlass(shape = pillShape)
+                    .background(miniArtworkPalette.background.copy(alpha = 0.24f), pillShape)
+                    .border(GLASS_EDGE_WIDTH, miniArtworkPalette.divider.copy(alpha = 0.55f), pillShape)
+                reduceDynamicBlur || hazeState == null -> Modifier
+                    .background(miniArtworkPalette.background.copy(alpha = 0.90f), pillShape)
+                    .border(GLASS_EDGE_WIDTH, miniArtworkPalette.divider.copy(alpha = 0.55f), pillShape)
+                else -> Modifier
+                    .optimizedHazeEffect(
+                        state = hazeState,
+                        style = HazeMaterials.regular(miniArtworkPalette.background),
+                    )
+                    .border(GLASS_EDGE_WIDTH, miniArtworkPalette.divider.copy(alpha = 0.55f), pillShape)
+            }
+        }
+    }
 
     FloatingTabBar(
         selectedTabKey = selectedIndex,
@@ -171,13 +200,14 @@ fun GlassNavBar(
                     isInline = true,
                     isPlaying = isPlaying,
                     isLoading = isLoading,
-                    contentColor = contentColor,
+                    contentColor = miniContentColor,
+                    artworkSecondaryColor = miniSecondaryColor,
                     onPlayPause = onPlayPause,
                     onNext = onNext,
                     onExpand = onExpand,
                     onDismiss = onDismiss,
                     useGlass = useGlass,
-                    modifier = accessoryModifier.then(surfaceModifier()),
+                    modifier = accessoryModifier.then(miniSurfaceModifier()),
                 )
             }
         },
@@ -188,13 +218,14 @@ fun GlassNavBar(
                     isInline = false,
                     isPlaying = isPlaying,
                     isLoading = isLoading,
-                    contentColor = contentColor,
+                    contentColor = miniContentColor,
+                    artworkSecondaryColor = miniSecondaryColor,
                     onPlayPause = onPlayPause,
                     onNext = onNext,
                     onExpand = onExpand,
                     onDismiss = onDismiss,
                     useGlass = useGlass,
-                    modifier = accessoryModifier.fillMaxWidth().then(surfaceModifier()),
+                    modifier = accessoryModifier.fillMaxWidth().then(miniSurfaceModifier()),
                 )
             }
         },
@@ -301,6 +332,7 @@ private fun GlassNowPlaying(
     isPlaying: Boolean,
     isLoading: Boolean,
     contentColor: Color,
+    artworkSecondaryColor: Color? = null,
     onPlayPause: () -> Unit,
     onNext: () -> Unit,
     onExpand: () -> Unit,
@@ -428,7 +460,8 @@ private fun GlassNowPlaying(
                     Text(
                         text = song.artist,
                         style = MaterialTheme.typography.bodyMedium,
-                        color = if (useGlass) contentColor.copy(alpha = 0.7f) else MaterialTheme.colorScheme.onSurfaceVariant,
+                        color = artworkSecondaryColor
+                            ?: if (useGlass) contentColor.copy(alpha = 0.7f) else MaterialTheme.colorScheme.onSurfaceVariant,
                         maxLines = 1,
                         overflow = TextOverflow.Ellipsis,
                     )
@@ -437,7 +470,7 @@ private fun GlassNowPlaying(
             if (isLoading) {
                 Box(Modifier.size(glyphSlot), contentAlignment = Alignment.Center) {
                     CircularProgressIndicator(
-                        color = if (useGlass) contentColor else MaterialTheme.colorScheme.primary,
+                        color = if (useGlass || artworkSecondaryColor != null) contentColor else MaterialTheme.colorScheme.primary,
                         strokeWidth = 2.dp,
                         modifier = Modifier.size(if (isInline) 18.dp else 22.dp),
                     )

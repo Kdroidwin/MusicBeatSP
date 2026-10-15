@@ -10,6 +10,7 @@ import com.music.bitchord.BuildConfig
 import com.music.bitchord.auth.AuthStore
 import com.music.bitchord.data.lyrics.LyricsSource
 import com.music.bitchord.data.Http
+import com.music.bitchord.data.innertube.YoutubeStreamBootstrap
 import com.music.bitchord.data.sources.SourceKind
 import com.music.bitchord.feature.artistimage.model.ArtistSort
 import kotlinx.coroutines.flow.MutableStateFlow
@@ -439,11 +440,19 @@ object AppSettings {
      * us a stereo stream, so there's no Atmos-style source to render.
      */
     val spatialAudio = MutableStateFlow(false)
+    /** Optional three-band PCM parametric EQ; disabled until the listener opts in. */
+    val parametricEqEnabled = MutableStateFlow(false)
+    val parametricEqBands = MutableStateFlow(ParametricEqBand.DEFAULTS)
+    /** Optional room reverb, attached to the active audio session when supported. */
+    val reverbEnabled = MutableStateFlow(false)
+    val reverbAmount = MutableStateFlow(35)
     val playbackSpeed = MutableStateFlow(1.0f)
     val playbackPitch = MutableStateFlow(1.0f)
     val themeMode = MutableStateFlow(ThemeMode.DARK)
     /** Uses the current track artwork for Material accents without recolouring app surfaces. */
     val matchButtonAccentToArtwork = MutableStateFlow(false)
+    /** Tints the mini-player surface from the current song sleeve. */
+    val miniPlayerArtworkColor = MutableStateFlow(false)
     val launcherIcon = MutableStateFlow(LauncherIcon.PINK)
     val frostedQueueManager = MutableStateFlow(true)
     val frostedPlayerDetails = MutableStateFlow(true)
@@ -655,6 +664,8 @@ object AppSettings {
     val doubleTapToSeek = MutableStateFlow(true)
     /** User-selected seek interval shared by double-tap and optional transport buttons. */
     val seekIntervalSeconds = MutableStateFlow(5)
+    /** Minimum audible playback before a track enters recent/play-count history. */
+    val recentlyPlayedThresholdSeconds = MutableStateFlow(DEFAULT_RECENT_PLAY_THRESHOLD_SECONDS)
     /** Optional seek-back/forward buttons beside previous/next. */
     val seekButtonMode = MutableStateFlow(SeekButtonMode.OFF)
     /** Hides the numeric seconds caption beneath optional seek buttons. */
@@ -910,6 +921,7 @@ object AppSettings {
     fun reload() {
         if (!this::prefs.isInitialized) return
         readAll()
+        YoutubeStreamBootstrap.initializeIfAllowed(appContext)
         // The selected lyrics providers are persisted as IDs, while the
         // available provider objects are loaded asynchronously by the
         // extension manager. Re-apply imported IDs to the already-loaded list
@@ -940,6 +952,10 @@ object AppSettings {
         preferUsbDac.value = prefs.getBoolean(KEY_PREFER_USB_DAC, false)
         dolbyAtmos.value = prefs.getBoolean(KEY_DOLBY_ATMOS, true)
         spatialAudio.value = prefs.getBoolean(KEY_SPATIAL_AUDIO, false)
+        parametricEqEnabled.value = prefs.getBoolean(KEY_PARAMETRIC_EQ_ENABLED, false)
+        parametricEqBands.value = ParametricEqBand.decode(prefs.getString(KEY_PARAMETRIC_EQ_BANDS, null))
+        reverbEnabled.value = prefs.getBoolean(KEY_REVERB_ENABLED, false)
+        reverbAmount.value = prefs.getInt(KEY_REVERB_AMOUNT, 35).coerceIn(0, 100)
         playbackSpeed.value = prefs.getFloat(KEY_SPEED, 1.0f).coerceIn(0.5f, 2.0f)
         playbackPitch.value = prefs.getFloat(KEY_PITCH, 1.0f).coerceIn(0.5f, 2.0f)
         val savedThemeMode = runCatching {
@@ -951,6 +967,7 @@ object AppSettings {
             savedThemeMode == ThemeMode.ARTWORK || prefs.getBoolean(KEY_THEME_MATCHES_ARTWORK, false)
         ) ThemeMode.ARTWORK else savedThemeMode
         matchButtonAccentToArtwork.value = prefs.getBoolean(KEY_MATCH_BUTTON_ACCENT_TO_ARTWORK, false)
+        miniPlayerArtworkColor.value = prefs.getBoolean(KEY_MINI_PLAYER_ARTWORK_COLOR, false)
         launcherIcon.value = runCatching {
             LauncherIcon.valueOf(prefs.getString(KEY_LAUNCHER_ICON, LauncherIcon.PINK.name) ?: LauncherIcon.PINK.name)
         }.getOrDefault(LauncherIcon.PINK)
@@ -1054,6 +1071,10 @@ object AppSettings {
         keepArtworkFullSizeWhenPaused.value = prefs.getBoolean(KEY_KEEP_ARTWORK_FULL_SIZE_PAUSED, false)
         doubleTapToSeek.value = prefs.getBoolean(KEY_DOUBLE_TAP_TO_SEEK, true)
         seekIntervalSeconds.value = prefs.getInt(KEY_SEEK_INTERVAL_SECONDS, 5).coerceIn(1, 60)
+        recentlyPlayedThresholdSeconds.value = prefs.getInt(
+            KEY_RECENT_PLAY_THRESHOLD_SECONDS,
+            DEFAULT_RECENT_PLAY_THRESHOLD_SECONDS,
+        ).coerceIn(0, MAX_RECENT_PLAY_THRESHOLD_SECONDS)
         seekButtonMode.value = runCatching {
             SeekButtonMode.valueOf(prefs.getString(KEY_SEEK_BUTTON_MODE, SeekButtonMode.OFF.name).orEmpty())
         }.getOrDefault(SeekButtonMode.OFF)
@@ -1323,6 +1344,35 @@ object AppSettings {
     fun setMatchButtonAccentToArtwork(value: Boolean) {
         matchButtonAccentToArtwork.value = value
         prefs.edit().putBoolean(KEY_MATCH_BUTTON_ACCENT_TO_ARTWORK, value).apply()
+    }
+
+    fun setMiniPlayerArtworkColor(value: Boolean) {
+        miniPlayerArtworkColor.value = value
+        prefs.edit().putBoolean(KEY_MINI_PLAYER_ARTWORK_COLOR, value).apply()
+    }
+
+    fun setParametricEqEnabled(value: Boolean) {
+        parametricEqEnabled.value = value
+        prefs.edit().putBoolean(KEY_PARAMETRIC_EQ_ENABLED, value).apply()
+    }
+
+    fun setParametricEqBand(index: Int, band: ParametricEqBand) {
+        if (index !in ParametricEqBand.DEFAULTS.indices) return
+        val safeBand = band.sanitized(ParametricEqBand.DEFAULTS[index])
+        val updated = parametricEqBands.value.toMutableList().apply { this[index] = safeBand }
+        parametricEqBands.value = updated
+        prefs.edit().putString(KEY_PARAMETRIC_EQ_BANDS, ParametricEqBand.encode(updated)).apply()
+    }
+
+    fun setReverbEnabled(value: Boolean) {
+        reverbEnabled.value = value
+        prefs.edit().putBoolean(KEY_REVERB_ENABLED, value).apply()
+    }
+
+    fun setReverbAmount(value: Int) {
+        val safeValue = value.coerceIn(0, 100)
+        reverbAmount.value = safeValue
+        prefs.edit().putInt(KEY_REVERB_AMOUNT, safeValue).apply()
     }
 
     fun setLauncherIcon(value: LauncherIcon) {
@@ -1677,6 +1727,7 @@ object AppSettings {
         offlineMode.value = value
         prefs.edit().putBoolean(KEY_OFFLINE_MODE, value).apply()
         if (!wasOffline && value) Http.cancelYoutubeMusicRequests()
+        if (!value && youtubeMusicEnabled.value) YoutubeStreamBootstrap.initializeIfAllowed(appContext)
     }
 
     fun setYoutubeMusicEnabled(value: Boolean) {
@@ -1684,6 +1735,7 @@ object AppSettings {
         youtubeMusicEnabled.value = value
         prefs.edit().putBoolean(KEY_YOUTUBE_MUSIC_ENABLED, value).apply()
         if (wasEnabled && !value) Http.cancelYoutubeMusicRequests()
+        if (value && !offlineMode.value) YoutubeStreamBootstrap.initializeIfAllowed(appContext)
     }
 
     fun setHideLosslessLabel(value: Boolean) {
@@ -1941,6 +1993,12 @@ object AppSettings {
         val safe = value.coerceIn(1, 60)
         seekIntervalSeconds.value = safe
         prefs.edit().putInt(KEY_SEEK_INTERVAL_SECONDS, safe).apply()
+    }
+
+    fun setRecentlyPlayedThresholdSeconds(value: Int) {
+        val safe = value.coerceIn(0, MAX_RECENT_PLAY_THRESHOLD_SECONDS)
+        recentlyPlayedThresholdSeconds.value = safe
+        prefs.edit().putInt(KEY_RECENT_PLAY_THRESHOLD_SECONDS, safe).apply()
     }
 
     fun setSeekButtonMode(value: SeekButtonMode) {
@@ -2500,6 +2558,8 @@ object AppSettings {
     private const val DEFAULT_PERFORMANCE_REFRESH_RATE = 120
     private const val MAX_LYRICS_TRANSPORT_CONTROL_SIZE = 64f
     const val MAX_CROSSFADE_SECONDS = 12
+    const val MAX_RECENT_PLAY_THRESHOLD_SECONDS = 300
+    private const val DEFAULT_RECENT_PLAY_THRESHOLD_SECONDS = 30
 
     private fun normalizeResamplerCutoffHz(value: Int): Int =
         if (value <= 0) 0 else value.coerceIn(8_000, 22_000)
@@ -2527,6 +2587,11 @@ object AppSettings {
     private const val KEY_THEME = "theme_mode"
     private const val KEY_THEME_MATCHES_ARTWORK = "theme_matches_artwork"
     private const val KEY_MATCH_BUTTON_ACCENT_TO_ARTWORK = "match_button_accent_to_artwork"
+    private const val KEY_MINI_PLAYER_ARTWORK_COLOR = "mini_player_artwork_color"
+    private const val KEY_PARAMETRIC_EQ_ENABLED = "parametric_eq_enabled"
+    private const val KEY_PARAMETRIC_EQ_BANDS = "parametric_eq_bands"
+    private const val KEY_REVERB_ENABLED = "reverb_enabled"
+    private const val KEY_REVERB_AMOUNT = "reverb_amount"
     private const val KEY_LAUNCHER_ICON = "launcher_icon"
     private const val KEY_FROSTED_QUEUE_MANAGER = "frosted_queue_manager"
     private const val KEY_FROSTED_PLAYER_DETAILS = "frosted_player_details"
@@ -2604,6 +2669,7 @@ object AppSettings {
     private const val KEY_KEEP_ARTWORK_FULL_SIZE_PAUSED = "keep_artwork_full_size_when_paused"
     private const val KEY_DOUBLE_TAP_TO_SEEK = "double_tap_to_seek"
     private const val KEY_SEEK_INTERVAL_SECONDS = "seek_interval_seconds"
+    private const val KEY_RECENT_PLAY_THRESHOLD_SECONDS = "recent_play_threshold_seconds"
     private const val KEY_SEEK_BUTTON_MODE = "seek_button_mode"
     private const val KEY_HIDE_SEEK_BUTTON_LABELS = "hide_seek_button_labels"
     private const val KEY_LEGACY_MESH_GRADIENT = "legacy_mesh_gradient"

@@ -156,7 +156,7 @@ import coil3.compose.AsyncImage
 import com.music.bitchord.ui.components.isGlassSupported
 import com.music.bitchord.ui.components.languageDisplayNameRes
 import com.music.bitchord.ui.components.thumbnailBorder
-import com.music.bitchord.ui.components.VerticalScrollbar
+import com.music.bitchord.ui.components.FastScroller
 import com.music.bitchord.ui.icons.BitChordIcons
 import com.music.bitchord.ui.performance.resolvePerformanceRefreshRate
 import com.music.bitchord.ui.performance.supportedPerformanceRefreshRates
@@ -260,6 +260,7 @@ fun SettingsScreen(
     val crossfadeSeconds by AppSettings.crossfadeSeconds.collectAsStateWithLifecycle()
     val doubleTapToSeek by AppSettings.doubleTapToSeek.collectAsStateWithLifecycle()
     val seekIntervalSeconds by AppSettings.seekIntervalSeconds.collectAsStateWithLifecycle()
+    val recentlyPlayedThresholdSeconds by AppSettings.recentlyPlayedThresholdSeconds.collectAsStateWithLifecycle()
     val seekButtonMode by AppSettings.seekButtonMode.collectAsStateWithLifecycle()
     val hideSeekButtonLabels by AppSettings.hideSeekButtonLabels.collectAsStateWithLifecycle()
     val spatialAudio by AppSettings.spatialAudio.collectAsStateWithLifecycle()
@@ -339,6 +340,9 @@ fun SettingsScreen(
     val showLyricsLogs by AppSettings.showLyricsLogs.collectAsStateWithLifecycle()
     val theme by AppSettings.themeMode.collectAsStateWithLifecycle()
     val matchButtonAccentToArtwork by AppSettings.matchButtonAccentToArtwork.collectAsStateWithLifecycle()
+    val miniPlayerArtworkColor by AppSettings.miniPlayerArtworkColor.collectAsStateWithLifecycle()
+    val parametricEqEnabled by AppSettings.parametricEqEnabled.collectAsStateWithLifecycle()
+    val reverbEnabled by AppSettings.reverbEnabled.collectAsStateWithLifecycle()
     val sessionId by AppSettings.audioSessionId.collectAsStateWithLifecycle()
     val outputPcmMode by AppSettings.outputPcmMode.collectAsStateWithLifecycle()
     val bitPerfectPlayback by AppSettings.bitPerfectPlayback.collectAsStateWithLifecycle()
@@ -493,6 +497,16 @@ fun SettingsScreen(
             activate = {},
         ),
         SettingsSearchEntry(
+            title = stringResource(R.string.recent_play_threshold),
+            subtitle = stringResource(R.string.recent_play_threshold_subtitle),
+            keywords = listOf("recent", "recently played", "play count", "再生履歴", "最近再生", "再生回数", "秒"),
+            valueLabel = stringResource(R.string.recent_play_threshold_value, recentlyPlayedThresholdSeconds),
+            sliderValue = recentlyPlayedThresholdSeconds.toFloat(),
+            sliderValueRange = 0f..AppSettings.MAX_RECENT_PLAY_THRESHOLD_SECONDS.toFloat(),
+            onSliderValueChange = { AppSettings.setRecentlyPlayedThresholdSeconds(it.roundToInt()) },
+            activate = {},
+        ),
+        SettingsSearchEntry(
             stringResource(R.string.hide_seek_button_labels),
             stringResource(R.string.hide_seek_button_labels_subtitle),
             listOf("seek", "seconds", "label", "シーク", "秒数", "ラベル"),
@@ -520,6 +534,8 @@ fun SettingsScreen(
         SettingsSearchEntry(stringResource(R.string.lyrics_furigana), stringResource(R.string.lyrics_furigana_subtitle), listOf("lyrics", "furigana", "ruby", "ふりがな", "ルビ"), showLyricsFurigana) { AppSettings.setShowLyricsFurigana(!showLyricsFurigana) },
         SettingsSearchEntry(stringResource(R.string.lyrics_auto_fit), stringResource(R.string.lyrics_auto_fit_subtitle), listOf("lyrics", "one line", "fit", "歌詞", "一行", "文字サイズ"), autoFitOneLineLyrics) { AppSettings.setAutoFitOneLineLyrics(!autoFitOneLineLyrics) },
         SettingsSearchEntry(stringResource(R.string.spatial_audio), stringResource(R.string.spatial_audio_subtitle), listOf("spatial", "空間オーディオ"), spatialAudio) { AppSettings.setSpatialAudio(!spatialAudio) },
+        SettingsSearchEntry(stringResource(R.string.parametric_eq), stringResource(R.string.parametric_eq_subtitle), listOf("parametric", "equalizer", "frequency", "Q", "gain", "パラメトリック", "イコライザー", "周波数"), parametricEqEnabled) { AppSettings.setParametricEqEnabled(!parametricEqEnabled) },
+        SettingsSearchEntry(stringResource(R.string.reverb), stringResource(R.string.reverb_subtitle), listOf("reverb", "room", "残響", "リバーブ"), reverbEnabled) { AppSettings.setReverbEnabled(!reverbEnabled) },
         SettingsSearchEntry(stringResource(R.string.favorite_icon_star), stringResource(R.string.favorite_icon_star_subtitle), listOf("favorite", "star", "お気に入り", "星", "ハート"), favoriteUsesStar) { AppSettings.setFavoriteUsesStar(!favoriteUsesStar) },
         SettingsSearchEntry(stringResource(R.string.hide_unknown_player_artist), stringResource(R.string.hide_unknown_player_artist_subtitle), listOf("artist", "unknown", "アーティスト", "unknown artist"), hideUnknownPlayerArtist) { AppSettings.setHideUnknownPlayerArtist(!hideUnknownPlayerArtist) },
         SettingsSearchEntry(stringResource(R.string.center_player_track_info), stringResource(R.string.center_player_track_info_subtitle), listOf("center", "中央", "曲情報"), centerPlayerTrackInfo) { AppSettings.setCenterPlayerTrackInfo(!centerPlayerTrackInfo) },
@@ -546,6 +562,12 @@ fun SettingsScreen(
             listOf("artwork", "button", "accent", "color", "アートワーク", "ボタン", "アクセント色"),
             matchButtonAccentToArtwork,
         ) { AppSettings.setMatchButtonAccentToArtwork(!matchButtonAccentToArtwork) },
+        SettingsSearchEntry(
+            stringResource(R.string.mini_player_artwork_color),
+            stringResource(R.string.mini_player_artwork_color_subtitle),
+            listOf("mini player", "album art", "color", "ミニプレイヤー", "アルバムアート", "色"),
+            miniPlayerArtworkColor,
+        ) { AppSettings.setMiniPlayerArtworkColor(!miniPlayerArtworkColor) },
         SettingsSearchEntry(stringResource(R.string.filter_non_music_audio), stringResource(R.string.filter_non_music_audio_subtitle), listOf("filter", "audio", "music", "音楽", "フィルター"), filterNonMusicAudio) { AppSettings.setFilterNonMusicAudio(!filterNonMusicAudio) },
         SettingsSearchEntry(stringResource(R.string.playlist_song_artwork), stringResource(R.string.playlist_song_artwork_subtitle), listOf("playlist", "artwork", "プレイリスト", "アルバムアート"), showPlaylistSongArtwork) { AppSettings.setShowPlaylistSongArtwork(!showPlaylistSongArtwork) },
     ) + listOf(
@@ -1476,6 +1498,25 @@ fun SettingsScreen(
             )
             RowDivider()
             SettingsRow(
+                icon = Icons.Rounded.History,
+                title = stringResource(R.string.recent_play_threshold),
+                subtitle = stringResource(R.string.recent_play_threshold_subtitle),
+                trailing = {
+                    Text(
+                        text = stringResource(R.string.recent_play_threshold_value, recentlyPlayedThresholdSeconds),
+                        color = MaterialTheme.colorScheme.primary,
+                        style = MaterialTheme.typography.labelLarge,
+                    )
+                },
+            )
+            Slider(
+                value = recentlyPlayedThresholdSeconds.toFloat(),
+                onValueChange = { AppSettings.setRecentlyPlayedThresholdSeconds(it.roundToInt()) },
+                valueRange = 0f..AppSettings.MAX_RECENT_PLAY_THRESHOLD_SECONDS.toFloat(),
+                modifier = Modifier.padding(start = ROW_INSET, end = ROW_INSET, bottom = 14.dp),
+            )
+            RowDivider()
+            SettingsRow(
                 icon = Icons.Rounded.FastForward,
                 title = stringResource(R.string.seek_button_mode),
                 subtitle = stringResource(R.string.seek_button_mode_subtitle),
@@ -1542,6 +1583,40 @@ fun SettingsScreen(
                     )
                 },
                 onClick = { AppSettings.setSpatialAudio(!spatialAudio) },
+            )
+            RowDivider()
+            SettingsRow(
+                icon = Icons.Rounded.GraphicEq,
+                title = stringResource(R.string.parametric_eq),
+                subtitle = stringResource(R.string.parametric_eq_subtitle),
+                trailing = {
+                    Switch(
+                        checked = parametricEqEnabled,
+                        onCheckedChange = AppSettings::setParametricEqEnabled,
+                        colors = SwitchDefaults.colors(
+                            checkedTrackColor = MaterialTheme.colorScheme.primary,
+                            checkedBorderColor = MaterialTheme.colorScheme.primary,
+                        ),
+                    )
+                },
+                onClick = { AppSettings.setParametricEqEnabled(!parametricEqEnabled) },
+            )
+            RowDivider()
+            SettingsRow(
+                icon = Icons.Rounded.SurroundSound,
+                title = stringResource(R.string.reverb),
+                subtitle = stringResource(R.string.reverb_subtitle),
+                trailing = {
+                    Switch(
+                        checked = reverbEnabled,
+                        onCheckedChange = AppSettings::setReverbEnabled,
+                        colors = SwitchDefaults.colors(
+                            checkedTrackColor = MaterialTheme.colorScheme.primary,
+                            checkedBorderColor = MaterialTheme.colorScheme.primary,
+                        ),
+                    )
+                },
+                onClick = { AppSettings.setReverbEnabled(!reverbEnabled) },
             )
             RowDivider()
             SettingsRow(
@@ -1990,6 +2065,23 @@ fun SettingsScreen(
                     )
                 },
                 onClick = { AppSettings.setMatchButtonAccentToArtwork(!matchButtonAccentToArtwork) },
+            )
+            RowDivider()
+            SettingsRow(
+                icon = Icons.Rounded.AutoAwesome,
+                title = stringResource(R.string.mini_player_artwork_color),
+                subtitle = stringResource(R.string.mini_player_artwork_color_subtitle),
+                trailing = {
+                    Switch(
+                        checked = miniPlayerArtworkColor,
+                        onCheckedChange = AppSettings::setMiniPlayerArtworkColor,
+                        colors = SwitchDefaults.colors(
+                            checkedTrackColor = MaterialTheme.colorScheme.primary,
+                            checkedBorderColor = MaterialTheme.colorScheme.primary,
+                        ),
+                    )
+                },
+                onClick = { AppSettings.setMiniPlayerArtworkColor(!miniPlayerArtworkColor) },
             )
             RowDivider()
             SettingsRow(
@@ -3299,8 +3391,8 @@ fun SettingsScreen(
         )
         }
     }
-    VerticalScrollbar(
-        state = settingsScrollState,
+    FastScroller(
+        scrollState = settingsScrollState,
         modifier = Modifier
             .align(Alignment.CenterEnd)
             .fillMaxHeight()

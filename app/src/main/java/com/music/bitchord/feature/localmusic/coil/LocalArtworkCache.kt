@@ -9,6 +9,8 @@ import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.sync.Semaphore
+import kotlinx.coroutines.sync.withPermit
 import com.music.bitchord.data.settings.AppSettings
 import java.io.File
 import java.io.FileOutputStream
@@ -23,11 +25,13 @@ internal object LocalArtworkCache {
     private val embeddedBytes = SingleFlightLru<String, ByteArray>(
         maxWeight = 8L * 1024 * 1024,
         maxEntries = 64,
+        maxConcurrentLoads = 2,
         weightOf = { it.size.toLong() },
     )
     private val decodedBitmaps = SingleFlightLru<String, Bitmap>(
         maxWeight = 12L * 1024 * 1024,
         maxEntries = 24,
+        maxConcurrentLoads = 2,
         weightOf = { it.allocationByteCount.toLong() },
     )
 
@@ -84,6 +88,10 @@ internal object LocalArtworkCache {
         val bytes = embeddedBytes(context, "album:$albumId", loadEncoded) ?: return null
         return embeddedBitmap(context, bytes, maxDim) { decode(bytes, maxDim) }
     }
+
+    /** Shares the fast MediaStore thumbnail for tracks on the same album. */
+    suspend fun albumThumbnail(albumId: Long, sizePx: Int, load: () -> Bitmap?): Bitmap? =
+        decodedBitmaps.getOrLoad("album-thumbnail:$albumId:$sizePx", load)
 
     /**
      * Encoded embedded covers survive process restarts in app-private cache storage.
@@ -286,6 +294,7 @@ internal object LocalArtworkCache {
     private class SingleFlightLru<K : Any, V : Any>(
         private val maxWeight: Long,
         private val maxEntries: Int,
+        maxConcurrentLoads: Int,
         private val weightOf: (V) -> Long,
     ) {
         private data class Entry<V>(val value: V?, val storedAtMs: Long)
@@ -294,6 +303,7 @@ internal object LocalArtworkCache {
         private val cache = LinkedHashMap<K, Entry<V>>(16, 0.75f, true)
         private val inFlight = HashMap<K, CompletableDeferred<V?>>()
         private val scope = CoroutineScope(SupervisorJob() + Dispatchers.IO)
+        private val loadSemaphore = Semaphore(maxConcurrentLoads.coerceAtLeast(1))
         private var weight = 0L
 
         suspend fun getOrLoad(key: K, load: () -> V?): V? {
@@ -317,7 +327,7 @@ internal object LocalArtworkCache {
 
             if (isOwner) {
                 scope.launch {
-                    val value = runCatching(load).getOrNull()
+                    val value = loadSemaphore.withPermit { runCatching(load).getOrNull() }
                     synchronized(lock) {
                         if (inFlight[key] === deferred) inFlight.remove(key)
                         putLocked(key, Entry(value, android.os.SystemClock.elapsedRealtime()))

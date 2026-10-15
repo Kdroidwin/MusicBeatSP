@@ -24,6 +24,7 @@ import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.CancellationException
 import com.music.bitchord.data.settings.AppSettings
 import com.music.bitchord.data.innertube.Innertube
+import com.music.bitchord.data.innertube.StreamResolver
 import com.music.bitchord.auth.CapturedSession
 import com.music.bitchord.auth.WebSessionMode
 import com.music.bitchord.data.model.Account
@@ -1126,6 +1127,11 @@ class MainViewModel(app: Application) : AndroidViewModel(app) {
     }
 
     init {
+        // These SharedFlow collectors must be attached before searchFor can
+        // enqueue a request. Without them, emissions are dropped and the UI
+        // stays in its initial Loading state forever.
+        startSearchPipeline()
+        startSuggestPipeline()
         loadLocalMusic()
         viewModelScope.launch {
             AppSettings.blacklistedFolders.drop(1).collect {
@@ -1982,13 +1988,13 @@ class MainViewModel(app: Application) : AndroidViewModel(app) {
         val resolved = browseTypeOf(browseId, type)
         val cachedLocal = (_localSongs.value as? UiState.Success)?.data
         val initialSongs: UiState<List<Song>> = when {
-            browseId.startsWith("local:album:") || resolved == BrowseType.ALBUM -> {
-                val album = if (browseId.startsWith("local:album:")) browseId.removePrefix("local:album:") else title
+            browseId.startsWith("local:album:") -> {
+                val album = browseId.removePrefix("local:album:")
                 val songs = cachedLocal?.filter { it.albumName.equals(album, ignoreCase = true) }
                 if (!songs.isNullOrEmpty()) UiState.Success(songs) else UiState.Loading
             }
-            browseId.startsWith("local:artist:") || resolved == BrowseType.ARTIST -> {
-                val artist = if (browseId.startsWith("local:artist:")) browseId.removePrefix("local:artist:") else title
+            browseId.startsWith("local:artist:") -> {
+                val artist = browseId.removePrefix("local:artist:")
                 val songs = cachedLocal?.filter { com.music.bitchord.feature.artistimage.util.ArtistSplitter.matchesArtist(it.artist, artist) }
                 if (!songs.isNullOrEmpty()) UiState.Success(songs) else UiState.Loading
             }
@@ -2076,27 +2082,41 @@ class MainViewModel(app: Application) : AndroidViewModel(app) {
                     else UiState.Success(artistSongs)
                 }
                 resolved == BrowseType.ARTIST -> {
-                    val artistName = title.ifBlank { browseId.removePrefix("local:artist:") }
-                    val context = getApplication<Application>()
-                    val allSongs = (_localSongs.value as? UiState.Success)?.data
-                        ?: LocalMediaRepository.getLocalMusic(context)
-                    val artistSongs = allSongs.filter {
-                        com.music.bitchord.feature.artistimage.util.ArtistSplitter.matchesArtist(it.artist, artistName)
-                    }
-                    if (artistSongs.isEmpty()) UiState.Error("No tracks found for this artist")
-                    else UiState.Success(artistSongs)
-                }
-                resolved == BrowseType.ALBUM -> {
-                    val albumName = title.ifBlank { browseId.removePrefix("local:album:") }
-                    val context = getApplication<Application>()
-                    val allSongs = (_localSongs.value as? UiState.Success)?.data
-                        ?: LocalMediaRepository.getLocalMusic(context)
-                    val albumSongs = allSongs.filter { it.albumName.equals(albumName, ignoreCase = true) }
-                    if (albumSongs.isEmpty()) UiState.Error("No tracks found for this album")
-                    else UiState.Success(albumSongs)
+                    YtMusicRepository.artistPage(browseId).fold(
+                        onSuccess = { page ->
+                            sections = page.sections
+                            artwork = page.thumbnailUrl
+                            name = page.name
+                            description = page.description
+                            subscriberCountText = page.subscriberCountText
+                            monthlyListenerCount = page.monthlyListenerCount
+                            subscription = page.subscription
+                            if (page.songs.isEmpty()) UiState.Error("No tracks found for this artist")
+                            else UiState.Success(page.songs)
+                        },
+                        onFailure = { UiState.Error(it.friendly()) },
+                    )
                 }
                 else -> {
-                    UiState.Error("Offline mode: online browsing is disabled")
+                    // Non-local browse ids (albums, playlists and external
+                    // Music links) belong to YouTube Music. Matching their
+                    // titles against MediaStore made remote releases appear as
+                    // empty local albums and prevented their tracks opening.
+                    YtMusicRepository.browseSongs(browseId).fold(
+                        onSuccess = { page ->
+                            sections = emptyList()
+                            artwork = page.header?.thumbnailUrl
+                            name = page.header?.title
+                            credit = page.header?.subtitle
+                            more = page.continuation
+                            suggested = page.suggested
+                            library = page.library
+                            description = page.description
+                            if (page.songs.isEmpty()) UiState.Error("No tracks found")
+                            else UiState.Success(page.songs)
+                        },
+                        onFailure = { UiState.Error(it.friendly()) },
+                    )
                 }
             }
             // Update by id — the user may have pushed another page meanwhile.
@@ -2536,6 +2556,7 @@ class MainViewModel(app: Application) : AndroidViewModel(app) {
             clientVersion = session.clientVersion,
             loggedIn = session.loggedIn,
         )
+        StreamResolver.onSessionChanged()
 
         if (session.loggedIn && (session.pageId != null || session.dataSyncId != null)) {
             // Persisted so the choice survives a restart: the shell fetched on
@@ -2571,6 +2592,7 @@ class MainViewModel(app: Application) : AndroidViewModel(app) {
         authStore.cookie = updated.cookie
         Innertube.cookie = updated.cookie
         Innertube.selectChannel(profile.pageId, profile.dataSyncId, profile.authUser)
+        StreamResolver.onSessionChanged()
         _selectedChannelKey.value = profile.profileId
         _selectedChannelName.value = profile.name
         clearListenerState(restoreCached = true)
@@ -2692,6 +2714,7 @@ class MainViewModel(app: Application) : AndroidViewModel(app) {
         }
         authStore.signOut()
         Innertube.cookie = null
+        StreamResolver.onSessionChanged()
         _signedIn.value = false
         _account.value = null
         Innertube.selectChannel(null, null)

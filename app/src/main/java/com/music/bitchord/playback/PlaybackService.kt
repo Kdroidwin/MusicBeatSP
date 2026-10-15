@@ -92,6 +92,7 @@ import com.music.bitchord.data.NerdStats
 import com.music.bitchord.data.TrackLog
 import com.music.bitchord.data.discord.DiscordRPC
 import com.music.bitchord.data.innertube.PlaybackTracker
+import com.music.bitchord.data.innertube.StreamResolver
 import com.music.bitchord.data.stats.ListeningRecorder
 import com.music.bitchord.feature.localsongactions.data.LocalPlayStatsStore
 import com.music.bitchord.data.model.LikeStatus
@@ -182,6 +183,7 @@ const val EXTRA_REORDER_ORDER = "bitchord.reorder.order"
 /** Each decoder owns its own mutable PCM processor state while two tracks overlap. */
 private data class PlaybackAudioChain(
     val spatial: SpatialAudioProcessor = SpatialAudioProcessor(),
+    val parametricEq: ParametricEqAudioProcessor = ParametricEqAudioProcessor(),
     val replayGain: ReplayGainAudioProcessor = ReplayGainAudioProcessor(),
     val resampler: ResamplerCutoffAudioProcessor = ResamplerCutoffAudioProcessor(),
 )
@@ -546,6 +548,9 @@ class PlaybackService : MediaLibraryService() {
 
     /** Prevents pause/resume callbacks from counting the same play twice. */
     private var currentPlayStatsRecorded = false
+    private var currentPlayStatsSongId: String? = null
+    private var currentPlayStatsElapsedMs = 0L
+    private var currentPlayStatsSegmentStartedAtMs = 0L
 
     /**
      * How many tracks in a row have been skipped for a plain playback error,
@@ -682,6 +687,7 @@ class PlaybackService : MediaLibraryService() {
             // session is currently pointed at.
             val exoPlayer = player ?: return
             if (isExternalPreviewPlaying(exoPlayer)) {
+                updateCurrentLocalPlayStats(isPlaying = false, song = exoPlayer.currentMediaItem?.toSong())
                 updateExternalAudioPopup(exoPlayer)
                 ListeningRecorder.onStopped()
                 clearDiscordPresence()
@@ -718,7 +724,11 @@ class PlaybackService : MediaLibraryService() {
                 audibleMediaId = exoPlayer.currentMediaItem?.mediaId
                 consecutiveErrorSkips = 0
             }
-            if (isPlaying) registerCurrentPlay()
+            if (isPlaying) {
+                registerCurrentPlay()
+            } else {
+                updateCurrentLocalPlayStats(isPlaying = false, song = exoPlayer.currentMediaItem?.toSong())
+            }
             // Nothing to read ahead for while paused, and a pause is often
             // the last thing that happens before the process goes idle.
             if (isPlaying) {
@@ -1267,7 +1277,15 @@ class PlaybackService : MediaLibraryService() {
                 QualityUpgrade.forget(videoId)
                 StreamChoice.forget(videoId)
                 NerdStats.clearDeclared(videoId)
-                throw java.io.IOException("Direct YouTube streaming is not supported")
+                val youtube = runBlocking(about) {
+                    withTimeout(RESOLVE_TIMEOUT_MS) { StreamResolver.resolveSourceStream(videoId) }
+                }
+                NerdStats.onSourceStream(videoId, youtube.format)
+                StreamChoice.remember(videoId, youtube, substituted = false)
+                return@Resolver dataSpec.buildUpon()
+                    .setUri(Uri.parse(youtube.url))
+                    .setHttpRequestHeaders(youtube.headers)
+                    .build()
             }
             // An upgraded item carries a marker and its stream has already
             // been found — see [QualityUpgrade]. Answered before anything
@@ -1360,22 +1378,34 @@ class PlaybackService : MediaLibraryService() {
                     .setHttpRequestHeaders(serving.headers)
                     .build()
             }
-            // A track queued from YouTube may be held by a source the user
-            // ranked above it — see [SourceResolver.substituteForYouTube] and
-            // [raceYouTubeOrModule]. Only worth the extra lookup when
-            // something actually outranks YouTube; otherwise this is the
-            // plain resolve every build before this one made.
-            if (!SourceResolver.canSubstituteForYouTube()) {
-                throw java.io.IOException("YouTube streaming is not supported")
+            // A track queued from YouTube may be held by a preferred source.
+            // If none is enabled or the lookup fails, resolve YouTube's own
+            // audio URL. Previously this branch either threw immediately
+            // when no substitute was configured, or failed after a miss;
+            // both left the player buffering forever despite search artwork
+            // and metadata having loaded successfully.
+            val substitute = if (SourceResolver.canSubstituteForYouTube()) {
+                try {
+                    runBlocking(about) {
+                        resolveWithModulePriority(
+                            videoId = videoId,
+                            target = SourceResolver.targetIn(dataSpec.uri),
+                        )
+                    }
+                } catch (cancelled: kotlinx.coroutines.CancellationException) {
+                    throw cancelled
+                } catch (failure: Exception) {
+                    Log.w("BitChord", "Preferred source failed for $videoId; trying YouTube audio", failure)
+                    null
+                }
+            } else {
+                null
             }
-            val won = runBlocking(about) {
-                resolveWithModulePriority(
-                    videoId = videoId,
-                    target = SourceResolver.targetIn(dataSpec.uri),
-                )
+            val won = substitute ?: runBlocking(about) {
+                withTimeout(RESOLVE_TIMEOUT_MS) { StreamResolver.resolveSourceStream(videoId) }
             }
             NerdStats.onSourceStream(videoId, won.format)
-            StreamChoice.remember(videoId, won, substituted = true)
+            StreamChoice.remember(videoId, won, substituted = substitute != null)
             return@Resolver dataSpec.buildUpon()
                 .setUri(Uri.parse(won.url))
                 .setHttpRequestHeaders(won.headers)
@@ -1440,6 +1470,7 @@ class PlaybackService : MediaLibraryService() {
                 virtualizerStrength = com.music.bitchord.data.settings.EqualizerSettings.virtualizerStrength.value,
             )
         }
+        updateAdvancedAudioEffects()
         applySettings(exoPlayer, activeAudioChain)
         applySettings(sparePlayer, spareAudioChain)
         observeSettings()
@@ -1775,7 +1806,7 @@ class PlaybackService : MediaLibraryService() {
         ownsSession: Boolean = true,
     ): ExoPlayer = ExoPlayer.Builder(this)
         .setRenderersFactory(
-            silenceSkippingRenderers(chain.spatial, chain.replayGain, chain.resampler),
+            silenceSkippingRenderers(chain.spatial, chain.parametricEq, chain.replayGain, chain.resampler),
         )
         .setMediaSourceFactory(requireNotNull(mediaSourceFactory))
         .setLoadControl(farBufferingLoadControl())
@@ -1903,10 +1934,61 @@ class PlaybackService : MediaLibraryService() {
     private fun registerCurrentPlay() {
         val song = player?.currentMediaItem?.toSong() ?: return
         PlaybackTracker.onPlaying(song.videoId)
-        if (!currentPlayStatsRecorded) {
-            currentPlayStatsRecorded = true
-            LocalPlayStatsStore.recordPlay(applicationContext, song.localUri ?: song.videoId)
+        updateCurrentLocalPlayStats(isPlaying = true, song = song)
+    }
+
+    /** Tracks only audible time; pausing or changing tracks closes the current segment. */
+    private fun updateCurrentLocalPlayStats(isPlaying: Boolean, song: Song?) {
+        val songId = song?.localUri ?: song?.videoId
+        if (songId != null && songId != currentPlayStatsSongId) {
+            finishCurrentLocalPlayStatsSegment()
+            currentPlayStatsRecorded = false
+            currentPlayStatsElapsedMs = 0L
+            currentPlayStatsSegmentStartedAtMs = 0L
+            currentPlayStatsSongId = songId
         }
+
+        val now = SystemClock.elapsedRealtime()
+        if (isPlaying && songId != null && !currentPlayStatsRecorded) {
+            if (currentPlayStatsSegmentStartedAtMs == 0L) {
+                currentPlayStatsSegmentStartedAtMs = now
+            }
+        } else if (!isPlaying) {
+            finishCurrentLocalPlayStatsSegment(now)
+        }
+        recordCurrentLocalPlayStatsIfQualified(now)
+    }
+
+    private fun finishCurrentLocalPlayStatsSegment(now: Long = SystemClock.elapsedRealtime()) {
+        val segmentStartedAt = currentPlayStatsSegmentStartedAtMs
+        if (segmentStartedAt > 0L) {
+            currentPlayStatsElapsedMs += (now - segmentStartedAt).coerceAtLeast(0L)
+            currentPlayStatsSegmentStartedAtMs = 0L
+        }
+        recordCurrentLocalPlayStatsIfQualified(now)
+    }
+
+    private fun recordCurrentLocalPlayStatsIfQualified(now: Long = SystemClock.elapsedRealtime()) {
+        if (currentPlayStatsRecorded) return
+        val songId = currentPlayStatsSongId ?: return
+        val activeSegmentMs = if (currentPlayStatsSegmentStartedAtMs > 0L) {
+            (now - currentPlayStatsSegmentStartedAtMs).coerceAtLeast(0L)
+        } else {
+            0L
+        }
+        val requiredMs = AppSettings.recentlyPlayedThresholdSeconds.value * 1_000L
+        if (currentPlayStatsElapsedMs + activeSegmentMs >= requiredMs) {
+            currentPlayStatsRecorded = true
+            LocalPlayStatsStore.recordPlay(applicationContext, songId)
+        }
+    }
+
+    private fun resetCurrentLocalPlayStatsForTrackChange() {
+        finishCurrentLocalPlayStatsSegment()
+        currentPlayStatsRecorded = false
+        currentPlayStatsSongId = null
+        currentPlayStatsElapsedMs = 0L
+        currentPlayStatsSegmentStartedAtMs = 0L
     }
 
     /** Reads local tags off the playback thread and applies the result only if this track is still current. */
@@ -1970,7 +2052,7 @@ class PlaybackService : MediaLibraryService() {
         alreadyAudible: Boolean = false,
     ) {
         val exoPlayer = player ?: return
-        currentPlayStatsRecorded = false
+        resetCurrentLocalPlayStatsForTrackChange()
         updateReplayGainForCurrentTrack()
 
         // A crossfade handoff never fires [formatListener] for the entering
@@ -2192,7 +2274,9 @@ class PlaybackService : MediaLibraryService() {
             var cause = error
             var depth = 0
             while (cause != null && depth++ < CAUSE_DEPTH) {
-                if (cause is PermanentlyUnplayableException) return true
+                if (cause is PermanentlyUnplayableException ||
+                    cause is StreamResolver.PermanentlyUnplayableException
+                ) return true
                 cause = cause.cause?.takeIf { it !== cause }
             }
             return false
@@ -2617,7 +2701,9 @@ class PlaybackService : MediaLibraryService() {
         var cause = error
         var depth = 0
         while (cause != null && depth++ < PERMANENT_CAUSE_DEPTH) {
-            if (cause is PermanentlyUnplayableException) {
+            if (cause is PermanentlyUnplayableException ||
+                cause is StreamResolver.PermanentlyUnplayableException
+            ) {
                 return cause.message ?: "This track cannot be played"
             }
             cause = cause.cause?.takeIf { it !== cause }
@@ -3975,6 +4061,7 @@ class PlaybackService : MediaLibraryService() {
                 val player = this@PlaybackService.player
                 if (player != null && player.isPlaying) {
                     if (isExternalPreviewPlaying(player)) {
+                        updateCurrentLocalPlayStats(isPlaying = false, song = player.currentMediaItem?.toSong())
                         publishNerdStats()
                         delay(PROGRESS_SAMPLE_MS)
                         continue
@@ -3982,6 +4069,9 @@ class PlaybackService : MediaLibraryService() {
                     lastPositionSeconds = player.currentPosition / 1000
                     player.currentMediaItem?.mediaId?.let {
                         PlaybackTracker.onProgress(it, lastPositionSeconds)
+                    }
+                    player.currentMediaItem?.toSong()?.let {
+                        updateCurrentLocalPlayStats(isPlaying = true, song = it)
                     }
                     // The device's own listening record — see [ListeningRecorder],
                     // which counts wall-clock time between ticks rather than
@@ -4005,6 +4095,11 @@ class PlaybackService : MediaLibraryService() {
                     // repeat: it returns immediately unless the track is
                     // pending and nothing is already looking.
                     lookForBetterCopy(player)
+                } else {
+                    updateCurrentLocalPlayStats(
+                        isPlaying = false,
+                        song = player?.currentMediaItem?.toSong(),
+                    )
                 }
                 delay(PROGRESS_SAMPLE_MS)
             }
@@ -4095,6 +4190,7 @@ class PlaybackService : MediaLibraryService() {
      */
     private fun silenceSkippingRenderers(
         spatial: SpatialAudioProcessor,
+        parametricEq: ParametricEqAudioProcessor,
         replayGain: ReplayGainAudioProcessor,
         resamplerCutoff: ResamplerCutoffAudioProcessor,
     ) = object : DefaultRenderersFactory(this) {
@@ -4137,7 +4233,7 @@ class PlaybackService : MediaLibraryService() {
             .setEnableAudioTrackPlaybackParams(enableAudioTrackPlaybackParams)
             .setAudioProcessorChain(
                 DefaultAudioSink.DefaultAudioProcessorChain(
-                    arrayOf(resamplerCutoff, spatial, replayGain),
+                    arrayOf(resamplerCutoff, parametricEq, spatial, replayGain),
                     SilenceSkippingAudioProcessor(
                         MIN_SILENCE_US,
                         SilenceSkippingAudioProcessor.DEFAULT_SILENCE_RETENTION_RATIO,
@@ -4161,6 +4257,10 @@ class PlaybackService : MediaLibraryService() {
         player.skipSilenceEnabled = AppSettings.skipSilence.value && !bitPerfect
         chain.resampler.cutoffHz = if (bitPerfect) 0 else AppSettings.resamplerCutoffHz.value
         chain.spatial.enabled = !bitPerfect && AppSettings.spatialAudio.value
+        chain.parametricEq.setTuning(
+            enabled = AppSettings.parametricEqEnabled.value && !bitPerfect,
+            bands = AppSettings.parametricEqBands.value,
+        )
         player.playbackParameters = PlaybackParameters(
             if (bitPerfect) 1f else AppSettings.playbackSpeed.value,
             if (bitPerfect) 1f else AppSettings.playbackPitch.value,
@@ -4397,6 +4497,7 @@ class PlaybackService : MediaLibraryService() {
             bassBoostStrength = com.music.bitchord.data.settings.EqualizerSettings.bassBoostStrength.value,
             virtualizerStrength = com.music.bitchord.data.settings.EqualizerSettings.virtualizerStrength.value,
         )
+        updateAdvancedAudioEffects()
         applySettings(newActive, activeAudioChain)
         applySettings(newSpare, spareAudioChain)
         newActive.repeatMode = repeatMode
@@ -4554,6 +4655,18 @@ class PlaybackService : MediaLibraryService() {
             AppSettings.spatialAudio.collect { applySpatialAudioEnabled() }
         }
         scope.launch {
+            AppSettings.parametricEqEnabled.collect { updateAdvancedAudioEffects() }
+        }
+        scope.launch {
+            AppSettings.parametricEqBands.collect { updateAdvancedAudioEffects() }
+        }
+        scope.launch {
+            AppSettings.reverbEnabled.collect { updateAdvancedAudioEffects() }
+        }
+        scope.launch {
+            AppSettings.reverbAmount.collect { updateAdvancedAudioEffects() }
+        }
+        scope.launch {
             com.music.bitchord.data.settings.EqualizerSettings.enabled.collect {
                 updateAudioEffectsEnabled()
             }
@@ -4603,6 +4716,21 @@ class PlaybackService : MediaLibraryService() {
             !AppSettings.bitPerfectPlayback.value
         audioEffectManager?.applyEnabled(enabled)
         spareAudioEffectManager?.applyEnabled(enabled)
+        updateAdvancedAudioEffects()
+    }
+
+    /** Keeps optional PCM and platform effects aligned on both crossfade players. */
+    private fun updateAdvancedAudioEffects() {
+        val bitPerfect = AppSettings.bitPerfectPlayback.value
+        val bands = AppSettings.parametricEqBands.value
+        val parametricEqEnabled = AppSettings.parametricEqEnabled.value && !bitPerfect
+        activeAudioChain.parametricEq.setTuning(parametricEqEnabled, bands)
+        spareAudioChain.parametricEq.setTuning(parametricEqEnabled, bands)
+
+        val reverbEnabled = AppSettings.reverbEnabled.value && !bitPerfect
+        val reverbAmount = AppSettings.reverbAmount.value
+        audioEffectManager?.applyReverb(reverbEnabled, reverbAmount)
+        spareAudioEffectManager?.applyReverb(reverbEnabled, reverbAmount)
     }
 
     private fun observeScrobbling() {

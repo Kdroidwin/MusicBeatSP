@@ -239,6 +239,17 @@
     <string name="double_tap_to_seek_subtitle">Double tap sides of album art to skip 5 seconds</string>
     <string name="equalizer">Equalizer</string>
     <string name="equalizer_subtitle">Built-in 5-band EQ &amp; audio effects</string>
+    <string name="parametric_eq">Parametric EQ</string>
+    <string name="parametric_eq_subtitle">Three adjustable peaking filters. Starts off; bit-perfect playback bypasses it.</string>
+    <string name="parametric_eq_band_number">Band %1$d</string>
+    <string name="parametric_eq_frequency">Center frequency</string>
+    <string name="parametric_eq_frequency_hz">%1$d Hz</string>
+    <string name="parametric_eq_frequency_khz">%1$.1f kHz</string>
+    <string name="parametric_eq_q">Bandwidth (Q)</string>
+    <string name="parametric_eq_gain">Gain</string>
+    <string name="reverb">Reverb</string>
+    <string name="reverb_subtitle">Adjust room ambience. Starts off; unavailable system effects are ignored.</string>
+    <string name="reverb_amount">Amount</string>
     <string name="show_nerd_stats">Show stats for nerds</string>
     <string name="show_nerd_stats_subtitle">Codec, bitrate and sample rate on the player</string>
     <string name="theme">Theme</string>
@@ -865,6 +876,8 @@
     <string name="theme_match_artwork_subtitle">Use the playing song’s cover colors for the app accent</string>
     <string name="match_button_accent_to_artwork">Match button accents to album art</string>
     <string name="match_button_accent_to_artwork_subtitle">Use the current song’s artwork color for buttons and selected controls without changing the app background</string>
+    <string name="mini_player_artwork_color">Tint mini player with album art</string>
+    <string name="mini_player_artwork_color_subtitle">Use the current song’s artwork colors for the mini player. Off by default.</string>
     <string name="preload_album_art">Preload local album art on startup</string>
     <string name="preload_album_art_subtitle">Preload every local track cover at launch and keep the extracted images in app storage</string>
     <string name="preload_album_art_now">Preload artwork now</string>
@@ -929,6 +942,9 @@
     <string name="seek_interval">Seek interval</string>
     <string name="seek_interval_subtitle">Seconds moved by double-tap and optional seek buttons</string>
     <string name="seek_interval_value">%1$d sec</string>
+    <string name="recent_play_threshold">Count as recently played after</string>
+    <string name="recent_play_threshold_subtitle">Only count a track in Recent Plays and play counts after it has played for at least this many seconds.</string>
+    <string name="recent_play_threshold_value">%1$d sec</string>
     <string name="seek_button_mode">Seek buttons</string>
     <string name="seek_button_mode_subtitle">Show seek buttons outside previous and next</string>
     <string name="hide_seek_button_labels">Hide seek time labels</string>

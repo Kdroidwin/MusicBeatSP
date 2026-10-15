@@ -5,6 +5,7 @@ import android.media.MediaDataSource
 import android.net.Uri
 import android.os.SystemClock
 import com.music.bitchord.data.TrackLog
+import com.music.bitchord.data.innertube.StreamResolver
 import androidx.media3.common.C
 import androidx.media3.common.util.UnstableApi
 import androidx.media3.database.StandaloneDatabaseProvider
@@ -24,6 +25,7 @@ import com.music.bitchord.data.sources.SourceResolver
 import com.music.bitchord.data.sources.TrackMatcher
 import com.music.bitchord.download.Downloads
 import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.SupervisorJob
@@ -548,6 +550,33 @@ object AudioCache {
                         delay(PREFETCH_DELAY_MS)
                         fetch(next, 0, PRELOAD_BYTES)
                         fetchWhole(next)
+                    }
+                }
+
+                // Resolve the next YouTube URL before the current song ends.
+                // This only warms the in-memory URL cache; no audio bytes are
+                // written, so it cannot race the cache writer or pin an
+                // unwanted YouTube copy when a preferred source is available.
+                if (AppSettings.youtubeMusicNetworkAllowed) {
+                    launch {
+                        delay(PREFETCH_DELAY_MS)
+                        val idsToWarm = videoIds.take(QUEUE_LOOKAHEAD + 1)
+                            .let { if (cacheBytes) it.drop(1) else it }
+                        for (id in idsToWarm) {
+                            if (id == next && warmed != null) continue
+                            try {
+                                StreamResolver.resolve(id)
+                            } catch (cancelled: CancellationException) {
+                                throw cancelled
+                            } catch (failure: Exception) {
+                                TrackLog.d(
+                                    TAG,
+                                    "queue stream warm-up skipped $id: ${failure.message}",
+                                    about = id,
+                                )
+                            }
+                            delay(QUEUE_RESOLVE_STAGGER_MS)
+                        }
                     }
                 }
 

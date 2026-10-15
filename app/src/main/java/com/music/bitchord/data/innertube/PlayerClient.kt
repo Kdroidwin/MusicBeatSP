@@ -252,5 +252,20 @@ data class PlayerClient(
                 else -> IOS
             }
         }
+
+        /** Largest range the media CDN reliably serves for the minted client. */
+        fun rangeBytesFor(url: String): Long {
+            val parsed = url.toHttpUrlOrNull() ?: return Long.MAX_VALUE
+            if (!parsed.host.endsWith("googlevideo.com")) return Long.MAX_VALUE
+            val name = parsed.queryParameter("c")?.uppercase(Locale.ROOT)
+            return if (name == "ANDROID_VR" || name?.startsWith("TVHTML5_SIMPLY") == true) {
+                NARROW_RANGE_BYTES
+            } else {
+                RANGE_BYTES
+            }
+        }
+
+        private const val RANGE_BYTES = 1024L * 1024
+        private const val NARROW_RANGE_BYTES = 512L * 1024
     }
 }
