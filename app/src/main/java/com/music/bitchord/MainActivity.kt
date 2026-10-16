@@ -452,6 +452,7 @@ private fun BitChordApp(
     val glassSamplesBackdrop = glassActive && !reduceDynamicBlur
     var selectedTab by rememberSaveable { mutableIntStateOf(AppSettings.startupTab.value.index) }
     val hideCollectionTopBar by AppSettings.hideCollectionTopBar.collectAsStateWithLifecycle()
+    val hideFloatingCollectionControls by AppSettings.hideFloatingCollectionControls.collectAsStateWithLifecycle()
     val collectionBackHandlers = remember { mutableStateMapOf<String, () -> Unit>() }
     var localCollectionArtwork by remember { mutableStateOf<Pair<Int, ArtworkPalette>?>(null) }
     val onLocalArtworkPaletteChanged: (ArtworkPalette?) -> Unit = remember(selectedTab) {
@@ -2397,6 +2398,10 @@ private fun BitChordApp(
                 // not report one and keep their labels visible.
                 val hideCollectionHeaderNow = hideCollectionTopBar && !showSettings && !showReplay &&
                     ((detail != null && !isLocalDetail) || localCollectionBackHandler != null)
+                val isAlbumOrPlaylistArtworkDetail = isLocalCollectionArtworkVisible ||
+                    (detail != null && !isLocalDetail && detail.type in setOf(BrowseType.ALBUM, BrowseType.PLAYLIST))
+                val hideFloatingCollectionControlsNow =
+                    hideFloatingCollectionControls && hideCollectionHeaderNow && isAlbumOrPlaylistArtworkDetail
                 if (!hideCollectionHeaderNow) {
                     TopFadeBlur(
                         hazeState = hazeState,
@@ -2418,56 +2423,61 @@ private fun BitChordApp(
                     )
                 }
 
-                FrostedTopBar(
-                    title = when {
-                        showSettings -> stringResource(R.string.settings)
-                        showReplay -> stringResource(R.string.replay)
-                        detail != null -> detail.title
-                        else -> allTabs.getOrElse(selectedTab) { allTabs.first() }.label
-                    },
-                    scrolled = when {
-                        showSettings -> true
-                        showReplay -> replayScrolled
-                        detail != null -> detailScrolled
-                        else -> scrolled || selectedTab == TAB_SEARCH
-                    },
-                    refreshing = isRefreshingLocalMusic,
-                    pullFraction = { 0f },
-                    artworkTint = when {
-                        isLocalCollectionArtworkVisible -> localCollectionPalette?.wash
-                        isDetailVisible -> detailPalette.wash
-                        else -> null
-                    },
-                    floatingOnly = hideCollectionHeaderNow,
-                    onBack = when {
-                        showSettings -> ({ showSettings = false })
-                        showReplay -> ({ showReplay = false })
-                        localCollectionBackHandler != null -> localCollectionBackHandler
-                        detail != null -> ({ viewModel.closeDetail(); Unit })
-                        else -> null
-                    },
-                    modifier = Modifier.align(Alignment.TopCenter),
-                    actions = {
-                        if (!showSettings) {
-                            if (detail != null && !isLocalDetail && detail.type != BrowseType.ARTIST) {
-                                IconButton(onClick = { songSortMenuOpen = true }) {
-                                    Icon(
-                                        Icons.Rounded.Sort,
-                                        contentDescription = stringResource(R.string.sort_songs),
-                                        tint = if (hideCollectionHeaderNow) Color.White else MaterialTheme.colorScheme.onSurface,
-                                    )
+                val showCollectionSortAction = detail != null && !isLocalDetail && detail.type != BrowseType.ARTIST
+                if (!hideFloatingCollectionControlsNow || showCollectionSortAction) {
+                    FrostedTopBar(
+                        title = when {
+                            showSettings -> stringResource(R.string.settings)
+                            showReplay -> stringResource(R.string.replay)
+                            detail != null -> detail.title
+                            else -> allTabs.getOrElse(selectedTab) { allTabs.first() }.label
+                        },
+                        scrolled = when {
+                            showSettings -> true
+                            showReplay -> replayScrolled
+                            detail != null -> detailScrolled
+                            else -> scrolled || selectedTab == TAB_SEARCH
+                        },
+                        refreshing = isRefreshingLocalMusic,
+                        pullFraction = { 0f },
+                        artworkTint = when {
+                            isLocalCollectionArtworkVisible -> localCollectionPalette?.wash
+                            isDetailVisible -> detailPalette.wash
+                            else -> null
+                        },
+                        floatingOnly = hideCollectionHeaderNow,
+                        onBack = if (hideFloatingCollectionControlsNow) null else when {
+                            showSettings -> ({ showSettings = false })
+                            showReplay -> ({ showReplay = false })
+                            localCollectionBackHandler != null -> localCollectionBackHandler
+                            detail != null -> ({ viewModel.closeDetail(); Unit })
+                            else -> null
+                        },
+                        modifier = Modifier.align(Alignment.TopCenter),
+                        actions = {
+                            if (!showSettings) {
+                                if (showCollectionSortAction) {
+                                    IconButton(onClick = { songSortMenuOpen = true }) {
+                                        Icon(
+                                            Icons.Rounded.Sort,
+                                            contentDescription = stringResource(R.string.sort_songs),
+                                            tint = if (hideCollectionHeaderNow) Color.White else MaterialTheme.colorScheme.onSurface,
+                                        )
+                                    }
+                                }
+                                if (!hideFloatingCollectionControlsNow) {
+                                    IconButton(onClick = { showSettings = true }) {
+                                        Icon(
+                                            Icons.Rounded.Settings,
+                                            contentDescription = stringResource(R.string.settings),
+                                            tint = if (hideCollectionHeaderNow) Color.White else MaterialTheme.colorScheme.onSurface,
+                                        )
+                                    }
                                 }
                             }
-                            IconButton(onClick = { showSettings = true }) {
-                                Icon(
-                                    Icons.Rounded.Settings,
-                                    contentDescription = stringResource(R.string.settings),
-                                    tint = if (hideCollectionHeaderNow) Color.White else MaterialTheme.colorScheme.onSurface,
-                                )
-                            }
-                        }
-                    },
-                )
+                        },
+                    )
+                }
 
                 // Drawn before the bars so their own glass reads on top of it.
                 BottomFadeScrim(

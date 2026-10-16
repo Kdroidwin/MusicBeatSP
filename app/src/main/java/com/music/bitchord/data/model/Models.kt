@@ -86,6 +86,58 @@ data class Song(
 )
 
 /**
+ * Sort album tracks by their indexed track number, keeping the incoming order
+ * for duplicate or missing numbers. MediaStore's track value also encodes the
+ * disc number, so comparing the full value keeps multi-disc albums in order.
+ * A numbered filename is a fallback for files whose metadata has no track tag.
+ * If neither source has an order, preserve the caller's order.
+ */
+fun List<Song>.sortedByAlbumTrackOrder(): List<Song> {
+    if (size < 2) return this
+
+    val ordered = mapIndexed { index, song ->
+        Triple(index, song, song.albumTrackOrderKey())
+    }
+    if (ordered.none { it.third != null }) return this
+
+    return ordered
+        .sortedWith(
+            compareBy<Triple<Int, Song, Long?>> { it.third ?: Long.MAX_VALUE }
+                .thenBy { it.first },
+        )
+        .map { it.second }
+}
+
+private fun Song.albumTrackOrderKey(): Long? {
+    trackNumber?.takeIf { it > 0 }?.let { rawTrack ->
+        val encoded = rawTrack.toLong()
+        val (disc, track) = when {
+            // Older MediaStore versions used the high 16 bits for the disc.
+            encoded >= 65_536L -> (encoded ushr 16) to (encoded and 0xFFFFL)
+            // Current MediaStore values use 1xxx, 2xxx, ... for discs.
+            encoded >= 1_000L -> (encoded / 1_000L) to (encoded % 1_000L)
+            else -> 1L to encoded
+        }
+        return disc * 1_000_000_000_000L + track * 1_000_000L
+    }
+
+    val filename = localPath?.substringAfterLast('/')?.takeIf(String::isNotBlank)
+        ?: localUri?.let(Uri::parse)
+            ?.takeIf { it.scheme.equals("file", ignoreCase = true) }
+            ?.lastPathSegment
+            ?.takeIf(String::isNotBlank)
+        ?: title
+    val match = TRACK_NUMBER_PREFIX.find(filename) ?: return null
+    val track = match.groupValues[1].toLongOrNull() ?: return null
+    val secondNumber = match.groupValues.getOrNull(2)?.toLongOrNull()
+    val disc = secondNumber?.let { track } ?: 1L
+    val trackNumber = secondNumber ?: track
+    return disc * 1_000_000_000_000L + trackNumber * 1_000_000L
+}
+
+private val TRACK_NUMBER_PREFIX = Regex("^\\s*(\\d+)(?:[-._ ](\\d+))?")
+
+/**
  * Artwork at a given pixel size.
  *
  * YouTube serves every size from one URL via a `w<n>-h<n>` hint, so the size

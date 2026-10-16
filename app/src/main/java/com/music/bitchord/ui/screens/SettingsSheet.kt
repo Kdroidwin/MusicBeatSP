@@ -277,6 +277,7 @@ fun SettingsScreen(
     val localFolderHierarchy by AppSettings.localFolderHierarchy.collectAsStateWithLifecycle()
     val fullScreenCollectionArtwork by AppSettings.fullScreenCollectionArtwork.collectAsStateWithLifecycle()
     val hideCollectionTopBar by AppSettings.hideCollectionTopBar.collectAsStateWithLifecycle()
+    val hideFloatingCollectionControls by AppSettings.hideFloatingCollectionControls.collectAsStateWithLifecycle()
     val frostedQueueManager by AppSettings.frostedQueueManager.collectAsStateWithLifecycle()
     val frostedPlayerDetails by AppSettings.frostedPlayerDetails.collectAsStateWithLifecycle()
     val frostedCompactLyrics by AppSettings.frostedCompactLyrics.collectAsStateWithLifecycle()
@@ -860,6 +861,12 @@ fun SettingsScreen(
             listOf("library", "album", "artist", "playlist", "header", "ライブラリ", "アルバム", "アーティスト", "上部バー"),
             hideCollectionTopBar,
         ) { AppSettings.setHideCollectionTopBar(!hideCollectionTopBar) },
+        SettingsSearchEntry(
+            stringResource(R.string.hide_floating_collection_controls),
+            stringResource(R.string.hide_floating_collection_controls_subtitle),
+            listOf("album", "playlist", "artwork", "back", "settings", "アルバム", "プレイリスト", "アート", "戻る", "設定", "ボタン"),
+            hideFloatingCollectionControls,
+        ) { AppSettings.setHideFloatingCollectionControls(!hideFloatingCollectionControls) },
         SettingsSearchEntry(
             stringResource(R.string.artists_open_albums),
             stringResource(R.string.artists_open_albums_subtitle),
@@ -2918,6 +2925,23 @@ fun SettingsScreen(
                     )
                 },
                 onClick = { AppSettings.setHideCollectionTopBar(!hideCollectionTopBar) },
+            )
+            RowDivider()
+            SettingsRow(
+                icon = Icons.Rounded.VisibilityOff,
+                title = stringResource(R.string.hide_floating_collection_controls),
+                subtitle = stringResource(R.string.hide_floating_collection_controls_subtitle),
+                trailing = {
+                    Switch(
+                        checked = hideFloatingCollectionControls,
+                        onCheckedChange = AppSettings::setHideFloatingCollectionControls,
+                        colors = SwitchDefaults.colors(
+                            checkedTrackColor = MaterialTheme.colorScheme.primary,
+                            checkedBorderColor = MaterialTheme.colorScheme.primary,
+                        ),
+                    )
+                },
+                onClick = { AppSettings.setHideFloatingCollectionControls(!hideFloatingCollectionControls) },
             )
             RowDivider()
             SettingsRow(

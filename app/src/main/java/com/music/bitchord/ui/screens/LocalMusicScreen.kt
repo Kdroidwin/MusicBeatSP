@@ -96,6 +96,7 @@ import kotlinx.coroutines.launch
 import com.music.bitchord.data.LocalMediaRepository
 import com.music.bitchord.data.model.durationMillis
 import com.music.bitchord.data.model.artworkAt
+import com.music.bitchord.data.model.sortedByAlbumTrackOrder
 import com.music.bitchord.feature.artistimage.model.ArtistEntry
 import com.music.bitchord.feature.artistimage.model.ArtistImage
 import com.music.bitchord.feature.artistimage.model.ArtistSort
@@ -184,27 +185,7 @@ private fun shuffleAlbumGroupsKeepTrackOrder(songs: List<Song>): List<Song> {
         else "${song.albumArtist.orEmpty().trim().lowercase(Locale.ROOT)}\u0000${album.lowercase(Locale.ROOT)}"
     }.values.shuffled()
 
-    fun fallbackOrder(song: Song): Long? {
-        song.trackNumber?.takeIf { it > 0 }?.let { return it.toLong() * 1_000_000L }
-        val name = song.localPath?.substringAfterLast('/')
-            ?: song.localUri?.substringAfterLast('/')
-            ?: song.title
-        val match = Regex("^\\s*(\\d+)(?:[-._ ](\\d+))?").find(name) ?: return null
-        val first = match.groupValues[1].toLongOrNull() ?: return null
-        val second = match.groupValues.getOrNull(2)?.toLongOrNull() ?: 0L
-        return first * 1_000_000L + second
-    }
-
-    return groups.flatMap { group ->
-        val numbered = group.map { it to fallbackOrder(it.value) }
-        if (numbered.any { it.second != null }) {
-            numbered.sortedWith(compareBy<Pair<IndexedValue<Song>, Long?>> { it.second ?: Long.MAX_VALUE }
-                .thenBy { it.first.index })
-                .map { it.first.value }
-        } else {
-            group.sortedBy { it.index }.map { it.value }
-        }
-    }
+    return groups.flatMap { group -> group.map { it.value }.sortedByAlbumTrackOrder() }
 }
 
 /**
@@ -468,7 +449,9 @@ fun LocalMusicScreen(
                 drillDownShowsAlbums = artistsOpenAlbums
                 parentArtistLabel = target
             } else {
-                val matching = songs.filter { it.albumName?.trim().equals(target, ignoreCase = true) }
+                val matching = songs
+                    .filter { it.albumName?.trim().equals(target, ignoreCase = true) }
+                    .sortedByAlbumTrackOrder()
                 drillDownLabel = target
                 drillDownSongs = matching
                 drillDownArt = matching.firstNotNullOfOrNull { it.thumbnailUrl?.takeIf { url -> url.isNotBlank() } }
@@ -501,7 +484,7 @@ fun LocalMusicScreen(
                 { targetAlbum ->
                     activeMenuSong = null
                     drillDownLabel = targetAlbum
-                    drillDownSongs = songs.filter { it.albumName == targetAlbum }
+                    drillDownSongs = songs.filter { it.albumName == targetAlbum }.sortedByAlbumTrackOrder()
                     drillDownArt = songs.find { it.albumName == targetAlbum }?.thumbnailUrl
                     drillDownIsArtist = false
                     drillDownShowsAlbums = false
@@ -1570,7 +1553,7 @@ private fun albumEntries(
                 artist = group.firstOrNull()?.artist.orEmpty(),
                 thumbnailUrl = group.firstNotNullOfOrNull { it.thumbnailUrl },
                 playlist = false,
-                songs = group,
+                songs = group.sortedByAlbumTrackOrder(),
                 asked = false,
                 key = "tagged:$name",
             )

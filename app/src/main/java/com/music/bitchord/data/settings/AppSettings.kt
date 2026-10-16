@@ -766,6 +766,8 @@ object AppSettings {
     val fullScreenCollectionArtwork = MutableStateFlow(false)
     /** Hides collection page titles while keeping floating back/settings actions available. */
     val hideCollectionTopBar = MutableStateFlow(true)
+    /** Hides floating back/settings controls only on album or playlist artwork pages. */
+    val hideFloatingCollectionControls = MutableStateFlow(true)
     val artistsOpenAlbums = MutableStateFlow(false)
     val shuffleArtistAlbums = MutableStateFlow(false)
     val localMusicViewType = MutableStateFlow(LibraryViewType.LIST)
@@ -1121,6 +1123,7 @@ object AppSettings {
         localFolderHierarchy.value = prefs.getBoolean(KEY_LOCAL_FOLDER_HIERARCHY, false)
         fullScreenCollectionArtwork.value = prefs.getBoolean(KEY_FULL_SCREEN_COLLECTION_ARTWORK, false)
         hideCollectionTopBar.value = prefs.getBoolean(KEY_HIDE_COLLECTION_TOP_BAR, true)
+        hideFloatingCollectionControls.value = prefs.getBoolean(KEY_HIDE_FLOATING_COLLECTION_CONTROLS, true)
         artistsOpenAlbums.value = prefs.getBoolean(KEY_ARTISTS_OPEN_ALBUMS, false)
         shuffleArtistAlbums.value = prefs.getBoolean(KEY_SHUFFLE_ARTIST_ALBUMS, false)
         downloadedMusicViewType.value = readLibraryViewType(KEY_DOWNLOADED_MUSIC_VIEW_TYPE, LibraryViewType.LIST)
@@ -2306,6 +2309,11 @@ object AppSettings {
         prefs.edit().putBoolean(KEY_HIDE_COLLECTION_TOP_BAR, value).apply()
     }
 
+    fun setHideFloatingCollectionControls(value: Boolean) {
+        hideFloatingCollectionControls.value = value
+        prefs.edit().putBoolean(KEY_HIDE_FLOATING_COLLECTION_CONTROLS, value).apply()
+    }
+
     fun setArtistsOpenAlbums(value: Boolean) {
         artistsOpenAlbums.value = value
         prefs.edit().putBoolean(KEY_ARTISTS_OPEN_ALBUMS, value).apply()
@@ -2698,6 +2706,7 @@ object AppSettings {
     private const val KEY_LOCAL_FOLDER_HIERARCHY = "local_folder_hierarchy"
     private const val KEY_FULL_SCREEN_COLLECTION_ARTWORK = "full_screen_collection_artwork"
     private const val KEY_HIDE_COLLECTION_TOP_BAR = "hide_collection_top_bar"
+    private const val KEY_HIDE_FLOATING_COLLECTION_CONTROLS = "hide_floating_collection_controls"
     private const val KEY_ARTISTS_OPEN_ALBUMS = "artists_open_albums"
     private const val KEY_SHUFFLE_ARTIST_ALBUMS = "shuffle_artist_albums"
     private const val KEY_LIBRARY_SORT = "library_sort"

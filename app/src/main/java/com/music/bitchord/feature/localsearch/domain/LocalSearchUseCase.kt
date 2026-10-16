@@ -1,6 +1,7 @@
 package com.music.bitchord.feature.localsearch.domain
 
 import com.music.bitchord.data.model.Song
+import com.music.bitchord.data.model.sortedByAlbumTrackOrder
 import com.music.bitchord.feature.artistimage.util.ArtistSplitter
 import com.music.bitchord.feature.localsearch.domain.model.LocalSearchFilter
 import com.music.bitchord.feature.localsearch.domain.model.LocalSearchResult
@@ -45,7 +46,7 @@ object LocalSearchUseCase {
                         title = albumName,
                         artist = songs.firstOrNull()?.artist.orEmpty(),
                         thumbnailUrl = songs.firstNotNullOfOrNull { it.thumbnailUrl },
-                        songs = songs,
+                        songs = songs.sortedByAlbumTrackOrder(),
                     )
                 }
         } else {

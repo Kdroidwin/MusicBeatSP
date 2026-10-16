@@ -813,6 +813,8 @@
     <string name="full_screen_collection_artwork_subtitle">Show a full-bleed cover on album and library playlist detail pages</string>
     <string name="hide_collection_top_bar">Hide the collection page header</string>
     <string name="hide_collection_top_bar_subtitle">Hide the header only inside an album, artist, or playlist; category labels remain visible</string>
+    <string name="hide_floating_collection_controls">Hide floating back and settings buttons</string>
+    <string name="hide_floating_collection_controls_subtitle">Hide these buttons only on full-screen album or playlist artwork pages when the collection header is hidden</string>
     <string name="frosted_queue_manager">Use album art colors for queue management</string>
     <string name="frosted_queue_manager_subtitle">Use the same artwork-derived palette as BitChord</string>
     <string name="frosted_player_details">Use an album art backdrop for player details</string>
