@@ -80,6 +80,7 @@ import androidx.compose.material.icons.rounded.SmartDisplay
 import androidx.compose.material.icons.rounded.Share
 import androidx.compose.material.icons.rounded.ScreenRotation
 import androidx.compose.material.icons.rounded.Schedule
+import androidx.compose.material.icons.rounded.SkipPrevious
 import androidx.compose.material.icons.rounded.Speed
 import androidx.compose.material.icons.rounded.SurroundSound
 import androidx.compose.material.icons.rounded.Tune
@@ -284,6 +285,7 @@ fun SettingsScreen(
     val launcherIcon by AppSettings.launcherIcon.collectAsStateWithLifecycle()
     val artistsOpenAlbums by AppSettings.artistsOpenAlbums.collectAsStateWithLifecycle()
     val shuffleArtistAlbums by AppSettings.shuffleArtistAlbums.collectAsStateWithLifecycle()
+    val onlineAlbumArtistArtwork by AppSettings.onlineAlbumArtistArtwork.collectAsStateWithLifecycle()
     val startupTab by AppSettings.startupTab.collectAsStateWithLifecycle()
     val quickActions by AppSettings.playerQuickActions.collectAsStateWithLifecycle()
     val hiddenPlayerDetailsActions by AppSettings.hiddenPlayerDetailsActions.collectAsStateWithLifecycle()
@@ -342,6 +344,7 @@ fun SettingsScreen(
     val theme by AppSettings.themeMode.collectAsStateWithLifecycle()
     val matchButtonAccentToArtwork by AppSettings.matchButtonAccentToArtwork.collectAsStateWithLifecycle()
     val miniPlayerArtworkColor by AppSettings.miniPlayerArtworkColor.collectAsStateWithLifecycle()
+    val miniPlayerPreviousButton by AppSettings.miniPlayerPreviousButton.collectAsStateWithLifecycle()
     val parametricEqEnabled by AppSettings.parametricEqEnabled.collectAsStateWithLifecycle()
     val reverbEnabled by AppSettings.reverbEnabled.collectAsStateWithLifecycle()
     val sessionId by AppSettings.audioSessionId.collectAsStateWithLifecycle()
@@ -569,6 +572,12 @@ fun SettingsScreen(
             listOf("mini player", "album art", "color", "ミニプレイヤー", "アルバムアート", "色"),
             miniPlayerArtworkColor,
         ) { AppSettings.setMiniPlayerArtworkColor(!miniPlayerArtworkColor) },
+        SettingsSearchEntry(
+            stringResource(R.string.mini_player_previous_button),
+            stringResource(R.string.mini_player_previous_button_subtitle),
+            listOf("mini player", "previous", "back", "skip previous", "ミニプレイヤー", "前の曲", "前へ"),
+            miniPlayerPreviousButton,
+        ) { AppSettings.setMiniPlayerPreviousButton(!miniPlayerPreviousButton) },
         SettingsSearchEntry(stringResource(R.string.filter_non_music_audio), stringResource(R.string.filter_non_music_audio_subtitle), listOf("filter", "audio", "music", "音楽", "フィルター"), filterNonMusicAudio) { AppSettings.setFilterNonMusicAudio(!filterNonMusicAudio) },
         SettingsSearchEntry(stringResource(R.string.playlist_song_artwork), stringResource(R.string.playlist_song_artwork_subtitle), listOf("playlist", "artwork", "プレイリスト", "アルバムアート"), showPlaylistSongArtwork) { AppSettings.setShowPlaylistSongArtwork(!showPlaylistSongArtwork) },
     ) + listOf(
@@ -879,6 +888,12 @@ fun SettingsScreen(
             listOf("artist", "album", "shuffle", "アーティスト", "アルバム", "シャッフル"),
             shuffleArtistAlbums,
         ) { AppSettings.setShuffleArtistAlbums(!shuffleArtistAlbums) },
+        SettingsSearchEntry(
+            stringResource(R.string.online_album_artist_artwork),
+            stringResource(R.string.online_album_artist_artwork_subtitle),
+            listOf("album artist", "artist image", "cover", "deezer", "アルバムアーティスト", "カバー", "画像", "オンライン", "通信"),
+            onlineAlbumArtistArtwork,
+        ) { AppSettings.setOnlineAlbumArtistArtwork(!onlineAlbumArtistArtwork) },
     )
 
     LaunchedEffect(selectedPerformanceRefreshRate, performanceRefreshRate) {
@@ -2092,6 +2107,23 @@ fun SettingsScreen(
             )
             RowDivider()
             SettingsRow(
+                icon = Icons.Rounded.SkipPrevious,
+                title = stringResource(R.string.mini_player_previous_button),
+                subtitle = stringResource(R.string.mini_player_previous_button_subtitle),
+                trailing = {
+                    Switch(
+                        checked = miniPlayerPreviousButton,
+                        onCheckedChange = AppSettings::setMiniPlayerPreviousButton,
+                        colors = SwitchDefaults.colors(
+                            checkedTrackColor = MaterialTheme.colorScheme.primary,
+                            checkedBorderColor = MaterialTheme.colorScheme.primary,
+                        ),
+                    )
+                },
+                onClick = { AppSettings.setMiniPlayerPreviousButton(!miniPlayerPreviousButton) },
+            )
+            RowDivider()
+            SettingsRow(
                 icon = Icons.Rounded.BlurOn,
                 title = stringResource(R.string.frosted_queue_manager),
                 subtitle = stringResource(R.string.frosted_queue_manager_subtitle),
@@ -2962,6 +2994,19 @@ fun SettingsScreen(
                     Switch(checked = shuffleArtistAlbums, onCheckedChange = AppSettings::setShuffleArtistAlbums)
                 },
                 onClick = { AppSettings.setShuffleArtistAlbums(!shuffleArtistAlbums) },
+            )
+            RowDivider()
+            SettingsRow(
+                icon = Icons.Rounded.Cloud,
+                title = stringResource(R.string.online_album_artist_artwork),
+                subtitle = stringResource(R.string.online_album_artist_artwork_subtitle),
+                trailing = {
+                    Switch(
+                        checked = onlineAlbumArtistArtwork,
+                        onCheckedChange = AppSettings::setOnlineAlbumArtistArtwork,
+                    )
+                },
+                onClick = { AppSettings.setOnlineAlbumArtistArtwork(!onlineAlbumArtistArtwork) },
             )
             RowDivider()
             if (android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.R) {

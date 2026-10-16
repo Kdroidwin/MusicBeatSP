@@ -327,6 +327,8 @@ fun LocalMusicScreen(
     val fullScreenCollectionArtwork by AppSettings.fullScreenCollectionArtwork.collectAsStateWithLifecycle()
     val artistsOpenAlbums by AppSettings.artistsOpenAlbums.collectAsStateWithLifecycle()
     val shuffleArtistAlbums by AppSettings.shuffleArtistAlbums.collectAsStateWithLifecycle()
+    val onlineAlbumArtistArtwork by AppSettings.onlineAlbumArtistArtwork.collectAsStateWithLifecycle()
+    val offlineMode by AppSettings.offlineMode.collectAsStateWithLifecycle()
     val drillDownViewType by if (isDownloads) {
         AppSettings.downloadedDrillDownSongsViewType.collectAsStateWithLifecycle()
     } else {
@@ -859,6 +861,7 @@ fun LocalMusicScreen(
                     }
                     ArtistsTab(
                         artists = albumArtists,
+                        allowRemoteArtwork = onlineAlbumArtistArtwork && !offlineMode,
                         viewType = artistsViewType,
                         onViewTypeToggle = {
                             val next = if (artistsViewType == LibraryViewType.GRID) LibraryViewType.LIST else LibraryViewType.GRID
@@ -1233,6 +1236,7 @@ private fun SongsTab(
 @Composable
 private fun ArtistsTab(
     artists: List<ArtistEntry>,
+    allowRemoteArtwork: Boolean = true,
     viewType: LibraryViewType,
     onViewTypeToggle: () -> Unit,
     artistSort: ArtistSort,
@@ -1277,6 +1281,7 @@ private fun ArtistsTab(
                         name = entry.name,
                         songCount = entry.songs.size,
                         thumbnailUrl = entry.thumbnailUrl,
+                        allowRemoteArtwork = allowRemoteArtwork,
                         onClick = { onArtistClick(entry.name, entry.songs) },
                         onLongPress = onArtistLongPress?.let { { it(entry.name, entry.songs) } },
                     )
@@ -1319,6 +1324,7 @@ private fun ArtistsTab(
                         name = entry.name,
                         songCount = entry.songs.size,
                         thumbnailUrl = entry.thumbnailUrl,
+                        allowRemoteArtwork = allowRemoteArtwork,
                         onClick = { onArtistClick(entry.name, entry.songs) },
                         onLongPress = onArtistLongPress?.let { { it(entry.name, entry.songs) } },
                     )
@@ -1345,6 +1351,7 @@ private fun ArtistRow(
     name: String,
     songCount: Int,
     thumbnailUrl: String? = null,
+    allowRemoteArtwork: Boolean = true,
     onClick: () -> Unit,
     onLongPress: (() -> Unit)? = null,
 ) {
@@ -1369,11 +1376,12 @@ private fun ArtistRow(
                 tint = MaterialTheme.colorScheme.onPrimaryContainer,
                 modifier = Modifier.size(26.dp),
             )
-            val imageModel = remember(name, thumbnailUrl) {
+            val imageModel = remember(name, thumbnailUrl, allowRemoteArtwork) {
                 ArtistImage(
                     name = name,
                     fallbackUrl = thumbnailUrl?.artworkAt(ROW_ART_PX),
                     isLarge = false,
+                    allowOnlineLookup = allowRemoteArtwork,
                 )
             }
             AsyncImage(
@@ -1416,6 +1424,7 @@ private fun ArtistGridCard(
     name: String,
     songCount: Int,
     thumbnailUrl: String?,
+    allowRemoteArtwork: Boolean = true,
     onClick: () -> Unit,
     onLongPress: (() -> Unit)? = null,
     modifier: Modifier = Modifier,
@@ -1441,11 +1450,12 @@ private fun ArtistGridCard(
                 tint = MaterialTheme.colorScheme.onPrimaryContainer,
                 modifier = Modifier.size(44.dp),
             )
-            val imageModel = remember(name, thumbnailUrl) {
+            val imageModel = remember(name, thumbnailUrl, allowRemoteArtwork) {
                 ArtistImage(
                     name = name,
                     fallbackUrl = thumbnailUrl?.artworkAt(CARD_ART_PX),
                     isLarge = false,
+                    allowOnlineLookup = allowRemoteArtwork,
                 )
             }
             AsyncImage(

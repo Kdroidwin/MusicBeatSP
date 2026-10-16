@@ -143,6 +143,7 @@ abstract class MediaWidget : AppWidgetProvider() {
                     render(app, ids, fallbackWidthDp, deadline = null)
                 }
                 MediaWidgetAlbumSquare.refresh(app)
+                MediaWidgetMini.refresh(app)
             }
         }
 

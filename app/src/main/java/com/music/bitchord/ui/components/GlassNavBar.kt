@@ -38,6 +38,7 @@ import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.rounded.Pause
 import androidx.compose.material.icons.rounded.PlayArrow
+import androidx.compose.material.icons.rounded.SkipPrevious
 import androidx.compose.material.icons.rounded.SkipNext
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.Icon
@@ -108,6 +109,7 @@ fun GlassNavBar(
     isPlaying: Boolean,
     isLoading: Boolean,
     onPlayPause: () -> Unit,
+    onPrevious: () -> Unit,
     onNext: () -> Unit,
     onExpand: () -> Unit,
     onDismiss: () -> Unit = {},
@@ -203,6 +205,7 @@ fun GlassNavBar(
                     contentColor = miniContentColor,
                     artworkSecondaryColor = miniSecondaryColor,
                     onPlayPause = onPlayPause,
+                    onPrevious = onPrevious,
                     onNext = onNext,
                     onExpand = onExpand,
                     onDismiss = onDismiss,
@@ -221,6 +224,7 @@ fun GlassNavBar(
                     contentColor = miniContentColor,
                     artworkSecondaryColor = miniSecondaryColor,
                     onPlayPause = onPlayPause,
+                    onPrevious = onPrevious,
                     onNext = onNext,
                     onExpand = onExpand,
                     onDismiss = onDismiss,
@@ -334,12 +338,14 @@ private fun GlassNowPlaying(
     contentColor: Color,
     artworkSecondaryColor: Color? = null,
     onPlayPause: () -> Unit,
+    onPrevious: () -> Unit,
     onNext: () -> Unit,
     onExpand: () -> Unit,
     onDismiss: () -> Unit = {},
     useGlass: Boolean = false,
     modifier: Modifier = Modifier,
 ) {
+    val showPreviousButton by AppSettings.miniPlayerPreviousButton.collectAsStateWithLifecycle()
     val haptics = rememberHaptics()
     val pressSource = remember { MutableInteractionSource() }
     val isPressed by pressSource.collectIsPressedAsState()
@@ -464,6 +470,22 @@ private fun GlassNowPlaying(
                             ?: if (useGlass) contentColor.copy(alpha = 0.7f) else MaterialTheme.colorScheme.onSurfaceVariant,
                         maxLines = 1,
                         overflow = TextOverflow.Ellipsis,
+                    )
+                }
+            }
+            if (showPreviousButton) {
+                IconButton(
+                    onClick = {
+                        haptics.play(Haptic.SkipPrevious)
+                        onPrevious()
+                    },
+                    modifier = Modifier.size(glyphSlot),
+                ) {
+                    Icon(
+                        imageVector = Icons.Rounded.SkipPrevious,
+                        contentDescription = stringResource(R.string.widget_previous),
+                        tint = contentColor,
+                        modifier = Modifier.size(glyphSize),
                     )
                 }
             }

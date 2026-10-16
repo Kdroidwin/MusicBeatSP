@@ -11,4 +11,6 @@ data class ArtistImage(
     val name: String,
     val fallbackUrl: String? = null,
     val isLarge: Boolean = true,
+    /** Whether remote artwork lookup and HTTP(S) fallback URLs are allowed. */
+    val allowOnlineLookup: Boolean = true,
 )

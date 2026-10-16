@@ -276,8 +276,8 @@
             android:foregroundServiceType="dataSync" />
 
         <!--
-          Home-screen widgets. Two providers list the responsive 2×2 and 4×2
-          designs; a third lists the dedicated title + square-art layout.
+          Home-screen widgets. The existing responsive 2×2 and 4×2 designs and
+          dedicated square-art widget stay independent from the new mini-player.
 
           Not exported, which is correct for a widget provider despite the
           launcher being the one that talks to it: the system delivers
@@ -319,6 +319,18 @@
             <meta-data
                 android:name="android.appwidget.provider"
                 android:resource="@xml/widget_media_album_square" />
+        </receiver>
+
+        <receiver
+            android:name=".widget.MediaWidgetMini"
+            android:exported="false"
+            android:label="@string/widget_mini_label">
+            <intent-filter>
+                <action android:name="android.appwidget.action.APPWIDGET_UPDATE" />
+            </intent-filter>
+            <meta-data
+                android:name="android.appwidget.provider"
+                android:resource="@xml/widget_media_mini" />
         </receiver>
 
         <!-- The transport buttons. Reached only by this app's own PendingIntents. -->

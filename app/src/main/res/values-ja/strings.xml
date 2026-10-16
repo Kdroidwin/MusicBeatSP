@@ -139,9 +139,11 @@
     <string name="widget_square_label">再生中 2×2</string>
     <string name="widget_wide_label">再生中 4×2</string>
     <string name="widget_album_square_label">正方形アート付き再生ウィジェット</string>
+    <string name="widget_mini_label">ミニプレイヤー</string>
     <string name="widget_square_description">再生コントロール付きのアルバムアート（正方形）。</string>
     <string name="widget_wide_description">曲名と再生コントロール付きのアルバムアート（横幅いっぱい）。</string>
     <string name="widget_album_square_description">上部に曲名、中央に正方形のアルバムアート、下部にシャッフルと再生操作を表示します。</string>
+    <string name="widget_mini_description">アルバムアート、曲情報、再生操作を表示するコンパクトなミニプレイヤーです。</string>
     <string name="widget_shuffle">シャッフル</string>
     <string name="widget_shuffle_on">シャッフル中</string>
     <string name="widget_play">再生</string>
@@ -738,6 +740,8 @@
     <string name="artists_open_albums_subtitle">アーティストを開くと曲一覧ではなくアルバムA・B・Cを表示します</string>
     <string name="shuffle_artist_albums">アーティストのシャッフルをアルバム単位にする</string>
     <string name="shuffle_artist_albums_subtitle">シャッフル時はアルバムの順番を入れ替え、アルバム内の曲順を保ちます</string>
+    <string name="online_album_artist_artwork">アルバムアーティスト画像のオンライン取得</string>
+    <string name="online_album_artist_artwork_subtitle">オンにするとDeezerから画像を検索します。オフではローカル音源のアルバムアートだけを使います。初期設定はオフです。</string>
     <string name="play_cue_sheet">CUEシートを再生</string>
     <string name="play_cue_sheet_subtitle">CUEファイルを選択します。参照先の音源はライブラリから再生可能である必要があります</string>
     <string name="cue_play_result">CUEから%1$d曲を再生し、利用できない%2$d件をスキップしました。</string>
@@ -788,6 +792,8 @@
     <string name="match_button_accent_to_artwork_subtitle">アプリの背景色は変えず、現在の曲のアートワーク色をボタンや選択状態に使います</string>
     <string name="mini_player_artwork_color">ミニプレイヤーをアートワークの色に合わせる</string>
     <string name="mini_player_artwork_color_subtitle">現在の曲のアートワーク色をミニプレイヤーに使います。初期設定はオフです</string>
+    <string name="mini_player_previous_button">ミニプレイヤーに前の曲ボタンを表示</string>
+    <string name="mini_player_previous_button_subtitle">再生・次の曲ボタンの横に前の曲へ戻るボタンを表示します。初期設定はオンです</string>
     <string name="preload_album_art">起動時にローカルのアートを読み込む</string>
     <string name="preload_album_art_subtitle">起動時に端末内の全曲のアートを先読みし、取得画像をアプリ内ストレージに保存します</string>
     <string name="preload_album_art_now">今すぐアートを先読み</string>

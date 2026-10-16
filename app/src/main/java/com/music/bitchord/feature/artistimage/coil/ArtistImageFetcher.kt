@@ -18,8 +18,19 @@ class ArtistImageFetcher(
 ) : Fetcher {
 
     override suspend fun fetch(): FetchResult? {
-        val deezerUrl = DeezerArtistService.getArtistImageUrl(image.name, image.isLarge)
-        val target = deezerUrl ?: image.fallbackUrl
+        val deezerUrl = if (image.allowOnlineLookup) {
+            DeezerArtistService.getArtistImageUrl(image.name, image.isLarge)
+        } else {
+            null
+        }
+        // Album-artist artwork is local-only unless the user explicitly opts
+        // in. Its fallback can be a remote thumbnail for downloaded tracks, so
+        // suppress HTTP(S) fallback URLs too when online lookup is disabled.
+        val fallbackUrl = image.fallbackUrl?.takeIf {
+            image.allowOnlineLookup ||
+                (!it.startsWith("http://", ignoreCase = true) && !it.startsWith("https://", ignoreCase = true))
+        }
+        val target = deezerUrl ?: fallbackUrl
 
         if (!target.isNullOrBlank()) {
             val mapped = loader.components.map(target, options)

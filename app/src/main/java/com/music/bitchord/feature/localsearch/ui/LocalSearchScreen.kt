@@ -75,6 +75,9 @@ import com.music.bitchord.data.model.SearchResult
 import com.music.bitchord.data.model.UiState
 import com.music.bitchord.data.model.isSameTrackAs
 import com.music.bitchord.ui.components.SongRow
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.delay
+import kotlinx.coroutines.withContext
 
 @Composable
 fun LocalSearchScreen(
@@ -143,12 +146,34 @@ fun LocalSearchScreen(
         }
     }
 
-    LaunchedEffect(useYoutubeMusic, query, selectedFilter, submittedYoutubeQuery) {
+    LaunchedEffect(useYoutubeMusic, selectedFilter, submittedYoutubeQuery) {
         listState.scrollToItem(0)
     }
 
-    val searchResults = remember(query, selectedFilter, songs, folderHierarchy) {
-        LocalSearchUseCase.search(query, selectedFilter, songs, folderHierarchy)
+    // Searching every local song (and grouping albums, artists and folders for
+    // the All filter) used to run synchronously during composition. On large
+    // libraries that blocked the main thread for each keystroke, starving the
+    // IME and making the field appear frozen. Debounce edits and do the scan off
+    // the UI thread; an identity key avoids walking a large Song list on the
+    // main thread just to compare Compose effect keys.
+    val songsIdentity = System.identityHashCode(songs)
+    var searchResults by remember { mutableStateOf<List<LocalSearchResult>>(emptyList()) }
+    LaunchedEffect(query, selectedFilter, songsIdentity, folderHierarchy, useYoutubeMusic) {
+        if (query.isBlank() || useYoutubeMusic) {
+            searchResults = emptyList()
+            listState.scrollToItem(0)
+        } else {
+            delay(140)
+            val currentQuery = query
+            val currentSongs = songs
+            val currentFilter = selectedFilter
+            val currentHierarchy = folderHierarchy
+            val results = withContext(Dispatchers.Default) {
+                LocalSearchUseCase.search(currentQuery, currentFilter, currentSongs, currentHierarchy)
+            }
+            listState.scrollToItem(0)
+            searchResults = results
+        }
     }
 
     val matchedSongs = remember(searchResults) {

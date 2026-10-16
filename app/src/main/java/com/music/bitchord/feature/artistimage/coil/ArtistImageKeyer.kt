@@ -10,6 +10,6 @@ import com.music.bitchord.feature.artistimage.model.ArtistImage
 class ArtistImageKeyer : Keyer<ArtistImage> {
     override fun key(data: ArtistImage, options: Options): String {
         val normalizedName = data.name.trim().lowercase()
-        return "artist::name=$normalizedName|large=${data.isLarge}|fallback=${data.fallbackUrl.orEmpty()}"
+        return "artist::name=$normalizedName|large=${data.isLarge}|online=${data.allowOnlineLookup}|fallback=${data.fallbackUrl.orEmpty()}"
     }
 }

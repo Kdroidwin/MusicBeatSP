@@ -43,6 +43,7 @@ import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.IntrinsicSize
 import androidx.compose.foundation.layout.heightIn
+import androidx.compose.foundation.layout.navigationBarsPadding
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
@@ -57,6 +58,9 @@ import androidx.compose.foundation.lazy.LazyListState
 import androidx.compose.foundation.lazy.grid.rememberLazyGridState
 import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.foundation.shape.CircleShape
+import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.verticalScroll
 import androidx.compose.foundation.isSystemInDarkTheme
 import androidx.compose.foundation.LocalOverscrollFactory
 import androidx.compose.material.icons.Icons
@@ -80,6 +84,7 @@ import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.material3.Slider
+import androidx.compose.material3.SliderDefaults
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.CancellationException
 import androidx.compose.material.icons.automirrored.rounded.QueueMusic
@@ -182,6 +187,7 @@ import com.music.bitchord.download.DownloadTarget
 import com.music.bitchord.download.Downloads
 import com.music.bitchord.ui.components.BrowseActionsSheet
 import com.music.bitchord.ui.components.BrowseTarget
+import com.music.bitchord.ui.components.ArtworkBackdrop
 import com.music.bitchord.ui.components.DownloadManagerSheet
 import com.music.bitchord.ui.components.PlaylistPickerSheet
 import com.music.bitchord.playback.rememberMediaController
@@ -248,6 +254,7 @@ import com.music.bitchord.ui.theme.SystemBarIcons
 import com.music.bitchord.ui.utils.rememberIosOverscrollFactory
 import com.music.bitchord.ui.performance.resolvePerformanceRefreshRate
 import com.music.bitchord.data.model.PLAYER_ART_PX
+import com.music.bitchord.data.model.ROW_ART_PX
 import com.music.bitchord.data.model.artworkAt
 import dev.chrisbanes.haze.HazeState
 import dev.chrisbanes.haze.hazeSource
@@ -2526,6 +2533,7 @@ private fun BitChordApp(
                         onPlayPause = {
                             controller?.let { if (it.isPlaying) it.pause() else it.play() }
                         },
+                        onPrevious = { controller?.seekToPreviousMediaItem() },
                         onNext = { controller?.seekToNextMediaItem() },
                         onExpand = { showNowPlaying = true },
                         onDismiss = onDismissMusicBar,
@@ -2562,6 +2570,7 @@ private fun BitChordApp(
                             onPlayPause = {
                                 controller?.let { if (it.isPlaying) it.pause() else it.play() }
                             },
+                            onPrevious = { controller?.seekToPreviousMediaItem() },
                             onNext = { controller?.seekToNextMediaItem() },
                             onExpand = { showNowPlaying = true },
                             onDismiss = onDismissMusicBar,
@@ -2894,7 +2903,10 @@ private fun BitChordApp(
         }
 
         if (showPlaybackTuning) {
-            PlaybackTuningDialog(onDismiss = { showPlaybackTuning = false })
+            PlaybackTuningDialog(
+                song = player.song,
+                onDismiss = { showPlaybackTuning = false },
+            )
         }
 
         // ---- Add to playlist / new playlist ----
@@ -3484,45 +3496,120 @@ private fun DockedPlayer(
     }
 }
 
+@OptIn(ExperimentalMaterial3Api::class)
 @Composable
-private fun PlaybackTuningDialog(onDismiss: () -> Unit) {
+private fun PlaybackTuningDialog(
+    song: Song?,
+    onDismiss: () -> Unit,
+) {
     var speed by remember { mutableStateOf(AppSettings.playbackSpeed.value) }
     var pitch by remember { mutableStateOf(AppSettings.playbackPitch.value) }
-    AlertDialog(
+    val palette = rememberArtworkPalette(song?.thumbnailUrl, dark = true, artPx = ROW_ART_PX)
+    val useArtworkBackdrop by AppSettings.frostedPlayerDetails.collectAsStateWithLifecycle()
+    val foreground = if (useArtworkBackdrop) palette.onBackground else MaterialTheme.colorScheme.onSurface
+    val secondary = if (useArtworkBackdrop) palette.onBackgroundVariant else MaterialTheme.colorScheme.onSurfaceVariant
+    val accent = if (useArtworkBackdrop) palette.accent else MaterialTheme.colorScheme.primary
+    val sheetShape = RoundedCornerShape(topStart = 24.dp, topEnd = 24.dp)
+
+    ModalBottomSheet(
         onDismissRequest = onDismiss,
-        title = { Text(stringResource(R.string.playback_tuning)) },
-        text = {
-            Column {
-                Text(stringResource(R.string.playback_speed) + " · " + String.format(Locale.ROOT, "%.2fx", speed))
+        sheetState = rememberModalBottomSheetState(skipPartiallyExpanded = true),
+        shape = sheetShape,
+        containerColor = if (useArtworkBackdrop) Color.Transparent else MaterialTheme.colorScheme.surfaceContainerHigh,
+        dragHandle = {
+            Box(
+                Modifier.fillMaxWidth().padding(top = 8.dp, bottom = 4.dp),
+                contentAlignment = Alignment.Center,
+            ) {
+                Box(
+                    Modifier
+                        .size(width = 34.dp, height = 4.dp)
+                        .clip(CircleShape)
+                        .background((if (useArtworkBackdrop) palette.onBackground else MaterialTheme.colorScheme.onSurface).copy(alpha = 0.38f)),
+                )
+            }
+        },
+    ) {
+        Box(Modifier.fillMaxWidth().clip(sheetShape)) {
+            if (useArtworkBackdrop) {
+                ArtworkBackdrop(
+                    palette = palette,
+                    imageUrl = song?.thumbnailUrl,
+                    modifier = Modifier.matchParentSize(),
+                    washFraction = 0.75f,
+                    artPx = ROW_ART_PX,
+                )
+            }
+            Column(
+                Modifier
+                    .fillMaxWidth()
+                    .navigationBarsPadding()
+                    .verticalScroll(rememberScrollState())
+                    .padding(horizontal = 24.dp)
+                    .padding(bottom = 24.dp),
+            ) {
+                Text(
+                    text = stringResource(R.string.playback_tuning),
+                    style = MaterialTheme.typography.titleLarge,
+                    color = foreground,
+                    modifier = Modifier.padding(top = 8.dp, bottom = 16.dp),
+                )
+                Text(
+                    text = stringResource(R.string.playback_speed) + " · " + String.format(Locale.ROOT, "%.1fx", speed),
+                    style = MaterialTheme.typography.titleMedium,
+                    color = foreground,
+                )
                 Slider(
                     value = speed,
                     onValueChange = { speed = it },
-                    valueRange = 0.5f..2.0f,
-                    steps = 29,
+                    valueRange = 0.1f..10.0f,
+                    steps = 98,
+                    colors = SliderDefaults.colors(
+                        thumbColor = accent,
+                        activeTrackColor = accent,
+                        inactiveTrackColor = secondary.copy(alpha = 0.28f),
+                        activeTickColor = foreground.copy(alpha = 0.65f),
+                        inactiveTickColor = secondary.copy(alpha = 0.45f),
+                    ),
                 )
                 Spacer(Modifier.height(12.dp))
-                Text(stringResource(R.string.playback_pitch) + " · " + String.format(Locale.ROOT, "%.2fx", pitch))
+                Text(
+                    text = stringResource(R.string.playback_pitch) + " · " + String.format(Locale.ROOT, "%.2fx", pitch),
+                    style = MaterialTheme.typography.titleMedium,
+                    color = foreground,
+                )
                 Slider(
                     value = pitch,
                     onValueChange = { pitch = it },
                     valueRange = 0.5f..2.0f,
                     steps = 29,
+                    colors = SliderDefaults.colors(
+                        thumbColor = accent,
+                        activeTrackColor = accent,
+                        inactiveTrackColor = secondary.copy(alpha = 0.28f),
+                        activeTickColor = foreground.copy(alpha = 0.65f),
+                        inactiveTickColor = secondary.copy(alpha = 0.45f),
+                    ),
                 )
+                Row(
+                    Modifier.fillMaxWidth().padding(top = 8.dp),
+                    horizontalArrangement = Arrangement.End,
+                    verticalAlignment = Alignment.CenterVertically,
+                ) {
+                    TextButton(onClick = onDismiss) {
+                        Text(stringResource(R.string.cancel), color = accent)
+                    }
+                    TextButton(onClick = {
+                        AppSettings.setPlaybackSpeed(speed)
+                        AppSettings.setPlaybackPitch(pitch)
+                        onDismiss()
+                    }) {
+                        Text(stringResource(R.string.save), color = accent)
+                    }
+                }
             }
-        },
-        confirmButton = {
-            TextButton(onClick = {
-                AppSettings.setPlaybackSpeed(speed)
-                AppSettings.setPlaybackPitch(pitch)
-                onDismiss()
-            }) {
-                Text(stringResource(R.string.save))
-            }
-        },
-        dismissButton = {
-            TextButton(onClick = onDismiss) { Text(stringResource(R.string.cancel)) }
-        },
-    )
+        }
+    }
 }
 
 /**

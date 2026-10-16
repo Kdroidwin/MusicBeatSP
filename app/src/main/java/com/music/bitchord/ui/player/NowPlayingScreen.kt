@@ -116,6 +116,7 @@ import androidx.compose.material.icons.rounded.PlayArrow
 import androidx.compose.material.icons.rounded.Videocam
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.ExperimentalMaterial3Api
+import androidx.compose.material3.BottomSheetDefaults
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.ModalBottomSheet
@@ -217,6 +218,7 @@ import kotlinx.coroutines.withContext
 import com.music.bitchord.ui.theme.SystemBarIcons
 import com.music.bitchord.ui.rememberIsForeground
 import com.music.bitchord.ui.theme.rememberArtworkPalette
+import com.music.bitchord.ui.components.ArtworkBackdrop
 import com.music.bitchord.ui.components.thumbnailBorder
 import com.music.bitchord.ui.components.FrostedGlassBackdrop
 import com.music.bitchord.ui.components.optimizedHazeEffect
@@ -925,6 +927,7 @@ fun NowPlayingScreen(
             // Use the same thumbnail size, source URL and dark palette as the
             // player-details sheet so the two surfaces share one colour set.
             artworkPalette = rememberArtworkPalette(song.thumbnailUrl, dark = true, artPx = ROW_ART_PX),
+            artworkUrl = song.thumbnailUrl,
             useFrostedGlass = frostedQueueManager,
             currentSongs = queue,
             currentIndex = queueIndex,

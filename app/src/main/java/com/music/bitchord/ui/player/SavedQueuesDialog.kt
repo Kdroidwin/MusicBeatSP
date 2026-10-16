@@ -1,6 +1,7 @@
 package com.music.bitchord.ui.player
 
 import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
@@ -8,14 +9,20 @@ import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.navigationBarsPadding
 import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.background
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material3.AlertDialog
+import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.ModalBottomSheet
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.OutlinedTextFieldDefaults
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
+import androidx.compose.material3.rememberModalBottomSheetState
+import androidx.compose.ui.graphics.Color
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
@@ -23,6 +30,7 @@ import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
+import androidx.compose.ui.draw.clip
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.unit.dp
@@ -30,11 +38,15 @@ import com.music.bitchord.R
 import com.music.bitchord.data.model.Song
 import com.music.bitchord.playback.SavedQueue
 import com.music.bitchord.ui.theme.ArtworkPalette
+import com.music.bitchord.ui.components.ArtworkBackdrop
+import com.music.bitchord.data.model.ROW_ART_PX
 
+@OptIn(ExperimentalMaterial3Api::class)
 @Composable
 internal fun SavedQueuesDialog(
     queues: List<SavedQueue>,
     artworkPalette: ArtworkPalette,
+    artworkUrl: String?,
     useFrostedGlass: Boolean,
     currentSongs: List<Song>,
     currentIndex: Int,
@@ -57,16 +69,52 @@ internal fun SavedQueuesDialog(
         artworkPalette.background
     } else MaterialTheme.colorScheme.surfaceContainerHigh
 
-    AlertDialog(
+    val sheetShape = RoundedCornerShape(topStart = 24.dp, topEnd = 24.dp)
+    ModalBottomSheet(
         onDismissRequest = onDismiss,
-        shape = RoundedCornerShape(28.dp),
-        title = { Text(stringResource(R.string.manage_queues), color = foreground) },
-        containerColor = container,
-        titleContentColor = foreground,
-        textContentColor = foreground,
-        iconContentColor = accent,
-        text = {
-            Column {
+        sheetState = rememberModalBottomSheetState(skipPartiallyExpanded = true),
+        shape = sheetShape,
+        containerColor = if (useFrostedGlass) Color.Transparent else container,
+        dragHandle = {
+            Box(
+                Modifier.fillMaxWidth().padding(top = 8.dp, bottom = 4.dp),
+                contentAlignment = Alignment.Center,
+            ) {
+                Box(
+                    Modifier
+                        .height(4.dp)
+                        .fillMaxWidth(0.14f)
+                        .clip(RoundedCornerShape(50))
+                        .background(foreground.copy(alpha = 0.38f)),
+                )
+            }
+        },
+    ) {
+        Box(Modifier.fillMaxWidth().clip(sheetShape)) {
+            if (useFrostedGlass) {
+                ArtworkBackdrop(
+                    palette = artworkPalette,
+                    imageUrl = artworkUrl,
+                    modifier = Modifier.matchParentSize(),
+                    washFraction = 0.75f,
+                    artPx = ROW_ART_PX,
+                )
+            } else {
+                Box(Modifier.matchParentSize().background(container))
+            }
+            Column(
+                Modifier
+                    .fillMaxWidth()
+                    .navigationBarsPadding()
+                    .heightIn(max = 640.dp)
+                    .padding(start = 24.dp, end = 24.dp, bottom = 20.dp),
+            ) {
+                Text(
+                    stringResource(R.string.manage_queues),
+                    color = foreground,
+                    style = MaterialTheme.typography.titleLarge,
+                    modifier = Modifier.padding(top = 8.dp, bottom = 12.dp),
+                )
                 OutlinedTextField(
                     value = name,
                     onValueChange = { name = it.take(80); saveError = false },
@@ -149,12 +197,15 @@ internal fun SavedQueuesDialog(
                         }
                     }
                 }
+                Row(
+                    modifier = Modifier.fillMaxWidth().padding(top = 8.dp),
+                    horizontalArrangement = Arrangement.End,
+                ) {
+                    TextButton(onClick = onDismiss) { Text(stringResource(R.string.done), color = accent) }
+                }
             }
-        },
-        confirmButton = {
-            TextButton(onClick = onDismiss) { Text(stringResource(R.string.done), color = accent) }
-        },
-    )
+        }
+    }
 
     deleting?.let { queue ->
         AlertDialog(

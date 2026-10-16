@@ -453,6 +453,8 @@ object AppSettings {
     val matchButtonAccentToArtwork = MutableStateFlow(false)
     /** Tints the mini-player surface from the current song sleeve. */
     val miniPlayerArtworkColor = MutableStateFlow(false)
+    /** Shows a previous-track control in expanded mini-player surfaces. */
+    val miniPlayerPreviousButton = MutableStateFlow(true)
     val launcherIcon = MutableStateFlow(LauncherIcon.PINK)
     val frostedQueueManager = MutableStateFlow(true)
     val frostedPlayerDetails = MutableStateFlow(true)
@@ -770,6 +772,8 @@ object AppSettings {
     val hideFloatingCollectionControls = MutableStateFlow(true)
     val artistsOpenAlbums = MutableStateFlow(false)
     val shuffleArtistAlbums = MutableStateFlow(false)
+    /** Deezer lookup for album-artist portraits; off keeps album artists local by default. */
+    val onlineAlbumArtistArtwork = MutableStateFlow(false)
     val localMusicViewType = MutableStateFlow(LibraryViewType.LIST)
     val downloadedSongsViewType = MutableStateFlow(LibraryViewType.LIST)
     val downloadedAlbumsViewType = MutableStateFlow(LibraryViewType.GRID)
@@ -958,7 +962,7 @@ object AppSettings {
         parametricEqBands.value = ParametricEqBand.decode(prefs.getString(KEY_PARAMETRIC_EQ_BANDS, null))
         reverbEnabled.value = prefs.getBoolean(KEY_REVERB_ENABLED, false)
         reverbAmount.value = prefs.getInt(KEY_REVERB_AMOUNT, 35).coerceIn(0, 100)
-        playbackSpeed.value = prefs.getFloat(KEY_SPEED, 1.0f).coerceIn(0.5f, 2.0f)
+        playbackSpeed.value = prefs.getFloat(KEY_SPEED, 1.0f).coerceIn(0.1f, 10.0f)
         playbackPitch.value = prefs.getFloat(KEY_PITCH, 1.0f).coerceIn(0.5f, 2.0f)
         val savedThemeMode = runCatching {
             ThemeMode.valueOf(prefs.getString(KEY_THEME, null) ?: "DARK")
@@ -970,6 +974,7 @@ object AppSettings {
         ) ThemeMode.ARTWORK else savedThemeMode
         matchButtonAccentToArtwork.value = prefs.getBoolean(KEY_MATCH_BUTTON_ACCENT_TO_ARTWORK, false)
         miniPlayerArtworkColor.value = prefs.getBoolean(KEY_MINI_PLAYER_ARTWORK_COLOR, false)
+        miniPlayerPreviousButton.value = prefs.getBoolean(KEY_MINI_PLAYER_PREVIOUS_BUTTON, true)
         launcherIcon.value = runCatching {
             LauncherIcon.valueOf(prefs.getString(KEY_LAUNCHER_ICON, LauncherIcon.PINK.name) ?: LauncherIcon.PINK.name)
         }.getOrDefault(LauncherIcon.PINK)
@@ -1126,6 +1131,7 @@ object AppSettings {
         hideFloatingCollectionControls.value = prefs.getBoolean(KEY_HIDE_FLOATING_COLLECTION_CONTROLS, true)
         artistsOpenAlbums.value = prefs.getBoolean(KEY_ARTISTS_OPEN_ALBUMS, false)
         shuffleArtistAlbums.value = prefs.getBoolean(KEY_SHUFFLE_ARTIST_ALBUMS, false)
+        onlineAlbumArtistArtwork.value = prefs.getBoolean(KEY_ONLINE_ALBUM_ARTIST_ARTWORK, false)
         downloadedMusicViewType.value = readLibraryViewType(KEY_DOWNLOADED_MUSIC_VIEW_TYPE, LibraryViewType.LIST)
         downloadedSongsViewType.value = readLibraryViewType(KEY_DOWNLOADED_SONGS_VIEW_TYPE, downloadedMusicViewType.value)
         downloadedAlbumsViewType.value = readLibraryViewType(KEY_DOWNLOADED_ALBUMS_VIEW_TYPE, LibraryViewType.GRID)
@@ -1320,7 +1326,7 @@ object AppSettings {
     }
 
     fun setPlaybackSpeed(value: Float) {
-        val normalized = value.coerceIn(0.5f, 2.0f)
+        val normalized = value.coerceIn(0.1f, 10.0f)
         playbackSpeed.value = normalized
         prefs.edit().putFloat(KEY_SPEED, normalized).apply()
     }
@@ -1352,6 +1358,11 @@ object AppSettings {
     fun setMiniPlayerArtworkColor(value: Boolean) {
         miniPlayerArtworkColor.value = value
         prefs.edit().putBoolean(KEY_MINI_PLAYER_ARTWORK_COLOR, value).apply()
+    }
+
+    fun setMiniPlayerPreviousButton(value: Boolean) {
+        miniPlayerPreviousButton.value = value
+        prefs.edit().putBoolean(KEY_MINI_PLAYER_PREVIOUS_BUTTON, value).apply()
     }
 
     fun setParametricEqEnabled(value: Boolean) {
@@ -2324,6 +2335,11 @@ object AppSettings {
         prefs.edit().putBoolean(KEY_SHUFFLE_ARTIST_ALBUMS, value).apply()
     }
 
+    fun setOnlineAlbumArtistArtwork(value: Boolean) {
+        onlineAlbumArtistArtwork.value = value
+        prefs.edit().putBoolean(KEY_ONLINE_ALBUM_ARTIST_ARTWORK, value).apply()
+    }
+
     fun setLocalMusicViewType(value: LibraryViewType) {
         setLocalSongsViewType(value)
     }
@@ -2596,6 +2612,7 @@ object AppSettings {
     private const val KEY_THEME_MATCHES_ARTWORK = "theme_matches_artwork"
     private const val KEY_MATCH_BUTTON_ACCENT_TO_ARTWORK = "match_button_accent_to_artwork"
     private const val KEY_MINI_PLAYER_ARTWORK_COLOR = "mini_player_artwork_color"
+    private const val KEY_MINI_PLAYER_PREVIOUS_BUTTON = "mini_player_previous_button"
     private const val KEY_PARAMETRIC_EQ_ENABLED = "parametric_eq_enabled"
     private const val KEY_PARAMETRIC_EQ_BANDS = "parametric_eq_bands"
     private const val KEY_REVERB_ENABLED = "reverb_enabled"
@@ -2709,6 +2726,7 @@ object AppSettings {
     private const val KEY_HIDE_FLOATING_COLLECTION_CONTROLS = "hide_floating_collection_controls"
     private const val KEY_ARTISTS_OPEN_ALBUMS = "artists_open_albums"
     private const val KEY_SHUFFLE_ARTIST_ALBUMS = "shuffle_artist_albums"
+    private const val KEY_ONLINE_ALBUM_ARTIST_ARTWORK = "online_album_artist_artwork"
     private const val KEY_LIBRARY_SORT = "library_sort"
     private const val KEY_DETAIL_SONG_SORTS = "detail_song_sorts"
     private const val KEY_LOCAL_MUSIC_VIEW_TYPE = "local_music_view_type"

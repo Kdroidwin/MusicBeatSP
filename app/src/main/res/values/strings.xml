@@ -158,9 +158,11 @@
     <string name="widget_square_label">Now playing 2×2</string>
     <string name="widget_wide_label">Now playing 4×2</string>
     <string name="widget_album_square_label">Now playing with square cover</string>
+    <string name="widget_mini_label">Mini player</string>
     <string name="widget_square_description">Album art with playback controls, in a square.</string>
     <string name="widget_wide_description">Album art with the track and playback controls, full width.</string>
     <string name="widget_album_square_description">Track title above square album art, with shuffle and playback controls below.</string>
+    <string name="widget_mini_description">A compact mini player with album art, track details, and playback controls.</string>
     <string name="widget_shuffle">Shuffle</string>
     <string name="widget_shuffle_on">Shuffle on</string>
     <string name="widget_play">Play</string>
@@ -830,6 +832,8 @@
     <string name="artists_open_albums_subtitle">Opening an artist shows album A, B, C instead of a flat list of tracks</string>
     <string name="shuffle_artist_albums">Shuffle artist playback by album</string>
     <string name="shuffle_artist_albums_subtitle">During artist shuffle, change album order while keeping each album’s track order</string>
+    <string name="online_album_artist_artwork">Online album-artist artwork</string>
+    <string name="online_album_artist_artwork_subtitle">Allow album-artist images to be searched on Deezer. When off, only local album artwork is used. Off by default.</string>
     <string name="play_cue_sheet">Play CUE sheet</string>
     <string name="play_cue_sheet_subtitle">Choose a CUE file; referenced audio must be available in the library</string>
     <string name="cue_play_result">Playing %1$d CUE tracks; skipped %2$d unavailable entries.</string>
@@ -880,6 +884,8 @@
     <string name="match_button_accent_to_artwork_subtitle">Use the current song’s artwork color for buttons and selected controls without changing the app background</string>
     <string name="mini_player_artwork_color">Tint mini player with album art</string>
     <string name="mini_player_artwork_color_subtitle">Use the current song’s artwork colors for the mini player. Off by default.</string>
+    <string name="mini_player_previous_button">Show previous-track button in mini player</string>
+    <string name="mini_player_previous_button_subtitle">Show the previous-track control beside play and next. On by default.</string>
     <string name="preload_album_art">Preload local album art on startup</string>
     <string name="preload_album_art_subtitle">Preload every local track cover at launch and keep the extracted images in app storage</string>
     <string name="preload_album_art_now">Preload artwork now</string>
