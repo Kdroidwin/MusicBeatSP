@@ -21,7 +21,9 @@ import androidx.compose.ui.draw.clip
 import androidx.compose.ui.draw.shadow
 import androidx.compose.ui.graphics.asImageBitmap
 import androidx.compose.ui.layout.ContentScale
+import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.unit.dp
+import com.music.bitchord.R
 import coil3.compose.AsyncImage
 
 @Composable
@@ -56,7 +58,7 @@ fun TagEditorArtworkSection(
                 artworkBitmap != null -> {
                     Image(
                         bitmap = artworkBitmap.asImageBitmap(),
-                        contentDescription = "Cover Art",
+                        contentDescription = stringResource(R.string.tag_editor_cover_art),
                         contentScale = ContentScale.Crop,
                         modifier = Modifier.fillMaxSize(),
                     )
@@ -64,7 +66,7 @@ fun TagEditorArtworkSection(
                 !thumbnailUrl.isNullOrBlank() -> {
                     AsyncImage(
                         model = thumbnailUrl,
-                        contentDescription = "Cover Art",
+                        contentDescription = stringResource(R.string.tag_editor_cover_art),
                         contentScale = ContentScale.Crop,
                         modifier = Modifier.fillMaxSize(),
                     )

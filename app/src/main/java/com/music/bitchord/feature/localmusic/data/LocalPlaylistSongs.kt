@@ -8,7 +8,8 @@ import java.io.File
 /** Resolves stored playlist IDs and recreates playable SAF/file references when needed. */
 fun resolvePlaylistSongs(playlist: LocalPlaylist, librarySongs: List<Song>): List<Song> =
     playlist.songIds.mapNotNull { id ->
-        val resolved = librarySongs.firstOrNull { song -> song.localUri == id || song.videoId == id }
+        val resolved = librarySongs.firstOrNull { song -> song.localUri == id }
+            ?: librarySongs.firstOrNull { song -> song.videoId == id }
             ?: id.takeIf { it.startsWith("content://") || it.startsWith("file://") }?.let { uriString ->
                 val uri = runCatching { Uri.parse(uriString) }.getOrNull()
                 if (uri?.scheme == "file") {

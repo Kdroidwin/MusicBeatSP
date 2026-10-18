@@ -10,7 +10,9 @@ import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.unit.dp
+import com.music.bitchord.R
 
 @Composable
 fun TagEditorSaveFab(
@@ -33,7 +35,7 @@ fun TagEditorSaveFab(
         } else {
             Icon(
                 imageVector = Icons.Rounded.Save,
-                contentDescription = "Save tags",
+                contentDescription = stringResource(R.string.tag_editor_save_tags),
                 modifier = Modifier.size(24.dp),
             )
         }

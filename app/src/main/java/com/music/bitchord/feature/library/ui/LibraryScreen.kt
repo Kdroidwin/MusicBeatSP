@@ -42,6 +42,7 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.rounded.ArrowDownward
 import androidx.compose.material.icons.rounded.ArrowUpward
 import androidx.compose.material.icons.rounded.Close
+import androidx.compose.material.icons.rounded.DeleteOutline
 import androidx.compose.material.icons.rounded.Edit
 import androidx.compose.material.icons.rounded.KeyboardArrowDown
 import androidx.compose.material.icons.rounded.KeyboardArrowUp
@@ -68,6 +69,7 @@ import androidx.compose.ui.unit.dp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.music.bitchord.R
 import com.music.bitchord.data.model.Song
+import com.music.bitchord.data.model.sortedByAlbumTrackOrder
 import com.music.bitchord.data.settings.AppSettings
 import com.music.bitchord.data.settings.LibraryViewType
 import com.music.bitchord.ui.theme.ArtworkPalette
@@ -80,8 +82,10 @@ import com.music.bitchord.feature.localmusic.data.LocalPlaylistStore
 import com.music.bitchord.feature.localmusic.data.resolvePlaylistSongs
 import com.music.bitchord.feature.localsongactions.data.LocalPlayStatsStore
 import com.music.bitchord.feature.localmusic.domain.model.LocalPlaylist
+import com.music.bitchord.feature.artistimage.util.ArtistSplitter
 import com.music.bitchord.feature.localmusic.ui.components.CreatePlaylistDialog
 import com.music.bitchord.feature.localsongactions.ui.components.LocalAddToPlaylistSheet
+import com.music.bitchord.feature.localsongactions.ui.components.LocalSongDropdownMenu
 import com.music.bitchord.feature.localsongactions.ui.LocalSongActionsHelper
 import com.music.bitchord.feature.tageditor.data.TagLibWriter
 import kotlinx.coroutines.launch
@@ -99,6 +103,7 @@ private fun PlaylistSelectionToolbar(
     onAddToPlaylist: () -> Unit,
     onEditTags: () -> Unit,
     onShare: () -> Unit,
+    onDeleteFromPlaylist: () -> Unit,
     onMoveUp: () -> Unit,
     onMoveDown: () -> Unit,
     onMoveToTop: () -> Unit,
@@ -130,6 +135,13 @@ private fun PlaylistSelectionToolbar(
         }
         IconButton(onClick = onShare) {
             Icon(Icons.Rounded.Share, contentDescription = stringResource(R.string.selection_share), tint = contentColor)
+        }
+        IconButton(onClick = onDeleteFromPlaylist) {
+            Icon(
+                Icons.Rounded.DeleteOutline,
+                contentDescription = stringResource(R.string.remove_from_playlist),
+                tint = contentColor,
+            )
         }
         IconButton(onClick = onToggleReorder) {
             Icon(
@@ -225,6 +237,8 @@ fun LibraryScreen(
     var playlistReorderEnabled by rememberSaveable { mutableStateOf(false) }
     var playlistSelectionMode by rememberSaveable { mutableStateOf(false) }
     var selectedPlaylistSongIds by rememberSaveable { mutableStateOf(emptySet<String>()) }
+    var activePlaylistMenuSong by remember { mutableStateOf<Song?>(null) }
+    var showDeleteFromPlaylistDialog by remember { mutableStateOf(false) }
     var showAddSelectedToPlaylist by remember { mutableStateOf(false) }
     var showBulkTagEditor by remember { mutableStateOf(false) }
     var bulkArtist by remember { mutableStateOf("") }
@@ -311,6 +325,8 @@ fun LibraryScreen(
     LaunchedEffect(drillDownPlaylistId) {
         playlistSelectionMode = false
         selectedPlaylistSongIds = emptySet()
+        activePlaylistMenuSong = null
+        showDeleteFromPlaylistDialog = false
     }
 
     LaunchedEffect(initialFilterRequest) {
@@ -340,7 +356,7 @@ fun LibraryScreen(
         if (selectedPlaylistSongIds.isEmpty()) playlistSelectionMode = false
     }
     fun isPlaylistSongSelected(song: Song): Boolean =
-        (song.localUri ?: song.videoId) in selectedPlaylistSongIds || song.videoId in selectedPlaylistSongIds
+        (song.localUri ?: song.videoId) in selectedPlaylistSongIds
 
     fun persistPlaylistSongOrder(playlistId: String, orderedSongs: List<Song>) {
         val storedIds = LocalPlaylistStore.getPlaylist(playlistId)?.songIds ?: return
@@ -399,7 +415,90 @@ fun LibraryScreen(
         drillDownSongs = reordered
         persistPlaylistSongOrder(playlistId, reordered)
     }
+    val playlistSongDropdownMenu: @Composable (Song) -> Unit = { song ->
+        val songKey = song.localUri ?: song.videoId
+        LocalSongDropdownMenu(
+            expanded = activePlaylistMenuSong?.let { it.localUri ?: it.videoId } == songKey,
+            onDismissRequest = { activePlaylistMenuSong = null },
+            song = song,
+            onQueueNext = {
+                activePlaylistMenuSong = null
+                onPlayNext?.invoke(song) ?: onSongSwipe(song)
+            },
+            onAddToQueue = {
+                activePlaylistMenuSong = null
+                onAddToQueue?.invoke(song) ?: onSongSwipe(song)
+            },
+            onAddToPlaylist = {
+                activePlaylistMenuSong = null
+                selectedPlaylistSongIds = setOf(songKey)
+                showAddSelectedToPlaylist = true
+            },
+            onRemoveFromPlaylist = if (drillDownPlaylistId != null) {
+                {
+                    activePlaylistMenuSong = null
+                    val playlistId = drillDownPlaylistId ?: return@LocalSongDropdownMenu
+                    LocalPlaylistStore.removeSongFromPlaylist(playlistId, songKey)
+                    drillDownSongs = drillDownSongs.filterNot { (it.localUri ?: it.videoId) == songKey }
+                    Toast.makeText(context, R.string.remove_from_playlist, Toast.LENGTH_SHORT).show()
+                }
+            } else null,
+            onGoToAlbum = song.albumName?.takeIf(String::isNotBlank)?.let {
+                { album ->
+                    activePlaylistMenuSong = null
+                    drillDownPlaylistId = null
+                    playlistSelectionMode = false
+                    selectedPlaylistSongIds = emptySet()
+                    drillDownLabel = album
+                    drillDownSongs = songs
+                        .filter { it.albumName.equals(album, ignoreCase = true) }
+                        .sortedByAlbumTrackOrder()
+                    drillDownArt = drillDownSongs.firstNotNullOfOrNull { it.thumbnailUrl }
+                }
+            },
+            onGoToArtist = song.artist.takeIf(String::isNotBlank)?.let {
+                { artist ->
+                    activePlaylistMenuSong = null
+                    drillDownPlaylistId = null
+                    playlistSelectionMode = false
+                    selectedPlaylistSongIds = emptySet()
+                    drillDownLabel = artist
+                    drillDownSongs = songs.filter { ArtistSplitter.matchesArtist(it.artist, artist) }
+                    drillDownArt = null
+                }
+            },
+            onGoToFolder = song.localPath?.takeIf(String::isNotBlank)?.let {
+                { folder ->
+                    activePlaylistMenuSong = null
+                    drillDownPlaylistId = null
+                    playlistSelectionMode = false
+                    selectedPlaylistSongIds = emptySet()
+                    drillDownLabel = folder.substringAfterLast('/')
+                    drillDownSongs = songs.filter { (it.localPath ?: "").substringBeforeLast('/') == folder }
+                    drillDownArt = null
+                }
+            },
+            onTagEditor = {
+                activePlaylistMenuSong = null
+                onSongLongPress(song)
+            },
+            onShare = {
+                activePlaylistMenuSong = null
+                LocalSongActionsHelper.shareSong(context, song)
+            },
+            onDeleteFromDevice = {
+                activePlaylistMenuSong = null
+                onDeleteSong?.invoke(song)
+            },
+            onDetails = {
+                activePlaylistMenuSong = null
+                onSongLongPress(song)
+            },
+        )
+    }
     val leaveDrillDown = {
+        activePlaylistMenuSong = null
+        showDeleteFromPlaylistDialog = false
         drillDownLabel = null
         drillDownSongs = emptyList()
         drillDownArt = null
@@ -478,6 +577,7 @@ fun LibraryScreen(
                                 onAddToPlaylist = { showAddSelectedToPlaylist = true },
                                 onEditTags = { showBulkTagEditor = true },
                                 onShare = { LocalSongActionsHelper.shareSongs(context, selectedPlaylistSongs) },
+                                onDeleteFromPlaylist = { showDeleteFromPlaylistDialog = true },
                                 onMoveUp = { moveSelectedSongsByOne(-1) },
                                 onMoveDown = { moveSelectedSongsByOne(1) },
                                 onMoveToTop = { persistSelectedOrder(toTop = true) },
@@ -520,7 +620,9 @@ fun LibraryScreen(
                     },
                     // Selection changes the row tap and long-press behavior,
                     // but the trailing details/actions button stays available.
-                    onSongMore = onSongLongPress,
+                    onSongMore = if (drillDownPlaylistId != null) {
+                        { song -> activePlaylistMenuSong = song }
+                    } else onSongLongPress,
                     onSongSwipe = onSongSwipe,
                     onShuffle = onShuffle,
                     onMore = null,
@@ -546,7 +648,7 @@ fun LibraryScreen(
                     },
                     onBack = leaveDrillDown,
                     contentPadding = contentPadding,
-                    songDropdownMenu = songDropdownMenu,
+                    songDropdownMenu = if (drillDownPlaylistId != null) playlistSongDropdownMenu else songDropdownMenu,
                     onArtworkPaletteChanged = onArtworkPaletteChanged,
                 )
             } else if (key.startsWith("history:")) {
@@ -773,6 +875,38 @@ fun LibraryScreen(
                 showAddSelectedToPlaylist = false
                 playlistSelectionMode = false
                 selectedPlaylistSongIds = emptySet()
+            },
+        )
+    }
+
+    if (showDeleteFromPlaylistDialog && drillDownPlaylistId != null) {
+        val playlistId = drillDownPlaylistId!!
+        val selectedIds = selectedPlaylistSongIds
+        AlertDialog(
+            onDismissRequest = { showDeleteFromPlaylistDialog = false },
+            title = { Text(stringResource(R.string.remove_from_playlist)) },
+            text = {
+                Text(stringResource(R.string.remove_playlist_tracks_confirmation, selectedIds.size))
+            },
+            confirmButton = {
+                TextButton(
+                    enabled = selectedIds.isNotEmpty(),
+                    onClick = {
+                        LocalPlaylistStore.removeSongsFromPlaylist(playlistId, selectedIds)
+                        drillDownSongs = drillDownSongs.filterNot(::isPlaylistSongSelected)
+                        selectedPlaylistSongIds = emptySet()
+                        playlistSelectionMode = false
+                        showDeleteFromPlaylistDialog = false
+                        Toast.makeText(context, R.string.remove_from_playlist, Toast.LENGTH_SHORT).show()
+                    },
+                ) {
+                    Text(stringResource(R.string.delete))
+                }
+            },
+            dismissButton = {
+                TextButton(onClick = { showDeleteFromPlaylistDialog = false }) {
+                    Text(stringResource(R.string.cancel))
+                }
             },
         )
     }

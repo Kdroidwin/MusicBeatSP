@@ -117,7 +117,9 @@ object MusicoletBackupImporter {
         val uri = runCatching { Uri.parse(raw) }.getOrNull()
         val scheme = uri?.scheme?.lowercase(Locale.ROOT)
 
-        localSongs.firstOrNull { it.localUri == raw || it.videoId == raw }?.let { return it.toTrack(entry) }
+        localSongs.firstOrNull { it.localUri == raw }
+            ?.let { return it.toTrack(entry) }
+            ?: localSongs.firstOrNull { it.videoId == raw }?.let { return it.toTrack(entry) }
 
         val relativeDocumentPath = if (scheme == "content") documentRelativePath(context, uri) else null
         val absolutePath = when {

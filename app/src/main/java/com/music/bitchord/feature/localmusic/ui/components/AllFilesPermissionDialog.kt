@@ -29,11 +29,13 @@ import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
+import com.music.bitchord.R
 
 /**
  * First-launch permission dialog requesting All Files Access.
@@ -79,7 +81,7 @@ fun AllFilesPermissionDialog(
                 Spacer(modifier = Modifier.height(16.dp))
 
                 Text(
-                    text = "All Files Access Required",
+                    text = stringResource(R.string.all_files_access_required),
                     style = MaterialTheme.typography.titleLarge,
                     fontWeight = FontWeight.Bold,
                     color = MaterialTheme.colorScheme.onSurface,
@@ -94,7 +96,7 @@ fun AllFilesPermissionDialog(
                     .padding(horizontal = 4.dp),
             ) {
                 Text(
-                    text = "BitChord is built to provide an uncompromised local music experience. To read your library, modify tags, and embed lyrics without system interruptions, BitChord requires All Files Access.",
+                    text = stringResource(R.string.all_files_access_explanation),
                     style = MaterialTheme.typography.bodyMedium,
                     color = MaterialTheme.colorScheme.onSurfaceVariant,
                     textAlign = TextAlign.Center,
@@ -104,24 +106,24 @@ fun AllFilesPermissionDialog(
 
                 PermissionFeatureRow(
                     icon = Icons.Rounded.LibraryMusic,
-                    title = "Full Audio Library",
-                    description = "Seamlessly index and play tracks from any folder on device.",
+                    title = stringResource(R.string.all_files_audio_library),
+                    description = stringResource(R.string.all_files_audio_library_description),
                 )
 
                 Spacer(modifier = Modifier.height(12.dp))
 
                 PermissionFeatureRow(
                     icon = Icons.Rounded.EditNote,
-                    title = "In-Place Tag Editor",
-                    description = "Edit metadata and embed album artwork without OS prompts.",
+                    title = stringResource(R.string.all_files_tag_editor),
+                    description = stringResource(R.string.all_files_tag_editor_description),
                 )
 
                 Spacer(modifier = Modifier.height(12.dp))
 
                 PermissionFeatureRow(
                     icon = Icons.Rounded.Lyrics,
-                    title = "Embedded Lyrics",
-                    description = "Save synced and unsynced lyrics directly into audio files.",
+                    title = stringResource(R.string.all_files_embedded_lyrics),
+                    description = stringResource(R.string.all_files_embedded_lyrics_description),
                 )
             }
         },
@@ -142,7 +144,7 @@ fun AllFilesPermissionDialog(
                     modifier = Modifier.fillMaxWidth(),
                 ) {
                     Text(
-                        text = "Grant All Files Access",
+                        text = stringResource(R.string.grant_all_files_access),
                         style = MaterialTheme.typography.labelLarge,
                         fontWeight = FontWeight.Bold,
                     )
@@ -155,7 +157,7 @@ fun AllFilesPermissionDialog(
                         modifier = Modifier.fillMaxWidth(),
                     ) {
                         Text(
-                            text = "Continue with Basic Audio",
+                            text = stringResource(R.string.continue_basic_audio),
                             style = MaterialTheme.typography.labelMedium,
                             color = MaterialTheme.colorScheme.onSurfaceVariant,
                         )
@@ -167,7 +169,7 @@ fun AllFilesPermissionDialog(
                         modifier = Modifier.fillMaxWidth(),
                     ) {
                         Text(
-                            text = "Not Now",
+                            text = stringResource(R.string.not_now),
                             style = MaterialTheme.typography.labelMedium,
                             color = MaterialTheme.colorScheme.onSurfaceVariant,
                         )

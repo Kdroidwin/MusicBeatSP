@@ -21,8 +21,10 @@ import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.unit.dp
+import com.music.bitchord.R
 
 val STANDARD_GENRES = listOf(
     "Acoustic", "Alternative", "Ambient", "Anime", "Blues", "Classical", "Classic Rock",
@@ -50,7 +52,7 @@ fun TagEditorGenreDialog(
         shape = RoundedCornerShape(24.dp),
         title = {
             Text(
-                text = "Select genre",
+                text = stringResource(R.string.tag_editor_select_genre),
                 style = MaterialTheme.typography.titleLarge,
             )
         },
@@ -59,7 +61,7 @@ fun TagEditorGenreDialog(
                 OutlinedTextField(
                     value = search,
                     onValueChange = { search = it },
-                    placeholder = { Text("Search genre...") },
+                    placeholder = { Text(stringResource(R.string.tag_editor_search_genre)) },
                     singleLine = true,
                     shape = RoundedCornerShape(12.dp),
                     modifier = Modifier.fillMaxWidth(),
@@ -92,7 +94,7 @@ fun TagEditorGenreDialog(
         confirmButton = {},
         dismissButton = {
             TextButton(onClick = onDismissRequest) {
-                Text("Cancel")
+                Text(stringResource(R.string.cancel))
             }
         },
         modifier = modifier,

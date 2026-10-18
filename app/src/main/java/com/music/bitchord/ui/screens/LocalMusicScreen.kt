@@ -60,6 +60,7 @@ import androidx.compose.material.icons.rounded.Search
 import androidx.compose.material.icons.rounded.Shuffle
 import androidx.compose.material3.DropdownMenu
 import androidx.compose.material3.DropdownMenuItem
+import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
@@ -73,6 +74,7 @@ import androidx.compose.material3.TabRow
 import androidx.compose.material3.TabRowDefaults
 import androidx.compose.material3.TabRowDefaults.tabIndicatorOffset
 import androidx.compose.material3.Text
+import androidx.compose.material3.TextButton
 import androidx.compose.material3.TextButton
 import androidx.compose.material3.pulltorefresh.PullToRefreshBox
 import androidx.compose.material3.pulltorefresh.PullToRefreshDefaults
@@ -272,6 +274,7 @@ fun LocalMusicScreen(
     var lyricsEditorSong by remember { mutableStateOf<Song?>(null) }
     var deleteSong by remember { mutableStateOf<Song?>(null) }
     var addToPlaylistSongs by remember { mutableStateOf<List<Song>?>(null) }
+    var showRemoveFromPlaylistDialog by remember { mutableStateOf(false) }
 
     // Which top-level tab is selected.
     var selectedTab by rememberSaveable { mutableIntStateOf(initialTab) }
@@ -360,14 +363,17 @@ fun LocalMusicScreen(
 
     val selectingSongs = selectedSongIds.isNotEmpty()
 
+    fun songSelectionKey(song: Song): String = song.localUri ?: song.videoId
+
     fun toggleDownloadSelection(song: Song) {
+        val key = songSelectionKey(song)
         selectedSongIds = selectedSongIds.let { selected ->
-            if (song.videoId in selected) selected - song.videoId else selected + song.videoId
+            if (key in selected) selected - key else selected + key
         }
     }
 
     fun toggleAlbumSelection(entry: AlbumEntry) {
-        val albumIds = entry.songs.mapTo(linkedSetOf()) { it.videoId }
+        val albumIds = entry.songs.mapTo(linkedSetOf(), ::songSelectionKey)
         if (entry.key in selectedAlbumKeys) {
             selectedAlbumKeys = selectedAlbumKeys - entry.key
             selectedSongIds = selectedSongIds - albumIds
@@ -379,6 +385,7 @@ fun LocalMusicScreen(
 
     // When non-null, we are showing a drill-down list for that artist or album.
     var drillDownLabel by remember { mutableStateOf<String?>(null) }
+    var drillDownPlaylistId by remember { mutableStateOf<String?>(null) }
     var drillDownSongs by remember { mutableStateOf<List<Song>>(emptyList()) }
     // The release's own cover, for the drill-down header. Only a downloaded
     // album or playlist has one worth showing — a tag-derived grouping's
@@ -399,6 +406,7 @@ fun LocalMusicScreen(
     }
     val leaveDrillDown: () -> Unit = {
         drillDownLabel = null
+        drillDownPlaylistId = null
         drillDownSongs = emptyList()
         drillDownArt = null
         drillDownIsArtist = false
@@ -441,6 +449,7 @@ fun LocalMusicScreen(
     LaunchedEffect(initialDrillDownLabel, songs, selectedTab, artistsOpenAlbums) {
         if (!initialDrillDownLabel.isNullOrBlank()) {
             val target = initialDrillDownLabel.trim()
+            drillDownPlaylistId = null
             if (selectedTab == LOCAL_TAB_ARTISTS) {
                 drillDownLabel = target
                 drillDownSongs = songs.filter { ArtistSplitter.matchesArtist(it.artist, target) }
@@ -465,7 +474,7 @@ fun LocalMusicScreen(
 
     val songDropdownMenu: @Composable (Song) -> Unit = { song ->
         LocalSongDropdownMenu(
-            expanded = (activeMenuSong?.videoId == song.videoId),
+            expanded = (activeMenuSong?.let(::songSelectionKey) == songSelectionKey(song)),
             onDismissRequest = { activeMenuSong = null },
             song = song,
             onQueueNext = {
@@ -482,9 +491,20 @@ fun LocalMusicScreen(
                 activeMenuSong = null
                 addToPlaylistSongs = listOf(song)
             },
+            onRemoveFromPlaylist = if (drillDownPlaylistId != null) {
+                {
+                    activeMenuSong = null
+                    val playlistId = drillDownPlaylistId ?: return@LocalSongDropdownMenu
+                    val songId = songSelectionKey(song)
+                    LocalPlaylistStore.removeSongFromPlaylist(playlistId, songId)
+                    drillDownSongs = drillDownSongs.filterNot { songSelectionKey(it) == songId }
+                    Toast.makeText(context, R.string.remove_from_playlist, Toast.LENGTH_SHORT).show()
+                }
+            } else null,
             onGoToAlbum = if (!song.albumName.isNullOrBlank()) {
                 { targetAlbum ->
                     activeMenuSong = null
+                    drillDownPlaylistId = null
                     drillDownLabel = targetAlbum
                     drillDownSongs = songs.filter { it.albumName == targetAlbum }.sortedByAlbumTrackOrder()
                     drillDownArt = songs.find { it.albumName == targetAlbum }?.thumbnailUrl
@@ -497,6 +517,7 @@ fun LocalMusicScreen(
             onGoToArtist = if (song.artist.isNotBlank()) {
                 { targetArtist ->
                     activeMenuSong = null
+                    drillDownPlaylistId = null
                     drillDownLabel = targetArtist
                     drillDownSongs = songs.filter { s -> ArtistSplitter.matchesArtist(s.artist, targetArtist) }
                     drillDownArt = null
@@ -511,6 +532,7 @@ fun LocalMusicScreen(
             onGoToFolder = if (!song.localPath.isNullOrBlank()) {
                 { targetFolder ->
                     activeMenuSong = null
+                    drillDownPlaylistId = null
                     drillDownLabel = targetFolder.substringAfterLast('/')
                     drillDownSongs = songs.filter { (it.localPath ?: "").substringBeforeLast('/') == targetFolder }
                     drillDownArt = null
@@ -558,19 +580,23 @@ fun LocalMusicScreen(
             val selectableSongs = if (inDrillDown) drillDownSongs else sortedSongs
             DownloadSelectionBar(
                 count = selectedSongIds.size,
-                allSelected = selectableSongs.isNotEmpty() && selectedSongIds.containsAll(selectableSongs.map { it.videoId }),
-                showDelete = isDownloads,
+                allSelected = selectableSongs.isNotEmpty() && selectedSongIds.containsAll(selectableSongs.map(::songSelectionKey)),
+                showDelete = isDownloads || (inDrillDown && drillDownPlaylistId != null),
                 onAddToPlaylist = {
-                    addToPlaylistSongs = songs.filter { it.videoId in selectedSongIds }
+                    addToPlaylistSongs = selectableSongs.filter { songSelectionKey(it) in selectedSongIds }
                     selectedSongIds = emptySet()
                     selectedAlbumKeys = emptySet()
                 },
-                onSelectAll = { selectedSongIds = selectedSongIds + selectableSongs.map { it.videoId } },
+                onSelectAll = { selectedSongIds = selectedSongIds + selectableSongs.map(::songSelectionKey) },
                 onDelete = {
-                    val chosen = songs.filter { it.videoId in selectedSongIds }
-                    selectedSongIds = emptySet()
-                    selectedAlbumKeys = emptySet()
-                    onDeleteDownloads?.invoke(chosen)
+                    if (drillDownPlaylistId != null) {
+                        showRemoveFromPlaylistDialog = true
+                    } else {
+                        val chosen = songs.filter { songSelectionKey(it) in selectedSongIds }
+                        selectedSongIds = emptySet()
+                        selectedAlbumKeys = emptySet()
+                        onDeleteDownloads?.invoke(chosen)
+                    }
                 },
                 onCancel = {
                     selectedSongIds = emptySet()
@@ -916,7 +942,7 @@ fun LocalMusicScreen(
                         },
                         onAlbumLongPress = { entry ->
                             if (isDownloads) {
-                                selectedSongIds = selectedSongIds + entry.songs.map { it.videoId }
+                                selectedSongIds = selectedSongIds + entry.songs.map(::songSelectionKey)
                                 selectedAlbumKeys = selectedAlbumKeys + entry.key
                             } else onCollectionLongPress?.invoke(entry.title, entry.songs)
                         },
@@ -952,7 +978,10 @@ fun LocalMusicScreen(
                     LocalPlaylistsTab(
                         playlists = localPlaylists,
                         onPlaylistClick = { playlist ->
+                            drillDownPlaylistId = playlist.id
                             drillDownLabel = playlist.name
+                            selectedSongIds = emptySet()
+                            selectedAlbumKeys = emptySet()
                             drillDownSongs = resolvePlaylistSongs(playlist, songs)
                             drillDownArt = playlist.customCoverUrl ?: playlist.coverUrl
                             // The art-led layout is scoped to album details and
@@ -1016,6 +1045,39 @@ fun LocalMusicScreen(
         )
     }
 
+    if (showRemoveFromPlaylistDialog) {
+        AlertDialog(
+            onDismissRequest = { showRemoveFromPlaylistDialog = false },
+            title = { Text(stringResource(R.string.remove_from_playlist)) },
+            text = {
+                Text(stringResource(R.string.remove_playlist_tracks_confirmation, selectedSongIds.size))
+            },
+            confirmButton = {
+                TextButton(
+                    enabled = selectedSongIds.isNotEmpty() && drillDownPlaylistId != null,
+                    onClick = {
+                        val playlistId = drillDownPlaylistId
+                        if (playlistId != null && selectedSongIds.isNotEmpty()) {
+                            LocalPlaylistStore.removeSongsFromPlaylist(playlistId, selectedSongIds)
+                            drillDownSongs = drillDownSongs.filterNot { songSelectionKey(it) in selectedSongIds }
+                            Toast.makeText(context, R.string.remove_from_playlist, Toast.LENGTH_SHORT).show()
+                        }
+                        selectedSongIds = emptySet()
+                        selectedAlbumKeys = emptySet()
+                        showRemoveFromPlaylistDialog = false
+                    },
+                ) {
+                    Text(stringResource(R.string.delete))
+                }
+            },
+            dismissButton = {
+                TextButton(onClick = { showRemoveFromPlaylistDialog = false }) {
+                    Text(stringResource(R.string.cancel))
+                }
+            },
+        )
+    }
+
     detailsSong?.let { song ->
         LocalSongDetailsSheet(
             song = song,
@@ -1054,8 +1116,7 @@ fun LocalMusicScreen(
     }
 
     lyricsEditorSong?.let { song ->
-        val isActiveLyricsTrack = currentSong?.videoId == song.videoId ||
-            (song.localUri != null && currentSong?.localUri == song.localUri)
+        val isActiveLyricsTrack = currentSong?.isSameTrackAs(song) == true
         Dialog(
             onDismissRequest = { lyricsEditorSong = null },
             properties = DialogProperties(
@@ -1153,7 +1214,7 @@ private fun SongsTab(
                 itemsIndexed(songs) { index, song ->
                     SongGridCard(
                         song = song,
-                        selected = song.videoId in selectedIds,
+                        selected = (song.localUri ?: song.videoId) in selectedIds,
                         isCurrent = song.isSameTrackAs(currentSong),
                         onClick = { onSongClick(songs, index) },
                         onLongPress = { onSongLongPress(song) },
@@ -1199,7 +1260,7 @@ private fun SongsTab(
                 itemsIndexed(songs) { index, song ->
                     SongRow(
                         song = song,
-                        selected = song.videoId in selectedIds,
+                        selected = (song.localUri ?: song.videoId) in selectedIds,
                         isCurrent = song.isSameTrackAs(currentSong),
                         isPlaying = song.isSameTrackAs(currentSong) && isPlaying,
                         onClick = { onSongClick(songs, index) },

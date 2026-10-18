@@ -29,6 +29,7 @@ import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.lifecycle.viewmodel.compose.viewModel
+import com.music.bitchord.R
 import com.music.bitchord.data.model.Song
 import com.music.bitchord.feature.tageditor.ui.components.TagEditorArtworkSection
 import com.music.bitchord.feature.tageditor.ui.components.TagEditorFormFields
@@ -73,7 +74,7 @@ fun TagEditorScreen(
         if (result.resultCode == android.app.Activity.RESULT_OK) {
             viewModel.save(song)
         } else {
-            Toast.makeText(context, "Permission denied to edit audio file", Toast.LENGTH_SHORT).show()
+            Toast.makeText(context, R.string.tag_editor_permission_denied, Toast.LENGTH_SHORT).show()
         }
     }
 
@@ -111,11 +112,11 @@ fun TagEditorScreen(
     LaunchedEffect(Unit) {
         viewModel.saveEvent.collect { success ->
             if (success) {
-                Toast.makeText(context, "Changes saved successfully", Toast.LENGTH_SHORT).show()
+                Toast.makeText(context, R.string.tag_editor_saved, Toast.LENGTH_SHORT).show()
                 onTagsSaved?.invoke()
                 onNavigateBack()
             } else {
-                Toast.makeText(context, "Failed to save some changes", Toast.LENGTH_SHORT).show()
+                Toast.makeText(context, R.string.tag_editor_save_failed, Toast.LENGTH_SHORT).show()
             }
         }
     }

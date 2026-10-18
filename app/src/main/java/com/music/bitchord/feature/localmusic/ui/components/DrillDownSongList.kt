@@ -677,7 +677,7 @@ fun DrillDownSongList(
                 itemsIndexed(songs) { index, song ->
                     SongGridCard(
                         song = song,
-                        selected = song.videoId in selectedIds || (song.localUri ?: song.videoId) in selectedIds,
+                        selected = (song.localUri ?: song.videoId) in selectedIds,
                         isCurrent = song.isSameTrackAs(currentSong),
                         onClick = {
                             if (selectionMode) onSelectionToggle?.invoke(song) else onSongClick(songs, index)
@@ -815,7 +815,7 @@ fun DrillDownSongList(
                                     rowBackground = rowBackground,
                                     subtitleColor = rowSubtitleColor,
                                     downloadedTint = rowAccent,
-                                    selected = song.videoId in selectedIds || (song.localUri ?: song.videoId) in selectedIds,
+                                    selected = songKey in selectedIds,
                                     isCurrent = song.isSameTrackAs(currentSong),
                                     isPlaying = song.isSameTrackAs(currentSong) && isPlaying,
                                     activeTint = rowAccent,
@@ -833,7 +833,7 @@ fun DrillDownSongList(
                             Icon(
                                 imageVector = Icons.Rounded.DragHandle,
                                 contentDescription = stringResource(
-                                    if (selectionMode && (songKey in selectedIds || song.videoId in selectedIds)) {
+                                    if (selectionMode && songKey in selectedIds) {
                                         R.string.drag_selected_songs_to_reorder
                                     } else {
                                         R.string.drag_to_reorder_song
@@ -847,10 +847,10 @@ fun DrillDownSongList(
                                     .pointerInput(songKey, selectionMode, selectedIds) {
                                         detectDragGestures(
                                             onDragStart = {
-                                                val draggedIsSelected = songKey in selectedIds || song.videoId in selectedIds
+                                                val draggedIsSelected = songKey in selectedIds
                                                 val groupKeys = if (selectionMode && draggedIsSelected) {
                                                     displayedSongs
-                                                        .filter { (it.localUri ?: it.videoId) in selectedIds || it.videoId in selectedIds }
+                                                        .filter { (it.localUri ?: it.videoId) in selectedIds }
                                                         .map { it.localUri ?: it.videoId }
                                                         .toSet()
                                                 } else {
@@ -874,7 +874,7 @@ fun DrillDownSongList(
                             rowBackground = rowBackground,
                             subtitleColor = rowSubtitleColor,
                             downloadedTint = rowAccent,
-                            selected = song.videoId in selectedIds || (song.localUri ?: song.videoId) in selectedIds,
+                            selected = (song.localUri ?: song.videoId) in selectedIds,
                             isCurrent = song.isSameTrackAs(currentSong),
                             isPlaying = song.isSameTrackAs(currentSong) && isPlaying,
                             activeTint = rowAccent,

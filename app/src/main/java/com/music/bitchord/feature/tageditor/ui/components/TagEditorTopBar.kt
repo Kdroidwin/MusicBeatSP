@@ -19,7 +19,9 @@ import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.font.FontWeight
+import com.music.bitchord.R
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -34,7 +36,7 @@ fun TagEditorTopBar(
     TopAppBar(
         title = {
             Text(
-                text = "Tag editor",
+                text = stringResource(R.string.tag_editor),
                 style = MaterialTheme.typography.titleLarge.copy(fontWeight = FontWeight.SemiBold),
             )
         },
@@ -42,7 +44,7 @@ fun TagEditorTopBar(
             IconButton(onClick = onBackClick) {
                 Icon(
                     imageVector = Icons.AutoMirrored.Rounded.ArrowBack,
-                    contentDescription = "Back",
+                    contentDescription = stringResource(R.string.back),
                 )
             }
         },
@@ -51,7 +53,7 @@ fun TagEditorTopBar(
                 IconButton(onClick = { menuOpen = true }) {
                     Icon(
                         imageVector = Icons.Rounded.MoreVert,
-                        contentDescription = "More options",
+                        contentDescription = stringResource(R.string.tag_editor_more_options),
                     )
                 }
 
@@ -60,14 +62,14 @@ fun TagEditorTopBar(
                     onDismissRequest = { menuOpen = false },
                 ) {
                     DropdownMenuItem(
-                        text = { Text("Search online image") },
+                        text = { Text(stringResource(R.string.tag_editor_search_online_image)) },
                         onClick = {
                             menuOpen = false
                             onSearchOnlineImage()
                         },
                     )
                     DropdownMenuItem(
-                        text = { Text("Restore original tags") },
+                        text = { Text(stringResource(R.string.tag_editor_restore_original_tags)) },
                         onClick = {
                             menuOpen = false
                             onResetTags()

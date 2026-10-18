@@ -22,9 +22,11 @@ import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.unit.dp
+import com.music.bitchord.R
 
 @Composable
 fun TagEditorImageOptionsDialog(
@@ -40,7 +42,7 @@ fun TagEditorImageOptionsDialog(
         shape = RoundedCornerShape(24.dp),
         title = {
             Text(
-                text = "Update cover art",
+                text = stringResource(R.string.tag_editor_update_cover_art),
                 style = MaterialTheme.typography.titleLarge,
             )
         },
@@ -48,7 +50,7 @@ fun TagEditorImageOptionsDialog(
             Column(modifier = Modifier.fillMaxWidth()) {
                 ImageOptionRow(
                     icon = Icons.Rounded.Image,
-                    text = "Pick from local storage",
+                    text = stringResource(R.string.tag_editor_pick_cover_art),
                     onClick = {
                         onPickFromStorage()
                         onDismissRequest()
@@ -56,7 +58,7 @@ fun TagEditorImageOptionsDialog(
                 )
                 ImageOptionRow(
                     icon = Icons.Rounded.Search,
-                    text = "Search online image",
+                    text = stringResource(R.string.tag_editor_search_online_image),
                     onClick = {
                         onSearchOnline()
                         onDismissRequest()
@@ -64,7 +66,7 @@ fun TagEditorImageOptionsDialog(
                 )
                 ImageOptionRow(
                     icon = Icons.Rounded.Restore,
-                    text = "Restore default",
+                    text = stringResource(R.string.tag_editor_restore_cover_art),
                     onClick = {
                         onRestoreDefault()
                         onDismissRequest()
@@ -72,7 +74,7 @@ fun TagEditorImageOptionsDialog(
                 )
                 ImageOptionRow(
                     icon = Icons.Rounded.Delete,
-                    text = "Remove cover",
+                    text = stringResource(R.string.tag_editor_remove_cover_art),
                     isDestructive = true,
                     onClick = {
                         onRemoveCover()
@@ -84,7 +86,7 @@ fun TagEditorImageOptionsDialog(
         confirmButton = {},
         dismissButton = {
             TextButton(onClick = onDismissRequest) {
-                Text("Cancel")
+                Text(stringResource(R.string.cancel))
             }
         },
         modifier = modifier,

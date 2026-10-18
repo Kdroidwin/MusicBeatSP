@@ -23,10 +23,12 @@ import androidx.compose.material3.DropdownMenu
 import androidx.compose.material3.DropdownMenuItem
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
+import androidx.compose.material3.LocalContentColor
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
@@ -43,6 +45,8 @@ import com.music.bitchord.R
 import coil3.compose.AsyncImage
 import com.music.bitchord.feature.localmusic.domain.model.LocalPlaylist
 import com.music.bitchord.data.model.Song
+import com.music.bitchord.data.model.ROW_ART_PX
+import com.music.bitchord.ui.theme.rememberArtworkPalette
 
 /**
  * Item row rendering a user-created local offline playlist.
@@ -66,6 +70,8 @@ fun LocalPlaylistItem(
 ) {
     var menuOpen by remember { mutableStateOf(false) }
     val exportM3u = rememberM3uExportAction(playlist, librarySongs)
+    val coverUrl = playlist.customCoverUrl ?: playlist.coverUrl
+    val menuPalette = if (menuOpen) rememberArtworkPalette(coverUrl, artPx = ROW_ART_PX) else null
 
     Surface(
         modifier = modifier
@@ -90,10 +96,9 @@ fun LocalPlaylistItem(
                     .background(MaterialTheme.colorScheme.primaryContainer),
                 contentAlignment = Alignment.Center,
             ) {
-                val cover = playlist.customCoverUrl ?: playlist.coverUrl
-                if (!cover.isNullOrBlank()) {
+                if (!coverUrl.isNullOrBlank()) {
                     AsyncImage(
-                        model = cover,
+                        model = coverUrl,
                         contentDescription = playlist.name,
                         contentScale = ContentScale.Crop,
                         modifier = Modifier.matchParentSize(),
@@ -140,10 +145,14 @@ fun LocalPlaylistItem(
                     )
                 }
 
-                DropdownMenu(
-                    expanded = menuOpen,
-                    onDismissRequest = { menuOpen = false },
+                CompositionLocalProvider(
+                    LocalContentColor provides (menuPalette?.onBackground ?: MaterialTheme.colorScheme.onSurface),
                 ) {
+                    DropdownMenu(
+                        expanded = menuOpen,
+                        onDismissRequest = { menuOpen = false },
+                        containerColor = menuPalette?.background ?: MaterialTheme.colorScheme.surfaceContainerHigh,
+                    ) {
                     DropdownMenuItem(
                         text = { Text(stringResource(R.string.change_playlist_cover)) },
                         onClick = {
@@ -217,6 +226,7 @@ fun LocalPlaylistItem(
                             onDelete()
                         },
                     )
+                    }
                 }
             }
         }

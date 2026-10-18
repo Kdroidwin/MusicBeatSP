@@ -82,7 +82,9 @@ object M3uPlaylistImporter {
         val uri = runCatching { Uri.parse(raw) }.getOrNull()
         val scheme = uri?.scheme?.lowercase(Locale.ROOT)
         if (scheme == "content") {
-            localSongs.firstOrNull { it.localUri == raw || it.videoId == raw }?.let { return it.toImportTrack(entry) }
+            localSongs.firstOrNull { it.localUri == raw }
+                ?.let { return it.toImportTrack(entry) }
+                ?: localSongs.firstOrNull { it.videoId == raw }?.let { return it.toImportTrack(entry) }
             if (!canReadContentUri(context, uri)) return null
             runCatching {
                 context.contentResolver.takePersistableUriPermission(

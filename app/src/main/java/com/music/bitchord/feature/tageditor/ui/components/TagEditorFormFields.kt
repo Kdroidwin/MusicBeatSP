@@ -19,6 +19,8 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.text.input.KeyboardCapitalization
 import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.unit.dp
+import androidx.compose.ui.res.stringResource
+import com.music.bitchord.R
 import com.music.bitchord.feature.tageditor.domain.model.SongTagData
 
 @Composable
@@ -38,7 +40,7 @@ fun TagEditorFormFields(
         OutlinedTextField(
             value = tags.title,
             onValueChange = { onTagsChange(tags.copy(title = it)) },
-            label = { Text("Title") },
+            label = { Text(stringResource(R.string.tag_field_title)) },
             shape = fieldShape,
             singleLine = true,
             modifier = Modifier.fillMaxWidth(),
@@ -48,7 +50,7 @@ fun TagEditorFormFields(
         OutlinedTextField(
             value = tags.album,
             onValueChange = { onTagsChange(tags.copy(album = it)) },
-            label = { Text("Album") },
+            label = { Text(stringResource(R.string.tag_field_album)) },
             shape = fieldShape,
             singleLine = true,
             modifier = Modifier.fillMaxWidth(),
@@ -58,7 +60,7 @@ fun TagEditorFormFields(
         OutlinedTextField(
             value = tags.artist,
             onValueChange = { onTagsChange(tags.copy(artist = it)) },
-            label = { Text("Artist") },
+            label = { Text(stringResource(R.string.tag_field_artist)) },
             shape = fieldShape,
             singleLine = true,
             modifier = Modifier.fillMaxWidth(),
@@ -68,7 +70,7 @@ fun TagEditorFormFields(
         OutlinedTextField(
             value = tags.albumArtist,
             onValueChange = { onTagsChange(tags.copy(albumArtist = it)) },
-            label = { Text("Album Artist") },
+            label = { Text(stringResource(R.string.tag_field_album_artist)) },
             shape = fieldShape,
             singleLine = true,
             modifier = Modifier.fillMaxWidth(),
@@ -78,7 +80,7 @@ fun TagEditorFormFields(
         OutlinedTextField(
             value = tags.composer,
             onValueChange = { onTagsChange(tags.copy(composer = it)) },
-            label = { Text("Composer") },
+            label = { Text(stringResource(R.string.tag_field_composer)) },
             shape = fieldShape,
             singleLine = true,
             modifier = Modifier.fillMaxWidth(),
@@ -88,7 +90,7 @@ fun TagEditorFormFields(
         OutlinedTextField(
             value = tags.conductor,
             onValueChange = { onTagsChange(tags.copy(conductor = it)) },
-            label = { Text("Producer") },
+            label = { Text(stringResource(R.string.tag_field_producer)) },
             shape = fieldShape,
             singleLine = true,
             modifier = Modifier.fillMaxWidth(),
@@ -98,7 +100,7 @@ fun TagEditorFormFields(
         OutlinedTextField(
             value = tags.publisher,
             onValueChange = { onTagsChange(tags.copy(publisher = it)) },
-            label = { Text("Publisher") },
+            label = { Text(stringResource(R.string.tag_field_publisher)) },
             shape = fieldShape,
             singleLine = true,
             modifier = Modifier.fillMaxWidth(),
@@ -108,12 +110,12 @@ fun TagEditorFormFields(
         OutlinedTextField(
             value = tags.genre,
             onValueChange = { onTagsChange(tags.copy(genre = it)) },
-            label = { Text("Genre") },
+            label = { Text(stringResource(R.string.tag_field_genre)) },
             trailingIcon = {
                 IconButton(onClick = onOpenGenrePicker) {
                     Icon(
                         imageVector = Icons.Rounded.ArrowDropDown,
-                        contentDescription = "Select Genre",
+                        contentDescription = stringResource(R.string.tag_editor_select_genre),
                     )
                 }
             },
@@ -126,7 +128,7 @@ fun TagEditorFormFields(
         OutlinedTextField(
             value = tags.year,
             onValueChange = { onTagsChange(tags.copy(year = it)) },
-            label = { Text("Year") },
+            label = { Text(stringResource(R.string.tag_field_year)) },
             keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),
             shape = fieldShape,
             singleLine = true,
@@ -141,7 +143,7 @@ fun TagEditorFormFields(
             OutlinedTextField(
                 value = tags.trackNumber,
                 onValueChange = { onTagsChange(tags.copy(trackNumber = it)) },
-                label = { Text("Track") },
+                label = { Text(stringResource(R.string.tag_field_track)) },
                 keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),
                 shape = fieldShape,
                 singleLine = true,
@@ -150,7 +152,7 @@ fun TagEditorFormFields(
             OutlinedTextField(
                 value = tags.trackTotal,
                 onValueChange = { onTagsChange(tags.copy(trackTotal = it)) },
-                label = { Text("Track Total") },
+                label = { Text(stringResource(R.string.tag_field_track_total)) },
                 keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),
                 shape = fieldShape,
                 singleLine = true,
@@ -166,7 +168,7 @@ fun TagEditorFormFields(
             OutlinedTextField(
                 value = tags.discNumber,
                 onValueChange = { onTagsChange(tags.copy(discNumber = it)) },
-                label = { Text("Disc") },
+                label = { Text(stringResource(R.string.tag_field_disc)) },
                 keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),
                 shape = fieldShape,
                 singleLine = true,
@@ -175,7 +177,7 @@ fun TagEditorFormFields(
             OutlinedTextField(
                 value = tags.discTotal,
                 onValueChange = { onTagsChange(tags.copy(discTotal = it)) },
-                label = { Text("Disc Total") },
+                label = { Text(stringResource(R.string.tag_field_disc_total)) },
                 keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),
                 shape = fieldShape,
                 singleLine = true,
@@ -187,7 +189,7 @@ fun TagEditorFormFields(
         OutlinedTextField(
             value = tags.lyrics,
             onValueChange = { onTagsChange(tags.copy(lyrics = it)) },
-            label = { Text("Lyrics") },
+            label = { Text(stringResource(R.string.tag_field_lyrics)) },
             shape = fieldShape,
             modifier = Modifier
                 .fillMaxWidth()
@@ -198,7 +200,7 @@ fun TagEditorFormFields(
         OutlinedTextField(
             value = tags.lyricist,
             onValueChange = { onTagsChange(tags.copy(lyricist = it)) },
-            label = { Text("Lyricist") },
+            label = { Text(stringResource(R.string.tag_field_lyricist)) },
             shape = fieldShape,
             singleLine = true,
             modifier = Modifier.fillMaxWidth(),
@@ -208,7 +210,7 @@ fun TagEditorFormFields(
         OutlinedTextField(
             value = tags.arranger,
             onValueChange = { onTagsChange(tags.copy(arranger = it)) },
-            label = { Text("Arranger") },
+            label = { Text(stringResource(R.string.tag_field_arranger)) },
             shape = fieldShape,
             singleLine = true,
             modifier = Modifier.fillMaxWidth(),
@@ -218,7 +220,7 @@ fun TagEditorFormFields(
         OutlinedTextField(
             value = tags.comment,
             onValueChange = { onTagsChange(tags.copy(comment = it)) },
-            label = { Text("Comment") },
+            label = { Text(stringResource(R.string.tag_field_comment)) },
             shape = fieldShape,
             singleLine = true,
             modifier = Modifier.fillMaxWidth(),

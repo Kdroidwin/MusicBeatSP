@@ -15,14 +15,17 @@ import androidx.compose.material.icons.rounded.Info
 import androidx.compose.material.icons.rounded.Person
 import androidx.compose.material.icons.rounded.PlaylistAdd
 import androidx.compose.material.icons.rounded.PlaylistPlay
+import androidx.compose.material.icons.rounded.PlaylistRemove
 import androidx.compose.material.icons.rounded.Share
 import androidx.compose.material3.DropdownMenu
 import androidx.compose.material3.DropdownMenuItem
 import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
+import androidx.compose.material3.LocalContentColor
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
@@ -33,7 +36,9 @@ import androidx.compose.ui.unit.DpOffset
 import androidx.compose.ui.unit.dp
 import com.music.bitchord.R
 import com.music.bitchord.data.model.Song
+import com.music.bitchord.data.model.CARD_ART_PX
 import com.music.bitchord.feature.artistimage.util.ArtistSplitter
+import com.music.bitchord.ui.theme.rememberArtworkPalette
 
 /**
  * Material 3 DropdownMenu displaying the 8 local song options matching the reference player.
@@ -53,22 +58,28 @@ fun LocalSongDropdownMenu(
     onShare: () -> Unit,
     onDeleteFromDevice: () -> Unit,
     onDetails: () -> Unit,
+    onRemoveFromPlaylist: (() -> Unit)? = null,
     modifier: Modifier = Modifier,
     offset: DpOffset = DpOffset(0.dp, 0.dp),
 ) {
     var showingSubMenu by remember { mutableStateOf(false) }
+    // Use the same artwork size and palette derivation as the player's details
+    // sheet so a playlist row's menu follows that track's own sleeve.
+    val palette = if (expanded) rememberArtworkPalette(song.thumbnailUrl, artPx = CARD_ART_PX) else null
+    val menuForeground = palette?.onBackground ?: MaterialTheme.colorScheme.onSurface
 
-    DropdownMenu(
-        expanded = expanded,
-        onDismissRequest = {
-            showingSubMenu = false
-            onDismissRequest()
-        },
-        offset = offset,
-        shape = RoundedCornerShape(16.dp),
-        containerColor = MaterialTheme.colorScheme.surfaceContainerHigh,
-        modifier = modifier,
-    ) {
+    CompositionLocalProvider(LocalContentColor provides menuForeground) {
+        DropdownMenu(
+            expanded = expanded,
+            onDismissRequest = {
+                showingSubMenu = false
+                onDismissRequest()
+            },
+            offset = offset,
+            shape = RoundedCornerShape(16.dp),
+            containerColor = palette?.background ?: MaterialTheme.colorScheme.surfaceContainerHigh,
+            modifier = modifier,
+        ) {
         if (!showingSubMenu) {
             DropdownMenuItem(
                 text = { Text(stringResource(R.string.queue_next)) },
@@ -114,6 +125,24 @@ fun LocalSongDropdownMenu(
                     onAddToPlaylist()
                 },
             )
+
+            if (onRemoveFromPlaylist != null) {
+                DropdownMenuItem(
+                    text = { Text(stringResource(R.string.remove_from_playlist)) },
+                    leadingIcon = {
+                        Icon(
+                            Icons.Rounded.PlaylistRemove,
+                            contentDescription = null,
+                            tint = MaterialTheme.colorScheme.error,
+                            modifier = Modifier.size(20.dp),
+                        )
+                    },
+                    onClick = {
+                        onDismissRequest()
+                        onRemoveFromPlaylist()
+                    },
+                )
+            }
 
             val hasGoTo = onGoToAlbum != null || onGoToArtist != null || onGoToFolder != null
             if (hasGoTo) {
@@ -286,6 +315,7 @@ fun LocalSongDropdownMenu(
                     },
                 )
             }
+        }
         }
     }
 }

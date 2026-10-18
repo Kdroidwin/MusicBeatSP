@@ -163,14 +163,34 @@ object LocalPlaylistStore {
     }
 
     fun removeSongFromPlaylist(playlistId: String, songId: String) {
+        var changed = false
         _playlists.value = _playlists.value.map { pl ->
             if (pl.id == playlistId) {
-                pl.copy(songIds = pl.songIds - songId)
+                if (songId in pl.songIds) changed = true
+                pl.copy(
+                    songIds = pl.songIds - songId,
+                    songMetadata = pl.songMetadata - songId,
+                )
             } else {
                 pl
             }
         }
-        persist()
+        if (changed) persist()
+    }
+
+    fun removeSongsFromPlaylist(playlistId: String, songIds: Set<String>) {
+        if (songIds.isEmpty()) return
+        var changed = false
+        _playlists.value = _playlists.value.map { pl ->
+            if (pl.id != playlistId) return@map pl
+            val updatedIds = pl.songIds.filterNot(songIds::contains)
+            if (updatedIds.size != pl.songIds.size) changed = true
+            pl.copy(
+                songIds = updatedIds,
+                songMetadata = pl.songMetadata.filterKeys { it !in songIds },
+            )
+        }
+        if (changed) persist()
     }
 
     fun getPlaylist(id: String): LocalPlaylist? {
