@@ -31,6 +31,7 @@ import androidx.compose.animation.core.animateFloatAsState
 import androidx.compose.animation.core.infiniteRepeatable
 import androidx.compose.animation.core.rememberInfiniteTransition
 import androidx.compose.animation.core.spring
+import androidx.compose.animation.core.snap
 import androidx.compose.animation.core.tween
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
@@ -97,6 +98,7 @@ import androidx.compose.material.icons.rounded.Album
 import androidx.compose.material.icons.rounded.Bedtime
 import androidx.compose.material.icons.rounded.Close
 import androidx.compose.material.icons.rounded.DragHandle
+import androidx.compose.material.icons.rounded.DeleteOutline
 import androidx.compose.material.icons.rounded.Edit
 import androidx.compose.material.icons.rounded.FastForward
 import androidx.compose.material.icons.rounded.FastRewind
@@ -147,6 +149,8 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.res.stringArrayResource
+import androidx.compose.ui.semantics.clearAndSetSemantics
+import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.draw.clipToBounds
 import androidx.compose.ui.draw.shadow
@@ -772,6 +776,7 @@ fun NowPlayingScreen(
     val showTrackDurationInsteadOfRemaining by AppSettings.showTrackDurationInsteadOfRemaining.collectAsStateWithLifecycle()
     val artworkTapOpensLyrics by AppSettings.artworkTapOpensLyrics.collectAsStateWithLifecycle()
     val lyricsReplaceArtworkOnly by AppSettings.lyricsReplaceArtworkOnly.collectAsStateWithLifecycle()
+    val reducePlayerAnimations by AppSettings.reduceAnimation.collectAsStateWithLifecycle()
     val frostedQueueManager by AppSettings.frostedQueueManager.collectAsStateWithLifecycle()
     val frostedCompactLyrics by AppSettings.frostedCompactLyrics.collectAsStateWithLifecycle()
     val showPlayerLyricsStrip by AppSettings.showPlayerLyricsStrip.collectAsStateWithLifecycle()
@@ -1028,9 +1033,13 @@ fun NowPlayingScreen(
     // [QUEUE_CARRY_FRACTION] has to fall back to 0 just as surely as one that
     // carried has to finish reaching 1.
     var queueReleased by remember { mutableIntStateOf(0) }
-    LaunchedEffect(queueOpen, queueDragging, queueReleased) {
+    LaunchedEffect(queueOpen, queueDragging, queueReleased, reducePlayerAnimations) {
         if (queueDragging) return@LaunchedEffect
         val target = if (queueOpen) 1f else 0f
+        if (reducePlayerAnimations) {
+            queueSlide.floatValue = target
+            return@LaunchedEffect
+        }
         val from = queueSlide.floatValue
         if (from == target) return@LaunchedEffect
         animate(
@@ -1049,7 +1058,7 @@ fun NowPlayingScreen(
     var swipeOffset by remember { mutableFloatStateOf(0f) }
     val swipeSettle by animateFloatAsState(
         targetValue = swipeOffset,
-        animationSpec = spring(stiffness = Spring.StiffnessMediumLow),
+        animationSpec = if (reducePlayerAnimations) snap() else spring(stiffness = Spring.StiffnessMediumLow),
         label = "swipeOffset",
     )
 
@@ -1160,7 +1169,7 @@ fun NowPlayingScreen(
     // read as a stutter rather than as either. One animation, both surfaces.
     val p by animateFloatAsState(
         targetValue = if (queueOpen || (lyricsOpen && !lyricsReplaceArtworkOnly)) 1f else 0f,
-        animationSpec = tween(durationMillis = 420, easing = FastOutSlowInEasing),
+        animationSpec = if (reducePlayerAnimations) snap() else tween(durationMillis = 420, easing = FastOutSlowInEasing),
         label = "sleeveCollapse",
     )
     val fullBleedArt by AppSettings.fullBleedArtwork.collectAsStateWithLifecycle()
@@ -1321,7 +1330,7 @@ fun NowPlayingScreen(
         targetValue = if (
             heroMode && (canvasRendered || artLoaded || heroSettled)
         ) 1f else 0f,
-        animationSpec = tween(durationMillis = 420, easing = FastOutSlowInEasing),
+        animationSpec = if (reducePlayerAnimations) snap() else tween(durationMillis = 420, easing = FastOutSlowInEasing),
         label = "heroCanvas",
     )
 
@@ -2388,15 +2397,18 @@ fun NowPlayingScreen(
                     )
                 }
 
-                if (lyricsOpen) {
-                    if (lyricsReplaceArtworkOnly) {
-                        Box(
-                            modifier = Modifier
+                if (lyricsReplaceArtworkOnly) {
+                    Crossfade(
+                        targetState = lyricsOpen,
+                        animationSpec = if (reducePlayerAnimations) snap() else tween(180),
+                        label = "compactLyricsTransition",
+                        modifier = Modifier
                                 .offset { IntOffset(artStart.roundToPx(), artTop.roundToPx()) }
                                 .size(width = artWidth, height = artHeight)
                                 .zIndex(2f)
                                 .clip(RoundedCornerShape(lerp(10.dp, 7.dp, p))),
-                        ) {
+                    ) { compactLyricsVisible ->
+                        if (compactLyricsVisible) Box(Modifier.fillMaxSize()) {
                             if (frostedCompactLyrics) {
                                 FrostedGlassBackdrop(
                                     hazeState = playerHaze,
@@ -2440,7 +2452,8 @@ fun NowPlayingScreen(
                                 )
                             }
                         }
-                    } else if (lyricsLogsOpen) {
+                    }
+                } else if (lyricsOpen && lyricsLogsOpen) {
                         // Full-screen log console — replaces the lyrics list while
                         // the debug panel is open. Same fade-in timing as the lyrics
                         // panel so the transition is identical from the user's side.
@@ -2453,7 +2466,7 @@ fun NowPlayingScreen(
                                     translationY = (1f - p) * 26.dp.toPx()
                                 },
                         )
-                    } else {
+                } else if (lyricsOpen) {
                         LyricsPanel(
                             lines = lyrics.orEmpty(),
                             positionMs = positionMs,
@@ -2472,7 +2485,6 @@ fun NowPlayingScreen(
                                     translationY = (1f - p) * 26.dp.toPx()
                                 },
                         )
-                    }
                 }
 
                 // Toggles and the queue arrive after the sleeve has finished
@@ -4665,6 +4677,10 @@ private fun InlineQueue(
     onManageQueues: () -> Unit,
     modifier: Modifier = Modifier,
 ) {
+    val useEqualsForManage by AppSettings.queueManagerEqualsIcon.collectAsStateWithLifecycle()
+    val hideQueueHeading by AppSettings.hideQueueLabel.collectAsStateWithLifecycle()
+    val useTrashForClear by AppSettings.queueClearTrashIcon.collectAsStateWithLifecycle()
+    val manageQueueDescription = stringResource(R.string.manage_queues)
     val listState = rememberLazyListState()
     val keepScroll = remember(listState) { keepScrollInList(listState) }
     // Where AutoPlay's tracks start. The queue is kept with them last, so this
@@ -4742,30 +4758,59 @@ private fun InlineQueue(
             modifier = Modifier.fillMaxWidth(),
             verticalAlignment = Alignment.CenterVertically,
         ) {
-            Text(
-                text = stringResource(R.string.queue),
-                style = MaterialTheme.typography.titleLarge,
-                color = Color.White,
-                modifier = Modifier.weight(1f),
-            )
-            Text(
-                text = stringResource(R.string.manage_queues),
-                style = MaterialTheme.typography.labelLarge,
-                color = Color.White.copy(alpha = 0.75f),
-                modifier = Modifier
-                    .clip(RoundedCornerShape(percent = 50))
-                    .clickable(onClick = onManageQueues)
-                    .padding(horizontal = 8.dp, vertical = 4.dp),
-            )
-            Text(
-                text = stringResource(R.string.clear),
-                style = MaterialTheme.typography.titleMedium,
-                color = Color.White.copy(alpha = 0.75f),
-                modifier = Modifier
-                    .clip(RoundedCornerShape(percent = 50))
-                    .clickable(onClick = onClear)
-                    .padding(horizontal = 8.dp, vertical = 4.dp),
-            )
+            if (hideQueueHeading) {
+                Spacer(Modifier.weight(1f))
+            } else {
+                Text(
+                    text = stringResource(R.string.queue),
+                    style = MaterialTheme.typography.titleLarge,
+                    color = Color.White,
+                    modifier = Modifier.weight(1f),
+                )
+            }
+            if (useEqualsForManage) {
+                IconButton(
+                    onClick = onManageQueues,
+                    modifier = Modifier.clearAndSetSemantics {
+                        contentDescription = manageQueueDescription
+                    },
+                ) {
+                    Text(
+                        text = "=",
+                        style = MaterialTheme.typography.headlineSmall,
+                        color = Color.White.copy(alpha = 0.82f),
+                    )
+                }
+            } else {
+                Text(
+                    text = stringResource(R.string.manage_queues),
+                    style = MaterialTheme.typography.labelLarge,
+                    color = Color.White.copy(alpha = 0.75f),
+                    modifier = Modifier
+                        .clip(RoundedCornerShape(percent = 50))
+                        .clickable(onClick = onManageQueues)
+                        .padding(horizontal = 8.dp, vertical = 4.dp),
+                )
+            }
+            if (useTrashForClear) {
+                IconButton(onClick = onClear) {
+                    Icon(
+                        imageVector = Icons.Rounded.DeleteOutline,
+                        contentDescription = stringResource(R.string.clear),
+                        tint = Color.White,
+                    )
+                }
+            } else {
+                Text(
+                    text = stringResource(R.string.clear),
+                    style = MaterialTheme.typography.titleMedium,
+                    color = Color.White.copy(alpha = 0.75f),
+                    modifier = Modifier
+                        .clip(RoundedCornerShape(percent = 50))
+                        .clickable(onClick = onClear)
+                        .padding(horizontal = 8.dp, vertical = 4.dp),
+                )
+            }
         }
         Spacer(Modifier.height(4.dp))
         LazyColumn(

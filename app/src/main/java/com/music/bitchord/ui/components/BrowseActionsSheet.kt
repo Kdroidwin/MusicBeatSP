@@ -1,6 +1,7 @@
 package com.music.bitchord.ui.components
 
 import androidx.compose.foundation.background
+import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
@@ -44,6 +45,7 @@ import com.music.bitchord.data.model.artworkAt
 import com.music.bitchord.download.DownloadState
 import com.music.bitchord.download.Downloads
 import com.music.bitchord.ui.icons.BitChordIcons
+import com.music.bitchord.ui.theme.rememberArtworkPalette
 import java.util.Locale
 
 /**
@@ -159,30 +161,49 @@ fun BrowseActionsSheet(
     var confirmingDeleteDownload by remember { mutableStateOf(false) }
 
     val playlist = target.playlist
+    val palette = rememberArtworkPalette(target.thumbnailUrl, artPx = ROW_ART_PX)
     if (renaming && playlist != null && onRename != null) {
-        RenamePlaylistForm(
-            playlist = playlist,
-            onBack = { renaming = false },
-            onRename = onRename,
-            modifier = modifier,
-        )
+        Box(modifier.fillMaxWidth().background(palette.background)) {
+            RenamePlaylistForm(
+                playlist = playlist,
+                onBack = { renaming = false },
+                onRename = onRename,
+                modifier = Modifier.fillMaxWidth(),
+            )
+        }
         return
     }
 
-    Column(modifier.fillMaxWidth()) {
-        BrowseSheetHeader(target)
-        HorizontalDivider(thickness = 0.5.dp, color = MaterialTheme.colorScheme.outline)
+    Box(
+        modifier
+            .fillMaxWidth()
+            .clip(RoundedCornerShape(topStart = 28.dp, topEnd = 28.dp)),
+    ) {
+        ArtworkBackdrop(
+            palette = palette,
+            imageUrl = target.thumbnailUrl,
+            modifier = Modifier.matchParentSize(),
+            washFraction = 0.78f,
+            artPx = ROW_ART_PX,
+        )
+        Column(Modifier.fillMaxWidth()) {
+        BrowseSheetHeader(target, palette)
+        HorizontalDivider(thickness = 0.5.dp, color = palette.divider)
 
-        onPlay?.let { ActionRow(Icons.Rounded.PlayArrow, stringResource(R.string.play), onClick = it) }
-        onShuffle?.let { ActionRow(BitChordIcons.Shuffle, stringResource(R.string.shuffle), onClick = it) }
+        onPlay?.let { ActionRow(Icons.Rounded.PlayArrow, stringResource(R.string.play), accent = palette.accent, foreground = palette.onBackground, onClick = it) }
+        onShuffle?.let { ActionRow(BitChordIcons.Shuffle, stringResource(R.string.shuffle), accent = palette.accent, foreground = palette.onBackground, onClick = it) }
         ActionRow(
             Icons.AutoMirrored.Rounded.PlaylistPlay,
             stringResource(R.string.play_next),
+            accent = palette.accent,
+            foreground = palette.onBackground,
             onClick = onPlayNext,
         )
         ActionRow(
             Icons.AutoMirrored.Rounded.QueueMusic,
             stringResource(R.string.add_to_queue),
+            accent = palette.accent,
+            foreground = palette.onBackground,
             onClick = onAddToQueue,
         )
         onDownloadAll?.let { download ->
@@ -223,6 +244,8 @@ fun BrowseActionsSheet(
                     downloaded -> stringResource(R.string.downloaded)
                     else -> null
                 },
+                accent = palette.accent,
+                foreground = palette.onBackground,
                 onClick = download,
             )
         }
@@ -230,6 +253,8 @@ fun BrowseActionsSheet(
             ActionRow(
                 BitChordIcons.ChevronRight,
                 target.type.localizedOpenLabel(),
+                accent = palette.accent,
+                foreground = palette.onBackground,
                 onClick = it,
             )
         }
@@ -237,11 +262,13 @@ fun BrowseActionsSheet(
             ActionRow(
                 BitChordIcons.Pin,
                 stringResource(if (isPinned) R.string.unpin else R.string.pin),
+                accent = palette.accent,
+                foreground = palette.onBackground,
                 onClick = it,
             )
         }
         if (onRename != null) {
-            ActionRow(Icons.Rounded.Edit, stringResource(R.string.rename)) { renaming = true }
+            ActionRow(Icons.Rounded.Edit, stringResource(R.string.rename), accent = palette.accent, foreground = palette.onBackground) { renaming = true }
         }
         if (onDelete != null) {
             if (confirmingDelete) {
@@ -249,10 +276,12 @@ fun BrowseActionsSheet(
                     icon = Icons.Rounded.DeleteForever,
                     label = stringResource(R.string.delete_playlist_confirmation, target.title),
                     tint = MaterialTheme.colorScheme.error,
+                    foreground = palette.onBackground,
+                    accent = palette.accent,
                     onClick = onDelete,
                 )
             } else {
-                ActionRow(Icons.Rounded.Delete, stringResource(R.string.delete_playlist)) { confirmingDelete = true }
+                ActionRow(Icons.Rounded.Delete, stringResource(R.string.delete_playlist), accent = palette.accent, foreground = palette.onBackground) { confirmingDelete = true }
             }
         }
         if (onDeleteDownload != null) {
@@ -261,21 +290,24 @@ fun BrowseActionsSheet(
                     icon = Icons.Rounded.DeleteForever,
                     label = stringResource(R.string.delete_download_confirmation, target.title),
                     tint = MaterialTheme.colorScheme.error,
+                    foreground = palette.onBackground,
+                    accent = palette.accent,
                     onClick = onDeleteDownload,
                 )
             } else {
-                ActionRow(Icons.Rounded.Delete, stringResource(R.string.delete_download)) {
+                ActionRow(Icons.Rounded.Delete, stringResource(R.string.delete_download), accent = palette.accent, foreground = palette.onBackground) {
                     confirmingDeleteDownload = true
                 }
             }
         }
         Spacer(Modifier.height(24.dp))
+        }
     }
 }
 
 /** Which release the sheet is about: the same row the shelf card was. */
 @Composable
-private fun BrowseSheetHeader(target: BrowseTarget) {
+private fun BrowseSheetHeader(target: BrowseTarget, palette: com.music.bitchord.ui.theme.ArtworkPalette) {
     val shape = if (target.type == BrowseType.ARTIST) CircleShape else RoundedCornerShape(8.dp)
     Row(
         modifier = Modifier
@@ -297,7 +329,7 @@ private fun BrowseSheetHeader(target: BrowseTarget) {
             Text(
                 text = target.title,
                 style = MaterialTheme.typography.titleMedium,
-                color = MaterialTheme.colorScheme.onBackground,
+                color = palette.onBackground,
                 maxLines = 1,
                 overflow = TextOverflow.Ellipsis,
             )
@@ -314,7 +346,7 @@ private fun BrowseSheetHeader(target: BrowseTarget) {
                     }
                 },
                 style = MaterialTheme.typography.bodyMedium,
-                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                color = palette.onBackgroundVariant,
                 maxLines = 1,
                 overflow = TextOverflow.Ellipsis,
             )

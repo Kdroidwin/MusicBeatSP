@@ -50,7 +50,7 @@ import androidx.compose.ui.unit.dp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.music.bitchord.R
 import com.music.bitchord.data.model.Song
-import com.music.bitchord.data.model.ROW_ART_PX
+import com.music.bitchord.data.model.CARD_ART_PX
 import com.music.bitchord.data.settings.AppSettings
 import com.music.bitchord.data.settings.PlayerDetailsAction
 import com.music.bitchord.playback.cast.CastActionItem
@@ -93,8 +93,12 @@ fun LocalSongActionsSheet(
 ) {
     val sheetState = rememberModalBottomSheetState(skipPartiallyExpanded = true)
     val sheetShape = RoundedCornerShape(topStart = 24.dp, topEnd = 24.dp)
-    val artworkPalette = rememberArtworkPalette(song.thumbnailUrl, dark = true, artPx = ROW_ART_PX)
+    // Use the same source resolution, palette, and backdrop as the player's
+    // details sheet so playlist-row details keep the color of that selected
+    // track instead of falling back to the app's AMOLED surface.
+    val artworkPalette = rememberArtworkPalette(song.thumbnailUrl, dark = true, artPx = CARD_ART_PX)
     val frostedPlayerDetails by AppSettings.frostedPlayerDetails.collectAsStateWithLifecycle()
+    val useArtworkBackdrop = frostedPlayerDetails && (showPlayerActions || song.localUri != null)
     var pickingSleepTimer by remember { mutableStateOf(false) }
     val hiddenActions by AppSettings.hiddenPlayerDetailsActions.collectAsStateWithLifecycle()
 
@@ -122,8 +126,9 @@ fun LocalSongActionsSheet(
         onDismissRequest = onDismissRequest,
         sheetState = sheetState,
         shape = sheetShape,
-        containerColor = if (showPlayerActions) Color.Transparent else MaterialTheme.colorScheme.surfaceContainerHigh,
-        dragHandle = if (showPlayerActions) {
+        containerColor = if (showPlayerActions || useArtworkBackdrop) Color.Transparent
+            else MaterialTheme.colorScheme.surfaceContainerHigh,
+        dragHandle = if (showPlayerActions || useArtworkBackdrop) {
             {
                 Box(
                     Modifier
@@ -136,7 +141,7 @@ fun LocalSongActionsSheet(
                             .size(width = 34.dp, height = 4.dp)
                             .clip(RoundedCornerShape(50))
                             .background(
-                                (if (frostedPlayerDetails) artworkPalette.onBackground else MaterialTheme.colorScheme.onSurface)
+                                (if (useArtworkBackdrop) artworkPalette.onBackground else MaterialTheme.colorScheme.onSurface)
                                     .copy(alpha = 0.38f),
                             ),
                     )
@@ -152,7 +157,7 @@ fun LocalSongActionsSheet(
                 .fillMaxWidth()
                 .clip(sheetShape),
         ) {
-            if (showPlayerActions && frostedPlayerDetails) {
+            if (useArtworkBackdrop) {
                 // Reuse BitChord's artwork-derived backdrop. The previous
                 // ultra-thin Haze-only layer was nearly transparent in AMOLED
                 // mode and did not carry the artwork colour into the sheet.
@@ -161,7 +166,7 @@ fun LocalSongActionsSheet(
                     imageUrl = song.thumbnailUrl,
                     modifier = Modifier.matchParentSize(),
                     washFraction = 0.75f,
-                    artPx = ROW_ART_PX,
+                    artPx = CARD_ART_PX,
                 )
             } else if (showPlayerActions) {
                 Box(
@@ -171,9 +176,8 @@ fun LocalSongActionsSheet(
                 )
             }
             CompositionLocalProvider(
-                LocalContentColor provides if (showPlayerActions) {
-                    if (frostedPlayerDetails) artworkPalette.onBackground else MaterialTheme.colorScheme.onSurface
-                } else MaterialTheme.colorScheme.onSurface,
+                LocalContentColor provides if (useArtworkBackdrop) artworkPalette.onBackground
+                else MaterialTheme.colorScheme.onSurface,
             ) {
                 AnimatedContent(
                     targetState = pickingSleepTimer,
@@ -197,7 +201,7 @@ fun LocalSongActionsSheet(
                             HorizontalDivider(
                                 modifier = Modifier.padding(horizontal = 20.dp, vertical = 8.dp),
                                 thickness = 0.5.dp,
-                                color = if (showPlayerActions && frostedPlayerDetails) {
+                                color = if (useArtworkBackdrop) {
                                     artworkPalette.divider.copy(alpha = 0.7f)
                                 } else if (showPlayerActions) {
                                     MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.65f)

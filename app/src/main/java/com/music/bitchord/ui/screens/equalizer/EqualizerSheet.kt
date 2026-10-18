@@ -9,17 +9,21 @@ import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.navigationBarsPadding
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.layout.width
+import androidx.compose.foundation.clickable
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.rounded.RestartAlt
 import androidx.compose.material.icons.rounded.Tune
+import androidx.compose.material.icons.rounded.Headphones
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.ModalBottomSheet
+import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.SheetState
 import androidx.compose.material3.Switch
 import androidx.compose.material3.SwitchDefaults
@@ -27,7 +31,9 @@ import androidx.compose.material3.Text
 import androidx.compose.material3.rememberModalBottomSheetState
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
+import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.res.stringResource
@@ -37,6 +43,8 @@ import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.music.bitchord.R
 import com.music.bitchord.data.settings.AppSettings
 import com.music.bitchord.data.settings.EqualizerSettings
+import com.music.bitchord.playback.equalizer.EqualizerPreset
+import com.music.bitchord.ui.screens.equalizer.components.EqualizerPresetGroup
 import com.music.bitchord.playback.ReplayGainScanner
 import com.music.bitchord.ui.screens.equalizer.components.AudioEnhancements
 import com.music.bitchord.ui.screens.equalizer.components.EqualizerBandSliders
@@ -68,7 +76,10 @@ fun EqualizerSheet(
     val reverbEnabled by AppSettings.reverbEnabled.collectAsStateWithLifecycle()
     val reverbAmount by AppSettings.reverbAmount.collectAsStateWithLifecycle()
     val replayGainScanState by ReplayGainScanner.state.collectAsStateWithLifecycle()
+    val diracAudioEnabled by AppSettings.diracAudioEnabled.collectAsStateWithLifecycle()
+    val diracAudioPreset by AppSettings.diracAudioPreset.collectAsStateWithLifecycle()
     val context = LocalContext.current
+    var showAutoEqDialog by androidx.compose.runtime.remember { androidx.compose.runtime.mutableStateOf(false) }
 
     val scrollState = rememberScrollState()
 
@@ -144,11 +155,75 @@ fun EqualizerSheet(
                 modifier = Modifier.padding(horizontal = 20.dp, vertical = 4.dp),
             )
 
+            OutlinedButton(
+                onClick = { showAutoEqDialog = true },
+                modifier = Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 4.dp),
+                shape = RoundedCornerShape(12.dp),
+            ) {
+                Icon(Icons.Rounded.Headphones, contentDescription = null, modifier = Modifier.size(18.dp))
+                Spacer(Modifier.width(8.dp))
+                Text(stringResource(R.string.autoeq_profiles))
+            }
+
             // Presets
             EqualizerPresetChips(
                 selectedPresetId = presetId,
                 enabled = enabled,
-                onSelectPreset = { EqualizerSettings.selectPreset(it) },
+                onSelectPreset = {
+                    AppSettings.setDiracAudioEnabled(false)
+                    EqualizerSettings.selectPreset(it)
+                },
+            )
+
+            Text(
+                text = stringResource(R.string.eq_profile_group_note),
+                style = MaterialTheme.typography.bodySmall,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                textAlign = TextAlign.Start,
+                modifier = Modifier.padding(horizontal = 20.dp, vertical = 2.dp),
+            )
+            EqualizerPresetGroup(
+                title = stringResource(R.string.eq_profile_group_atmos),
+                presets = EqualizerPreset.DOLBY_ATMOS_PRESETS,
+                selectedPresetId = presetId,
+                enabled = enabled,
+                onSelectPreset = {
+                    AppSettings.setDiracAudioEnabled(false)
+                    EqualizerSettings.selectPreset(it)
+                },
+            )
+
+            Row(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .clickable { AppSettings.setDiracAudioEnabled(!diracAudioEnabled) }
+                    .padding(horizontal = 20.dp, vertical = 8.dp),
+                verticalAlignment = Alignment.CenterVertically,
+            ) {
+                Column(modifier = Modifier.weight(1f).padding(end = 12.dp)) {
+                    Text(stringResource(R.string.dirac_audio_eq), style = MaterialTheme.typography.bodyLarge, color = MaterialTheme.colorScheme.onSurface)
+                    Text(stringResource(R.string.dirac_audio_eq_subtitle), style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                }
+                Switch(
+                    checked = diracAudioEnabled,
+                    onCheckedChange = AppSettings::setDiracAudioEnabled,
+                    colors = SwitchDefaults.colors(
+                        checkedTrackColor = MaterialTheme.colorScheme.primary,
+                        checkedBorderColor = MaterialTheme.colorScheme.primary,
+                    ),
+                )
+            }
+            EqualizerPresetGroup(
+                title = stringResource(R.string.eq_profile_group_dirac),
+                presets = EqualizerPreset.DIRAC_AUDIO_PRESETS,
+                selectedPresetId = EqualizerPreset.diracPresetByIndex(diracAudioPreset).id,
+                enabled = true,
+                onSelectPreset = { selectedId ->
+                    val index = EqualizerPreset.DIRAC_AUDIO_PRESETS.indexOfFirst { it.id == selectedId }
+                        .coerceAtLeast(0)
+                    AppSettings.setDiracAudioPreset(index)
+                    AppSettings.setDiracAudioEnabled(true)
+                },
             )
 
             // Frequency band sliders
@@ -200,5 +275,16 @@ fun EqualizerSheet(
 
             Spacer(modifier = Modifier.height(16.dp))
         }
+    }
+
+    if (showAutoEqDialog) {
+        AutoEqProfilesDialog(
+            onDismiss = { showAutoEqDialog = false },
+            onApplyEq = { levels ->
+                AppSettings.setDiracAudioEnabled(false)
+                EqualizerSettings.setEnabled(true)
+                levels.forEachIndexed { index, level -> EqualizerSettings.setBandLevel(index, level) }
+            },
+        )
     }
 }

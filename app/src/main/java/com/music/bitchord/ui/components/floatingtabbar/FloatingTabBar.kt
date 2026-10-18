@@ -40,11 +40,13 @@ import androidx.compose.animation.EnterExitState
 import androidx.compose.animation.ExperimentalSharedTransitionApi
 import androidx.compose.animation.SharedTransitionLayout
 import androidx.compose.animation.SharedTransitionScope
-import androidx.compose.animation.animateColorAsState
 import androidx.compose.animation.animateContentSize
 import androidx.compose.animation.core.FastOutSlowInEasing
 import androidx.compose.animation.core.animateFloat
+import androidx.compose.animation.core.animateFloatAsState
 import androidx.compose.animation.core.keyframes
+import androidx.compose.animation.core.spring
+import androidx.compose.animation.core.snap
 import androidx.compose.animation.core.tween
 import androidx.compose.animation.fadeIn
 import androidx.compose.animation.fadeOut
@@ -81,8 +83,11 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.draw.drawBehind
 import androidx.compose.ui.draw.shadow
+import androidx.compose.ui.geometry.CornerRadius
 import androidx.compose.ui.geometry.Offset
+import androidx.compose.ui.geometry.Size
 import androidx.compose.ui.graphics.BlurEffect
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.CompositingStrategy
@@ -93,6 +98,9 @@ import androidx.compose.ui.input.nestedscroll.NestedScrollSource
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
+import androidx.lifecycle.compose.collectAsStateWithLifecycle
+import com.music.bitchord.data.settings.AppSettings
+import com.music.bitchord.data.settings.PillMotionStyle
 
 /** Hoisted so the default is one stable lambda rather than a new one per call. */
 private val DefaultTabBarContentModifier: @Composable () -> Modifier = { Modifier }
@@ -189,11 +197,25 @@ fun FloatingTabBar(
     val scope = remember(contentKey) { FloatingTabBarScopeImpl().apply { content() } }
 
     val isAccessoryShared = inlineAccessory != null && expandedAccessory != null
+    val reduceMotion by AppSettings.reduceAnimation.collectAsStateWithLifecycle()
+    val pillMotionStyle by AppSettings.pillMotionStyle.collectAsStateWithLifecycle()
+    val transitionDuration = when (pillMotionStyle) {
+        PillMotionStyle.FAST -> 150
+        PillMotionStyle.FLUID -> 230
+        PillMotionStyle.RELAXED -> 340
+    }
 
     SharedTransitionLayout(modifier = modifier) {
         AnimatedContent(
             targetState = scrollConnection.isInline,
-            transitionSpec = { fadeIn() togetherWith fadeOut() },
+            transitionSpec = {
+                if (reduceMotion) {
+                    fadeIn(snap()) togetherWith fadeOut(snap())
+                } else {
+                    val spec = tween<Float>(transitionDuration, easing = FastOutSlowInEasing)
+                    fadeIn(spec) togetherWith fadeOut(spec)
+                }
+            },
             contentAlignment = Alignment.BottomCenter
         ) { isInline ->
             if (isInline) {
@@ -723,6 +745,19 @@ private fun SharedTransitionScope.ExpandedTabs(
     tabBarContentModifier: @Composable () -> Modifier
 ) {
     val inlineTab = scope.getInlineTab(selectedTabKey)
+    val selectedIndex = scope.tabs.indexOfFirst { it.key == selectedTabKey }
+    val reduceMotion by AppSettings.reduceAnimation.collectAsStateWithLifecycle()
+    val pillMotionStyle by AppSettings.pillMotionStyle.collectAsStateWithLifecycle()
+    val indicatorPosition by animateFloatAsState(
+        targetValue = selectedIndex.coerceAtLeast(0).toFloat(),
+        animationSpec = when {
+            reduceMotion -> snap()
+            pillMotionStyle == PillMotionStyle.FAST -> tween(150, easing = FastOutSlowInEasing)
+            pillMotionStyle == PillMotionStyle.RELAXED -> spring(dampingRatio = 0.92f, stiffness = 170f)
+            else -> spring(dampingRatio = 0.78f, stiffness = 360f)
+        },
+        label = "tabSelectionPill",
+    )
 
     Row(
         horizontalArrangement = Arrangement.spacedBy(sizes.tabSpacing),
@@ -743,15 +778,26 @@ private fun SharedTransitionScope.ExpandedTabs(
             .clip(shapes.tabBarShape)
             .then(tabBarContentModifier())
             .padding(sizes.tabBarContentPadding)
+            .drawBehind {
+                val tabCount = scope.tabs.size
+                if (selectedIndex in 0 until tabCount) {
+                    val spacingPx = sizes.tabSpacing.toPx()
+                    val cellWidth = (size.width - spacingPx * (tabCount - 1)) / tabCount
+                    if (cellWidth > 0f) {
+                        val x = (indicatorPosition * (cellWidth + spacingPx))
+                            .coerceIn(0f, (size.width - cellWidth).coerceAtLeast(0f))
+                        drawRoundRect(
+                            color = colors.indicatorColor,
+                            topLeft = Offset(x, 0f),
+                            size = Size(cellWidth, size.height),
+                            cornerRadius = CornerRadius(size.height / 2f),
+                        )
+                    }
+                }
+            }
             .animateContentSize()
     ) {
         scope.tabs.forEach { tab ->
-            val isSelected = tab.key == selectedTabKey
-            val indicatorColor by animateColorAsState(
-                targetValue = if (isSelected) colors.indicatorColor else Color.Transparent,
-                animationSpec = tween(200),
-                label = "tabIndicator"
-            )
             Tab(
                 icon = {
                     Box(
@@ -789,7 +835,6 @@ private fun SharedTransitionScope.ExpandedTabs(
                     .weight(1f)
                     .skipToLookaheadSize()
                     .clip(shapes.tabShape)
-                    .background(indicatorColor, shapes.tabShape)
                     .clickable(
                         onClick = tab.onClick,
                         indication = tab.indication?.invoke(),

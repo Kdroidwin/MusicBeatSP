@@ -67,6 +67,7 @@ import com.music.bitchord.data.model.ROW_ART_PX
 import com.music.bitchord.data.model.Song
 import com.music.bitchord.data.model.artworkAt
 import com.music.bitchord.data.settings.AppSettings
+import com.music.bitchord.data.settings.ThemeMode
 import com.music.bitchord.ui.components.floatingtabbar.FloatingTabBar
 import com.music.bitchord.ui.components.floatingtabbar.FloatingTabBarDefaults
 import com.music.bitchord.ui.components.floatingtabbar.FloatingTabBarScrollConnection
@@ -123,6 +124,13 @@ fun GlassNavBar(
     val reduceDynamicBlur by AppSettings.reduceDynamicBlur.collectAsStateWithLifecycle()
     val hideNavigationBarLabels by AppSettings.hideNavigationBarLabels.collectAsStateWithLifecycle()
     val useArtworkColor by AppSettings.miniPlayerArtworkColor.collectAsStateWithLifecycle()
+    val themeMode by AppSettings.themeMode.collectAsStateWithLifecycle()
+    val artworkThemeActive = themeMode == ThemeMode.ARTWORK && song?.thumbnailUrl != null
+    val navigationArtworkPalette = rememberArtworkPalette(
+        imageUrl = song?.thumbnailUrl?.takeIf { artworkThemeActive },
+        dark = isDark,
+        artPx = ROW_ART_PX,
+    )
     val miniArtworkPalette = rememberArtworkPalette(
         imageUrl = song?.thumbnailUrl?.takeIf { useArtworkColor },
         artPx = ROW_ART_PX,
@@ -131,9 +139,21 @@ fun GlassNavBar(
     val contentColor = if (useGlass) glassContentColor() else MaterialTheme.colorScheme.onSurface
     val miniContentColor = if (useArtworkColor) miniArtworkPalette.onBackground else contentColor
     val miniSecondaryColor = if (useArtworkColor) miniArtworkPalette.onBackgroundVariant else null
-    val selectedColor = if (useGlass) contentColor else MaterialTheme.colorScheme.primary
-    val unselectedColor = if (useGlass) contentColor.copy(alpha = 0.65f) else MaterialTheme.colorScheme.onSurfaceVariant
-    val indicatorColor = if (useGlass) glassIndicatorColor().copy(alpha = 0.5f) else MaterialTheme.colorScheme.primary.copy(alpha = 0.14f)
+    val selectedColor = when {
+        artworkThemeActive -> navigationArtworkPalette.accent
+        useGlass -> contentColor
+        else -> MaterialTheme.colorScheme.primary
+    }
+    val unselectedColor = when {
+        artworkThemeActive -> navigationArtworkPalette.onBackgroundVariant
+        useGlass -> contentColor.copy(alpha = 0.65f)
+        else -> MaterialTheme.colorScheme.onSurfaceVariant
+    }
+    val indicatorColor = when {
+        artworkThemeActive -> navigationArtworkPalette.accent.copy(alpha = 0.18f)
+        useGlass -> glassIndicatorColor().copy(alpha = 0.5f)
+        else -> MaterialTheme.colorScheme.primary.copy(alpha = 0.14f)
+    }
     val haptics = rememberHaptics()
 
     val currentOnTabSelected by rememberUpdatedState(onTabSelected)

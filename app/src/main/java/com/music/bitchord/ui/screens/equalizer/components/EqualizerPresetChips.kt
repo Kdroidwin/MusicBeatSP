@@ -10,6 +10,8 @@ import androidx.compose.material3.FilterChip
 import androidx.compose.material3.FilterChipDefaults
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
+import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.unit.dp
@@ -59,6 +61,46 @@ fun EqualizerPresetChips(
                     labelColor = MaterialTheme.colorScheme.onSurfaceVariant,
                 ),
             )
+        }
+    }
+}
+
+@Composable
+fun EqualizerPresetGroup(
+    title: String,
+    presets: List<EqualizerPreset>,
+    selectedPresetId: Int,
+    enabled: Boolean,
+    onSelectPreset: (Int) -> Unit,
+    modifier: Modifier = Modifier,
+) {
+    val scrollState = rememberScrollState()
+    Column(modifier = modifier.fillMaxWidth().padding(top = 8.dp)) {
+        Text(
+            text = title,
+            style = MaterialTheme.typography.titleSmall,
+            color = MaterialTheme.colorScheme.onSurfaceVariant,
+            modifier = Modifier.padding(horizontal = 20.dp, vertical = 4.dp),
+        )
+        Row(
+            modifier = Modifier.horizontalScroll(scrollState).padding(horizontal = 16.dp),
+            horizontalArrangement = Arrangement.spacedBy(8.dp),
+        ) {
+            presets.forEach { preset ->
+                FilterChip(
+                    selected = selectedPresetId == preset.id,
+                    onClick = { onSelectPreset(preset.id) },
+                    enabled = enabled,
+                    label = { Text(preset.name) },
+                    shape = RoundedCornerShape(12.dp),
+                    colors = FilterChipDefaults.filterChipColors(
+                        selectedContainerColor = MaterialTheme.colorScheme.primaryContainer,
+                        selectedLabelColor = MaterialTheme.colorScheme.onPrimaryContainer,
+                        containerColor = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.5f),
+                        labelColor = MaterialTheme.colorScheme.onSurfaceVariant,
+                    ),
+                )
+            }
         }
     }
 }

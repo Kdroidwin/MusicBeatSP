@@ -153,6 +153,7 @@ import com.music.bitchord.data.model.SearchFilter
 import com.music.bitchord.data.model.SearchResult
 import com.music.bitchord.data.model.ShelfItem
 import com.music.bitchord.data.model.Song
+import com.music.bitchord.data.model.isSameTrackAs
 import com.music.bitchord.data.model.UiState
 import com.music.bitchord.data.model.durationMillis
 import com.music.bitchord.data.scrobbling.LastFM
@@ -505,6 +506,32 @@ private fun BitChordApp(
      * question this used to answer on its own: is the player covering the page?
      */
     var showNowPlaying by remember { mutableStateOf(false) }
+    val reducePlayerMotion by AppSettings.reduceAnimation.collectAsStateWithLifecycle()
+    val playerTransitionScope = rememberCoroutineScope()
+    val nowPlayingSheetState = rememberModalBottomSheetState(
+        skipPartiallyExpanded = true,
+        confirmValueChange = { target ->
+            if (target == SheetValue.Hidden && AppSettings.reduceAnimation.value) {
+                showNowPlaying = false
+                false
+            } else {
+                true
+            }
+        },
+    )
+    fun dismissNowPlaying() {
+        if (!showNowPlaying) return
+        if (reducePlayerMotion) {
+            showNowPlaying = false
+        } else {
+            playerTransitionScope.launch {
+                if (nowPlayingSheetState.currentValue != SheetValue.Hidden) {
+                    nowPlayingSheetState.hide()
+                }
+                showNowPlaying = false
+            }
+        }
+    }
     // The far end of the relay from a widget's artwork. Cleared here rather than
     // where it was set, so the request is spent by being served — see
     // [PlayerDeepLink.handled]. The sheet itself is gated on there being a track,
@@ -521,7 +548,7 @@ private fun BitChordApp(
 
     LaunchedEffect(Unit) {
         SingleSongPlaybackManager.closePlayerEvent.collect {
-            showNowPlaying = false
+            dismissNowPlaying()
         }
     }
 
@@ -1153,7 +1180,7 @@ private fun BitChordApp(
                 }
             }
             is LinkRequest.Page -> {
-                showNowPlaying = false
+                dismissNowPlaying()
                 // Titled by the page itself once it lands — a link carries a
                 // browse id and nothing else. See MainViewModel.openDetail.
                 viewModel.openDetail(request.browseId, title = "")
@@ -1170,7 +1197,7 @@ private fun BitChordApp(
                     // Either the link was a search to look at, or "play X"
                     // found nothing to start — and the results are a better
                     // answer to a spoken request than silence is.
-                    showNowPlaying = false
+                    dismissNowPlaying()
                     selectedTab = TAB_SEARCH
                     viewModel.searchFor(request.query)
                 }
@@ -1504,7 +1531,7 @@ private fun BitChordApp(
      */
     val downloadSong: (Song) -> Unit = { song ->
         val withDuration = if (song.durationMillis() <= 0L &&
-            player.song?.videoId == song.videoId && player.durationMs > 0L
+            player.song?.isSameTrackAs(song) == true && player.durationMs > 0L
         ) {
             song.copy(durationText = formatDurationText(player.durationMs))
         } else {
@@ -1597,7 +1624,7 @@ private fun BitChordApp(
     // stuck without album/artist rows even after the ids come in. Keep it in
     // sync while it's showing this track.
     LaunchedEffect(playerSong) {
-        if (playerSong != null && songActions?.videoId == playerSong.videoId) {
+        if (playerSong != null && songActions?.let { (it.localUri ?: it.videoId) == (playerSong.localUri ?: playerSong.videoId) } == true) {
             songActions = playerSong
         }
     }
@@ -1794,7 +1821,7 @@ private fun BitChordApp(
                 }
             },
             onOpenPlaylists = {
-                showNowPlaying = false
+                dismissNowPlaying()
                 showSettings = false
                 showReplay = false
                 viewModel.clearDetail()
@@ -1802,7 +1829,7 @@ private fun BitChordApp(
                 selectedTab = TAB_LIBRARY
             },
             onOpenSearch = {
-                showNowPlaying = false
+                dismissNowPlaying()
                 showSettings = false
                 showReplay = false
                 viewModel.clearDetail()
@@ -1810,7 +1837,7 @@ private fun BitChordApp(
                 searchFocusTrigger++
             },
             onOpenAlbum = { _ ->
-                showNowPlaying = false
+                dismissNowPlaying()
                 val albumName = song.albumName?.trim().orEmpty()
                 if (albumName.isNotBlank()) {
                     openLocalAlbum(albumName, song.thumbnailUrl)
@@ -1819,7 +1846,7 @@ private fun BitChordApp(
                 }
             },
             onOpenArtist = { _ ->
-                showNowPlaying = false
+                dismissNowPlaying()
                 val artists = com.music.bitchord.feature.artistimage.util.ArtistSplitter.split(song.artist)
                 if (artists.size > 1) {
                     songActions = song
@@ -2600,7 +2627,6 @@ private fun BitChordApp(
 
         // ---- Now Playing ----
         // Only raised where it isn't already open beside the page.
-        val nowPlayingSheetState = rememberModalBottomSheetState(skipPartiallyExpanded = true)
         LaunchedEffect(showNowPlaying) {
             if (showNowPlaying && nowPlayingSheetState.currentValue != SheetValue.Expanded) {
                 nowPlayingSheetState.show()
@@ -2608,7 +2634,7 @@ private fun BitChordApp(
         }
         if (!playerDocked && showNowPlaying && playerSong != null) {
             ModalBottomSheet(
-                onDismissRequest = { showNowPlaying = false },
+                onDismissRequest = { dismissNowPlaying() },
                 sheetState = nowPlayingSheetState,
                 // The player fills the screen and paints its own background to
                 // the very top, so the sheet's default 28.dp top corners would
@@ -2669,22 +2695,25 @@ private fun BitChordApp(
         // ---- Album / playlist detail ----
         // ---- Long-press track actions ----
         songActions?.let { originalSong ->
+            // Local tracks can share a title, artist, and even an imported ID.
+            // Resolve by the stable file URI first so opening actions for one
+            // playlist row can never silently switch to another folder's file.
+            val originalSongKey = originalSong.localUri ?: originalSong.videoId
             val resolvedSong = localSongs.firstOrNull { local ->
-                local.videoId == originalSong.videoId ||
-                (local.title.equals(originalSong.title, ignoreCase = true) &&
-                 (originalSong.artist.isBlank() || local.artist.equals(originalSong.artist, ignoreCase = true)))
+                (local.localUri ?: local.videoId) == originalSongKey
             } ?: originalSong
             val song = resolvedSong
-            var showTagEditor by remember(song.videoId, pendingPlayerQuickAction) {
+            val songIdentityKey = song.localUri ?: song.videoId
+            var showTagEditor by remember(songIdentityKey, pendingPlayerQuickAction) {
                 mutableStateOf(pendingPlayerQuickAction == PlayerQuickAction.TAG_EDITOR)
             }
-            var showLyricsEditor by remember(song.videoId, pendingPlayerQuickAction) {
+            var showLyricsEditor by remember(songIdentityKey, pendingPlayerQuickAction) {
                 mutableStateOf(pendingPlayerQuickAction == PlayerQuickAction.EDIT_LYRICS)
             }
-            var showDetailsSheet by remember(song.videoId, pendingPlayerQuickAction) {
+            var showDetailsSheet by remember(songIdentityKey, pendingPlayerQuickAction) {
                 mutableStateOf(pendingPlayerQuickAction == PlayerQuickAction.DETAILS)
             }
-            var showAudioCutterSheet by remember(song.videoId, pendingPlayerQuickAction) {
+            var showAudioCutterSheet by remember(songIdentityKey, pendingPlayerQuickAction) {
                 mutableStateOf(false)
             }
             var showAddToPlaylist by remember { mutableStateOf(false) }
@@ -2726,8 +2755,7 @@ private fun BitChordApp(
                         decorFitsSystemWindows = false,
                     ),
                 ) {
-                    val isActiveLyricsTrack = player.song?.videoId == song.videoId ||
-                        (song.localUri != null && player.song?.localUri == song.localUri)
+                    val isActiveLyricsTrack = player.song?.isSameTrackAs(song) == true
                     LyricsEditorScreen(
                         song = song,
                         playbackPositionMs = if (isActiveLyricsTrack) player.position.positionMs else 0L,
@@ -2805,7 +2833,7 @@ private fun BitChordApp(
                     onSelectArtist = { selectedArtist ->
                         showArtistPicker = false
                         songActions = null
-                        showNowPlaying = false
+                        dismissNowPlaying()
                         val cleanArtist = selectedArtist.trim()
                         if (cleanArtist.isNotBlank()) {
                             openLocalArtist(cleanArtist, null)
@@ -2818,7 +2846,7 @@ private fun BitChordApp(
                     onDismissRequest = { songActions = null },
                     onGoToAlbum = {
                         songActions = null
-                        showNowPlaying = false
+                        dismissNowPlaying()
                         val albumName = song.albumName?.trim().orEmpty()
                         if (albumName.isNotBlank()) {
                             openLocalAlbum(albumName, song.thumbnailUrl)
@@ -2832,7 +2860,7 @@ private fun BitChordApp(
                             showArtistPicker = true
                         } else {
                             songActions = null
-                            showNowPlaying = false
+                            dismissNowPlaying()
                             val artistName = (artists.firstOrNull() ?: song.artist).trim()
                             if (artistName.isNotBlank()) {
                                 openLocalArtist(artistName, null)
@@ -2981,7 +3009,7 @@ private fun BitChordApp(
             val pinnableId = target.browseId?.takeIf { target.type == BrowseType.PLAYLIST }
             ModalBottomSheet(
                 onDismissRequest = { browseActions = null },
-                containerColor = MaterialTheme.colorScheme.background,
+                containerColor = Color.Transparent,
             ) {
                 BrowseActionsSheet(
                     // The live answer, not the one the target was built with.
@@ -3506,6 +3534,7 @@ private fun PlaybackTuningDialog(
     var pitch by remember { mutableStateOf(AppSettings.playbackPitch.value) }
     val palette = rememberArtworkPalette(song?.thumbnailUrl, dark = true, artPx = ROW_ART_PX)
     val useArtworkBackdrop by AppSettings.frostedPlayerDetails.collectAsStateWithLifecycle()
+    val hideTitle by AppSettings.hidePlaybackTuningTitle.collectAsStateWithLifecycle()
     val foreground = if (useArtworkBackdrop) palette.onBackground else MaterialTheme.colorScheme.onSurface
     val secondary = if (useArtworkBackdrop) palette.onBackgroundVariant else MaterialTheme.colorScheme.onSurfaceVariant
     val accent = if (useArtworkBackdrop) palette.accent else MaterialTheme.colorScheme.primary
@@ -3548,12 +3577,14 @@ private fun PlaybackTuningDialog(
                     .padding(horizontal = 24.dp)
                     .padding(bottom = 24.dp),
             ) {
-                Text(
-                    text = stringResource(R.string.playback_tuning),
-                    style = MaterialTheme.typography.titleLarge,
-                    color = foreground,
-                    modifier = Modifier.padding(top = 8.dp, bottom = 16.dp),
-                )
+                if (!hideTitle) {
+                    Text(
+                        text = stringResource(R.string.playback_tuning),
+                        style = MaterialTheme.typography.titleLarge,
+                        color = foreground,
+                        modifier = Modifier.padding(top = 8.dp, bottom = 16.dp),
+                    )
+                }
                 Text(
                     text = stringResource(R.string.playback_speed) + " · " + String.format(Locale.ROOT, "%.1fx", speed),
                     style = MaterialTheme.typography.titleMedium,

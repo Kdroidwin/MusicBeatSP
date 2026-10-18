@@ -617,6 +617,7 @@ internal fun ActionRow(
     value: String? = null,
     tint: Color? = null,
     accent: Color = MaterialTheme.colorScheme.primary,
+    foreground: Color = MaterialTheme.colorScheme.onBackground,
     onClick: () -> Unit,
 ) {
     Row(
@@ -629,14 +630,14 @@ internal fun ActionRow(
         Icon(
             imageVector = icon,
             contentDescription = null,
-            tint = tint ?: MaterialTheme.colorScheme.onBackground,
+            tint = tint ?: foreground,
             modifier = Modifier.size(22.dp),
         )
         Spacer(Modifier.width(18.dp))
         Text(
             text = label,
             style = MaterialTheme.typography.bodyLarge,
-            color = MaterialTheme.colorScheme.onBackground,
+            color = foreground,
             modifier = Modifier.weight(1f),
         )
         if (value != null) {

@@ -179,6 +179,7 @@ import com.music.bitchord.data.settings.LyricsTextAlignment
 import com.music.bitchord.playback.AudioOutputStatus
 import com.music.bitchord.R
 import com.music.bitchord.data.settings.ThemeMode
+import com.music.bitchord.data.settings.PillMotionStyle
 import com.music.bitchord.data.stats.Backup
 import com.music.bitchord.feature.localmusic.data.LocalPlaylistStore
 import com.music.bitchord.feature.localmusic.data.M3uImportException
@@ -258,7 +259,10 @@ fun SettingsScreen(
     }
 
     val skipSilence by AppSettings.skipSilence.collectAsStateWithLifecycle()
+    val audioOffloadEnabled by AppSettings.audioOffloadEnabled.collectAsStateWithLifecycle()
     val crossfadeSeconds by AppSettings.crossfadeSeconds.collectAsStateWithLifecycle()
+    val dolbyAtmos by AppSettings.dolbyAtmos.collectAsStateWithLifecycle()
+    val diracAudioEnabled by AppSettings.diracAudioEnabled.collectAsStateWithLifecycle()
     val doubleTapToSeek by AppSettings.doubleTapToSeek.collectAsStateWithLifecycle()
     val seekIntervalSeconds by AppSettings.seekIntervalSeconds.collectAsStateWithLifecycle()
     val recentlyPlayedThresholdSeconds by AppSettings.recentlyPlayedThresholdSeconds.collectAsStateWithLifecycle()
@@ -267,6 +271,7 @@ fun SettingsScreen(
     val spatialAudio by AppSettings.spatialAudio.collectAsStateWithLifecycle()
     val nerdStats by AppSettings.showNerdStats.collectAsStateWithLifecycle()
     val reduceAnimation by AppSettings.reduceAnimation.collectAsStateWithLifecycle()
+    val pillMotionStyle by AppSettings.pillMotionStyle.collectAsStateWithLifecycle()
     val reduceDynamicBlur by AppSettings.reduceDynamicBlur.collectAsStateWithLifecycle()
     val liquidGlass by AppSettings.liquidGlass.collectAsStateWithLifecycle()
     val classicNavBar by AppSettings.classicNavBar.collectAsStateWithLifecycle()
@@ -282,6 +287,10 @@ fun SettingsScreen(
     val frostedQueueManager by AppSettings.frostedQueueManager.collectAsStateWithLifecycle()
     val frostedPlayerDetails by AppSettings.frostedPlayerDetails.collectAsStateWithLifecycle()
     val frostedCompactLyrics by AppSettings.frostedCompactLyrics.collectAsStateWithLifecycle()
+    val queueManagerEqualsIcon by AppSettings.queueManagerEqualsIcon.collectAsStateWithLifecycle()
+    val hideQueueLabel by AppSettings.hideQueueLabel.collectAsStateWithLifecycle()
+    val queueClearTrashIcon by AppSettings.queueClearTrashIcon.collectAsStateWithLifecycle()
+    val hidePlaybackTuningTitle by AppSettings.hidePlaybackTuningTitle.collectAsStateWithLifecycle()
     val launcherIcon by AppSettings.launcherIcon.collectAsStateWithLifecycle()
     val artistsOpenAlbums by AppSettings.artistsOpenAlbums.collectAsStateWithLifecycle()
     val shuffleArtistAlbums by AppSettings.shuffleArtistAlbums.collectAsStateWithLifecycle()
@@ -376,6 +385,7 @@ fun SettingsScreen(
     var settingsSearchQuery by rememberSaveable { mutableStateOf("") }
     var showLauncherIconPicker by rememberSaveable { mutableStateOf(false) }
     var showPerformanceWarning by remember { mutableStateOf(false) }
+    var showEqualizerSheet by remember { mutableStateOf(false) }
 
     val settingsSearchEntries = listOf(
         SettingsSearchEntry(stringResource(R.string.hide_lyrics_status_text), stringResource(R.string.hide_lyrics_status_text_subtitle), listOf("lyrics", "歌詞", "状態", "status"), hideLyricsStatusText) { AppSettings.setHideLyricsStatusText(!hideLyricsStatusText) },
@@ -416,6 +426,30 @@ fun SettingsScreen(
             listOf("lyrics", "glass", "frosted", "歌詞", "すりガラス", "ぼかし"),
             frostedCompactLyrics,
         ) { AppSettings.setFrostedCompactLyrics(!frostedCompactLyrics) },
+        SettingsSearchEntry(
+            stringResource(R.string.queue_manage_equals_icon),
+            stringResource(R.string.queue_manage_equals_icon_subtitle),
+            listOf("queue", "manage", "equals", "icon", "再生キュー", "管理", "イコール", "アイコン"),
+            queueManagerEqualsIcon,
+        ) { AppSettings.setQueueManagerEqualsIcon(!queueManagerEqualsIcon) },
+        SettingsSearchEntry(
+            stringResource(R.string.hide_queue_label),
+            stringResource(R.string.hide_queue_label_subtitle),
+            listOf("queue", "label", "hide", "再生キュー", "ラベル", "非表示"),
+            hideQueueLabel,
+        ) { AppSettings.setHideQueueLabel(!hideQueueLabel) },
+        SettingsSearchEntry(
+            stringResource(R.string.queue_clear_trash_icon),
+            stringResource(R.string.queue_clear_trash_icon_subtitle),
+            listOf("queue", "clear", "trash", "delete", "再生キュー", "消去", "ゴミ箱", "アイコン"),
+            queueClearTrashIcon,
+        ) { AppSettings.setQueueClearTrashIcon(!queueClearTrashIcon) },
+        SettingsSearchEntry(
+            stringResource(R.string.hide_playback_tuning_title),
+            stringResource(R.string.hide_playback_tuning_title_subtitle),
+            listOf("speed", "pitch", "playback", "title", "再生速度", "ピッチ", "ラベル", "非表示"),
+            hidePlaybackTuningTitle,
+        ) { AppSettings.setHidePlaybackTuningTitle(!hidePlaybackTuningTitle) },
         SettingsSearchEntry(
             title = stringResource(R.string.app_icon),
             subtitle = stringResource(R.string.app_icon_subtitle),
@@ -488,6 +522,32 @@ fun SettingsScreen(
             onSliderValueChange = { AppSettings.setCrossfadeSeconds(it.roundToInt()) },
             activate = {},
         ),
+        SettingsSearchEntry(
+            title = stringResource(R.string.audio_offload),
+            subtitle = stringResource(if (crossfadeSeconds > 0) R.string.audio_offload_disabled_by_crossfade else R.string.audio_offload_subtitle),
+            keywords = listOf("audio offload", "offload", "hardware playback", "省電力", "オフロード再生"),
+            checked = audioOffloadEnabled && crossfadeSeconds == 0,
+            enabled = crossfadeSeconds == 0,
+            activate = { if (crossfadeSeconds == 0) AppSettings.setAudioOffloadEnabled(!audioOffloadEnabled) },
+        ),
+        SettingsSearchEntry(
+            stringResource(R.string.dolby_atmos),
+            stringResource(R.string.dolby_atmos_subtitle),
+            listOf("dolby", "atmos", "eac3", "ドルビー", "空間オーディオ"),
+            dolbyAtmos,
+        ) { AppSettings.setDolbyAtmos(!dolbyAtmos) },
+        SettingsSearchEntry(
+            stringResource(R.string.dirac_audio_eq),
+            stringResource(R.string.dirac_audio_eq_subtitle),
+            listOf("dirac", "eq", "equalizer", "ディラック", "イコライザー"),
+            diracAudioEnabled,
+        ) { AppSettings.setDiracAudioEnabled(!diracAudioEnabled) },
+        SettingsSearchEntry(
+            stringResource(R.string.autoeq_profiles),
+            stringResource(R.string.autoeq_profiles_subtitle),
+            listOf("autoeq", "headphones", "equalizer", "ヘッドホン", "自動EQ"),
+            activate = { showEqualizerSheet = true },
+        ),
         SettingsSearchEntry(stringResource(R.string.double_tap_to_seek), stringResource(R.string.double_tap_to_seek_subtitle), listOf("seek", "double tap", "シーク", "ダブルタップ"), doubleTapToSeek) { AppSettings.setDoubleTapToSeek(!doubleTapToSeek) },
         SettingsSearchEntry(
             title = stringResource(R.string.seek_interval),
@@ -556,6 +616,15 @@ fun SettingsScreen(
         SettingsSearchEntry(stringResource(R.string.keep_original_artwork_aspect_ratio), stringResource(R.string.keep_original_artwork_aspect_ratio_subtitle), listOf("artwork", "cover", "aspect ratio", "crop", "縦長", "横長", "比率", "トリミング"), keepOriginalArtworkAspectRatio) { AppSettings.setKeepOriginalArtworkAspectRatio(!keepOriginalArtworkAspectRatio) },
         SettingsSearchEntry(stringResource(R.string.keep_artwork_full_size_paused), stringResource(R.string.keep_artwork_full_size_paused_subtitle), listOf("artwork", "cover", "paused", "停止中", "アート"), keepArtworkFullSizeWhenPaused) { AppSettings.setKeepArtworkFullSizeWhenPaused(!keepArtworkFullSizeWhenPaused) },
         SettingsSearchEntry(stringResource(R.string.reduce_animation), stringResource(R.string.reduce_animation_subtitle), listOf("animation", "reduce", "アニメーション"), reduceAnimation) { AppSettings.setReduceAnimation(!reduceAnimation) },
+        SettingsSearchEntry(
+            title = stringResource(R.string.pill_motion_style),
+            subtitle = stringResource(R.string.pill_motion_style_subtitle),
+            keywords = listOf("tab", "pill", "motion", "speed", "animation", "タブ", "ピル", "モーション", "速度"),
+            valueLabel = pillMotionStyle.localizedLabel(),
+        ) {
+            val next = (PillMotionStyle.entries.indexOf(pillMotionStyle) + 1) % PillMotionStyle.entries.size
+            AppSettings.setPillMotionStyle(PillMotionStyle.entries[next])
+        },
         SettingsSearchEntry(stringResource(R.string.reduce_dynamic_blur), stringResource(R.string.reduce_dynamic_blur_subtitle), listOf("blur", "ぼかし", "performance", "動的"), reduceDynamicBlur) { AppSettings.setReduceDynamicBlur(!reduceDynamicBlur) },
         SettingsSearchEntry(stringResource(R.string.classic_nav_bar), stringResource(R.string.classic_nav_bar_subtitle), listOf("navigation", "nav bar", "ナビゲーション", "classic"), classicNavBar) { AppSettings.setClassicNavBar(!classicNavBar) },
         SettingsSearchEntry(stringResource(R.string.hide_nav_bar_labels), stringResource(R.string.hide_nav_bar_labels_subtitle), listOf("navigation", "nav bar", "label", "ラベル", "ナビゲーション"), hideNavBarLabels) { AppSettings.setHideNavigationBarLabels(!hideNavBarLabels) },
@@ -924,7 +993,6 @@ fun SettingsScreen(
     var importStatus by remember { mutableStateOf<String?>(null) }
     var confirmImport by remember { mutableStateOf(false) }
     var showPerformanceConfirmation by remember { mutableStateOf(false) }
-    var showEqualizerSheet by remember { mutableStateOf(false) }
     var showManageFoldersSheet by remember { mutableStateOf(false) }
     var showPlaylistOrderDialog by remember { mutableStateOf(false) }
     var preparedM3uImport by remember { mutableStateOf<PreparedM3uImport?>(null) }
@@ -1423,6 +1491,49 @@ fun SettingsScreen(
             RowDivider()
             SettingsRow(
                 icon = Icons.Rounded.GraphicEq,
+                title = stringResource(R.string.audio_offload),
+                subtitle = stringResource(
+                    if (crossfadeSeconds > 0) R.string.audio_offload_disabled_by_crossfade
+                    else R.string.audio_offload_subtitle,
+                ),
+                enabled = crossfadeSeconds == 0,
+                trailing = {
+                    Switch(
+                        checked = audioOffloadEnabled && crossfadeSeconds == 0,
+                        onCheckedChange = { enabled ->
+                            if (crossfadeSeconds == 0) AppSettings.setAudioOffloadEnabled(enabled)
+                        },
+                        enabled = crossfadeSeconds == 0,
+                        colors = SwitchDefaults.colors(
+                            checkedTrackColor = MaterialTheme.colorScheme.primary,
+                            checkedBorderColor = MaterialTheme.colorScheme.primary,
+                        ),
+                    )
+                },
+                onClick = {
+                    if (crossfadeSeconds == 0) AppSettings.setAudioOffloadEnabled(!audioOffloadEnabled)
+                },
+            )
+            RowDivider()
+            SettingsRow(
+                icon = Icons.Rounded.SurroundSound,
+                title = stringResource(R.string.dolby_atmos),
+                subtitle = stringResource(R.string.dolby_atmos_subtitle),
+                trailing = {
+                    Switch(
+                        checked = dolbyAtmos,
+                        onCheckedChange = AppSettings::setDolbyAtmos,
+                        colors = SwitchDefaults.colors(
+                            checkedTrackColor = MaterialTheme.colorScheme.primary,
+                            checkedBorderColor = MaterialTheme.colorScheme.primary,
+                        ),
+                    )
+                },
+                onClick = { AppSettings.setDolbyAtmos(!dolbyAtmos) },
+            )
+            RowDivider()
+            SettingsRow(
+                icon = Icons.Rounded.GraphicEq,
                 title = stringResource(R.string.resampler_cutoff),
                 subtitle = stringResource(R.string.resampler_cutoff_subtitle),
                 trailing = {
@@ -1646,6 +1757,23 @@ fun SettingsScreen(
                 title = stringResource(R.string.equalizer),
                 subtitle = stringResource(R.string.equalizer_subtitle),
                 onClick = { showEqualizerSheet = true },
+            )
+            RowDivider()
+            SettingsRow(
+                icon = Icons.Rounded.SurroundSound,
+                title = stringResource(R.string.dirac_audio_eq),
+                subtitle = stringResource(R.string.dirac_audio_eq_subtitle),
+                trailing = {
+                    Switch(
+                        checked = diracAudioEnabled,
+                        onCheckedChange = AppSettings::setDiracAudioEnabled,
+                        colors = SwitchDefaults.colors(
+                            checkedTrackColor = MaterialTheme.colorScheme.primary,
+                            checkedBorderColor = MaterialTheme.colorScheme.primary,
+                        ),
+                    )
+                },
+                onClick = { AppSettings.setDiracAudioEnabled(!diracAudioEnabled) },
             )
             RowDivider()
             SettingsRow(
@@ -2150,6 +2278,58 @@ fun SettingsScreen(
             )
             RowDivider()
             SettingsRow(
+                icon = Icons.Rounded.Tune,
+                title = stringResource(R.string.queue_manage_equals_icon),
+                subtitle = stringResource(R.string.queue_manage_equals_icon_subtitle),
+                trailing = {
+                    Switch(
+                        checked = queueManagerEqualsIcon,
+                        onCheckedChange = AppSettings::setQueueManagerEqualsIcon,
+                    )
+                },
+                onClick = { AppSettings.setQueueManagerEqualsIcon(!queueManagerEqualsIcon) },
+            )
+            RowDivider()
+            SettingsRow(
+                icon = Icons.Rounded.Tune,
+                title = stringResource(R.string.hide_queue_label),
+                subtitle = stringResource(R.string.hide_queue_label_subtitle),
+                trailing = {
+                    Switch(
+                        checked = hideQueueLabel,
+                        onCheckedChange = AppSettings::setHideQueueLabel,
+                    )
+                },
+                onClick = { AppSettings.setHideQueueLabel(!hideQueueLabel) },
+            )
+            RowDivider()
+            SettingsRow(
+                icon = Icons.Rounded.Tune,
+                title = stringResource(R.string.queue_clear_trash_icon),
+                subtitle = stringResource(R.string.queue_clear_trash_icon_subtitle),
+                trailing = {
+                    Switch(
+                        checked = queueClearTrashIcon,
+                        onCheckedChange = AppSettings::setQueueClearTrashIcon,
+                    )
+                },
+                onClick = { AppSettings.setQueueClearTrashIcon(!queueClearTrashIcon) },
+            )
+            RowDivider()
+            SettingsRow(
+                icon = Icons.Rounded.Tune,
+                title = stringResource(R.string.hide_playback_tuning_title),
+                subtitle = stringResource(R.string.hide_playback_tuning_title_subtitle),
+                trailing = {
+                    Switch(
+                        checked = hidePlaybackTuningTitle,
+                        onCheckedChange = AppSettings::setHidePlaybackTuningTitle,
+                    )
+                },
+                onClick = { AppSettings.setHidePlaybackTuningTitle(!hidePlaybackTuningTitle) },
+            )
+            RowDivider()
+            SettingsRow(
                 icon = Icons.Rounded.BlurOn,
                 title = stringResource(R.string.artwork_backdrop_blur),
                 subtitle = stringResource(R.string.artwork_backdrop_blur_subtitle),
@@ -2275,6 +2455,18 @@ fun SettingsScreen(
                     )
                 },
                 onClick = { AppSettings.setReduceAnimation(!reduceAnimation) },
+            )
+            RowDivider()
+            SettingsRow(
+                icon = Icons.Rounded.Speed,
+                title = stringResource(R.string.pill_motion_style),
+                subtitle = stringResource(R.string.pill_motion_style_subtitle),
+            )
+            SegmentedControl(
+                options = PillMotionStyle.entries.map { it.localizedLabel() },
+                selectedIndex = PillMotionStyle.entries.indexOf(pillMotionStyle),
+                onSelect = { AppSettings.setPillMotionStyle(PillMotionStyle.entries[it]) },
+                modifier = Modifier.padding(start = ROW_INSET, end = ROW_INSET, bottom = 14.dp),
             )
             RowDivider()
             SettingsRow(
@@ -3923,6 +4115,15 @@ private fun ThemeMode.localizedLabel(): String = stringResource(
         ThemeMode.DARK -> R.string.dark
         ThemeMode.AMOLED -> R.string.theme_amoled
         ThemeMode.ARTWORK -> R.string.theme_match_artwork
+    },
+)
+
+@Composable
+private fun PillMotionStyle.localizedLabel(): String = stringResource(
+    when (this) {
+        PillMotionStyle.FAST -> R.string.pill_motion_fast
+        PillMotionStyle.FLUID -> R.string.pill_motion_fluid
+        PillMotionStyle.RELAXED -> R.string.pill_motion_relaxed
     },
 )
 
