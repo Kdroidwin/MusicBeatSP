@@ -145,6 +145,17 @@ enum class ThemeMode(val label: String) {
     SYSTEM("System"), LIGHT("Light"), DARK("Dark"), AMOLED("AMOLED black"), ARTWORK("Album art")
 }
 
+/** Motion used by the floating navigation selection indicator. */
+enum class PillMotionStyle {
+    FAST,
+    FLUID,
+    RELAXED;
+
+    companion object {
+        val DEFAULT = FLUID
+    }
+}
+
 
 /** Stable persisted ordering for each on-device music library. */
 enum class LocalMusicSort {
@@ -399,6 +410,8 @@ object AppSettings {
     val resamplerCutoffHz = MutableStateFlow(0)
 
     val skipSilence = MutableStateFlow(false)
+    /** Requests Media3 audio offload when no crossfade is configured. */
+    val audioOffloadEnabled = MutableStateFlow(false)
 
     /** Requested PCM representation at the Android AudioTrack boundary. */
     val outputPcmMode = MutableStateFlow(OutputPcmMode.PCM_16)
@@ -412,15 +425,12 @@ object AppSettings {
     /**
      * Whether a source offering a Dolby Atmos rendition is allowed to serve it.
      *
-     * On by default: where the device can decode it, Atmos is the premium
-     * rendition the catalogue holds and the one most people are paying a
-     * subscription for.
-     *
-     * Off is a real preference and not just a safety valve. Atmos is E-AC-3,
+     * Off by default. When enabled, a source that offers an Atmos rendition
+     * may choose it if this device can decode it. Atmos is E-AC-3,
      * which is *lossy* — a track with an Atmos master is frequently also held
      * as a FLAC, and someone listening on wired headphones may well prefer the
      * bit-exact stereo copy to a spatial mix their output can't render. Turning
-     * this off is how they say so; see
+     * this off keeps the source on its usual version; see
      * [ModuleSource.unplayable][com.music.bitchord.data.sources.ModuleSource],
      * which is where the refusal is applied.
      *
@@ -431,7 +441,11 @@ object AppSettings {
      * that cannot honour it (a restored backup, a swapped device) without
      * quietly rewriting itself.
      */
-    val dolbyAtmos = MutableStateFlow(true)
+    val dolbyAtmos = MutableStateFlow(false)
+
+    /** Dirac-style system EQ curve; this is not the vendor's proprietary DSP. */
+    val diracAudioEnabled = MutableStateFlow(false)
+    val diracAudioPreset = MutableStateFlow(0)
 
     /**
      * Widens stereo output via [com.music.bitchord.playback.SpatialAudioProcessor],
@@ -459,6 +473,14 @@ object AppSettings {
     val frostedQueueManager = MutableStateFlow(true)
     val frostedPlayerDetails = MutableStateFlow(true)
     val frostedCompactLyrics = MutableStateFlow(true)
+    /** Replaces the queue manager's text action with a compact equals glyph. */
+    val queueManagerEqualsIcon = MutableStateFlow(false)
+    /** Hides the queue heading while keeping its actions available. */
+    val hideQueueLabel = MutableStateFlow(true)
+    /** Replaces the clear-queue label with a trash icon. */
+    val queueClearTrashIcon = MutableStateFlow(false)
+    /** Hides the heading and its vertical gap in the playback tuning sheet. */
+    val hidePlaybackTuningTitle = MutableStateFlow(true)
 
     /** Keep playing similar music once the queue runs out. */
     val autoplay = MutableStateFlow(true)
@@ -477,6 +499,9 @@ object AppSettings {
 
     /** Freezes the main player's mesh gradient instead of letting it drift/crossfade. */
     val reduceAnimation = MutableStateFlow(false)
+
+    /** Speed and fluidity of the floating tab selection animation. */
+    val pillMotionStyle = MutableStateFlow(PillMotionStyle.DEFAULT)
 
     /** Requests a sustained high-refresh UI. Off keeps Android's automatic policy. */
     val highPerformanceMode = MutableStateFlow(false)
@@ -946,6 +971,7 @@ object AppSettings {
         wifiOnlyDownloads.value = prefs.getBoolean(KEY_WIFI_ONLY_DOWNLOADS, true)
         exportDownloads.value = prefs.getBoolean(KEY_EXPORT_DOWNLOADS, false)
         skipSilence.value = prefs.getBoolean(KEY_SKIP_SILENCE, false)
+        audioOffloadEnabled.value = prefs.getBoolean(KEY_AUDIO_OFFLOAD_ENABLED, false)
         crossfadeSeconds.value = prefs.getInt(KEY_CROSSFADE_SECONDS, 0).coerceIn(0, MAX_CROSSFADE_SECONDS)
         resamplerCutoffHz.value = normalizeResamplerCutoffHz(prefs.getInt(KEY_RESAMPLER_CUTOFF_HZ, 0))
         outputPcmMode.value = runCatching {
@@ -956,7 +982,9 @@ object AppSettings {
         }.getOrDefault(OutputPcmMode.PCM_16)
         bitPerfectPlayback.value = prefs.getBoolean(KEY_BIT_PERFECT_PLAYBACK, false)
         preferUsbDac.value = prefs.getBoolean(KEY_PREFER_USB_DAC, false)
-        dolbyAtmos.value = prefs.getBoolean(KEY_DOLBY_ATMOS, true)
+        dolbyAtmos.value = prefs.getBoolean(KEY_DOLBY_ATMOS, false)
+        diracAudioEnabled.value = prefs.getBoolean(KEY_DIRAC_AUDIO_ENABLED, false)
+        diracAudioPreset.value = prefs.getInt(KEY_DIRAC_AUDIO_PRESET, 0).coerceIn(0, 2)
         spatialAudio.value = prefs.getBoolean(KEY_SPATIAL_AUDIO, false)
         parametricEqEnabled.value = prefs.getBoolean(KEY_PARAMETRIC_EQ_ENABLED, false)
         parametricEqBands.value = ParametricEqBand.decode(prefs.getString(KEY_PARAMETRIC_EQ_BANDS, null))
@@ -981,12 +1009,19 @@ object AppSettings {
         frostedQueueManager.value = prefs.getBoolean(KEY_FROSTED_QUEUE_MANAGER, true)
         frostedPlayerDetails.value = prefs.getBoolean(KEY_FROSTED_PLAYER_DETAILS, true)
         frostedCompactLyrics.value = prefs.getBoolean(KEY_FROSTED_COMPACT_LYRICS, true)
+        queueManagerEqualsIcon.value = prefs.getBoolean(KEY_QUEUE_MANAGER_EQUALS_ICON, false)
+        hideQueueLabel.value = prefs.getBoolean(KEY_HIDE_QUEUE_LABEL, true)
+        queueClearTrashIcon.value = prefs.getBoolean(KEY_QUEUE_CLEAR_TRASH_ICON, false)
+        hidePlaybackTuningTitle.value = prefs.getBoolean(KEY_HIDE_PLAYBACK_TUNING_TITLE, true)
         autoplay.value = prefs.getBoolean(KEY_AUTOPLAY, true)
         shuffleEnabled.value = prefs.getBoolean(KEY_SHUFFLE_ENABLED, false)
         audioFocusLevel.value = prefs.getInt(KEY_AUDIO_FOCUS_LEVEL, 1).coerceIn(0, 4)
         repeatMode.value = prefs.getInt(KEY_REPEAT_MODE, Player.REPEAT_MODE_OFF)
         showNerdStats.value = prefs.getBoolean(KEY_NERD_STATS, false)
         reduceAnimation.value = prefs.getBoolean(KEY_REDUCE_ANIMATION, false)
+        pillMotionStyle.value = runCatching {
+            PillMotionStyle.valueOf(prefs.getString(KEY_PILL_MOTION_STYLE, null) ?: PillMotionStyle.DEFAULT.name)
+        }.getOrDefault(PillMotionStyle.DEFAULT)
         highPerformanceMode.value = prefs.getBoolean(KEY_HIGH_PERFORMANCE_MODE, false)
         performanceRefreshRate.value = normalizePerformanceRefreshRate(
             prefs.getInt(KEY_PERFORMANCE_REFRESH_RATE, DEFAULT_PERFORMANCE_REFRESH_RATE),
@@ -1303,6 +1338,11 @@ object AppSettings {
         prefs.edit().putBoolean(KEY_SKIP_SILENCE, value).apply()
     }
 
+    fun setAudioOffloadEnabled(value: Boolean) {
+        audioOffloadEnabled.value = value
+        prefs.edit().putBoolean(KEY_AUDIO_OFFLOAD_ENABLED, value).apply()
+    }
+
     fun setCrossfadeSeconds(value: Int) {
         val normalized = value.coerceIn(0, MAX_CROSSFADE_SECONDS)
         crossfadeSeconds.value = normalized
@@ -1318,6 +1358,17 @@ object AppSettings {
     fun setDolbyAtmos(value: Boolean) {
         dolbyAtmos.value = value
         prefs.edit().putBoolean(KEY_DOLBY_ATMOS, value).apply()
+    }
+
+    fun setDiracAudioEnabled(value: Boolean) {
+        diracAudioEnabled.value = value
+        prefs.edit().putBoolean(KEY_DIRAC_AUDIO_ENABLED, value).apply()
+    }
+
+    fun setDiracAudioPreset(value: Int) {
+        val normalized = value.coerceIn(0, 2)
+        diracAudioPreset.value = normalized
+        prefs.edit().putInt(KEY_DIRAC_AUDIO_PRESET, normalized).apply()
     }
 
     fun setSpatialAudio(value: Boolean) {
@@ -1410,12 +1461,37 @@ object AppSettings {
         prefs.edit().putBoolean(KEY_FROSTED_COMPACT_LYRICS, value).apply()
     }
 
+    fun setQueueManagerEqualsIcon(value: Boolean) {
+        queueManagerEqualsIcon.value = value
+        prefs.edit().putBoolean(KEY_QUEUE_MANAGER_EQUALS_ICON, value).apply()
+    }
+
+    fun setHideQueueLabel(value: Boolean) {
+        hideQueueLabel.value = value
+        prefs.edit().putBoolean(KEY_HIDE_QUEUE_LABEL, value).apply()
+    }
+
+    fun setQueueClearTrashIcon(value: Boolean) {
+        queueClearTrashIcon.value = value
+        prefs.edit().putBoolean(KEY_QUEUE_CLEAR_TRASH_ICON, value).apply()
+    }
+
+    fun setHidePlaybackTuningTitle(value: Boolean) {
+        hidePlaybackTuningTitle.value = value
+        prefs.edit().putBoolean(KEY_HIDE_PLAYBACK_TUNING_TITLE, value).apply()
+    }
+
     fun setReduceAnimation(value: Boolean) {
         reduceAnimation.value = value
         if (value) highPerformanceMode.value = false
         val editor = prefs.edit().putBoolean(KEY_REDUCE_ANIMATION, value)
         if (value) editor.putBoolean(KEY_HIGH_PERFORMANCE_MODE, false)
         editor.apply()
+    }
+
+    fun setPillMotionStyle(value: PillMotionStyle) {
+        pillMotionStyle.value = value
+        prefs.edit().putString(KEY_PILL_MOTION_STYLE, value.name).apply()
     }
 
     fun setStopOnTaskRemoved(value: Boolean) {
@@ -2599,12 +2675,15 @@ object AppSettings {
     private const val KEY_EXPORT_DOWNLOADS = "export_downloads"
     private const val KEY_LOSSLESS = "lossless_audio"
     private const val KEY_SKIP_SILENCE = "skip_silence"
+    private const val KEY_AUDIO_OFFLOAD_ENABLED = "audio_offload_enabled"
     private const val KEY_CROSSFADE_SECONDS = "crossfade_seconds"
     private const val KEY_RESAMPLER_CUTOFF_HZ = "resampler_cutoff_hz"
     private const val KEY_OUTPUT_PCM_MODE = "output_pcm_mode"
     private const val KEY_BIT_PERFECT_PLAYBACK = "bit_perfect_playback"
     private const val KEY_PREFER_USB_DAC = "prefer_usb_dac"
     private const val KEY_DOLBY_ATMOS = "dolby_atmos"
+    private const val KEY_DIRAC_AUDIO_ENABLED = "dirac_audio_enabled"
+    private const val KEY_DIRAC_AUDIO_PRESET = "dirac_audio_preset"
     private const val KEY_SPATIAL_AUDIO = "spatial_audio"
     private const val KEY_SPEED = "playback_speed"
     private const val KEY_PITCH = "playback_pitch"
@@ -2621,6 +2700,10 @@ object AppSettings {
     private const val KEY_FROSTED_QUEUE_MANAGER = "frosted_queue_manager"
     private const val KEY_FROSTED_PLAYER_DETAILS = "frosted_player_details"
     private const val KEY_FROSTED_COMPACT_LYRICS = "frosted_compact_lyrics"
+    private const val KEY_QUEUE_MANAGER_EQUALS_ICON = "queue_manager_equals_icon"
+    private const val KEY_HIDE_QUEUE_LABEL = "hide_queue_label"
+    private const val KEY_QUEUE_CLEAR_TRASH_ICON = "queue_clear_trash_icon"
+    private const val KEY_HIDE_PLAYBACK_TUNING_TITLE = "hide_playback_tuning_title"
     private const val KEY_AUTOPLAY = "autoplay"
     private const val KEY_SHUFFLE_ENABLED = "shuffle_enabled"
     private const val KEY_AUDIO_FOCUS_LEVEL = "audio_focus_level"
@@ -2628,6 +2711,7 @@ object AppSettings {
     private const val KEY_NERD_STATS = "show_nerd_stats"
     private const val KEY_CACHE_LIMIT = "audio_cache_limit_bytes"
     private const val KEY_REDUCE_ANIMATION = "reduce_animation"
+    private const val KEY_PILL_MOTION_STYLE = "pill_motion_style"
     private const val KEY_HIGH_PERFORMANCE_MODE = "high_performance_mode"
     private const val KEY_PERFORMANCE_REFRESH_RATE = "performance_refresh_rate"
     private const val KEY_STOP_ON_TASK_REMOVED = "stop_on_task_removed"

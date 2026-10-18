@@ -4,7 +4,8 @@ import android.content.ContentResolver
 import android.content.Context
 import android.net.ConnectivityManager
 import android.net.Uri
-import android.os.ParcelFileDescriptor
+import android.net.NetworkCapabilities
+import android.util.Log
 import java.io.Closeable
 import java.io.BufferedInputStream
 import java.io.ByteArrayOutputStream
@@ -35,6 +36,7 @@ internal class LocalCastHttpServer(
     context: Context,
     private val mediaUri: Uri,
     private val contentType: String,
+    private val receiverAddress: Inet4Address? = null,
 ) : Closeable {
     private val resolver: ContentResolver = context.applicationContext.contentResolver
     private val responseContentType = contentType
@@ -54,6 +56,7 @@ internal class LocalCastHttpServer(
         ArrayBlockingQueue(4),
     ) { runnable -> Thread(runnable, "cast-local-file-client").apply { isDaemon = true } }
     @Volatile private var serverSocket: ServerSocket? = null
+    @Volatile private var advertisedAddress: AddressCandidate? = null
 
     @Synchronized
     @Throws(IOException::class)
@@ -62,16 +65,30 @@ internal class LocalCastHttpServer(
         if (serverSocket == null) {
             val length = mediaLength()
             if (length <= 0L) throw IOException("Local media has no readable length")
+            // Bind to the receiver-reachable physical interface. A wildcard
+            // listener can still be advertised with the VPN's address, which
+            // the Cast device on Wi-Fi cannot route to.
+            val candidate = localIpv4Address()
+                ?: throw IOException("No local IPv4 address is available for Cast")
             val socket = ServerSocket().apply {
                 reuseAddress = true
-                bind(InetSocketAddress(InetAddress.getByName("0.0.0.0"), 0), 4)
+                bind(InetSocketAddress(candidate.address, 0), 4)
             }
             serverSocket = socket
+            advertisedAddress = candidate
             thread(name = "cast-local-file-server", isDaemon = true) { acceptClients(socket) }
         }
-        val address = localIpv4Address()
+        val candidate = advertisedAddress
             ?: throw IOException("No local IPv4 address is available for Cast")
-        return "http://$address:${serverSocket!!.localPort}/media/$token"
+        val subnetMatch = receiverAddress?.let(candidate::sharesSubnetWith) ?: false
+        val transport = when (candidate.transportPriority) {
+            0 -> "wifi"
+            1 -> "ethernet"
+            3 -> "cellular"
+            else -> "other"
+        }
+        Log.i(TAG, "Serving Cast audio on $transport; receiver subnet match=$subnetMatch")
+        return "http://${candidate.address.hostAddress}:${serverSocket!!.localPort}/media/$token"
     }
 
     private fun acceptClients(socket: ServerSocket) {
@@ -87,6 +104,8 @@ internal class LocalCastHttpServer(
                 workers.execute {
                     try {
                         serve(client)
+                    } catch (failure: Exception) {
+                        if (!closed.get()) Log.w(TAG, "Cast audio request failed", failure)
                     } finally {
                         clients -= client
                         runCatching { client.close() }
@@ -108,8 +127,12 @@ internal class LocalCastHttpServer(
         if (requestLine.size != 3) return
         val method = requestLine[0]
         val requestPath = requestLine[1]
+        if (method == "OPTIONS") {
+            respond(socket, 204, "No Content", CORS_HEADERS)
+            return
+        }
         if (method != "GET" && method != "HEAD") {
-            respond(socket, 405, "Method Not Allowed", "Allow: GET, HEAD\r\n")
+            respond(socket, 405, "Method Not Allowed", "Allow: GET, HEAD, OPTIONS\r\n$CORS_HEADERS")
             return
         }
         if (requestPath != "/media/$token") {
@@ -143,9 +166,10 @@ internal class LocalCastHttpServer(
             return
         }
         val range = headers["range"]
+        Log.d(TAG, "Cast audio request method=$method range=${range ?: "none"}")
         val bounds = if (range == null) null else parseRange(range, length)
         if (range != null && bounds == null) {
-            respond(socket, 416, "Range Not Satisfiable", "Content-Range: bytes */$length\r\n")
+            respond(socket, 416, "Range Not Satisfiable", "Content-Range: bytes */$length\r\n$CORS_HEADERS")
             return
         }
         val start = bounds?.first ?: 0L
@@ -158,6 +182,7 @@ internal class LocalCastHttpServer(
             append("Content-Type: $responseContentType\r\n")
             append("Content-Length: $responseLength\r\n")
             append("Accept-Ranges: bytes\r\n")
+            append(CORS_HEADERS)
             append("Connection: close\r\n")
             append("Cache-Control: no-store\r\n")
             if (bounds != null) append("Content-Range: bytes $start-$end/$length\r\n")
@@ -178,6 +203,7 @@ internal class LocalCastHttpServer(
                 remaining -= read
             }
             output.flush()
+            Log.d(TAG, "Cast audio response status=$status bytes=${responseLength - remaining}/$responseLength")
         }
     }
 
@@ -227,14 +253,72 @@ internal class LocalCastHttpServer(
         else -> null
     }
 
-    private fun localIpv4Address(): Inet4Address? {
+    private fun localIpv4Address(): AddressCandidate? {
         val connectivity = resolverContextConnectivityManager() ?: return null
-        val network = connectivity.activeNetwork ?: return null
-        val addresses = connectivity.getLinkProperties(network)?.linkAddresses.orEmpty().map { it.address }
-        return addresses.filterIsInstance<Inet4Address>()
-            .firstOrNull { !it.isLoopbackAddress && !it.isLinkLocalAddress && it.isSiteLocalAddress }
-            ?: addresses.filterIsInstance<Inet4Address>()
-                .firstOrNull { !it.isLoopbackAddress && !it.isLinkLocalAddress }
+        val activeNetwork = runCatching { connectivity.activeNetwork }.getOrNull()
+        val networks = runCatching { connectivity.allNetworks.toList() }
+            .getOrDefault(emptyList())
+            .let { if (activeNetwork != null && activeNetwork !in it) it + activeNetwork else it }
+        val candidates = mutableListOf<AddressCandidate>()
+
+        for (network in networks) {
+            val capabilities = runCatching { connectivity.getNetworkCapabilities(network) }.getOrNull()
+            // A VPN address is generally private to the phone and cannot be
+            // reached by the receiver. Prefer the physical LAN beneath it.
+            if (capabilities?.hasTransport(NetworkCapabilities.TRANSPORT_VPN) == true) continue
+            val transportPriority = when {
+                capabilities?.hasTransport(NetworkCapabilities.TRANSPORT_WIFI) == true -> 0
+                capabilities?.hasTransport(NetworkCapabilities.TRANSPORT_ETHERNET) == true -> 1
+                capabilities?.hasTransport(NetworkCapabilities.TRANSPORT_CELLULAR) == true -> 3
+                else -> 2
+            }
+            val links = runCatching { connectivity.getLinkProperties(network)?.linkAddresses.orEmpty() }
+                .getOrDefault(emptyList())
+            for (link in links) {
+                val address = link.address as? Inet4Address ?: continue
+                if (address.isLoopbackAddress || address.isLinkLocalAddress || address.isAnyLocalAddress) continue
+                candidates += AddressCandidate(
+                    address = address,
+                    prefixLength = link.prefixLength,
+                    transportPriority = transportPriority,
+                    activeNetwork = network == activeNetwork,
+                )
+            }
+        }
+
+        return candidates.minWithOrNull(
+            compareBy<AddressCandidate>(
+                { if (receiverAddress != null && it.sharesSubnetWith(receiverAddress)) 0 else 1 },
+                { it.transportPriority },
+                { if (it.activeNetwork) 0 else 1 },
+                { if (it.address.isSiteLocalAddress) 0 else 1 },
+            ),
+        )
+    }
+
+    private data class AddressCandidate(
+        val address: Inet4Address,
+        val prefixLength: Int,
+        val transportPriority: Int,
+        val activeNetwork: Boolean,
+    ) {
+        fun sharesSubnetWith(receiver: Inet4Address): Boolean {
+            val prefix = prefixLength.coerceIn(0, 32)
+            if (prefix == 0) return false
+            val local = address.address
+            val remote = receiver.address
+            var bitsLeft = prefix
+            for (index in 0 until 4) {
+                if (bitsLeft <= 0) break
+                val bitsHere = minOf(bitsLeft, 8)
+                val mask = (0xff shl (8 - bitsHere)) and 0xff
+                val localByte = local[index].toInt() and 0xff
+                val remoteByte = remote[index].toInt() and 0xff
+                if ((localByte and mask) != (remoteByte and mask)) return false
+                bitsLeft -= bitsHere
+            }
+            return true
+        }
     }
 
     // ContentResolver intentionally holds the application context; recover the
@@ -273,6 +357,7 @@ internal class LocalCastHttpServer(
         if (!closed.compareAndSet(false, true)) return
         runCatching { serverSocket?.close() }
         serverSocket = null
+        advertisedAddress = null
         clients.forEach { runCatching { it.close() } }
         clients.clear()
         workers.shutdownNow()
@@ -310,12 +395,17 @@ internal class LocalCastHttpServer(
     }
 
     companion object {
+        private const val TAG = "MusicBeatSPCast"
         private const val TOKEN_BYTES = 24
         private const val SOCKET_TIMEOUT_MS = 15_000
         private const val TRANSFER_BUFFER_BYTES = 64 * 1024
         private const val MAX_HTTP_LINE_BYTES = 8 * 1024
         private const val MAX_HTTP_HEADER_BYTES = 16 * 1024
         private const val MAX_HTTP_HEADER_COUNT = 64
+        private const val CORS_HEADERS = "Access-Control-Allow-Origin: *\r\n" +
+            "Access-Control-Allow-Methods: GET, HEAD, OPTIONS\r\n" +
+            "Access-Control-Allow-Headers: Range, Accept, Origin, Content-Type\r\n" +
+            "Access-Control-Expose-Headers: Accept-Ranges, Content-Length, Content-Range\r\n"
         private val MIME_TYPE_PATTERN = Regex("[A-Za-z0-9!#$&^_.+-]+/[A-Za-z0-9!#$&^_.+-]+")
 
         private fun contextConnectivityManager(context: Context): ConnectivityManager? =

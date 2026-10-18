@@ -32,6 +32,7 @@ import androidx.media3.common.MimeTypes
 import androidx.media3.common.PlaybackException
 import androidx.media3.common.PlaybackParameters
 import androidx.media3.common.Player
+import androidx.media3.common.TrackSelectionParameters
 import androidx.media3.common.Timeline
 import androidx.core.net.toUri
 import androidx.media3.common.MediaMetadata
@@ -139,6 +140,7 @@ import kotlinx.coroutines.withTimeoutOrNull
 import kotlin.math.abs
 import kotlinx.coroutines.TimeoutCancellationException
 import java.util.Locale
+import java.net.Inet4Address
 
 class PermanentlyUnplayableException(message: String, cause: Throwable? = null) : java.io.IOException(message, cause)
 
@@ -1084,6 +1086,7 @@ class PlaybackService : MediaLibraryService() {
             )
             activeTrackIsDolbyAtmos = NerdStats.isDolbyAtmosMime(format.sampleMimeType)
             applySpatialAudioEnabled()
+            updateAudioEffectsEnabled()
             publishNerdStats()
         }
 
@@ -1470,7 +1473,7 @@ class PlaybackService : MediaLibraryService() {
                 virtualizerStrength = com.music.bitchord.data.settings.EqualizerSettings.virtualizerStrength.value,
             )
         }
-        updateAdvancedAudioEffects()
+        updateAudioEffectsEnabled()
         applySettings(exoPlayer, activeAudioChain)
         applySettings(sparePlayer, spareAudioChain)
         observeSettings()
@@ -1527,11 +1530,11 @@ class PlaybackService : MediaLibraryService() {
     }
 
     /** Resolve the same stream the local player uses, or expose a local file over a session token. */
-    private suspend fun resolveForCast(item: MediaItem): CastStream? = withContext(Dispatchers.IO) {
+    private suspend fun resolveForCast(item: MediaItem, receiverAddress: Inet4Address?): CastStream? = withContext(Dispatchers.IO) {
         val uri = item.localConfiguration?.uri ?: return@withContext null
         if (uri.scheme == "content" || uri.scheme == "file") {
             val mimeType = castMimeType(item, uri)
-            val url = startLocalCastServer(item.mediaId, uri, mimeType)
+            val url = startLocalCastServer(item.mediaId, uri, mimeType, receiverAddress)
             return@withContext CastStream(url, mimeType)
         }
 
@@ -1567,10 +1570,16 @@ class PlaybackService : MediaLibraryService() {
         return configured ?: provider ?: pathMime ?: CastPlayback.mimeTypeOf(uri)
     }
 
-    private fun startLocalCastServer(mediaId: String, uri: Uri, mimeType: String): String {
+    private fun startLocalCastServer(
+        mediaId: String,
+        uri: Uri,
+        mimeType: String,
+        receiverAddress: Inet4Address?,
+    ): String {
         val evicted = mutableListOf<LocalCastHttpServer>()
         val server = synchronized(castLocalServerLock) {
-            val current = castLocalServers[mediaId] ?: LocalCastHttpServer(applicationContext, uri, mimeType)
+            val current = castLocalServers[mediaId]
+                ?: LocalCastHttpServer(applicationContext, uri, mimeType, receiverAddress)
                 .also { castLocalServers[mediaId] = it }
             while (castLocalServers.size > MAX_CAST_LOCAL_SERVERS) {
                 val oldest = castLocalServers.entries.iterator().next()
@@ -1849,6 +1858,7 @@ class PlaybackService : MediaLibraryService() {
             bassBoostStrength = com.music.bitchord.data.settings.EqualizerSettings.bassBoostStrength.value,
             virtualizerStrength = com.music.bitchord.data.settings.EqualizerSettings.virtualizerStrength.value,
         )
+        updateAudioEffectsEnabled()
 
         val song = item.toSong()
         if (bitPerfect || !AppSettings.replayGainEnabled.value ||
@@ -2064,6 +2074,7 @@ class PlaybackService : MediaLibraryService() {
         // corrects it — see [formatListener]'s onAudioInputFormatChanged.
         activeTrackIsDolbyAtmos = NerdStats.declaredFormat(mediaItem?.mediaId)?.isDolbyAtmos == true
         applySpatialAudioEnabled()
+        updateAudioEffectsEnabled()
 
         // Keep a real, bounded history in the player rather than merely hiding
         // old rows in Compose. MediaController mirrors the playlist across the
@@ -4254,6 +4265,7 @@ class PlaybackService : MediaLibraryService() {
      */
     private fun applySettings(player: ExoPlayer, chain: PlaybackAudioChain) {
         val bitPerfect = AppSettings.bitPerfectPlayback.value
+        applyAudioOffloadPreference(player)
         player.skipSilenceEnabled = AppSettings.skipSilence.value && !bitPerfect
         chain.resampler.cutoffHz = if (bitPerfect) 0 else AppSettings.resamplerCutoffHz.value
         chain.spatial.enabled = !bitPerfect && AppSettings.spatialAudio.value
@@ -4497,7 +4509,7 @@ class PlaybackService : MediaLibraryService() {
             bassBoostStrength = com.music.bitchord.data.settings.EqualizerSettings.bassBoostStrength.value,
             virtualizerStrength = com.music.bitchord.data.settings.EqualizerSettings.virtualizerStrength.value,
         )
-        updateAdvancedAudioEffects()
+        updateAudioEffectsEnabled()
         applySettings(newActive, activeAudioChain)
         applySettings(newSpare, spareAudioChain)
         newActive.repeatMode = repeatMode
@@ -4561,6 +4573,16 @@ class PlaybackService : MediaLibraryService() {
         scope.launch {
             AppSettings.skipSilence.collect { on ->
                 eachPlayer { it.skipSilenceEnabled = on && !AppSettings.bitPerfectPlayback.value }
+            }
+        }
+        scope.launch {
+            combine(AppSettings.audioOffloadEnabled, AppSettings.crossfadeSeconds) { enabled, crossfadeSeconds ->
+                enabled && crossfadeSeconds == 0
+            }.distinctUntilChanged().collect { effectiveOffload ->
+                eachPlayer(::applyAudioOffloadPreference)
+                // Do not let an already armed overlap run after offload becomes
+                // effective (for example when crossfade is turned off mid-fade).
+                if (effectiveOffload) crossfade?.cancelTransition()
             }
         }
         scope.launch {
@@ -4672,24 +4694,24 @@ class PlaybackService : MediaLibraryService() {
             }
         }
         scope.launch {
-            com.music.bitchord.data.settings.EqualizerSettings.bandLevels.collect { bands ->
-                bands.forEach { (band, level) ->
-                    audioEffectManager?.applyBandLevel(band, level)
-                    spareAudioEffectManager?.applyBandLevel(band, level)
-                }
+            com.music.bitchord.data.settings.EqualizerSettings.bandLevels.collect {
+                updateAudioEffectsEnabled()
             }
         }
         scope.launch {
-            com.music.bitchord.data.settings.EqualizerSettings.bassBoostStrength.collect { strength ->
-                audioEffectManager?.applyBassBoost(strength)
-                spareAudioEffectManager?.applyBassBoost(strength)
+            com.music.bitchord.data.settings.EqualizerSettings.bassBoostStrength.collect {
+                updateAudioEffectsEnabled()
             }
         }
         scope.launch {
-            com.music.bitchord.data.settings.EqualizerSettings.virtualizerStrength.collect { strength ->
-                audioEffectManager?.applyVirtualizer(strength)
-                spareAudioEffectManager?.applyVirtualizer(strength)
+            com.music.bitchord.data.settings.EqualizerSettings.virtualizerStrength.collect {
+                updateAudioEffectsEnabled()
             }
+        }
+        scope.launch {
+            combine(AppSettings.diracAudioEnabled, AppSettings.diracAudioPreset) { enabled, preset -> enabled to preset }
+                .distinctUntilChanged()
+                .collect { updateAudioEffectsEnabled() }
         }
     }
 
@@ -4712,11 +4734,50 @@ class PlaybackService : MediaLibraryService() {
     }
 
     private fun updateAudioEffectsEnabled() {
-        val enabled = com.music.bitchord.data.settings.EqualizerSettings.enabled.value &&
-            !AppSettings.bitPerfectPlayback.value
-        audioEffectManager?.applyEnabled(enabled)
-        spareAudioEffectManager?.applyEnabled(enabled)
+        val settings = com.music.bitchord.data.settings.EqualizerSettings
+        val bitPerfect = AppSettings.bitPerfectPlayback.value
+        val regularEqEnabled = settings.enabled.value && !bitPerfect
+        val applyProfile = { manager: com.music.bitchord.playback.equalizer.AudioEffectManager?, isDolbyAtmos: Boolean ->
+            val diracEnabled = AppSettings.diracAudioEnabled.value && !bitPerfect && !isDolbyAtmos
+            val bandLevels = if (diracEnabled) {
+                com.music.bitchord.playback.equalizer.EqualizerPreset
+                    .diracPresetByIndex(AppSettings.diracAudioPreset.value)
+                    .bandLevels
+                    .mapIndexed { band, level -> band to level }
+                    .toMap()
+            } else {
+                settings.bandLevels.value
+            }
+            val effectsEnabled = regularEqEnabled || diracEnabled
+            val bassBoost = settings.bassBoostStrength.value.takeIf { regularEqEnabled } ?: 0
+            val virtualizer = settings.virtualizerStrength.value.takeIf { regularEqEnabled } ?: 0
+            manager?.applyAll(effectsEnabled, bandLevels, bassBoost, virtualizer)
+        }
+        val standbyIsDolbyAtmos = spare?.currentMediaItem?.mediaId
+            ?.let { NerdStats.declaredFormat(it)?.isDolbyAtmos } == true
+        applyProfile(audioEffectManager, activeTrackIsDolbyAtmos)
+        applyProfile(spareAudioEffectManager, standbyIsDolbyAtmos)
         updateAdvancedAudioEffects()
+    }
+
+    /** Requests Android audio offload only when the two-player crossfade is idle. */
+    private fun applyAudioOffloadPreference(target: ExoPlayer) {
+        val enabled = AppSettings.audioOffloadEnabled.value && AppSettings.crossfadeSeconds.value == 0
+        val preferences = TrackSelectionParameters.AudioOffloadPreferences.Builder()
+            .setAudioOffloadMode(
+                if (enabled) TrackSelectionParameters.AudioOffloadPreferences.AUDIO_OFFLOAD_MODE_ENABLED
+                else TrackSelectionParameters.AudioOffloadPreferences.AUDIO_OFFLOAD_MODE_DISABLED,
+            )
+            .build()
+        runCatching {
+            target.trackSelectionParameters = target.trackSelectionParameters
+                .buildUpon()
+                .setAudioOffloadPreferences(preferences)
+                .build()
+        }.onFailure { error ->
+            // This optional platform path must never interrupt ordinary playback.
+            Log.w("BitChord", "Could not apply audio offload preference", error)
+        }
     }
 
     /** Keeps optional PCM and platform effects aligned on both crossfade players. */

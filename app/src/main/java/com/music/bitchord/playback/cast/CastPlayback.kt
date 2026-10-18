@@ -27,6 +27,7 @@ import kotlinx.coroutines.flow.drop
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.suspendCancellableCoroutine
 import org.json.JSONObject
+import java.net.Inet4Address
 import kotlin.coroutines.resume
 
 /** A stream the receiver can open by itself: a URL and what it holds. */
@@ -79,7 +80,7 @@ interface CastSink {
 class CastPlayback(
     private val scope: CoroutineScope,
     private val localPlayer: () -> ExoPlayer?,
-    private val resolve: suspend (MediaItem) -> CastStream?,
+    private val resolve: suspend (MediaItem, Inet4Address?) -> CastStream?,
     private val say: (Int) -> Unit,
 ) {
     var sink: CastSink? = null
@@ -115,6 +116,8 @@ class CastPlayback(
 
     private var loadGeneration = 0
     private var loadJob: Job? = null
+    private var bufferingTimeoutJob: Job? = null
+    private var bufferingTimedOut = false
     private var reconcileJob: Job? = null
     private var reconcileAgain = false
 
@@ -126,7 +129,8 @@ class CastPlayback(
     private var endWasPlaying = false
 
     val isPlaying: Boolean
-        get() = active && !loading && client?.mediaStatus?.playerState == MediaStatus.PLAYER_STATE_PLAYING
+        get() = active && !loading && !bufferingTimedOut &&
+            client?.mediaStatus?.playerState == MediaStatus.PLAYER_STATE_PLAYING
 
     val playWhenReady: Boolean get() = wantsPlay
 
@@ -134,6 +138,7 @@ class CastPlayback(
     val playbackState: Int
         get() = when {
             loading -> Player.STATE_BUFFERING
+            bufferingTimedOut -> Player.STATE_IDLE
             finished -> Player.STATE_ENDED
             else -> when (client?.mediaStatus?.playerState) {
                 MediaStatus.PLAYER_STATE_BUFFERING, MediaStatus.PLAYER_STATE_LOADING -> Player.STATE_BUFFERING
@@ -163,15 +168,25 @@ class CastPlayback(
 
     fun play() {
         if (!active) return
+        if (bufferingTimedOut) {
+            val item = localPlayer()?.currentMediaItem
+            if (item != null) {
+                load(item, requestedPositionMs, play = true)
+                return
+            }
+        }
         wantsPlay = true
         finished = false
+        bufferingTimedOut = false
         client?.play()
+        scheduleBufferingTimeout(loadGeneration)
         sink?.onRemotePlaybackChanged()
     }
 
     fun pause() {
         if (!active) return
         wantsPlay = false
+        bufferingTimeoutJob?.cancel()
         client?.pause()
         sink?.onRemotePlaybackChanged()
     }
@@ -264,12 +279,14 @@ class CastPlayback(
     /** Lets go of the receiver without touching the phone's player. */
     fun release() {
         loadJob?.cancel()
+        bufferingTimeoutJob?.cancel()
         reconcileJob?.cancel()
         client?.unregisterCallback(callback)
         client = null
         session = null
         active = false
         loading = false
+        bufferingTimedOut = false
         wantsPlay = false
         finished = false
         lastItemId = MediaQueueItem.INVALID_ITEM_ID
@@ -332,21 +349,31 @@ class CastPlayback(
 
         when (state) {
             MediaStatus.PLAYER_STATE_PLAYING -> {
+                bufferingTimeoutJob?.cancel()
+                bufferingTimedOut = false
                 wantsPlay = true
                 loading = false
                 finished = false
             }
             MediaStatus.PLAYER_STATE_PAUSED -> {
+                bufferingTimeoutJob?.cancel()
+                bufferingTimedOut = false
                 wantsPlay = false
                 loading = false
             }
+            MediaStatus.PLAYER_STATE_BUFFERING, MediaStatus.PLAYER_STATE_LOADING -> {
+                if (wantsPlay) scheduleBufferingTimeout(loadGeneration)
+            }
             MediaStatus.PLAYER_STATE_IDLE -> {
                 if (!loading && status.idleReason == MediaStatus.IDLE_REASON_FINISHED) {
+                    bufferingTimeoutJob?.cancel()
                     wantsPlay = false
                     onReceiverFinished()
                 } else if (status.idleReason == MediaStatus.IDLE_REASON_ERROR) {
+                    bufferingTimeoutJob?.cancel()
                     wantsPlay = false
                     loading = false
+                    bufferingTimedOut = false
                     say(R.string.cast_track_unsupported)
                 }
             }
@@ -389,6 +416,8 @@ class CastPlayback(
         val remote = client ?: return
         loadJob?.cancel()
         val generation = ++loadGeneration
+        bufferingTimeoutJob?.cancel()
+        bufferingTimedOut = false
         wantsPlay = play
         loading = true
         finished = false
@@ -433,8 +462,34 @@ class CastPlayback(
             }
             lastItemId = remote.mediaStatus?.currentItemId ?: lastItemId
             loading = false
+            if (play) scheduleBufferingTimeout(generation)
             sink?.onRemotePlaybackChanged()
             scheduleReconcile()
+        }
+    }
+
+    /**
+     * A successful Cast LOAD response only confirms that the receiver accepted
+     * the metadata. It does not mean the receiver could fetch the audio URL.
+     * Stop the spinner and report a recoverable error if the receiver never
+     * reaches PLAYING; tapping play retries the current item.
+     */
+    private fun scheduleBufferingTimeout(generation: Int) {
+        if (bufferingTimeoutJob?.isActive == true || !wantsPlay) return
+        bufferingTimeoutJob = scope.launch {
+            delay(BUFFERING_TIMEOUT_MS)
+            val remote = client ?: return@launch
+            val state = remote.mediaStatus?.playerState
+            if (!active || generation != loadGeneration || !wantsPlay || state == MediaStatus.PLAYER_STATE_PLAYING) {
+                return@launch
+            }
+            Log.w(TAG, "receiver did not start the requested stream; state=$state")
+            loading = false
+            wantsPlay = false
+            bufferingTimedOut = true
+            remote.stop()
+            say(R.string.chromecast_playback_failed)
+            sink?.onRemotePlaybackChanged()
         }
     }
 
@@ -493,7 +548,8 @@ class CastPlayback(
 
     private suspend fun buildQueueItem(item: MediaItem, autoplay: Boolean): MediaQueueItem? {
         val stream = try {
-            resolve(item)
+            val receiverAddress = runCatching { session?.castDevice?.ipAddress }.getOrNull()
+            resolve(item, receiverAddress)
         } catch (e: Exception) {
             Log.w(TAG, "could not resolve ${item.mediaId} for casting", e)
             null
@@ -561,6 +617,7 @@ class CastPlayback(
         private const val AHEAD = 3
         private const val RECONCILE_DELAY_MS = 300L
         private const val SEEK_GRACE_MS = 1_500L
+        private const val BUFFERING_TIMEOUT_MS = 25_000L
 
         /**
          * What a stream is, for a receiver that is told rather than left to
