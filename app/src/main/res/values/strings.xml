@@ -794,8 +794,6 @@
     <string name="lyrics_replace_artwork_only_subtitle">Show lyrics in the main artwork area, keep playback controls visible, and move the cover and song actions into the compact header. Off by default.</string>
     <string name="hide_player_header_during_lyrics">Hide song header during lyrics</string>
     <string name="hide_player_header_during_lyrics_subtitle">While lyrics are open, hide the compact cover, title, artist, favorite, and more actions. Playback controls remain visible.</string>
-    <string name="frosted_compact_lyrics">Frosted glass for lyrics over artwork</string>
-    <string name="frosted_compact_lyrics_subtitle">Blur the artwork behind compact lyrics and let its colors show through</string>
     <string name="hide_lyrics_saved_message">Hide saved lyrics message</string>
     <string name="hide_lyrics_saved_message_subtitle">Hide “Lyrics saved with this download” in the lyrics panel</string>
     <string name="hide_lossless_label">Hide audio quality labels</string>

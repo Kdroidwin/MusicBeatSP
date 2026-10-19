@@ -239,7 +239,6 @@ import com.music.bitchord.ui.rememberIsForeground
 import com.music.bitchord.ui.theme.rememberArtworkPalette
 import com.music.bitchord.ui.components.ArtworkBackdrop
 import com.music.bitchord.ui.components.thumbnailBorder
-import com.music.bitchord.ui.components.FrostedGlassBackdrop
 import com.music.bitchord.ui.components.optimizedHazeEffect
 import com.music.bitchord.ui.haptics.Haptic
 import com.music.bitchord.ui.haptics.rememberHaptics
@@ -756,10 +755,6 @@ fun NowPlayingScreen(
     val context = LocalContext.current
     val density = LocalDensity.current
     val haptics = rememberHaptics()
-    // Compact lyrics should sample the player's colour mesh rather than the
-    // cover image, which can make the lyrics surface look much lighter or
-    // darker than the rest of the player.
-    val compactLyricsBackdropHaze = remember { HazeState() }
     val artUrl = song.artworkAt(ART_PX)
     val artworkPalette = rememberArtworkPalette(artUrl, dark = true, artPx = ART_PX)
     // Ask MediaStore for its already-indexed thumbnail while the full-size
@@ -921,7 +916,6 @@ fun NowPlayingScreen(
     val hidePlayerHeaderDuringLyrics by AppSettings.hidePlayerHeaderDuringLyrics.collectAsStateWithLifecycle()
     val reducePlayerAnimations by AppSettings.reduceAnimation.collectAsStateWithLifecycle()
     val frostedQueueManager by AppSettings.frostedQueueManager.collectAsStateWithLifecycle()
-    val frostedCompactLyrics by AppSettings.frostedCompactLyrics.collectAsStateWithLifecycle()
     val showPlayerLyricsStrip by AppSettings.showPlayerLyricsStrip.collectAsStateWithLifecycle()
     val offlineMode by AppSettings.offlineMode.collectAsStateWithLifecycle()
     val visiblePlayerControls by AppSettings.visiblePlayerControls.collectAsStateWithLifecycle()
@@ -1561,14 +1555,12 @@ fun NowPlayingScreen(
             // is passed as one immutable value.
             MeshGradientBackground(
                 palette = rememberArtworkColors(backdropArtworkUrl, canvasFrame),
-                modifier = Modifier.hazeSource(compactLyricsBackdropHaze),
                 trackKey = song.videoId,
                 blurRadius = artworkBackdropBlurDp.dp,
             )
         } else {
             ArtworkMeshBackdrop(
                 mesh = artMesh,
-                modifier = Modifier.hazeSource(compactLyricsBackdropHaze),
                 seam = if (heroMode) heroHeight else 0.dp,
                 blurRadius = artworkBackdropBlurDp.dp,
             )
@@ -2620,17 +2612,9 @@ fun NowPlayingScreen(
                                 translationY = (1f - p) * 26.dp.toPx()
                             },
                     ) {
-                        if (frostedCompactLyrics) {
-                            FrostedGlassBackdrop(
-                                hazeState = compactLyricsBackdropHaze,
-                                modifier = Modifier.matchParentSize(),
-                                // Blur the exact colour mesh visible behind the player.
-                                // Do not add a white or black tint: either makes the
-                                // lyrics region read as a separate colour block.
-                                tint = Color.Transparent,
-                                tintAlpha = 0f,
-                            )
-                        }
+                        // Keep this layer transparent. The player's artwork mesh
+                        // already provides the backdrop; a separate haze surface
+                        // samples as a black or white rectangle on some devices.
                         if (lyricsLogsOpen) {
                             LyricsLogConsole(Modifier.fillMaxSize())
                         } else {

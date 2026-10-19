@@ -306,7 +306,6 @@ fun SettingsScreen(
     val hideFloatingCollectionControls by AppSettings.hideFloatingCollectionControls.collectAsStateWithLifecycle()
     val frostedQueueManager by AppSettings.frostedQueueManager.collectAsStateWithLifecycle()
     val frostedPlayerDetails by AppSettings.frostedPlayerDetails.collectAsStateWithLifecycle()
-    val frostedCompactLyrics by AppSettings.frostedCompactLyrics.collectAsStateWithLifecycle()
     val queueManagerEqualsIcon by AppSettings.queueManagerEqualsIcon.collectAsStateWithLifecycle()
     val hideQueueLabel by AppSettings.hideQueueLabel.collectAsStateWithLifecycle()
     val queueClearTrashIcon by AppSettings.queueClearTrashIcon.collectAsStateWithLifecycle()
@@ -445,12 +444,6 @@ fun SettingsScreen(
             listOf("player", "details", "glass", "frosted", "プレーヤー", "詳細", "すりガラス"),
             frostedPlayerDetails,
         ) { AppSettings.setFrostedPlayerDetails(!frostedPlayerDetails) },
-        SettingsSearchEntry(
-            stringResource(R.string.frosted_compact_lyrics),
-            stringResource(R.string.frosted_compact_lyrics_subtitle),
-            listOf("lyrics", "glass", "frosted", "歌詞", "すりガラス", "ぼかし"),
-            frostedCompactLyrics,
-        ) { AppSettings.setFrostedCompactLyrics(!frostedCompactLyrics) },
         SettingsSearchEntry(
             stringResource(R.string.queue_manage_equals_icon),
             stringResource(R.string.queue_manage_equals_icon_subtitle),
@@ -2211,19 +2204,6 @@ fun SettingsScreen(
                 subtitle = stringResource(R.string.lyrics_auto_fit_subtitle),
                 trailing = { Switch(checked = autoFitOneLineLyrics, onCheckedChange = AppSettings::setAutoFitOneLineLyrics) },
                 onClick = { AppSettings.setAutoFitOneLineLyrics(!autoFitOneLineLyrics) },
-            )
-            RowDivider()
-            SettingsRow(
-                icon = Icons.Rounded.BlurOn,
-                title = stringResource(R.string.frosted_compact_lyrics),
-                subtitle = stringResource(R.string.frosted_compact_lyrics_subtitle),
-                trailing = {
-                    Switch(
-                        checked = frostedCompactLyrics,
-                        onCheckedChange = AppSettings::setFrostedCompactLyrics,
-                    )
-                },
-                onClick = { AppSettings.setFrostedCompactLyrics(!frostedCompactLyrics) },
             )
         }
 

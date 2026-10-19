@@ -704,8 +704,6 @@
     <string name="lyrics_replace_artwork_only_subtitle">アート領域を広い歌詞表示に切り替え、再生操作を残します。ジャケットと曲情報は上部の小さな行にまとめます。初期設定はオフです。</string>
     <string name="hide_player_header_during_lyrics">歌詞表示中に上部の曲情報を隠す</string>
     <string name="hide_player_header_during_lyrics_subtitle">歌詞表示中だけ、小さなジャケット・曲名・アーティスト名・お気に入り・詳細ボタンを隠します。再生操作は残します。</string>
-    <string name="frosted_compact_lyrics">アート部分の歌詞をすりガラス表示</string>
-    <string name="frosted_compact_lyrics_subtitle">背景をぼかして透かし、アートの色を歌詞領域に反映します</string>
     <string name="hide_lyrics_saved_message">歌詞の保存済みメッセージを隠す</string>
     <string name="hide_lyrics_saved_message_subtitle">歌詞画面の「このダウンロードに歌詞を保存済み」を隠します</string>
     <string name="hide_lossless_label">音質ラベルを隠す</string>

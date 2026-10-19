@@ -474,7 +474,6 @@ object AppSettings {
     val launcherIcon = MutableStateFlow(LauncherIcon.PINK)
     val frostedQueueManager = MutableStateFlow(true)
     val frostedPlayerDetails = MutableStateFlow(true)
-    val frostedCompactLyrics = MutableStateFlow(true)
     /** Replaces the queue manager's text action with a compact equals glyph. */
     val queueManagerEqualsIcon = MutableStateFlow(false)
     /** Hides the queue heading while keeping its actions available. */
@@ -1020,7 +1019,6 @@ object AppSettings {
         }.getOrDefault(LauncherIcon.PINK)
         frostedQueueManager.value = prefs.getBoolean(KEY_FROSTED_QUEUE_MANAGER, true)
         frostedPlayerDetails.value = prefs.getBoolean(KEY_FROSTED_PLAYER_DETAILS, true)
-        frostedCompactLyrics.value = prefs.getBoolean(KEY_FROSTED_COMPACT_LYRICS, true)
         queueManagerEqualsIcon.value = prefs.getBoolean(KEY_QUEUE_MANAGER_EQUALS_ICON, false)
         hideQueueLabel.value = prefs.getBoolean(KEY_HIDE_QUEUE_LABEL, true)
         queueClearTrashIcon.value = prefs.getBoolean(KEY_QUEUE_CLEAR_TRASH_ICON, false)
@@ -1474,11 +1472,6 @@ object AppSettings {
     fun setFrostedPlayerDetails(value: Boolean) {
         frostedPlayerDetails.value = value
         prefs.edit().putBoolean(KEY_FROSTED_PLAYER_DETAILS, value).apply()
-    }
-
-    fun setFrostedCompactLyrics(value: Boolean) {
-        frostedCompactLyrics.value = value
-        prefs.edit().putBoolean(KEY_FROSTED_COMPACT_LYRICS, value).apply()
     }
 
     fun setQueueManagerEqualsIcon(value: Boolean) {
@@ -2754,7 +2747,6 @@ object AppSettings {
     private const val KEY_LAUNCHER_ICON = "launcher_icon"
     private const val KEY_FROSTED_QUEUE_MANAGER = "frosted_queue_manager"
     private const val KEY_FROSTED_PLAYER_DETAILS = "frosted_player_details"
-    private const val KEY_FROSTED_COMPACT_LYRICS = "frosted_compact_lyrics"
     private const val KEY_QUEUE_MANAGER_EQUALS_ICON = "queue_manager_equals_icon"
     private const val KEY_HIDE_QUEUE_LABEL = "hide_queue_label"
     private const val KEY_QUEUE_CLEAR_TRASH_ICON = "queue_clear_trash_icon"
