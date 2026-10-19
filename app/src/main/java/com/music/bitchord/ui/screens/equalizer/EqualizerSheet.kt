@@ -16,6 +16,7 @@ import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.rounded.RestartAlt
+import androidx.compose.material.icons.rounded.SwapHoriz
 import androidx.compose.material.icons.rounded.Tune
 import androidx.compose.material.icons.rounded.Headphones
 import androidx.compose.material3.ExperimentalMaterial3Api
@@ -25,6 +26,7 @@ import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.ModalBottomSheet
 import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.SheetState
+import androidx.compose.material3.Surface
 import androidx.compose.material3.Switch
 import androidx.compose.material3.SwitchDefaults
 import androidx.compose.material3.Text
@@ -73,6 +75,7 @@ fun EqualizerSheet(
     val replayGainPreventClipping by AppSettings.replayGainPreventClipping.collectAsStateWithLifecycle()
     val parametricEqEnabled by AppSettings.parametricEqEnabled.collectAsStateWithLifecycle()
     val parametricEqBands by AppSettings.parametricEqBands.collectAsStateWithLifecycle()
+    val channelSwapEnabled by AppSettings.channelSwapEnabled.collectAsStateWithLifecycle()
     val reverbEnabled by AppSettings.reverbEnabled.collectAsStateWithLifecycle()
     val reverbAmount by AppSettings.reverbAmount.collectAsStateWithLifecycle()
     val replayGainScanState by ReplayGainScanner.state.collectAsStateWithLifecycle()
@@ -234,6 +237,39 @@ fun EqualizerSheet(
                     EqualizerSettings.setBandLevel(band, level)
                 },
             )
+
+            Surface(
+                modifier = Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 6.dp),
+                shape = RoundedCornerShape(16.dp),
+                color = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.35f),
+            ) {
+                Row(
+                    modifier = Modifier.fillMaxWidth().padding(16.dp),
+                    verticalAlignment = Alignment.CenterVertically,
+                ) {
+                    Icon(Icons.Rounded.SwapHoriz, contentDescription = null, tint = MaterialTheme.colorScheme.primary)
+                    Column(modifier = Modifier.weight(1f).padding(start = 8.dp, end = 12.dp)) {
+                        Text(
+                            text = stringResource(R.string.channel_swap),
+                            style = MaterialTheme.typography.titleSmall,
+                            fontWeight = FontWeight.SemiBold,
+                        )
+                        Text(
+                            text = stringResource(R.string.channel_swap_subtitle),
+                            style = MaterialTheme.typography.bodySmall,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant,
+                        )
+                    }
+                    Switch(
+                        checked = channelSwapEnabled,
+                        onCheckedChange = AppSettings::setChannelSwapEnabled,
+                        colors = SwitchDefaults.colors(
+                            checkedTrackColor = MaterialTheme.colorScheme.primary,
+                            checkedBorderColor = MaterialTheme.colorScheme.primary,
+                        ),
+                    )
+                }
+            }
 
             ParametricEqControls(
                 enabled = parametricEqEnabled,

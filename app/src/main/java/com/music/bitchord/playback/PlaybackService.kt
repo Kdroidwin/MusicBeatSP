@@ -1532,6 +1532,12 @@ class PlaybackService : MediaLibraryService() {
     /** Resolve the same stream the local player uses, or expose a local file over a session token. */
     private suspend fun resolveForCast(item: MediaItem, receiverAddress: Inet4Address?): CastStream? = withContext(Dispatchers.IO) {
         val uri = item.localConfiguration?.uri ?: return@withContext null
+        // Cast receivers cannot receive the authenticated request headers the
+        // local resolver needs. OpenSubsonic also places its spec-mandated
+        // token in the stream URL. Never resolve either server-backed track
+        // into a URL that would be sent to the receiver without its protected
+        // request context.
+        if (uri.scheme == "bitchord" && uri.authority == "source") return@withContext null
         if (uri.scheme == "content" || uri.scheme == "file") {
             val mimeType = castMimeType(item, uri)
             val url = startLocalCastServer(item.mediaId, uri, mimeType, receiverAddress)
@@ -4272,6 +4278,7 @@ class PlaybackService : MediaLibraryService() {
         chain.parametricEq.setTuning(
             enabled = AppSettings.parametricEqEnabled.value && !bitPerfect,
             bands = AppSettings.parametricEqBands.value,
+            swapChannels = AppSettings.channelSwapEnabled.value && !bitPerfect,
         )
         player.playbackParameters = PlaybackParameters(
             if (bitPerfect) 1f else AppSettings.playbackSpeed.value,
@@ -4613,6 +4620,7 @@ class PlaybackService : MediaLibraryService() {
                 activeAudioChain.replayGain.gainDb = 0f
                 spareAudioChain.replayGain.gainDb = 0f
                 applySpatialAudioEnabled()
+                updateAdvancedAudioEffects()
                 updateAudioEffectsEnabled()
                 updateReplayGainForCurrentTrack(force = true)
                 spare?.currentMediaItem?.let(::prepareCrossfadeIncoming)
@@ -4681,6 +4689,9 @@ class PlaybackService : MediaLibraryService() {
         }
         scope.launch {
             AppSettings.parametricEqBands.collect { updateAdvancedAudioEffects() }
+        }
+        scope.launch {
+            AppSettings.channelSwapEnabled.collect { updateAdvancedAudioEffects() }
         }
         scope.launch {
             AppSettings.reverbEnabled.collect { updateAdvancedAudioEffects() }
@@ -4785,8 +4796,9 @@ class PlaybackService : MediaLibraryService() {
         val bitPerfect = AppSettings.bitPerfectPlayback.value
         val bands = AppSettings.parametricEqBands.value
         val parametricEqEnabled = AppSettings.parametricEqEnabled.value && !bitPerfect
-        activeAudioChain.parametricEq.setTuning(parametricEqEnabled, bands)
-        spareAudioChain.parametricEq.setTuning(parametricEqEnabled, bands)
+        val channelSwapEnabled = AppSettings.channelSwapEnabled.value && !bitPerfect
+        activeAudioChain.parametricEq.setTuning(parametricEqEnabled, bands, channelSwapEnabled)
+        spareAudioChain.parametricEq.setTuning(parametricEqEnabled, bands, channelSwapEnabled)
 
         val reverbEnabled = AppSettings.reverbEnabled.value && !bitPerfect
         val reverbAmount = AppSettings.reverbAmount.value

@@ -375,6 +375,7 @@ fun SettingsScreen(
     val miniPlayerArtworkColor by AppSettings.miniPlayerArtworkColor.collectAsStateWithLifecycle()
     val miniPlayerPreviousButton by AppSettings.miniPlayerPreviousButton.collectAsStateWithLifecycle()
     val parametricEqEnabled by AppSettings.parametricEqEnabled.collectAsStateWithLifecycle()
+    val channelSwapEnabled by AppSettings.channelSwapEnabled.collectAsStateWithLifecycle()
     val reverbEnabled by AppSettings.reverbEnabled.collectAsStateWithLifecycle()
     val sessionId by AppSettings.audioSessionId.collectAsStateWithLifecycle()
     val outputPcmMode by AppSettings.outputPcmMode.collectAsStateWithLifecycle()
@@ -621,6 +622,7 @@ fun SettingsScreen(
         SettingsSearchEntry(stringResource(R.string.lyrics_auto_fit), stringResource(R.string.lyrics_auto_fit_subtitle), listOf("lyrics", "one line", "fit", "歌詞", "一行", "文字サイズ"), autoFitOneLineLyrics) { AppSettings.setAutoFitOneLineLyrics(!autoFitOneLineLyrics) },
         SettingsSearchEntry(stringResource(R.string.spatial_audio), stringResource(R.string.spatial_audio_subtitle), listOf("spatial", "空間オーディオ"), spatialAudio) { AppSettings.setSpatialAudio(!spatialAudio) },
         SettingsSearchEntry(stringResource(R.string.parametric_eq), stringResource(R.string.parametric_eq_subtitle), listOf("parametric", "equalizer", "frequency", "Q", "gain", "パラメトリック", "イコライザー", "周波数"), parametricEqEnabled) { AppSettings.setParametricEqEnabled(!parametricEqEnabled) },
+        SettingsSearchEntry(stringResource(R.string.channel_swap), stringResource(R.string.channel_swap_subtitle), listOf("channel swap", "swap channels", "stereo", "left", "right", "左右", "チャンネル", "反転"), channelSwapEnabled) { AppSettings.setChannelSwapEnabled(!channelSwapEnabled) },
         SettingsSearchEntry(stringResource(R.string.reverb), stringResource(R.string.reverb_subtitle), listOf("reverb", "room", "残響", "リバーブ"), reverbEnabled) { AppSettings.setReverbEnabled(!reverbEnabled) },
         SettingsSearchEntry(stringResource(R.string.favorite_icon_star), stringResource(R.string.favorite_icon_star_subtitle), listOf("favorite", "star", "お気に入り", "星", "ハート"), favoriteUsesStar) { AppSettings.setFavoriteUsesStar(!favoriteUsesStar) },
         SettingsSearchEntry(stringResource(R.string.hide_unknown_player_artist), stringResource(R.string.hide_unknown_player_artist_subtitle), listOf("artist", "unknown", "アーティスト", "unknown artist"), hideUnknownPlayerArtist) { AppSettings.setHideUnknownPlayerArtist(!hideUnknownPlayerArtist) },
@@ -1765,6 +1767,11 @@ fun SettingsScreen(
                     )
                 },
                 onClick = { AppSettings.setParametricEqEnabled(!parametricEqEnabled) },
+            )
+            RowDivider()
+            ChannelSwapSettingsRow(
+                checked = channelSwapEnabled,
+                onCheckedChange = AppSettings::setChannelSwapEnabled,
             )
             RowDivider()
             SettingsRow(

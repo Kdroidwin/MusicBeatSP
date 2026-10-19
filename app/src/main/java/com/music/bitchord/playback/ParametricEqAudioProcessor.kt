@@ -19,7 +19,11 @@ import kotlin.math.sin
  */
 @UnstableApi
 class ParametricEqAudioProcessor : BaseAudioProcessor() {
-    private data class Tuning(val enabled: Boolean, val bands: List<ParametricEqBand>)
+    private data class Tuning(
+        val enabled: Boolean,
+        val bands: List<ParametricEqBand>,
+        val swapChannels: Boolean,
+    )
 
     private data class Coefficients(
         val b0: Float = 1f,
@@ -30,7 +34,7 @@ class ParametricEqAudioProcessor : BaseAudioProcessor() {
     )
 
     @Volatile
-    private var tuning = Tuning(false, ParametricEqBand.DEFAULTS)
+    private var tuning = Tuning(false, ParametricEqBand.DEFAULTS, swapChannels = false)
 
     private var sampleRateHz = 0
     private var channelCount = 0
@@ -41,11 +45,11 @@ class ParametricEqAudioProcessor : BaseAudioProcessor() {
     private var y1 = FloatArray(0)
     private var y2 = FloatArray(0)
 
-    fun setTuning(enabled: Boolean, bands: List<ParametricEqBand>) {
+    fun setTuning(enabled: Boolean, bands: List<ParametricEqBand>, swapChannels: Boolean = false) {
         val safeBands = ParametricEqBand.DEFAULTS.mapIndexed { index, fallback ->
             bands.getOrNull(index)?.sanitized(fallback) ?: fallback
         }
-        tuning = Tuning(enabled, safeBands)
+        tuning = Tuning(enabled, safeBands, swapChannels)
     }
 
     override fun onConfigure(inputAudioFormat: AudioProcessor.AudioFormat): AudioProcessor.AudioFormat {
@@ -90,14 +94,16 @@ class ParametricEqAudioProcessor : BaseAudioProcessor() {
         if (byteCount == 0) return
         val output = replaceOutputBuffer(byteCount)
         val current = tuning
-        if (!current.enabled || current.bands.all { it.gainDb == 0f }) {
+        val applyEq = current.enabled && current.bands.any { it.gainDb != 0f }
+        val swapChannels = current.swapChannels && channelCount >= 2
+        if (!applyEq && !swapChannels) {
             // Keep disabled and flat playback byte-for-byte identical.
             output.put(inputBuffer)
             output.flip()
             return
         }
 
-        if (coefficientsFor != current.bands) updateCoefficients(current.bands)
+        if (applyEq && coefficientsFor != current.bands) updateCoefficients(current.bands)
         inputBuffer.order(ByteOrder.nativeOrder())
         output.order(ByteOrder.nativeOrder())
         val bytesPerSample = when (inputAudioFormat.encoding) {
@@ -110,34 +116,46 @@ class ParametricEqAudioProcessor : BaseAudioProcessor() {
             }
         }
 
-        var channel = 0
-        while (inputBuffer.remaining() >= bytesPerSample) {
-            val source = when (inputAudioFormat.encoding) {
-                C.ENCODING_PCM_16BIT -> inputBuffer.short.toFloat() / 32768f
-                else -> inputBuffer.float.takeIf(Float::isFinite) ?: 0f
+        val frameBytes = bytesPerSample * channelCount
+        val frame = FloatArray(channelCount)
+        while (inputBuffer.remaining() >= frameBytes) {
+            for (channel in 0 until channelCount) {
+                frame[channel] = when (inputAudioFormat.encoding) {
+                    C.ENCODING_PCM_16BIT -> inputBuffer.short.toFloat() / 32768f
+                    else -> inputBuffer.float.takeIf(Float::isFinite) ?: 0f
+                }
             }
-            var sample = source
-            for (band in coefficients.indices) {
-                val stateIndex = channel * coefficients.size + band
-                val coefficient = coefficients[band]
-                val filtered = coefficient.b0 * sample + coefficient.b1 * x1[stateIndex] +
-                    coefficient.b2 * x2[stateIndex] - coefficient.a1 * y1[stateIndex] -
-                    coefficient.a2 * y2[stateIndex]
-                x2[stateIndex] = x1[stateIndex]
-                x1[stateIndex] = sample
-                y2[stateIndex] = y1[stateIndex]
-                sample = filtered.takeIf(Float::isFinite) ?: 0f
-                y1[stateIndex] = if (kotlin.math.abs(sample) < 1e-20f) 0f else sample
+            for (outputChannel in 0 until channelCount) {
+                val sourceChannel = when {
+                    !swapChannels -> outputChannel
+                    outputChannel == 0 -> 1
+                    outputChannel == 1 -> 0
+                    else -> outputChannel
+                }
+                var sample = frame[sourceChannel]
+                if (applyEq) {
+                    for (band in coefficients.indices) {
+                        val stateIndex = outputChannel * coefficients.size + band
+                        val coefficient = coefficients[band]
+                        val filtered = coefficient.b0 * sample + coefficient.b1 * x1[stateIndex] +
+                            coefficient.b2 * x2[stateIndex] - coefficient.a1 * y1[stateIndex] -
+                            coefficient.a2 * y2[stateIndex]
+                        x2[stateIndex] = x1[stateIndex]
+                        x1[stateIndex] = sample
+                        y2[stateIndex] = y1[stateIndex]
+                        sample = filtered.takeIf(Float::isFinite) ?: 0f
+                        y1[stateIndex] = if (kotlin.math.abs(sample) < 1e-20f) 0f else sample
+                    }
+                }
+                when (inputAudioFormat.encoding) {
+                    C.ENCODING_PCM_16BIT -> output.putShort(
+                        (sample * 32768f).roundToInt()
+                            .coerceIn(Short.MIN_VALUE.toInt(), Short.MAX_VALUE.toInt())
+                            .toShort(),
+                    )
+                    C.ENCODING_PCM_FLOAT -> output.putFloat(sample)
+                }
             }
-            when (inputAudioFormat.encoding) {
-                C.ENCODING_PCM_16BIT -> output.putShort(
-                    (sample * 32768f).roundToInt()
-                        .coerceIn(Short.MIN_VALUE.toInt(), Short.MAX_VALUE.toInt())
-                        .toShort(),
-                )
-                C.ENCODING_PCM_FLOAT -> output.putFloat(sample)
-            }
-            channel = (channel + 1) % channelCount
         }
         if (inputBuffer.hasRemaining()) output.put(inputBuffer)
         output.flip()
