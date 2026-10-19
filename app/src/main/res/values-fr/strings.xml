@@ -189,6 +189,8 @@
     <string name="theme">Thème</string>
     <string name="reduce_animation">Réduire les animations</string>
     <string name="reduce_animation_subtitle">Fige le dégradé du lecteur principal au lieu de le faire dériver</string>
+    <string name="player_artwork_transition">Transitions du lecteur et des paroles</string>
+    <string name="player_artwork_transition_subtitle">Déplace la pochette entre le mini-lecteur et le lecteur plein écran et anime les changements de paroles. Indépendant de « Réduire les animations ».</string>
     <string name="reduce_dynamic_blur">Réduire le flou dynamique</string>
     <string name="reduce_dynamic_blur_subtitle">Remplace le verre dépoli par des couleurs unies dans toute l\'application</string>
     <string name="full_screen_cover_art">Pochette plein écran</string>

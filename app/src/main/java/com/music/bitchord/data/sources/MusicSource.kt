@@ -171,6 +171,9 @@ interface MusicSource {
      */
     suspend fun search(query: String, limit: Int = 25, waitForAll: Boolean = false): List<Song>
 
+    /** Artwork bytes for an opaque server image id. Auth is kept inside the source. */
+    suspend fun artwork(imageId: String): ByteArray? = null
+
     /**
      * @param trackId this source's own id for the track, as issued by [search].
      * @return an openable stream, or null when this source turns out not to

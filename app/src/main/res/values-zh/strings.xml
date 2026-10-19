@@ -185,6 +185,8 @@
     <string name="theme">主题</string>
     <string name="reduce_animation">减少动画</string>
     <string name="reduce_animation_subtitle">让主播放器的渐变保持静止，而不是流动</string>
+    <string name="player_artwork_transition">播放器与歌词切换动画</string>
+    <string name="player_artwork_transition_subtitle">让封面在迷你播放器和全屏播放器之间移动，并为歌词切换添加动画。与“减少动画”设置相互独立。</string>
     <string name="reduce_dynamic_blur">减少动态模糊</string>
     <string name="reduce_dynamic_blur_subtitle">在整个应用中用纯色填充替代磨砂玻璃效果</string>
     <string name="full_screen_cover_art">全屏封面</string>

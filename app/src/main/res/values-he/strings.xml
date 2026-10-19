@@ -189,6 +189,8 @@
     <string name="theme">ערכת נושא</string>
     <string name="reduce_animation">הפחתת אנימציה</string>
     <string name="reduce_animation_subtitle">מקפיא את הגרדיאנט של הנגן הראשי במקום לתת לו לנוע</string>
+    <string name="player_artwork_transition">מעברי נגן ומילות שיר</string>
+    <string name="player_artwork_transition_subtitle">מעביר את עטיפת האלבום בין הנגן הממוזער לנגן במסך מלא ומנפיש החלפת שורות. נפרד מהגדרת הפחתת האנימציה.</string>
     <string name="reduce_dynamic_blur">הפחתת טשטוש דינמי</string>
     <string name="reduce_dynamic_blur_subtitle">מחליף אפקט זכוכית מטושטשת במילוי אחיד בכל האפליקציה</string>
     <string name="full_screen_cover_art">עטיפת אלבום במסך מלא</string>

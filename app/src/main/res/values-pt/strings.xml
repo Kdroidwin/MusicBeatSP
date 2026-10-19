@@ -190,6 +190,8 @@
     <string name="theme">Tema</string>
     <string name="reduce_animation">Reduzir animação</string>
     <string name="reduce_animation_subtitle">Congela o gradiente do player principal em vez de mover</string>
+    <string name="player_artwork_transition">Transições do player e das letras</string>
+    <string name="player_artwork_transition_subtitle">Move a capa entre o mini player e o player em tela cheia e anima as mudanças de letra. Independente de Reduzir animação.</string>
     <string name="reduce_dynamic_blur">Reduzir desfoque dinâmico</string>
     <string name="reduce_dynamic_blur_subtitle">Troca o vidro fosco por preenchimentos sólidos em todo o app</string>
     <string name="full_screen_cover_art">Capa em tela cheia</string>

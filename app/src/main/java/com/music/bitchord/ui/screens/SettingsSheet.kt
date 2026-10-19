@@ -210,6 +210,23 @@ private data class SettingsSearchEntry(
     val activate: () -> Unit,
 )
 
+@Composable
+private fun musicFolderRootSearchEntry(path: String, onPick: () -> Unit) = SettingsSearchEntry(
+    title = stringResource(R.string.music_folder_root),
+    subtitle = stringResource(R.string.music_folder_root_subtitle),
+    keywords = listOf("folder", "root", "sd card", "storage", "フォルダー", "ルート", "SDカード", "ストレージ"),
+    valueLabel = path.ifBlank { stringResource(R.string.music_folder_root_auto) },
+    activate = onPick,
+)
+
+@Composable
+private fun musicServerSearchEntry(onOpen: () -> Unit) = SettingsSearchEntry(
+    title = stringResource(R.string.music_servers),
+    subtitle = stringResource(R.string.music_servers_subtitle),
+    keywords = listOf("Jellyfin", "Navidrome", "OpenSubsonic", "server", "音楽サーバー", "ストリーミング"),
+    activate = onOpen,
+)
+
 /**
  * Grouped settings, in the shape phones have taught people to expect: inset
  * cards of rows, a leading glyph per row, the current value on the right, and a
@@ -231,6 +248,7 @@ fun SettingsScreen(
     modifier: Modifier = Modifier,
 ) {
     val context = LocalContext.current
+    val musicFolderRootPicker = rememberMusicFolderRootPicker(AppSettings::setLocalMusicFolderPath)
     val settingsScrollState = rememberScrollState()
     val popupOverlayPermissionLauncher = rememberLauncherForActivityResult(
         ActivityResultContracts.StartActivityForResult(),
@@ -271,6 +289,7 @@ fun SettingsScreen(
     val spatialAudio by AppSettings.spatialAudio.collectAsStateWithLifecycle()
     val nerdStats by AppSettings.showNerdStats.collectAsStateWithLifecycle()
     val reduceAnimation by AppSettings.reduceAnimation.collectAsStateWithLifecycle()
+    val playerArtworkTransition by AppSettings.playerArtworkTransition.collectAsStateWithLifecycle()
     val pillMotionStyle by AppSettings.pillMotionStyle.collectAsStateWithLifecycle()
     val reduceDynamicBlur by AppSettings.reduceDynamicBlur.collectAsStateWithLifecycle()
     val liquidGlass by AppSettings.liquidGlass.collectAsStateWithLifecycle()
@@ -281,6 +300,7 @@ fun SettingsScreen(
     val localTabs by AppSettings.visibleLocalLibraryTabs.collectAsStateWithLifecycle()
     val localTabOrder by AppSettings.localLibraryTabOrder.collectAsStateWithLifecycle()
     val localFolderHierarchy by AppSettings.localFolderHierarchy.collectAsStateWithLifecycle()
+    val localMusicFolderRoot by AppSettings.localMusicFolderUri.collectAsStateWithLifecycle()
     val fullScreenCollectionArtwork by AppSettings.fullScreenCollectionArtwork.collectAsStateWithLifecycle()
     val hideCollectionTopBar by AppSettings.hideCollectionTopBar.collectAsStateWithLifecycle()
     val hideFloatingCollectionControls by AppSettings.hideFloatingCollectionControls.collectAsStateWithLifecycle()
@@ -387,7 +407,9 @@ fun SettingsScreen(
     var showPerformanceWarning by remember { mutableStateOf(false) }
     var showEqualizerSheet by remember { mutableStateOf(false) }
 
-    val settingsSearchEntries = listOf(
+    @Composable
+    fun buildSettingsSearchEntries(): List<SettingsSearchEntry> {
+        return listOf(
         SettingsSearchEntry(stringResource(R.string.hide_lyrics_status_text), stringResource(R.string.hide_lyrics_status_text_subtitle), listOf("lyrics", "歌詞", "状態", "status"), hideLyricsStatusText) { AppSettings.setHideLyricsStatusText(!hideLyricsStatusText) },
         SettingsSearchEntry(stringResource(R.string.hide_lyrics_saved_message), stringResource(R.string.hide_lyrics_saved_message_subtitle), listOf("lyrics", "歌詞", "保存済み", "downloaded"), hideLyricsSavedMessage) { AppSettings.setHideLyricsSavedMessage(!hideLyricsSavedMessage) },
         SettingsSearchEntry(stringResource(R.string.hide_lyrics_unavailable_label), stringResource(R.string.hide_lyrics_unavailable_label_subtitle), listOf("lyrics", "歌詞", "ありません", "unavailable"), hideLyricsUnavailableLabel) { AppSettings.setHideLyricsUnavailableLabel(!hideLyricsUnavailableLabel) },
@@ -616,6 +638,7 @@ fun SettingsScreen(
         SettingsSearchEntry(stringResource(R.string.keep_original_artwork_aspect_ratio), stringResource(R.string.keep_original_artwork_aspect_ratio_subtitle), listOf("artwork", "cover", "aspect ratio", "crop", "縦長", "横長", "比率", "トリミング"), keepOriginalArtworkAspectRatio) { AppSettings.setKeepOriginalArtworkAspectRatio(!keepOriginalArtworkAspectRatio) },
         SettingsSearchEntry(stringResource(R.string.keep_artwork_full_size_paused), stringResource(R.string.keep_artwork_full_size_paused_subtitle), listOf("artwork", "cover", "paused", "停止中", "アート"), keepArtworkFullSizeWhenPaused) { AppSettings.setKeepArtworkFullSizeWhenPaused(!keepArtworkFullSizeWhenPaused) },
         SettingsSearchEntry(stringResource(R.string.reduce_animation), stringResource(R.string.reduce_animation_subtitle), listOf("animation", "reduce", "アニメーション"), reduceAnimation) { AppSettings.setReduceAnimation(!reduceAnimation) },
+        SettingsSearchEntry(stringResource(R.string.player_artwork_transition), stringResource(R.string.player_artwork_transition_subtitle), listOf("player", "artwork", "cover", "lyrics", "animation", "transition", "プレイヤー", "アート", "歌詞", "遷移", "アニメーション"), playerArtworkTransition) { AppSettings.setPlayerArtworkTransition(!playerArtworkTransition) },
         SettingsSearchEntry(
             title = stringResource(R.string.pill_motion_style),
             subtitle = stringResource(R.string.pill_motion_style_subtitle),
@@ -889,6 +912,7 @@ fun SettingsScreen(
             MainNavigationTab.LIBRARY -> R.string.library
             MainNavigationTab.SEARCH -> R.string.search
             MainNavigationTab.ALBUM_ARTISTS -> R.string.album_artists
+            MainNavigationTab.FOLDERS -> R.string.folders
         })
         SettingsSearchEntry(
             title = stringResource(R.string.show_tab_setting, tabTitle),
@@ -927,6 +951,7 @@ fun SettingsScreen(
             listOf("folder", "hierarchy", "search", "フォルダ", "階層", "検索"),
             localFolderHierarchy,
         ) { AppSettings.setLocalFolderHierarchy(!localFolderHierarchy) },
+        musicFolderRootSearchEntry(localMusicFolderRoot) { musicFolderRootPicker.launch(null) },
         SettingsSearchEntry(
             stringResource(R.string.full_screen_collection_artwork),
             stringResource(R.string.full_screen_collection_artwork_subtitle),
@@ -964,6 +989,9 @@ fun SettingsScreen(
             onlineAlbumArtistArtwork,
         ) { AppSettings.setOnlineAlbumArtistArtwork(!onlineAlbumArtistArtwork) },
     )
+    }
+    val settingsSearchEntries = buildSettingsSearchEntries()
+
 
     LaunchedEffect(selectedPerformanceRefreshRate, performanceRefreshRate) {
         if (selectedPerformanceRefreshRate != performanceRefreshRate) {
@@ -994,6 +1022,7 @@ fun SettingsScreen(
     var confirmImport by remember { mutableStateOf(false) }
     var showPerformanceConfirmation by remember { mutableStateOf(false) }
     var showManageFoldersSheet by remember { mutableStateOf(false) }
+    var showMusicServersSheet by rememberSaveable { mutableStateOf(false) }
     var showPlaylistOrderDialog by remember { mutableStateOf(false) }
     var preparedM3uImport by remember { mutableStateOf<PreparedM3uImport?>(null) }
     var m3uPlaylistName by remember { mutableStateOf("") }
@@ -1312,7 +1341,10 @@ fun SettingsScreen(
             keywords = listOf("backup", "restore", "import", "バックアップ", "復元"),
             activate = { confirmImport = true },
         ),
-    )
+    ).let { entries ->
+        if (context.packageName.endsWith(".nointernet")) entries else entries +
+            musicServerSearchEntry { showMusicServersSheet = true }
+    }
 
     Box(modifier = modifier.fillMaxSize()) {
     Column(
@@ -2458,6 +2490,23 @@ fun SettingsScreen(
             )
             RowDivider()
             SettingsRow(
+                icon = Icons.Rounded.Fullscreen,
+                title = stringResource(R.string.player_artwork_transition),
+                subtitle = stringResource(R.string.player_artwork_transition_subtitle),
+                trailing = {
+                    Switch(
+                        checked = playerArtworkTransition,
+                        onCheckedChange = AppSettings::setPlayerArtworkTransition,
+                        colors = SwitchDefaults.colors(
+                            checkedTrackColor = MaterialTheme.colorScheme.primary,
+                            checkedBorderColor = MaterialTheme.colorScheme.primary,
+                        ),
+                    )
+                },
+                onClick = { AppSettings.setPlayerArtworkTransition(!playerArtworkTransition) },
+            )
+            RowDivider()
+            SettingsRow(
                 icon = Icons.Rounded.Speed,
                 title = stringResource(R.string.pill_motion_style),
                 subtitle = stringResource(R.string.pill_motion_style_subtitle),
@@ -2917,6 +2966,7 @@ fun SettingsScreen(
                 MainNavigationTab.LIBRARY -> R.string.library
                 MainNavigationTab.SEARCH -> R.string.search
                 MainNavigationTab.ALBUM_ARTISTS -> R.string.album_artists
+                MainNavigationTab.FOLDERS -> R.string.folders
             })
             SettingsRow(
                 icon = Icons.Rounded.MusicNote,
@@ -2935,6 +2985,7 @@ fun SettingsScreen(
                     MainNavigationTab.LIBRARY -> R.string.library
                     MainNavigationTab.SEARCH -> R.string.search
                     MainNavigationTab.ALBUM_ARTISTS -> R.string.album_artists
+                    MainNavigationTab.FOLDERS -> R.string.folders
                 }
                 val icon = when (tab) {
                     MainNavigationTab.SONGS -> Icons.Rounded.MusicNote
@@ -2943,6 +2994,7 @@ fun SettingsScreen(
                     MainNavigationTab.LIBRARY -> Icons.Rounded.LibraryMusic
                     MainNavigationTab.SEARCH -> BitChordIcons.Search
                     MainNavigationTab.ALBUM_ARTISTS -> Icons.Rounded.Person
+                    MainNavigationTab.FOLDERS -> Icons.Rounded.Folder
                 }
                 val checked = if (tab == MainNavigationTab.ALBUM_ARTISTS) {
                     com.music.bitchord.data.settings.LocalLibraryTab.ALBUM_ARTISTS in localTabs
@@ -3047,224 +3099,35 @@ fun SettingsScreen(
             }
         }
 
-        SettingsGroup(header = stringResource(R.string.local_music)) {
-            SettingsRow(
-                icon = Icons.Rounded.Folder,
-                title = stringResource(R.string.music_folders),
-                subtitle = stringResource(R.string.music_folders_subtitle),
-                trailing = { Chevron() },
-                onClick = { showManageFoldersSheet = true },
-            )
-            RowDivider()
-            SettingsRow(
-                icon = Icons.Rounded.Tune,
-                title = stringResource(R.string.local_library_tabs),
-                subtitle = stringResource(R.string.local_library_tabs_subtitle),
-            )
-            localTabOrder.forEachIndexed { index, tab ->
-                if (index > 0) RowDivider()
-                val titleRes = when (tab) {
-                    LocalLibraryTab.SONGS -> R.string.songs
-                    LocalLibraryTab.ALBUMS -> R.string.albums
-                    LocalLibraryTab.ARTISTS -> R.string.artists
-                    LocalLibraryTab.FOLDERS -> R.string.folders
-                    LocalLibraryTab.PLAYLISTS -> R.string.playlists
-                    LocalLibraryTab.ALBUM_ARTISTS -> R.string.album_artists
-                }
-                val tabIcon = when (tab) {
-                    LocalLibraryTab.SONGS -> Icons.Rounded.MusicNote
-                    LocalLibraryTab.ALBUMS -> Icons.Rounded.Album
-                    LocalLibraryTab.ARTISTS, LocalLibraryTab.ALBUM_ARTISTS -> Icons.Rounded.Person
-                    LocalLibraryTab.FOLDERS -> Icons.Rounded.Folder
-                    LocalLibraryTab.PLAYLISTS -> Icons.Rounded.PlaylistPlay
-                }
-                val visible = tab in localTabs
-                SettingsRow(
-                    icon = tabIcon,
-                    title = stringResource(titleRes),
-                    subtitle = stringResource(R.string.navigation_tab_order_subtitle),
-                    enabled = visible || localTabs.size > 1,
-                    trailing = {
-                        Row(verticalAlignment = Alignment.CenterVertically) {
-                            IconButton(
-                                enabled = index > 0,
-                                onClick = { AppSettings.moveLocalLibraryTab(tab, -1) },
-                            ) {
-                                Icon(Icons.Rounded.ArrowUpward, stringResource(R.string.move_up),
-                                    tint = if (index > 0) MaterialTheme.colorScheme.onSurfaceVariant else MaterialTheme.colorScheme.outlineVariant)
-                            }
-                            IconButton(
-                                enabled = index < localTabOrder.lastIndex,
-                                onClick = { AppSettings.moveLocalLibraryTab(tab, 1) },
-                            ) {
-                                Icon(Icons.Rounded.ArrowDownward, stringResource(R.string.move_down),
-                                    tint = if (index < localTabOrder.lastIndex) MaterialTheme.colorScheme.onSurfaceVariant else MaterialTheme.colorScheme.outlineVariant)
-                            }
-                            Switch(
-                                checked = visible,
-                                enabled = visible || localTabs.size > 1,
-                                onCheckedChange = { AppSettings.setLocalLibraryTabVisible(tab, it) },
-                                colors = SwitchDefaults.colors(
-                                    checkedTrackColor = MaterialTheme.colorScheme.primary,
-                                    checkedBorderColor = MaterialTheme.colorScheme.primary,
-                                ),
-                            )
-                        }
-                    },
-                )
-            }
-            RowDivider()
-            SettingsRow(
-                icon = Icons.Rounded.Folder,
-                title = stringResource(R.string.local_folder_hierarchy),
-                subtitle = stringResource(R.string.local_folder_hierarchy_subtitle),
-                trailing = {
-                    Switch(checked = localFolderHierarchy, onCheckedChange = AppSettings::setLocalFolderHierarchy)
-                },
-                onClick = { AppSettings.setLocalFolderHierarchy(!localFolderHierarchy) },
-            )
-            RowDivider()
-            SettingsRow(
-                icon = Icons.Rounded.Album,
-                title = stringResource(R.string.full_screen_collection_artwork),
-                subtitle = stringResource(R.string.full_screen_collection_artwork_subtitle),
-                trailing = {
-                    Switch(checked = fullScreenCollectionArtwork, onCheckedChange = AppSettings::setFullScreenCollectionArtwork)
-                },
-                onClick = { AppSettings.setFullScreenCollectionArtwork(!fullScreenCollectionArtwork) },
-            )
-            RowDivider()
-            SettingsRow(
-                icon = Icons.Rounded.VisibilityOff,
-                title = stringResource(R.string.hide_collection_top_bar),
-                subtitle = stringResource(R.string.hide_collection_top_bar_subtitle),
-                trailing = {
-                    Switch(
-                        checked = hideCollectionTopBar,
-                        onCheckedChange = AppSettings::setHideCollectionTopBar,
-                        colors = SwitchDefaults.colors(
-                            checkedTrackColor = MaterialTheme.colorScheme.primary,
-                            checkedBorderColor = MaterialTheme.colorScheme.primary,
-                        ),
-                    )
-                },
-                onClick = { AppSettings.setHideCollectionTopBar(!hideCollectionTopBar) },
-            )
-            RowDivider()
-            SettingsRow(
-                icon = Icons.Rounded.VisibilityOff,
-                title = stringResource(R.string.hide_floating_collection_controls),
-                subtitle = stringResource(R.string.hide_floating_collection_controls_subtitle),
-                trailing = {
-                    Switch(
-                        checked = hideFloatingCollectionControls,
-                        onCheckedChange = AppSettings::setHideFloatingCollectionControls,
-                        colors = SwitchDefaults.colors(
-                            checkedTrackColor = MaterialTheme.colorScheme.primary,
-                            checkedBorderColor = MaterialTheme.colorScheme.primary,
-                        ),
-                    )
-                },
-                onClick = { AppSettings.setHideFloatingCollectionControls(!hideFloatingCollectionControls) },
-            )
-            RowDivider()
-            SettingsRow(
-                icon = Icons.Rounded.Person,
-                title = stringResource(R.string.artists_open_albums),
-                subtitle = stringResource(R.string.artists_open_albums_subtitle),
-                trailing = {
-                    Switch(checked = artistsOpenAlbums, onCheckedChange = AppSettings::setArtistsOpenAlbums)
-                },
-                onClick = { AppSettings.setArtistsOpenAlbums(!artistsOpenAlbums) },
-            )
-            RowDivider()
-            SettingsRow(
-                icon = Icons.Rounded.Album,
-                title = stringResource(R.string.shuffle_artist_albums),
-                subtitle = stringResource(R.string.shuffle_artist_albums_subtitle),
-                trailing = {
-                    Switch(checked = shuffleArtistAlbums, onCheckedChange = AppSettings::setShuffleArtistAlbums)
-                },
-                onClick = { AppSettings.setShuffleArtistAlbums(!shuffleArtistAlbums) },
-            )
-            RowDivider()
-            SettingsRow(
-                icon = Icons.Rounded.Cloud,
-                title = stringResource(R.string.online_album_artist_artwork),
-                subtitle = stringResource(R.string.online_album_artist_artwork_subtitle),
-                trailing = {
-                    Switch(
-                        checked = onlineAlbumArtistArtwork,
-                        onCheckedChange = AppSettings::setOnlineAlbumArtistArtwork,
-                    )
-                },
-                onClick = { AppSettings.setOnlineAlbumArtistArtwork(!onlineAlbumArtistArtwork) },
-            )
-            RowDivider()
-            if (android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.R) {
-                SettingsRow(
-                    icon = Icons.Rounded.FolderSpecial,
-                    title = stringResource(R.string.all_files_access),
-                    subtitle = if (hasAllFiles) {
-                        "Granted — tags and lyrics are edited directly without prompts"
-                    } else {
-                        "Grant access to edit tags and embed lyrics without system prompts"
-                    },
-                    trailing = {
-                        if (hasAllFiles) {
-                            Icon(
-                                Icons.Rounded.CheckCircle,
-                                contentDescription = null,
-                                tint = MaterialTheme.colorScheme.primary,
-                            )
-                        } else {
-                            Chevron()
-                        }
-                    },
-                    onClick = {
-                        runCatching {
-                            allFilesSettingsLauncher.launch(LocalMediaRepository.createAllFilesAccessIntent(context))
-                        }.onFailure {
-                            LocalMediaRepository.requestAllFilesAccess(context)
-                        }
-                    },
-                )
-                RowDivider()
-            }
-            SettingsRow(
-                icon = Icons.Rounded.FilterAlt,
-                title = stringResource(R.string.filter_non_music_audio),
-                subtitle = stringResource(R.string.filter_non_music_audio_subtitle),
-                trailing = {
-                    Switch(
-                        checked = filterNonMusicAudio,
-                        onCheckedChange = AppSettings::setFilterNonMusicAudio,
-                        colors = SwitchDefaults.colors(
-                            checkedTrackColor = MaterialTheme.colorScheme.primary,
-                            checkedBorderColor = MaterialTheme.colorScheme.primary,
-                        ),
-                    )
-                },
-                onClick = { AppSettings.setFilterNonMusicAudio(!filterNonMusicAudio) },
-            )
-            RowDivider()
-            SettingsRow(
-                icon = Icons.Rounded.Album,
-                title = stringResource(R.string.playlist_song_artwork),
-                subtitle = stringResource(R.string.playlist_song_artwork_subtitle),
-                trailing = {
-                    Switch(
-                        checked = showPlaylistSongArtwork,
-                        onCheckedChange = AppSettings::setShowPlaylistSongArtwork,
-                        colors = SwitchDefaults.colors(
-                            checkedTrackColor = MaterialTheme.colorScheme.primary,
-                            checkedBorderColor = MaterialTheme.colorScheme.primary,
-                        ),
-                    )
-                },
-                onClick = { AppSettings.setShowPlaylistSongArtwork(!showPlaylistSongArtwork) },
-            )
+        if (!context.packageName.endsWith(".nointernet")) {
+            MusicServersSettingsGroup(onClick = { showMusicServersSheet = true })
         }
+
+        LocalMusicSettingsGroup(
+            localTabs = localTabs,
+            localTabOrder = localTabOrder,
+            localFolderHierarchy = localFolderHierarchy,
+            localMusicFolderRoot = localMusicFolderRoot,
+            fullScreenCollectionArtwork = fullScreenCollectionArtwork,
+            hideCollectionTopBar = hideCollectionTopBar,
+            hideFloatingCollectionControls = hideFloatingCollectionControls,
+            artistsOpenAlbums = artistsOpenAlbums,
+            shuffleArtistAlbums = shuffleArtistAlbums,
+            onlineAlbumArtistArtwork = onlineAlbumArtistArtwork,
+            filterNonMusicAudio = filterNonMusicAudio,
+            showPlaylistSongArtwork = showPlaylistSongArtwork,
+            hasAllFiles = hasAllFiles,
+            onManageFolders = { showManageFoldersSheet = true },
+            onChooseMusicFolder = { musicFolderRootPicker.launch(null) },
+            onClearMusicFolder = { AppSettings.setLocalMusicFolderPath("") },
+            onOpenAllFiles = {
+                runCatching {
+                    allFilesSettingsLauncher.launch(LocalMediaRepository.createAllFilesAccessIntent(context))
+                }.onFailure {
+                    LocalMediaRepository.requestAllFilesAccess(context)
+                }
+            },
+        )
 
         SettingsGroup(header = stringResource(R.string.storage)) {
             SettingsRow(
@@ -3591,6 +3454,7 @@ fun SettingsScreen(
                                 MainNavigationTab.LIBRARY -> stringResource(R.string.library)
                                 MainNavigationTab.SEARCH -> stringResource(R.string.search)
                                 MainNavigationTab.ALBUM_ARTISTS -> stringResource(R.string.album_artists)
+                                MainNavigationTab.FOLDERS -> stringResource(R.string.folders)
                             }
                             Row(
                                 modifier = Modifier
@@ -4090,12 +3954,279 @@ fun SettingsScreen(
         )
     }
 
+    MusicServerManagerSheetHost(
+        visible = showMusicServersSheet,
+        onDismiss = { showMusicServersSheet = false },
+    )
+
     if (showEqualizerSheet) {
         com.music.bitchord.ui.screens.equalizer.EqualizerSheet(
             onDismiss = { showEqualizerSheet = false },
         )
     }
 
+}
+
+
+@Composable
+private fun LocalMusicSettingsGroup(
+    localTabs: Set<LocalLibraryTab>,
+    localTabOrder: List<LocalLibraryTab>,
+    localFolderHierarchy: Boolean,
+    localMusicFolderRoot: String,
+    fullScreenCollectionArtwork: Boolean,
+    hideCollectionTopBar: Boolean,
+    hideFloatingCollectionControls: Boolean,
+    artistsOpenAlbums: Boolean,
+    shuffleArtistAlbums: Boolean,
+    onlineAlbumArtistArtwork: Boolean,
+    filterNonMusicAudio: Boolean,
+    showPlaylistSongArtwork: Boolean,
+    hasAllFiles: Boolean,
+    onManageFolders: () -> Unit,
+    onChooseMusicFolder: () -> Unit,
+    onClearMusicFolder: () -> Unit,
+    onOpenAllFiles: () -> Unit,
+) {
+    val context = LocalContext.current
+SettingsGroup(header = stringResource(R.string.local_music)) {
+    SettingsRow(
+        icon = Icons.Rounded.Folder,
+        title = stringResource(R.string.music_folders),
+        subtitle = stringResource(R.string.music_folders_subtitle),
+        trailing = { Chevron() },
+        onClick = onManageFolders,
+    )
+    RowDivider()
+    SettingsRow(
+        icon = Icons.Rounded.Tune,
+        title = stringResource(R.string.local_library_tabs),
+        subtitle = stringResource(R.string.local_library_tabs_subtitle),
+    )
+    localTabOrder.forEachIndexed { index, tab ->
+        if (index > 0) RowDivider()
+        val titleRes = when (tab) {
+            LocalLibraryTab.SONGS -> R.string.songs
+            LocalLibraryTab.ALBUMS -> R.string.albums
+            LocalLibraryTab.ARTISTS -> R.string.artists
+            LocalLibraryTab.FOLDERS -> R.string.folders
+            LocalLibraryTab.PLAYLISTS -> R.string.playlists
+            LocalLibraryTab.ALBUM_ARTISTS -> R.string.album_artists
+        }
+        val tabIcon = when (tab) {
+            LocalLibraryTab.SONGS -> Icons.Rounded.MusicNote
+            LocalLibraryTab.ALBUMS -> Icons.Rounded.Album
+            LocalLibraryTab.ARTISTS, LocalLibraryTab.ALBUM_ARTISTS -> Icons.Rounded.Person
+            LocalLibraryTab.FOLDERS -> Icons.Rounded.Folder
+            LocalLibraryTab.PLAYLISTS -> Icons.Rounded.PlaylistPlay
+        }
+        val visible = tab in localTabs
+        SettingsRow(
+            icon = tabIcon,
+            title = stringResource(titleRes),
+            subtitle = stringResource(R.string.navigation_tab_order_subtitle),
+            enabled = visible || localTabs.size > 1,
+            trailing = {
+                Row(verticalAlignment = Alignment.CenterVertically) {
+                    IconButton(
+                        enabled = index > 0,
+                        onClick = { AppSettings.moveLocalLibraryTab(tab, -1) },
+                    ) {
+                        Icon(Icons.Rounded.ArrowUpward, stringResource(R.string.move_up),
+                            tint = if (index > 0) MaterialTheme.colorScheme.onSurfaceVariant else MaterialTheme.colorScheme.outlineVariant)
+                    }
+                    IconButton(
+                        enabled = index < localTabOrder.lastIndex,
+                        onClick = { AppSettings.moveLocalLibraryTab(tab, 1) },
+                    ) {
+                        Icon(Icons.Rounded.ArrowDownward, stringResource(R.string.move_down),
+                            tint = if (index < localTabOrder.lastIndex) MaterialTheme.colorScheme.onSurfaceVariant else MaterialTheme.colorScheme.outlineVariant)
+                    }
+                    Switch(
+                        checked = visible,
+                        enabled = visible || localTabs.size > 1,
+                        onCheckedChange = { AppSettings.setLocalLibraryTabVisible(tab, it) },
+                        colors = SwitchDefaults.colors(
+                            checkedTrackColor = MaterialTheme.colorScheme.primary,
+                            checkedBorderColor = MaterialTheme.colorScheme.primary,
+                        ),
+                    )
+                }
+            },
+        )
+    }
+    RowDivider()
+    SettingsRow(
+        icon = Icons.Rounded.Folder,
+        title = stringResource(R.string.local_folder_hierarchy),
+        subtitle = stringResource(R.string.local_folder_hierarchy_subtitle),
+        trailing = {
+            Switch(checked = localFolderHierarchy, onCheckedChange = AppSettings::setLocalFolderHierarchy)
+        },
+        onClick = { AppSettings.setLocalFolderHierarchy(!localFolderHierarchy) },
+    )
+    RowDivider()
+    LocalMusicFolderRootSettingsRow(
+        path = localMusicFolderRoot,
+        onChoose = onChooseMusicFolder,
+        onClear = onClearMusicFolder,
+    )
+    RowDivider()
+    SettingsRow(
+        icon = Icons.Rounded.Album,
+        title = stringResource(R.string.full_screen_collection_artwork),
+        subtitle = stringResource(R.string.full_screen_collection_artwork_subtitle),
+        trailing = {
+            Switch(checked = fullScreenCollectionArtwork, onCheckedChange = AppSettings::setFullScreenCollectionArtwork)
+        },
+        onClick = { AppSettings.setFullScreenCollectionArtwork(!fullScreenCollectionArtwork) },
+    )
+    RowDivider()
+    SettingsRow(
+        icon = Icons.Rounded.VisibilityOff,
+        title = stringResource(R.string.hide_collection_top_bar),
+        subtitle = stringResource(R.string.hide_collection_top_bar_subtitle),
+        trailing = {
+            Switch(
+                checked = hideCollectionTopBar,
+                onCheckedChange = AppSettings::setHideCollectionTopBar,
+                colors = SwitchDefaults.colors(
+                    checkedTrackColor = MaterialTheme.colorScheme.primary,
+                    checkedBorderColor = MaterialTheme.colorScheme.primary,
+                ),
+            )
+        },
+        onClick = { AppSettings.setHideCollectionTopBar(!hideCollectionTopBar) },
+    )
+    RowDivider()
+    SettingsRow(
+        icon = Icons.Rounded.VisibilityOff,
+        title = stringResource(R.string.hide_floating_collection_controls),
+        subtitle = stringResource(R.string.hide_floating_collection_controls_subtitle),
+        trailing = {
+            Switch(
+                checked = hideFloatingCollectionControls,
+                onCheckedChange = AppSettings::setHideFloatingCollectionControls,
+                colors = SwitchDefaults.colors(
+                    checkedTrackColor = MaterialTheme.colorScheme.primary,
+                    checkedBorderColor = MaterialTheme.colorScheme.primary,
+                ),
+            )
+        },
+        onClick = { AppSettings.setHideFloatingCollectionControls(!hideFloatingCollectionControls) },
+    )
+    RowDivider()
+    SettingsRow(
+        icon = Icons.Rounded.Person,
+        title = stringResource(R.string.artists_open_albums),
+        subtitle = stringResource(R.string.artists_open_albums_subtitle),
+        trailing = {
+            Switch(checked = artistsOpenAlbums, onCheckedChange = AppSettings::setArtistsOpenAlbums)
+        },
+        onClick = { AppSettings.setArtistsOpenAlbums(!artistsOpenAlbums) },
+    )
+    RowDivider()
+    SettingsRow(
+        icon = Icons.Rounded.Album,
+        title = stringResource(R.string.shuffle_artist_albums),
+        subtitle = stringResource(R.string.shuffle_artist_albums_subtitle),
+        trailing = {
+            Switch(checked = shuffleArtistAlbums, onCheckedChange = AppSettings::setShuffleArtistAlbums)
+        },
+        onClick = { AppSettings.setShuffleArtistAlbums(!shuffleArtistAlbums) },
+    )
+    RowDivider()
+    SettingsRow(
+        icon = Icons.Rounded.Cloud,
+        title = stringResource(R.string.online_album_artist_artwork),
+        subtitle = stringResource(R.string.online_album_artist_artwork_subtitle),
+        trailing = {
+            Switch(
+                checked = onlineAlbumArtistArtwork,
+                onCheckedChange = AppSettings::setOnlineAlbumArtistArtwork,
+            )
+        },
+        onClick = { AppSettings.setOnlineAlbumArtistArtwork(!onlineAlbumArtistArtwork) },
+    )
+    RowDivider()
+    if (android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.R) {
+        SettingsRow(
+            icon = Icons.Rounded.FolderSpecial,
+            title = stringResource(R.string.all_files_access),
+            subtitle = if (hasAllFiles) {
+                "Granted — tags and lyrics are edited directly without prompts"
+            } else {
+                "Grant access to edit tags and embed lyrics without system prompts"
+            },
+            trailing = {
+                if (hasAllFiles) {
+                    Icon(
+                        Icons.Rounded.CheckCircle,
+                        contentDescription = null,
+                        tint = MaterialTheme.colorScheme.primary,
+                    )
+                } else {
+                    Chevron()
+                }
+            },
+            onClick = onOpenAllFiles,
+        )
+        RowDivider()
+    }
+    SettingsRow(
+        icon = Icons.Rounded.FilterAlt,
+        title = stringResource(R.string.filter_non_music_audio),
+        subtitle = stringResource(R.string.filter_non_music_audio_subtitle),
+        trailing = {
+            Switch(
+                checked = filterNonMusicAudio,
+                onCheckedChange = AppSettings::setFilterNonMusicAudio,
+                colors = SwitchDefaults.colors(
+                    checkedTrackColor = MaterialTheme.colorScheme.primary,
+                    checkedBorderColor = MaterialTheme.colorScheme.primary,
+                ),
+            )
+        },
+        onClick = { AppSettings.setFilterNonMusicAudio(!filterNonMusicAudio) },
+    )
+    RowDivider()
+    SettingsRow(
+        icon = Icons.Rounded.Album,
+        title = stringResource(R.string.playlist_song_artwork),
+        subtitle = stringResource(R.string.playlist_song_artwork_subtitle),
+        trailing = {
+            Switch(
+                checked = showPlaylistSongArtwork,
+                onCheckedChange = AppSettings::setShowPlaylistSongArtwork,
+                colors = SwitchDefaults.colors(
+                    checkedTrackColor = MaterialTheme.colorScheme.primary,
+                    checkedBorderColor = MaterialTheme.colorScheme.primary,
+                ),
+            )
+        },
+        onClick = { AppSettings.setShowPlaylistSongArtwork(!showPlaylistSongArtwork) },
+    )
+}
+
+
+}
+
+@Composable
+private fun MusicServersSettingsGroup(onClick: () -> Unit) {
+    SettingsGroup(header = stringResource(R.string.music_servers)) {
+        SettingsRow(
+            icon = Icons.Rounded.Cloud,
+            title = stringResource(R.string.music_servers),
+            subtitle = stringResource(R.string.music_servers_subtitle),
+            trailing = { Chevron() },
+            onClick = onClick,
+        )
+    }
+}
+
+@Composable
+private fun MusicServerManagerSheetHost(visible: Boolean, onDismiss: () -> Unit) {
+    if (visible) MusicServerManagerSheet(onDismiss = onDismiss)
 }
 
 /** "3 months of listening" — the unit a backup is actually measured in. */

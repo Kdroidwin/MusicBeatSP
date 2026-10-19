@@ -281,6 +281,10 @@ object LocalMediaRepository {
             add(MediaStore.Audio.Media.ALBUM_ID)
             add(MediaStore.Audio.Media.DURATION)
             add(MediaStore.Audio.Media.DATA)
+            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
+                add(MediaStore.MediaColumns.RELATIVE_PATH)
+                add(MediaStore.MediaColumns.VOLUME_NAME)
+            }
             add(MediaStore.Audio.Media.DATE_ADDED)
             add(MediaStore.Audio.Media.DATE_MODIFIED)
         }.toTypedArray()
@@ -325,6 +329,8 @@ object LocalMediaRepository {
                 val albumIdCol = cursor.getColumnIndexOrThrow(MediaStore.Audio.Media.ALBUM_ID)
                 val durationCol = cursor.getColumnIndexOrThrow(MediaStore.Audio.Media.DURATION)
                 val dataCol = cursor.getColumnIndexOrThrow(MediaStore.Audio.Media.DATA)
+                val relativePathCol = cursor.getColumnIndex(MediaStore.MediaColumns.RELATIVE_PATH)
+                val volumeNameCol = cursor.getColumnIndex(MediaStore.MediaColumns.VOLUME_NAME)
                 val dateAddedCol = cursor.getColumnIndexOrThrow(MediaStore.Audio.Media.DATE_ADDED)
                 val dateModifiedCol = cursor.getColumnIndexOrThrow(MediaStore.Audio.Media.DATE_MODIFIED)
 
@@ -339,6 +345,11 @@ object LocalMediaRepository {
                     val path = cursor.getString(dataCol)
                     if (filterNonMusic && !isEligibleLocalMusic(durationMs, displayName, path)) continue
                     if (AppSettings.isFolderBlacklisted(path?.substringBeforeLast('/'))) continue
+                    val relativePath = relativePathCol.takeIf { it >= 0 }?.let(cursor::getString)
+                    val volumeName = volumeNameCol.takeIf { it >= 0 }?.let(cursor::getString)
+                    val folderPath = path?.substringBeforeLast('/')
+                        ?.takeIf(String::isNotBlank)
+                        ?: resolveMediaStoreFolderPath(relativePath, volumeName)
 
                     val contentUri = ContentUris.withAppendedId(MediaStore.Audio.Media.EXTERNAL_CONTENT_URI, id).toString()
                     val title = rawTitle.cleanTag()?.removeAudioExtension()
@@ -372,6 +383,7 @@ object LocalMediaRepository {
                             trackNumber = cursor.getInt(trackCol).takeIf { it > 0 },
                             localUri = contentUri,
                             localPath = path,
+                            localFolderPath = folderPath,
                             localDateAddedSeconds = cursor.getLong(dateAddedCol),
                             localDateModifiedSeconds = cursor.getLong(dateModifiedCol),
                         )
@@ -381,6 +393,23 @@ object LocalMediaRepository {
         }.onFailure { Log.w(TAG, "Failed scanning device local music: ${it.message}") }
 
         songs
+    }
+
+    /**
+     * DATA is still available on most devices, but Android may omit it for a
+     * MediaStore row. RELATIVE_PATH and VOLUME_NAME are enough to build a path
+     * for folder display without pretending it is a playable raw-file path.
+     */
+    private fun resolveMediaStoreFolderPath(relativePath: String?, volumeName: String?): String? {
+        val relative = relativePath?.trim('/')?.takeIf(String::isNotBlank) ?: return null
+        val storageRoot = when {
+            volumeName.equals("external_primary", ignoreCase = true) ->
+                Environment.getExternalStorageDirectory().absolutePath
+            !volumeName.isNullOrBlank() && !volumeName.equals("external", ignoreCase = true) ->
+                "/storage/${volumeName.trim('/')}"
+            else -> return null
+        }
+        return File(storageRoot, relative).path.replace('\\', '/')
     }
 
     /**

@@ -127,6 +127,26 @@ enum class SourceKind(
         rank = 1,
     ),
 
+    /** A user-owned Jellyfin catalogue and authenticated direct streams. */
+    JELLYFIN(
+        label = "Jellyfin",
+        detail = "Search and play music from a Jellyfin server you configure.",
+        labels = listOf("Server library", "Direct play"),
+        needsServer = true,
+        canServeLossless = true,
+        rank = 0,
+    ),
+
+    /** Navidrome implements the OpenSubsonic API used for this connection. */
+    NAVIDROME(
+        label = "Navidrome / OpenSubsonic",
+        detail = "Search and play from Navidrome and compatible OpenSubsonic servers.",
+        labels = listOf("Navidrome", "OpenSubsonic", "Direct stream"),
+        needsServer = true,
+        canServeLossless = true,
+        rank = 0,
+    ),
+
 
     /**
      * The source the app was built on, listed here so it always has a fixed
@@ -145,8 +165,10 @@ enum class SourceKind(
     ),
     ;
 
-    /** Whether this is a source the user configured, rather than one that ships. */
-    val isUserAdded: Boolean get() = rank == USER_ADDED
+    /** Whether this kind participates in the legacy addon/module priority ordering. */
+    val isUserAdded: Boolean get() = this == ADDON || this == CUSTOM_MODULE
+
+    val isRemoteMusicServer: Boolean get() = this == JELLYFIN || this == NAVIDROME
 
     companion object {
         /**

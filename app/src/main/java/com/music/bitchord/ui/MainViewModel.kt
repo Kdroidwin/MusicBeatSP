@@ -80,6 +80,7 @@ import com.music.bitchord.data.sources.SourceResolver
 import com.music.bitchord.data.sources.TrackMatcher
 import com.music.bitchord.playback.StreamChoice
 import java.util.concurrent.atomic.AtomicLong
+import java.io.IOException
 import java.util.Locale
 
 data class LocalArtworkPreloadState(
@@ -146,6 +147,11 @@ class MainViewModel(app: Application) : AndroidViewModel(app) {
 
     private val _results = MutableStateFlow<UiState<List<SearchResult>>?>(null)
     val results: StateFlow<UiState<List<SearchResult>>?> = _results.asStateFlow()
+
+    private val _musicServerResults = MutableStateFlow<UiState<List<SearchResult>>?>(null)
+    val musicServerResults: StateFlow<UiState<List<SearchResult>>?> = _musicServerResults.asStateFlow()
+    private val musicServerSearchGeneration = AtomicLong(0L)
+    private var musicServerSearchJob: Job? = null
 
     /** The mixed YouTube Music result page is the fast, useful default. */
     private val _filter = MutableStateFlow(SearchFilter.ALL)
@@ -1554,6 +1560,54 @@ class MainViewModel(app: Application) : AndroidViewModel(app) {
         }
         forceYoutubeMusicSearch = youtubeMusicOnly
         runSearch()
+    }
+
+    /** Explicit catalogue search for configured Jellyfin and OpenSubsonic servers. */
+    fun searchMusicServers(term: String) {
+        val query = term.trim()
+        musicServerSearchJob?.cancel()
+        musicServerSearchJob = null
+        val generation = musicServerSearchGeneration.incrementAndGet()
+        if (query.isEmpty()) {
+            _musicServerResults.value = null
+            return
+        }
+        if (AppSettings.offlineMode.value || getApplication<Application>().packageName.endsWith(".nointernet")) {
+            _musicServerResults.value = UiState.Error(text(R.string.offline_mode))
+            return
+        }
+
+        val servers = SourceRegistry.active().filter { it.kind.isRemoteMusicServer }
+        if (servers.isEmpty()) {
+            _musicServerResults.value = UiState.Error(text(R.string.music_servers_not_configured))
+            return
+        }
+        _musicServerResults.value = UiState.Loading
+        musicServerSearchJob = viewModelScope.launch {
+            val outcomes = coroutineScope {
+                servers.map { source ->
+                    async(Dispatchers.IO) {
+                        try {
+                            val songs = kotlinx.coroutines.withTimeoutOrNull(SOURCE_SEARCH_TIMEOUT_MS) {
+                                source.search(query, SOURCE_SEARCH_LIMIT, waitForAll = true)
+                            }
+                            songs to (if (songs == null) IOException("Server search timed out") else null)
+                        } catch (cancelled: CancellationException) {
+                            throw cancelled
+                        } catch (failure: Exception) {
+                            null to failure
+                        }
+                    }
+                }.awaitAll()
+            }
+            if (generation != musicServerSearchGeneration.get()) return@launch
+            val songs = outcomes.flatMap { it.first.orEmpty() }.distinctBy(Song::videoId)
+            _musicServerResults.value = when {
+                songs.isNotEmpty() -> UiState.Success(songs.map { SearchResult.Track(it) })
+                outcomes.all { it.second != null } -> UiState.Error(text(R.string.music_server_search_failed))
+                else -> UiState.Error(text(R.string.no_results))
+            }
+        }
     }
 
     fun removeSearch(term: String) = SearchHistory.remove(term)

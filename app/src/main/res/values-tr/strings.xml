@@ -201,6 +201,8 @@
     <string name="theme">Tema</string>
     <string name="reduce_animation">Animasyonu azalt</string>
     <string name="reduce_animation_subtitle">Ana oynatıcının gradyanını kaymak yerine dondurur</string>
+    <string name="player_artwork_transition">Oynatıcı ve şarkı sözü geçişleri</string>
+    <string name="player_artwork_transition_subtitle">Kapak görselini mini oynatıcı ile tam ekran oynatıcı arasında taşır ve söz değişimlerini canlandırır. Animasyonu azalt ayarından bağımsızdır.</string>
     <string name="reduce_dynamic_blur">Dinamik bulanıklığı azalt</string>
     <string name="reduce_dynamic_blur_subtitle">Uygulama genelinde buzlu camı düz dolgularla değiştirir</string>
     <string name="liquid_glass">Liquid Glass</string>

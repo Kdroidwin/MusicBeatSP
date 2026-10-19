@@ -10,4 +10,5 @@
     <exclude domain="sharedpref" path="bitchord_auth_plain.xml" />
     <exclude domain="sharedpref" path="bitchord_sources.xml" />
     <exclude domain="sharedpref" path="bitchord_sources_plain.xml" />
+    <exclude domain="sharedpref" path="music_server_credentials_encrypted.xml" />
 </full-backup-content>

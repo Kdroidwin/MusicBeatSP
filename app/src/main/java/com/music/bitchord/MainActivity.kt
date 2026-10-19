@@ -44,6 +44,7 @@ import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.IntrinsicSize
 import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.navigationBarsPadding
+import androidx.compose.foundation.layout.offset
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
@@ -80,6 +81,8 @@ import androidx.compose.material3.IconButton
 import androidx.compose.material3.LinearProgressIndicator
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.ModalBottomSheet
+import androidx.compose.material3.ModalBottomSheetProperties
+import androidx.compose.material3.SheetState
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
@@ -93,6 +96,7 @@ import androidx.compose.material.icons.rounded.Folder
 import androidx.compose.material.icons.rounded.MusicNote
 import androidx.compose.material.icons.rounded.Person
 import com.music.bitchord.feature.localmusic.ui.components.LocalPermissionCard
+import com.music.bitchord.feature.localmusic.ui.FolderBrowserScreen
 import androidx.compose.material.icons.rounded.LibraryMusic
 import com.music.bitchord.feature.library.ui.LibraryScreen
 import com.music.bitchord.feature.library.ui.components.LibraryFilter
@@ -128,10 +132,16 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.draw.drawBehind
 import androidx.compose.ui.draw.rotate
 import androidx.compose.ui.focus.FocusRequester
+import androidx.compose.ui.geometry.Offset
+import androidx.compose.ui.geometry.Rect
+import androidx.compose.ui.geometry.Size
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.Outline
 import androidx.compose.ui.graphics.RectangleShape
+import androidx.compose.ui.graphics.Shape
 import androidx.compose.ui.platform.LocalClipboardManager
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalDensity
@@ -139,8 +149,12 @@ import androidx.compose.ui.platform.LocalView
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.AnnotatedString
 import androidx.compose.ui.text.style.TextAlign
+import androidx.compose.ui.unit.Density
 import androidx.compose.ui.unit.Dp
+import androidx.compose.ui.unit.IntOffset
+import androidx.compose.ui.unit.LayoutDirection
 import androidx.compose.ui.unit.dp
+import androidx.compose.ui.layout.onSizeChanged
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.lifecycle.viewmodel.compose.viewModel
 import com.music.bitchord.data.LocalMediaRepository
@@ -225,6 +239,9 @@ import com.music.bitchord.data.YtMusicRepository
 import com.music.bitchord.data.innertube.InnertubeParser
 import com.music.bitchord.playback.SingleSongPlaybackManager
 import com.music.bitchord.ui.player.NowPlayingScreen
+import com.music.bitchord.ui.player.LocalPlayerDock
+import com.music.bitchord.ui.player.PlayerDock
+import com.music.bitchord.ui.player.PlayerSheetMotion
 import com.music.bitchord.ui.player.dockedPlayerAvailable
 import com.music.bitchord.ui.player.dockedPlayerWidth
 import com.music.bitchord.data.settings.SongSort
@@ -239,6 +256,7 @@ import com.music.bitchord.feature.tageditor.ui.TagEditorScreen
 import com.music.bitchord.ui.screens.equalizer.EqualizerSheet
 import androidx.compose.ui.window.Dialog
 import androidx.compose.ui.window.DialogProperties
+import androidx.compose.ui.window.DialogWindowProvider
 import com.music.bitchord.feature.localmusic.ui.components.DrillDownSongList
 import com.music.bitchord.widget.QuickPlayTileState
 import com.music.bitchord.ui.screens.LocalMusicScreen
@@ -267,6 +285,7 @@ import java.util.Locale
 
 /** A full first screen of a native YouTube Music radio before AutoPlay tops it up. */
 private const val INITIAL_RADIO_TRACKS = 24
+private const val PLAYER_SHEET_SCRIM_ALPHA = 0.32f
 
 class MainActivity : AppCompatActivity() {
     override fun onCreate(savedInstanceState: Bundle?) {
@@ -468,6 +487,7 @@ private fun BitChordApp(
     }
     val visibleMainNavigationTabs by AppSettings.visibleMainNavigationTabs.collectAsStateWithLifecycle()
     val visibleLocalLibraryTabs by AppSettings.visibleLocalLibraryTabs.collectAsStateWithLifecycle()
+    val localMusicFolderRoot by AppSettings.localMusicFolderUri.collectAsStateWithLifecycle()
     val mainNavigationTabOrder by AppSettings.mainNavigationTabOrder.collectAsStateWithLifecycle()
     val effectiveVisibleMainTabs = remember(visibleMainNavigationTabs, visibleLocalLibraryTabs) {
         if (com.music.bitchord.data.settings.LocalLibraryTab.ALBUM_ARTISTS in visibleLocalLibraryTabs) {
@@ -507,8 +527,24 @@ private fun BitChordApp(
      */
     var showNowPlaying by remember { mutableStateOf(false) }
     val reducePlayerMotion by AppSettings.reduceAnimation.collectAsStateWithLifecycle()
+    val playerArtworkTransitionEnabled by AppSettings.playerArtworkTransition.collectAsStateWithLifecycle()
     val playerTransitionScope = rememberCoroutineScope()
-    val nowPlayingSheetState = rememberModalBottomSheetState(
+    val playerDock = remember { PlayerDock() }
+    val playerSheetMotion = remember(playerDock, playerTransitionScope) {
+        PlayerSheetMotion(
+            scope = playerTransitionScope,
+            dock = playerDock,
+            shown = { showNowPlaying },
+            setShown = { showNowPlaying = it },
+        )
+    }
+    val motionWindowInfo = androidx.compose.ui.platform.LocalWindowInfo.current
+    val motionDensity = LocalDensity.current
+    LaunchedEffect(motionWindowInfo, motionDensity) {
+        playerSheetMotion.windowInfo = motionWindowInfo
+        playerSheetMotion.flingVelocity = with(motionDensity) { 400.dp.toPx() }
+    }
+    val normalNowPlayingSheetState = rememberModalBottomSheetState(
         skipPartiallyExpanded = true,
         confirmValueChange = { target ->
             if (target == SheetValue.Hidden && AppSettings.reduceAnimation.value) {
@@ -519,14 +555,22 @@ private fun BitChordApp(
             }
         },
     )
+    fun openNowPlaying() {
+        if (playerDocked) return
+        if (playerArtworkTransitionEnabled) playerSheetMotion.open() else showNowPlaying = true
+    }
     fun dismissNowPlaying() {
         if (!showNowPlaying) return
+        if (playerArtworkTransitionEnabled) {
+            playerSheetMotion.close()
+            return
+        }
         if (reducePlayerMotion) {
             showNowPlaying = false
         } else {
             playerTransitionScope.launch {
-                if (nowPlayingSheetState.currentValue != SheetValue.Hidden) {
-                    nowPlayingSheetState.hide()
+                if (normalNowPlayingSheetState.currentValue != SheetValue.Hidden) {
+                    normalNowPlayingSheetState.hide()
                 }
                 showNowPlaying = false
             }
@@ -541,7 +585,7 @@ private fun BitChordApp(
     val openPlayerRequested by PlayerDeepLink.pending.collectAsStateWithLifecycle()
     LaunchedEffect(openPlayerRequested) {
         if (openPlayerRequested) {
-            if (!playerDocked) showNowPlaying = true
+            openNowPlaying()
             PlayerDeepLink.handled()
         }
     }
@@ -751,6 +795,12 @@ private fun BitChordApp(
 
     val localSongsState by viewModel.localSongs.collectAsStateWithLifecycle()
     val youtubeMusicSearchResults by viewModel.results.collectAsStateWithLifecycle()
+    val musicServerSearchResults by viewModel.musicServerResults.collectAsStateWithLifecycle()
+    val remoteServerConfigs by SourceRegistry.configs.collectAsStateWithLifecycle()
+    val offlineMode by AppSettings.offlineMode.collectAsStateWithLifecycle()
+    val canSearchMusicServers = !offlineMode &&
+        !context.packageName.endsWith(".nointernet") &&
+        remoteServerConfigs.any { it.enabled && it.kind.isRemoteMusicServer && it.isComplete }
     val isRefreshingLocalMusic by viewModel.isRefreshingLocalMusic.collectAsStateWithLifecycle()
     val localArtworkPreload by viewModel.localArtworkPreload.collectAsStateWithLifecycle()
     val localSongs = (localSongsState as? UiState.Success)?.data.orEmpty()
@@ -845,7 +895,8 @@ private fun BitChordApp(
     val albumArtistsLabel = stringResource(R.string.album_artists)
     val libraryLabel = stringResource(R.string.library)
     val searchLabel = stringResource(R.string.search)
-    val allTabs = remember(songsLabel, albumsLabel, artistsLabel, albumArtistsLabel, libraryLabel, searchLabel) {
+    val foldersLabel = stringResource(R.string.folders)
+    val allTabs = remember(songsLabel, albumsLabel, artistsLabel, albumArtistsLabel, libraryLabel, searchLabel, foldersLabel) {
         listOf(
             BottomTab(songsLabel, Icons.Rounded.MusicNote),
             BottomTab(albumsLabel, Icons.Rounded.Album),
@@ -853,6 +904,7 @@ private fun BitChordApp(
             BottomTab(libraryLabel, Icons.Rounded.LibraryMusic),
             BottomTab(searchLabel, BitChordIcons.Search),
             BottomTab(albumArtistsLabel, Icons.Rounded.Person),
+            BottomTab(foldersLabel, Icons.Rounded.Folder),
         )
     }
     val tabs = remember(allTabs, visibleTabIndices) {
@@ -873,6 +925,12 @@ private fun BitChordApp(
                         s
                     } else if (!s.localPath.isNullOrBlank() && java.io.File(s.localPath).isFile) {
                         s.copy(localUri = android.net.Uri.fromFile(java.io.File(s.localPath)).toString())
+                    } else if (SourceRegistry.parseTrackKey(s.videoId) != null) {
+                        // A server catalogue result has a source-qualified id.
+                        // Preserve it as-is; matching only its title and artist
+                        // here could silently replace it with a different local
+                        // recording before the source stream resolver sees it.
+                        s
                     } else {
                         localSongs.firstOrNull { local ->
                             local.videoId == s.videoId ||
@@ -901,7 +959,7 @@ private fun BitChordApp(
                     .takeIf { it >= 0 } ?: 0
                 controller?.playSongs(playable.map { it.second }, startIndex)
                 // Nothing to raise where the player is already open beside the page.
-                if (!playerDocked) showNowPlaying = true
+                openNowPlaying()
             } catch (cancelled: CancellationException) {
                 throw cancelled
             } catch (error: Exception) {
@@ -932,7 +990,7 @@ private fun BitChordApp(
         activeRadioSeed = null
         playJob = scope.launch {
             controller?.playSongs(listOf(song), 0)
-            if (!playerDocked) showNowPlaying = true
+            openNowPlaying()
         }
     }
 
@@ -1008,7 +1066,7 @@ private fun BitChordApp(
                     context.getString(R.string.radio_started, song.title),
                     Toast.LENGTH_SHORT,
                 ).show()
-                if (!playerDocked) showNowPlaying = true
+                openNowPlaying()
             }
         }
     }
@@ -1162,7 +1220,7 @@ private fun BitChordApp(
                 // one-file preview, so opening a file never loses the user's
                 // playlist or its exact playhead.
                 session.previewExternalAudio(request.uri)
-                if (!playerDocked) showNowPlaying = true
+                openNowPlaying()
             }
             is LinkRequest.Track -> {
                 val song = YtMusicRepository.trackLinks(request.videoId).getOrNull()
@@ -2403,6 +2461,10 @@ private fun BitChordApp(
                                 youtubeMusicResults = youtubeMusicSearchResults,
                                 onYoutubeMusicSearch = { term -> viewModel.searchFor(term, youtubeMusicOnly = true) },
                                 onYoutubeMusicTrackClick = playRadio,
+                                musicServerResults = musicServerSearchResults,
+                                canSearchMusicServers = canSearchMusicServers,
+                                onMusicServersSearch = viewModel::searchMusicServers,
+                                onMusicServerTrackClick = { song -> play(listOf(song), 0) },
                                 onYoutubeMusicBrowseClick = { item ->
                                     viewModel.openDetail(
                                         browseId = item.browseId,
@@ -2413,6 +2475,31 @@ private fun BitChordApp(
                                     )
                                 },
                                 contentPadding = listPadding,
+                            )
+                        }
+                        TAB_FOLDERS -> if (!hasStoragePermission) {
+                            Box(modifier = Modifier.fillMaxSize().padding(listPadding), contentAlignment = Alignment.Center) {
+                                LocalPermissionCard(
+                                    onRequestPermission = requestDefaultPermission,
+                                    onFallbackPermission = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.R) requestAudioPermission else null,
+                                )
+                            }
+                        } else {
+                            FolderBrowserScreen(
+                                songs = localSongs,
+                                currentSong = player.song,
+                                isPlaying = player.isPlaying,
+                                onSongClick = play,
+                                onSongLongPress = openSongMenu,
+                                onSongSwipe = onSongSwipe,
+                                onShuffle = { songs ->
+                                    QueueShuffle.enableForNextQueue()
+                                    play(songs, songs.indices.random())
+                                },
+                                contentPadding = listPadding,
+                                customRootPath = localMusicFolderRoot.ifBlank { null },
+                                onArtworkPaletteChanged = onLocalArtworkPaletteChanged,
+                                onNavigationChanged = onCollectionNavigationChanged,
                             )
                         }
                         else -> Box(modifier = Modifier.fillMaxSize())
@@ -2545,6 +2632,7 @@ private fun BitChordApp(
                     }
                 }
 
+                CompositionLocalProvider(LocalPlayerDock provides playerDock) {
                 if (useCollapsibleNavBar) {
                     // Collapsible floating bar replaces the two stacked bars with a
                     // unified component: now playing controls dock into the tab bar,
@@ -2562,7 +2650,7 @@ private fun BitChordApp(
                         },
                         onPrevious = { controller?.seekToPreviousMediaItem() },
                         onNext = { controller?.seekToNextMediaItem() },
-                        onExpand = { showNowPlaying = true },
+                        onExpand = ::openNowPlaying,
                         onDismiss = onDismissMusicBar,
                         useGlass = glassActive,
                         hazeState = hazeState,
@@ -2599,7 +2687,7 @@ private fun BitChordApp(
                             },
                             onPrevious = { controller?.seekToPreviousMediaItem() },
                             onNext = { controller?.seekToNextMediaItem() },
-                            onExpand = { showNowPlaying = true },
+                            onExpand = ::openNowPlaying,
                             onDismiss = onDismissMusicBar,
                             modifier = Modifier.fillMaxWidth(),
                         )
@@ -2610,6 +2698,7 @@ private fun BitChordApp(
                         hazeState = hazeState,
                         onTabSelected = onTabSelected,
                     )
+                }
                 }
             }
 
@@ -2627,18 +2716,95 @@ private fun BitChordApp(
 
         // ---- Now Playing ----
         // Only raised where it isn't already open beside the page.
-        LaunchedEffect(showNowPlaying) {
-            if (showNowPlaying && nowPlayingSheetState.currentValue != SheetValue.Expanded) {
-                nowPlayingSheetState.show()
+        LaunchedEffect(showNowPlaying, playerArtworkTransitionEnabled) {
+            if (
+                showNowPlaying && !playerArtworkTransitionEnabled &&
+                normalNowPlayingSheetState.currentValue != SheetValue.Expanded
+            ) {
+                normalNowPlayingSheetState.show()
             }
         }
-        if (!playerDocked && showNowPlaying && playerSong != null) {
+        val playerRaised = !playerDocked && showNowPlaying && playerSong != null
+        if (playerRaised && playerArtworkTransitionEnabled) {
+            val sheetDensity = LocalDensity.current
+            val confirmSheetValue: (SheetValue) -> Boolean = { target ->
+                if (target == SheetValue.Hidden) {
+                    playerSheetMotion.close()
+                    false
+                } else {
+                    true
+                }
+            }
+            val animatedSheetState = rememberSaveable(
+                saver = SheetState.Saver(
+                    skipPartiallyExpanded = true,
+                    confirmValueChange = confirmSheetValue,
+                    density = sheetDensity,
+                    skipHiddenState = false,
+                ),
+            ) {
+                SheetState(
+                    skipPartiallyExpanded = true,
+                    density = sheetDensity,
+                    initialValue = if (playerSheetMotion.holding) SheetValue.Expanded else SheetValue.Hidden,
+                    confirmValueChange = confirmSheetValue,
+                )
+            }
+            DisposableEffect(animatedSheetState) {
+                playerSheetMotion.sheet = animatedSheetState
+                playerDock.sheetOffset = playerSheetMotion::position
+                onDispose {
+                    playerDock.sheetOffset = null
+                    playerSheetMotion.onSheetGone()
+                }
+            }
             ModalBottomSheet(
-                onDismissRequest = { dismissNowPlaying() },
-                sheetState = nowPlayingSheetState,
+                onDismissRequest = { playerSheetMotion.close() },
+                sheetState = animatedSheetState,
+                scrimColor = Color.Transparent,
                 // The player fills the screen and paints its own background to
                 // the very top, so the sheet's default 28.dp top corners would
                 // only cut two notches out of the artwork behind the status bar.
+                // A taller outline leaves room for the sleeve as it docks down
+                // to the mini-player below the sheet's normal bounds.
+                shape = PlayerSheetShape,
+                sheetMaxWidth = Dp.Unspecified,
+                containerColor = Color.Transparent,
+                dragHandle = null,
+                contentWindowInsets = { WindowInsets(0, 0, 0, 0) },
+                properties = ModalBottomSheetProperties(shouldDismissOnBackPress = false),
+            ) {
+                BackHandler { playerSheetMotion.close() }
+                val sheetWindow = (LocalView.current.parent as? DialogWindowProvider)?.window
+                DisposableEffect(sheetWindow) {
+                    playerSheetMotion.attachWindow(sheetWindow)
+                    onDispose { }
+                }
+                Box(
+                    Modifier
+                        .offset { IntOffset(0, playerSheetMotion.contentOffsetPx()) }
+                        .drawBehind {
+                            val open = playerDock.openFraction()
+                            if (open > 0f && !(open >= 1f && playerDock.attached)) {
+                                val top = playerSheetMotion.position().takeUnless { it.isNaN() } ?: 0f
+                                drawRect(
+                                    color = Color.Black.copy(alpha = PLAYER_SHEET_SCRIM_ALPHA * open * open),
+                                    topLeft = Offset(0f, -top.toInt().toFloat()),
+                                    size = Size(size.width, size.height),
+                                )
+                            }
+                        }
+                        .onSizeChanged { playerSheetMotion.onMeasured(it.height.toFloat()) },
+                ) {
+                    CompositionLocalProvider(LocalPlayerDock provides playerDock) {
+                        nowPlaying(playerSong, false)
+                    }
+                }
+            }
+        } else if (playerRaised) {
+            ModalBottomSheet(
+                onDismissRequest = { dismissNowPlaying() },
+                sheetState = normalNowPlayingSheetState,
                 shape = RectangleShape,
                 sheetMaxWidth = Dp.Unspecified,
                 containerColor = Color.Transparent,
@@ -3669,6 +3835,7 @@ private const val TAB_ARTISTS = 2
 private const val TAB_LIBRARY = 3
 private const val TAB_SEARCH = 4
 private const val TAB_ALBUM_ARTISTS = 5
+private const val TAB_FOLDERS = 6
 
 
 
@@ -3679,3 +3846,9 @@ private const val TAB_ALBUM_ARTISTS = 5
  * prefix has to be the one thing both the writing and the reading agree on.
  */
 private const val TAB_KEY = "tab:"
+
+/** Lets the artwork travel above the modal sheet's top edge while it docks. */
+private object PlayerSheetShape : Shape {
+    override fun createOutline(size: Size, layoutDirection: LayoutDirection, density: Density): Outline =
+        Outline.Rectangle(Rect(0f, -size.height, size.width, size.height))
+}

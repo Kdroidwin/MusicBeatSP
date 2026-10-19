@@ -68,6 +68,8 @@ import com.music.bitchord.data.model.Song
 import com.music.bitchord.data.model.artworkAt
 import com.music.bitchord.data.settings.AppSettings
 import com.music.bitchord.data.settings.ThemeMode
+import com.music.bitchord.ui.player.LocalPlayerDock
+import com.music.bitchord.ui.player.playerDockArt
 import com.music.bitchord.ui.components.floatingtabbar.FloatingTabBar
 import com.music.bitchord.ui.components.floatingtabbar.FloatingTabBarDefaults
 import com.music.bitchord.ui.components.floatingtabbar.FloatingTabBarScrollConnection
@@ -449,6 +451,7 @@ private fun GlassNowPlaying(
                 contentDescription = null,
                 modifier = Modifier
                     .size(artSize)
+                    .playerDockArt(LocalPlayerDock.current, if (isInline) 6.dp else 8.dp)
                     .clip(RoundedCornerShape(if (isInline) 6.dp else 8.dp))
                     .thumbnailBorder(RoundedCornerShape(if (isInline) 6.dp else 8.dp))
                     .background(MaterialTheme.colorScheme.surfaceVariant),

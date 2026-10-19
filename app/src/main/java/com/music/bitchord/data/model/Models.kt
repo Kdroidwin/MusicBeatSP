@@ -56,6 +56,8 @@ data class Song(
      * that need it — see [com.music.bitchord.playback.toMediaItem].
      */
     val localPath: String? = null,
+    /** Filesystem directory used only for local folder browsing when DATA is unavailable. */
+    val localFolderPath: String? = null,
     /** MediaStore timestamps used only to sort device and downloaded libraries. */
     val localDateAddedSeconds: Long? = null,
     val localDateModifiedSeconds: Long? = null,

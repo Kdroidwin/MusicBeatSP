@@ -19,7 +19,14 @@ import android.window.OnBackInvokedDispatcher
 import androidx.activity.compose.BackHandler
 import androidx.annotation.RequiresApi
 import androidx.compose.animation.animateColorAsState
+import androidx.compose.animation.AnimatedContent
 import androidx.compose.animation.Crossfade
+import androidx.compose.animation.fadeIn
+import androidx.compose.animation.fadeOut
+import androidx.compose.animation.slideInVertically
+import androidx.compose.animation.slideOutVertically
+import androidx.compose.animation.togetherWith
+import androidx.compose.animation.SizeTransform
 import androidx.compose.animation.core.Animatable
 import androidx.compose.animation.core.FastOutSlowInEasing
 import androidx.compose.animation.core.LinearEasing
@@ -156,6 +163,8 @@ import androidx.compose.ui.draw.clipToBounds
 import androidx.compose.ui.draw.shadow
 import androidx.compose.ui.draw.drawWithContent
 import androidx.compose.ui.geometry.Offset
+import androidx.compose.ui.geometry.Rect
+import androidx.compose.ui.geometry.Size
 import androidx.compose.ui.graphics.BlendMode
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.CompositingStrategy
@@ -165,7 +174,11 @@ import androidx.compose.ui.graphics.TransformOrigin
 import androidx.compose.ui.graphics.painter.Painter
 import androidx.compose.ui.graphics.drawscope.ContentDrawScope
 import androidx.compose.ui.graphics.drawscope.clipRect
+import androidx.compose.ui.graphics.drawscope.scale
+import androidx.compose.ui.graphics.drawscope.translate
 import androidx.compose.ui.graphics.graphicsLayer
+import androidx.compose.ui.graphics.layer.drawLayer
+import androidx.compose.ui.graphics.rememberGraphicsLayer
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.input.nestedscroll.NestedScrollConnection
@@ -184,6 +197,7 @@ import androidx.compose.ui.layout.layout
 import androidx.compose.ui.layout.onGloballyPositioned
 import androidx.compose.ui.layout.onSizeChanged
 import androidx.compose.ui.layout.positionInRoot
+import androidx.compose.ui.layout.positionOnScreen
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.platform.LocalView
@@ -204,6 +218,7 @@ import androidx.compose.ui.text.withStyle
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.Constraints
 import androidx.compose.ui.unit.IntOffset
+import androidx.compose.ui.unit.IntSize
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.lerp
 import androidx.compose.ui.unit.Velocity
@@ -637,6 +652,25 @@ private fun Bitmap.topAreaLuminance(): Float {
     return (totalLuminance / count).toFloat()
 }
 
+private const val DOCK_FADE_LEAD = 0.15f
+private const val DOCK_FADE_FLOOR = 1f / 255f
+
+/** Geometry shared between the full player and the mini-player cover. */
+private class DockFrame {
+    var anchor: Offset? = null
+    var anchorFor: IntSize = IntSize.Zero
+    var host: LayoutCoordinates? = null
+    var artworkBox: LayoutCoordinates? = null
+    var artworkRect: Rect = Rect.Zero
+}
+
+private fun lerpRect(start: Rect, end: Rect, fraction: Float): Rect = Rect(
+    left = start.left + (end.left - start.left) * fraction,
+    top = start.top + (end.top - start.top) * fraction,
+    right = start.right + (end.right - start.right) * fraction,
+    bottom = start.bottom + (end.bottom - start.bottom) * fraction,
+)
+
 /**
  * Apple Music's Now Playing, closely: artwork that shrinks when paused, a
  * hairline scrubber with elapsed / remaining either side, oversized transport
@@ -747,6 +781,88 @@ fun NowPlayingScreen(
     val remoteArtFallbackUrl = song.thumbnailUrl?.artworkAt(ART_PX)
         ?.takeIf { it.startsWith("http://") || it.startsWith("https://") }
         ?.takeIf { it != artUrl }
+
+    val playerArtworkTransitionEnabled by AppSettings.playerArtworkTransition.collectAsStateWithLifecycle()
+    val dock = if (playerArtworkTransitionEnabled) LocalPlayerDock.current?.takeUnless { docked } else null
+    if (dock != null) {
+        DisposableEffect(dock) {
+            onDispose { dock.attached = false }
+        }
+    }
+    val dockFrame = remember { DockFrame() }
+    val sleeveLayer = rememberGraphicsLayer()
+    fun dockFraction(): Float {
+        val activeDock = dock ?: return 1f
+        val host = dockFrame.host ?: return 1f
+        if (host.size.width >= host.size.height) return 1f
+        if (dockFrame.anchor == null || !activeDock.hasMiniArt()) return 1f
+        return activeDock.openFraction()
+    }
+    fun isDocking(): Boolean = dockFraction() < 1f
+    fun dockFade(): Float {
+        val fraction = dockFraction()
+        val raw = ((fraction - DOCK_FADE_LEAD) / (1f - DOCK_FADE_LEAD)).coerceIn(0f, 1f)
+        return raw * raw
+    }
+    val dockHost = Modifier
+        .then(
+            if (dock != null) {
+                Modifier.onGloballyPositioned { coordinates ->
+                    dockFrame.host = coordinates
+                    if (coordinates.size.width < coordinates.size.height) {
+                        val offset = dock.offset() ?: return@onGloballyPositioned
+                        if (dockFrame.anchor == null || dockFrame.anchorFor != coordinates.size) {
+                            dockFrame.anchorFor = coordinates.size
+                            dockFrame.anchor = coordinates.positionOnScreen() - Offset(0f, offset.toInt().toFloat())
+                        }
+                        if (!dock.attached) dock.attached = true
+                    } else {
+                        dock.attached = false
+                    }
+                }
+            } else {
+                Modifier
+            },
+        )
+        .drawWithContent {
+            drawContent()
+            val activeDock = dock
+            val host = dockFrame.host
+            val box = dockFrame.artworkBox
+            val anchor = dockFrame.anchor
+            val offset = activeDock?.offset()
+            val mini = activeDock?.miniArtOnScreen()
+            val layerSize = sleeveLayer.size
+            if (
+                activeDock != null && isDocking() && host != null && box != null && anchor != null &&
+                offset != null && mini != null && layerSize.width > 0 && layerSize.height > 0
+            ) {
+                val fraction = dockFraction()
+                val boxOrigin = host.localPositionOf(box, Offset.Zero)
+                val card = dockFrame.artworkRect.translate(boxOrigin.x, boxOrigin.y)
+                val miniInRoot = mini.translate(-anchor.x, -anchor.y - offset)
+                val sleeve = lerpRect(miniInRoot, card, fraction)
+                val imageScale = maxOf(
+                    sleeve.width / layerSize.width,
+                    sleeve.height / layerSize.height,
+                )
+                val drawnWidth = layerSize.width * imageScale
+                val drawnHeight = layerSize.height * imageScale
+                clipRect(sleeve.left, sleeve.top, sleeve.right, sleeve.bottom) {
+                    translate(
+                        sleeve.center.x - drawnWidth / 2f,
+                        sleeve.center.y - drawnHeight / 2f,
+                    ) {
+                        scale(imageScale, imageScale, pivot = Offset.Zero) {
+                            drawLayer(sleeveLayer)
+                        }
+                    }
+                }
+            }
+        }
+        .graphicsLayer {
+            alpha = if (isDocking()) dockFade().coerceAtLeast(DOCK_FADE_FLOOR) else 1f
+        }
 
     // A docked pane sits beside the page rather than covering the screen, so
     // the status bar it's under belongs to the page, not this artwork — only
@@ -1169,7 +1285,11 @@ fun NowPlayingScreen(
     // read as a stutter rather than as either. One animation, both surfaces.
     val p by animateFloatAsState(
         targetValue = if (queueOpen || (lyricsOpen && !lyricsReplaceArtworkOnly)) 1f else 0f,
-        animationSpec = if (reducePlayerAnimations) snap() else tween(durationMillis = 420, easing = FastOutSlowInEasing),
+        animationSpec = if (playerArtworkTransitionEnabled) {
+            tween(durationMillis = 420, easing = FastOutSlowInEasing)
+        } else {
+            snap()
+        },
         label = "sleeveCollapse",
     )
     val fullBleedArt by AppSettings.fullBleedArtwork.collectAsStateWithLifecycle()
@@ -1397,7 +1517,7 @@ fun NowPlayingScreen(
     // position into the same space as the two edges above.
     var dismissBandSpace by remember { mutableStateOf<LayoutCoordinates?>(null) }
 
-    Box(modifier = modifier.fillMaxSize()) {
+    Box(modifier = modifier.fillMaxSize().then(dockHost)) {
         // Anchored to the sleeve's bottom edge, so the screen carries on in the
         // colours the artwork ended in rather than in a quantiser's idea of what
         // the artwork was about. Position ticks recompose this screen twice a
@@ -1763,7 +1883,8 @@ fun NowPlayingScreen(
                     .weight(1f)
                     .widthIn(max = PLAYER_MAX_WIDTH)
                     .fillMaxWidth()
-                    .padding(top = ART_BOX_TOP_PAD, bottom = 18.dp),
+                    .padding(top = ART_BOX_TOP_PAD, bottom = 18.dp)
+                    .onGloballyPositioned { dockFrame.artworkBox = it },
             ) {
                 // The height this box would have if the controls at the foot of
                 // the screen were at their natural size. They aren't: they are
@@ -1878,6 +1999,27 @@ fun NowPlayingScreen(
                 val artStart = lerp((maxWidth - expandedArtWidth) / 2, 0.dp, p)
                 val titleTop = lerp(groupTop + expandedArtHeight + ART_TITLE_GAP, 0.dp, p)
                 val titleStart = lerp(0.dp, THUMB_SIZE + 12.dp, p)
+                val cardRect = Rect(
+                    left = with(density) { artStart.toPx() },
+                    top = with(density) { artTop.toPx() },
+                    right = with(density) { (artStart + artWidth).toPx() },
+                    bottom = with(density) { (artTop + artHeight).toPx() },
+                )
+                val playerWidthPx = dockFrame.host?.size?.width?.toFloat()
+                    ?: with(density) { maxWidth.toPx() + PLAYER_GUTTER.toPx() * 2f }
+                val artworkBoxWidthPx = with(density) { maxWidth.toPx() }
+                val bannerTopPx = -with(density) {
+                    (statusBarTop + topStrip + ART_BOX_TOP_PAD).toPx()
+                }
+                val bannerLeftPx = -((playerWidthPx - artworkBoxWidthPx) / 2f)
+                val bannerRect = Rect(
+                    left = bannerLeftPx,
+                    top = bannerTopPx,
+                    right = bannerLeftPx + playerWidthPx,
+                    bottom = bannerTopPx + with(density) { heroHeight.toPx() },
+                )
+                val bannerShare = if (heroMode && heroHeight > 0.dp) heroT else 0f
+                dockFrame.artworkRect = lerpRect(cardRect, bannerRect, bannerShare)
 
                 // How far down the *screen* the sleeve's bottom edge sits, which
                 // is where the full-bleed banner has to stop for the credits
@@ -1936,6 +2078,13 @@ fun NowPlayingScreen(
                         // same movement costs a placement pass.
                         .offset { IntOffset(artStart.roundToPx(), artTop.roundToPx()) }
                         .size(width = artWidth, height = artHeight)
+                        .drawWithContent {
+                            if (isDocking()) {
+                                sleeveLayer.record { this@drawWithContent.drawContent() }
+                            } else {
+                                drawContent()
+                            }
+                        }
                         // Where the dismiss band starts. Read here, above the
                         // paused shrink below, so the band covers the sleeve's
                         // slot rather than the 86% of it that is drawn while
@@ -2026,7 +2175,7 @@ fun NowPlayingScreen(
                             // The compact sleeve is the source while full
                             // bleed artwork is off, including its Canvas.
                             .hazeSource(playerHaze)
-                            .graphicsLayer { alpha = if (artLoaded) 1f - heroVisible else 1f }
+                            .graphicsLayer { alpha = if (artLoaded && !isDocking()) 1f - heroVisible else 1f }
                             // A drop shadow grounds a photo; on the flat
                             // placeholder tile it has nothing to sit behind, so
                             // it just reads as a second, darker square ringing
@@ -2400,7 +2549,7 @@ fun NowPlayingScreen(
                 if (lyricsReplaceArtworkOnly) {
                     Crossfade(
                         targetState = lyricsOpen,
-                        animationSpec = if (reducePlayerAnimations) snap() else tween(180),
+                        animationSpec = if (playerArtworkTransitionEnabled) tween(180) else snap(),
                         label = "compactLyricsTransition",
                         modifier = Modifier
                                 .offset { IntOffset(artStart.roundToPx(), artTop.roundToPx()) }
@@ -3972,6 +4121,7 @@ private fun CurrentLyricLine(
 ) {
     val isSynced = remember(lines) { lines.any { it.timeMs > 0L } }
     val hideLyricsStatusText by AppSettings.hideLyricsStatusText.collectAsStateWithLifecycle()
+    val animateLyricTransitions by AppSettings.playerArtworkTransition.collectAsStateWithLifecycle()
     if (!isSynced) {
         val previewLine = remember(lines) {
             LyricsStripText.firstLyricLine(lines)?.text
@@ -4066,26 +4216,47 @@ private fun CurrentLyricLine(
             )
             Spacer(Modifier.width(6.dp))
         }
-        val swept = current?.takeIf { !showingFirstLineEarly && !instrumental && it.isWordSynced }
-        if (swept != null) {
-            SweptLyricLine(
-                line = swept,
-                clock = clock,
-                style = MaterialTheme.typography.titleMedium,
-                dimAlpha = UNSUNG_ALPHA_STRIP,
-                maxLines = 1,
-                overflow = TextOverflow.Ellipsis,
-                modifier = Modifier.weight(1f, fill = false),
-            )
-        } else {
-            LyricTextDisplay(
-                text = text,
-                style = MaterialTheme.typography.titleMedium,
-                color = Color.White,
-                maxLines = 1,
-                overflow = TextOverflow.Ellipsis,
-                modifier = Modifier.weight(1f, fill = false),
-            )
+        AnimatedContent(
+            targetState = Triple(displayIndex, displayLine, text),
+            transitionSpec = {
+                if (!animateLyricTransitions) {
+                    (fadeIn(animationSpec = snap()) togetherWith fadeOut(animationSpec = snap())).using(
+                        SizeTransform(clip = false, sizeAnimationSpec = { _, _ -> snap() }),
+                    )
+                } else {
+                    val duration = 340
+                    (fadeIn(animationSpec = tween(duration, easing = FastOutSlowInEasing)) +
+                        slideInVertically(animationSpec = tween(duration, easing = FastOutSlowInEasing)) { height -> (height * 0.35f).toInt() })
+                        .togetherWith(
+                            fadeOut(animationSpec = tween(duration, easing = FastOutSlowInEasing)) +
+                                slideOutVertically(animationSpec = tween(duration, easing = FastOutSlowInEasing)) { height -> -(height * 0.35f).toInt() },
+                        )
+                        .using(SizeTransform(clip = false, sizeAnimationSpec = { _, _ -> tween(duration, easing = FastOutSlowInEasing) }))
+                }
+            },
+            label = "currentLyricTransition",
+            modifier = Modifier.weight(1f, fill = false),
+        ) { (_, lineItem, lineText) ->
+            val itemInstrumental = lineItem == null || lineItem.isGap
+            val swept = lineItem?.takeIf { !showingFirstLineEarly && !itemInstrumental && it.isWordSynced }
+            if (swept != null) {
+                SweptLyricLine(
+                    line = swept,
+                    clock = clock,
+                    style = MaterialTheme.typography.titleMedium,
+                    dimAlpha = UNSUNG_ALPHA_STRIP,
+                    maxLines = 1,
+                    overflow = TextOverflow.Ellipsis,
+                )
+            } else {
+                LyricTextDisplay(
+                    text = lineText,
+                    style = MaterialTheme.typography.titleMedium,
+                    color = if (itemInstrumental) Color.White.copy(alpha = 0.5f) else Color.White,
+                    maxLines = 1,
+                    overflow = TextOverflow.Ellipsis,
+                )
+            }
         }
         Spacer(Modifier.width(6.dp))
         // Disclosure hint: this strip opens the full lyrics screen.

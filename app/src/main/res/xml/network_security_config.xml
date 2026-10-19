@@ -1,0 +1,10 @@
+<?xml version="1.0" encoding="utf-8"?>
+<network-security-config>
+    <!--
+        Android's platform policy must permit HTTP for user-hosted LAN servers.
+        Http.client applies a stricter per-request gate: only an enabled
+        Jellyfin/Navidrome server with the explicit insecure-HTTP switch may
+        use cleartext, and the host/port must match exactly (including redirects).
+    -->
+    <base-config cleartextTrafficPermitted="true" />
+</network-security-config>

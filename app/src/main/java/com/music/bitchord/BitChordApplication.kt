@@ -23,6 +23,7 @@ import com.music.bitchord.data.scrobbling.LastFM
 import com.music.bitchord.data.settings.AppSettings
 import com.music.bitchord.data.settings.SearchHistory
 import com.music.bitchord.data.sources.SourceRegistry
+import com.music.bitchord.data.sources.RemoteServerArtworkFetcher
 import com.music.bitchord.data.stats.ArtistFacts
 import com.music.bitchord.data.stats.ListeningStats
 import com.music.bitchord.download.Downloads
@@ -134,6 +135,8 @@ class BitChordApplication : Application(), SingletonImageLoader.Factory {
     override fun newImageLoader(context: PlatformContext): ImageLoader =
         ImageLoader.Builder(context)
             .components {
+                add(RemoteServerArtworkFetcher.CoilUriFactory())
+                add(RemoteServerArtworkFetcher.AndroidUriFactory())
                 add(
                     coil3.network.okhttp.OkHttpNetworkFetcherFactory(
                         callFactory = { com.music.bitchord.data.Http.client },

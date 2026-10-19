@@ -16,6 +16,7 @@ import java.util.Collections
 import java.util.concurrent.TimeUnit
 import java.util.concurrent.atomic.AtomicLong
 import java.io.IOException
+import okhttp3.HttpUrl.Companion.toHttpUrlOrNull
 
 /**
  * One OkHttp client for the whole app.
@@ -45,10 +46,29 @@ object Http {
     private val activeYoutubeMusicCalls = Collections.newSetFromMap(
         ConcurrentHashMap<okhttp3.Call, Boolean>(),
     )
+    private val activeNetworkCalls = Collections.newSetFromMap(
+        ConcurrentHashMap<okhttp3.Call, Boolean>(),
+    )
 
     /** Cancels only active YouTube/YouTube Music traffic when its opt-in is turned off. */
     fun cancelYoutubeMusicRequests() {
         activeYoutubeMusicCalls.toList().forEach { call -> runCatching { call.cancel() } }
+    }
+
+    /** Stops in-flight HTTP work when the user switches the whole app offline. */
+    fun cancelAllNetworkRequests() {
+        activeNetworkCalls.toList().forEach { call -> runCatching { call.cancel() } }
+    }
+
+    /** Stops requests and streams tied to one configured remote-server origin. */
+    fun cancelRequestsForOrigin(url: String) {
+        val origin = url.trim().toHttpUrlOrNull() ?: return
+        activeNetworkCalls.toList().forEach { call ->
+            val matches = runCatching {
+                call.request().url.let { it.scheme == origin.scheme && it.host == origin.host && it.port == origin.port }
+            }.getOrDefault(false)
+            if (matches) runCatching { call.cancel() }
+        }
     }
 
     private fun isYoutubeMusicRelatedHost(host: String): Boolean =
@@ -107,6 +127,28 @@ object Http {
         override fun source() = counted
     }
 
+    /** Keeps an HTTP call cancellable until its response body has been closed. */
+    private class CallTrackedBody(
+        private val delegate: ResponseBody,
+        private val onClose: () -> Unit,
+    ) : ResponseBody() {
+        private val trackedSource by lazy(LazyThreadSafetyMode.NONE) {
+            object : ForwardingSource(delegate.source()) {
+                override fun close() {
+                    try {
+                        super.close()
+                    } finally {
+                        onClose()
+                    }
+                }
+            }.buffer()
+        }
+
+        override fun contentType() = delegate.contentType()
+        override fun contentLength() = delegate.contentLength()
+        override fun source(): BufferedSource = trackedSource
+    }
+
     private val usageInterceptor = okhttp3.Interceptor { chain ->
         val request = chain.request()
         val response = chain.proceed(request)
@@ -138,25 +180,54 @@ object Http {
         .addInterceptor { chain ->
             if (AppSettings.offlineMode.value) throw IOException("Offline mode is enabled")
             val request = chain.request()
-            if (!isYoutubeMusicRelatedHost(request.url.host)) {
-                chain.proceed(request)
-            } else {
-                if (!AppSettings.youtubeMusicEnabled.value) {
+            val youtubeRelated = isYoutubeMusicRelatedHost(request.url.host)
+            if (youtubeRelated && !AppSettings.youtubeMusicEnabled.value) {
+                throw IOException("YouTube Music is disabled")
+            }
+            val call = chain.call()
+            activeNetworkCalls.add(call)
+            if (youtubeRelated) activeYoutubeMusicCalls.add(call)
+            var responseBodyOwnsTracking = false
+            val removeTrackedCall = {
+                activeNetworkCalls.remove(call)
+                if (youtubeRelated) activeYoutubeMusicCalls.remove(call)
+            }
+            try {
+                // Recheck after registering so a request queued at the same
+                // moment as a privacy switch cannot slip onto the wire.
+                if (AppSettings.offlineMode.value) throw IOException("Offline mode is enabled")
+                if (youtubeRelated && !AppSettings.youtubeMusicEnabled.value) {
                     throw IOException("YouTube Music is disabled")
                 }
-                val call = chain.call()
-                activeYoutubeMusicCalls.add(call)
-                try {
-                    // Recheck after registration so disabling the feature at
-                    // the same time cannot let a queued call slip onto the wire.
-                    if (!AppSettings.youtubeMusicEnabled.value || AppSettings.offlineMode.value) {
-                        throw IOException("YouTube Music is disabled")
-                    }
-                    chain.proceed(request)
-                } finally {
-                    activeYoutubeMusicCalls.remove(call)
-                }
+                val response = chain.proceed(request)
+                val trackedResponse = response.newBuilder()
+                    .body(CallTrackedBody(response.body, removeTrackedCall))
+                    .build()
+                responseBodyOwnsTracking = true
+                trackedResponse
+            } finally {
+                if (!responseBodyOwnsTracking) removeTrackedCall()
             }
+        }
+        // Network Security Config permits cleartext at the Android layer so
+        // self-hosted LAN servers can be used when the user explicitly opts
+        // into HTTP for that server. Keep the actual app-wide gate here and
+        // match the exact configured origin; redirects to other HTTP hosts
+        // are denied as each network exchange passes through this interceptor.
+        .addNetworkInterceptor { chain ->
+            val request = chain.request()
+            val carriesRemoteServerAuth = request.header("X-Emby-Authorization") != null ||
+                request.header("X-Emby-Token") != null ||
+                request.url.queryParameter("c") == "MusicBeatSP"
+            if (carriesRemoteServerAuth &&
+                !com.music.bitchord.data.sources.SourceRegistry.isRemoteServerOriginAllowed(request.url)
+            ) {
+                throw IOException("Remote-server credentials cannot be sent to an unconfigured host")
+            }
+            if (!request.url.isHttps && !com.music.bitchord.data.sources.SourceRegistry.isCleartextAllowed(request.url)) {
+                throw IOException("Unencrypted HTTP is not enabled for this server")
+            }
+            chain.proceed(request)
         }
         .apply { if (USAGE_LOGGING_ENABLED) addNetworkInterceptor(usageInterceptor) }
         .build()

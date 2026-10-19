@@ -241,6 +241,7 @@ enum class MainNavigationTab(val index: Int) {
     LIBRARY(3),
     SEARCH(4),
     ALBUM_ARTISTS(5),
+    FOLDERS(6),
 }
 
 enum class ScreenOrientationMode { SYSTEM, PORTRAIT, LANDSCAPE }
@@ -457,6 +458,7 @@ object AppSettings {
     /** Optional three-band PCM parametric EQ; disabled until the listener opts in. */
     val parametricEqEnabled = MutableStateFlow(false)
     val parametricEqBands = MutableStateFlow(ParametricEqBand.DEFAULTS)
+    val channelSwapEnabled = MutableStateFlow(false)
     /** Optional room reverb, attached to the active audio session when supported. */
     val reverbEnabled = MutableStateFlow(false)
     val reverbAmount = MutableStateFlow(35)
@@ -499,6 +501,9 @@ object AppSettings {
 
     /** Freezes the main player's mesh gradient instead of letting it drift/crossfade. */
     val reduceAnimation = MutableStateFlow(false)
+
+    /** Moves the player artwork between the mini and full player, and animates lyric changes. */
+    val playerArtworkTransition = MutableStateFlow(true)
 
     /** Speed and fluidity of the floating tab selection animation. */
     val pillMotionStyle = MutableStateFlow(PillMotionStyle.DEFAULT)
@@ -988,6 +993,7 @@ object AppSettings {
         spatialAudio.value = prefs.getBoolean(KEY_SPATIAL_AUDIO, false)
         parametricEqEnabled.value = prefs.getBoolean(KEY_PARAMETRIC_EQ_ENABLED, false)
         parametricEqBands.value = ParametricEqBand.decode(prefs.getString(KEY_PARAMETRIC_EQ_BANDS, null))
+        channelSwapEnabled.value = prefs.getBoolean(KEY_CHANNEL_SWAP_ENABLED, false)
         reverbEnabled.value = prefs.getBoolean(KEY_REVERB_ENABLED, false)
         reverbAmount.value = prefs.getInt(KEY_REVERB_AMOUNT, 35).coerceIn(0, 100)
         playbackSpeed.value = prefs.getFloat(KEY_SPEED, 1.0f).coerceIn(0.1f, 10.0f)
@@ -1019,6 +1025,7 @@ object AppSettings {
         repeatMode.value = prefs.getInt(KEY_REPEAT_MODE, Player.REPEAT_MODE_OFF)
         showNerdStats.value = prefs.getBoolean(KEY_NERD_STATS, false)
         reduceAnimation.value = prefs.getBoolean(KEY_REDUCE_ANIMATION, false)
+        playerArtworkTransition.value = prefs.getBoolean(KEY_PLAYER_ARTWORK_TRANSITION, true)
         pillMotionStyle.value = runCatching {
             PillMotionStyle.valueOf(prefs.getString(KEY_PILL_MOTION_STYLE, null) ?: PillMotionStyle.DEFAULT.name)
         }.getOrDefault(PillMotionStyle.DEFAULT)
@@ -1076,12 +1083,10 @@ object AppSettings {
         showPlayerLyricsStrip.value = prefs.getBoolean(KEY_SHOW_PLAYER_LYRICS_STRIP, true)
         val wasOffline = offlineMode.value
         offlineMode.value = prefs.getBoolean(KEY_OFFLINE_MODE, false)
-        if (!wasOffline && offlineMode.value) Http.cancelYoutubeMusicRequests()
         val wasYoutubeMusicEnabled = youtubeMusicEnabled.value
         youtubeMusicEnabled.value = prefs.getBoolean(KEY_YOUTUBE_MUSIC_ENABLED, false)
-        if ((wasYoutubeMusicEnabled && !youtubeMusicEnabled.value) || (!wasOffline && offlineMode.value)) {
-            Http.cancelYoutubeMusicRequests()
-        }
+        if (wasYoutubeMusicEnabled && !youtubeMusicEnabled.value) Http.cancelYoutubeMusicRequests()
+        if (!wasOffline && offlineMode.value) Http.cancelAllNetworkRequests()
         hideLosslessLabel.value = prefs.getBoolean(KEY_HIDE_LOSSLESS_LABEL, false)
         showTrackDurationInsteadOfRemaining.value =
             prefs.getBoolean(KEY_SHOW_TRACK_DURATION_INSTEAD_OF_REMAINING, false)
@@ -1161,6 +1166,7 @@ object AppSettings {
         localAlbumsViewType.value = readLibraryViewType(KEY_LOCAL_ALBUMS_VIEW_TYPE, LibraryViewType.GRID)
         localArtistsViewType.value = readLibraryViewType(KEY_LOCAL_ARTISTS_VIEW_TYPE, LibraryViewType.GRID)
         localFolderHierarchy.value = prefs.getBoolean(KEY_LOCAL_FOLDER_HIERARCHY, false)
+        localMusicFolderUri.value = prefs.getString(KEY_LOCAL_MUSIC_FOLDER_PATH, "").orEmpty()
         fullScreenCollectionArtwork.value = prefs.getBoolean(KEY_FULL_SCREEN_COLLECTION_ARTWORK, false)
         hideCollectionTopBar.value = prefs.getBoolean(KEY_HIDE_COLLECTION_TOP_BAR, true)
         hideFloatingCollectionControls.value = prefs.getBoolean(KEY_HIDE_FLOATING_COLLECTION_CONTROLS, true)
@@ -1421,6 +1427,11 @@ object AppSettings {
         prefs.edit().putBoolean(KEY_PARAMETRIC_EQ_ENABLED, value).apply()
     }
 
+    fun setChannelSwapEnabled(value: Boolean) {
+        channelSwapEnabled.value = value
+        prefs.edit().putBoolean(KEY_CHANNEL_SWAP_ENABLED, value).apply()
+    }
+
     fun setParametricEqBand(index: Int, band: ParametricEqBand) {
         if (index !in ParametricEqBand.DEFAULTS.indices) return
         val safeBand = band.sanitized(ParametricEqBand.DEFAULTS[index])
@@ -1489,6 +1500,11 @@ object AppSettings {
         editor.apply()
     }
 
+    fun setPlayerArtworkTransition(value: Boolean) {
+        playerArtworkTransition.value = value
+        prefs.edit().putBoolean(KEY_PLAYER_ARTWORK_TRANSITION, value).apply()
+    }
+
     fun setPillMotionStyle(value: PillMotionStyle) {
         pillMotionStyle.value = value
         prefs.edit().putString(KEY_PILL_MOTION_STYLE, value.name).apply()
@@ -1544,7 +1560,10 @@ object AppSettings {
         val updated = MainNavigationTabs.setVisible(current, tab, visible)
         if (updated == current) return
         visibleMainNavigationTabs.value = updated
-        prefs.edit().putStringSet(KEY_VISIBLE_MAIN_NAVIGATION_TABS, updated.map { it.name }.toSet()).apply()
+        prefs.edit()
+            .putStringSet(KEY_VISIBLE_MAIN_NAVIGATION_TABS, updated.map { it.name }.toSet())
+            .putBoolean(KEY_MAIN_FOLDER_TAB_MIGRATED, true)
+            .apply()
         if (startupTab.value !in effectiveMainNavigationTabs()) setStartupTab(MainNavigationTabs.fallback(
             startupTab.value.index, effectiveMainNavigationTabs(), mainNavigationTabOrder.value,
         ))
@@ -1710,11 +1729,20 @@ object AppSettings {
     }
 
     private fun readVisibleMainNavigationTabs(): Set<MainNavigationTab> {
-        val saved = prefs.getStringSet(KEY_VISIBLE_MAIN_NAVIGATION_TABS, null)
-            ?: return MainNavigationTab.entries.toSet()
-        return saved.mapNotNull { name -> MainNavigationTab.entries.firstOrNull { it.name == name } }
+        val raw = prefs.getStringSet(KEY_VISIBLE_MAIN_NAVIGATION_TABS, null)
+        val saved = raw.orEmpty()
+            .mapNotNull { name -> MainNavigationTab.entries.firstOrNull { it.name == name } }
             .toSet()
-            .ifEmpty { MainNavigationTab.entries.toSet() }
+        if (!prefs.getBoolean(KEY_MAIN_FOLDER_TAB_MIGRATED, false)) {
+            val migrated = if (raw == null) MainNavigationTab.entries.toSet() else saved + MainNavigationTab.FOLDERS
+            prefs.edit()
+                .putBoolean(KEY_MAIN_FOLDER_TAB_MIGRATED, true)
+                .putStringSet(KEY_VISIBLE_MAIN_NAVIGATION_TABS, migrated.map { it.name }.toSet())
+                .apply()
+            return migrated
+        }
+        if (raw == null) return MainNavigationTab.entries.toSet()
+        return saved.ifEmpty { MainNavigationTab.entries.toSet() }
     }
 
     fun setHighPerformanceMode(value: Boolean) {
@@ -1816,7 +1844,7 @@ object AppSettings {
         val wasOffline = offlineMode.value
         offlineMode.value = value
         prefs.edit().putBoolean(KEY_OFFLINE_MODE, value).apply()
-        if (!wasOffline && value) Http.cancelYoutubeMusicRequests()
+        if (!wasOffline && value) Http.cancelAllNetworkRequests()
         if (!value && youtubeMusicEnabled.value) YoutubeStreamBootstrap.initializeIfAllowed(appContext)
     }
 
@@ -2386,6 +2414,12 @@ object AppSettings {
         prefs.edit().putBoolean(KEY_LOCAL_FOLDER_HIERARCHY, value).apply()
     }
 
+    fun setLocalMusicFolderPath(path: String) {
+        val safePath = path.trim().take(4096)
+        localMusicFolderUri.value = safePath
+        prefs.edit().putString(KEY_LOCAL_MUSIC_FOLDER_PATH, safePath).apply()
+    }
+
     fun setFullScreenCollectionArtwork(value: Boolean) {
         fullScreenCollectionArtwork.value = value
         prefs.edit().putBoolean(KEY_FULL_SCREEN_COLLECTION_ARTWORK, value).apply()
@@ -2633,6 +2667,7 @@ object AppSettings {
         "downloaded_tracks_metadata",
         "downloaded_collections",
         KEY_LAST_VERSION_CODE,
+        KEY_LOCAL_MUSIC_FOLDER_PATH,
     )
 
     private val OBSOLETE_ONLINE_KEYS = setOf(
@@ -2694,6 +2729,7 @@ object AppSettings {
     private const val KEY_MINI_PLAYER_PREVIOUS_BUTTON = "mini_player_previous_button"
     private const val KEY_PARAMETRIC_EQ_ENABLED = "parametric_eq_enabled"
     private const val KEY_PARAMETRIC_EQ_BANDS = "parametric_eq_bands"
+    private const val KEY_CHANNEL_SWAP_ENABLED = "channel_swap_enabled"
     private const val KEY_REVERB_ENABLED = "reverb_enabled"
     private const val KEY_REVERB_AMOUNT = "reverb_amount"
     private const val KEY_LAUNCHER_ICON = "launcher_icon"
@@ -2711,6 +2747,7 @@ object AppSettings {
     private const val KEY_NERD_STATS = "show_nerd_stats"
     private const val KEY_CACHE_LIMIT = "audio_cache_limit_bytes"
     private const val KEY_REDUCE_ANIMATION = "reduce_animation"
+    private const val KEY_PLAYER_ARTWORK_TRANSITION = "player_artwork_transition"
     private const val KEY_PILL_MOTION_STYLE = "pill_motion_style"
     private const val KEY_HIGH_PERFORMANCE_MODE = "high_performance_mode"
     private const val KEY_PERFORMANCE_REFRESH_RATE = "performance_refresh_rate"
@@ -2724,6 +2761,7 @@ object AppSettings {
     private const val KEY_HIDE_NAVIGATION_BAR_LABELS = "hide_navigation_bar_labels"
     private const val KEY_VISIBLE_MAIN_NAVIGATION_TABS = "visible_main_navigation_tabs"
     private const val KEY_MAIN_NAVIGATION_TAB_ORDER = "main_navigation_tab_order"
+    private const val KEY_MAIN_FOLDER_TAB_MIGRATED = "main_folder_tab_migrated"
     private const val KEY_STARTUP_TAB = "startup_tab"
     private const val KEY_SHOW_STATUS_BAR = "show_status_bar"
     private const val KEY_SHOW_NAVIGATION_BAR = "show_navigation_bar"
@@ -2805,6 +2843,7 @@ object AppSettings {
     private const val KEY_ALBUM_ARTISTS_TAB_MIGRATED = "album_artists_tab_migrated"
     private const val KEY_LOCAL_LIBRARY_TAB_ORDER = "local_library_tab_order"
     private const val KEY_LOCAL_FOLDER_HIERARCHY = "local_folder_hierarchy"
+    private const val KEY_LOCAL_MUSIC_FOLDER_PATH = "local_music_folder_path"
     private const val KEY_FULL_SCREEN_COLLECTION_ARTWORK = "full_screen_collection_artwork"
     private const val KEY_HIDE_COLLECTION_TOP_BAR = "hide_collection_top_bar"
     private const val KEY_HIDE_FLOATING_COLLECTION_CONTROLS = "hide_floating_collection_controls"

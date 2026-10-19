@@ -4,6 +4,7 @@ import android.content.Context
 import android.content.SharedPreferences
 import android.net.Uri
 import android.util.Log
+import com.music.bitchord.data.Http
 import com.music.bitchord.data.TrackLog
 import com.music.bitchord.data.settings.AppSettings
 import com.music.bitchord.data.sources.addon.AddonClient
@@ -20,6 +21,8 @@ import kotlinx.serialization.builtins.ListSerializer
 import kotlinx.serialization.json.Json
 import kotlinx.serialization.json.jsonArray
 import java.util.UUID
+import java.util.concurrent.ConcurrentHashMap
+import java.util.concurrent.atomic.AtomicInteger
 
 /**
  * One configured source: which protocol, which index.
@@ -36,6 +39,8 @@ data class SourceConfig(
     val label: String = "",
     val baseUrl: String = "",
     val enabled: Boolean = true,
+    /** Cleartext HTTP is opt-in because server credentials/audio would be visible on the network. */
+    val allowInsecureHttp: Boolean = false,
 ) {
     /** What the sources screen and the player show. Never blank. */
     val displayName: String
@@ -47,7 +52,13 @@ data class SourceConfig(
 
     /** Whether this has enough filled in to be worth contacting at all. */
     val isComplete: Boolean
-        get() = !kind.needsServer || baseUrl.isNotBlank()
+        get() = when {
+            !kind.needsServer -> true
+            baseUrl.isBlank() -> false
+            kind.isRemoteMusicServer -> RemoteServerCredentialsStore.read(id)
+                ?.let { it.username.isNotBlank() && it.password.isNotBlank() } == true
+            else -> true
+        }
 }
 
 /**
@@ -80,8 +91,11 @@ object SourceRegistry {
      * tracks instead of re-probing on every resolve.
      */
     private var instances: Map<String, MusicSource> = emptyMap()
+    private val temporaryCleartextOrigins = ConcurrentHashMap<String, AtomicInteger>()
+    private val temporaryRemoteServerOrigins = ConcurrentHashMap<String, AtomicInteger>()
 
     fun init(context: Context) {
+        RemoteServerCredentialsStore.init(context.applicationContext)
         prefs = runCatching {
             EncryptedSharedPreferences.create(
                 context,
@@ -160,6 +174,7 @@ object SourceRegistry {
         configs.value
             .filter {
                 it.enabled && it.isComplete &&
+                    (!it.kind.isRemoteMusicServer || !AppSettings.offlineMode.value) &&
                     (it.kind != SourceKind.YOUTUBE || AppSettings.youtubeMusicNetworkAllowed)
             }
             .sortedBy { it.kind.rank }
@@ -185,6 +200,85 @@ object SourceRegistry {
     fun instance(configId: String): MusicSource? = instances[configId]
 
     fun config(configId: String): SourceConfig? = configs.value.firstOrNull { it.id == configId }
+
+    fun serverCredentials(configId: String): RemoteServerCredentials? =
+        RemoteServerCredentialsStore.read(configId)
+
+    fun hasConfiguredRemoteServer(): Boolean = configs.value.any { config ->
+        config.enabled && config.kind.isRemoteMusicServer && config.isComplete
+    }
+
+    /** Allows cleartext only to an explicitly opted-in server origin. */
+    fun isCleartextAllowed(url: okhttp3.HttpUrl): Boolean {
+        if (url.isHttps) return true
+        if (url.scheme != "http") return false
+        if ((temporaryCleartextOrigins["${url.host}:${url.port}"]?.get() ?: 0) > 0) return true
+        return configs.value.any { config ->
+            if (!config.enabled || !config.allowInsecureHttp || !config.kind.isRemoteMusicServer) return@any false
+            val base = config.baseUrl.toHttpUrlOrNull() ?: return@any false
+            base.scheme == "http" && base.host == url.host && base.port == url.port && config.isComplete
+        }
+    }
+
+    /** Limits authenticated Jellyfin/OpenSubsonic requests to their configured origin. */
+    fun isRemoteServerOriginAllowed(url: okhttp3.HttpUrl): Boolean {
+        val origin = remoteServerOrigin(url)
+        if ((temporaryRemoteServerOrigins[origin]?.get() ?: 0) > 0) return true
+        return configs.value.any { config ->
+            if (!config.enabled || !config.kind.isRemoteMusicServer || !config.isComplete) return@any false
+            val base = config.baseUrl.trim().toHttpUrlOrNull() ?: return@any false
+            base.scheme == url.scheme && base.host == url.host && base.port == url.port
+        }
+    }
+
+    private fun remoteServerOrigin(url: okhttp3.HttpUrl) = "${url.scheme}://${url.host}:${url.port}"
+
+    /** Saves secrets separately from exported preferences and the source list. */
+    fun saveRemoteServer(config: SourceConfig, credentials: RemoteServerCredentials): Result<Unit> {
+        if (!config.kind.isRemoteMusicServer) return Result.failure(IllegalArgumentException("Unsupported server type"))
+        if (config.baseUrl.isBlank()) return Result.failure(IllegalArgumentException("Server URL is required"))
+        val parsedUrl = config.baseUrl.trim().toHttpUrlOrNull()
+            ?: return Result.failure(IllegalArgumentException("Enter a valid server URL"))
+        if (parsedUrl.host.isBlank() || parsedUrl.username.isNotEmpty() || parsedUrl.password.isNotEmpty() ||
+            parsedUrl.query != null || parsedUrl.fragment != null || config.baseUrl.length > 2048
+        ) {
+            return Result.failure(IllegalArgumentException("Use a server URL without credentials, query, or fragment"))
+        }
+        if (parsedUrl.scheme == "http" && !config.allowInsecureHttp) {
+            return Result.failure(IllegalArgumentException("Allow unencrypted HTTP to use this server"))
+        }
+        if (parsedUrl.scheme !in setOf("http", "https")) {
+            return Result.failure(IllegalArgumentException("Server URL must use HTTP or HTTPS"))
+        }
+        if (credentials.username.isBlank() || credentials.password.isBlank()) {
+            return Result.failure(IllegalArgumentException("Username and password are required"))
+        }
+        this.config(config.id)?.takeIf { it.kind.isRemoteMusicServer }?.let {
+            Http.cancelRequestsForOrigin(it.baseUrl)
+        }
+        if (!RemoteServerCredentialsStore.save(config.id, credentials)) {
+            return Result.failure(IllegalStateException("Secure credential storage is unavailable on this device"))
+        }
+        val tidied = config.tidied()
+        if (configs.value.any { it.id == tidied.id }) update(tidied) else add(tidied)
+        return Result.success(Unit)
+    }
+
+    fun remoteServerArtworkUri(configId: String, imageId: String): String =
+        Uri.Builder()
+            .scheme("bitchord")
+            .authority("server-art")
+            .appendQueryParameter("s", configId)
+            .appendQueryParameter("i", imageId)
+            .build()
+            .toString()
+
+    suspend fun loadRemoteServerArtwork(uri: Uri): ByteArray? {
+        if (uri.scheme != "bitchord" || uri.authority != "server-art") return null
+        val configId = uri.getQueryParameter("s") ?: return null
+        val imageId = uri.getQueryParameter("i") ?: return null
+        return instances[configId]?.artwork(imageId)
+    }
 
     // ── Editing ─────────────────────────────────────────────────────────
 
@@ -212,6 +306,7 @@ object SourceRegistry {
     fun remove(configId: String) {
         val target = config(configId) ?: return
         if (target.kind in BUILT_IN_KINDS) return
+        if (target.kind.isRemoteMusicServer) RemoteServerCredentialsStore.delete(configId)
         publish(configs.value.filterNot { it.id == configId })
     }
 
@@ -259,7 +354,16 @@ object SourceRegistry {
     }
 
     private fun publish(next: List<SourceConfig>, persist: Boolean = true) {
+        val previousConfigs = configs.value
         configs.value = next
+        previousConfigs.filter { it.kind.isRemoteMusicServer }.forEach { previous ->
+            val current = next.firstOrNull { it.id == previous.id }
+            if (current == null || !current.enabled || current.baseUrl != previous.baseUrl ||
+                current.allowInsecureHttp != previous.allowInsecureHttp
+            ) {
+                Http.cancelRequestsForOrigin(previous.baseUrl)
+            }
+        }
         // Rebuilt against the previous map so that an untouched source keeps
         // the instance it already had, rather than being replaced by an
         // identical-but-cold one every time an unrelated row is toggled.
@@ -370,13 +474,50 @@ object SourceRegistry {
      * old address, which is precisely the state the user is in the middle of
      * correcting.
      */
-    suspend fun probeCandidate(config: SourceConfig): SourceHealth = build(config).health()
+    suspend fun probeCandidate(
+        config: SourceConfig,
+        credentials: RemoteServerCredentials? = null,
+    ): SourceHealth {
+        val parsed = config.baseUrl.toHttpUrlOrNull()
+        val temporaryRemoteOrigin = parsed
+            ?.takeIf { config.kind.isRemoteMusicServer }
+            ?.let(::remoteServerOrigin)
+        val temporaryOrigin = parsed
+            ?.takeIf { it.scheme == "http" && config.allowInsecureHttp }
+            ?.let { "${it.host}:${it.port}" }
+        temporaryRemoteOrigin?.let { origin ->
+            temporaryRemoteServerOrigins.computeIfAbsent(origin) { AtomicInteger() }.incrementAndGet()
+        }
+        temporaryOrigin?.let { origin ->
+            temporaryCleartextOrigins.computeIfAbsent(origin) { AtomicInteger() }.incrementAndGet()
+        }
+        return try {
+            build(config, credentials).health()
+        } finally {
+            temporaryOrigin?.let { origin ->
+                temporaryCleartextOrigins.computeIfPresent(origin) { _, count ->
+                    if (count.decrementAndGet() <= 0) null else count
+                }
+            }
+            temporaryRemoteOrigin?.let { origin ->
+                temporaryRemoteServerOrigins.computeIfPresent(origin) { _, count ->
+                    if (count.decrementAndGet() <= 0) null else count
+                }
+            }
+        }
+    }
 
-    private fun build(config: SourceConfig): MusicSource = when (config.kind) {
+    private fun build(config: SourceConfig, credentials: RemoteServerCredentials? = null): MusicSource = when (config.kind) {
         SourceKind.ADDON -> AddonSource(config)
         // Same protocol, same implementation — the kinds differ only in rank.
         SourceKind.CUSTOM_MODULE -> ModuleSource(config)
         SourceKind.MODULE -> ModuleSource(config)
+        SourceKind.JELLYFIN -> JellyfinMusicSource(config) {
+            credentials ?: RemoteServerCredentialsStore.read(config.id)
+        }
+        SourceKind.NAVIDROME -> NavidromeMusicSource(config) {
+            credentials ?: RemoteServerCredentialsStore.read(config.id)
+        }
         SourceKind.YOUTUBE -> YouTubeSource(config)
     }
 

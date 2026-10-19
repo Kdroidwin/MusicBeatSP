@@ -142,8 +142,15 @@ object SourceResolver {
         target: TrackMatcher.Target,
     ): SourceStream? {
         val request = requestForNow()
-        val pinned = SourceRegistry.instance(configId)
+        val enabledSources = SourceRegistry.active()
         val active = SourceRegistry.activeForPlayback()
+        // A queued item can outlive its source configuration. Resolve it only
+        // through the currently enabled source list so disabling a server (or
+        // turning on offline mode) takes effect for the next network request.
+        // An explicitly selected source-backed result must always play from
+        // that enabled source. Quality ceilings apply to alternate lookups;
+        // they must not turn a tapped Jellyfin/Navidrome row into a dead item.
+        val pinned = enabledSources.firstOrNull { it.configId == configId }
 
         // The upgrade path: with lossless asked for and the pinned source
         // unable to serve it, anything ranked above it that can is worth
