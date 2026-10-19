@@ -756,6 +756,10 @@ fun NowPlayingScreen(
     val context = LocalContext.current
     val density = LocalDensity.current
     val haptics = rememberHaptics()
+    // Compact lyrics should sample the player's colour mesh rather than the
+    // cover image, which can make the lyrics surface look much lighter or
+    // darker than the rest of the player.
+    val compactLyricsBackdropHaze = remember { HazeState() }
     val artUrl = song.artworkAt(ART_PX)
     val artworkPalette = rememberArtworkPalette(artUrl, dark = true, artPx = ART_PX)
     // Ask MediaStore for its already-indexed thumbnail while the full-size
@@ -1557,12 +1561,14 @@ fun NowPlayingScreen(
             // is passed as one immutable value.
             MeshGradientBackground(
                 palette = rememberArtworkColors(backdropArtworkUrl, canvasFrame),
+                modifier = Modifier.hazeSource(compactLyricsBackdropHaze),
                 trackKey = song.videoId,
                 blurRadius = artworkBackdropBlurDp.dp,
             )
         } else {
             ArtworkMeshBackdrop(
                 mesh = artMesh,
+                modifier = Modifier.hazeSource(compactLyricsBackdropHaze),
                 seam = if (heroMode) heroHeight else 0.dp,
                 blurRadius = artworkBackdropBlurDp.dp,
             )
@@ -2616,14 +2622,13 @@ fun NowPlayingScreen(
                     ) {
                         if (frostedCompactLyrics) {
                             FrostedGlassBackdrop(
-                                hazeState = playerHaze,
+                                hazeState = compactLyricsBackdropHaze,
                                 modifier = Modifier.matchParentSize(),
-                                // The player already has an artwork-derived mesh behind
-                                // this layer. A white glass tint washes that colour out
-                                // and reads as a separate pale rectangle, so keep the
-                                // blur subtly shaded with this track's own page colour.
-                                tint = artworkPalette.background.copy(alpha = 0.18f),
-                                tintAlpha = 0.12f,
+                                // Blur the exact colour mesh visible behind the player.
+                                // Do not add a white or black tint: either makes the
+                                // lyrics region read as a separate colour block.
+                                tint = Color.Transparent,
+                                tintAlpha = 0f,
                             )
                         }
                         if (lyricsLogsOpen) {
