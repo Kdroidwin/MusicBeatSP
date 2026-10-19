@@ -1163,6 +1163,8 @@
     <string name="blur_unfocused_lyrics_subtitle">Keeps the spotlight on the current line</string>
     <string name="auto_embed_lyrics">Auto-embed lyrics into audio files</string>
     <string name="auto_embed_lyrics_subtitle">Automatically writes online lyrics into local music files when played</string>
+    <string name="lyrics_extensions_enabled">Enable lyrics extensions</string>
+    <string name="lyrics_extensions_enabled_subtitle">Allows bundled and downloaded lyrics scripts to run. Extensions may access the network; enable only when you trust them.</string>
     <string name="all_files_access">All files access</string>
     <string name="original_developer">Original developer</string>
     <string name="details">Details</string>

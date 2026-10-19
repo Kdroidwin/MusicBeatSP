@@ -62,6 +62,7 @@ fun LyricsRepoSettingsDialog(
     val context = LocalContext.current
     val scope = rememberCoroutineScope()
     val repoUrl by AppSettings.lyricsExtensionRepoUrl.collectAsStateWithLifecycle()
+    val extensionsEnabled by AppSettings.lyricsExtensionsEnabled.collectAsStateWithLifecycle()
     val autoUpdate by AppSettings.lyricsAutoUpdate.collectAsStateWithLifecycle()
     val lastSyncMs by AppSettings.lastLyricsExtensionSyncMs.collectAsStateWithLifecycle()
     val isSyncing by LyricsExtensionManager.isSyncing.collectAsStateWithLifecycle()
@@ -132,6 +133,30 @@ fun LyricsRepoSettingsDialog(
                 color = MaterialTheme.colorScheme.onSurfaceVariant,
             )
 
+            Spacer(modifier = Modifier.height(12.dp))
+
+            Row(
+                verticalAlignment = Alignment.CenterVertically,
+                modifier = Modifier.fillMaxWidth(),
+            ) {
+                Column(modifier = Modifier.weight(1f)) {
+                    Text(
+                        text = stringResource(R.string.lyrics_extensions_enabled),
+                        style = MaterialTheme.typography.bodyMedium.copy(fontWeight = FontWeight.SemiBold),
+                        color = MaterialTheme.colorScheme.onSurface,
+                    )
+                    Text(
+                        text = stringResource(R.string.lyrics_extensions_enabled_subtitle),
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    )
+                }
+                Switch(
+                    checked = extensionsEnabled,
+                    onCheckedChange = AppSettings::setLyricsExtensionsEnabled,
+                )
+            }
+
             Spacer(modifier = Modifier.height(14.dp))
 
             OutlinedTextField(
@@ -164,6 +189,7 @@ fun LyricsRepoSettingsDialog(
                 }
                 Switch(
                     checked = autoUpdate,
+                    enabled = extensionsEnabled,
                     onCheckedChange = { AppSettings.setLyricsAutoUpdate(it) },
                 )
             }
@@ -207,7 +233,7 @@ fun LyricsRepoSettingsDialog(
                 Spacer(modifier = Modifier.weight(1f))
 
                 TextButton(
-                    enabled = !isSyncing,
+                    enabled = extensionsEnabled && !isSyncing,
                     onClick = {
                         AppSettings.setLyricsExtensionRepoUrl(inputUrl)
                         scope.launch {

@@ -2,6 +2,9 @@ name: Android CI
 
 on: [push, pull_request]
 
+permissions:
+  contents: read
+
 jobs:
   build-dev-debug:
     if: github.ref != 'refs/heads/main'
@@ -9,19 +12,14 @@ jobs:
 
     steps:
     - name: Checkout Repository
-      uses: actions/checkout@v4
+      uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
 
     - name: Set up JDK 17
-      uses: actions/setup-java@v4
+      uses: actions/setup-java@cf277c60eb25467037889841efdb72551f06f6c3 # v4
       with:
         java-version: '17'
         distribution: 'temurin'
         cache: gradle
-
-    - name: Setup local.properties
-      run: |
-        echo "LASTFM_API_KEY=${{ secrets.LASTFM_API_KEY }}" > local.properties
-        echo "LASTFM_SECRET=${{ secrets.LASTFM_SECRET }}" >> local.properties
 
     - name: Grant execute permission for gradlew
       run: chmod +x gradlew
@@ -30,9 +28,9 @@ jobs:
       run: ./gradlew assembleDevDebug
 
     - name: Upload APK Artifact
-      uses: actions/upload-artifact@v4
+      uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
       with:
-        name: bitchord-dev-debug
+        name: musicbeat-dev-debug
         path: app/build/outputs/apk/dev/debug/*.apk
 
   build-prod-release:
@@ -41,34 +39,59 @@ jobs:
 
     steps:
     - name: Checkout Repository
-      uses: actions/checkout@v4
+      uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
 
     - name: Set up JDK 17
-      uses: actions/setup-java@v4
+      uses: actions/setup-java@cf277c60eb25467037889841efdb72551f06f6c3 # v4
       with:
         java-version: '17'
         distribution: 'temurin'
         cache: gradle
 
-    - name: Setup Secrets (Keystore & local.properties)
+    - name: Setup Release Secrets
+      env:
+        LASTFM_API_KEY: ${{ secrets.LASTFM_API_KEY }}
+        LASTFM_SECRET: ${{ secrets.LASTFM_SECRET }}
+        KEYSTORE_BASE64: ${{ secrets.KEYSTORE_BASE64 }}
+        STORE_PASSWORD: ${{ secrets.STORE_PASSWORD || secrets.KEYSTORE_PASSWORD }}
+        KEY_ALIAS: ${{ secrets.KEY_ALIAS }}
+        KEY_PASSWORD: ${{ secrets.KEY_PASSWORD }}
       run: |
-        echo "LASTFM_API_KEY=${{ secrets.LASTFM_API_KEY }}" > local.properties
-        echo "LASTFM_SECRET=${{ secrets.LASTFM_SECRET }}" >> local.properties
-
-        echo "${{ secrets.KEYSTORE_BASE64 }}" | base64 -d > musicbeat-release.jks
-        echo "storeFile=musicbeat-release.jks" > keystore.properties
-        echo "storePassword=${{ secrets.STORE_PASSWORD || secrets.KEYSTORE_PASSWORD }}" >> keystore.properties
-        echo "keyAlias=${{ secrets.KEY_ALIAS }}" >> keystore.properties
-        echo "keyPassword=${{ secrets.KEY_PASSWORD }}" >> keystore.properties
+        set -euo pipefail
+        umask 077
+        if [[ "$LASTFM_API_KEY" == *$'\n'* || "$LASTFM_API_KEY" == *$'\r'* || "$LASTFM_SECRET" == *$'\n'* || "$LASTFM_SECRET" == *$'\r'* ]]; then
+          echo 'Last.fm build values must be single-line.' >&2
+          exit 1
+        fi
+        printf 'LASTFM_API_KEY=%s\nLASTFM_SECRET=%s\n' "$LASTFM_API_KEY" "$LASTFM_SECRET" > local.properties
+        if [[ -n "$KEYSTORE_BASE64" ]]; then
+          : "${STORE_PASSWORD:?Missing release keystore password}"
+          : "${KEY_ALIAS:?Missing release key alias}"
+          : "${KEY_PASSWORD:?Missing release key password}"
+          if [[ "$STORE_PASSWORD" == *$'\n'* || "$STORE_PASSWORD" == *$'\r'* || "$KEY_ALIAS" == *$'\n'* || "$KEY_ALIAS" == *$'\r'* || "$KEY_PASSWORD" == *$'\n'* || "$KEY_PASSWORD" == *$'\r'* ]]; then
+            echo 'Release signing values must be single-line.' >&2
+            exit 1
+          fi
+          printf '%s' "$KEYSTORE_BASE64" | base64 --decode > musicbeat-release.jks
+          chmod 600 musicbeat-release.jks
+          {
+            printf 'storeFile=musicbeat-release.jks\n'
+            printf 'storePassword=%s\n' "$STORE_PASSWORD"
+            printf 'keyAlias=%s\n' "$KEY_ALIAS"
+            printf 'keyPassword=%s\n' "$KEY_PASSWORD"
+          } > keystore.properties
+        fi
 
     - name: Grant execute permission for gradlew
       run: chmod +x gradlew
 
-    - name: Build Signed Standard Release APK
-      run: ./gradlew assembleStandardRelease
+    - name: Build Signed Standard and Offline Release APKs
+      run: ./gradlew assembleStandardRelease assembleNoInternetRelease
 
-    - name: Upload APK Artifact
-      uses: actions/upload-artifact@v4
+    - name: Upload Release APK Artifacts
+      uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
       with:
-        name: musicbeat-standard-release-signed
-        path: app/build/outputs/apk/standard/release/*.apk
+        name: musicbeat-standard-and-offline-release
+        path: |
+          app/build/outputs/apk/standard/release/*.apk
+          app/build/outputs/apk/noInternet/release/*.apk

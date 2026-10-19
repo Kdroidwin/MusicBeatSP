@@ -1,11 +1,13 @@
 package com.music.bitchord.feature.lyrics.manager
 
 import android.content.Context
+import android.util.AtomicFile
 import com.music.bitchord.data.Http
 import com.music.bitchord.data.lyrics.LyricsLog
 import com.music.bitchord.data.settings.AppSettings
 import com.music.bitchord.feature.lyrics.domain.LyricsExtension
 import com.music.bitchord.feature.lyrics.domain.LyricsExtensionManifest
+import com.music.bitchord.feature.lyrics.domain.LyricsExtensionSecurity
 import com.music.bitchord.feature.lyrics.domain.RemoteLyricsRegistry
 import com.music.bitchord.feature.lyrics.engine.LyricsExtensionExecutor
 import kotlinx.coroutines.CoroutineScope
@@ -16,9 +18,14 @@ import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
+import kotlinx.coroutines.sync.Mutex
+import kotlinx.coroutines.sync.withLock
 import kotlinx.serialization.json.Json
 import okhttp3.Request
 import java.io.File
+import java.io.ByteArrayOutputStream
+import java.nio.charset.StandardCharsets
+import java.util.concurrent.atomic.AtomicBoolean
 
 /**
  * Manages installed lyrics extensions, bundled assets, and remote GitHub synchronization.
@@ -31,6 +38,10 @@ object LyricsExtensionManager {
 
     private val json = Json { ignoreUnknownKeys = true; isLenient = true }
     private val scope = CoroutineScope(SupervisorJob() + Dispatchers.IO)
+    private val initializationLock = Mutex()
+    private val syncRunning = AtomicBoolean(false)
+    private val activeSyncCalls = java.util.concurrent.ConcurrentHashMap.newKeySet<okhttp3.Call>()
+    @Volatile private var extensionsEnabled = false
 
     private val _installedExtensions = MutableStateFlow<List<LyricsExtension>>(emptyList())
     val installedExtensions: StateFlow<List<LyricsExtension>> = _installedExtensions.asStateFlow()
@@ -51,11 +62,34 @@ object LyricsExtensionManager {
      */
     fun init(context: Context) {
         appContext = context.applicationContext
+        setEnabled(AppSettings.lyricsExtensionsEnabled.value)
+    }
+
+    /** Enables bundled/installed scripts only after explicit user consent. */
+    fun setEnabled(enabled: Boolean) {
+        extensionsEnabled = enabled
+        LyricsExtensionExecutor.setExtensionsEnabled(enabled)
+        if (!enabled) {
+            activeSyncCalls.forEach { call -> call.cancel() }
+            _installedExtensions.value = emptyList()
+            _dynamicSources.value = emptyList()
+            // Keep the user's provider choices. The IDs can be resolved again
+            // when extensions are re-enabled; disabling execution must not
+            // silently erase their selection or ordering.
+            _syncMessage.value = null
+            return
+        }
+
+        val context = appContext ?: return
         scope.launch {
-            bootstrapBundledExtensions(context)
-            loadInstalledExtensions(context)
-            if (AppSettings.lyricsAutoUpdate.value) {
-                syncFromRepository(context, force = false)
+            initializationLock.withLock {
+                if (!extensionsEnabled) return@withLock
+                bootstrapBundledExtensions(context)
+                if (!extensionsEnabled) return@withLock
+                loadInstalledExtensions(context)
+                if (extensionsEnabled && AppSettings.lyricsAutoUpdate.value) {
+                    syncFromRepository(context, force = false)
+                }
             }
         }
     }
@@ -66,39 +100,31 @@ object LyricsExtensionManager {
      * what's currently installed (e.g. after an app update).
      */
     private suspend fun bootstrapBundledExtensions(context: Context) = withContext(Dispatchers.IO) {
+        if (!extensionsEnabled) return@withContext
         val rootDir = File(context.filesDir, EXTENSIONS_DIR)
         val extDir = File(rootDir, "extensions")
         if (!extDir.exists()) extDir.mkdirs()
 
         runCatching {
             val assetManager = context.assets
-            val hasNestedExtensions = assetManager.list("$ASSETS_DIR/extensions")?.isNotEmpty() == true
-            val bundledDirs = if (hasNestedExtensions) {
-                assetManager.list("$ASSETS_DIR/extensions") ?: emptyArray()
-            } else {
-                assetManager.list(ASSETS_DIR)?.filter { it != "registry.json" && it != "README.md" && !it.contains(".") }?.toTypedArray() ?: emptyArray()
-            }
-            val bundledSet = bundledDirs.toSet()
-
-            // Prune extensions on disk that are no longer bundled
-            extDir.listFiles()?.filter { it.isDirectory && it.name !in bundledSet }?.forEach { staleDir ->
-                LyricsLog.w(TAG, "Pruning removed extension from disk: ${staleDir.name}")
-                LyricsExtensionExecutor.unload(staleDir.name)
-                staleDir.deleteRecursively()
-            }
+            val (assetRoot, bundledDirsList) = bundledExtensionAssets(context)
+            val bundledDirs = bundledDirsList.toTypedArray()
 
             for (extName in bundledDirs) {
+                if (!extensionsEnabled) return@withContext
+                if (!LyricsExtensionSecurity.isSafeExtensionId(extName)) continue
                 val targetDir = File(extDir, extName)
                 if (!targetDir.exists()) targetDir.mkdirs()
 
                 val manifestFile = File(targetDir, "manifest.json")
                 val scriptFile = File(targetDir, "index.js")
-                val assetPrefix = if (hasNestedExtensions) "$ASSETS_DIR/extensions/$extName" else "$ASSETS_DIR/$extName"
+                val assetPrefix = "$assetRoot/$extName"
 
                 // Read bundled manifest version to decide whether to overwrite
                 val bundledVersion = runCatching {
                     assetManager.open("$assetPrefix/manifest.json").bufferedReader().use { reader ->
                         val manifest = json.decodeFromString<LyricsExtensionManifest>(reader.readText())
+                        require(manifest.id == extName)
                         manifest.version
                     }
                 }.getOrNull()
@@ -138,20 +164,31 @@ object LyricsExtensionManager {
      * Loads installed extensions from disk into memory.
      */
     suspend fun loadInstalledExtensions(context: Context) = withContext(Dispatchers.IO) {
+        if (!extensionsEnabled) {
+            _installedExtensions.value = emptyList()
+            _dynamicSources.value = emptyList()
+            return@withContext
+        }
         val extDir = File(context.filesDir, "$EXTENSIONS_DIR/extensions")
         if (!extDir.exists()) {
             _installedExtensions.value = emptyList()
+            _dynamicSources.value = emptyList()
             return@withContext
         }
 
+        val bundledIds = bundledExtensionAssets(context).second.toSet()
         val list = mutableListOf<LyricsExtension>()
         extDir.listFiles()?.filter { it.isDirectory }?.forEach { dir ->
+            if (!LyricsExtensionSecurity.isSafeExtensionId(dir.name)) return@forEach
             val manifestFile = File(dir, "manifest.json")
             val scriptFile = File(dir, "index.js")
             if (manifestFile.exists() && scriptFile.exists()) {
                 runCatching {
                     val content = manifestFile.readText()
                     val manifest = json.decodeFromString<LyricsExtensionManifest>(content)
+                    require(LyricsExtensionSecurity.isSafeExtensionId(manifest.id) && manifest.id == dir.name) {
+                        "Extension ID does not match its directory"
+                    }
                     list += LyricsExtension(
                         id = manifest.id,
                         name = manifest.name,
@@ -161,7 +198,7 @@ object LyricsExtensionManager {
                         wordSynced = manifest.wordSynced,
                         defaultPriority = manifest.defaultPriority,
                         scriptFile = scriptFile,
-                        isBundled = false,
+                        isBundled = dir.name in bundledIds,
                     )
                 }.onFailure {
                     LyricsLog.w(TAG, "Failed to load extension in ${dir.name}: ${it.message}")
@@ -170,6 +207,7 @@ object LyricsExtensionManager {
         }
 
         list.sortBy { it.defaultPriority }
+        if (!extensionsEnabled) return@withContext
         _installedExtensions.value = list
         val sources = list.map { com.music.bitchord.data.lyrics.LyricsSource.fromExtension(it) }
         _dynamicSources.value = sources
@@ -186,32 +224,42 @@ object LyricsExtensionManager {
     ): Result<Int> = withContext(Dispatchers.IO) {
         val ctx = context ?: appContext
             ?: return@withContext Result.failure(IllegalStateException("No context available"))
-        if (_isSyncing.value) return@withContext Result.success(0)
+        if (!extensionsEnabled) {
+            return@withContext Result.failure(IllegalStateException("Lyrics extensions are disabled"))
+        }
+        if (!syncRunning.compareAndSet(false, true)) return@withContext Result.success(0)
         _isSyncing.value = true
         _syncMessage.value = "Checking for extension updates..."
 
         try {
             val repoUrl = AppSettings.lyricsExtensionRepoUrl.value.trim()
-            if (repoUrl.isBlank()) {
-                _syncMessage.value = "No repository URL configured"
-                return@withContext Result.failure(IllegalStateException("No repository URL"))
+            if (!LyricsExtensionSecurity.isHttpsUrl(repoUrl)) {
+                _syncMessage.value = "Use a valid HTTPS repository URL"
+                return@withContext Result.failure(IllegalArgumentException("Invalid lyrics registry URL"))
             }
 
-            LyricsLog.i(TAG, "Fetching registry from $repoUrl")
-            val request = Request.Builder().url(repoUrl).cacheControl(okhttp3.CacheControl.FORCE_NETWORK).build()
-            val registryJson = Http.client.newCall(request).execute().use { resp ->
-                if (!resp.isSuccessful) throw Exception("HTTP ${resp.code} fetching registry")
-                resp.body?.string() ?: throw Exception("Empty registry response")
-            }
+            LyricsLog.i(TAG, "Fetching the configured lyrics registry")
+            val registryJson = requestText(repoUrl, MAX_REGISTRY_BYTES)
+                ?: throw IllegalStateException("Could not read a valid lyrics registry")
 
             val remoteRegistry = json.decodeFromString<RemoteLyricsRegistry>(registryJson)
+            require(remoteRegistry.extensions.size <= MAX_EXTENSION_COUNT) { "Registry contains too many extensions" }
+            require(remoteRegistry.extensions.map { it.id }.toSet().size == remoteRegistry.extensions.size) {
+                "Registry contains duplicate extension IDs"
+            }
+            require(remoteRegistry.extensions.all { LyricsExtensionSecurity.isSafeExtensionId(it.id) }) {
+                "Registry contains an invalid extension ID"
+            }
+            if (!extensionsEnabled) return@withContext Result.failure(IllegalStateException("Lyrics extensions are disabled"))
             val currentMap = _installedExtensions.value.associateBy { it.id }
             val extDir = File(ctx.filesDir, "$EXTENSIONS_DIR/extensions")
             if (!extDir.exists()) extDir.mkdirs()
 
             // 1. Prune deleted extensions (folders on disk whose ID is no longer in the remote registry)
             val remoteIds = remoteRegistry.extensions.map { it.id }.toSet()
-            extDir.listFiles()?.filter { it.isDirectory && it.name !in remoteIds }?.forEach { staleDir ->
+            val bundledIds = bundledExtensionAssets(ctx).second.toSet()
+            extDir.listFiles()?.filter { it.isDirectory && it.name !in remoteIds && it.name !in bundledIds }?.forEach { staleDir ->
+                if (!extensionsEnabled) return@withContext Result.failure(IllegalStateException("Lyrics extensions are disabled"))
                 LyricsLog.w(TAG, "Pruning deleted extension: ${staleDir.name}")
                 LyricsExtensionExecutor.unload(staleDir.name)
                 staleDir.deleteRecursively()
@@ -220,6 +268,7 @@ object LyricsExtensionManager {
             var updatedCount = 0
 
             for (remoteItem in remoteRegistry.extensions) {
+                if (!extensionsEnabled) return@withContext Result.failure(IllegalStateException("Lyrics extensions are disabled"))
                 val current = currentMap[remoteItem.id]
                 val isRemoteOlder = current != null && isNewerVersion(current.version, remoteItem.version)
                 val needsUpdate = !isRemoteOlder && (force || current == null || isNewerVersion(remoteItem.version, current.version))
@@ -233,17 +282,30 @@ object LyricsExtensionManager {
                     val manifestUrl = remoteItem.manifest_url
                         ?: repoUrl.substringBeforeLast("/") + "/extensions/${remoteItem.id}/manifest.json"
 
+                    if (!LyricsExtensionSecurity.isHttpsUrl(scriptUrl) || !LyricsExtensionSecurity.isHttpsUrl(manifestUrl)) {
+                        LyricsLog.w(TAG, "Skipping ${remoteItem.id}: extension URLs must use HTTPS")
+                        continue
+                    }
+
                     val itemDir = File(extDir, remoteItem.id)
                     if (!itemDir.exists()) itemDir.mkdirs()
 
-                    val downloadedScript = downloadString(scriptUrl)
-                    val downloadedManifest = downloadString(manifestUrl)
+                    val downloadedScript = downloadString(scriptUrl, MAX_SCRIPT_BYTES)
+                    val downloadedManifest = downloadString(manifestUrl, MAX_MANIFEST_BYTES)
 
-                    if (downloadedScript != null && downloadedManifest != null) {
-                        File(itemDir, "index.js").writeText(downloadedScript)
-                        File(itemDir, "manifest.json").writeText(downloadedManifest)
+                    if (!extensionsEnabled) return@withContext Result.failure(IllegalStateException("Lyrics extensions are disabled"))
+                    val manifest = downloadedManifest?.let {
+                        runCatching { json.decodeFromString<LyricsExtensionManifest>(it) }.getOrNull()
+                    }
+                    if (downloadedScript != null && downloadedManifest != null && manifest?.id == remoteItem.id) {
+                        val scriptFile = File(itemDir, "index.js")
+                        val manifestFile = File(itemDir, "manifest.json")
+                        writeAtomically(scriptFile, downloadedScript)
+                        writeAtomically(manifestFile, downloadedManifest)
                         LyricsExtensionExecutor.unload(remoteItem.id)
                         updatedCount++
+                    } else {
+                        LyricsLog.w(TAG, "Skipping ${remoteItem.id}: downloaded extension data was invalid")
                     }
                 }
             }
@@ -253,20 +315,82 @@ object LyricsExtensionManager {
             _syncMessage.value = if (updatedCount > 0) "$updatedCount extension(s) updated" else "All extensions up to date"
             Result.success(updatedCount)
         } catch (e: Throwable) {
-            LyricsLog.e(TAG, "Sync failed: ${e.message}")
-            _syncMessage.value = "Sync failed: ${e.localizedMessage}"
+            if (extensionsEnabled) {
+                LyricsLog.e(TAG, "Sync failed: ${e.javaClass.simpleName}")
+                _syncMessage.value = "Sync failed. Check the registry URL and connection."
+            } else {
+                _syncMessage.value = "Lyrics extensions are disabled"
+            }
             Result.failure(e)
         } finally {
             _isSyncing.value = false
+            syncRunning.set(false)
         }
     }
 
-    private fun downloadString(url: String): String? = runCatching {
-        val req = Request.Builder().url(url).cacheControl(okhttp3.CacheControl.FORCE_NETWORK).build()
-        Http.client.newCall(req).execute().use { resp ->
-            if (resp.isSuccessful) resp.body?.string() else null
-        }
+    private fun downloadString(url: String, maxBytes: Int): String? = runCatching {
+        requestText(url, maxBytes)
     }.getOrNull()
+
+    private fun bundledExtensionAssets(context: Context): Pair<String, List<String>> {
+        val nestedRoot = "$ASSETS_DIR/extensions"
+        val nested = runCatching { context.assets.list(nestedRoot)?.toList().orEmpty() }.getOrDefault(emptyList())
+        if (nested.isNotEmpty()) return nestedRoot to nested
+        val flat = runCatching { context.assets.list(ASSETS_DIR)?.toList().orEmpty() }.getOrDefault(emptyList())
+            .filter { it != "registry.json" && it != "README.md" && !it.contains(".") }
+        return ASSETS_DIR to flat
+    }
+
+    private fun requestText(url: String, maxBytes: Int): String? {
+        if (!extensionsEnabled || !LyricsExtensionSecurity.isHttpsUrl(url)) return null
+        val request = Request.Builder().url(url).cacheControl(okhttp3.CacheControl.FORCE_NETWORK).build()
+        val call = Http.client.newCall(request)
+        activeSyncCalls.add(call)
+        return try {
+            if (!extensionsEnabled) {
+                call.cancel()
+                null
+            } else {
+                call.execute().use { response ->
+                    if (response.isSuccessful && response.request.url.isHttps) {
+                        readBoundedBody(response.body, maxBytes)
+                    } else null
+                }
+            }
+        } finally {
+            activeSyncCalls.remove(call)
+        }
+    }
+
+    private fun readBoundedBody(body: okhttp3.ResponseBody?, maxBytes: Int): String? {
+        body ?: return null
+        if (body.contentLength() > maxBytes) return null
+        val output = ByteArrayOutputStream(minOf(maxBytes, 8192))
+        body.byteStream().use { input ->
+            val buffer = ByteArray(8192)
+            var total = 0
+            while (true) {
+                val count = input.read(buffer)
+                if (count < 0) break
+                total += count
+                if (total > maxBytes) return null
+                output.write(buffer, 0, count)
+            }
+        }
+        return output.toByteArray().toString(StandardCharsets.UTF_8)
+    }
+
+    private fun writeAtomically(target: File, value: String) {
+        val file = AtomicFile(target)
+        val output = file.startWrite()
+        try {
+            output.write(value.toByteArray(StandardCharsets.UTF_8))
+            file.finishWrite(output)
+        } catch (error: Throwable) {
+            file.failWrite(output)
+            throw error
+        }
+    }
 
     private fun isNewerVersion(remote: String, local: String): Boolean {
         if (remote == local) return false
@@ -285,5 +409,10 @@ object LyricsExtensionManager {
      * Gets installed extension by ID.
      */
     fun getExtension(id: String): LyricsExtension? =
-        _installedExtensions.value.firstOrNull { it.id.equals(id, ignoreCase = true) }
+        if (extensionsEnabled) _installedExtensions.value.firstOrNull { it.id.equals(id, ignoreCase = true) } else null
+
+    private const val MAX_REGISTRY_BYTES = 512 * 1024
+    private const val MAX_MANIFEST_BYTES = 64 * 1024
+    private const val MAX_SCRIPT_BYTES = 1024 * 1024
+    private const val MAX_EXTENSION_COUNT = 100
 }

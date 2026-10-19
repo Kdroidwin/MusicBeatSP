@@ -368,6 +368,7 @@ fun SettingsScreen(
     val legacyMeshGradient by AppSettings.legacyMeshGradient.collectAsStateWithLifecycle()
     val syncedLyrics by AppSettings.syncedLyrics.collectAsStateWithLifecycle()
     val autoEmbedLyrics by AppSettings.autoEmbedLyrics.collectAsStateWithLifecycle()
+    val lyricsExtensionsEnabled by AppSettings.lyricsExtensionsEnabled.collectAsStateWithLifecycle()
     val lyricsSources by AppSettings.lyricsSources.collectAsStateWithLifecycle()
     val lyricsSourceOrder by AppSettings.lyricsSourceOrder.collectAsStateWithLifecycle()
     val showLyricsLogs by AppSettings.showLyricsLogs.collectAsStateWithLifecycle()
@@ -638,6 +639,12 @@ fun SettingsScreen(
         SettingsSearchEntry(stringResource(R.string.synced_lyrics), stringResource(R.string.synced_lyrics_subtitle), listOf("lyrics", "歌詞", "同期"), syncedLyrics) { AppSettings.setSyncedLyrics(!syncedLyrics) },
         SettingsSearchEntry(stringResource(R.string.blur_unfocused_lyrics), stringResource(R.string.blur_unfocused_lyrics_subtitle), listOf("lyrics", "歌詞", "blur", "ぼかし"), lyricsBlur) { AppSettings.setLyricsBlur(!lyricsBlur) },
         SettingsSearchEntry(stringResource(R.string.auto_embed_lyrics), stringResource(R.string.auto_embed_lyrics_subtitle), listOf("lyrics", "歌詞", "embed", "埋め込み"), autoEmbedLyrics) { AppSettings.setAutoEmbedLyrics(!autoEmbedLyrics) },
+        SettingsSearchEntry(
+            stringResource(R.string.lyrics_extensions_enabled),
+            stringResource(R.string.lyrics_extensions_enabled_subtitle),
+            listOf("lyrics", "歌詞", "extension", "extensions", "script", "拡張", "スクリプト", "安全", "privacy", "supply chain"),
+            lyricsExtensionsEnabled,
+        ) { AppSettings.setLyricsExtensionsEnabled(!lyricsExtensionsEnabled) },
         SettingsSearchEntry(stringResource(R.string.full_screen_cover_art), stringResource(R.string.full_screen_cover_art_subtitle), listOf("artwork", "cover", "full screen", "アート", "全画面"), fullBleedArtwork) { AppSettings.setFullBleedArtwork(!fullBleedArtwork) },
         SettingsSearchEntry(stringResource(R.string.keep_original_artwork_aspect_ratio), stringResource(R.string.keep_original_artwork_aspect_ratio_subtitle), listOf("artwork", "cover", "aspect ratio", "crop", "縦長", "横長", "比率", "トリミング"), keepOriginalArtworkAspectRatio) { AppSettings.setKeepOriginalArtworkAspectRatio(!keepOriginalArtworkAspectRatio) },
         SettingsSearchEntry(stringResource(R.string.preserve_artwork_shape_in_compact_transitions), stringResource(R.string.preserve_artwork_shape_in_compact_transitions_subtitle), listOf("artwork", "cover", "aspect ratio", "mini player", "dock", "lyrics", "アート", "カバー", "縦横比", "ミニプレーヤー", "歌詞", "遷移"), preserveArtworkShapeInCompactTransitions) { AppSettings.setPreserveArtworkShapeInCompactTransitions(!preserveArtworkShapeInCompactTransitions) },
@@ -2977,6 +2984,23 @@ fun SettingsScreen(
                         )
                     },
                     onClick = { AppSettings.setAutoEmbedLyrics(!autoEmbedLyrics) },
+                )
+                RowDivider()
+                SettingsRow(
+                    icon = Icons.Rounded.Language,
+                    title = stringResource(R.string.lyrics_extensions_enabled),
+                    subtitle = stringResource(R.string.lyrics_extensions_enabled_subtitle),
+                    trailing = {
+                        Switch(
+                            checked = lyricsExtensionsEnabled,
+                            onCheckedChange = AppSettings::setLyricsExtensionsEnabled,
+                            colors = SwitchDefaults.colors(
+                                checkedTrackColor = MaterialTheme.colorScheme.primary,
+                                checkedBorderColor = MaterialTheme.colorScheme.primary,
+                            ),
+                        )
+                    },
+                    onClick = { AppSettings.setLyricsExtensionsEnabled(!lyricsExtensionsEnabled) },
                 )
                 RowDivider()
                 SettingsRow(

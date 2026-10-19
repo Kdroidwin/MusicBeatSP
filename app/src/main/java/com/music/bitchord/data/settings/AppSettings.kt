@@ -765,8 +765,11 @@ object AppSettings {
     /** Configurable repository URL for remote lyrics extensions (like SpotiFLAC). */
     val lyricsExtensionRepoUrl = MutableStateFlow(DEFAULT_LYRICS_EXTENSION_REPO_URL)
 
+    /** Dynamic lyrics scripts are opt-in because they can make network requests and are third-party code. */
+    val lyricsExtensionsEnabled = MutableStateFlow(false)
+
     /** When enabled, automatically syncs lyrics extensions from the remote repository. */
-    val lyricsAutoUpdate = MutableStateFlow(true)
+    val lyricsAutoUpdate = MutableStateFlow(false)
 
     /** Timestamp of the last successful lyrics extensions sync. */
     val lastLyricsExtensionSyncMs = MutableStateFlow(0L)
@@ -947,8 +950,33 @@ object AppSettings {
         appContext = context.applicationContext
         prefs = appContext.getSharedPreferences("bitchord_settings", Context.MODE_PRIVATE)
         authStore = AuthStore(appContext)
+        migratePlaintextCredentials()
         readAll()
         watchConnection(context)
+    }
+
+    /** Moves legacy account tokens into Keystore-backed storage, then removes the plaintext copies. */
+    private fun migratePlaintextCredentials() {
+        val credentialKeys = listOf(
+            KEY_LASTFM_SESSION_KEY,
+            KEY_LASTFM_API_KEY,
+            KEY_LASTFM_SECRET,
+            KEY_LISTENBRAINZ_TOKEN,
+            KEY_SPOTIFY_SPDC_TOKEN,
+        )
+        val editor = prefs.edit()
+        credentialKeys.forEach { key ->
+            val legacyValue = prefs.all[key] as? String
+            if (!legacyValue.isNullOrEmpty() && authStore.getProtectedValue(key) == null) {
+                // A failed encrypted write deliberately loses the old value;
+                // retaining a plaintext credential would defeat the migration.
+                authStore.migrateProtectedValue(key, legacyValue)
+            }
+            editor.remove(key)
+        }
+        if (!runCatching { editor.commit() }.getOrDefault(false)) {
+            android.util.Log.w("BitChord", "Could not clear legacy plaintext credential preferences")
+        }
     }
 
     /**
@@ -966,6 +994,8 @@ object AppSettings {
         if (!this::prefs.isInitialized) return
         readAll()
         YoutubeStreamBootstrap.initializeIfAllowed(appContext)
+        com.music.bitchord.feature.lyrics.manager.LyricsExtensionManager
+            .setEnabled(lyricsExtensionsEnabled.value)
         // The selected lyrics providers are persisted as IDs, while the
         // available provider objects are loaded asynchronously by the
         // extension manager. Re-apply imported IDs to the already-loaded list
@@ -1146,15 +1176,16 @@ object AppSettings {
         autoEmbedLyrics.value = prefs.getBoolean(KEY_AUTO_EMBED_LYRICS, true)
         lyricsExtensionRepoUrl.value = prefs.getString(KEY_LYRICS_EXTENSION_REPO_URL, DEFAULT_LYRICS_EXTENSION_REPO_URL)
             .orEmpty().ifBlank { DEFAULT_LYRICS_EXTENSION_REPO_URL }
-        lyricsAutoUpdate.value = prefs.getBoolean(KEY_LYRICS_AUTO_UPDATE, true)
+        lyricsExtensionsEnabled.value = prefs.getBoolean(KEY_LYRICS_EXTENSIONS_ENABLED, false)
+        lyricsAutoUpdate.value = prefs.getBoolean(KEY_LYRICS_AUTO_UPDATE, false)
         lastLyricsExtensionSyncMs.value = prefs.getLong(KEY_LAST_LYRICS_EXTENSION_SYNC, 0L)
         audioCacheLimitBytes.value = prefs.getLong(KEY_CACHE_LIMIT, DEFAULT_CACHE_LIMIT_BYTES)
             .coerceIn(DEFAULT_CACHE_LIMIT_BYTES, MAX_CACHE_LIMIT_BYTES)
         lastfmEnabled.value = prefs.getBoolean(KEY_LASTFM_ENABLED, false)
         lastfmUsername.value = prefs.getString(KEY_LASTFM_USERNAME, "").orEmpty()
-        lastfmSessionKey.value = prefs.getString(KEY_LASTFM_SESSION_KEY, "").orEmpty()
-        lastfmApiKey.value = prefs.getString(KEY_LASTFM_API_KEY, "").orEmpty().ifBlank { BuildConfig.LASTFM_API_KEY }
-        lastfmSecret.value = prefs.getString(KEY_LASTFM_SECRET, "").orEmpty().ifBlank { BuildConfig.LASTFM_SECRET }
+        lastfmSessionKey.value = authStore.getProtectedValue(KEY_LASTFM_SESSION_KEY).orEmpty()
+        lastfmApiKey.value = authStore.getProtectedValue(KEY_LASTFM_API_KEY).orEmpty().ifBlank { BuildConfig.LASTFM_API_KEY }
+        lastfmSecret.value = authStore.getProtectedValue(KEY_LASTFM_SECRET).orEmpty().ifBlank { BuildConfig.LASTFM_SECRET }
         lastfmEndpoint.value = prefs.getString(KEY_LASTFM_ENDPOINT, "").orEmpty()
         lastfmScrobbleEnabled.value = prefs.getBoolean(KEY_LASTFM_SCROBBLE_ENABLED, false)
         lastfmNowPlaying.value = prefs.getBoolean(KEY_LASTFM_NOW_PLAYING, false) && lastfmScrobbleEnabled.value
@@ -1163,9 +1194,9 @@ object AppSettings {
         scrobbleDelayPercent.value = prefs.getFloat(KEY_SCROBBLE_DELAY_PERCENT, 0.5f)
         scrobbleDelaySeconds.value = prefs.getInt(KEY_SCROBBLE_DELAY_SECONDS, 180)
         listenBrainzEnabled.value = prefs.getBoolean(KEY_LISTENBRAINZ_ENABLED, false)
-        listenBrainzToken.value = prefs.getString(KEY_LISTENBRAINZ_TOKEN, "").orEmpty()
+        listenBrainzToken.value = authStore.getProtectedValue(KEY_LISTENBRAINZ_TOKEN).orEmpty()
         listenBrainzPrimaryArtistOnly.value = prefs.getBoolean(KEY_LISTENBRAINZ_PRIMARY_ARTIST_ONLY, false)
-        spotifySpdcToken.value = prefs.getString(KEY_SPOTIFY_SPDC_TOKEN, "").orEmpty()
+        spotifySpdcToken.value = authStore.getProtectedValue(KEY_SPOTIFY_SPDC_TOKEN).orEmpty()
         replayGenres.value = prefs.getBoolean(KEY_REPLAY_GENRES, true)
         filterNonMusicAudio.value = prefs.getBoolean(KEY_FILTER_NON_MUSIC_AUDIO, true)
         localMusicSort.value = readLocalMusicSort(KEY_LOCAL_MUSIC_SORT)
@@ -2065,6 +2096,12 @@ object AppSettings {
         prefs.edit().putString(KEY_LYRICS_EXTENSION_REPO_URL, normalized).apply()
     }
 
+    fun setLyricsExtensionsEnabled(value: Boolean) {
+        lyricsExtensionsEnabled.value = value
+        prefs.edit().putBoolean(KEY_LYRICS_EXTENSIONS_ENABLED, value).apply()
+        com.music.bitchord.feature.lyrics.manager.LyricsExtensionManager.setEnabled(value)
+    }
+
     fun setLyricsAutoUpdate(value: Boolean) {
         lyricsAutoUpdate.value = value
         prefs.edit().putBoolean(KEY_LYRICS_AUTO_UPDATE, value).apply()
@@ -2174,17 +2211,17 @@ object AppSettings {
 
     fun setLastfmSessionKey(value: String) {
         lastfmSessionKey.value = value
-        prefs.edit().putString(KEY_LASTFM_SESSION_KEY, value).apply()
+        authStore.setProtectedValue(KEY_LASTFM_SESSION_KEY, value)
     }
 
     fun setLastfmApiKey(value: String) {
         lastfmApiKey.value = value
-        prefs.edit().putString(KEY_LASTFM_API_KEY, value).apply()
+        authStore.setProtectedValue(KEY_LASTFM_API_KEY, value)
     }
 
     fun setLastfmSecret(value: String) {
         lastfmSecret.value = value
-        prefs.edit().putString(KEY_LASTFM_SECRET, value).apply()
+        authStore.setProtectedValue(KEY_LASTFM_SECRET, value)
     }
 
     fun setLastfmEndpoint(value: String) {
@@ -2194,7 +2231,7 @@ object AppSettings {
 
     fun setSpotifySpdcToken(value: String) {
         spotifySpdcToken.value = value
-        prefs.edit().putString(KEY_SPOTIFY_SPDC_TOKEN, value).apply()
+        authStore.setProtectedValue(KEY_SPOTIFY_SPDC_TOKEN, value)
     }
 
     fun setLastfmScrobbleEnabled(value: Boolean) {
@@ -2259,7 +2296,7 @@ object AppSettings {
 
     fun setListenBrainzToken(value: String) {
         listenBrainzToken.value = value
-        prefs.edit().putString(KEY_LISTENBRAINZ_TOKEN, value).apply()
+        authStore.setProtectedValue(KEY_LISTENBRAINZ_TOKEN, value)
     }
 
     fun setListenBrainzPrimaryArtistOnly(value: Boolean) {
@@ -2635,7 +2672,7 @@ object AppSettings {
      */
     fun importPrefs(values: Map<String, Any?>) {
         if (!this::prefs.isInitialized) return
-        val kept = prefs.all.filterKeys { it in SECRETS || it in PROFILE_DATA || it in DEVICE_LOCAL }
+        val kept = prefs.all.filterKeys { it in PROFILE_DATA || it in DEVICE_LOCAL }
         prefs.edit().apply {
             clear()
             val incoming = values.filterKeys {
@@ -2854,6 +2891,7 @@ object AppSettings {
     const val DEFAULT_LYRICS_EXTENSION_REPO_URL =
         "https://raw.githubusercontent.com/SamuelAdmand/MusicBeat-Lyrics-Extensions/main/registry.json"
     private const val KEY_LYRICS_EXTENSION_REPO_URL = "lyrics_extension_repo_url"
+    private const val KEY_LYRICS_EXTENSIONS_ENABLED = "lyrics_extensions_enabled"
     private const val KEY_LYRICS_AUTO_UPDATE = "lyrics_auto_update"
     private const val KEY_LAST_LYRICS_EXTENSION_SYNC = "last_lyrics_extension_sync"
     private const val KEY_REPLAY_GENRES = "replay_genres"

@@ -8,6 +8,7 @@ import com.dokar.quickjs.binding.define
 import com.music.bitchord.data.Http
 import com.music.bitchord.data.quickjs.QuickJsLifecycle
 import com.music.bitchord.data.lyrics.LyricsLog
+import com.music.bitchord.feature.lyrics.domain.LyricsExtensionSecurity
 import kotlinx.coroutines.CompletableDeferred
 import kotlinx.coroutines.asCoroutineDispatcher
 import kotlinx.coroutines.delay
@@ -18,8 +19,11 @@ import kotlinx.coroutines.withTimeoutOrNull
 import okhttp3.MediaType.Companion.toMediaType
 import okhttp3.Request
 import okhttp3.RequestBody.Companion.toRequestBody
+import okhttp3.Call
 import org.json.JSONObject
+import java.io.ByteArrayOutputStream
 import java.io.File
+import java.nio.charset.StandardCharsets
 import java.util.concurrent.Executors
 import java.util.concurrent.TimeUnit
 import java.util.concurrent.atomic.AtomicLong
@@ -32,6 +36,8 @@ object LyricsExtensionExecutor {
     private const val TAG = "LyricsExtension"
     private const val EXECUTION_TIMEOUT_MS = 15_000L
     private const val SEARCH_TIMEOUT_MS = 30_000L
+    private const val MAX_EXTENSION_REQUEST_BODY_CHARS = 1_048_576
+    private const val MAX_EXTENSION_RESPONSE_BYTES = 2 * 1_048_576
 
     // QuickJS' Android JNI layer keeps process-global references. Creating or
     // disposing contexts concurrently (or from different Default dispatcher
@@ -45,10 +51,22 @@ object LyricsExtensionExecutor {
     private var engineSetupFailed = false
     private var loadedExtensionId: String? = null
     private val invalidatedExtensions = java.util.concurrent.ConcurrentHashMap.newKeySet<String>()
+    private val activeNetworkCalls = java.util.concurrent.ConcurrentHashMap.newKeySet<Call>()
     @Volatile private var invalidateLoadedExtension = false
+    @Volatile private var extensionsEnabled = false
     @Volatile private var activeExtensionId: String? = null
     @Volatile private var activeRequest: ActiveRequest? = null
     private val requestIds = AtomicLong()
+
+    /** Stops extension execution and any network requests as soon as the user opts out. */
+    fun setExtensionsEnabled(enabled: Boolean) {
+        extensionsEnabled = enabled
+        if (!enabled) {
+            activeRequest?.result?.complete(null)
+            activeNetworkCalls.forEach { call -> call.cancel() }
+            unloadAll()
+        }
+    }
 
     private data class ActiveRequest(
         val id: Long,
@@ -84,9 +102,11 @@ object LyricsExtensionExecutor {
         album: String? = null,
         videoId: String? = null,
     ): String? = withContext(quickJsDispatcher) {
+        if (!extensionsEnabled) return@withContext null
         engineLock.withLock {
             withTimeoutOrNull(EXECUTION_TIMEOUT_MS) {
                 try {
+                    if (!extensionsEnabled) return@withTimeoutOrNull null
                     val qjs = getOrInitEngine(extensionId, scriptFile) ?: return@withTimeoutOrNull null
                     val trackJson = JSONObject().apply {
                         put("title", title)
@@ -96,7 +116,7 @@ object LyricsExtensionExecutor {
                         put("videoId", videoId ?: "")
                     }.toString()
 
-                    LyricsLog.i(extensionId, "getLyrics query: title='$title', artist='$artist'")
+                    LyricsLog.i(extensionId, "Running lyrics lookup")
 
                     val request = ActiveRequest(requestIds.incrementAndGet(), extensionId, CompletableDeferred())
                     activeExtensionId = extensionId
@@ -148,9 +168,11 @@ object LyricsExtensionExecutor {
         artist: String,
         album: String? = null,
     ): String? = withContext(quickJsDispatcher) {
+        if (!extensionsEnabled) return@withContext null
         engineLock.withLock {
             withTimeoutOrNull(SEARCH_TIMEOUT_MS) {
                 try {
+                    if (!extensionsEnabled) return@withTimeoutOrNull null
                     val qjs = getOrInitEngine(extensionId, scriptFile) ?: return@withTimeoutOrNull null
                     val queryJson = JSONObject().apply {
                         put("title", title)
@@ -158,7 +180,7 @@ object LyricsExtensionExecutor {
                         put("album", album ?: "")
                     }.toString()
 
-                    LyricsLog.i(extensionId, "searchLyrics query: title='$title', artist='$artist'")
+                    LyricsLog.i(extensionId, "Running lyrics search")
 
                     val request = ActiveRequest(requestIds.incrementAndGet(), extensionId, CompletableDeferred())
                     activeExtensionId = extensionId
@@ -218,6 +240,7 @@ object LyricsExtensionExecutor {
     }
 
     private suspend fun getOrInitEngine(extensionId: String, scriptFile: File): QuickJs? {
+        if (!extensionsEnabled) return null
         if (!scriptFile.exists() || !scriptFile.canRead()) {
             LyricsLog.w(extensionId, "Script file not found: ${scriptFile.absolutePath}")
             return null
@@ -342,6 +365,7 @@ object LyricsExtensionExecutor {
         qjs.define("__native_lyrics") {
             asyncFunction("fetch", object : AsyncFunctionBinding<String> {
                 override suspend fun invoke(args: Array<Any?>): String {
+                    if (!extensionsEnabled) throw IllegalStateException("Lyrics extensions are disabled")
                     val rawUrl = args.getOrNull(0)?.toString() ?: throw IllegalArgumentException("fetch requires URL")
                     val method = args.getOrNull(1)?.toString() ?: "GET"
                     val headersJson = args.getOrNull(2)?.toString() ?: "{}"
@@ -415,13 +439,18 @@ object LyricsExtensionExecutor {
         headersJson: String,
         body: String?,
     ): Pair<Int, String> = runCatching {
+        if (!extensionsEnabled) return@runCatching Pair(0, "")
+        if (!LyricsExtensionSecurity.isHttpsUrl(url) || headersJson.length > 16_384 ||
+            (body?.length ?: 0) > MAX_EXTENSION_REQUEST_BODY_CHARS
+        ) return@runCatching Pair(0, "")
         val builder = Request.Builder().url(url)
         var hasUserAgent = false
 
-        runCatching {
-            val headersObj = JSONObject(headersJson)
+        val headersObj = runCatching { JSONObject(headersJson) }.getOrNull()
+        if (headersObj != null && headersObj.length() <= 40) {
             for (key in headersObj.keys()) {
                 val value = headersObj.optString(key, "")
+                if (key.length > 128 || value.length > 8192) continue
                 builder.header(key, value)
                 if (key.equals("user-agent", ignoreCase = true)) hasUserAgent = true
             }
@@ -438,13 +467,40 @@ object LyricsExtensionExecutor {
             builder.get()
         }
 
-        httpClient.newCall(builder.build()).execute().use { response ->
-            val code = response.code
-            val respBody = response.body?.string() ?: ""
-            Pair(code, respBody)
+        val call = httpClient.newCall(builder.build())
+        activeNetworkCalls.add(call)
+        try {
+            if (!extensionsEnabled) call.cancel()
+            call.execute().use { response ->
+                val code = response.code
+                val responseBody = if (response.request.url.isHttps) {
+                    readBoundedBody(response.body, MAX_EXTENSION_RESPONSE_BYTES)
+                } else null
+                Pair(code, responseBody.orEmpty())
+            }
+        } finally {
+            activeNetworkCalls.remove(call)
         }
     }.getOrElse {
-        LyricsLog.w(TAG, "executeHttp failed for $url: ${it.message}")
+        LyricsLog.w(TAG, "Lyrics extension network request failed")
         Pair(0, "")
+    }
+
+    private fun readBoundedBody(body: okhttp3.ResponseBody?, maxBytes: Int): String? {
+        body ?: return null
+        if (body.contentLength() > maxBytes) return null
+        val output = ByteArrayOutputStream(minOf(maxBytes, 8192))
+        body.byteStream().use { input ->
+            val buffer = ByteArray(8192)
+            var total = 0
+            while (true) {
+                val count = input.read(buffer)
+                if (count < 0) break
+                total += count
+                if (total > maxBytes) return null
+                output.write(buffer, 0, count)
+            }
+        }
+        return output.toByteArray().toString(StandardCharsets.UTF_8)
     }
 }

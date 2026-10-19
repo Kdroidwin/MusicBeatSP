@@ -1073,6 +1073,8 @@
     <string name="blur_unfocused_lyrics_subtitle">再生中の行に注目しやすくします</string>
     <string name="auto_embed_lyrics">歌詞を音声ファイルに自動保存</string>
     <string name="auto_embed_lyrics_subtitle">オンライン歌詞を再生時にローカル音楽ファイルへ書き込みます</string>
+    <string name="lyrics_extensions_enabled">歌詞拡張機能を有効にする</string>
+    <string name="lyrics_extensions_enabled_subtitle">組み込み・ダウンロードした歌詞スクリプトを実行します。ネットワーク通信を行う場合があるため、信頼できる拡張機能だけ有効にしてください。</string>
     <string name="all_files_access">すべてのファイルへのアクセス</string>
     <string name="original_developer">オリジナル開発者</string>
     <string name="details">詳細</string>

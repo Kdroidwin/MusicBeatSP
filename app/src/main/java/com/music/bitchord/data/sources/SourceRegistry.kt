@@ -76,7 +76,7 @@ object SourceRegistry {
 
     private const val TAG = "BitChord"
 
-    private lateinit var prefs: SharedPreferences
+    private var prefs: SharedPreferences? = null
 
     private val json = Json { ignoreUnknownKeys = true; encodeDefaults = true }
 
@@ -96,7 +96,7 @@ object SourceRegistry {
 
     fun init(context: Context) {
         RemoteServerCredentialsStore.init(context.applicationContext)
-        prefs = runCatching {
+        val securePrefs = runCatching {
             EncryptedSharedPreferences.create(
                 context,
                 "bitchord_sources",
@@ -104,15 +104,19 @@ object SourceRegistry {
                 EncryptedSharedPreferences.PrefKeyEncryptionScheme.AES256_SIV,
                 EncryptedSharedPreferences.PrefValueEncryptionScheme.AES256_GCM,
             )
-        }.getOrElse {
-            // Same degradation as AuthStore: a handful of OEM builds cannot
-            // init the keystore, and refusing to run at all is worse than
-            // storing this the way every other setting in the app is stored.
-            TrackLog.w(TAG, "EncryptedSharedPreferences unavailable for sources: ${it.message}")
-            context.getSharedPreferences("bitchord_sources_plain", Context.MODE_PRIVATE)
+        }.onFailure {
+            // Source URLs can carry bearer tokens in path segments, so never
+            // move these preferences to unencrypted storage.
+            TrackLog.w(TAG, "Encrypted source storage unavailable; custom sources are unavailable")
+        }.getOrNull()
+        prefs = securePrefs
+        if (securePrefs != null) {
+            migrateLegacyPlainSources(context.applicationContext, securePrefs)
+        } else {
+            discardLegacyPlainSources(context.applicationContext)
         }
 
-        val stored = prefs.getString(KEY_SOURCES, null)?.let(::decodeStored) ?: emptyList()
+        val stored = securePrefs?.getString(KEY_SOURCES, null)?.let(::decodeStored) ?: emptyList()
 
         // Seeded rather than persisted-on-first-write, so that a build that
         // adds a new built-in kind picks it up for existing installs too.
@@ -382,10 +386,28 @@ object SourceRegistry {
         previous.values.filterNot { it in instances.values }
             .filterIsInstance<AddonSource>()
             .forEach { it.release() }
-        if (persist && ::prefs.isInitialized) {
-            prefs.edit()
-                .putString(KEY_SOURCES, json.encodeToString(ListSerializer(SourceConfig.serializer()), next))
-                .apply()
+        if (persist) prefs?.edit()?.apply {
+            putString(KEY_SOURCES, json.encodeToString(ListSerializer(SourceConfig.serializer()), next))
+        }?.apply()
+    }
+
+    private fun migrateLegacyPlainSources(context: Context, encrypted: SharedPreferences) {
+        val legacy = runCatching {
+            context.getSharedPreferences("bitchord_sources_plain", Context.MODE_PRIVATE)
+        }.getOrNull() ?: return
+        val legacyValue = runCatching { legacy.getString(KEY_SOURCES, null) }.getOrNull()
+        val secureValueExists = runCatching { encrypted.getString(KEY_SOURCES, null) != null }.getOrDefault(true)
+        if (!legacyValue.isNullOrBlank() && !secureValueExists) {
+            runCatching { encrypted.edit().putString(KEY_SOURCES, legacyValue).commit() }
+        }
+        discardLegacyPlainSources(context, legacy)
+    }
+
+    private fun discardLegacyPlainSources(context: Context, existing: SharedPreferences? = null) {
+        runCatching {
+            val legacy = existing ?: context.getSharedPreferences("bitchord_sources_plain", Context.MODE_PRIVATE)
+            legacy.edit().clear().commit()
+            context.deleteSharedPreferences("bitchord_sources_plain")
         }
     }
 

@@ -9,123 +9,142 @@ on:
   workflow_dispatch:
     inputs:
       tag_name:
-        description: 'Tag name for the release (e.g. v1.5.3)'
+        description: 'Tag name for the release (e.g. v2.4.2)'
         required: false
         default: ''
 
 permissions:
-  contents: write
+  contents: read
 
 jobs:
   build-and-release:
     runs-on: ubuntu-latest
+    permissions:
+      contents: write
 
     steps:
       - name: Checkout Repository
-        uses: actions/checkout@v4
+        uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
         with:
           fetch-depth: 0
 
       - name: Set up JDK 17
-        uses: actions/setup-java@v4
+        uses: actions/setup-java@cf277c60eb25467037889841efdb72551f06f6c3 # v4
         with:
           java-version: '17'
           distribution: 'temurin'
           cache: gradle
 
-      - name: Setup local.properties
+      - name: Setup Release Secrets
+        env:
+          LASTFM_API_KEY: ${{ secrets.LASTFM_API_KEY }}
+          LASTFM_SECRET: ${{ secrets.LASTFM_SECRET }}
+          KEYSTORE_BASE64: ${{ secrets.KEYSTORE_BASE64 }}
+          STORE_PASSWORD: ${{ secrets.STORE_PASSWORD || secrets.KEYSTORE_PASSWORD }}
+          KEY_ALIAS: ${{ secrets.KEY_ALIAS }}
+          KEY_PASSWORD: ${{ secrets.KEY_PASSWORD }}
         run: |
-          echo "LASTFM_API_KEY=${{ secrets.LASTFM_API_KEY }}" > local.properties
-          echo "LASTFM_SECRET=${{ secrets.LASTFM_SECRET }}" >> local.properties
-
-      - name: Setup Release Keystore
-        run: |
-          if [ -n "${{ secrets.KEYSTORE_BASE64 }}" ]; then
-            echo "${{ secrets.KEYSTORE_BASE64 }}" | base64 -d > musicbeat-release.jks
-            echo "storeFile=musicbeat-release.jks" > keystore.properties
-            echo "storePassword=${{ secrets.STORE_PASSWORD || secrets.KEYSTORE_PASSWORD }}" >> keystore.properties
-            echo "keyAlias=${{ secrets.KEY_ALIAS }}" >> keystore.properties
-            echo "keyPassword=${{ secrets.KEY_PASSWORD }}" >> keystore.properties
+          set -euo pipefail
+          umask 077
+          if [[ "$LASTFM_API_KEY" == *$'\n'* || "$LASTFM_API_KEY" == *$'\r'* || "$LASTFM_SECRET" == *$'\n'* || "$LASTFM_SECRET" == *$'\r'* ]]; then
+            echo 'Last.fm build values must be single-line.' >&2
+            exit 1
+          fi
+          printf 'LASTFM_API_KEY=%s\nLASTFM_SECRET=%s\n' "$LASTFM_API_KEY" "$LASTFM_SECRET" > local.properties
+          if [[ -n "$KEYSTORE_BASE64" ]]; then
+            : "${STORE_PASSWORD:?Missing release keystore password}"
+            : "${KEY_ALIAS:?Missing release key alias}"
+            : "${KEY_PASSWORD:?Missing release key password}"
+            if [[ "$STORE_PASSWORD" == *$'\n'* || "$STORE_PASSWORD" == *$'\r'* || "$KEY_ALIAS" == *$'\n'* || "$KEY_ALIAS" == *$'\r'* || "$KEY_PASSWORD" == *$'\n'* || "$KEY_PASSWORD" == *$'\r'* ]]; then
+              echo 'Release signing values must be single-line.' >&2
+              exit 1
+            fi
+            printf '%s' "$KEYSTORE_BASE64" | base64 --decode > musicbeat-release.jks
+            chmod 600 musicbeat-release.jks
+            {
+              printf 'storeFile=musicbeat-release.jks\n'
+              printf 'storePassword=%s\n' "$STORE_PASSWORD"
+              printf 'keyAlias=%s\n' "$KEY_ALIAS"
+              printf 'keyPassword=%s\n' "$KEY_PASSWORD"
+            } > keystore.properties
           fi
 
       - name: Grant execute permission for gradlew
         run: chmod +x gradlew
 
-      - name: Build All Release Variants
-        run: ./gradlew assembleStandardRelease assembleQqmusicRelease assembleKugouRelease
+      - name: Build Standard and Offline Release APKs
+        run: ./gradlew assembleStandardRelease assembleNoInternetRelease
 
       - name: Prepare and Organize Release APKs
         id: prepare_apks
+        env:
+          EVENT_NAME: ${{ github.event_name }}
+          INPUT_TAG_NAME: ${{ inputs.tag_name }}
+          REF_TYPE: ${{ github.ref_type }}
+          REF_NAME: ${{ github.ref_name }}
         run: |
-          if [ "${{ github.event_name }}" = "workflow_dispatch" ] && [ -n "${{ github.event.inputs.tag_name }}" ]; then
-            TAG="${{ github.event.inputs.tag_name }}"
-          elif [ "${{ github.ref_type }}" = "tag" ]; then
-            TAG="${{ github.ref_name }}"
+          set -euo pipefail
+          if [[ "$EVENT_NAME" == 'workflow_dispatch' && -n "$INPUT_TAG_NAME" ]]; then
+            TAG="$INPUT_TAG_NAME"
+          elif [[ "$REF_TYPE" == 'tag' ]]; then
+            TAG="$REF_NAME"
           else
-            VERSION=$(grep 'versionName =' app/build.gradle.kts | head -n1 | sed -E 's/.*"([^"]+)".*/\1/')
+            VERSION=$(sed -nE 's/^[[:space:]]*versionName = "([^"]+)".*/\1/p' app/build.gradle.kts | head -n1)
+            [[ -n "$VERSION" ]] || { echo 'Could not read app version.' >&2; exit 1; }
             if git rev-parse "v$VERSION" >/dev/null 2>&1; then
-              SHORT_SHA=$(git rev-parse --short HEAD)
-              TAG="v${VERSION}-${SHORT_SHA}"
+              TAG="v${VERSION}-$(git rev-parse --short HEAD)"
             else
               TAG="v${VERSION}"
             fi
           fi
-          echo "RELEASE_TAG=$TAG" >> $GITHUB_ENV
+
+          if [[ ! "$TAG" =~ ^v[0-9]+\.[0-9]+\.[0-9]+([.-][A-Za-z0-9._-]+)?$ ]]; then
+            echo 'Release tag must be a version tag such as v2.4.2.' >&2
+            exit 1
+          fi
+          printf 'RELEASE_TAG=%s\n' "$TAG" >> "$GITHUB_ENV"
 
           mkdir -p release-apks
-
-          # Standard flavor (com.samuel.musicbeat)
-          for f in app/build/outputs/apk/standard/release/app-standard-*.apk; do
-            [ -f "$f" ] || continue
-            base=$(basename "$f" | sed -E 's/app-standard-(.*)-release(-unsigned)?\.apk/\1/')
-            cp "$f" "release-apks/MusicBeat-${TAG}-standard-${base}.apk"
+          for flavor in standard noInternet; do
+            case "$flavor" in
+              standard) label='standard' ;;
+              noInternet) label='offline' ;;
+            esac
+            dir="app/build/outputs/apk/$flavor/release"
+            shopt -s nullglob
+            for apk in "$dir"/*.apk; do
+              base=$(basename "$apk")
+              abi=${base#app-${flavor}-}
+              abi=${abi%-release.apk}
+              abi=${abi%-release-unsigned.apk}
+              cp -- "$apk" "release-apks/MusicBeat-${TAG}-${label}-${abi}.apk"
+            done
+            shopt -u nullglob
           done
-
-          # OnePlus / OPPO Whitelisted: QQ Music flavor (com.tencent.qqmusic)
-          for f in app/build/outputs/apk/qqmusic/release/app-qqmusic-*.apk; do
-            [ -f "$f" ] || continue
-            base=$(basename "$f" | sed -E 's/app-qqmusic-(.*)-release(-unsigned)?\.apk/\1/')
-            cp "$f" "release-apks/MusicBeat-${TAG}-oneplus-qqmusic-${base}.apk"
-          done
-
-          # OnePlus / OPPO Whitelisted: Kugou flavor (com.kugou.android)
-          for f in app/build/outputs/apk/kugou/release/app-kugou-*.apk; do
-            [ -f "$f" ] || continue
-            base=$(basename "$f" | sed -E 's/app-kugou-(.*)-release(-unsigned)?\.apk/\1/')
-            cp "$f" "release-apks/MusicBeat-${TAG}-oneplus-kugou-${base}.apk"
-          done
-
+          test -n "$(find release-apks -maxdepth 1 -type f -name '*.apk' -print -quit)" || {
+            echo 'No APKs were produced.' >&2
+            exit 1
+          }
           ls -lh release-apks/
 
       - name: Generate Release Notes
-        id: release_notes
         run: |
-          cat << 'EOF' > release_notes.md
-          ## 🎵 MusicBeat Release
+          cat <<'EOF' > release_notes.md
+          ## MusicBeatSP 2.4.2
 
-          MusicBeat is a modern, privacy-respecting local & streaming music player with lossless audio, word-synced lyrics, and native hardware equalizer integration.
+          Standard and internet-permission-free offline APKs are included.
 
-          Forked with credit and gratitude from [kushagrasinghx/BitChord](https://github.com/kushagrasinghx/BitChord).
-
-          ---
-
-          ### 📦 Variant Selection Guide
-
-          | Variant | Package Name (`applicationId`) | Recommended For |
-          | :--- | :--- | :--- |
-          | **Standard** | `com.samuel.musicbeat` | **All general Android devices** (Pixel, Samsung, Motorola, Xiaomi, etc.) |
-          | **OnePlus (QQ Music)** | `com.tencent.qqmusic` | **OnePlus, OPPO, Realme** devices to unlock native **Dolby Atmos, Dirac, & OReality** audio effects |
-          | **OnePlus (KuGou)** | `com.kugou.android` | Alternative OnePlus/OPPO whitelist package for hardware audio enhancement |
-
-          > [!TIP]
-          > For 99% of modern phones, download the **`arm64-v8a`** APK for best performance and smaller file size. If unsure, download the **`universal`** APK.
+          | Variant | Package name |
+          | --- | --- |
+          | Standard | `io.pockets.musicbestsp` |
+          | Offline | `io.pockets.musicbestsp.nointernet` |
           EOF
 
       - name: Publish GitHub Release
-        uses: softprops/action-gh-release@v2
+        uses: softprops/action-gh-release@3bb12739c298aeb8a4eeaf626c5b8d85266b0e65 # v2
         with:
           tag_name: ${{ env.RELEASE_TAG }}
-          name: MusicBeat ${{ env.RELEASE_TAG }}
+          name: MusicBeatSP ${{ env.RELEASE_TAG }}
           body_path: release_notes.md
           files: release-apks/*.apk
           draft: false
