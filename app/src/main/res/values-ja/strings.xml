@@ -268,6 +268,8 @@
     <string name="full_screen_cover_art">全画面カバーアート</string>
     <string name="keep_original_artwork_aspect_ratio">カバーアートの縦横比を維持</string>
     <string name="keep_original_artwork_aspect_ratio_subtitle">全画面カバーアートがオフのとき、縦長・横長の画像を正方形に切り抜かず表示します</string>
+    <string name="keep_collection_artwork_aspect_ratio">アルバム・プレイリストのアート比率を維持</string>
+    <string name="keep_collection_artwork_aspect_ratio_subtitle">ライブラリのカードや曲一覧で、カバーを切り抜かずに表示します</string>
     <string name="preserve_artwork_shape_in_compact_transitions">ミニプレーヤー遷移時にアートを枠内へ収める</string>
     <string name="preserve_artwork_shape_in_compact_transitions_subtitle">カバーアートの縦横比を維持する設定と併用し、収納時に切り抜かず表示します。全画面歌詞では正方形の枠を維持します。初期設定はオフです。</string>
     <string name="animated_cover_art">アニメーションカバーアート</string>

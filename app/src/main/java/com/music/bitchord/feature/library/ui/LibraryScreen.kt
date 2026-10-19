@@ -201,6 +201,7 @@ fun LibraryScreen(
     val songsViewType by AppSettings.librarySongsViewType.collectAsStateWithLifecycle()
     val showPlaylistSongArtwork by AppSettings.showPlaylistSongArtwork.collectAsStateWithLifecycle()
     val fullScreenCollectionArtwork by AppSettings.fullScreenCollectionArtwork.collectAsStateWithLifecycle()
+    val keepCollectionArtworkAspectRatio by AppSettings.keepCollectionArtworkAspectRatio.collectAsStateWithLifecycle()
     val playStatsRevision by LocalPlayStatsStore.revision.collectAsStateWithLifecycle()
     var recentlyPlayedSongs by remember { mutableStateOf<List<Song>>(emptyList()) }
     var mostPlayedSongs by remember { mutableStateOf<List<Song>>(emptyList()) }
@@ -561,6 +562,7 @@ fun LibraryScreen(
                     isPlaylist = drillDownPlaylistId != null,
                     showArtworkInList = showPlaylistSongArtwork,
                     fullScreenArtwork = fullScreenCollectionArtwork,
+                    preserveArtworkAspectRatioInCollections = keepCollectionArtworkAspectRatio,
                     viewType = songsViewType,
                     onViewTypeToggle = {
                         playlistReorderEnabled = false

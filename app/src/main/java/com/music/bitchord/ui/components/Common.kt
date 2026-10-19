@@ -28,6 +28,7 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.snapshotFlow
 import androidx.compose.ui.layout.onSizeChanged
+import androidx.compose.ui.layout.ContentScale
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.music.bitchord.data.settings.AppSettings
 import com.music.bitchord.download.Downloads
@@ -297,6 +298,8 @@ fun SongRow(
     activeTint: Color = MaterialTheme.colorScheme.primary,
     /** True while a Downloads row belongs to the current multi-selection. */
     selected: Boolean = false,
+    /** Keeps collection art square by default; opt into fitting its source proportions where needed. */
+    artworkContentScale: ContentScale = ContentScale.Crop,
     dropdownMenu: (@Composable () -> Unit)? = null,
 ) {
     val haptics = rememberHaptics()
@@ -333,6 +336,7 @@ fun SongRow(
             isPlaying = isPlaying,
             activeTint = activeTint,
             selected = selected,
+            artworkContentScale = artworkContentScale,
             dropdownMenu = dropdownMenu,
         )
         return
@@ -380,6 +384,7 @@ fun SongRow(
             isPlaying = isPlaying,
             activeTint = activeTint,
             selected = selected,
+            artworkContentScale = artworkContentScale,
             dropdownMenu = dropdownMenu,
         )
     }
@@ -447,6 +452,7 @@ private fun SongRowContent(
     isPlaying: Boolean = false,
     activeTint: Color = MaterialTheme.colorScheme.primary,
     selected: Boolean = false,
+    artworkContentScale: ContentScale = ContentScale.Crop,
     dropdownMenu: (@Composable () -> Unit)? = null,
 ) {
     val titleColor by animateColorAsState(
@@ -488,6 +494,7 @@ private fun SongRowContent(
             AsyncImage(
                 model = song.artworkAt(ROW_ART_PX),
                 contentDescription = null,
+                contentScale = artworkContentScale,
                 modifier = Modifier
                     .size(52.dp)
                     .clip(RoundedCornerShape(8.dp))

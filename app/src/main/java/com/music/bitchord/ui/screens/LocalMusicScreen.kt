@@ -328,6 +328,7 @@ fun LocalMusicScreen(
     }
     val localFolderHierarchy by AppSettings.localFolderHierarchy.collectAsStateWithLifecycle()
     val fullScreenCollectionArtwork by AppSettings.fullScreenCollectionArtwork.collectAsStateWithLifecycle()
+    val keepCollectionArtworkAspectRatio by AppSettings.keepCollectionArtworkAspectRatio.collectAsStateWithLifecycle()
     val artistsOpenAlbums by AppSettings.artistsOpenAlbums.collectAsStateWithLifecycle()
     val shuffleArtistAlbums by AppSettings.shuffleArtistAlbums.collectAsStateWithLifecycle()
     val onlineAlbumArtistArtwork by AppSettings.onlineAlbumArtistArtwork.collectAsStateWithLifecycle()
@@ -725,6 +726,7 @@ fun LocalMusicScreen(
                         AlbumsTab(
                             albums = artistAlbums,
                             viewType = albumsViewType,
+                            keepArtworkAspectRatio = keepCollectionArtworkAspectRatio,
                             onViewTypeToggle = {
                                 val next = if (albumsViewType == LibraryViewType.GRID) LibraryViewType.LIST else LibraryViewType.GRID
                                 if (isDownloads) AppSettings.setDownloadedAlbumsViewType(next)
@@ -752,6 +754,8 @@ fun LocalMusicScreen(
                             artworkUrl = drillDownArt,
                             songs = drillDownSongs,
                             isArtist = drillDownIsArtist,
+                            preserveArtworkAspectRatioInCollections =
+                                keepCollectionArtworkAspectRatio && !drillDownIsArtist && !drillDownShowsAlbums,
                             fullScreenArtwork = fullScreenCollectionArtwork && drillDownFullScreenArtwork,
                             viewType = drillDownViewType,
                             onViewTypeToggle = {
@@ -923,6 +927,7 @@ fun LocalMusicScreen(
                     AlbumsTab(
                         albums = albums,
                         viewType = albumsViewType,
+                        keepArtworkAspectRatio = keepCollectionArtworkAspectRatio,
                         onViewTypeToggle = {
                             val next = if (albumsViewType == LibraryViewType.GRID) LibraryViewType.LIST else LibraryViewType.GRID
                             if (isDownloads) AppSettings.setDownloadedAlbumsViewType(next)
@@ -1643,6 +1648,7 @@ private fun AlbumsTab(
     onAlbumClick: (AlbumEntry) -> Unit,
     onAlbumLongPress: ((AlbumEntry) -> Unit)?,
     contentPadding: PaddingValues,
+    keepArtworkAspectRatio: Boolean,
 ) {
     if (viewType == LibraryViewType.GRID) {
         val gridState = rememberLazyGridState()
@@ -1686,6 +1692,7 @@ private fun AlbumsTab(
                 items(albums, key = { it.key }) { entry ->
                     AlbumGridCard(
                         entry = entry,
+                        keepArtworkAspectRatio = keepArtworkAspectRatio,
                         selected = entry.key in selectedKeys,
                         onClick = { onAlbumClick(entry) },
                         onLongPress = onAlbumLongPress?.let { { it(entry) } },
@@ -1735,6 +1742,7 @@ private fun AlbumsTab(
                 items(albums, key = { it.key }) { entry ->
                     AlbumRow(
                         entry = entry,
+                        keepArtworkAspectRatio = keepArtworkAspectRatio,
                         selected = entry.key in selectedKeys,
                         onClick = { onAlbumClick(entry) },
                         onLongPress = onAlbumLongPress?.let { { it(entry) } },
@@ -1760,6 +1768,7 @@ private fun AlbumsTab(
 @Composable
 private fun AlbumGridCard(
     entry: AlbumEntry,
+    keepArtworkAspectRatio: Boolean,
     selected: Boolean = false,
     onClick: () -> Unit,
     onLongPress: (() -> Unit)? = null,
@@ -1792,7 +1801,7 @@ private fun AlbumGridCard(
                 AsyncImage(
                     model = entry.thumbnailUrl.artworkAt(CARD_ART_PX),
                     contentDescription = null,
-                    contentScale = ContentScale.Crop,
+                    contentScale = if (keepArtworkAspectRatio) ContentScale.Fit else ContentScale.Crop,
                     modifier = Modifier.fillMaxSize(),
                 )
             }
@@ -1833,6 +1842,7 @@ private fun AlbumGridCard(
 @Composable
 private fun AlbumRow(
     entry: AlbumEntry,
+    keepArtworkAspectRatio: Boolean,
     selected: Boolean = false,
     onClick: () -> Unit,
     onLongPress: (() -> Unit)? = null,
@@ -1849,6 +1859,7 @@ private fun AlbumRow(
             url = entry.thumbnailUrl,
             playlist = entry.playlist,
             size = 48.dp,
+            keepArtworkAspectRatio = keepArtworkAspectRatio,
         )
         Spacer(Modifier.width(14.dp))
         Column(Modifier.weight(1f)) {
@@ -1903,7 +1914,12 @@ private fun AlbumRow(
  * glyph without the row changing size under it.
  */
 @Composable
-private fun CollectionArtwork(url: String?, playlist: Boolean, size: Dp) {
+private fun CollectionArtwork(
+    url: String?,
+    playlist: Boolean,
+    size: Dp,
+    keepArtworkAspectRatio: Boolean,
+) {
     val shape = RoundedCornerShape(8.dp)
     Box(
         modifier = Modifier
@@ -1922,7 +1938,7 @@ private fun CollectionArtwork(url: String?, playlist: Boolean, size: Dp) {
             AsyncImage(
                 model = url.artworkAt(ROW_ART_PX),
                 contentDescription = null,
-                contentScale = ContentScale.Crop,
+                contentScale = if (keepArtworkAspectRatio) ContentScale.Fit else ContentScale.Crop,
                 modifier = Modifier
                     .size(size)
                     .clip(shape)

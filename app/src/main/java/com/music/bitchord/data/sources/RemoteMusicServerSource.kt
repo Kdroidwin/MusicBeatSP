@@ -58,6 +58,7 @@ abstract class RemoteMusicServerSource(
     }
 
     protected val formatsByTrack = ConcurrentHashMap<String, StreamFormat>()
+    private val mediaSourcesByTrack = ConcurrentHashMap<String, JellyfinMediaSource>()
 
     protected fun credentials(): RemoteServerCredentials? = credentialProvider()
 
@@ -79,6 +80,7 @@ abstract class RemoteMusicServerSource(
         headers: Map<String, String> = emptyMap(),
         jsonBody: String? = null,
         maxBytes: Int = MAX_RESPONSE_BYTES,
+        operation: String = "server request",
     ): ByteArray {
         val request = Request.Builder().url(url)
             .header("Accept", "application/json, image/*, */*")
@@ -103,7 +105,7 @@ abstract class RemoteMusicServerSource(
                 override fun onResponse(call: Call, response: Response) {
                     try {
                         val bytes = response.use {
-                            if (!it.isSuccessful) throw ServerHttpException(it.code)
+                            if (!it.isSuccessful) throw ServerHttpException(it.code, operation)
                             val body = it.body
                             val contentLength = body.contentLength()
                             if (contentLength > maxBytes) throw IOException("Server response exceeded the size limit")
@@ -138,15 +140,18 @@ abstract class RemoteMusicServerSource(
         url: HttpUrl,
         headers: Map<String, String> = emptyMap(),
         jsonBody: String? = null,
-    ): JsonObject = remoteServerJson.parseToJsonElement(requestBytes(url, headers, jsonBody).decodeToString()).jsonObject
+        operation: String = "server request",
+    ): JsonObject = remoteServerJson.parseToJsonElement(
+        requestBytes(url, headers, jsonBody, operation = operation).decodeToString(),
+    ).jsonObject
 
     protected fun sourceArtworkUri(imageId: String): String = SourceRegistry.remoteServerArtworkUri(configId, imageId)
 
     protected fun healthFrom(error: Throwable): SourceHealth = when (error) {
         is ServerHttpException -> if (error.statusCode == 401 || error.statusCode == 403) {
-            SourceHealth.Rejected("HTTP ${error.statusCode}: authentication was rejected")
+            SourceHealth.Rejected("HTTP ${error.statusCode}: authentication was rejected during ${error.operation}")
         } else {
-            SourceHealth.Unreachable("HTTP ${error.statusCode}")
+            SourceHealth.Unreachable("HTTP ${error.statusCode} during ${error.operation}")
         }
         is SecurityException -> SourceHealth.Rejected("Server authentication was rejected")
         else -> SourceHealth.Unreachable(error.message?.let(::safeServerMessage) ?: "Server is unreachable")
@@ -161,6 +166,16 @@ abstract class RemoteMusicServerSource(
             formatsByTrack.remove(oldest)
         }
     }
+
+    protected fun rememberMediaSource(trackId: String, source: JellyfinMediaSource) {
+        mediaSourcesByTrack[trackId] = source
+        while (mediaSourcesByTrack.size > MAX_CACHED_TRACK_FORMATS) {
+            val oldest = mediaSourcesByTrack.keys.firstOrNull() ?: break
+            mediaSourcesByTrack.remove(oldest)
+        }
+    }
+
+    protected fun mediaSource(trackId: String): JellyfinMediaSource? = mediaSourcesByTrack[trackId]
 
     protected fun durationText(seconds: Int?): String? {
         val value = seconds?.takeIf { it >= 0 } ?: return null
@@ -180,6 +195,11 @@ abstract class RemoteMusicServerSource(
         protected const val IMAGE_MAX_BYTES = MAX_IMAGE_BYTES
     }
 }
+
+data class JellyfinMediaSource(
+    val id: String?,
+    val container: String?,
+)
 
 /** Jellyfin client using its supported MediaBrowser auth header and direct-play stream route. */
 class JellyfinMusicSource(
@@ -203,6 +223,7 @@ class JellyfinMusicSource(
             url,
             headers = mapOf("X-Emby-Authorization" to mediaBrowserHeader()),
             jsonBody = body,
+            operation = "Jellyfin sign-in",
         )
         val token = response.string("AccessToken")?.takeIf(String::isNotBlank)
             ?: throw SecurityException("Jellyfin did not return an access token")
@@ -223,7 +244,7 @@ class JellyfinMusicSource(
     override suspend fun health(): SourceHealth = try {
         val auth = authenticate()
         val url = endpoint("System", "Info") ?: throw IOException("Invalid server URL")
-        requestJson(url, authHeaders(auth))
+        requestJson(url, authHeaders(auth), operation = "Jellyfin connection check")
         SourceHealth.Ok("Jellyfin connected")
     } catch (error: CancellationException) {
         throw error
@@ -242,9 +263,9 @@ class JellyfinMusicSource(
             "SearchTerm" to term,
             "StartIndex" to "0",
             "Limit" to requestLimit(limit).toString(),
-            "Fields" to "MediaStreams,ProviderIds",
+            "Fields" to "MediaStreams,MediaSources,ProviderIds",
         )) ?: throw IOException("Invalid server URL")
-        val root = requestJson(url, authHeaders(auth))
+        val root = requestJson(url, authHeaders(auth), operation = "Jellyfin search")
         val items = root.array("Items") ?: return emptyList()
         return items.mapNotNull { element ->
             val item = element.objectOrNull() ?: return@mapNotNull null
@@ -259,6 +280,17 @@ class JellyfinMusicSource(
                 bitDepth = audioStream?.int("BitDepth"),
             )
             rememberFormat(id, format)
+            val mediaSource = item.array("MediaSources")
+                ?.firstOrNull()
+                ?.objectOrNull()
+            rememberMediaSource(
+                id,
+                JellyfinMediaSource(
+                    id = mediaSource?.string("Id")?.takeIf(String::isNotBlank),
+                    container = (mediaSource?.string("Container") ?: item.string("Container"))
+                        ?.takeIf { it.matches(Regex("[A-Za-z0-9]+")) },
+                ),
+            )
             val artists = item.stringArray("Artists")
             val artist = artists.firstOrNull()
                 ?: item.string("AlbumArtist")
@@ -282,10 +314,18 @@ class JellyfinMusicSource(
 
     override suspend fun stream(trackId: String, request: StreamRequest): SourceStream? {
         val auth = authenticate()
-        val url = endpoint("Audio", trackId, "stream", query = mapOf(
-            "UserId" to auth.userId,
-            "static" to "true",
-        )) ?: return null
+        val mediaSource = mediaSource(trackId)
+        val query = buildMap {
+            put("UserId", auth.userId)
+            // Jellyfin's audio stream endpoint expects the selected media source
+            // when it is known. The item id is also the media-source id for
+            // ordinary single-source library items.
+            put("MediaSourceId", mediaSource?.id ?: trackId)
+            put("static", "true")
+            mediaSource?.container?.let { put("Container", it) }
+        }
+        val url = endpoint("Audio", trackId, "stream", query = query)
+            ?: return null
         val format = formatsByTrack[trackId] ?: StreamFormat()
         return SourceStream(
             url = url.toString(),
@@ -298,7 +338,12 @@ class JellyfinMusicSource(
     override suspend fun artwork(imageId: String): ByteArray? = try {
         val auth = authenticate()
         val url = endpoint("Items", imageId, "Images", "Primary") ?: return null
-        requestBytes(url, authHeaders(auth), maxBytes = IMAGE_MAX_BYTES).takeIf { it.isNotEmpty() }
+        requestBytes(
+            url,
+            authHeaders(auth),
+            maxBytes = IMAGE_MAX_BYTES,
+            operation = "Jellyfin artwork",
+        ).takeIf { it.isNotEmpty() }
     } catch (error: CancellationException) {
         throw error
     } catch (_: Exception) {
@@ -356,7 +401,7 @@ class NavidromeMusicSource(
     override suspend fun health(): SourceHealth = try {
         val auth = authenticate()
         val url = subsonicUrl("rest/ping.view", auth) ?: throw IOException("Invalid server URL")
-        val response = requestJson(url).subsonicResponse()
+        val response = requestJson(url, operation = "OpenSubsonic connection check").subsonicResponse()
         if (response.string("status") == "ok") {
             SourceHealth.Ok(response.string("version")?.let { "OpenSubsonic $it" } ?: "OpenSubsonic connected")
         } else {
@@ -383,7 +428,7 @@ class NavidromeMusicSource(
             "albumCount" to "0",
             "artistCount" to "0",
         )) ?: throw IOException("Invalid server URL")
-        val response = requestJson(url).subsonicResponse()
+        val response = requestJson(url, operation = "OpenSubsonic search").subsonicResponse()
         ensureSubsonicOk(response)
         val songs = response.objectOrNull("searchResult3")?.arrayOrSingle("song") ?: return emptyList()
         return songs.mapNotNull { element ->
@@ -436,7 +481,7 @@ class NavidromeMusicSource(
         val auth = authenticate()
         val url = subsonicUrl("rest/getCoverArt.view", auth, mapOf("id" to imageId, "size" to "1200"), json = false)
             ?: return null
-        requestBytes(url, maxBytes = IMAGE_MAX_BYTES).takeIf { it.isNotEmpty() }
+        requestBytes(url, maxBytes = IMAGE_MAX_BYTES, operation = "OpenSubsonic artwork").takeIf { it.isNotEmpty() }
     } catch (error: CancellationException) {
         throw error
     } catch (_: Exception) {
@@ -459,7 +504,7 @@ class NavidromeMusicSource(
     }
 }
 
-private class ServerHttpException(val statusCode: Int) : IOException("HTTP $statusCode")
+private class ServerHttpException(val statusCode: Int, val operation: String) : IOException("HTTP $statusCode during $operation")
 
 private fun safeServerMessage(message: String): String =
     message.filterNot(Char::isISOControl).trim().take(160).ifBlank { "Server is unreachable" }

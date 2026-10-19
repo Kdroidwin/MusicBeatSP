@@ -124,6 +124,7 @@ fun DrillDownHeader(
     onBack: (() -> Unit)? = null,
     isPlaylist: Boolean = false,
     fullScreenArtwork: Boolean = false,
+    preserveArtworkAspectRatio: Boolean = false,
     artHeight: Dp? = null,
     palette: ArtworkPalette? = null,
     modifier: Modifier = Modifier,
@@ -144,6 +145,7 @@ fun DrillDownHeader(
             songs = songs,
             isArtist = isArtist,
             onBack = onBack,
+            preserveArtworkAspectRatio = preserveArtworkAspectRatio,
             modifier = modifier,
         )
     }
@@ -156,6 +158,7 @@ private fun CompactDrillDownHeader(
     songs: List<Song>,
     isArtist: Boolean,
     onBack: (() -> Unit)?,
+    preserveArtworkAspectRatio: Boolean,
     modifier: Modifier,
 ) {
     Column(
@@ -221,7 +224,7 @@ private fun CompactDrillDownHeader(
                     AsyncImage(
                         model = imageModel,
                         contentDescription = null,
-                        contentScale = ContentScale.Crop,
+                        contentScale = if (preserveArtworkAspectRatio) ContentScale.Fit else ContentScale.Crop,
                         modifier = Modifier
                             .fillMaxSize()
                             .clip(shape)
@@ -470,6 +473,7 @@ fun DrillDownActionRow(
 @Composable
 fun SongGridCard(
     song: Song,
+    preserveArtworkAspectRatio: Boolean = false,
     selected: Boolean = false,
     isCurrent: Boolean = false,
     onClick: () -> Unit,
@@ -503,7 +507,7 @@ fun SongGridCard(
                 AsyncImage(
                     model = song.thumbnailUrl.artworkAt(CARD_ART_PX),
                     contentDescription = null,
-                    contentScale = ContentScale.Crop,
+                    contentScale = if (preserveArtworkAspectRatio) ContentScale.Fit else ContentScale.Crop,
                     modifier = Modifier.fillMaxSize(),
                 )
             }
@@ -555,6 +559,7 @@ fun DrillDownSongList(
     isPlaylist: Boolean = false,
     showArtworkInList: Boolean = false,
     fullScreenArtwork: Boolean = false,
+    preserveArtworkAspectRatioInCollections: Boolean = false,
     reorderEnabled: Boolean = false,
     onReorderToggle: (() -> Unit)? = null,
     onReorderComplete: ((List<Song>) -> Unit)? = null,
@@ -655,6 +660,7 @@ fun DrillDownSongList(
                         onBack = onBack,
                         isPlaylist = isPlaylist,
                         fullScreenArtwork = fullScreenArtwork,
+                        preserveArtworkAspectRatio = preserveArtworkAspectRatioInCollections && !isArtist,
                         artHeight = artHeight,
                         palette = artworkPalette,
                     )
@@ -683,6 +689,7 @@ fun DrillDownSongList(
                             if (selectionMode) onSelectionToggle?.invoke(song) else onSongClick(songs, index)
                         },
                         onLongPress = { onSongLongPress(song) },
+                        preserveArtworkAspectRatio = preserveArtworkAspectRatioInCollections && !isArtist,
                     )
                 }
             }
@@ -763,6 +770,7 @@ fun DrillDownSongList(
                         onBack = onBack,
                         isPlaylist = isPlaylist,
                         fullScreenArtwork = fullScreenArtwork,
+                        preserveArtworkAspectRatio = preserveArtworkAspectRatioInCollections && !isArtist,
                         artHeight = artHeight,
                         palette = artworkPalette,
                     )
@@ -820,6 +828,11 @@ fun DrillDownSongList(
                                     isPlaying = song.isSameTrackAs(currentSong) && isPlaying,
                                     activeTint = rowAccent,
                                     trackNumber = trackNumber,
+                                    artworkContentScale = if (preserveArtworkAspectRatioInCollections && showArtworkInList) {
+                                        ContentScale.Fit
+                                    } else {
+                                        ContentScale.Crop
+                                    },
                                     onClick = {
                                         if (selectionMode) onSelectionToggle?.invoke(song)
                                         else onSongClick(displayedSongs, index)
@@ -879,6 +892,11 @@ fun DrillDownSongList(
                             isPlaying = song.isSameTrackAs(currentSong) && isPlaying,
                             activeTint = rowAccent,
                             trackNumber = trackNumber,
+                            artworkContentScale = if (preserveArtworkAspectRatioInCollections && showArtworkInList) {
+                                ContentScale.Fit
+                            } else {
+                                ContentScale.Crop
+                            },
                             onClick = {
                                 if (selectionMode) onSelectionToggle?.invoke(song) else onSongClick(displayedSongs, index)
                             },

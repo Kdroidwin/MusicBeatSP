@@ -395,6 +395,7 @@ fun SettingsScreen(
     val dontRepeatSuggestions by AppSettings.dontRepeatSuggestions.collectAsStateWithLifecycle()
     val filterNonMusicAudio by AppSettings.filterNonMusicAudio.collectAsStateWithLifecycle()
     val showPlaylistSongArtwork by AppSettings.showPlaylistSongArtwork.collectAsStateWithLifecycle()
+    val keepCollectionArtworkAspectRatio by AppSettings.keepCollectionArtworkAspectRatio.collectAsStateWithLifecycle()
     val highPerformanceMode by AppSettings.highPerformanceMode.collectAsStateWithLifecycle()
     val performanceRefreshRate by AppSettings.performanceRefreshRate.collectAsStateWithLifecycle()
     val currentDisplay = LocalView.current.display
@@ -676,6 +677,7 @@ fun SettingsScreen(
         ) { AppSettings.setMiniPlayerPreviousButton(!miniPlayerPreviousButton) },
         SettingsSearchEntry(stringResource(R.string.filter_non_music_audio), stringResource(R.string.filter_non_music_audio_subtitle), listOf("filter", "audio", "music", "音楽", "フィルター"), filterNonMusicAudio) { AppSettings.setFilterNonMusicAudio(!filterNonMusicAudio) },
         SettingsSearchEntry(stringResource(R.string.playlist_song_artwork), stringResource(R.string.playlist_song_artwork_subtitle), listOf("playlist", "artwork", "プレイリスト", "アルバムアート"), showPlaylistSongArtwork) { AppSettings.setShowPlaylistSongArtwork(!showPlaylistSongArtwork) },
+        SettingsSearchEntry(stringResource(R.string.keep_collection_artwork_aspect_ratio), stringResource(R.string.keep_collection_artwork_aspect_ratio_subtitle), listOf("playlist", "album", "artwork", "aspect ratio", "cover", "プレイリスト", "アルバム", "アート", "縦横比"), keepCollectionArtworkAspectRatio) { AppSettings.setKeepCollectionArtworkAspectRatio(!keepCollectionArtworkAspectRatio) },
     ) + listOf(
         SettingsSearchEntry(
             stringResource(R.string.artwork_tap_opens_lyrics),
@@ -3148,6 +3150,7 @@ fun SettingsScreen(
             onlineAlbumArtistArtwork = onlineAlbumArtistArtwork,
             filterNonMusicAudio = filterNonMusicAudio,
             showPlaylistSongArtwork = showPlaylistSongArtwork,
+            keepCollectionArtworkAspectRatio = keepCollectionArtworkAspectRatio,
             hasAllFiles = hasAllFiles,
             onManageFolders = { showManageFoldersSheet = true },
             onChooseMusicFolder = { musicFolderRootPicker.launch(null) },
@@ -4014,6 +4017,7 @@ private fun LocalMusicSettingsGroup(
     onlineAlbumArtistArtwork: Boolean,
     filterNonMusicAudio: Boolean,
     showPlaylistSongArtwork: Boolean,
+    keepCollectionArtworkAspectRatio: Boolean,
     hasAllFiles: Boolean,
     onManageFolders: () -> Unit,
     onChooseMusicFolder: () -> Unit,
@@ -4237,6 +4241,23 @@ SettingsGroup(header = stringResource(R.string.local_music)) {
             )
         },
         onClick = { AppSettings.setShowPlaylistSongArtwork(!showPlaylistSongArtwork) },
+    )
+    RowDivider()
+    SettingsRow(
+        icon = Icons.Rounded.Album,
+        title = stringResource(R.string.keep_collection_artwork_aspect_ratio),
+        subtitle = stringResource(R.string.keep_collection_artwork_aspect_ratio_subtitle),
+        trailing = {
+            Switch(
+                checked = keepCollectionArtworkAspectRatio,
+                onCheckedChange = AppSettings::setKeepCollectionArtworkAspectRatio,
+                colors = SwitchDefaults.colors(
+                    checkedTrackColor = MaterialTheme.colorScheme.primary,
+                    checkedBorderColor = MaterialTheme.colorScheme.primary,
+                ),
+            )
+        },
+        onClick = { AppSettings.setKeepCollectionArtworkAspectRatio(!keepCollectionArtworkAspectRatio) },
     )
 }
 

@@ -301,6 +301,8 @@
     <string name="full_screen_cover_art">Full-screen cover art</string>
     <string name="keep_original_artwork_aspect_ratio">Keep cover art proportions</string>
     <string name="keep_original_artwork_aspect_ratio_subtitle">When full-screen cover art is off, show portrait and landscape covers without cropping them square</string>
+    <string name="keep_collection_artwork_aspect_ratio">Keep album and playlist cover proportions</string>
+    <string name="keep_collection_artwork_aspect_ratio_subtitle">Show album and playlist covers uncropped in library cards and their song lists</string>
     <string name="preserve_artwork_shape_in_compact_transitions">Fit cover art during mini-player transitions</string>
     <string name="preserve_artwork_shape_in_compact_transitions_subtitle">When cover proportions are preserved, fit them without cropping during the mini-player transition and keep the full-screen lyrics cover in a square frame. Off by default.</string>
     <string name="legacy_mesh_gradient">Legacy mesh gradient</string>

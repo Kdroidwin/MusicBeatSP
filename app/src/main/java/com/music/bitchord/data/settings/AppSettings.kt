@@ -691,6 +691,9 @@ object AppSettings {
     /** Preserves non-square still-cover proportions when the full-bleed treatment is off. */
     val keepOriginalArtworkAspectRatio = MutableStateFlow(false)
 
+    /** Shows album and playlist artwork without cropping it into a square tile. */
+    val keepCollectionArtworkAspectRatio = MutableStateFlow(false)
+
     /** Fits preserved non-square covers into square mini-player and lyrics transition frames. */
     val preserveArtworkShapeInCompactTransitions = MutableStateFlow(false)
 
@@ -1120,6 +1123,7 @@ object AppSettings {
         canvasOverCellular.value = prefs.getBoolean(KEY_CANVAS_OVER_CELLULAR, false)
         fullBleedArtwork.value = prefs.getBoolean(KEY_FULL_BLEED_ARTWORK, true)
         keepOriginalArtworkAspectRatio.value = prefs.getBoolean(KEY_KEEP_ORIGINAL_ARTWORK_ASPECT_RATIO, false)
+        keepCollectionArtworkAspectRatio.value = prefs.getBoolean(KEY_KEEP_COLLECTION_ARTWORK_ASPECT_RATIO, false)
         preserveArtworkShapeInCompactTransitions.value =
             prefs.getBoolean(KEY_PRESERVE_ARTWORK_SHAPE_IN_COMPACT_TRANSITIONS, false)
         keepArtworkFullSizeWhenPaused.value = prefs.getBoolean(KEY_KEEP_ARTWORK_FULL_SIZE_PAUSED, false)
@@ -2104,6 +2108,11 @@ object AppSettings {
         prefs.edit().putBoolean(KEY_KEEP_ORIGINAL_ARTWORK_ASPECT_RATIO, value).apply()
     }
 
+    fun setKeepCollectionArtworkAspectRatio(value: Boolean) {
+        keepCollectionArtworkAspectRatio.value = value
+        prefs.edit().putBoolean(KEY_KEEP_COLLECTION_ARTWORK_ASPECT_RATIO, value).apply()
+    }
+
     fun setPreserveArtworkShapeInCompactTransitions(value: Boolean) {
         preserveArtworkShapeInCompactTransitions.value = value
         prefs.edit().putBoolean(KEY_PRESERVE_ARTWORK_SHAPE_IN_COMPACT_TRANSITIONS, value).apply()
@@ -2825,6 +2834,7 @@ object AppSettings {
     private const val KEY_CANVAS_OVER_CELLULAR = "canvas_over_cellular"
     private const val KEY_FULL_BLEED_ARTWORK = "full_bleed_artwork"
     private const val KEY_KEEP_ORIGINAL_ARTWORK_ASPECT_RATIO = "keep_original_artwork_aspect_ratio"
+    private const val KEY_KEEP_COLLECTION_ARTWORK_ASPECT_RATIO = "keep_collection_artwork_aspect_ratio"
     private const val KEY_PRESERVE_ARTWORK_SHAPE_IN_COMPACT_TRANSITIONS = "preserve_artwork_shape_in_compact_transitions"
     private const val KEY_KEEP_ARTWORK_FULL_SIZE_PAUSED = "keep_artwork_full_size_when_paused"
     private const val KEY_DOUBLE_TAP_TO_SEEK = "double_tap_to_seek"

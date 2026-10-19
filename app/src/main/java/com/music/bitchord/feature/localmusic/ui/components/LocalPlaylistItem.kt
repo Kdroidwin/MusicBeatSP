@@ -46,7 +46,9 @@ import coil3.compose.AsyncImage
 import com.music.bitchord.feature.localmusic.domain.model.LocalPlaylist
 import com.music.bitchord.data.model.Song
 import com.music.bitchord.data.model.ROW_ART_PX
+import com.music.bitchord.data.settings.AppSettings
 import com.music.bitchord.ui.theme.rememberArtworkPalette
+import androidx.lifecycle.compose.collectAsStateWithLifecycle
 
 /**
  * Item row rendering a user-created local offline playlist.
@@ -72,6 +74,7 @@ fun LocalPlaylistItem(
     val exportM3u = rememberM3uExportAction(playlist, librarySongs)
     val coverUrl = playlist.customCoverUrl ?: playlist.coverUrl
     val menuPalette = if (menuOpen) rememberArtworkPalette(coverUrl, artPx = ROW_ART_PX) else null
+    val keepArtworkAspectRatio by AppSettings.keepCollectionArtworkAspectRatio.collectAsStateWithLifecycle()
 
     Surface(
         modifier = modifier
@@ -100,7 +103,7 @@ fun LocalPlaylistItem(
                     AsyncImage(
                         model = coverUrl,
                         contentDescription = playlist.name,
-                        contentScale = ContentScale.Crop,
+                        contentScale = if (keepArtworkAspectRatio) ContentScale.Fit else ContentScale.Crop,
                         modifier = Modifier.matchParentSize(),
                     )
                 } else {
