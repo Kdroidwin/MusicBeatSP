@@ -2618,11 +2618,13 @@ fun NowPlayingScreen(
                             FrostedGlassBackdrop(
                                 hazeState = playerHaze,
                                 modifier = Modifier.matchParentSize(),
-                                tint = Color.White.copy(alpha = 0.08f),
-                                tintAlpha = 0.06f,
+                                // The player already has an artwork-derived mesh behind
+                                // this layer. A white glass tint washes that colour out
+                                // and reads as a separate pale rectangle, so keep the
+                                // blur subtly shaded with this track's own page colour.
+                                tint = artworkPalette.background.copy(alpha = 0.18f),
+                                tintAlpha = 0.12f,
                             )
-                        } else {
-                            Box(Modifier.matchParentSize().background(artworkPalette.background))
                         }
                         if (lyricsLogsOpen) {
                             LyricsLogConsole(Modifier.fillMaxSize())
