@@ -268,6 +268,8 @@
     <string name="full_screen_cover_art">全画面カバーアート</string>
     <string name="keep_original_artwork_aspect_ratio">カバーアートの縦横比を維持</string>
     <string name="keep_original_artwork_aspect_ratio_subtitle">全画面カバーアートがオフのとき、縦長・横長の画像を正方形に切り抜かず表示します</string>
+    <string name="preserve_artwork_shape_in_compact_transitions">ミニプレーヤー遷移時にアートを枠内へ収める</string>
+    <string name="preserve_artwork_shape_in_compact_transitions_subtitle">カバーアートの縦横比を維持する設定と併用し、収納時に切り抜かず表示します。全画面歌詞では正方形の枠を維持します。初期設定はオフです。</string>
     <string name="animated_cover_art">アニメーションカバーアート</string>
     <string name="synced_lyrics">同期歌詞</string>
     <string name="synced_lyrics_subtitle">歌われている歌詞をプレイヤー上でハイライト表示します</string>
@@ -698,8 +700,10 @@
     <string name="player_lyrics_strip_subtitle">歌詞機能を無効にせず、プレーヤーの一行歌詞だけを表示・非表示にします</string>
     <string name="artwork_tap_opens_lyrics">アルバムアートをタップして歌詞を表示</string>
     <string name="artwork_tap_opens_lyrics_subtitle">プレーヤーのアートワークを一度タップすると歌詞画面を開きます</string>
-    <string name="lyrics_replace_artwork_only">アートワーク部分に歌詞を表示</string>
-    <string name="lyrics_replace_artwork_only_subtitle">アルバムアートだけを歌詞に置き換え、再生操作・再生バー・音量・下部ボタンは表示したままにします</string>
+    <string name="lyrics_replace_artwork_only">プレーヤー内に歌詞を表示</string>
+    <string name="lyrics_replace_artwork_only_subtitle">アート領域を広い歌詞表示に切り替え、再生操作を残します。ジャケットと曲情報は上部の小さな行にまとめます。初期設定はオフです。</string>
+    <string name="hide_player_header_during_lyrics">歌詞表示中に上部の曲情報を隠す</string>
+    <string name="hide_player_header_during_lyrics_subtitle">歌詞表示中だけ、小さなジャケット・曲名・アーティスト名・お気に入り・詳細ボタンを隠します。再生操作は残します。</string>
     <string name="frosted_compact_lyrics">アート部分の歌詞をすりガラス表示</string>
     <string name="frosted_compact_lyrics_subtitle">背景をぼかして透かし、アートの色を歌詞領域に反映します</string>
     <string name="hide_lyrics_saved_message">歌詞の保存済みメッセージを隠す</string>

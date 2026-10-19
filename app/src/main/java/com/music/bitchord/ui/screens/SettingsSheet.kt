@@ -345,6 +345,7 @@ fun SettingsScreen(
     val lyricsTransportControlsCentered by AppSettings.lyricsTransportControlsCentered.collectAsStateWithLifecycle()
     val artworkTapOpensLyrics by AppSettings.artworkTapOpensLyrics.collectAsStateWithLifecycle()
     val lyricsReplaceArtworkOnly by AppSettings.lyricsReplaceArtworkOnly.collectAsStateWithLifecycle()
+    val hidePlayerHeaderDuringLyrics by AppSettings.hidePlayerHeaderDuringLyrics.collectAsStateWithLifecycle()
     val showPlayerLyricsStrip by AppSettings.showPlayerLyricsStrip.collectAsStateWithLifecycle()
     val offlineMode by AppSettings.offlineMode.collectAsStateWithLifecycle()
     val youtubeMusicEnabled by AppSettings.youtubeMusicEnabled.collectAsStateWithLifecycle()
@@ -363,6 +364,7 @@ fun SettingsScreen(
     val preloadAlbumArtOnStartup by AppSettings.preloadAlbumArtOnStartup.collectAsStateWithLifecycle()
     val fullBleedArtwork by AppSettings.fullBleedArtwork.collectAsStateWithLifecycle()
     val keepOriginalArtworkAspectRatio by AppSettings.keepOriginalArtworkAspectRatio.collectAsStateWithLifecycle()
+    val preserveArtworkShapeInCompactTransitions by AppSettings.preserveArtworkShapeInCompactTransitions.collectAsStateWithLifecycle()
     val keepArtworkFullSizeWhenPaused by AppSettings.keepArtworkFullSizeWhenPaused.collectAsStateWithLifecycle()
     val legacyMeshGradient by AppSettings.legacyMeshGradient.collectAsStateWithLifecycle()
     val syncedLyrics by AppSettings.syncedLyrics.collectAsStateWithLifecycle()
@@ -532,6 +534,12 @@ fun SettingsScreen(
             listOf("lyrics", "歌詞", "artwork", "アルバムアート", "controls", "操作を残す"),
             lyricsReplaceArtworkOnly,
         ) { AppSettings.setLyricsReplaceArtworkOnly(!lyricsReplaceArtworkOnly) },
+        SettingsSearchEntry(
+            stringResource(R.string.hide_player_header_during_lyrics),
+            stringResource(R.string.hide_player_header_during_lyrics_subtitle),
+            listOf("lyrics", "歌詞", "header", "title", "artist", "favorite", "more", "上部", "曲名", "アーティスト", "お気に入り", "詳細"),
+            hidePlayerHeaderDuringLyrics,
+        ) { AppSettings.setHidePlayerHeaderDuringLyrics(!hidePlayerHeaderDuringLyrics) },
         SettingsSearchEntry(stringResource(R.string.skip_silence), stringResource(R.string.skip_silence_subtitle), listOf("silence", "無音", "再生"), skipSilence) { AppSettings.setSkipSilence(!skipSilence) },
         SettingsSearchEntry(
             title = stringResource(R.string.crossfade),
@@ -638,6 +646,7 @@ fun SettingsScreen(
         SettingsSearchEntry(stringResource(R.string.auto_embed_lyrics), stringResource(R.string.auto_embed_lyrics_subtitle), listOf("lyrics", "歌詞", "embed", "埋め込み"), autoEmbedLyrics) { AppSettings.setAutoEmbedLyrics(!autoEmbedLyrics) },
         SettingsSearchEntry(stringResource(R.string.full_screen_cover_art), stringResource(R.string.full_screen_cover_art_subtitle), listOf("artwork", "cover", "full screen", "アート", "全画面"), fullBleedArtwork) { AppSettings.setFullBleedArtwork(!fullBleedArtwork) },
         SettingsSearchEntry(stringResource(R.string.keep_original_artwork_aspect_ratio), stringResource(R.string.keep_original_artwork_aspect_ratio_subtitle), listOf("artwork", "cover", "aspect ratio", "crop", "縦長", "横長", "比率", "トリミング"), keepOriginalArtworkAspectRatio) { AppSettings.setKeepOriginalArtworkAspectRatio(!keepOriginalArtworkAspectRatio) },
+        SettingsSearchEntry(stringResource(R.string.preserve_artwork_shape_in_compact_transitions), stringResource(R.string.preserve_artwork_shape_in_compact_transitions_subtitle), listOf("artwork", "cover", "aspect ratio", "mini player", "dock", "lyrics", "アート", "カバー", "縦横比", "ミニプレーヤー", "歌詞", "遷移"), preserveArtworkShapeInCompactTransitions) { AppSettings.setPreserveArtworkShapeInCompactTransitions(!preserveArtworkShapeInCompactTransitions) },
         SettingsSearchEntry(stringResource(R.string.keep_artwork_full_size_paused), stringResource(R.string.keep_artwork_full_size_paused_subtitle), listOf("artwork", "cover", "paused", "停止中", "アート"), keepArtworkFullSizeWhenPaused) { AppSettings.setKeepArtworkFullSizeWhenPaused(!keepArtworkFullSizeWhenPaused) },
         SettingsSearchEntry(stringResource(R.string.reduce_animation), stringResource(R.string.reduce_animation_subtitle), listOf("animation", "reduce", "アニメーション"), reduceAnimation) { AppSettings.setReduceAnimation(!reduceAnimation) },
         SettingsSearchEntry(stringResource(R.string.player_artwork_transition), stringResource(R.string.player_artwork_transition_subtitle), listOf("player", "artwork", "cover", "lyrics", "animation", "transition", "プレイヤー", "アート", "歌詞", "遷移", "アニメーション"), playerArtworkTransition) { AppSettings.setPlayerArtworkTransition(!playerArtworkTransition) },
@@ -2644,6 +2653,25 @@ fun SettingsScreen(
             )
             RowDivider()
             SettingsRow(
+                icon = Icons.Rounded.ViewStream,
+                title = stringResource(R.string.preserve_artwork_shape_in_compact_transitions),
+                subtitle = stringResource(R.string.preserve_artwork_shape_in_compact_transitions_subtitle),
+                trailing = {
+                    Switch(
+                        checked = preserveArtworkShapeInCompactTransitions,
+                        onCheckedChange = AppSettings::setPreserveArtworkShapeInCompactTransitions,
+                        colors = SwitchDefaults.colors(
+                            checkedTrackColor = MaterialTheme.colorScheme.primary,
+                            checkedBorderColor = MaterialTheme.colorScheme.primary,
+                        ),
+                    )
+                },
+                onClick = {
+                    AppSettings.setPreserveArtworkShapeInCompactTransitions(!preserveArtworkShapeInCompactTransitions)
+                },
+            )
+            RowDivider()
+            SettingsRow(
                 icon = Icons.Rounded.Album,
                 title = stringResource(R.string.keep_artwork_full_size_paused),
                 subtitle = stringResource(R.string.keep_artwork_full_size_paused_subtitle),
@@ -2746,6 +2774,23 @@ fun SettingsScreen(
                     )
                 },
                 onClick = { AppSettings.setLyricsReplaceArtworkOnly(!lyricsReplaceArtworkOnly) },
+            )
+            RowDivider()
+            SettingsRow(
+                icon = Icons.AutoMirrored.Rounded.Notes,
+                title = stringResource(R.string.hide_player_header_during_lyrics),
+                subtitle = stringResource(R.string.hide_player_header_during_lyrics_subtitle),
+                trailing = {
+                    Switch(
+                        checked = hidePlayerHeaderDuringLyrics,
+                        onCheckedChange = AppSettings::setHidePlayerHeaderDuringLyrics,
+                        colors = SwitchDefaults.colors(
+                            checkedTrackColor = MaterialTheme.colorScheme.primary,
+                            checkedBorderColor = MaterialTheme.colorScheme.primary,
+                        ),
+                    )
+                },
+                onClick = { AppSettings.setHidePlayerHeaderDuringLyrics(!hidePlayerHeaderDuringLyrics) },
             )
             // Nothing to choose between while the feature is off, and the
             // sources are third-party services being reached on the user's

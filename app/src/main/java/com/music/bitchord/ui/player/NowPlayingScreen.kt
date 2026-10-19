@@ -783,6 +783,12 @@ fun NowPlayingScreen(
         ?.takeIf { it != artUrl }
 
     val playerArtworkTransitionEnabled by AppSettings.playerArtworkTransition.collectAsStateWithLifecycle()
+    val preserveArtworkShapeInCompactTransitions by AppSettings.preserveArtworkShapeInCompactTransitions.collectAsStateWithLifecycle()
+    val fullBleedArt by AppSettings.fullBleedArtwork.collectAsStateWithLifecycle()
+    val keepOriginalArtworkAspectRatio by AppSettings.keepOriginalArtworkAspectRatio.collectAsStateWithLifecycle()
+    val preserveSleeveArtworkShape = keepOriginalArtworkAspectRatio && !fullBleedArt
+    val preserveTransitionArtworkProportions =
+        preserveArtworkShapeInCompactTransitions && preserveSleeveArtworkShape
     val dock = if (playerArtworkTransitionEnabled) LocalPlayerDock.current?.takeUnless { docked } else null
     if (dock != null) {
         DisposableEffect(dock) {
@@ -842,19 +848,35 @@ fun NowPlayingScreen(
                 val card = dockFrame.artworkRect.translate(boxOrigin.x, boxOrigin.y)
                 val miniInRoot = mini.translate(-anchor.x, -anchor.y - offset)
                 val sleeve = lerpRect(miniInRoot, card, fraction)
-                val imageScale = maxOf(
-                    sleeve.width / layerSize.width,
-                    sleeve.height / layerSize.height,
-                )
-                val drawnWidth = layerSize.width * imageScale
-                val drawnHeight = layerSize.height * imageScale
-                clipRect(sleeve.left, sleeve.top, sleeve.right, sleeve.bottom) {
-                    translate(
-                        sleeve.center.x - drawnWidth / 2f,
-                        sleeve.center.y - drawnHeight / 2f,
-                    ) {
-                        scale(imageScale, imageScale, pivot = Offset.Zero) {
-                            drawLayer(sleeveLayer)
+                if (sleeve.width > 0f && sleeve.height > 0f) {
+                    // The mini-player cover slot is square, while a preserved
+                    // sleeve can be portrait or landscape. Cover-scaling the
+                    // recorded layer into the interpolated rectangle crops the
+                    // artwork as it docks; fit it uniformly inside that square
+                    // travel frame when the opt-in is enabled.
+                    val imageScale = if (preserveTransitionArtworkProportions) {
+                        minOf(
+                            sleeve.width / layerSize.width,
+                            sleeve.height / layerSize.height,
+                        )
+                    } else {
+                        maxOf(
+                            sleeve.width / layerSize.width,
+                            sleeve.height / layerSize.height,
+                        )
+                    }
+                    if (imageScale.isFinite() && imageScale > 0f) {
+                        val drawnWidth = layerSize.width * imageScale
+                        val drawnHeight = layerSize.height * imageScale
+                        clipRect(sleeve.left, sleeve.top, sleeve.right, sleeve.bottom) {
+                            translate(
+                                sleeve.center.x - drawnWidth / 2f,
+                                sleeve.center.y - drawnHeight / 2f,
+                            ) {
+                                scale(imageScale, imageScale, pivot = Offset.Zero) {
+                                    drawLayer(sleeveLayer)
+                                }
+                            }
                         }
                     }
                 }
@@ -892,6 +914,7 @@ fun NowPlayingScreen(
     val showTrackDurationInsteadOfRemaining by AppSettings.showTrackDurationInsteadOfRemaining.collectAsStateWithLifecycle()
     val artworkTapOpensLyrics by AppSettings.artworkTapOpensLyrics.collectAsStateWithLifecycle()
     val lyricsReplaceArtworkOnly by AppSettings.lyricsReplaceArtworkOnly.collectAsStateWithLifecycle()
+    val hidePlayerHeaderDuringLyrics by AppSettings.hidePlayerHeaderDuringLyrics.collectAsStateWithLifecycle()
     val reducePlayerAnimations by AppSettings.reduceAnimation.collectAsStateWithLifecycle()
     val frostedQueueManager by AppSettings.frostedQueueManager.collectAsStateWithLifecycle()
     val frostedCompactLyrics by AppSettings.frostedCompactLyrics.collectAsStateWithLifecycle()
@@ -1271,11 +1294,9 @@ fun NowPlayingScreen(
         onDispose { context.contentResolver.unregisterContentObserver(observer) }
     }
 
-    // 0 = the ordinary square sleeve, 1 = the artwork as a full-bleed banner.
-    // Both states collapse the header, but the banner only ever shows over a
-    // settled player: opening the queue or the lyrics hands the sleeve back its
-    // card first.
-    // How collapsed the sleeve is, whichever surface asked for it.
+    // 0 = the expanded sleeve, 1 = the compact header. The banner only ever
+    // shows over a settled player: opening the queue or lyrics hands the sleeve
+    // back its card first. Both panels share this one collapse animation.
     //
     // This used to read `if (lyricsOpen) 1f else queueProgress`, which gave the
     // queue a 420ms ease and the lyrics nothing at all: opening them snapped
@@ -1284,7 +1305,7 @@ fun NowPlayingScreen(
     // half of the artwork jumped, the other half glided after it, and the pair
     // read as a stutter rather than as either. One animation, both surfaces.
     val p by animateFloatAsState(
-        targetValue = if (queueOpen || (lyricsOpen && !lyricsReplaceArtworkOnly)) 1f else 0f,
+        targetValue = if (queueOpen || lyricsOpen) 1f else 0f,
         animationSpec = if (playerArtworkTransitionEnabled) {
             tween(durationMillis = 420, easing = FastOutSlowInEasing)
         } else {
@@ -1292,8 +1313,6 @@ fun NowPlayingScreen(
         },
         label = "sleeveCollapse",
     )
-    val fullBleedArt by AppSettings.fullBleedArtwork.collectAsStateWithLifecycle()
-    val keepOriginalArtworkAspectRatio by AppSettings.keepOriginalArtworkAspectRatio.collectAsStateWithLifecycle()
     var loadedArtworkAspectRatio by remember(song.videoId, artUrl) { mutableFloatStateOf(1f) }
     val animatedArtworkAspectRatio by animateFloatAsState(
         targetValue = loadedArtworkAspectRatio,
@@ -1302,7 +1321,6 @@ fun NowPlayingScreen(
     )
     // The option applies to the compact sleeve. Full-bleed artwork keeps its
     // existing edge-to-edge crop behavior.
-    val preserveSleeveArtworkShape = keepOriginalArtworkAspectRatio && !fullBleedArt
     val sleeveContentScale = if (preserveSleeveArtworkShape) ContentScale.Fit else ContentScale.Crop
     val doubleTapToSeek by AppSettings.doubleTapToSeek.collectAsStateWithLifecycle()
     val seekIntervalSeconds by AppSettings.seekIntervalSeconds.collectAsStateWithLifecycle()
@@ -1902,8 +1920,8 @@ fun NowPlayingScreen(
                 // or coming back from the lyrics panel, where the strip is
                 // rebuilt from scratch) was pocketed for good. The gaps
                 // ratcheted open a little at a time and the sleeve paid for it.
-                val compactLyrics = lyricsOpen && lyricsReplaceArtworkOnly
-                val roomy = maxHeight + if (lyricsOpen && !compactLyrics) 0.dp else controlSpread
+                val integratedLyrics = lyricsOpen && lyricsReplaceArtworkOnly
+                val roomy = maxHeight + if (lyricsOpen && !integratedLyrics) 0.dp else controlSpread
                 // The sleeve is square, so it is bounded by whichever of the
                 // two axes runs out first: the player's width on a phone, or —
                 // on a tablet, where there is width to spare — the height left
@@ -1948,7 +1966,7 @@ fun NowPlayingScreen(
                 // of settling — a full-amplitude standing oscillation, not the
                 // single-pixel shiver this rounding alone was built to absorb.
                 // See [granted] below for the fix.
-                if (!lyricsOpen || compactLyrics) {
+                if (!lyricsOpen || integratedLyrics) {
                     val target = with(density) {
                         val half = slack
                             .coerceAtMost(CONTROL_GAP_SPREAD_MAX * 2)
@@ -1990,14 +2008,49 @@ fun NowPlayingScreen(
                 val expandedArtHeight = fullArt * minOf(1f, 1f / sleeveAspectRatio)
                 val groupTop = (maxHeight - expandedArtHeight - ART_TITLE_GAP - HEADER_HEIGHT)
                     .coerceAtLeast(0.dp) / 2
-                val artWidth = lerp(expandedArtWidth, THUMB_SIZE, p)
-                val artHeight = lerp(expandedArtHeight, THUMB_SIZE, p)
-                val artTop = lerp(groupTop, 0.dp, p)
+                var settledArtWidth by remember(song.videoId) { mutableStateOf(expandedArtWidth) }
+                var settledArtHeight by remember(song.videoId) { mutableStateOf(expandedArtHeight) }
+                var settledGroupTop by remember(song.videoId) { mutableStateOf(groupTop) }
+                var settledArtStart by remember(song.videoId) {
+                    mutableStateOf((maxWidth - expandedArtWidth) / 2)
+                }
+
+                // Layout height changes while full-screen lyrics are shown.
+                // Keep the starting sleeve geometry from the last resting
+                // frame, then always collapse to a square tile. This is
+                // opt-in and only applies when the original non-square cover
+                // proportions are being preserved.
+                val geometryAtRest = p <= 0.001f && (!lyricsOpen || integratedLyrics) && !isDocking()
+                if (preserveTransitionArtworkProportions && geometryAtRest && (
+                        settledArtWidth != expandedArtWidth ||
+                            settledArtHeight != expandedArtHeight ||
+                            settledGroupTop != groupTop ||
+                            settledArtStart != (maxWidth - expandedArtWidth) / 2
+                    )
+                ) {
+                    SideEffect {
+                        settledArtWidth = expandedArtWidth
+                        settledArtHeight = expandedArtHeight
+                        settledGroupTop = groupTop
+                        settledArtStart = (maxWidth - expandedArtWidth) / 2
+                    }
+                }
+                val targetArtWidth = if (preserveTransitionArtworkProportions) settledArtWidth else expandedArtWidth
+                val targetArtHeight = if (preserveTransitionArtworkProportions) settledArtHeight else expandedArtHeight
+                val targetGroupTop = if (preserveTransitionArtworkProportions) settledGroupTop else groupTop
+                val targetArtStart = if (preserveTransitionArtworkProportions) {
+                    settledArtStart
+                } else {
+                    (maxWidth - expandedArtWidth) / 2
+                }
+                val artWidth = lerp(targetArtWidth, THUMB_SIZE, p)
+                val artHeight = lerp(targetArtHeight, THUMB_SIZE, p)
+                val artTop = lerp(targetGroupTop, 0.dp, p)
                 // Expanded and height-bound, the sleeve is narrower than the
                 // player and has to be centred in it; collapsed, it belongs
                 // hard against the left edge with the credits beside it.
-                val artStart = lerp((maxWidth - expandedArtWidth) / 2, 0.dp, p)
-                val titleTop = lerp(groupTop + expandedArtHeight + ART_TITLE_GAP, 0.dp, p)
+                val artStart = lerp(targetArtStart, 0.dp, p)
+                val titleTop = lerp(targetGroupTop + targetArtHeight + ART_TITLE_GAP, 0.dp, p)
                 val titleStart = lerp(0.dp, THUMB_SIZE + 12.dp, p)
                 val cardRect = Rect(
                     left = with(density) { artStart.toPx() },
@@ -2027,7 +2080,7 @@ fun NowPlayingScreen(
                 // screen's top and this box's own top is fixed padding, so it
                 // can simply be added back up rather than measured.
                 val bannerBottom = statusBarTop + topStrip + ART_BOX_TOP_PAD +
-                    groupTop + expandedArtHeight + ART_TITLE_GAP / 2
+                    targetGroupTop + targetArtHeight + ART_TITLE_GAP / 2
                 // Held where it was while the lyrics are up.
                 //
                 // [groupTop] centres the block in this box's *real* height, and
@@ -2100,11 +2153,12 @@ fun NowPlayingScreen(
                             scaleX = idle
                             scaleY = idle
                             translationX = swipeSettle * (1f - p)
+                            alpha = if (lyricsOpen && hidePlayerHeaderDuringLyrics) 0f else 1f
                         }
                         // Collapsed, the sleeve is the way back: tapping the
                         // thumbnail puts the queue or the lyrics away again.
                         .then(
-                            if (queueOpen || lyricsOpen) {
+                            if ((queueOpen || lyricsOpen) && !(lyricsOpen && hidePlayerHeaderDuringLyrics)) {
                                 Modifier.clickable {
                                     queueOpen = false
                                     lyricsOpen = false
@@ -2379,20 +2433,21 @@ fun NowPlayingScreen(
                 }
 
                 // ---- Title + menu ----
-                Row(
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .offset(y = titleTop)
-                        .padding(start = titleStart)
-                        .height(HEADER_HEIGHT)
-                        // Where the dismiss band ends — see its top on the
-                        // artwork above. Taken from the row rather than added up
-                        // from the sleeve so the gap between the two is inside
-                        // the band as well: it is a gap in one block, not a seam
-                        // between two, and a finger should not be able to find it.
-                        .onGloballyPositioned { dismissBandBottom = it.boundsInRoot().bottom },
-                    verticalAlignment = Alignment.CenterVertically,
-                ) {
+                if (!lyricsOpen || !hidePlayerHeaderDuringLyrics) {
+                    Row(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .offset(y = titleTop)
+                            .padding(start = titleStart)
+                            .height(HEADER_HEIGHT)
+                            // Where the dismiss band ends — see its top on the
+                            // artwork above. Taken from the row rather than added up
+                            // from the sleeve so the gap between the two is inside
+                            // the band as well: it is a gap in one block, not a seam
+                            // between two, and a finger should not be able to find it.
+                            .onGloballyPositioned { dismissBandBottom = it.boundsInRoot().bottom },
+                        verticalAlignment = Alignment.CenterVertically,
+                    ) {
                     Column(
                         Modifier.weight(1f),
                         horizontalAlignment = if (centerPlayerTrackInfo) Alignment.CenterHorizontally else Alignment.Start,
@@ -2544,43 +2599,43 @@ fun NowPlayingScreen(
                         contentDescription = stringResource(R.string.more),
                         onClick = onOpenMenu,
                     )
+                    }
                 }
 
-                if (lyricsReplaceArtworkOnly) {
-                    Crossfade(
-                        targetState = lyricsOpen,
-                        animationSpec = if (playerArtworkTransitionEnabled) tween(180) else snap(),
-                        label = "compactLyricsTransition",
+                if (lyricsReplaceArtworkOnly && lyricsOpen) {
+                    val lyricsTopPadding = if (hidePlayerHeaderDuringLyrics) 0.dp else HEADER_HEIGHT
+                    Box(
                         modifier = Modifier
-                                .offset { IntOffset(artStart.roundToPx(), artTop.roundToPx()) }
-                                .size(width = artWidth, height = artHeight)
-                                .zIndex(2f)
-                                .clip(RoundedCornerShape(lerp(10.dp, 7.dp, p))),
-                    ) { compactLyricsVisible ->
-                        if (compactLyricsVisible) Box(Modifier.fillMaxSize()) {
-                            if (frostedCompactLyrics) {
-                                FrostedGlassBackdrop(
-                                    hazeState = playerHaze,
-                                    modifier = Modifier.matchParentSize(),
-                                    // Keep the lyrics replacement readable while
-                                    // letting the blurred player artwork show through.
-                                    tint = Color.White.copy(alpha = 0.08f),
-                                    tintAlpha = 0.06f,
-                                )
-                            } else {
-                                Box(Modifier.matchParentSize().background(artworkPalette.background))
-                            }
-                            if (lyricsLogsOpen) {
-                                LyricsLogConsole(Modifier.fillMaxSize().padding(top = 44.dp))
-                            } else {
-                                LyricsPanel(
-                                    lines = lyrics.orEmpty(),
-                                    positionMs = positionMs,
-                                    isPlaying = isPlaying,
-                                    onSeekToLine = onSeek,
-                                    modifier = Modifier.fillMaxSize().padding(top = 44.dp),
-                                )
-                            }
+                            .fillMaxSize()
+                            .padding(top = lyricsTopPadding)
+                            .zIndex(2f)
+                            .graphicsLayer {
+                                alpha = ((p - 0.45f) / 0.55f).coerceIn(0f, 1f)
+                                translationY = (1f - p) * 26.dp.toPx()
+                            },
+                    ) {
+                        if (frostedCompactLyrics) {
+                            FrostedGlassBackdrop(
+                                hazeState = playerHaze,
+                                modifier = Modifier.matchParentSize(),
+                                tint = Color.White.copy(alpha = 0.08f),
+                                tintAlpha = 0.06f,
+                            )
+                        } else {
+                            Box(Modifier.matchParentSize().background(artworkPalette.background))
+                        }
+                        if (lyricsLogsOpen) {
+                            LyricsLogConsole(Modifier.fillMaxSize())
+                        } else {
+                            LyricsPanel(
+                                lines = lyrics.orEmpty(),
+                                positionMs = positionMs,
+                                isPlaying = isPlaying,
+                                onSeekToLine = onSeek,
+                                modifier = Modifier.fillMaxSize(),
+                            )
+                        }
+                        if (hidePlayerHeaderDuringLyrics) {
                             IconButton(
                                 onClick = {
                                     lyricsLogsOpen = false
@@ -2591,7 +2646,7 @@ fun NowPlayingScreen(
                                     .padding(4.dp)
                                     .size(40.dp)
                                     .clip(CircleShape)
-                                    .background(Color.Black.copy(alpha = 0.45f)),
+                                    .background(Color.Black.copy(alpha = 0.35f)),
                             ) {
                                 Icon(
                                     imageVector = Icons.Rounded.Close,
@@ -2609,7 +2664,7 @@ fun NowPlayingScreen(
                         LyricsLogConsole(
                             modifier = Modifier
                                 .fillMaxSize()
-                                .padding(top = HEADER_HEIGHT)
+                                .padding(top = if (hidePlayerHeaderDuringLyrics) 0.dp else HEADER_HEIGHT)
                                 .graphicsLayer {
                                     alpha = ((p - 0.45f) / 0.55f).coerceIn(0f, 1f)
                                     translationY = (1f - p) * 26.dp.toPx()
@@ -2623,7 +2678,7 @@ fun NowPlayingScreen(
                             onSeekToLine = onSeek,
                             modifier = Modifier
                                 .fillMaxSize()
-                                .padding(top = HEADER_HEIGHT)
+                                .padding(top = if (hidePlayerHeaderDuringLyrics) 0.dp else HEADER_HEIGHT)
                                 // Arrives once the sleeve has finished collapsing
                                 // into the header, the same beat the queue below
                                 // already waits for — fading lyrics in over a

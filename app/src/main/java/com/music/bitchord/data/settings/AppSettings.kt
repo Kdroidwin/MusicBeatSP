@@ -595,8 +595,11 @@ object AppSettings {
     /** Whether a tap on the player artwork opens the full lyrics panel. */
     val artworkTapOpensLyrics = MutableStateFlow(false)
 
-    /** Replaces only the player artwork tile with lyrics while leaving controls visible. */
+    /** Uses the artwork area as an expanded lyrics view while leaving playback controls visible. */
     val lyricsReplaceArtworkOnly = MutableStateFlow(false)
+
+    /** Hides the compact song/artwork/actions header while the player lyrics view is open. */
+    val hidePlayerHeaderDuringLyrics = MutableStateFlow(false)
 
     /** Presentation-only switch for the one-line lyric above the seek bar. */
     val showPlayerLyricsStrip = MutableStateFlow(true)
@@ -688,6 +691,9 @@ object AppSettings {
 
     /** Preserves non-square still-cover proportions when the full-bleed treatment is off. */
     val keepOriginalArtworkAspectRatio = MutableStateFlow(false)
+
+    /** Fits preserved non-square covers into square mini-player and lyrics transition frames. */
+    val preserveArtworkShapeInCompactTransitions = MutableStateFlow(false)
 
     /** Keeps the sleeve at its playing size while playback is paused. */
     val keepArtworkFullSizeWhenPaused = MutableStateFlow(false)
@@ -1080,6 +1086,7 @@ object AppSettings {
         }.getOrDefault(LyricsTextAlignment.CENTER)
         artworkTapOpensLyrics.value = prefs.getBoolean(KEY_ARTWORK_TAP_OPENS_LYRICS, false)
         lyricsReplaceArtworkOnly.value = prefs.getBoolean(KEY_LYRICS_REPLACE_ARTWORK_ONLY, false)
+        hidePlayerHeaderDuringLyrics.value = prefs.getBoolean(KEY_HIDE_PLAYER_HEADER_DURING_LYRICS, false)
         showPlayerLyricsStrip.value = prefs.getBoolean(KEY_SHOW_PLAYER_LYRICS_STRIP, true)
         val wasOffline = offlineMode.value
         offlineMode.value = prefs.getBoolean(KEY_OFFLINE_MODE, false)
@@ -1115,6 +1122,8 @@ object AppSettings {
         canvasOverCellular.value = prefs.getBoolean(KEY_CANVAS_OVER_CELLULAR, false)
         fullBleedArtwork.value = prefs.getBoolean(KEY_FULL_BLEED_ARTWORK, true)
         keepOriginalArtworkAspectRatio.value = prefs.getBoolean(KEY_KEEP_ORIGINAL_ARTWORK_ASPECT_RATIO, false)
+        preserveArtworkShapeInCompactTransitions.value =
+            prefs.getBoolean(KEY_PRESERVE_ARTWORK_SHAPE_IN_COMPACT_TRANSITIONS, false)
         keepArtworkFullSizeWhenPaused.value = prefs.getBoolean(KEY_KEEP_ARTWORK_FULL_SIZE_PAUSED, false)
         doubleTapToSeek.value = prefs.getBoolean(KEY_DOUBLE_TAP_TO_SEEK, true)
         seekIntervalSeconds.value = prefs.getInt(KEY_SEEK_INTERVAL_SECONDS, 5).coerceIn(1, 60)
@@ -1835,6 +1844,11 @@ object AppSettings {
         prefs.edit().putBoolean(KEY_LYRICS_REPLACE_ARTWORK_ONLY, value).apply()
     }
 
+    fun setHidePlayerHeaderDuringLyrics(value: Boolean) {
+        hidePlayerHeaderDuringLyrics.value = value
+        prefs.edit().putBoolean(KEY_HIDE_PLAYER_HEADER_DURING_LYRICS, value).apply()
+    }
+
     fun setShowPlayerLyricsStrip(value: Boolean) {
         showPlayerLyricsStrip.value = value
         prefs.edit().putBoolean(KEY_SHOW_PLAYER_LYRICS_STRIP, value).apply()
@@ -2095,6 +2109,11 @@ object AppSettings {
     fun setKeepOriginalArtworkAspectRatio(value: Boolean) {
         keepOriginalArtworkAspectRatio.value = value
         prefs.edit().putBoolean(KEY_KEEP_ORIGINAL_ARTWORK_ASPECT_RATIO, value).apply()
+    }
+
+    fun setPreserveArtworkShapeInCompactTransitions(value: Boolean) {
+        preserveArtworkShapeInCompactTransitions.value = value
+        prefs.edit().putBoolean(KEY_PRESERVE_ARTWORK_SHAPE_IN_COMPACT_TRANSITIONS, value).apply()
     }
 
     fun setKeepArtworkFullSizeWhenPaused(value: Boolean) {
@@ -2788,6 +2807,7 @@ object AppSettings {
     private const val KEY_LYRICS_TEXT_ALIGNMENT = "lyrics_text_alignment"
     private const val KEY_ARTWORK_TAP_OPENS_LYRICS = "artwork_tap_opens_lyrics"
     private const val KEY_LYRICS_REPLACE_ARTWORK_ONLY = "lyrics_replace_artwork_only"
+    private const val KEY_HIDE_PLAYER_HEADER_DURING_LYRICS = "hide_player_header_during_lyrics"
     private const val KEY_SHOW_PLAYER_LYRICS_STRIP = "show_player_lyrics_strip"
     private const val KEY_OFFLINE_MODE = "offline_mode"
     private const val KEY_YOUTUBE_MUSIC_ENABLED = "youtube_music_enabled"
@@ -2813,6 +2833,7 @@ object AppSettings {
     private const val KEY_CANVAS_OVER_CELLULAR = "canvas_over_cellular"
     private const val KEY_FULL_BLEED_ARTWORK = "full_bleed_artwork"
     private const val KEY_KEEP_ORIGINAL_ARTWORK_ASPECT_RATIO = "keep_original_artwork_aspect_ratio"
+    private const val KEY_PRESERVE_ARTWORK_SHAPE_IN_COMPACT_TRANSITIONS = "preserve_artwork_shape_in_compact_transitions"
     private const val KEY_KEEP_ARTWORK_FULL_SIZE_PAUSED = "keep_artwork_full_size_when_paused"
     private const val KEY_DOUBLE_TAP_TO_SEEK = "double_tap_to_seek"
     private const val KEY_SEEK_INTERVAL_SECONDS = "seek_interval_seconds"
