@@ -32,10 +32,13 @@ private fun LyricLine.splitTrailingBracket(): LyricLine {
     // guessing from punctuation could, and better.
     if (background != null || isGap) return this
 
-    // `漢字((かんじ))` is the app's optional ruby notation, not a trailing
-    // backing-vocal annotation. Treating its outer parentheses as a vocal
-    // split removed the notation before the player could render furigana.
-    if (LyricsFurigana.hasTrailingAnnotation(text)) return this
+    // `漢字((かんじ))` (including kana suffixes such as `輝く((かがやく))`)
+    // is the app's optional ruby notation, not a backing-vocal annotation.
+    // Check the entire line: a lyric may continue after the reading, and the
+    // final parenthesis of that reading must never be split off as a second
+    // voice. Otherwise the display formatter can turn `((とわ))` into the
+    // literal ` (とわ)` and the ruby parser never sees the original marker.
+    if (LyricsFurigana.annotations(text).isNotEmpty()) return this
 
     val open = bracketStart(text) ?: return this
     val lead = text.substring(0, open).trimEnd()

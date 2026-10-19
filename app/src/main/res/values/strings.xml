@@ -1018,7 +1018,7 @@
     <string name="seek_back_seconds">Seek back %1$d seconds</string>
     <string name="seek_forward_seconds">Seek forward %1$d seconds</string>
     <string name="lyrics_furigana">Show furigana in lyrics</string>
-    <string name="lyrics_furigana_subtitle">Render 漢字((かんじ)) readings above Japanese text</string>
+    <string name="lyrics_furigana_subtitle">Render 漢字((かんじ)) and hiragana readings such as 漢字(かんじ) above Japanese text</string>
     <string name="lyrics_auto_fit">Fit each lyric line to one line</string>
     <string name="lyrics_auto_fit_subtitle">Reduce text size so long lyric lines fit without wrapping</string>
     <string name="lyrics_sync_editor">Sync lyrics while playing</string>

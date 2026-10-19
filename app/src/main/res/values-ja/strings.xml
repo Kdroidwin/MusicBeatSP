@@ -928,7 +928,7 @@
     <string name="seek_back_seconds">%1$d秒戻る</string>
     <string name="seek_forward_seconds">%1$d秒進む</string>
     <string name="lyrics_furigana">歌詞にふりがなを表示</string>
-    <string name="lyrics_furigana_subtitle">漢字((かんじ))の読みを漢字の上に表示します</string>
+    <string name="lyrics_furigana_subtitle">漢字((かんじ))や、漢字(かんじ)のようなひらがなの読みを漢字の上に表示します</string>
     <string name="lyrics_auto_fit">歌詞を一行に収める</string>
     <string name="lyrics_auto_fit_subtitle">長い歌詞の文字を縮小し、折り返さずに表示します</string>
     <string name="lyrics_sync_editor">再生しながら歌詞を同期</string>

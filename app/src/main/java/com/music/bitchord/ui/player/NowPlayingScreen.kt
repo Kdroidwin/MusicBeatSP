@@ -1037,8 +1037,20 @@ fun NowPlayingScreen(
     var lyricsLogsOpen by remember { mutableStateOf(false) }
     val showLyricsLogsEnabled by AppSettings.showLyricsLogs.collectAsStateWithLifecycle()
     LaunchedEffect(song.videoId) {
-        lyricsOpen = false
+        // Keep the full lyrics view open as playback advances. The lyrics
+        // themselves are keyed to the new track below and will follow it.
         lyricsLogsOpen = false
+    }
+    LaunchedEffect(song.videoId, lyricsUnavailable) {
+        // A new lookup can take a moment. Only leave the lyrics view after the
+        // lookup has actually finished without results, not while it is loading.
+        if (lyricsUnavailable) {
+            delay(150L)
+            if (lyricsUnavailable && lyricsOpen) {
+                lyricsOpen = false
+                lyricsLogsOpen = false
+            }
+        }
     }
     // A brief, non-modal confirmation that the three-dot menu now contains a
     // way back to the original YouTube rendition. The control keeps its usual
@@ -2620,6 +2632,7 @@ fun NowPlayingScreen(
                         } else {
                             LyricsPanel(
                                 lines = lyrics.orEmpty(),
+                                trackKey = song.videoId,
                                 positionMs = positionMs,
                                 isPlaying = isPlaying,
                                 onSeekToLine = onSeek,
@@ -2664,6 +2677,7 @@ fun NowPlayingScreen(
                 } else if (lyricsOpen) {
                         LyricsPanel(
                             lines = lyrics.orEmpty(),
+                            trackKey = song.videoId,
                             positionMs = positionMs,
                             isPlaying = isPlaying,
                             onSeekToLine = onSeek,
@@ -3591,6 +3605,7 @@ private fun ContentDrawScope.sweepTo(layout: TextLayoutResult, revealedChars: Fl
 @Composable
 private fun LyricsPanel(
     lines: List<LyricLine>,
+    trackKey: Any,
     positionMs: Long,
     isPlaying: Boolean,
     onSeekToLine: (Long) -> Unit,
@@ -3659,7 +3674,7 @@ private fun LyricsPanel(
         }
     }
 
-    var placed by remember(lines) { mutableStateOf(false) }
+    var placed by remember(trackKey) { mutableStateOf(false) }
     LaunchedEffect(activeLine, browsing) {
         if (isSynced && !browsing && !listState.isScrollInProgress &&
             activeLine >= 0 && activeLine in lines.indices
@@ -3829,8 +3844,9 @@ private fun LyricsPanel(
                 // the song, they scale and dim together, and tapping either
                 // seeks to the same place.
                 Column(modifier = shape) {
+                    val lineWithRubyRestored = line.withTrailingFuriganaMerged()
                     PanelVoice(
-                        line = line,
+                        line = lineWithRubyRestored ?: line,
                         clock = clock,
                         style = style,
                         isActive = isActive,
@@ -3840,7 +3856,7 @@ private fun LyricsPanel(
                         textAlign = lyricTextAlign,
                         modifier = Modifier.fillMaxWidth(),
                     )
-                    line.background?.let { backing ->
+                    line.background?.takeIf { lineWithRubyRestored == null }?.let { backing ->
                         PanelVoice(
                             line = backing.withoutBracketPunctuation(),
                             clock = clock,
@@ -3951,6 +3967,87 @@ private fun PanelVoice(
 }
 
 /**
+ * Rejoins a ruby reading that an older lyric parse classified as a backing
+ * vocal. Some synced sources split the ruby base and reading across timed
+ * runs; the combined text is still the app's `漢字((よみ))` notation and must
+ * reach [makeLyricRichText] intact.
+ */
+private fun LyricLine.withTrailingFuriganaMerged(): LyricLine? {
+    val backing = background ?: return null
+    val base = text.trimEnd()
+    val reading = backing.text.trim()
+    if (base.isEmpty() || reading.isEmpty()) return null
+
+    fun hasTrailingRuby(value: String): Boolean = LyricsFurigana.annotations(value).any { ruby ->
+        ruby.sourceStart < base.length &&
+            ruby.sourceStart + ruby.base.length == base.length &&
+            ruby.sourceEndExclusive == value.length
+    }
+
+    // Recover a legacy split where `((よみ))` had already been reduced to
+    // `(よみ)`. The single-pair form is ambiguous in normal lyrics, so only
+    // upgrade it here, where the previous parser has explicitly made it a
+    // separate background row beneath its kanji base.
+    val readingContent = when {
+        reading.startsWith("(") && reading.endsWith(")") &&
+            !reading.startsWith("((") && !reading.endsWith("))") ->
+            reading.substring(1, reading.lastIndex).takeIf(String::isHiraganaReading)
+                ?.let { "(($it))" }
+        reading.startsWith("（") && reading.endsWith("）") &&
+            !reading.startsWith("（（") && !reading.endsWith("））") ->
+            reading.substring(1, reading.lastIndex).takeIf(String::isHiraganaReading)
+                ?.let { "（（$it））" }
+        else -> null
+    }
+    val direct = base + reading
+    val combined = when {
+        hasTrailingRuby(direct) -> direct
+        readingContent != null -> (base + readingContent).takeIf(::hasTrailingRuby)
+        else -> null
+    } ?: return null
+
+    val normalizedBackingWords = if (combined != direct && backing.words.isNotEmpty()) {
+        val singleOpen = if (reading.startsWith("（")) "（" else "("
+        val singleClose = if (reading.endsWith("）")) "）" else ")"
+        val doubleOpen = singleOpen + singleOpen
+        val doubleClose = singleClose + singleClose
+        backing.words.mapIndexed { index, word ->
+            var wordText = word.text
+            if (index == 0) wordText = wordText.replaceFirst(singleOpen, doubleOpen)
+            if (index == backing.words.lastIndex) {
+                val closeAt = wordText.lastIndexOf(singleClose)
+                if (closeAt >= 0) {
+                    wordText = wordText.replaceRange(closeAt, closeAt + singleClose.length, doubleClose)
+                }
+            }
+            word.copy(text = wordText)
+        }
+    } else {
+        backing.words
+    }
+
+    // Keep word timing when both halves carry it. If either half is
+    // line-synced, retain the lead timings only: manufacturing timings for the
+    // reading would make the sweep jump or expose the closing marker early.
+    val combinedWords = if (words.isNotEmpty() && backing.words.isNotEmpty()) {
+        words + normalizedBackingWords
+    } else {
+        words
+    }
+    return copy(
+        text = combined,
+        words = combinedWords,
+        background = null,
+    )
+}
+
+private fun String.isHiraganaReading(): Boolean =
+    isNotEmpty() && all { char ->
+        Character.UnicodeScript.of(char.code) == Character.UnicodeScript.HIRAGANA ||
+            Character.getType(char).toByte() == Character.NON_SPACING_MARK
+    }
+
+/**
  * The answering vocal without the parentheses every text-only source wraps it
  * in — see [withBackgroundVocals]. Apple Music draws its own equivalent line
  * bare, and the brackets were only ever there to mark the split before there
@@ -3963,14 +4060,38 @@ private fun PanelVoice(
  * words against the text it draws, and a sweep reading "(echoed" against a
  * line reading "echoed" would search for a substring that is no longer there.
  */
-private fun LyricLine.withoutBracketPunctuation(): LyricLine = copy(
-    text = text.stripParens(),
-    words = words.mapNotNull { word ->
-        word.text.stripParens().takeIf { it.isNotEmpty() }?.let { word.copy(text = it) }
-    },
-)
+private fun LyricLine.withoutBracketPunctuation(): LyricLine {
+    val value = text.trim()
+    if (!value.isWrappedInOneParenthesisPair()) return this
 
-private fun String.stripParens(): String = replace("(", "").replace(")", "").trim()
+    val strippedWords = words.mapIndexedNotNull { index, word ->
+        var wordText = word.text
+        if (index == 0) wordText = wordText.removePrefix("(")
+        if (index == words.lastIndex) wordText = wordText.removeSuffix(")")
+        wordText.trim().takeIf(String::isNotEmpty)?.let { word.copy(text = it) }
+    }
+    return copy(
+        text = value.substring(1, value.lastIndex).trim(),
+        words = strippedWords,
+    )
+}
+
+/** Remove only the one outer vocal marker, preserving nested ruby notation. */
+private fun String.isWrappedInOneParenthesisPair(): Boolean {
+    val value = trim()
+    if (value.length < 2 || value.first() != '(' || value.last() != ')') return false
+    var depth = 0
+    value.forEachIndexed { index, char ->
+        when (char) {
+            '(' -> depth++
+            ')' -> {
+                depth--
+                if (depth < 0 || (depth == 0 && index != value.lastIndex)) return false
+            }
+        }
+    }
+    return depth == 0
+}
 
 
 /**
@@ -4219,14 +4340,18 @@ private fun CurrentLyricLine(
         LyricsStripText.shouldPreviewFirstLyric(index, firstSung)
     val displayIndex = if (showingFirstLineEarly) firstSung else index
     val displayLine = current ?: if (showingFirstLineEarly) lines.getOrNull(firstSung) else null
-    val instrumental = displayLine == null
+    // If an older parse already moved a ruby reading into [background], join
+    // it back before the one-line preview is drawn. This keeps the notation
+    // available to the same ruby renderer used by the full lyrics panel.
+    val renderedDisplayLine = displayLine?.withTrailingFuriganaMerged() ?: displayLine
+    val instrumental = renderedDisplayLine == null
     // The strip is one line and switches the moment the next one is due, so
     // the answering vocal — where there is one — has nowhere to go: showing
     // it would mean either cutting it short when the next line arrives or
     // holding the strip back and leaving a gap before the next line's own
     // words appear. [LyricsPanel] has the room to draw it properly; here it
     // is simply left off, same as before this line had a bracket in it.
-    val text = displayLine?.text ?: LyricsStripText.statusTextOrNull(
+    val text = renderedDisplayLine?.text ?: LyricsStripText.statusTextOrNull(
         stringResource(R.string.instrumental),
         hideLyricsStatusText,
     ).orEmpty()
@@ -4263,7 +4388,7 @@ private fun CurrentLyricLine(
             Spacer(Modifier.width(6.dp))
         }
         AnimatedContent(
-            targetState = Triple(displayIndex, displayLine, text),
+            targetState = Triple(displayIndex, renderedDisplayLine, text),
             transitionSpec = {
                 if (!animateLyricTransitions) {
                     (fadeIn(animationSpec = snap()) togetherWith fadeOut(animationSpec = snap())).using(
