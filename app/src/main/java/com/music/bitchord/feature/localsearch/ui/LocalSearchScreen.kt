@@ -75,6 +75,7 @@ import coil3.compose.AsyncImage
 import com.music.bitchord.R
 import com.music.bitchord.data.model.SearchResult
 import com.music.bitchord.data.model.UiState
+import com.music.bitchord.data.sources.SourceConfig
 import com.music.bitchord.data.model.isSameTrackAs
 import com.music.bitchord.ui.components.SongRow
 import kotlinx.coroutines.Dispatchers
@@ -106,6 +107,10 @@ fun LocalSearchScreen(
     canSearchMusicServers: Boolean = false,
     onMusicServersSearch: ((String) -> Unit)? = null,
     onMusicServerTrackClick: ((Song) -> Unit)? = null,
+    configuredSearchSources: List<SourceConfig> = emptyList(),
+    configuredSourceResults: Pair<String, UiState<List<SearchResult>>>? = null,
+    onConfiguredSourceSearch: ((String, String) -> Unit)? = null,
+    onConfiguredSourceTrackClick: ((Song) -> Unit)? = null,
     contentPadding: PaddingValues = PaddingValues(0.dp),
     modifier: Modifier = Modifier,
 ) {
@@ -119,6 +124,8 @@ fun LocalSearchScreen(
     var submittedYoutubeQuery by rememberSaveable { mutableStateOf<String?>(null) }
     var useMusicServers by rememberSaveable { mutableStateOf(false) }
     var submittedMusicServerQuery by rememberSaveable { mutableStateOf<String?>(null) }
+    var selectedConfiguredSource by rememberSaveable { mutableStateOf<String?>(null) }
+    var submittedConfiguredSourceQuery by rememberSaveable { mutableStateOf<String?>(null) }
     var selectedFilter by rememberSaveable { mutableStateOf(LocalSearchFilter.ALL) }
     val listState = rememberLazyListState()
 
@@ -136,6 +143,13 @@ fun LocalSearchScreen(
         }
     }
 
+    LaunchedEffect(configuredSearchSources.map(SourceConfig::id)) {
+        if (selectedConfiguredSource != null && configuredSearchSources.none { it.id == selectedConfiguredSource }) {
+            selectedConfiguredSource = null
+            submittedConfiguredSourceQuery = null
+        }
+    }
+
     var drillDownLabel by rememberSaveable { mutableStateOf<String?>(null) }
     var drillDownSongs by remember { mutableStateOf<List<Song>>(emptyList()) }
     var drillDownArt by remember { mutableStateOf<String?>(null) }
@@ -144,6 +158,31 @@ fun LocalSearchScreen(
     var songsForPlaylist by remember { mutableStateOf<List<Song>?>(null) }
 
     val inDrillDown = drillDownLabel != null
+    val selectedConfiguredSourceLabel = configuredSearchSources
+        .firstOrNull { it.id == selectedConfiguredSource }
+        ?.displayName
+    val submitSearchTerm: (String) -> Unit = { rawTerm ->
+        val term = rawTerm.trim()
+        if (term.isNotBlank()) {
+            when {
+                useYoutubeMusic -> {
+                    submittedYoutubeQuery = term
+                    onYoutubeMusicSearch?.invoke(term)
+                }
+                useMusicServers -> {
+                    submittedMusicServerQuery = term
+                    onRecordSearch(term)
+                    onMusicServersSearch?.invoke(term)
+                }
+                selectedConfiguredSource != null -> {
+                    submittedConfiguredSourceQuery = term
+                    onRecordSearch(term)
+                    onConfiguredSourceSearch?.invoke(selectedConfiguredSource!!, term)
+                }
+                else -> onRecordSearch(term)
+            }
+        }
+    }
     val leaveDrillDown = {
         drillDownLabel = null
         drillDownSongs = emptyList()
@@ -161,7 +200,15 @@ fun LocalSearchScreen(
         }
     }
 
-    LaunchedEffect(useYoutubeMusic, useMusicServers, selectedFilter, submittedYoutubeQuery, submittedMusicServerQuery) {
+    LaunchedEffect(
+        useYoutubeMusic,
+        useMusicServers,
+        selectedConfiguredSource,
+        selectedFilter,
+        submittedYoutubeQuery,
+        submittedMusicServerQuery,
+        submittedConfiguredSourceQuery,
+    ) {
         listState.scrollToItem(0)
     }
 
@@ -173,8 +220,8 @@ fun LocalSearchScreen(
     // main thread just to compare Compose effect keys.
     val songsIdentity = System.identityHashCode(songs)
     var searchResults by remember { mutableStateOf<List<LocalSearchResult>>(emptyList()) }
-    LaunchedEffect(query, selectedFilter, songsIdentity, folderHierarchy, useYoutubeMusic, useMusicServers) {
-        if (query.isBlank() || useYoutubeMusic || useMusicServers) {
+    LaunchedEffect(query, selectedFilter, songsIdentity, folderHierarchy, useYoutubeMusic, useMusicServers, selectedConfiguredSource) {
+        if (query.isBlank() || useYoutubeMusic || useMusicServers || selectedConfiguredSource != null) {
             searchResults = emptyList()
             listState.scrollToItem(0)
         } else {
@@ -196,7 +243,8 @@ fun LocalSearchScreen(
     }
     val showSearchHistory = query.isBlank() ||
         (useYoutubeMusic && submittedYoutubeQuery.isNullOrBlank()) ||
-        (useMusicServers && submittedMusicServerQuery.isNullOrBlank())
+        (useMusicServers && submittedMusicServerQuery.isNullOrBlank()) ||
+        (selectedConfiguredSource != null && submittedConfiguredSourceQuery.isNullOrBlank())
 
     AnimatedContent(
         targetState = if (inDrillDown) "drill" else "search",
@@ -265,38 +313,26 @@ fun LocalSearchScreen(
                 LocalSearchField(
                     query = query,
                     onQueryChange = { query = it },
-                    onSearch = {
-                        if (query.isNotBlank()) {
-                            val term = query.trim()
-                            if (useYoutubeMusic) {
-                                submittedYoutubeQuery = term
-                                onYoutubeMusicSearch?.invoke(term)
-                            } else if (useMusicServers) {
-                                submittedMusicServerQuery = term
-                                onRecordSearch(term)
-                                onMusicServersSearch?.invoke(term)
-                            } else {
-                                onRecordSearch(term)
-                            }
-                        }
-                    },
+                    onSearch = { submitSearchTerm(query) },
                     focusTrigger = focusTrigger,
                     modifier = Modifier.padding(horizontal = PAGE_GUTTER, vertical = 6.dp),
                 )
 
-                if (canSearchYoutubeMusic || canSearchMusicServers) {
+                if (canSearchYoutubeMusic || canSearchMusicServers || configuredSearchSources.isNotEmpty()) {
                     Row(
                         modifier = Modifier.fillMaxWidth().horizontalScroll(rememberScrollState())
                             .padding(horizontal = PAGE_GUTTER, vertical = 2.dp),
                         horizontalArrangement = Arrangement.spacedBy(8.dp),
                     ) {
                         FilterChip(
-                            selected = !useYoutubeMusic && !useMusicServers,
+                            selected = !useYoutubeMusic && !useMusicServers && selectedConfiguredSource == null,
                             onClick = {
                                 useYoutubeMusic = false
                                 useMusicServers = false
+                                selectedConfiguredSource = null
                                 submittedYoutubeQuery = null
                                 submittedMusicServerQuery = null
+                                submittedConfiguredSourceQuery = null
                             },
                             label = { Text(stringResource(R.string.search_this_device)) },
                         )
@@ -306,8 +342,10 @@ fun LocalSearchScreen(
                                 onClick = {
                                     useYoutubeMusic = true
                                     useMusicServers = false
+                                    selectedConfiguredSource = null
                                     submittedYoutubeQuery = null
                                     submittedMusicServerQuery = null
+                                    submittedConfiguredSourceQuery = null
                                 },
                                 label = { Text(stringResource(R.string.search_youtube_music)) },
                             )
@@ -318,16 +356,38 @@ fun LocalSearchScreen(
                                 onClick = {
                                     useMusicServers = true
                                     useYoutubeMusic = false
+                                    selectedConfiguredSource = null
                                     submittedYoutubeQuery = null
                                     submittedMusicServerQuery = null
+                                    submittedConfiguredSourceQuery = null
                                 },
                                 label = { Text(stringResource(R.string.search_music_servers)) },
+                            )
+                        }
+                        configuredSearchSources.forEach { source ->
+                            FilterChip(
+                                selected = selectedConfiguredSource == source.id,
+                                onClick = {
+                                    selectedConfiguredSource = source.id
+                                    useYoutubeMusic = false
+                                    useMusicServers = false
+                                    submittedYoutubeQuery = null
+                                    submittedMusicServerQuery = null
+                                    submittedConfiguredSourceQuery = null
+                                },
+                                label = {
+                                    Text(
+                                        source.displayName,
+                                        maxLines = 1,
+                                        overflow = TextOverflow.Ellipsis,
+                                    )
+                                },
                             )
                         }
                     }
                 }
 
-                if (!useYoutubeMusic && !useMusicServers) {
+                if (!useYoutubeMusic && !useMusicServers && selectedConfiguredSource == null) {
                     LocalSearchFilterChips(
                         selectedFilter = selectedFilter,
                         onFilterSelect = { selectedFilter = it },
@@ -394,6 +454,8 @@ fun LocalSearchScreen(
                                                 submittedMusicServerQuery = term
                                                 onRecordSearch(term)
                                                 onMusicServersSearch?.invoke(term)
+                                            } else if (selectedConfiguredSource != null) {
+                                                submitSearchTerm(term)
                                             } else {
                                                 onRecordSearch(term)
                                             }
@@ -459,6 +521,10 @@ fun LocalSearchScreen(
                                 text = when {
                                     useYoutubeMusic -> "Search YouTube Music"
                                     useMusicServers -> stringResource(R.string.music_server_search_prompt)
+                                    selectedConfiguredSource != null -> stringResource(
+                                        R.string.search_configured_source_prompt,
+                                        selectedConfiguredSourceLabel.orEmpty(),
+                                    )
                                     else -> "Search offline music"
                                 },
                                     style = MaterialTheme.typography.titleMedium,
@@ -469,6 +535,7 @@ fun LocalSearchScreen(
                                 text = when {
                                     useMusicServers -> stringResource(R.string.music_server_search_hint)
                                     useYoutubeMusic -> "Type a song, artist, album, or playlist"
+                                    selectedConfiguredSource != null -> stringResource(R.string.search_configured_source_hint)
                                     else -> "Type a title, artist, album, or folder name"
                                 },
                                     style = MaterialTheme.typography.bodySmall,
@@ -494,6 +561,7 @@ fun LocalSearchScreen(
                     )
                 } else if (useMusicServers) {
                     MusicServerSearchResults(
+                        currentQuery = query,
                         submittedQuery = submittedMusicServerQuery,
                         state = musicServerResults,
                         currentSong = currentSong,
@@ -502,6 +570,23 @@ fun LocalSearchScreen(
                         onTrackLongPress = onSongLongPress,
                         onTrackSwipe = onSongSwipe,
                         contentPadding = contentPadding,
+                        modifier = Modifier.weight(1f),
+                    )
+                } else if (selectedConfiguredSource != null) {
+                    MusicServerSearchResults(
+                        currentQuery = query,
+                        submittedQuery = submittedConfiguredSourceQuery,
+                        state = configuredSourceResults
+                            ?.takeIf { it.first == selectedConfiguredSource }
+                            ?.second,
+                        currentSong = currentSong,
+                        isPlaying = isPlaying,
+                        onTrackClick = onConfiguredSourceTrackClick
+                            ?: { song -> onSongClick(listOf(song), 0) },
+                        onTrackLongPress = onSongLongPress,
+                        onTrackSwipe = onSongSwipe,
+                        contentPadding = contentPadding,
+                        sourceLabel = selectedConfiguredSourceLabel,
                         modifier = Modifier.weight(1f),
                     )
                 } else if (searchResults.isEmpty()) {
@@ -805,6 +890,7 @@ fun LocalSearchScreen(
 
 @Composable
 private fun MusicServerSearchResults(
+    currentQuery: String,
     submittedQuery: String?,
     state: UiState<List<SearchResult>>?,
     currentSong: Song?,
@@ -813,6 +899,7 @@ private fun MusicServerSearchResults(
     onTrackLongPress: (Song) -> Unit,
     onTrackSwipe: (Song) -> Unit,
     contentPadding: PaddingValues,
+    sourceLabel: String? = null,
     modifier: Modifier = Modifier,
 ) {
     val tracks = (state as? UiState.Success)?.data.orEmpty()
@@ -820,6 +907,9 @@ private fun MusicServerSearchResults(
     when {
         submittedQuery.isNullOrBlank() -> Box(modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
             Text(stringResource(R.string.music_server_search_prompt), color = MaterialTheme.colorScheme.onSurfaceVariant)
+        }
+        submittedQuery != currentQuery.trim() -> Box(modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
+            Text(stringResource(R.string.search_configured_source_prompt, sourceLabel ?: stringResource(R.string.music_servers)), color = MaterialTheme.colorScheme.onSurfaceVariant)
         }
         state == null || state is UiState.Loading -> Box(modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
             CircularProgressIndicator()
@@ -839,7 +929,7 @@ private fun MusicServerSearchResults(
         ) {
             item {
                 Text(
-                    text = "${tracks.size} results · ${stringResource(R.string.music_servers)}",
+                    text = "${tracks.size} results · ${sourceLabel ?: stringResource(R.string.music_servers)}",
                     style = MaterialTheme.typography.labelMedium,
                     color = MaterialTheme.colorScheme.onSurfaceVariant,
                     modifier = Modifier.padding(horizontal = PAGE_GUTTER, vertical = 8.dp),

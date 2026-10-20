@@ -60,6 +60,7 @@ import kotlinx.coroutines.async
 import kotlinx.coroutines.awaitAll
 import kotlinx.coroutines.coroutineScope
 import kotlinx.coroutines.withTimeout
+import kotlinx.coroutines.withTimeoutOrNull
 import kotlinx.coroutines.channels.BufferOverflow
 import kotlinx.coroutines.flow.MutableSharedFlow
 import kotlinx.coroutines.flow.MutableStateFlow
@@ -152,6 +153,11 @@ class MainViewModel(app: Application) : AndroidViewModel(app) {
     val musicServerResults: StateFlow<UiState<List<SearchResult>>?> = _musicServerResults.asStateFlow()
     private val musicServerSearchGeneration = AtomicLong(0L)
     private var musicServerSearchJob: Job? = null
+    private val _configuredSourceResults = MutableStateFlow<Pair<String, UiState<List<SearchResult>>>?>(null)
+    val configuredSourceResults: StateFlow<Pair<String, UiState<List<SearchResult>>>?> =
+        _configuredSourceResults.asStateFlow()
+    private val configuredSourceSearchGeneration = AtomicLong(0L)
+    private var configuredSourceSearchJob: Job? = null
 
     /** The mixed YouTube Music result page is the fast, useful default. */
     private val _filter = MutableStateFlow(SearchFilter.ALL)
@@ -1606,6 +1612,56 @@ class MainViewModel(app: Application) : AndroidViewModel(app) {
                 songs.isNotEmpty() -> UiState.Success(songs.map { SearchResult.Track(it) })
                 outcomes.all { it.second != null } -> UiState.Error(text(R.string.music_server_search_failed))
                 else -> UiState.Error(text(R.string.no_results))
+            }
+        }
+    }
+
+    /** Searches one configured source directly instead of silently using it only as a playback fallback. */
+    fun searchConfiguredSource(configId: String, term: String) {
+        val query = term.trim()
+        val generation = configuredSourceSearchGeneration.incrementAndGet()
+        configuredSourceSearchJob?.cancel()
+        configuredSourceSearchJob = null
+        if (query.isEmpty()) {
+            _configuredSourceResults.value = null
+            return
+        }
+        if (AppSettings.offlineMode.value || getApplication<Application>().packageName.endsWith(".nointernet")) {
+            _configuredSourceResults.value = configId to UiState.Error(text(R.string.offline_mode))
+            return
+        }
+
+        val config = SourceRegistry.config(configId)
+        val source = SourceRegistry.instance(configId)
+        if (config == null || !config.enabled || !config.isComplete || source == null) {
+            _configuredSourceResults.value = configId to UiState.Error(text(R.string.configured_source_unavailable))
+            return
+        }
+        if (config.kind == SourceKind.YOUTUBE) {
+            _configuredSourceResults.value = configId to UiState.Error(text(R.string.configured_source_unavailable))
+            return
+        }
+
+        _configuredSourceResults.value = configId to UiState.Loading
+        configuredSourceSearchJob = viewModelScope.launch {
+            val outcome = try {
+                val songs = withTimeoutOrNull(SOURCE_SEARCH_TIMEOUT_MS) {
+                    source.search(query, limit = SOURCE_SEARCH_LIMIT, waitForAll = true)
+                }
+                if (songs == null) {
+                    UiState.Error(text(R.string.configured_source_search_timeout))
+                } else {
+                    UiState.Success(songs.map { SearchResult.Track(it) })
+                }
+            } catch (cancelled: CancellationException) {
+                throw cancelled
+            } catch (_: Exception) {
+                UiState.Error(getApplication<Application>().getString(R.string.configured_source_search_failed, config.displayName))
+            }
+            if (generation == configuredSourceSearchGeneration.get()) {
+                val stillConfigured = SourceRegistry.config(configId)?.let { it.enabled && it.isComplete } == true
+                if (stillConfigured) _configuredSourceResults.value = configId to outcome
+                else _configuredSourceResults.value = configId to UiState.Error(text(R.string.configured_source_unavailable))
             }
         }
     }

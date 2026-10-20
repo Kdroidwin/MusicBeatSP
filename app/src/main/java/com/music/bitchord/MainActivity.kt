@@ -806,8 +806,18 @@ private fun BitChordApp(
     val localSongsState by viewModel.localSongs.collectAsStateWithLifecycle()
     val youtubeMusicSearchResults by viewModel.results.collectAsStateWithLifecycle()
     val musicServerSearchResults by viewModel.musicServerResults.collectAsStateWithLifecycle()
+    val configuredSourceSearchResults by viewModel.configuredSourceResults.collectAsStateWithLifecycle()
     val remoteServerConfigs by SourceRegistry.configs.collectAsStateWithLifecycle()
     val offlineMode by AppSettings.offlineMode.collectAsStateWithLifecycle()
+    val individuallySearchableSources = remember(remoteServerConfigs, offlineMode, context.packageName) {
+        if (offlineMode || context.packageName.endsWith(".nointernet")) {
+            emptyList()
+        } else {
+            remoteServerConfigs.filter { config ->
+                config.enabled && config.isComplete && config.kind != SourceKind.YOUTUBE
+            }
+        }
+    }
     val canSearchMusicServers = !offlineMode &&
         !context.packageName.endsWith(".nointernet") &&
         remoteServerConfigs.any { it.enabled && it.kind.isRemoteMusicServer && it.isComplete }
@@ -2485,6 +2495,10 @@ private fun BitChordApp(
                                 canSearchMusicServers = canSearchMusicServers,
                                 onMusicServersSearch = viewModel::searchMusicServers,
                                 onMusicServerTrackClick = { song -> play(listOf(song), 0) },
+                                configuredSearchSources = individuallySearchableSources,
+                                configuredSourceResults = configuredSourceSearchResults,
+                                onConfiguredSourceSearch = viewModel::searchConfiguredSource,
+                                onConfiguredSourceTrackClick = { song -> play(listOf(song), 0) },
                                 onYoutubeMusicBrowseClick = { item ->
                                     viewModel.openDetail(
                                         browseId = item.browseId,

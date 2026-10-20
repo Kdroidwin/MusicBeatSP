@@ -748,6 +748,11 @@
     <string name="music_servers_empty">音楽サーバーはまだ登録されていません。</string>
     <string name="music_servers_not_configured">設定からJellyfinまたはNavidromeサーバーを追加して有効にしてください。</string>
     <string name="music_server_search_failed">登録した音楽サーバーを検索できませんでした。</string>
+    <string name="configured_source_search_failed">%1$sを検索できませんでした。</string>
+    <string name="configured_source_search_timeout">ソースから応答がありません。時間をおいて再試行してください。</string>
+    <string name="configured_source_unavailable">このソースは無効か、利用できません。</string>
+    <string name="search_configured_source_prompt">%1$sを検索</string>
+    <string name="search_configured_source_hint">曲名、アーティスト、アルバムを入力</string>
     <string name="add_jellyfin">Jellyfinを追加</string>
     <string name="add_navidrome">Navidromeを追加</string>
     <string name="music_server_name">名前（省略可）</string>

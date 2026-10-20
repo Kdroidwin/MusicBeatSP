@@ -838,6 +838,11 @@
     <string name="music_servers_empty">No music servers configured yet.</string>
     <string name="music_servers_not_configured">Add and enable a Jellyfin or Navidrome server in Settings first.</string>
     <string name="music_server_search_failed">Could not search the configured music servers.</string>
+    <string name="configured_source_search_failed">Could not search %1$s.</string>
+    <string name="configured_source_search_timeout">The source took too long to respond. Try again.</string>
+    <string name="configured_source_unavailable">This source is disabled or unavailable.</string>
+    <string name="search_configured_source_prompt">Search %1$s</string>
+    <string name="search_configured_source_hint">Type a song, artist, or album</string>
     <string name="add_jellyfin">Jellyfin</string>
     <string name="add_navidrome">Navidrome</string>
     <string name="music_server_name">Name (optional)</string>
