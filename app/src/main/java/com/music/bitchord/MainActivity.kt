@@ -217,6 +217,7 @@ import com.music.bitchord.ui.components.BottomTab
 import com.music.bitchord.ui.components.FLOATING_BAR_MAX_WIDTH
 import com.music.bitchord.ui.components.FloatingBottomBar
 import com.music.bitchord.ui.components.GlassNavBar
+import com.music.bitchord.ui.components.PopupNavigationBar
 import com.music.bitchord.ui.components.floatingtabbar.FloatingTabBarInlineBehavior
 import com.music.bitchord.ui.components.floatingtabbar.rememberFloatingTabBarScrollConnection
 import com.music.bitchord.ui.components.FrostedTopBar
@@ -481,6 +482,7 @@ private fun BitChordApp(
     // below goes with them, which is the part that costs a draw pass.
     val reduceDynamicBlur by AppSettings.reduceDynamicBlur.collectAsStateWithLifecycle()
     val classicNavBar by AppSettings.classicNavBar.collectAsStateWithLifecycle()
+    val mainNavigationTabsPopup by AppSettings.mainNavigationTabsPopup.collectAsStateWithLifecycle()
     val useCollapsibleNavBar = !classicNavBar
     val glassSamplesBackdrop = glassActive && !reduceDynamicBlur
     var selectedTab by rememberSaveable { mutableIntStateOf(AppSettings.startupTab.value.index) }
@@ -2671,7 +2673,40 @@ private fun BitChordApp(
                 }
 
                 CompositionLocalProvider(LocalPlayerDock provides playerDock) {
-                if (useCollapsibleNavBar) {
+                if (mainNavigationTabsPopup) {
+                    Column(
+                        modifier = Modifier
+                            .align(Alignment.BottomCenter)
+                            .widthIn(max = FLOATING_BAR_MAX_WIDTH)
+                            .fillMaxWidth(),
+                        horizontalAlignment = Alignment.CenterHorizontally,
+                        verticalArrangement = Arrangement.spacedBy(8.dp),
+                    ) {
+                        player.song?.takeUnless { playerDocked }?.let { song ->
+                            MiniPlayer(
+                                song = song,
+                                isPlaying = player.isPlaying,
+                                isLoading = player.isLoading,
+                                hazeState = hazeState,
+                                onPlayPause = {
+                                    controller?.let { if (it.isPlaying) it.pause() else it.play() }
+                                },
+                                onPrevious = { controller?.seekToPreviousMediaItem() },
+                                onNext = { controller?.seekToNextMediaItem() },
+                                onExpand = ::openNowPlaying,
+                                onDismiss = onDismissMusicBar,
+                                modifier = Modifier.fillMaxWidth(),
+                            )
+                        }
+                        PopupNavigationBar(
+                            tabs = tabs,
+                            selectedIndex = visibleTabIndices.indexOf(selectedTab).coerceAtLeast(0),
+                            hazeState = hazeState,
+                            onTabSelected = onTabSelected,
+                            modifier = Modifier.fillMaxWidth(),
+                        )
+                    }
+                } else if (useCollapsibleNavBar) {
                     // Collapsible floating bar replaces the two stacked bars with a
                     // unified component: now playing controls dock into the tab bar,
                     // and the pair folds together on scroll. Works with or without liquid glass.

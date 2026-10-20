@@ -34,6 +34,7 @@ import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
+import androidx.compose.runtime.rememberUpdatedState
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.res.stringResource
@@ -143,6 +144,7 @@ fun MiniPlayer(
     val useArtworkColor by AppSettings.miniPlayerArtworkColor.collectAsStateWithLifecycle()
     val showPreviousButton by AppSettings.miniPlayerPreviousButton.collectAsStateWithLifecycle()
     val swipeChangesTrack by AppSettings.miniPlayerSwipeChangesTrack.collectAsStateWithLifecycle()
+    val swipeUpExpands by AppSettings.miniPlayerSwipeUpExpands.collectAsStateWithLifecycle()
     val artworkPalette = rememberArtworkPalette(
         imageUrl = song.thumbnailUrl.takeIf { useArtworkColor },
         artPx = ROW_ART_PX,
@@ -156,6 +158,8 @@ fun MiniPlayer(
     val trackSwipeThresholdPx = with(density) { 64.dp.toPx() }
     val offsetY = remember { Animatable(0f) }
     val scope = rememberCoroutineScope()
+    val currentOnExpand by rememberUpdatedState(onExpand)
+    val currentOnDismiss by rememberUpdatedState(onDismiss)
 
     // percent rather than a dp figure, so the corner stays exactly half the
     // height if the row's contents ever change it — which is what keeps a pill
@@ -169,30 +173,41 @@ fun MiniPlayer(
                 translationY = offsetY.value
                 alpha = (1f - (offsetY.value / (dismissThresholdPx * 1.5f))).coerceIn(0f, 1f)
             }
-            .pointerInput(Unit) {
+            .pointerInput(swipeUpExpands, dismissThresholdPx) {
+                var upwardDistance = 0f
                 detectVerticalDragGestures(
+                    onDragStart = { upwardDistance = 0f },
                     onDragEnd = {
-                        if (offsetY.value >= dismissThresholdPx) {
-                            scope.launch {
-                                offsetY.animateTo(dismissThresholdPx * 2f, tween(120))
-                                onDismiss()
+                        when {
+                            offsetY.value >= dismissThresholdPx -> {
+                                scope.launch {
+                                    offsetY.animateTo(dismissThresholdPx * 2f, tween(120))
+                                    currentOnDismiss()
+                                }
                             }
-                        } else {
-                            scope.launch {
-                                offsetY.animateTo(0f, spring(dampingRatio = 0.75f, stiffness = Spring.StiffnessMediumLow))
+                            swipeUpExpands && upwardDistance >= dismissThresholdPx -> currentOnExpand()
+                            else -> {
+                                scope.launch {
+                                    offsetY.animateTo(0f, spring(dampingRatio = 0.75f, stiffness = Spring.StiffnessMediumLow))
+                                }
                             }
                         }
                     },
                     onDragCancel = {
+                        upwardDistance = 0f
                         scope.launch {
                             offsetY.animateTo(0f, spring(dampingRatio = 0.75f, stiffness = Spring.StiffnessMediumLow))
                         }
                     },
                     onVerticalDrag = { change, dragAmount ->
                         if (dragAmount > 0 || offsetY.value > 0) {
+                            upwardDistance = 0f
                             change.consume()
                             val next = (offsetY.value + dragAmount).coerceAtLeast(0f)
                             scope.launch { offsetY.snapTo(next) }
+                        } else if (dragAmount < 0 && swipeUpExpands) {
+                            change.consume()
+                            upwardDistance += -dragAmount
                         }
                     },
                 )

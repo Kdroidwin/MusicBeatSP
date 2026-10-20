@@ -466,6 +466,8 @@ object AppSettings {
     /** Optional three-band PCM parametric EQ; disabled until the listener opts in. */
     val parametricEqEnabled = MutableStateFlow(false)
     val parametricEqBands = MutableStateFlow(ParametricEqBand.DEFAULTS)
+    /** Stereo balance trim, centred by default and bypassed during bit-perfect playback. */
+    val equalizerBalance = MutableStateFlow(0f)
     val channelSwapEnabled = MutableStateFlow(false)
     /** Optional room reverb, attached to the active audio session when supported. */
     val reverbEnabled = MutableStateFlow(false)
@@ -481,6 +483,8 @@ object AppSettings {
     val miniPlayerPreviousButton = MutableStateFlow(true)
     /** Lets horizontal swipes on the mini-player move between tracks. */
     val miniPlayerSwipeChangesTrack = MutableStateFlow(false)
+    /** Lets an upward swipe on the mini-player open the expanded player. */
+    val miniPlayerSwipeUpExpands = MutableStateFlow(true)
     /** Uses the playlist page artwork palette for track menus opened inside it. */
     val playlistTrackMenuUsesArtworkColor = MutableStateFlow(true)
     val launcherIcon = MutableStateFlow(LauncherIcon.PINK)
@@ -515,6 +519,8 @@ object AppSettings {
 
     /** Moves the player artwork between the mini and full player, and animates lyric changes. */
     val playerArtworkTransition = MutableStateFlow(true)
+    /** Opt-in Walkman-inspired layout for the expanded player surface. */
+    val walkmanPlayerStyle = MutableStateFlow(false)
 
     /** Speed and fluidity of the floating tab selection animation. */
     val pillMotionStyle = MutableStateFlow(PillMotionStyle.DEFAULT)
@@ -548,6 +554,9 @@ object AppSettings {
 
     /** When true, hides labels in the bottom navigation bar and displays only icons. */
     val hideNavigationBarLabels = MutableStateFlow(false)
+
+    /** Replaces the bottom navigation tabs with a single popup-menu button. */
+    val mainNavigationTabsPopup = MutableStateFlow(false)
 
     /** Main navigation destinations the user wants to keep in the bottom bar. */
     val visibleMainNavigationTabs = MutableStateFlow(MainNavigationTab.entries.toSet())
@@ -1071,6 +1080,7 @@ object AppSettings {
         spatialAudio.value = prefs.getBoolean(KEY_SPATIAL_AUDIO, false)
         parametricEqEnabled.value = prefs.getBoolean(KEY_PARAMETRIC_EQ_ENABLED, false)
         parametricEqBands.value = ParametricEqBand.decode(prefs.getString(KEY_PARAMETRIC_EQ_BANDS, null))
+        equalizerBalance.value = prefs.getFloat(KEY_EQUALIZER_BALANCE, 0f).coerceIn(-1f, 1f)
         channelSwapEnabled.value = prefs.getBoolean(KEY_CHANNEL_SWAP_ENABLED, false)
         reverbEnabled.value = prefs.getBoolean(KEY_REVERB_ENABLED, false)
         reverbAmount.value = prefs.getInt(KEY_REVERB_AMOUNT, 35).coerceIn(0, 100)
@@ -1088,6 +1098,7 @@ object AppSettings {
         miniPlayerArtworkColor.value = prefs.getBoolean(KEY_MINI_PLAYER_ARTWORK_COLOR, false)
         miniPlayerPreviousButton.value = prefs.getBoolean(KEY_MINI_PLAYER_PREVIOUS_BUTTON, true)
         miniPlayerSwipeChangesTrack.value = prefs.getBoolean(KEY_MINI_PLAYER_SWIPE_CHANGES_TRACK, false)
+        miniPlayerSwipeUpExpands.value = prefs.getBoolean(KEY_MINI_PLAYER_SWIPE_UP_EXPANDS, true)
         playlistTrackMenuUsesArtworkColor.value = prefs.getBoolean(KEY_PLAYLIST_TRACK_MENU_ARTWORK_COLOR, true)
         launcherIcon.value = runCatching {
             LauncherIcon.valueOf(prefs.getString(KEY_LAUNCHER_ICON, LauncherIcon.PINK.name) ?: LauncherIcon.PINK.name)
@@ -1105,6 +1116,7 @@ object AppSettings {
         showNerdStats.value = prefs.getBoolean(KEY_NERD_STATS, false)
         reduceAnimation.value = prefs.getBoolean(KEY_REDUCE_ANIMATION, false)
         playerArtworkTransition.value = prefs.getBoolean(KEY_PLAYER_ARTWORK_TRANSITION, true)
+        walkmanPlayerStyle.value = prefs.getBoolean(KEY_WALKMAN_PLAYER_STYLE, false)
         pillMotionStyle.value = runCatching {
             PillMotionStyle.valueOf(prefs.getString(KEY_PILL_MOTION_STYLE, null) ?: PillMotionStyle.DEFAULT.name)
         }.getOrDefault(PillMotionStyle.DEFAULT)
@@ -1120,6 +1132,7 @@ object AppSettings {
         liquidGlass.value = prefs.getBoolean(KEY_LIQUID_GLASS, false)
         classicNavBar.value = prefs.getBoolean(KEY_CLASSIC_NAV_BAR, false)
         hideNavigationBarLabels.value = prefs.getBoolean(KEY_HIDE_NAVIGATION_BAR_LABELS, false)
+        mainNavigationTabsPopup.value = prefs.getBoolean(KEY_MAIN_NAVIGATION_TABS_POPUP, false)
         visibleLocalLibraryTabs.value = readVisibleLocalLibraryTabs()
         localLibraryTabOrder.value = readLocalLibraryTabOrder()
         visibleMainNavigationTabs.value = readVisibleMainNavigationTabs()
@@ -1539,6 +1552,11 @@ object AppSettings {
         prefs.edit().putBoolean(KEY_MINI_PLAYER_SWIPE_CHANGES_TRACK, value).apply()
     }
 
+    fun setMiniPlayerSwipeUpExpands(value: Boolean) {
+        miniPlayerSwipeUpExpands.value = value
+        prefs.edit().putBoolean(KEY_MINI_PLAYER_SWIPE_UP_EXPANDS, value).apply()
+    }
+
     fun setPlaylistTrackMenuUsesArtworkColor(value: Boolean) {
         playlistTrackMenuUsesArtworkColor.value = value
         prefs.edit().putBoolean(KEY_PLAYLIST_TRACK_MENU_ARTWORK_COLOR, value).apply()
@@ -1547,6 +1565,12 @@ object AppSettings {
     fun setParametricEqEnabled(value: Boolean) {
         parametricEqEnabled.value = value
         prefs.edit().putBoolean(KEY_PARAMETRIC_EQ_ENABLED, value).apply()
+    }
+
+    fun setEqualizerBalance(value: Float) {
+        val safeValue = value.takeIf(Float::isFinite)?.coerceIn(-1f, 1f) ?: 0f
+        equalizerBalance.value = safeValue
+        prefs.edit().putFloat(KEY_EQUALIZER_BALANCE, safeValue).apply()
     }
 
     fun setChannelSwapEnabled(value: Boolean) {
@@ -1622,6 +1646,11 @@ object AppSettings {
         prefs.edit().putBoolean(KEY_PLAYER_ARTWORK_TRANSITION, value).apply()
     }
 
+    fun setWalkmanPlayerStyle(value: Boolean) {
+        walkmanPlayerStyle.value = value
+        prefs.edit().putBoolean(KEY_WALKMAN_PLAYER_STYLE, value).apply()
+    }
+
     fun setPillMotionStyle(value: PillMotionStyle) {
         pillMotionStyle.value = value
         prefs.edit().putString(KEY_PILL_MOTION_STYLE, value.name).apply()
@@ -1665,6 +1694,11 @@ object AppSettings {
     fun setHideNavigationBarLabels(value: Boolean) {
         hideNavigationBarLabels.value = value
         prefs.edit().putBoolean(KEY_HIDE_NAVIGATION_BAR_LABELS, value).apply()
+    }
+
+    fun setMainNavigationTabsPopup(value: Boolean) {
+        mainNavigationTabsPopup.value = value
+        prefs.edit().putBoolean(KEY_MAIN_NAVIGATION_TABS_POPUP, value).apply()
     }
 
     /** Keeps at least one destination available for navigation. */
@@ -2961,9 +2995,11 @@ object AppSettings {
     private const val KEY_MINI_PLAYER_ARTWORK_COLOR = "mini_player_artwork_color"
     private const val KEY_MINI_PLAYER_PREVIOUS_BUTTON = "mini_player_previous_button"
     private const val KEY_MINI_PLAYER_SWIPE_CHANGES_TRACK = "mini_player_swipe_changes_track"
+    private const val KEY_MINI_PLAYER_SWIPE_UP_EXPANDS = "mini_player_swipe_up_expands"
     private const val KEY_PLAYLIST_TRACK_MENU_ARTWORK_COLOR = "playlist_track_menu_artwork_color"
     private const val KEY_PARAMETRIC_EQ_ENABLED = "parametric_eq_enabled"
     private const val KEY_PARAMETRIC_EQ_BANDS = "parametric_eq_bands"
+    private const val KEY_EQUALIZER_BALANCE = "equalizer_balance"
     private const val KEY_CHANNEL_SWAP_ENABLED = "channel_swap_enabled"
     private const val KEY_REVERB_ENABLED = "reverb_enabled"
     private const val KEY_REVERB_AMOUNT = "reverb_amount"
@@ -2982,6 +3018,7 @@ object AppSettings {
     private const val KEY_CACHE_LIMIT = "audio_cache_limit_bytes"
     private const val KEY_REDUCE_ANIMATION = "reduce_animation"
     private const val KEY_PLAYER_ARTWORK_TRANSITION = "player_artwork_transition"
+    private const val KEY_WALKMAN_PLAYER_STYLE = "walkman_player_style"
     private const val KEY_PILL_MOTION_STYLE = "pill_motion_style"
     private const val KEY_HIGH_PERFORMANCE_MODE = "high_performance_mode"
     private const val KEY_PERFORMANCE_REFRESH_RATE = "performance_refresh_rate"
@@ -2993,6 +3030,7 @@ object AppSettings {
     private const val KEY_LIQUID_GLASS = "liquid_glass"
     private const val KEY_CLASSIC_NAV_BAR = "classic_nav_bar"
     private const val KEY_HIDE_NAVIGATION_BAR_LABELS = "hide_navigation_bar_labels"
+    private const val KEY_MAIN_NAVIGATION_TABS_POPUP = "main_navigation_tabs_popup"
     private const val KEY_VISIBLE_MAIN_NAVIGATION_TABS = "visible_main_navigation_tabs"
     private const val KEY_MAIN_NAVIGATION_TAB_ORDER = "main_navigation_tab_order"
     private const val KEY_MAIN_FOLDER_TAB_MIGRATED = "main_folder_tab_migrated"

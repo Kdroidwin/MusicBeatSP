@@ -22,10 +22,16 @@ import androidx.compose.foundation.layout.navigationBarsPadding
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
+import androidx.compose.foundation.layout.widthIn
 import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.rounded.MoreVert
+import androidx.compose.material.icons.rounded.Check
 import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.ModalBottomSheet
 import androidx.compose.material3.Text
+import androidx.compose.material3.rememberModalBottomSheetState
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
@@ -48,12 +54,23 @@ import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.IntSize
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
+import androidx.compose.ui.semantics.Role
+import androidx.compose.ui.semantics.contentDescription
+import androidx.compose.ui.semantics.role
+import androidx.compose.ui.semantics.semantics
 import com.music.bitchord.data.settings.AppSettings
 import com.music.bitchord.ui.haptics.Haptic
 import com.music.bitchord.ui.haptics.rememberHaptics
 import dev.chrisbanes.haze.HazeState
 import dev.chrisbanes.haze.materials.ExperimentalHazeMaterialsApi
 import dev.chrisbanes.haze.materials.HazeMaterials
+import androidx.compose.material3.HorizontalDivider
+import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.foundation.layout.heightIn
+import androidx.compose.foundation.verticalScroll
+import androidx.compose.foundation.rememberScrollState
+import androidx.compose.ui.res.stringResource
+import com.music.bitchord.R
 import kotlin.math.abs
 import kotlin.math.roundToInt
 
@@ -102,6 +119,144 @@ internal val TAB_ICON_LABEL_GAP = 2.dp
  * enough that the tap and the arrival feel like one event.
  */
 private val GlassSpring = spring<Float>(dampingRatio = 0.72f, stiffness = 320f)
+
+/** Compact navigation trigger whose destinations are shown in a modal sheet. */
+@OptIn(ExperimentalHazeMaterialsApi::class, androidx.compose.material3.ExperimentalMaterial3Api::class)
+@Composable
+fun PopupNavigationBar(
+    tabs: List<BottomTab>,
+    selectedIndex: Int,
+    onTabSelected: (Int) -> Unit,
+    hazeState: HazeState,
+    modifier: Modifier = Modifier,
+) {
+    if (tabs.isEmpty()) return
+    var expanded by remember { mutableStateOf(false) }
+    val reduceDynamicBlur by AppSettings.reduceDynamicBlur.collectAsStateWithLifecycle()
+    val useGlass = LocalLiquidGlassEnabled.current && isGlassSupported()
+    val currentIndex = selectedIndex.coerceIn(tabs.indices)
+    val selectedTab = tabs[currentIndex]
+    val popupDescription = stringResource(R.string.main_navigation_popup)
+    val shape = RoundedCornerShape(percent = 50)
+    val container = MaterialTheme.colorScheme.surface
+
+    Box(
+        modifier = modifier
+            .navigationBarsPadding()
+            .padding(horizontal = PAGE_GUTTER)
+            .padding(bottom = 2.dp)
+            .fillMaxWidth(),
+        contentAlignment = Alignment.Center,
+    ) {
+        Row(
+            modifier = Modifier
+                .widthIn(min = 160.dp, max = 300.dp)
+                .clip(shape)
+                .then(
+                    when {
+                        reduceDynamicBlur -> Modifier.background(container)
+                        useGlass -> Modifier.liquidGlass(shape = shape)
+                        else -> Modifier.optimizedHazeEffect(
+                            state = hazeState,
+                            style = HazeMaterials.regular(container),
+                        )
+                    },
+                )
+                .border(GLASS_EDGE_WIDTH, GLASS_EDGE_COLOR, shape)
+                .clickable { expanded = true }
+                .semantics {
+                    role = Role.Button
+                    contentDescription = popupDescription
+                }
+                .padding(horizontal = 18.dp, vertical = 10.dp),
+            horizontalArrangement = Arrangement.spacedBy(10.dp),
+            verticalAlignment = Alignment.CenterVertically,
+        ) {
+            Icon(
+                imageVector = Icons.Rounded.MoreVert,
+                contentDescription = null,
+                tint = MaterialTheme.colorScheme.onSurfaceVariant,
+                modifier = Modifier.size(22.dp),
+            )
+            Icon(
+                imageVector = selectedTab.icon,
+                contentDescription = null,
+                tint = MaterialTheme.colorScheme.primary,
+                modifier = Modifier.size(22.dp),
+            )
+            Text(
+                text = selectedTab.label,
+                style = MaterialTheme.typography.labelLarge,
+                fontWeight = FontWeight.SemiBold,
+                color = MaterialTheme.colorScheme.onSurface,
+                maxLines = 1,
+                overflow = TextOverflow.Ellipsis,
+                modifier = Modifier.weight(1f),
+            )
+        }
+    }
+
+    if (expanded) {
+        ModalBottomSheet(
+            onDismissRequest = { expanded = false },
+            sheetState = rememberModalBottomSheetState(skipPartiallyExpanded = true),
+            containerColor = MaterialTheme.colorScheme.surface,
+        ) {
+            Column(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .heightIn(max = 520.dp)
+                    .verticalScroll(rememberScrollState())
+                    .navigationBarsPadding()
+                    .padding(bottom = 16.dp),
+            ) {
+                Text(
+                    text = stringResource(R.string.main_navigation_popup),
+                    style = MaterialTheme.typography.titleMedium,
+                    fontWeight = FontWeight.SemiBold,
+                    color = MaterialTheme.colorScheme.onSurface,
+                    modifier = Modifier.padding(start = 24.dp, end = 24.dp, top = 8.dp, bottom = 12.dp),
+                )
+                HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.5f))
+                tabs.forEachIndexed { index, tab ->
+                    val selected = index == currentIndex
+                    Row(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .clickable {
+                                expanded = false
+                                onTabSelected(index)
+                            }
+                            .padding(horizontal = 24.dp, vertical = 15.dp),
+                        horizontalArrangement = Arrangement.spacedBy(16.dp),
+                        verticalAlignment = Alignment.CenterVertically,
+                    ) {
+                        Icon(
+                            imageVector = tab.icon,
+                            contentDescription = null,
+                            tint = if (selected) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurfaceVariant,
+                            modifier = Modifier.size(24.dp),
+                        )
+                        Text(
+                            text = tab.label,
+                            style = MaterialTheme.typography.bodyLarge,
+                            color = MaterialTheme.colorScheme.onSurface,
+                            modifier = Modifier.weight(1f),
+                        )
+                        if (selected) {
+                            Icon(
+                                imageVector = Icons.Rounded.Check,
+                                contentDescription = null,
+                                tint = MaterialTheme.colorScheme.primary,
+                                modifier = Modifier.size(22.dp),
+                            )
+                        }
+                    }
+                }
+            }
+        }
+    }
+}
 
 /**
  * How far the indicator elongates along its travel, at full stride.

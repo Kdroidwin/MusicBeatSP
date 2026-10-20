@@ -368,6 +368,7 @@ private fun GlassNowPlaying(
     modifier: Modifier = Modifier,
 ) {
     val showPreviousButton by AppSettings.miniPlayerPreviousButton.collectAsStateWithLifecycle()
+    val swipeUpExpands by AppSettings.miniPlayerSwipeUpExpands.collectAsStateWithLifecycle()
     val haptics = rememberHaptics()
     val pressSource = remember { MutableInteractionSource() }
     val isPressed by pressSource.collectIsPressedAsState()
@@ -381,6 +382,8 @@ private fun GlassNowPlaying(
     val dismissThresholdPx = with(density) { 48.dp.toPx() }
     val offsetY = remember { Animatable(0f) }
     val scope = rememberCoroutineScope()
+    val currentOnExpand by rememberUpdatedState(onExpand)
+    val currentOnDismiss by rememberUpdatedState(onDismiss)
 
     val artSize = if (isInline) 32.dp else 40.dp
     val glyphSlot = if (isInline) 32.dp else 40.dp
@@ -402,30 +405,41 @@ private fun GlassNowPlaying(
                 translationY = offsetY.value
                 alpha = (1f - (offsetY.value / (dismissThresholdPx * 1.5f))).coerceIn(0f, 1f)
             }
-            .pointerInput(Unit) {
+            .pointerInput(swipeUpExpands, dismissThresholdPx) {
+                var upwardDistance = 0f
                 detectVerticalDragGestures(
+                    onDragStart = { upwardDistance = 0f },
                     onDragEnd = {
-                        if (offsetY.value >= dismissThresholdPx) {
-                            scope.launch {
-                                offsetY.animateTo(dismissThresholdPx * 2f, tween(120))
-                                onDismiss()
+                        when {
+                            offsetY.value >= dismissThresholdPx -> {
+                                scope.launch {
+                                    offsetY.animateTo(dismissThresholdPx * 2f, tween(120))
+                                    currentOnDismiss()
+                                }
                             }
-                        } else {
-                            scope.launch {
-                                offsetY.animateTo(0f, spring(dampingRatio = 0.75f, stiffness = Spring.StiffnessMediumLow))
+                            swipeUpExpands && upwardDistance >= dismissThresholdPx -> currentOnExpand()
+                            else -> {
+                                scope.launch {
+                                    offsetY.animateTo(0f, spring(dampingRatio = 0.75f, stiffness = Spring.StiffnessMediumLow))
+                                }
                             }
                         }
                     },
                     onDragCancel = {
+                        upwardDistance = 0f
                         scope.launch {
                             offsetY.animateTo(0f, spring(dampingRatio = 0.75f, stiffness = Spring.StiffnessMediumLow))
                         }
                     },
                     onVerticalDrag = { change, dragAmount ->
                         if (dragAmount > 0 || offsetY.value > 0) {
+                            upwardDistance = 0f
                             change.consume()
                             val next = (offsetY.value + dragAmount).coerceAtLeast(0f)
                             scope.launch { offsetY.snapTo(next) }
+                        } else if (dragAmount < 0 && swipeUpExpands) {
+                            change.consume()
+                            upwardDistance += -dragAmount
                         }
                     },
                 )

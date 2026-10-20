@@ -295,10 +295,12 @@ fun SettingsScreen(
     val nerdStats by AppSettings.showNerdStats.collectAsStateWithLifecycle()
     val reduceAnimation by AppSettings.reduceAnimation.collectAsStateWithLifecycle()
     val playerArtworkTransition by AppSettings.playerArtworkTransition.collectAsStateWithLifecycle()
+    val walkmanPlayerStyle by AppSettings.walkmanPlayerStyle.collectAsStateWithLifecycle()
     val pillMotionStyle by AppSettings.pillMotionStyle.collectAsStateWithLifecycle()
     val reduceDynamicBlur by AppSettings.reduceDynamicBlur.collectAsStateWithLifecycle()
     val liquidGlass by AppSettings.liquidGlass.collectAsStateWithLifecycle()
     val classicNavBar by AppSettings.classicNavBar.collectAsStateWithLifecycle()
+    val mainNavigationTabsPopup by AppSettings.mainNavigationTabsPopup.collectAsStateWithLifecycle()
     val hideNavBarLabels by AppSettings.hideNavigationBarLabels.collectAsStateWithLifecycle()
     val visibleMainTabs by AppSettings.visibleMainNavigationTabs.collectAsStateWithLifecycle()
     val mainTabOrder by AppSettings.mainNavigationTabOrder.collectAsStateWithLifecycle()
@@ -382,6 +384,7 @@ fun SettingsScreen(
     val miniPlayerArtworkColor by AppSettings.miniPlayerArtworkColor.collectAsStateWithLifecycle()
     val miniPlayerPreviousButton by AppSettings.miniPlayerPreviousButton.collectAsStateWithLifecycle()
     val miniPlayerSwipeChangesTrack by AppSettings.miniPlayerSwipeChangesTrack.collectAsStateWithLifecycle()
+    val miniPlayerSwipeUpExpands by AppSettings.miniPlayerSwipeUpExpands.collectAsStateWithLifecycle()
     val playlistTrackMenuUsesArtworkColor by AppSettings.playlistTrackMenuUsesArtworkColor.collectAsStateWithLifecycle()
     val parametricEqEnabled by AppSettings.parametricEqEnabled.collectAsStateWithLifecycle()
     val channelSwapEnabled by AppSettings.channelSwapEnabled.collectAsStateWithLifecycle()
@@ -674,6 +677,7 @@ fun SettingsScreen(
         SettingsSearchEntry(stringResource(R.string.keep_artwork_full_size_paused), stringResource(R.string.keep_artwork_full_size_paused_subtitle), listOf("artwork", "cover", "paused", "停止中", "アート"), keepArtworkFullSizeWhenPaused) { AppSettings.setKeepArtworkFullSizeWhenPaused(!keepArtworkFullSizeWhenPaused) },
         SettingsSearchEntry(stringResource(R.string.reduce_animation), stringResource(R.string.reduce_animation_subtitle), listOf("animation", "reduce", "アニメーション"), reduceAnimation) { AppSettings.setReduceAnimation(!reduceAnimation) },
         SettingsSearchEntry(stringResource(R.string.player_artwork_transition), stringResource(R.string.player_artwork_transition_subtitle), listOf("player", "artwork", "cover", "lyrics", "animation", "transition", "プレイヤー", "アート", "歌詞", "遷移", "アニメーション"), playerArtworkTransition) { AppSettings.setPlayerArtworkTransition(!playerArtworkTransition) },
+        SettingsSearchEntry(stringResource(R.string.walkman_player_style), stringResource(R.string.walkman_player_style_subtitle), listOf("player", "walkman", "sony", "controls", "ウォークマン", "ソニー", "プレイヤー", "再生ボタン"), walkmanPlayerStyle) { AppSettings.setWalkmanPlayerStyle(!walkmanPlayerStyle) },
         SettingsSearchEntry(
             title = stringResource(R.string.pill_motion_style),
             subtitle = stringResource(R.string.pill_motion_style_subtitle),
@@ -685,6 +689,7 @@ fun SettingsScreen(
         },
         SettingsSearchEntry(stringResource(R.string.reduce_dynamic_blur), stringResource(R.string.reduce_dynamic_blur_subtitle), listOf("blur", "ぼかし", "performance", "動的"), reduceDynamicBlur) { AppSettings.setReduceDynamicBlur(!reduceDynamicBlur) },
         SettingsSearchEntry(stringResource(R.string.classic_nav_bar), stringResource(R.string.classic_nav_bar_subtitle), listOf("navigation", "nav bar", "ナビゲーション", "classic"), classicNavBar) { AppSettings.setClassicNavBar(!classicNavBar) },
+        SettingsSearchEntry(stringResource(R.string.main_navigation_popup), stringResource(R.string.main_navigation_popup_subtitle), listOf("navigation", "tabs", "popup", "menu", "bottom bar", "ナビゲーション", "タブ", "ポップアップ", "メニュー"), mainNavigationTabsPopup) { AppSettings.setMainNavigationTabsPopup(!mainNavigationTabsPopup) },
         SettingsSearchEntry(stringResource(R.string.hide_nav_bar_labels), stringResource(R.string.hide_nav_bar_labels_subtitle), listOf("navigation", "nav bar", "label", "ラベル", "ナビゲーション"), hideNavBarLabels) { AppSettings.setHideNavigationBarLabels(!hideNavBarLabels) },
         SettingsSearchEntry(stringResource(R.string.legacy_mesh_gradient), stringResource(R.string.legacy_mesh_gradient_subtitle), listOf("theme", "gradient", "テーマ", "グラデーション"), legacyMeshGradient) { AppSettings.setLegacyMeshGradient(!legacyMeshGradient) },
         SettingsSearchEntry(
@@ -711,6 +716,12 @@ fun SettingsScreen(
             listOf("mini player", "swipe", "gesture", "previous", "next", "ミニプレイヤー", "スワイプ", "ジェスチャー", "前の曲", "次の曲"),
             miniPlayerSwipeChangesTrack,
         ) { AppSettings.setMiniPlayerSwipeChangesTrack(!miniPlayerSwipeChangesTrack) },
+        SettingsSearchEntry(
+            stringResource(R.string.mini_player_swipe_up_expands),
+            stringResource(R.string.mini_player_swipe_up_expands_subtitle),
+            listOf("mini player", "swipe up", "expand", "open player", "ミニプレイヤー", "上スワイプ", "プレイヤーを開く"),
+            miniPlayerSwipeUpExpands,
+        ) { AppSettings.setMiniPlayerSwipeUpExpands(!miniPlayerSwipeUpExpands) },
         SettingsSearchEntry(
             stringResource(R.string.playlist_track_menu_artwork_color),
             stringResource(R.string.playlist_track_menu_artwork_color_subtitle),
@@ -2375,6 +2386,23 @@ fun SettingsScreen(
             )
             RowDivider()
             SettingsRow(
+                icon = Icons.Rounded.ArrowUpward,
+                title = stringResource(R.string.mini_player_swipe_up_expands),
+                subtitle = stringResource(R.string.mini_player_swipe_up_expands_subtitle),
+                trailing = {
+                    Switch(
+                        checked = miniPlayerSwipeUpExpands,
+                        onCheckedChange = AppSettings::setMiniPlayerSwipeUpExpands,
+                        colors = SwitchDefaults.colors(
+                            checkedTrackColor = MaterialTheme.colorScheme.primary,
+                            checkedBorderColor = MaterialTheme.colorScheme.primary,
+                        ),
+                    )
+                },
+                onClick = { AppSettings.setMiniPlayerSwipeUpExpands(!miniPlayerSwipeUpExpands) },
+            )
+            RowDivider()
+            SettingsRow(
                 icon = Icons.Rounded.AutoAwesome,
                 title = stringResource(R.string.playlist_track_menu_artwork_color),
                 subtitle = stringResource(R.string.playlist_track_menu_artwork_color_subtitle),
@@ -2686,6 +2714,23 @@ fun SettingsScreen(
             )
             RowDivider()
             SettingsRow(
+                icon = Icons.Rounded.MoreVert,
+                title = stringResource(R.string.main_navigation_popup),
+                subtitle = stringResource(R.string.main_navigation_popup_subtitle),
+                trailing = {
+                    Switch(
+                        checked = mainNavigationTabsPopup,
+                        onCheckedChange = AppSettings::setMainNavigationTabsPopup,
+                        colors = SwitchDefaults.colors(
+                            checkedTrackColor = MaterialTheme.colorScheme.primary,
+                            checkedBorderColor = MaterialTheme.colorScheme.primary,
+                        ),
+                    )
+                },
+                onClick = { AppSettings.setMainNavigationTabsPopup(!mainNavigationTabsPopup) },
+            )
+            RowDivider()
+            SettingsRow(
                 icon = Icons.Rounded.LocalOffer,
                 title = stringResource(R.string.hide_nav_bar_labels),
                 subtitle = stringResource(R.string.hide_nav_bar_labels_subtitle),
@@ -2742,6 +2787,23 @@ fun SettingsScreen(
                 onClick = {
                     AppSettings.setKeepOriginalArtworkAspectRatio(!keepOriginalArtworkAspectRatio)
                 },
+            )
+            RowDivider()
+            SettingsRow(
+                icon = Icons.Rounded.Headphones,
+                title = stringResource(R.string.walkman_player_style),
+                subtitle = stringResource(R.string.walkman_player_style_subtitle),
+                trailing = {
+                    Switch(
+                        checked = walkmanPlayerStyle,
+                        onCheckedChange = AppSettings::setWalkmanPlayerStyle,
+                        colors = SwitchDefaults.colors(
+                            checkedTrackColor = MaterialTheme.colorScheme.primary,
+                            checkedBorderColor = MaterialTheme.colorScheme.primary,
+                        ),
+                    )
+                },
+                onClick = { AppSettings.setWalkmanPlayerStyle(!walkmanPlayerStyle) },
             )
             RowDivider()
             SettingsRow(

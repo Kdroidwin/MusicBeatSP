@@ -276,6 +276,8 @@
     <string name="reduce_animation_subtitle">プレイヤー・歌詞・タブの動きを減らし、プレイヤーのグラデーションを固定します</string>
     <string name="player_artwork_transition">プレイヤー・歌詞の切り替えアニメーション</string>
     <string name="player_artwork_transition_subtitle">ミニプレーヤーから全画面プレーヤーへのアートの移動と歌詞の切り替えをアニメーションします。「アニメーションを減らす」とは別に設定できます</string>
+    <string name="walkman_player_style">ウォークマン風プレーヤー</string>
+    <string name="walkman_player_style_subtitle">小さめの中央配置アート、中央揃えの曲情報、円で囲んだ再生操作を使います。初期設定はオフです。</string>
     <string name="pill_motion_style">タブ切り替えの速さ</string>
     <string name="pill_motion_style_subtitle">選択中タブのインジケーターが移動する速さを調整します</string>
     <string name="pill_motion_fast">スピーディ</string>
@@ -877,6 +879,10 @@
     <string name="mini_player_previous_button_subtitle">再生・次の曲ボタンの横に前の曲へ戻るボタンを表示します。初期設定はオンです</string>
     <string name="mini_player_swipe_changes_track">ミニプレイヤーのスワイプで曲を切り替える</string>
     <string name="mini_player_swipe_changes_track_subtitle">左スワイプで次の曲、右スワイプで前の曲に移動します。初期設定はオフです</string>
+    <string name="mini_player_swipe_up_expands">ミニプレイヤーの上スワイプでプレイヤーを開く</string>
+    <string name="mini_player_swipe_up_expands_subtitle">上にスワイプすると、ミニプレイヤーをタップしたときと同じように全画面プレイヤーを開きます。初期設定はオンです</string>
+    <string name="main_navigation_popup">下部タブをポップアップメニューにする</string>
+    <string name="main_navigation_popup_subtitle">下部のタブバーを1つのボタンにまとめ、メニューから画面を選びます。初期設定はオフです</string>
     <string name="playlist_track_menu_artwork_color">プレイリスト内の曲メニューをアートワークの色に合わせる</string>
     <string name="playlist_track_menu_artwork_color_subtitle">プレイリスト内で開いた曲メニューに、そのプレイリストのカバー色を使います。初期設定はオンです</string>
     <string name="preload_album_art">起動時にローカルのアートを読み込む</string>

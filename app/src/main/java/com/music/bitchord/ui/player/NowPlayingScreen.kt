@@ -924,6 +924,7 @@ fun NowPlayingScreen(
     val hideUnknownPlayerArtist by AppSettings.hideUnknownPlayerArtist.collectAsStateWithLifecycle()
     val centerPlayerTrackInfo by AppSettings.centerPlayerTrackInfo.collectAsStateWithLifecycle()
     val playerDetailsVerticalMenu by AppSettings.playerDetailsVerticalMenu.collectAsStateWithLifecycle()
+    val walkmanPlayerStyle by AppSettings.walkmanPlayerStyle.collectAsStateWithLifecycle()
     val artworkBackdropBlurDp by AppSettings.artworkBackdropBlurDp.collectAsStateWithLifecycle()
     val useLibraryIconForPlaylistControl by AppSettings.useLibraryIconForPlaylistControl.collectAsStateWithLifecycle()
     val keepArtworkFullSizeWhenPaused by AppSettings.keepArtworkFullSizeWhenPaused.collectAsStateWithLifecycle()
@@ -1323,6 +1324,9 @@ fun NowPlayingScreen(
         },
         label = "sleeveCollapse",
     )
+    // Keep the new transport treatment on the settled, expanded player only.
+    // Queue and lyrics surfaces retain their established controls and gestures.
+    val walkmanControlsActive = walkmanPlayerStyle && p < 0.01f && !queueOpen && !lyricsOpen
     var loadedArtworkAspectRatio by remember(song.videoId, artUrl) { mutableFloatStateOf(1f) }
     val animatedArtworkAspectRatio by animateFloatAsState(
         targetValue = loadedArtworkAspectRatio,
@@ -1943,8 +1947,13 @@ fun NowPlayingScreen(
                 // takes the gaps below to catch up with a change in their own
                 // height: a sleeve a few dp under for one frame is a better
                 // failure than a credits row overhanging the lyric strip.
-                val fullArt = minOf(wantArt, maxHeight - ART_TITLE_GAP - HEADER_HEIGHT)
-                    .coerceAtLeast(THUMB_SIZE)
+                val walkmanTopGap = minOf(40.dp, maxHeight * 0.08f)
+                val walkmanHeightLimit = maxHeight - walkmanTopGap - ART_TITLE_GAP - HEADER_HEIGHT
+                val fullArt = if (walkmanPlayerStyle) {
+                    minOf(maxWidth * 0.76f, walkmanHeightLimit)
+                } else {
+                    minOf(wantArt, maxHeight - ART_TITLE_GAP - HEADER_HEIGHT)
+                }.coerceAtLeast(THUMB_SIZE)
                 // What's left over once the sleeve, the gap and the credits have
                 // had theirs. A few dp on a phone; the better part of a
                 // centimetre on anything taller, and since the group is centred,
@@ -2016,8 +2025,12 @@ fun NowPlayingScreen(
                 // square footprint used by the old sleeve layout.
                 val expandedArtWidth = fullArt * minOf(1f, sleeveAspectRatio)
                 val expandedArtHeight = fullArt * minOf(1f, 1f / sleeveAspectRatio)
-                val groupTop = (maxHeight - expandedArtHeight - ART_TITLE_GAP - HEADER_HEIGHT)
-                    .coerceAtLeast(0.dp) / 2
+                val groupTop = if (walkmanPlayerStyle) {
+                    walkmanTopGap
+                } else {
+                    (maxHeight - expandedArtHeight - ART_TITLE_GAP - HEADER_HEIGHT)
+                        .coerceAtLeast(0.dp) / 2
+                }
                 var settledArtWidth by remember(song.videoId) { mutableStateOf(expandedArtWidth) }
                 var settledArtHeight by remember(song.videoId) { mutableStateOf(expandedArtHeight) }
                 var settledGroupTop by remember(song.videoId) { mutableStateOf(groupTop) }
@@ -2460,7 +2473,9 @@ fun NowPlayingScreen(
                     ) {
                     Column(
                         Modifier.weight(1f),
-                        horizontalAlignment = if (centerPlayerTrackInfo) Alignment.CenterHorizontally else Alignment.Start,
+                        horizontalAlignment = if (centerPlayerTrackInfo || walkmanPlayerStyle) {
+                            Alignment.CenterHorizontally
+                        } else Alignment.Start,
                     ) {
                         // Shrinks as the header collapses, so the queue's
                         // heading doesn't have to compete with it.
@@ -3038,6 +3053,19 @@ fun NowPlayingScreen(
                         },
                     )
                 }
+                if (walkmanControlsActive && PlayerControl.SHUFFLE in visiblePlayerControls) {
+                    BottomGlyph(
+                        icon = BitChordIcons.Shuffle,
+                        contentDescription = stringResource(
+                            if (shuffleEnabled) R.string.shuffle_on else R.string.shuffle_off,
+                        ),
+                        onClick = onToggleShuffle,
+                        highlighted = shuffleEnabled,
+                        haptic = if (shuffleEnabled) Haptic.ToggleOff else Haptic.ToggleOn,
+                        tapWindowMs = SHUFFLE_TAP_WINDOW_MS,
+                        outlined = true,
+                    )
+                }
                 TransportGlyph(
                     icon = Icons.Rounded.FastRewind,
                     contentDescription = stringResource(R.string.widget_previous),
@@ -3047,13 +3075,23 @@ fun NowPlayingScreen(
                     // step to, or enough elapsed for it to restart this one.
                     enabled = hasPrevious || positionMs > BACK_RESTARTS_AFTER_MS,
                     haptic = Haptic.SkipPrevious,
+                    outlined = walkmanControlsActive,
                 )
                 // While the stream URL resolves and buffers, the play glyph
                 // would be a lie — show progress instead.
                 if (isLoading) {
                     // Same footprint as TransportGlyph(62.dp) — a smaller box
                     // here would shunt everything below it on every load.
-                    Box(Modifier.size(74.dp), contentAlignment = Alignment.Center) {
+                    Box(
+                        Modifier
+                            .size(74.dp)
+                            .then(
+                                if (walkmanControlsActive) {
+                                    Modifier.border(1.dp, Color.White.copy(alpha = 0.72f), CircleShape)
+                                } else Modifier,
+                            ),
+                        contentAlignment = Alignment.Center,
+                    ) {
                         CircularProgressIndicator(
                             color = Color.White,
                             strokeWidth = 3.dp,
@@ -3067,6 +3105,7 @@ fun NowPlayingScreen(
                         size = 62.dp,
                         onClick = onPlayPause,
                         haptic = if (isPlaying) Haptic.Pause else Haptic.Resume,
+                        outlined = walkmanControlsActive,
                     )
                 }
                 TransportGlyph(
@@ -3076,7 +3115,27 @@ fun NowPlayingScreen(
                     onClick = onNext,
                     enabled = hasNext,
                     haptic = Haptic.SkipNext,
+                    outlined = walkmanControlsActive,
                 )
+                if (walkmanControlsActive && PlayerControl.REPEAT in visiblePlayerControls) {
+                    BottomGlyph(
+                        icon = if (repeatMode == Player.REPEAT_MODE_ONE) null else BitChordIcons.Repeat,
+                        label = if (repeatMode == Player.REPEAT_MODE_ONE) "1" else null,
+                        contentDescription = when (repeatMode) {
+                            Player.REPEAT_MODE_ONE -> stringResource(R.string.repeat_one)
+                            Player.REPEAT_MODE_ALL -> stringResource(R.string.repeat_all)
+                            else -> stringResource(R.string.repeat_off)
+                        },
+                        onClick = onCycleRepeat,
+                        highlighted = repeatMode != Player.REPEAT_MODE_OFF,
+                        haptic = when (repeatMode) {
+                            Player.REPEAT_MODE_OFF -> Haptic.ToggleOn
+                            Player.REPEAT_MODE_ONE -> Haptic.ToggleOff
+                            else -> Haptic.Select
+                        },
+                        outlined = true,
+                    )
+                }
                 if (seekButtonsVisible) {
                     SeekTransportGlyph(
                         icon = Icons.Rounded.FastForward,
@@ -3153,7 +3212,7 @@ fun NowPlayingScreen(
                     playerControlOrder.forEach { control ->
                         if (control !in visiblePlayerControls) return@forEach
                         when (control) {
-                            PlayerControl.SHUFFLE -> BottomGlyph(
+                            PlayerControl.SHUFFLE -> if (!walkmanControlsActive) BottomGlyph(
                                 icon = BitChordIcons.Shuffle,
                                 contentDescription = stringResource(
                                     if (shuffleEnabled) R.string.shuffle_on else R.string.shuffle_off,
@@ -3163,7 +3222,7 @@ fun NowPlayingScreen(
                                 haptic = if (shuffleEnabled) Haptic.ToggleOff else Haptic.ToggleOn,
                                 tapWindowMs = SHUFFLE_TAP_WINDOW_MS,
                             )
-                            PlayerControl.REPEAT -> BottomGlyph(
+                            PlayerControl.REPEAT -> if (!walkmanControlsActive) BottomGlyph(
                                 icon = if (repeatMode == Player.REPEAT_MODE_ONE) null else BitChordIcons.Repeat,
                                 label = if (repeatMode == Player.REPEAT_MODE_ONE) "1" else null,
                                 contentDescription = when (repeatMode) {
@@ -4644,6 +4703,7 @@ private fun TransportGlyph(
     onClick: () -> Unit,
     enabled: Boolean = true,
     haptic: Haptic = Haptic.Tap,
+    outlined: Boolean = false,
 ) {
     val haptics = rememberHaptics()
     // Faded rather than hidden: the row keeps its shape at the ends of a queue.
@@ -4655,6 +4715,10 @@ private fun TransportGlyph(
         modifier = Modifier
             .size(size + 12.dp)
             .clip(CircleShape)
+            .then(
+                if (outlined) Modifier.border(1.dp, Color.White.copy(alpha = 0.72f), CircleShape)
+                else Modifier,
+            )
             .clickable(
                 interactionSource = remember { MutableInteractionSource() },
                 indication = null,
@@ -4724,6 +4788,7 @@ private fun BottomGlyph(
     enabled: Boolean = true,
     haptic: Haptic = Haptic.Tap,
     label: String? = null,
+    outlined: Boolean = false,
     /**
      * Shortest gap between taps that both reach [onClick]. A tap inside the
      * window of the last one is dropped whole — haptic included, so a swallowed
@@ -4744,6 +4809,10 @@ private fun BottomGlyph(
             .clip(CircleShape)
             .background(
                 if (highlighted && enabled) Color.White.copy(alpha = 0.20f) else Color.Transparent,
+            )
+            .then(
+                if (outlined) Modifier.border(1.dp, Color.White.copy(alpha = 0.72f), CircleShape)
+                else Modifier,
             )
             .clickable(
                 enabled = enabled,
