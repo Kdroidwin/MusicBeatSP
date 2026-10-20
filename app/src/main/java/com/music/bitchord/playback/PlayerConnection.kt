@@ -28,6 +28,8 @@ import com.music.bitchord.data.model.Song
 import com.music.bitchord.data.model.artworkAt
 import com.music.bitchord.data.sources.SourceRegistry
 import com.music.bitchord.data.sources.TrackMatcher
+import com.music.bitchord.data.smb.SmbConfig
+import com.music.bitchord.data.webdav.WebDavConfig
 import androidx.compose.runtime.rememberCoroutineScope
 import androidx.media3.common.Timeline
 import com.music.bitchord.download.Downloads
@@ -448,6 +450,11 @@ private fun Song.matchQuery(): String = buildString {
 
 fun Song.toMediaItem(): MediaItem {
     val sourceTrack = SourceRegistry.parseTrackKey(videoId)
+    val remoteFileUri = when {
+        WebDavConfig.isWebDavId(videoId) -> WebDavConfig.fileUrlOf(videoId)
+        SmbConfig.isSmbId(videoId) -> SmbConfig.fileUrlOf(videoId)
+        else -> null
+    }
     // A row from search or a playlist carries no file of its own, but the track
     // may still be on disk from a download — see [Downloads.saved].
     //
@@ -472,10 +479,13 @@ fun Song.toMediaItem(): MediaItem {
     // [MediaItem.toSong], so an item waiting in the live queue can carry a URI
     // that has become stale since it was created. Checking only the lookup
     // leaves that path unguarded.
-    val offlineUri = localUri?.takeUnless(Downloads::isMissingLocalFile)
+    val offlineUri = if (WebDavConfig.isWebDavId(videoId) || SmbConfig.isSmbId(videoId)) null else
+        localUri?.takeUnless(Downloads::isMissingLocalFile)
         ?: localPath?.takeIf { java.io.File(it).exists() }?.let { android.net.Uri.fromFile(java.io.File(it)).toString() }
         ?: Downloads.verifiedSavedUri(videoId)
-    val uriString = offlineUri ?: when {
+    val uriString = remoteFileUri ?: offlineUri ?: when {
+        WebDavConfig.isWebDavId(videoId) || SmbConfig.isSmbId(videoId) ->
+            "bitchord://unavailable?source=remote-file"
         videoId.startsWith("content://") || videoId.startsWith("file://") -> videoId
         // Title, artist and runtime ride along in the URI because they are what
         // a cross-source match is made on, and the resolver runs on ExoPlayer's

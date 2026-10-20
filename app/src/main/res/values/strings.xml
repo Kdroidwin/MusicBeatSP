@@ -250,9 +250,27 @@
     <string name="crossfade">Crossfade</string>
     <string name="crossfade_subtitle">Overlap consecutive tracks for a smoother transition. Off by default.</string>
     <string name="crossfade_value">%1$d sec</string>
+    <string name="automix">Automix [BETA]</string>
+    <string name="automix_enabled_subtitle">Times and blends every transition from the tracks themselves. Turn it off if the phone gets hot or playback stutters.</string>
+    <string name="automix_disabled_subtitle">Times and blends transitions automatically, without a slider. Performance may vary on slower devices.</string>
+    <string name="automix_performance">Automix performance</string>
+    <string name="automix_performance_subtitle">Sets how much CPU background analysis may use</string>
+    <string name="automix_performance_warning">Higher performance analyses tracks faster, but can use more battery and make the phone warmer.</string>
+    <string name="automix_mode_efficient">Efficient</string>
+    <string name="automix_mode_efficient_subtitle">1 thread · lowest heat and battery use · analysis may take longer</string>
+    <string name="automix_mode_balanced">Balanced</string>
+    <string name="automix_mode_balanced_subtitle">2 threads · recommended balance of speed, heat and battery</string>
+    <string name="automix_mode_performance">Performance</string>
+    <string name="automix_mode_performance_subtitle">4 threads · fastest analysis · higher heat and battery use</string>
+    <string name="crossfade_disabled_by_automix">Manual crossfade is replaced while Automix is enabled.</string>
     <string name="audio_offload">Audio offload</string>
     <string name="audio_offload_subtitle">Use Android’s hardware offload path when available. Starts off; crossfade disables it while active.</string>
     <string name="audio_offload_disabled_by_crossfade">Temporarily unavailable while crossfade is enabled.</string>
+    <string name="audio_offload_disabled_by_transition">Temporarily unavailable while crossfade or Automix is enabled.</string>
+    <string name="webdav_server_url_hint">https://cloud.example.com/remote.php/dav/files/user/Music</string>
+    <string name="smb_server_hint">nas.local or 192.168.1.10:4445</string>
+    <string name="smb_share_hint">Share name, e.g. Music</string>
+    <string name="smb_folder_hint">Folder inside the share, e.g. media/music (optional)</string>
     <string name="double_tap_to_seek">Double tap to seek</string>
     <string name="double_tap_to_seek_subtitle">Double tap sides of album art to skip 5 seconds</string>
     <string name="equalizer">Equalizer</string>
@@ -1206,4 +1224,19 @@
     <string name="show_navigation_bar_search_help">Show Android Back, Home, and app-switcher buttons</string>
     <string name="show_tab_setting">Show %1$s tab</string>
     <string name="show_tab_setting_subtitle">Include the %1$s destination in the main navigation</string>
+
+<string name="smb">SMB</string>
+<string name="smb_description">Point MusicBeatSP at a shared music folder — a NAS or Windows share speaking SMB.</string>
+<string name="smb_disconnect">Disconnect</string>
+<string name="smb_not_configured">Connect a share under Sources</string>
+<string name="smb_subtitle">Music on a file share</string>
+<string name="smb_test_failed">Couldn’t reach it: %1$s</string>
+<string name="webdav">WebDAV</string>
+<string name="webdav_description">Point MusicBeatSP at a WebDAV music folder — your Nextcloud Music directory or any server speaking WebDAV.</string>
+<string name="webdav_disconnect">Disconnect</string>
+<string name="webdav_not_configured">Connect a server under Sources</string>
+<string name="webdav_subtitle">Music on your server</string>
+<string name="webdav_test_failed">Couldn’t reach it: %1$s</string>
+<string name="webdav_allow_insecure_http">Allow unencrypted HTTP</string>
+<string name="webdav_allow_insecure_http_subtitle">Only enable this for a trusted local network. HTTPS remains preferred.</string>
 </resources>

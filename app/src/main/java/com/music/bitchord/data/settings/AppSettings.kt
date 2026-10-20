@@ -407,6 +407,14 @@ object AppSettings {
     /** Equal-power overlap between consecutive tracks; zero keeps current transitions unchanged. */
     val crossfadeSeconds = MutableStateFlow(0)
 
+    /** Lets the analyzer plan transition timing from each track; falls back to fixed crossfade while analysis is unavailable. */
+    val smartFadeEnabled = MutableStateFlow(false)
+    val automixPerformanceMode = MutableStateFlow(AutomixPerformanceMode.BALANCED)
+    val smartMixInProgress = MutableStateFlow(false)
+    val smartMixBlend = MutableStateFlow<MixBlend?>(null)
+    val smartAnalysis = MutableStateFlow(SmartAnalysis())
+    val smartTransitionWindow = MutableStateFlow<TransitionWindow?>(null)
+
     /** Optional high-frequency cutoff for PCM playback. Zero leaves audio untouched. */
     val resamplerCutoffHz = MutableStateFlow(0)
 
@@ -838,6 +846,20 @@ object AppSettings {
     /** Empty means every MediaStore folder; otherwise this is a persisted SAF tree URI. */
     val localMusicFolderUri = MutableStateFlow("")
 
+    /** Remote file-library connection details. Credentials are Keystore-backed. */
+    val webdavUrl = MutableStateFlow("")
+    val webdavUsername = MutableStateFlow("")
+    val webdavPassword = MutableStateFlow("")
+    val webdavAllowInsecureHttp = MutableStateFlow(false)
+    val smbHost = MutableStateFlow("")
+    val smbShare = MutableStateFlow("")
+    val smbBasePath = MutableStateFlow("")
+    val smbUsername = MutableStateFlow("")
+    val smbPassword = MutableStateFlow("")
+
+    val secureRemoteCredentialsAvailable: Boolean
+        get() = this::authStore.isInitialized && authStore.secureStorageAvailable
+
     /** Normalized paths of folders blacklisted/excluded from local music scanning. */
     val blacklistedFolders = MutableStateFlow<Set<String>>(emptySet())
 
@@ -963,6 +985,8 @@ object AppSettings {
             KEY_LASTFM_SECRET,
             KEY_LISTENBRAINZ_TOKEN,
             KEY_SPOTIFY_SPDC_TOKEN,
+            KEY_WEBDAV_USERNAME,
+            KEY_SMB_USERNAME,
         )
         val editor = prefs.edit()
         credentialKeys.forEach { key ->
@@ -1014,8 +1038,20 @@ object AppSettings {
         wifiOnlyDownloads.value = prefs.getBoolean(KEY_WIFI_ONLY_DOWNLOADS, true)
         exportDownloads.value = prefs.getBoolean(KEY_EXPORT_DOWNLOADS, false)
         skipSilence.value = prefs.getBoolean(KEY_SKIP_SILENCE, false)
-        audioOffloadEnabled.value = prefs.getBoolean(KEY_AUDIO_OFFLOAD_ENABLED, false)
         crossfadeSeconds.value = prefs.getInt(KEY_CROSSFADE_SECONDS, 0).coerceIn(0, MAX_CROSSFADE_SECONDS)
+        smartFadeEnabled.value = prefs.getBoolean(KEY_SMART_FADE, false)
+        // Older backups can contain both. Keep the requested fade mode and
+        // clear the incompatible offload switch before the player is rebuilt.
+        val savedAudioOffload = prefs.getBoolean(KEY_AUDIO_OFFLOAD_ENABLED, false)
+        audioOffloadEnabled.value = savedAudioOffload && crossfadeSeconds.value == 0 && !smartFadeEnabled.value
+        if (savedAudioOffload && !audioOffloadEnabled.value) {
+            prefs.edit().putBoolean(KEY_AUDIO_OFFLOAD_ENABLED, false).apply()
+        }
+        automixPerformanceMode.value = runCatching {
+            AutomixPerformanceMode.valueOf(
+                prefs.getString(KEY_AUTOMIX_PERFORMANCE_MODE, null) ?: AutomixPerformanceMode.BALANCED.name,
+            )
+        }.getOrDefault(AutomixPerformanceMode.BALANCED)
         resamplerCutoffHz.value = normalizeResamplerCutoffHz(prefs.getInt(KEY_RESAMPLER_CUTOFF_HZ, 0))
         outputPcmMode.value = runCatching {
             OutputPcmMode.valueOf(
@@ -1209,6 +1245,21 @@ object AppSettings {
         localArtistsViewType.value = readLibraryViewType(KEY_LOCAL_ARTISTS_VIEW_TYPE, LibraryViewType.GRID)
         localFolderHierarchy.value = prefs.getBoolean(KEY_LOCAL_FOLDER_HIERARCHY, false)
         localMusicFolderUri.value = prefs.getString(KEY_LOCAL_MUSIC_FOLDER_PATH, "").orEmpty()
+        webdavUrl.value = prefs.getString(KEY_WEBDAV_URL, "").orEmpty()
+        webdavAllowInsecureHttp.value = prefs.getBoolean(KEY_WEBDAV_ALLOW_HTTP, false)
+        webdavUsername.value = authStore.getProtectedValue(KEY_WEBDAV_USERNAME).orEmpty()
+        webdavPassword.value = authStore.getProtectedValue(KEY_WEBDAV_PASSWORD).orEmpty()
+        smbHost.value = prefs.getString(KEY_SMB_HOST, "").orEmpty()
+        smbShare.value = prefs.getString(KEY_SMB_SHARE, "").orEmpty()
+        smbBasePath.value = prefs.getString(KEY_SMB_BASE_PATH, "").orEmpty()
+        smbUsername.value = authStore.getProtectedValue(KEY_SMB_USERNAME).orEmpty()
+        smbPassword.value = authStore.getProtectedValue(KEY_SMB_PASSWORD).orEmpty()
+        com.music.bitchord.data.smb.SmbAuth.update(
+            smbHost.value, smbShare.value, smbBasePath.value, smbUsername.value, smbPassword.value,
+        )
+        com.music.bitchord.data.webdav.WebDavAuth.update(
+            webdavUrl.value, webdavUsername.value, webdavPassword.value, webdavAllowInsecureHttp.value,
+        )
         fullScreenCollectionArtwork.value = prefs.getBoolean(KEY_FULL_SCREEN_COLLECTION_ARTWORK, false)
         hideCollectionTopBar.value = prefs.getBoolean(KEY_HIDE_COLLECTION_TOP_BAR, true)
         hideFloatingCollectionControls.value = prefs.getBoolean(KEY_HIDE_FLOATING_COLLECTION_CONTROLS, true)
@@ -1387,14 +1438,27 @@ object AppSettings {
     }
 
     fun setAudioOffloadEnabled(value: Boolean) {
-        audioOffloadEnabled.value = value
-        prefs.edit().putBoolean(KEY_AUDIO_OFFLOAD_ENABLED, value).apply()
+        val allowed = value && crossfadeSeconds.value == 0 && !smartFadeEnabled.value
+        audioOffloadEnabled.value = allowed
+        prefs.edit().putBoolean(KEY_AUDIO_OFFLOAD_ENABLED, allowed).apply()
     }
 
     fun setCrossfadeSeconds(value: Int) {
         val normalized = value.coerceIn(0, MAX_CROSSFADE_SECONDS)
+        if (normalized > 0) setAudioOffloadEnabled(false)
         crossfadeSeconds.value = normalized
         prefs.edit().putInt(KEY_CROSSFADE_SECONDS, normalized).apply()
+    }
+
+    fun setSmartFadeEnabled(value: Boolean) {
+        if (value) setAudioOffloadEnabled(false)
+        smartFadeEnabled.value = value
+        prefs.edit().putBoolean(KEY_SMART_FADE, value).apply()
+    }
+
+    fun setAutomixPerformanceMode(value: AutomixPerformanceMode) {
+        automixPerformanceMode.value = value
+        prefs.edit().putString(KEY_AUTOMIX_PERFORMANCE_MODE, value.name).apply()
     }
 
     fun setResamplerCutoffHz(value: Int) {
@@ -2478,6 +2542,95 @@ object AppSettings {
         prefs.edit().putString(KEY_LOCAL_MUSIC_FOLDER_PATH, safePath).apply()
     }
 
+    fun setWebDavUrl(value: String) {
+        val normalized = value.trim().trimEnd('/')
+        webdavUrl.value = normalized
+        prefs.edit().putString(KEY_WEBDAV_URL, normalized).apply()
+        publishWebDavAuth()
+    }
+
+    fun setWebDavAllowInsecureHttp(value: Boolean) {
+        webdavAllowInsecureHttp.value = value
+        prefs.edit().putBoolean(KEY_WEBDAV_ALLOW_HTTP, value).apply()
+        publishWebDavAuth()
+    }
+
+    fun setWebDavUsername(value: String) {
+        val normalized = value.trim()
+        webdavUsername.value = normalized
+        authStore.setProtectedValue(KEY_WEBDAV_USERNAME, normalized)
+        publishWebDavAuth()
+    }
+
+    fun setWebDavPassword(value: String) {
+        webdavPassword.value = value
+        authStore.setProtectedValue(KEY_WEBDAV_PASSWORD, value)
+        publishWebDavAuth()
+    }
+
+    fun setSmbHost(value: String) {
+        val normalized = value.trim()
+        smbHost.value = normalized
+        prefs.edit().putString(KEY_SMB_HOST, normalized).apply()
+        publishSmbAuth()
+    }
+
+    fun setSmbShare(value: String) {
+        val normalized = value.trim().trim('/')
+        smbShare.value = normalized
+        prefs.edit().putString(KEY_SMB_SHARE, normalized).apply()
+        publishSmbAuth()
+    }
+
+    fun setSmbBasePath(value: String) {
+        val normalized = value.trim().trim('/').replace('\\', '/')
+        smbBasePath.value = normalized
+        prefs.edit().putString(KEY_SMB_BASE_PATH, normalized).apply()
+        publishSmbAuth()
+    }
+
+    fun setSmbUsername(value: String) {
+        val normalized = value.trim()
+        smbUsername.value = normalized
+        authStore.setProtectedValue(KEY_SMB_USERNAME, normalized)
+        publishSmbAuth()
+    }
+
+    fun setSmbPassword(value: String) {
+        smbPassword.value = value
+        authStore.setProtectedValue(KEY_SMB_PASSWORD, value)
+        publishSmbAuth()
+    }
+
+    fun clearWebDav() {
+        setWebDavUrl("")
+        setWebDavAllowInsecureHttp(false)
+        setWebDavUsername("")
+        setWebDavPassword("")
+    }
+
+    fun clearSmb() {
+        setSmbHost("")
+        setSmbShare("")
+        setSmbBasePath("")
+        setSmbUsername("")
+        setSmbPassword("")
+    }
+
+    private fun publishSmbAuth() {
+        if (!this::prefs.isInitialized || !this::authStore.isInitialized) return
+        com.music.bitchord.data.smb.SmbAuth.update(
+            smbHost.value, smbShare.value, smbBasePath.value, smbUsername.value, smbPassword.value,
+        )
+    }
+
+    private fun publishWebDavAuth() {
+        if (!this::prefs.isInitialized || !this::authStore.isInitialized) return
+        com.music.bitchord.data.webdav.WebDavAuth.update(
+            webdavUrl.value, webdavUsername.value, webdavPassword.value, webdavAllowInsecureHttp.value,
+        )
+    }
+
     fun setFullScreenCollectionArtwork(value: Boolean) {
         fullScreenCollectionArtwork.value = value
         prefs.edit().putBoolean(KEY_FULL_SCREEN_COLLECTION_ARTWORK, value).apply()
@@ -2706,6 +2859,10 @@ object AppSettings {
         KEY_LASTFM_SECRET,
         KEY_LISTENBRAINZ_TOKEN,
         KEY_SPOTIFY_SPDC_TOKEN,
+        KEY_WEBDAV_USERNAME,
+        KEY_WEBDAV_PASSWORD,
+        KEY_SMB_USERNAME,
+        KEY_SMB_PASSWORD,
     )
 
     /** Account identity is kept on this device but is not an application setting. */
@@ -2770,6 +2927,8 @@ object AppSettings {
     private const val KEY_SKIP_SILENCE = "skip_silence"
     private const val KEY_AUDIO_OFFLOAD_ENABLED = "audio_offload_enabled"
     private const val KEY_CROSSFADE_SECONDS = "crossfade_seconds"
+    private const val KEY_SMART_FADE = "smart_fade_enabled"
+    private const val KEY_AUTOMIX_PERFORMANCE_MODE = "automix_performance_mode"
     private const val KEY_RESAMPLER_CUTOFF_HZ = "resampler_cutoff_hz"
     private const val KEY_OUTPUT_PCM_MODE = "output_pcm_mode"
     private const val KEY_BIT_PERFECT_PLAYBACK = "bit_perfect_playback"
@@ -2905,6 +3064,15 @@ object AppSettings {
     private const val KEY_LOCAL_LIBRARY_TAB_ORDER = "local_library_tab_order"
     private const val KEY_LOCAL_FOLDER_HIERARCHY = "local_folder_hierarchy"
     private const val KEY_LOCAL_MUSIC_FOLDER_PATH = "local_music_folder_path"
+    private const val KEY_WEBDAV_URL = "webdav_url"
+    private const val KEY_WEBDAV_USERNAME = "webdav_username"
+    private const val KEY_WEBDAV_PASSWORD = "webdav_password"
+    private const val KEY_WEBDAV_ALLOW_HTTP = "webdav_allow_http"
+    private const val KEY_SMB_HOST = "smb_host"
+    private const val KEY_SMB_SHARE = "smb_share"
+    private const val KEY_SMB_BASE_PATH = "smb_base_path"
+    private const val KEY_SMB_USERNAME = "smb_username"
+    private const val KEY_SMB_PASSWORD = "smb_password"
     private const val KEY_FULL_SCREEN_COLLECTION_ARTWORK = "full_screen_collection_artwork"
     private const val KEY_HIDE_COLLECTION_TOP_BAR = "hide_collection_top_bar"
     private const val KEY_HIDE_FLOATING_COLLECTION_CONTROLS = "hide_floating_collection_controls"

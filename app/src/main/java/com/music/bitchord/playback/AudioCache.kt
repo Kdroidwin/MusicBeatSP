@@ -24,6 +24,7 @@ import com.music.bitchord.data.sources.SourceRegistry
 import com.music.bitchord.data.sources.SourceResolver
 import com.music.bitchord.data.sources.TrackMatcher
 import com.music.bitchord.download.Downloads
+import com.music.bitchord.playback.smart.AutomixAnalysisSource
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.Dispatchers
@@ -79,6 +80,9 @@ object AudioCache {
      * skip past.
      */
     private const val PRELOAD_BYTES = 1L * 1024 * 1024
+
+    /** Bounded opening window used by Automix when a remote track is uncached. */
+    private const val AUTOMIX_ANALYSIS_HEAD_BYTES = 1L * 1024 * 1024
 
     /**
      * Size of each range the whole-track fetch asks for.
@@ -163,6 +167,9 @@ object AudioCache {
 
     private val scope = CoroutineScope(Dispatchers.IO + SupervisorJob())
 
+    /** One bounded analysis prefetch per video during this process. */
+    private val analysisHeadRequests = ConcurrentHashMap.newKeySet<String>()
+
     /**
      * Kept in the app's cache directory: this is disposable by definition, and
      * that is where the system and the "clear cache" button expect to reclaim
@@ -204,6 +211,7 @@ object AudioCache {
     /** Drops everything on disk. The listener asked; no grace period. */
     fun clear(onComplete: () -> Unit = {}) {
         cancel()
+        analysisHeadRequests.clear()
         scope.launch {
             cache.keys.toList().forEach { cache.removeResource(it) }
             withContext(Dispatchers.Main) { onComplete() }
@@ -680,6 +688,39 @@ object AudioCache {
     suspend fun warmRange(uri: Uri, position: Long, length: Long) {
         val key = keyFactory.buildCacheKey(DataSpec(uri))
         fetch(key, uri, position, length)
+    }
+
+    /**
+     * Starts the small, pinned YouTube rendition read used by BitChord's
+     * Automix analyzer. The operation is bounded and best-effort: it never
+     * blocks playback, and it is disabled whenever the app's privacy settings
+     * disallow YouTube traffic.
+     */
+    fun requestAnalysisHead(uri: Uri) {
+        if (uri.scheme != "bitchord" || uri.authority != "watch") return
+        if (!AppSettings.youtubeMusicNetworkAllowed) return
+        if (!::cache.isInitialized || upstreamFactory == null) return
+        val videoId = uri.getQueryParameter("v")?.takeIf { id ->
+            id.length == 11 && id.all { it.isLetterOrDigit() || it == '_' || it == '-' }
+        } ?: return
+        if (!analysisHeadRequests.add(videoId)) return
+
+        scope.launch {
+            // Match the source implementation's opening-window prefetch, but
+            // use this fork's existing fetch/cache pipeline and key API.
+            val totalBytes = runCatching { StreamResolver.contentLength(videoId) }.getOrNull() ?: 0L
+            val wantedBytes = if (totalBytes > 0L) minOf(totalBytes, AUTOMIX_ANALYSIS_HEAD_BYTES)
+                else AUTOMIX_ANALYSIS_HEAD_BYTES
+            if (wantedBytes > 0L) {
+                fetch(
+                    cacheKey = videoId,
+                    uri = Uri.parse(AutomixAnalysisSource.opusUri(videoId)),
+                    position = 0L,
+                    length = wantedBytes,
+                    pinKey = true,
+                )
+            }
+        }
     }
 
 

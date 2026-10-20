@@ -44,6 +44,7 @@ android {
     // package Android exposes to installers and to other applications.
     namespace = "com.music.bitchord"
     compileSdk = 37
+    ndkVersion = "27.0.12077973"
 
     defaultConfig {
         applicationId = "io.pockets.musicbestsp"
@@ -161,6 +162,12 @@ android {
         compose = true
         buildConfig = true
     }
+    externalNativeBuild {
+        cmake {
+            path = file("src/main/cpp/CMakeLists.txt")
+            version = "3.22.1"
+        }
+    }
     testOptions {
         unitTests {
             // Unit tests run against a stub android.jar whose methods throw
@@ -271,6 +278,10 @@ dependencies {
     implementation("com.github.TeamNewPipe:NewPipeExtractor:v0.26.3")
     implementation("com.github.TeamNewPipe:nanojson:e9d656ddb49a412a5a0a5d5ef20ca7ef09549996")
     implementation("com.google.code.findbugs:jsr305:3.0.2")
+    // Direct SMB2/3 file access, ported from BitChord's source implementation.
+    implementation("com.hierynomus:smbj:0.15.0")
+    // BitChord Automix beat/downbeat and vocal analysis models.
+    implementation("com.microsoft.onnxruntime:onnxruntime-android:1.28.0")
     implementation("org.mozilla:rhino:1.8.1")
     implementation("org.mozilla:rhino-engine:1.8.1")
 

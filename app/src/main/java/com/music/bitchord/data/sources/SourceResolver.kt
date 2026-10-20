@@ -41,6 +41,13 @@ object SourceResolver {
 
     private const val TAG = "BitChord"
 
+    /** Marker for a result explicitly chosen from an add-on search. */
+    const val MIX_PARAM = "mix"
+
+    /** Whether a source URI represents an add-on result selected by the user. */
+    fun isPickedAddonRow(uri: Uri): Boolean =
+        uri.authority == "source" && uri.getQueryParameter(MIX_PARAM) != null
+
     /**
      * What to ask a source for, right now.
      *

@@ -179,7 +179,16 @@ object Http {
         .connectionPool(ConnectionPool(16, 5, TimeUnit.MINUTES))
         .addInterceptor { chain ->
             if (AppSettings.offlineMode.value) throw IOException("Offline mode is enabled")
-            val request = chain.request()
+            val initialRequest = chain.request()
+            val webDavAuth = com.music.bitchord.data.webdav.WebDavAuth.authHeaderFor(initialRequest.url)
+            val request = if (webDavAuth != null && initialRequest.header("Authorization") == null) {
+                initialRequest.newBuilder()
+                    .header("Authorization", webDavAuth)
+                    .header(WEB_DAV_SCOPED_AUTH_HEADER, "1")
+                    .build()
+            } else {
+                initialRequest
+            }
             val youtubeRelated = isYoutubeMusicRelatedHost(request.url.host)
             if (youtubeRelated && !AppSettings.youtubeMusicEnabled.value) {
                 throw IOException("YouTube Music is disabled")
@@ -216,6 +225,14 @@ object Http {
         // are denied as each network exchange passes through this interceptor.
         .addNetworkInterceptor { chain ->
             val request = chain.request()
+            val webDavScopedRequest = request.header(WEB_DAV_SCOPED_AUTH_HEADER) != null
+            val carriesWebDavAuth = com.music.bitchord.data.webdav.WebDavAuth.authHeader
+                ?.let { request.header("Authorization") == it } == true
+            if ((webDavScopedRequest || carriesWebDavAuth) &&
+                !com.music.bitchord.data.webdav.WebDavAuth.isAllowedUrl(request.url)
+            ) {
+                throw IOException("WebDAV credentials cannot leave the configured server path")
+            }
             val carriesRemoteServerAuth = request.header("X-Emby-Authorization") != null ||
                 request.header("X-Emby-Token") != null ||
                 request.url.queryParameter("c") == "MusicBeatSP"
@@ -224,11 +241,19 @@ object Http {
             ) {
                 throw IOException("Remote-server credentials cannot be sent to an unconfigured host")
             }
-            if (!request.url.isHttps && !com.music.bitchord.data.sources.SourceRegistry.isCleartextAllowed(request.url)) {
+            val webDavCleartextAllowed = com.music.bitchord.data.webdav.WebDavAuth.isCleartextAllowed(request.url)
+            if (!request.url.isHttps && !webDavCleartextAllowed &&
+                !com.music.bitchord.data.sources.SourceRegistry.isCleartextAllowed(request.url)
+            ) {
                 throw IOException("Unencrypted HTTP is not enabled for this server")
             }
-            chain.proceed(request)
+            chain.proceed(
+                if (webDavScopedRequest) request.newBuilder().removeHeader(WEB_DAV_SCOPED_AUTH_HEADER).build()
+                else request,
+            )
         }
         .apply { if (USAGE_LOGGING_ENABLED) addNetworkInterceptor(usageInterceptor) }
         .build()
+
+    private const val WEB_DAV_SCOPED_AUTH_HEADER = "X-MusicBeat-WebDAV-Scoped"
 }

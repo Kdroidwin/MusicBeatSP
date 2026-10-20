@@ -19,6 +19,11 @@ class ReplayGainAudioProcessor : BaseAudioProcessor() {
     @Volatile
     var preventClipping: Boolean = true
 
+    /** Shared headroom trim used only while two players overlap. */
+    @Volatile
+    var blendTrim: Float = 1f
+        set(value) { field = value.coerceIn(0f, 1f) }
+
     override fun onConfigure(inputAudioFormat: AudioProcessor.AudioFormat): AudioProcessor.AudioFormat =
         if (inputAudioFormat.encoding == C.ENCODING_PCM_16BIT ||
             inputAudioFormat.encoding == C.ENCODING_PCM_FLOAT
@@ -28,7 +33,7 @@ class ReplayGainAudioProcessor : BaseAudioProcessor() {
         val bytes = inputBuffer.remaining()
         if (bytes == 0) return
         val output = replaceOutputBuffer(bytes)
-        val gain = 10f.pow(gainDb / 20f)
+        val gain = 10f.pow(gainDb / 20f) * blendTrim
         if (gain == 1f) {
             output.put(inputBuffer)
             output.flip()

@@ -29,9 +29,13 @@ import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.rememberCoroutineScope
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
@@ -49,6 +53,7 @@ import com.music.bitchord.data.settings.AppSettings
 import dev.chrisbanes.haze.HazeState
 import dev.chrisbanes.haze.materials.ExperimentalHazeMaterialsApi
 import dev.chrisbanes.haze.materials.HazeMaterials
+import kotlinx.coroutines.launch
 
 /**
  * Same UIAlertController shape as other alerts — frosted card,
@@ -472,6 +477,172 @@ fun <T> ChoiceAlert(
         AlertRule()
         AlertAction(label = stringResource(R.string.cancel), emphasised = false, onClick = onDismiss)
     }
+}
+
+/** One field in BitChord's shared WebDAV/SMB editor. */
+data class EditorField(
+    val value: String,
+    val onChange: (String) -> Unit,
+    val placeholder: String,
+    val keyboardType: KeyboardType = KeyboardType.Text,
+    val isPassword: Boolean = false,
+)
+
+/** BitChord's shared server editor, hosted by the activity-level overlay. */
+@OptIn(ExperimentalHazeMaterialsApi::class)
+@Composable
+fun ServerEditorAlert(
+    hazeState: HazeState,
+    title: String,
+    description: String,
+    fields: List<EditorField>,
+    status: String?,
+    statusIsGood: Boolean,
+    testing: Boolean,
+    canSubmit: Boolean,
+    onTest: () -> Unit,
+    onSave: () -> Unit,
+    removeLabel: String? = null,
+    onRemove: (() -> Unit)? = null,
+    onDismiss: () -> Unit,
+) {
+    AlertScaffold(hazeState = hazeState, onDismiss = { if (!testing) onDismiss() }) {
+        Column(
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(horizontal = 16.dp, vertical = 19.dp),
+            horizontalAlignment = Alignment.CenterHorizontally,
+        ) {
+            Text(
+                text = title,
+                style = MaterialTheme.typography.bodyLarge.copy(fontSize = 17.sp, fontWeight = FontWeight.W600),
+                color = MaterialTheme.colorScheme.onSurface,
+                textAlign = TextAlign.Center,
+            )
+            Text(
+                text = status ?: description,
+                modifier = Modifier.padding(top = 4.dp, bottom = 14.dp),
+                style = MaterialTheme.typography.bodyMedium.copy(fontSize = 13.sp, lineHeight = 17.sp),
+                color = when {
+                    status == null -> MaterialTheme.colorScheme.onSurface
+                    statusIsGood -> MaterialTheme.colorScheme.primary
+                    else -> MaterialTheme.colorScheme.error
+                },
+                textAlign = TextAlign.Center,
+            )
+            fields.forEachIndexed { index, field ->
+                if (index > 0) Spacer(Modifier.height(8.dp))
+                AlertTextField(
+                    value = field.value,
+                    onValueChange = field.onChange,
+                    placeholder = field.placeholder,
+                    enabled = !testing,
+                    isPassword = field.isPassword,
+                    keyboardOptions = KeyboardOptions(
+                        keyboardType = field.keyboardType,
+                        imeAction = if (index == fields.lastIndex) ImeAction.Done else ImeAction.Next,
+                    ),
+                    keyboardActions = KeyboardActions(onDone = { if (canSubmit && !testing) onSave() }),
+                )
+            }
+        }
+        AlertRule()
+        AlertAction(
+            label = if (testing) stringResource(R.string.testing) else stringResource(R.string.test),
+            emphasised = false,
+            onClick = onTest,
+            enabled = canSubmit && !testing,
+        )
+        AlertRule()
+        AlertAction(
+            label = stringResource(R.string.save),
+            emphasised = true,
+            onClick = onSave,
+            enabled = canSubmit && !testing,
+        )
+        if (onRemove != null && removeLabel != null) {
+            AlertRule()
+            AlertAction(label = removeLabel, emphasised = false, destructive = true, onClick = onRemove, enabled = !testing)
+        }
+        AlertRule()
+        AlertAction(label = stringResource(R.string.cancel), emphasised = false, onClick = onDismiss, enabled = !testing)
+    }
+}
+
+/** A field definition for the shared WebDAV/SMB editor used by BitChord. */
+data class FieldConfig(
+    val initial: String,
+    val placeholder: String,
+    val keyboardType: KeyboardType = KeyboardType.Text,
+    val isPassword: Boolean = false,
+)
+
+/**
+ * BitChord's server editor host, kept as the shared entry point for the remote
+ * library editors. Only the server-specific field list and save/test actions
+ * are supplied by MusicBeatSP.
+ */
+@OptIn(ExperimentalHazeMaterialsApi::class)
+@Composable
+fun ServerEditorHost(
+    hazeState: HazeState,
+    title: String,
+    description: String,
+    fields: List<FieldConfig>,
+    canSubmit: (List<String>) -> Boolean,
+    testFailedRes: Int,
+    onTest: suspend (List<String>) -> Result<Unit>,
+    onSave: (List<String>) -> Unit,
+    onDismiss: () -> Unit,
+) {
+    val context = LocalContext.current
+    val scope = rememberCoroutineScope()
+    val states = remember { fields.map { mutableStateOf(it.initial) } }
+    var status by remember { mutableStateOf<String?>(null) }
+    var statusIsGood by remember { mutableStateOf(false) }
+    var testing by remember { mutableStateOf(false) }
+    val values = states.map { it.value }
+
+    ServerEditorAlert(
+        hazeState = hazeState,
+        title = title,
+        description = description,
+        fields = fields.mapIndexed { index, field ->
+            EditorField(
+                value = states[index].value,
+                onChange = { states[index].value = it; status = null },
+                placeholder = field.placeholder,
+                keyboardType = field.keyboardType,
+                isPassword = field.isPassword,
+            )
+        },
+        status = status,
+        statusIsGood = statusIsGood,
+        testing = testing,
+        canSubmit = canSubmit(values),
+        onTest = {
+            testing = true
+            status = null
+            scope.launch {
+                onTest(values).fold(
+                    onSuccess = {
+                        status = context.getString(R.string.connected)
+                        statusIsGood = true
+                    },
+                    onFailure = {
+                        status = context.getString(
+                            testFailedRes,
+                            it.message ?: context.getString(R.string.failed),
+                        )
+                        statusIsGood = false
+                    },
+                )
+                testing = false
+            }
+        },
+        onSave = { onSave(values) },
+        onDismiss = onDismiss,
+    )
 }
 
 @Composable

@@ -146,6 +146,7 @@ import androidx.compose.ui.platform.LocalClipboardManager
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.platform.LocalView
+import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.AnnotatedString
 import androidx.compose.ui.text.style.TextAlign
@@ -177,6 +178,8 @@ import com.music.bitchord.data.settings.MainNavigationTabs
 import com.music.bitchord.data.settings.PlayerQuickAction
 import com.music.bitchord.data.settings.ThemeMode
 import com.music.bitchord.ui.screens.SettingsScreen
+import com.music.bitchord.ui.screens.SourcesScreen
+import com.music.bitchord.ui.screens.SourceEditorAlert
 import com.music.bitchord.playback.LinkRequest
 import com.music.bitchord.playback.MusicLink
 import com.music.bitchord.playback.OriginalVersion
@@ -226,6 +229,9 @@ import com.music.bitchord.ui.components.backdrop.backdrops.rememberLayerBackdrop
 import com.music.bitchord.ui.components.isGlassSupported
 import com.music.bitchord.data.sources.SourceConfig
 import com.music.bitchord.data.sources.SourceRegistry
+import com.music.bitchord.data.sources.SourceKind
+import com.music.bitchord.ui.components.FieldConfig
+import com.music.bitchord.ui.components.ServerEditorHost
 import com.music.bitchord.ui.components.ListenBrainzTokenAlert
 import com.music.bitchord.ui.components.MiniPlayer
 import com.music.bitchord.ui.components.optimizedHazeEffect
@@ -597,6 +603,10 @@ private fun BitChordApp(
     }
 
     var showSettings by remember { mutableStateOf(false) }
+    var showSources by rememberSaveable { mutableStateOf(false) }
+    var editingSource by remember { mutableStateOf<SourceConfig?>(null) }
+    var showWebDavEditor by remember { mutableStateOf(false) }
+    var showSmbEditor by remember { mutableStateOf(false) }
     var showReplay by remember { mutableStateOf(false) }
     var replayStory by remember { mutableStateOf<ReplayStoryPage?>(null) }
     var showReplayShare by remember { mutableStateOf(false) }
@@ -1951,6 +1961,7 @@ private fun BitChordApp(
         BackHandler(
             enabled = detail != null,
         ) { viewModel.closeDetail() }
+        BackHandler(enabled = showSources) { showSources = false }
         // One back step out of Settings lands on Songs rather than exiting
         BackHandler(enabled = showSettings && detail == null) {
             showSettings = false
@@ -1974,6 +1985,7 @@ private fun BitChordApp(
                 AnimatedContent(
                     targetState = when {
                         detail != null -> detail.browseId
+                        showSources -> "sources"
                         showSettings -> "settings"
                         showReplay -> "replay"
                         else -> "$TAB_KEY$selectedTab"
@@ -2014,7 +2026,7 @@ private fun BitChordApp(
                         }
                     }
                     val live = detailStack.lastOrNull()?.takeIf {
-                        it.browseId == key && key != "settings" && key != "replay"
+                        it.browseId == key && key != "settings" && key != "replay" && key != "sources"
                     }
                     // Held for the same reason, one step further on: a popped
                     // page is off the stack before it has finished animating
@@ -2066,7 +2078,15 @@ private fun BitChordApp(
                             onAppLanguage = { showAppLanguage = true },
                             onPreloadArtworkNow = { viewModel.preloadLocalArtwork() },
                             onPlayCueSheet = { cueSongs -> play(cueSongs, 0) },
+                            onManageSources = { showSources = true },
                             contentPadding = listPadding,
+                        )
+                    } else if (key == "sources") {
+                        SourcesScreen(
+                            contentPadding = listPadding,
+                            onEditSource = { editingSource = it },
+                            onEditWebDav = { showWebDavEditor = true },
+                            onEditSmb = { showSmbEditor = true },
                         )
                     } else if (page != null && page.browseId.isDeviceFolder()) {
                         // Local Music and Downloads — both the tabbed Songs / Artists /
@@ -2548,12 +2568,14 @@ private fun BitChordApp(
                 if (!hideFloatingCollectionControlsNow || showCollectionSortAction) {
                     FrostedTopBar(
                         title = when {
+                            showSources -> stringResource(R.string.sources)
                             showSettings -> stringResource(R.string.settings)
                             showReplay -> stringResource(R.string.replay)
                             detail != null -> detail.title
                             else -> allTabs.getOrElse(selectedTab) { allTabs.first() }.label
                         },
                         scrolled = when {
+                            showSources -> true
                             showSettings -> true
                             showReplay -> replayScrolled
                             detail != null -> detailScrolled
@@ -2568,6 +2590,7 @@ private fun BitChordApp(
                         },
                         floatingOnly = hideCollectionHeaderNow,
                         onBack = if (hideFloatingCollectionControlsNow) null else when {
+                            showSources -> ({ showSources = false })
                             showSettings -> ({ showSettings = false })
                             showReplay -> ({ showReplay = false })
                             localCollectionBackHandler != null -> localCollectionBackHandler
@@ -2620,6 +2643,7 @@ private fun BitChordApp(
                             searchFocusTrigger = 0
                         }
                         viewModel.clearDetail()
+                        showSources = false
                         showSettings = false
                         showReplay = false
                         if (index == TAB_ALBUMS && selectedTab == TAB_ALBUMS) {
@@ -3441,6 +3465,80 @@ private fun BitChordApp(
                     }
                 },
                 onDismiss = { if (!lastfmLoading) showLastfmLogin = false },
+            )
+        }
+
+        if (showWebDavEditor) {
+            BackHandler { showWebDavEditor = false }
+            ServerEditorHost(
+                hazeState = hazeState,
+                title = stringResource(R.string.webdav),
+                description = stringResource(R.string.webdav_description),
+                fields = listOf(
+                    FieldConfig(AppSettings.webdavUrl.value, stringResource(R.string.webdav_server_url_hint), KeyboardType.Uri),
+                    FieldConfig(AppSettings.webdavUsername.value, stringResource(R.string.username)),
+                    FieldConfig(AppSettings.webdavPassword.value, stringResource(R.string.password), KeyboardType.Password, true),
+                ),
+                canSubmit = { values -> values.firstOrNull()?.isNotBlank() == true },
+                testFailedRes = R.string.webdav_test_failed,
+                onTest = { values ->
+                    com.music.bitchord.data.webdav.WebDavRepository.testConnection(
+                        values[0].trim(), values[1].trim(), values[2], AppSettings.webdavAllowInsecureHttp.value,
+                    )
+                },
+                onSave = { values ->
+                    AppSettings.setWebDavUrl(values[0].trim())
+                    AppSettings.setWebDavUsername(values[1].trim())
+                    AppSettings.setWebDavPassword(values[2])
+                    showWebDavEditor = false
+                },
+                onDismiss = { showWebDavEditor = false },
+            )
+        }
+
+        if (showSmbEditor) {
+            BackHandler { showSmbEditor = false }
+            ServerEditorHost(
+                hazeState = hazeState,
+                title = stringResource(R.string.smb),
+                description = stringResource(R.string.smb_description),
+                fields = listOf(
+                    FieldConfig(AppSettings.smbHost.value, stringResource(R.string.smb_server_hint), KeyboardType.Uri),
+                    FieldConfig(AppSettings.smbShare.value, stringResource(R.string.smb_share_hint)),
+                    FieldConfig(AppSettings.smbBasePath.value, stringResource(R.string.smb_folder_hint)),
+                    FieldConfig(AppSettings.smbUsername.value, stringResource(R.string.username)),
+                    FieldConfig(AppSettings.smbPassword.value, stringResource(R.string.password), KeyboardType.Password, true),
+                ),
+                canSubmit = { values -> values.size >= 2 && values[0].isNotBlank() && values[1].isNotBlank() },
+                testFailedRes = R.string.smb_test_failed,
+                onTest = { values ->
+                    com.music.bitchord.data.smb.SmbRepository.testConnection(
+                        values[0].trim(), values[1].trim(), values[2].trim(), values[3].trim(), values[4],
+                    )
+                },
+                onSave = { values ->
+                    AppSettings.setSmbHost(values[0].trim())
+                    AppSettings.setSmbShare(values[1].trim())
+                    AppSettings.setSmbBasePath(values[2].trim())
+                    AppSettings.setSmbUsername(values[3].trim())
+                    AppSettings.setSmbPassword(values[4])
+                    showSmbEditor = false
+                },
+                onDismiss = { showSmbEditor = false },
+            )
+        }
+
+        editingSource?.let { config ->
+            SourceEditorAlert(
+                hazeState = hazeState,
+                config = config,
+                onDismiss = { editingSource = null },
+                onSaved = { editingSource = null },
+                onDelete = {
+                    SourceRegistry.remove(config.id)
+                    editingSource = null
+                },
+                scope = scope,
             )
         }
 

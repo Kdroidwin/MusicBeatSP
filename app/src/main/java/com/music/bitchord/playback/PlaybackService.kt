@@ -186,6 +186,7 @@ const val EXTRA_REORDER_ORDER = "bitchord.reorder.order"
 private data class PlaybackAudioChain(
     val spatial: SpatialAudioProcessor = SpatialAudioProcessor(),
     val parametricEq: ParametricEqAudioProcessor = ParametricEqAudioProcessor(),
+    val transition: TransitionFilterProcessor = TransitionFilterProcessor(),
     val replayGain: ReplayGainAudioProcessor = ReplayGainAudioProcessor(),
     val resampler: ResamplerCutoffAudioProcessor = ResamplerCutoffAudioProcessor(),
 )
@@ -437,6 +438,7 @@ class PlaybackService : MediaLibraryService() {
     private var spare: ExoPlayer? = null
 
     private var crossfade: CrossfadeController? = null
+    private val trackAnalyzer = com.music.bitchord.playback.smart.TrackAnalyzer(this, AudioCache)
 
     /**
      * The queue and playhead parked while a file-manager song is previewed.
@@ -1441,8 +1443,12 @@ class PlaybackService : MediaLibraryService() {
         }
         // Read-ahead resolves streams through the same chain the player does.
         val defaultDataSourceFactory = DefaultDataSource.Factory(this, resolvingFactory)
-        AudioCache.setUpstream(defaultDataSourceFactory)
-        mediaSourceFactory = DefaultMediaSourceFactory(AudioCache.playbackFactory(defaultDataSourceFactory))
+        // SMB is a BitChord data source rather than an HTTP URL. Keep it in
+        // the shared cache path so prepared/playing tracks use the same bytes,
+        // while routing the smb:// scheme to the upstream SMB reader.
+        val routedDataSourceFactory = SmbDataSource.RoutingFactory(defaultDataSourceFactory)
+        AudioCache.setUpstream(routedDataSourceFactory)
+        mediaSourceFactory = DefaultMediaSourceFactory(AudioCache.playbackFactory(routedDataSourceFactory))
             .setLoadErrorHandlingPolicy(PermanentAwareLoadErrorPolicy())
 
         configuredFloatOutput = shouldEnableFloatOutput()
@@ -1512,19 +1518,7 @@ class PlaybackService : MediaLibraryService() {
             .setBitmapLoader(CoilBitmapLoader(this, scope))
             .build()
         mediaSession?.setCustomLayout(notificationButtons())
-        crossfade = CrossfadeController(
-            scope = scope,
-            activePlayer = { player },
-            standbyPlayer = { spare },
-            fadeSeconds = { if (AppSettings.bitPerfectPlayback.value) 0 else AppSettings.crossfadeSeconds.value },
-            onHandoff = ::adoptPlayer,
-            onPrepareIncoming = ::prepareCrossfadeIncoming,
-            canCrossfade = { item ->
-                !castPlayback.active &&
-                    player?.let { !isExternalPreviewPlaying(it) } == true &&
-                    item.mediaId != suppressRestoredTrackTransition
-            },
-        ).also { it.start() }
+        crossfade = createCrossfadeController().also { it.start() }
         CastController.ensureStarted(this)
         CastController.attach(castPlayback)
     }
@@ -1821,7 +1815,7 @@ class PlaybackService : MediaLibraryService() {
         ownsSession: Boolean = true,
     ): ExoPlayer = ExoPlayer.Builder(this)
         .setRenderersFactory(
-            silenceSkippingRenderers(chain.spatial, chain.parametricEq, chain.replayGain, chain.resampler),
+            silenceSkippingRenderers(chain.spatial, chain.parametricEq, chain.transition, chain.replayGain, chain.resampler),
         )
         .setMediaSourceFactory(requireNotNull(mediaSourceFactory))
         .setLoadControl(farBufferingLoadControl())
@@ -1887,6 +1881,48 @@ class PlaybackService : MediaLibraryService() {
             }
         }
     }
+
+    private fun createCrossfadeController() = CrossfadeController(
+        scope = scope,
+        active = { requireNotNull(player) },
+        standby = { requireNotNull(spare) },
+        onHandoff = ::adoptPlayer,
+        analysisFor = { item -> trackAnalyzer.analysisFor(item.mediaId) },
+        requestAnalysis = { item, durationMs ->
+            item.localConfiguration?.uri?.let { uri ->
+                trackAnalyzer.request(item.mediaId, uri, durationMs / 1000.0)
+            }
+        },
+        filters = object : TransitionFilters {
+            override fun incoming(lowPassHz: Float, highPassHz: Float) =
+                activeAudioChain.transition.setCutoffs(lowPassHz, highPassHz)
+
+            override fun outgoing(lowPassHz: Float, highPassHz: Float) =
+                spareAudioChain.transition.setCutoffs(lowPassHz, highPassHz)
+
+            override fun incomingLeadMs(): Long = activeAudioChain.transition.leadUs / 1000
+
+            override fun outgoingLeadMs(): Long = spareAudioChain.transition.leadUs / 1000
+
+            override fun incomingEcho(delaySeconds: Float, send: Float, dry: Float) =
+                activeAudioChain.transition.setEcho(delaySeconds, send, dry)
+
+            override fun outgoingEcho(delaySeconds: Float, send: Float, dry: Float) =
+                spareAudioChain.transition.setEcho(delaySeconds, send, dry)
+
+            override fun parkEchoes() {
+                activeAudioChain.transition.parkEcho()
+                spareAudioChain.transition.parkEcho()
+            }
+        },
+        analysisRunningFor = { item -> trackAnalyzer.isAnalysing(item.mediaId) },
+        onArmIncoming = { item, _ -> prepareCrossfadeIncoming(item) },
+        onBlendHeadroom = { trim ->
+            activeAudioChain.replayGain.blendTrim = trim
+            spareAudioChain.replayGain.blendTrim = trim
+        },
+        versionSwapActive = { false },
+    )
 
     /** Moves the session onto the already-playing incoming decoder at mid-fade. */
     private fun adoptPlayer(outgoing: ExoPlayer, incoming: ExoPlayer) {
@@ -4208,6 +4244,7 @@ class PlaybackService : MediaLibraryService() {
     private fun silenceSkippingRenderers(
         spatial: SpatialAudioProcessor,
         parametricEq: ParametricEqAudioProcessor,
+        transition: TransitionFilterProcessor,
         replayGain: ReplayGainAudioProcessor,
         resamplerCutoff: ResamplerCutoffAudioProcessor,
     ) = object : DefaultRenderersFactory(this) {
@@ -4250,7 +4287,7 @@ class PlaybackService : MediaLibraryService() {
             .setEnableAudioTrackPlaybackParams(enableAudioTrackPlaybackParams)
             .setAudioProcessorChain(
                 DefaultAudioSink.DefaultAudioProcessorChain(
-                    arrayOf(resamplerCutoff, parametricEq, spatial, replayGain),
+                    arrayOf(resamplerCutoff, parametricEq, spatial, transition, replayGain),
                     SilenceSkippingAudioProcessor(
                         MIN_SILENCE_US,
                         SilenceSkippingAudioProcessor.DEFAULT_SILENCE_RETENTION_RATIO,
@@ -5185,6 +5222,7 @@ class PlaybackService : MediaLibraryService() {
         closeLocalCastServers()
         crossfade?.release()
         crossfade = null
+        trackAnalyzer.release()
         scope.cancel()
         mediaSession?.release()
         mediaSession = null

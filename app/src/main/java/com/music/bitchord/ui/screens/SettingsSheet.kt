@@ -165,6 +165,7 @@ import com.music.bitchord.data.model.Account
 import com.music.bitchord.data.LocalMediaRepository
 import com.music.bitchord.data.scrobbling.LastFM
 import com.music.bitchord.data.settings.AppSettings
+import com.music.bitchord.data.settings.AutomixPerformanceMode
 import com.music.bitchord.data.settings.LocalLibraryTab
 import com.music.bitchord.data.settings.LauncherIcon
 import com.music.bitchord.data.settings.SeekButtonMode
@@ -244,6 +245,7 @@ fun SettingsScreen(
     onAppLanguage: () -> Unit,
     onPreloadArtworkNow: () -> Unit,
     onPlayCueSheet: (List<com.music.bitchord.data.model.Song>) -> Unit,
+    onManageSources: () -> Unit,
     contentPadding: PaddingValues,
     modifier: Modifier = Modifier,
 ) {
@@ -279,6 +281,8 @@ fun SettingsScreen(
     val skipSilence by AppSettings.skipSilence.collectAsStateWithLifecycle()
     val audioOffloadEnabled by AppSettings.audioOffloadEnabled.collectAsStateWithLifecycle()
     val crossfadeSeconds by AppSettings.crossfadeSeconds.collectAsStateWithLifecycle()
+    val smartFade by AppSettings.smartFadeEnabled.collectAsStateWithLifecycle()
+    val automixPerformance by AppSettings.automixPerformanceMode.collectAsStateWithLifecycle()
     val dolbyAtmos by AppSettings.dolbyAtmos.collectAsStateWithLifecycle()
     val diracAudioEnabled by AppSettings.diracAudioEnabled.collectAsStateWithLifecycle()
     val doubleTapToSeek by AppSettings.doubleTapToSeek.collectAsStateWithLifecycle()
@@ -410,6 +414,7 @@ fun SettingsScreen(
     var showLauncherIconPicker by rememberSaveable { mutableStateOf(false) }
     var showPerformanceWarning by remember { mutableStateOf(false) }
     var showEqualizerSheet by remember { mutableStateOf(false) }
+    var showAutomixPerformanceSheet by rememberSaveable { mutableStateOf(false) }
 
     @Composable
     fun buildSettingsSearchEntries(): List<SettingsSearchEntry> {
@@ -537,8 +542,22 @@ fun SettingsScreen(
         ) { AppSettings.setHidePlayerHeaderDuringLyrics(!hidePlayerHeaderDuringLyrics) },
         SettingsSearchEntry(stringResource(R.string.skip_silence), stringResource(R.string.skip_silence_subtitle), listOf("silence", "無音", "再生"), skipSilence) { AppSettings.setSkipSilence(!skipSilence) },
         SettingsSearchEntry(
+            title = stringResource(R.string.automix),
+            subtitle = stringResource(if (smartFade) R.string.automix_enabled_subtitle else R.string.automix_disabled_subtitle),
+            keywords = listOf("automix", "smart fade", "mix", "オートミックス", "自動ミックス", "クロスフェード"),
+            checked = smartFade,
+            activate = { AppSettings.setSmartFadeEnabled(!smartFade) },
+        ),
+        SettingsSearchEntry(
+            title = stringResource(R.string.automix_performance),
+            subtitle = stringResource(R.string.automix_performance_subtitle),
+            keywords = listOf("automix", "performance", "cpu", "battery", "オートミックス", "パフォーマンス", "CPU", "電池"),
+            valueLabel = automixPerformance.localizedLabel(),
+            activate = { showAutomixPerformanceSheet = true },
+        ),
+        SettingsSearchEntry(
             title = stringResource(R.string.crossfade),
-            subtitle = stringResource(R.string.crossfade_subtitle),
+            subtitle = stringResource(if (smartFade) R.string.crossfade_disabled_by_automix else R.string.crossfade_subtitle),
             keywords = listOf("crossfade", "fade", "transition", "クロスフェード", "曲間"),
             valueLabel = if (crossfadeSeconds == 0) stringResource(R.string.off)
                 else stringResource(R.string.crossfade_value, crossfadeSeconds),
@@ -546,15 +565,16 @@ fun SettingsScreen(
             sliderValueRange = 0f..AppSettings.MAX_CROSSFADE_SECONDS.toFloat(),
             sliderSteps = AppSettings.MAX_CROSSFADE_SECONDS - 1,
             onSliderValueChange = { AppSettings.setCrossfadeSeconds(it.roundToInt()) },
+            enabled = !smartFade,
             activate = {},
         ),
         SettingsSearchEntry(
             title = stringResource(R.string.audio_offload),
-            subtitle = stringResource(if (crossfadeSeconds > 0) R.string.audio_offload_disabled_by_crossfade else R.string.audio_offload_subtitle),
+            subtitle = stringResource(if (crossfadeSeconds > 0 || smartFade) R.string.audio_offload_disabled_by_transition else R.string.audio_offload_subtitle),
             keywords = listOf("audio offload", "offload", "hardware playback", "省電力", "オフロード再生"),
-            checked = audioOffloadEnabled && crossfadeSeconds == 0,
-            enabled = crossfadeSeconds == 0,
-            activate = { if (crossfadeSeconds == 0) AppSettings.setAudioOffloadEnabled(!audioOffloadEnabled) },
+            checked = audioOffloadEnabled && crossfadeSeconds == 0 && !smartFade,
+            enabled = crossfadeSeconds == 0 && !smartFade,
+            activate = { if (crossfadeSeconds == 0 && !smartFade) AppSettings.setAudioOffloadEnabled(!audioOffloadEnabled) },
         ),
         SettingsSearchEntry(
             stringResource(R.string.dolby_atmos),
@@ -977,6 +997,12 @@ fun SettingsScreen(
             listOf("library", "album", "artist", "playlist", "header", "ライブラリ", "アルバム", "アーティスト", "上部バー"),
             hideCollectionTopBar,
         ) { AppSettings.setHideCollectionTopBar(!hideCollectionTopBar) },
+        SettingsSearchEntry(
+            title = stringResource(R.string.source),
+            subtitle = stringResource(R.string.sources_subtitle),
+            keywords = listOf("source", "addon", "webdav", "smb", "server", "音源", "ソース", "アドオン", "WebDAV", "共有フォルダ"),
+            activate = onManageSources,
+        ),
         SettingsSearchEntry(
             stringResource(R.string.hide_floating_collection_controls),
             stringResource(R.string.hide_floating_collection_controls_subtitle),
@@ -1444,6 +1470,7 @@ fun SettingsScreen(
                                 onValueChange = onSliderValueChange,
                                 steps = entry.sliderSteps,
                                 valueRange = entry.sliderValueRange,
+                                enabled = entry.enabled,
                                 modifier = Modifier.padding(start = ROW_INSET, end = ROW_INSET, bottom = 14.dp),
                             )
                         }
@@ -1520,35 +1547,62 @@ fun SettingsScreen(
             )
             RowDivider()
             SettingsRow(
-                icon = Icons.Rounded.FastForward,
-                title = stringResource(R.string.crossfade),
-                subtitle = stringResource(R.string.crossfade_subtitle),
-                value = if (crossfadeSeconds == 0) stringResource(R.string.off)
-                    else stringResource(R.string.crossfade_value, crossfadeSeconds),
+                icon = Icons.Rounded.AutoAwesome,
+                title = stringResource(R.string.automix),
+                subtitle = stringResource(if (smartFade) R.string.automix_enabled_subtitle else R.string.automix_disabled_subtitle),
+                trailing = {
+                    Switch(
+                        checked = smartFade,
+                        onCheckedChange = AppSettings::setSmartFadeEnabled,
+                        colors = SwitchDefaults.colors(
+                            checkedTrackColor = MaterialTheme.colorScheme.primary,
+                            checkedBorderColor = MaterialTheme.colorScheme.primary,
+                        ),
+                    )
+                },
+                onClick = { AppSettings.setSmartFadeEnabled(!smartFade) },
             )
-            Slider(
-                value = crossfadeSeconds.toFloat(),
-                onValueChange = { AppSettings.setCrossfadeSeconds(it.roundToInt()) },
-                steps = AppSettings.MAX_CROSSFADE_SECONDS - 1,
-                valueRange = 0f..AppSettings.MAX_CROSSFADE_SECONDS.toFloat(),
-                modifier = Modifier.padding(start = ROW_INSET, end = ROW_INSET, bottom = 14.dp),
+            RowDivider()
+            SettingsRow(
+                icon = Icons.Rounded.Tune,
+                title = stringResource(R.string.automix_performance),
+                subtitle = stringResource(R.string.automix_performance_subtitle),
+                value = automixPerformance.localizedLabel(),
+                onClick = { showAutomixPerformanceSheet = true },
             )
+            if (!smartFade) {
+                RowDivider()
+                SettingsRow(
+                    icon = Icons.Rounded.FastForward,
+                    title = stringResource(R.string.crossfade),
+                    subtitle = stringResource(R.string.crossfade_subtitle),
+                    value = if (crossfadeSeconds == 0) stringResource(R.string.off)
+                        else stringResource(R.string.crossfade_value, crossfadeSeconds),
+                )
+                Slider(
+                    value = crossfadeSeconds.toFloat(),
+                    onValueChange = { AppSettings.setCrossfadeSeconds(it.roundToInt()) },
+                    steps = AppSettings.MAX_CROSSFADE_SECONDS - 1,
+                    valueRange = 0f..AppSettings.MAX_CROSSFADE_SECONDS.toFloat(),
+                    modifier = Modifier.padding(start = ROW_INSET, end = ROW_INSET, bottom = 14.dp),
+                )
+            }
             RowDivider()
             SettingsRow(
                 icon = Icons.Rounded.GraphicEq,
                 title = stringResource(R.string.audio_offload),
                 subtitle = stringResource(
-                    if (crossfadeSeconds > 0) R.string.audio_offload_disabled_by_crossfade
+                    if (crossfadeSeconds > 0 || smartFade) R.string.audio_offload_disabled_by_transition
                     else R.string.audio_offload_subtitle,
                 ),
-                enabled = crossfadeSeconds == 0,
+                enabled = crossfadeSeconds == 0 && !smartFade,
                 trailing = {
                     Switch(
-                        checked = audioOffloadEnabled && crossfadeSeconds == 0,
+                        checked = audioOffloadEnabled && crossfadeSeconds == 0 && !smartFade,
                         onCheckedChange = { enabled ->
-                            if (crossfadeSeconds == 0) AppSettings.setAudioOffloadEnabled(enabled)
+                            if (crossfadeSeconds == 0 && !smartFade) AppSettings.setAudioOffloadEnabled(enabled)
                         },
-                        enabled = crossfadeSeconds == 0,
+                        enabled = crossfadeSeconds == 0 && !smartFade,
                         colors = SwitchDefaults.colors(
                             checkedTrackColor = MaterialTheme.colorScheme.primary,
                             checkedBorderColor = MaterialTheme.colorScheme.primary,
@@ -1556,7 +1610,7 @@ fun SettingsScreen(
                     )
                 },
                 onClick = {
-                    if (crossfadeSeconds == 0) AppSettings.setAudioOffloadEnabled(!audioOffloadEnabled)
+                    if (crossfadeSeconds == 0 && !smartFade) AppSettings.setAudioOffloadEnabled(!audioOffloadEnabled)
                 },
             )
             RowDivider()
@@ -3157,6 +3211,8 @@ fun SettingsScreen(
             }
         }
 
+        SourcesSettingsGroup(onClick = onManageSources)
+
         if (!context.packageName.endsWith(".nointernet")) {
             MusicServersSettingsGroup(onClick = { showMusicServersSheet = true })
         }
@@ -4024,6 +4080,107 @@ fun SettingsScreen(
         )
     }
 
+    if (showAutomixPerformanceSheet) {
+        ModalBottomSheet(
+            onDismissRequest = { showAutomixPerformanceSheet = false },
+            sheetState = rememberModalBottomSheetState(skipPartiallyExpanded = true),
+        ) {
+            AutomixPerformanceSheet(
+                selected = automixPerformance,
+                onSelect = {
+                    AppSettings.setAutomixPerformanceMode(it)
+                    showAutomixPerformanceSheet = false
+                },
+            )
+        }
+    }
+
+}
+
+@Composable
+private fun AutomixPerformanceMode.localizedLabel(): String = stringResource(
+    when (this) {
+        AutomixPerformanceMode.EFFICIENT -> R.string.automix_mode_efficient
+        AutomixPerformanceMode.BALANCED -> R.string.automix_mode_balanced
+        AutomixPerformanceMode.PERFORMANCE -> R.string.automix_mode_performance
+    },
+)
+
+/** The original BitChord selector for background Automix analysis load. */
+@Composable
+private fun AutomixPerformanceSheet(
+    selected: AutomixPerformanceMode,
+    onSelect: (AutomixPerformanceMode) -> Unit,
+) {
+    val haptics = LocalHapticFeedback.current
+    Column(Modifier.fillMaxWidth().padding(bottom = 24.dp)) {
+        Row(
+            modifier = Modifier.padding(start = 22.dp, end = 22.dp, bottom = 14.dp),
+            verticalAlignment = Alignment.CenterVertically,
+        ) {
+            Icon(
+                imageVector = Icons.Rounded.Tune,
+                contentDescription = null,
+                tint = MaterialTheme.colorScheme.onBackground,
+                modifier = Modifier.size(22.dp),
+            )
+            Spacer(Modifier.width(14.dp))
+            Column {
+                Text(
+                    text = stringResource(R.string.automix_performance),
+                    style = MaterialTheme.typography.titleLarge,
+                    color = MaterialTheme.colorScheme.onBackground,
+                )
+                Text(
+                    text = stringResource(R.string.automix_performance_warning),
+                    style = MaterialTheme.typography.bodyMedium,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                )
+            }
+        }
+        HorizontalDivider(thickness = 0.5.dp, color = MaterialTheme.colorScheme.outline)
+        AutomixPerformanceMode.entries.forEach { mode ->
+            val chosen = mode == selected
+            Row(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .clickable {
+                        haptics.performHapticFeedback(HapticFeedbackType.TextHandleMove)
+                        onSelect(mode)
+                    }
+                    .padding(horizontal = 22.dp, vertical = 14.dp),
+                verticalAlignment = Alignment.CenterVertically,
+            ) {
+                Column(Modifier.weight(1f)) {
+                    Text(
+                        text = mode.localizedLabel(),
+                        style = MaterialTheme.typography.bodyLarge,
+                        color = MaterialTheme.colorScheme.onBackground,
+                    )
+                    Text(
+                        text = stringResource(
+                            when (mode) {
+                                AutomixPerformanceMode.EFFICIENT -> R.string.automix_mode_efficient_subtitle
+                                AutomixPerformanceMode.BALANCED -> R.string.automix_mode_balanced_subtitle
+                                AutomixPerformanceMode.PERFORMANCE -> R.string.automix_mode_performance_subtitle
+                            },
+                        ),
+                        style = MaterialTheme.typography.bodyMedium,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    )
+                }
+                if (chosen) {
+                    Spacer(Modifier.width(12.dp))
+                    Icon(
+                        Icons.Rounded.Check,
+                        contentDescription = stringResource(R.string.selected),
+                        tint = MaterialTheme.colorScheme.primary,
+                        modifier = Modifier.size(22.dp),
+                    )
+                }
+            }
+        }
+    }
 }
 
 
@@ -4295,6 +4452,19 @@ private fun MusicServersSettingsGroup(onClick: () -> Unit) {
             icon = Icons.Rounded.Cloud,
             title = stringResource(R.string.music_servers),
             subtitle = stringResource(R.string.music_servers_subtitle),
+            trailing = { Chevron() },
+            onClick = onClick,
+        )
+    }
+}
+
+@Composable
+private fun SourcesSettingsGroup(onClick: () -> Unit) {
+    SettingsGroup(header = stringResource(R.string.audio_quality)) {
+        SettingsRow(
+            icon = Icons.Rounded.Cloud,
+            title = stringResource(R.string.source),
+            subtitle = stringResource(R.string.sources_subtitle),
             trailing = { Chevron() },
             onClick = onClick,
         )
