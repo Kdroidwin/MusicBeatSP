@@ -54,6 +54,7 @@ import com.music.bitchord.ui.screens.equalizer.components.EqualizerPresetChips
 import com.music.bitchord.ui.screens.equalizer.components.ReplayGainControls
 import com.music.bitchord.ui.screens.equalizer.components.ParametricEqControls
 import com.music.bitchord.ui.screens.equalizer.components.ReverbControls
+import com.music.bitchord.ui.screens.equalizer.components.BalanceControl
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -75,6 +76,8 @@ fun EqualizerSheet(
     val replayGainPreventClipping by AppSettings.replayGainPreventClipping.collectAsStateWithLifecycle()
     val parametricEqEnabled by AppSettings.parametricEqEnabled.collectAsStateWithLifecycle()
     val parametricEqBands by AppSettings.parametricEqBands.collectAsStateWithLifecycle()
+    val equalizerBalance by AppSettings.equalizerBalance.collectAsStateWithLifecycle()
+    val bitPerfectPlayback by AppSettings.bitPerfectPlayback.collectAsStateWithLifecycle()
     val channelSwapEnabled by AppSettings.channelSwapEnabled.collectAsStateWithLifecycle()
     val reverbEnabled by AppSettings.reverbEnabled.collectAsStateWithLifecycle()
     val reverbAmount by AppSettings.reverbAmount.collectAsStateWithLifecycle()
@@ -277,6 +280,32 @@ fun EqualizerSheet(
                 onEnabledChange = AppSettings::setParametricEqEnabled,
                 onBandChange = AppSettings::setParametricEqBand,
             )
+
+            Surface(
+                modifier = Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 6.dp),
+                shape = RoundedCornerShape(16.dp),
+                color = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.35f),
+            ) {
+                Column(Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 14.dp)) {
+                    Text(
+                        text = stringResource(R.string.equalizer_balance),
+                        style = MaterialTheme.typography.titleSmall,
+                        fontWeight = FontWeight.SemiBold,
+                        color = MaterialTheme.colorScheme.onSurface,
+                    )
+                    Text(
+                        text = stringResource(R.string.equalizer_balance_subtitle),
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    )
+                    BalanceControl(
+                        balance = equalizerBalance,
+                        enabled = !bitPerfectPlayback,
+                        onChange = AppSettings::setEqualizerBalance,
+                        modifier = Modifier.fillMaxWidth().padding(top = 8.dp),
+                    )
+                }
+            }
 
             ReverbControls(
                 enabled = reverbEnabled,

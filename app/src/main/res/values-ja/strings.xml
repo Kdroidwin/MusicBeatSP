@@ -257,6 +257,10 @@
     <string name="parametric_eq_frequency_khz">%1$.1f kHz</string>
     <string name="parametric_eq_q">帯域幅（Q）</string>
     <string name="parametric_eq_gain">ゲイン</string>
+    <string name="equalizer_balance">左右バランス</string>
+    <string name="equalizer_balance_left">L</string>
+    <string name="equalizer_balance_right">R</string>
+    <string name="equalizer_balance_subtitle">ステレオ音声の片側を小さくして左右のバランスを調整します。ビットパーフェクト再生中は適用されません。</string>
     <string name="channel_swap">ステレオチャンネルを入れ替える</string>
     <string name="channel_swap_subtitle">ステレオ再生の左右チャンネルを反転します。ビットパーフェクト再生中は処理を停止します。</string>
     <string name="music_folder_root">音楽フォルダーのルート</string>

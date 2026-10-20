@@ -4316,6 +4316,8 @@ class PlaybackService : MediaLibraryService() {
             enabled = AppSettings.parametricEqEnabled.value && !bitPerfect,
             bands = AppSettings.parametricEqBands.value,
             swapChannels = AppSettings.channelSwapEnabled.value && !bitPerfect,
+            balance = AppSettings.equalizerBalance.value,
+            bypassAll = bitPerfect,
         )
         player.playbackParameters = PlaybackParameters(
             if (bitPerfect) 1f else AppSettings.playbackSpeed.value,
@@ -4731,6 +4733,9 @@ class PlaybackService : MediaLibraryService() {
             AppSettings.channelSwapEnabled.collect { updateAdvancedAudioEffects() }
         }
         scope.launch {
+            AppSettings.equalizerBalance.collect { updateAdvancedAudioEffects() }
+        }
+        scope.launch {
             AppSettings.reverbEnabled.collect { updateAdvancedAudioEffects() }
         }
         scope.launch {
@@ -4834,8 +4839,21 @@ class PlaybackService : MediaLibraryService() {
         val bands = AppSettings.parametricEqBands.value
         val parametricEqEnabled = AppSettings.parametricEqEnabled.value && !bitPerfect
         val channelSwapEnabled = AppSettings.channelSwapEnabled.value && !bitPerfect
-        activeAudioChain.parametricEq.setTuning(parametricEqEnabled, bands, channelSwapEnabled)
-        spareAudioChain.parametricEq.setTuning(parametricEqEnabled, bands, channelSwapEnabled)
+        val balance = AppSettings.equalizerBalance.value
+        activeAudioChain.parametricEq.setTuning(
+            parametricEqEnabled,
+            bands,
+            channelSwapEnabled,
+            balance = balance,
+            bypassAll = bitPerfect,
+        )
+        spareAudioChain.parametricEq.setTuning(
+            parametricEqEnabled,
+            bands,
+            channelSwapEnabled,
+            balance = balance,
+            bypassAll = bitPerfect,
+        )
 
         val reverbEnabled = AppSettings.reverbEnabled.value && !bitPerfect
         val reverbAmount = AppSettings.reverbAmount.value

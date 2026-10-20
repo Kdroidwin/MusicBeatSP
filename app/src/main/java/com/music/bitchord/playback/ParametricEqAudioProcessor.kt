@@ -8,6 +8,7 @@ import com.music.bitchord.data.settings.ParametricEqBand
 import java.nio.ByteBuffer
 import java.nio.ByteOrder
 import kotlin.math.PI
+import kotlin.math.abs
 import kotlin.math.cos
 import kotlin.math.pow
 import kotlin.math.roundToInt
@@ -23,6 +24,8 @@ class ParametricEqAudioProcessor : BaseAudioProcessor() {
         val enabled: Boolean,
         val bands: List<ParametricEqBand>,
         val swapChannels: Boolean,
+        val balance: Float,
+        val bypassAll: Boolean,
     )
 
     private data class Coefficients(
@@ -34,7 +37,7 @@ class ParametricEqAudioProcessor : BaseAudioProcessor() {
     )
 
     @Volatile
-    private var tuning = Tuning(false, ParametricEqBand.DEFAULTS, swapChannels = false)
+    private var tuning = Tuning(false, ParametricEqBand.DEFAULTS, swapChannels = false, balance = 0f, bypassAll = false)
 
     private var sampleRateHz = 0
     private var channelCount = 0
@@ -44,12 +47,27 @@ class ParametricEqAudioProcessor : BaseAudioProcessor() {
     private var x2 = FloatArray(0)
     private var y1 = FloatArray(0)
     private var y2 = FloatArray(0)
+    private var currentBalance = 0f
+    private var balanceGlideFrame = 0
 
-    fun setTuning(enabled: Boolean, bands: List<ParametricEqBand>, swapChannels: Boolean = false) {
+    fun setTuning(
+        enabled: Boolean,
+        bands: List<ParametricEqBand>,
+        swapChannels: Boolean = false,
+        balance: Float = 0f,
+        bypassAll: Boolean = false,
+    ) {
         val safeBands = ParametricEqBand.DEFAULTS.mapIndexed { index, fallback ->
             bands.getOrNull(index)?.sanitized(fallback) ?: fallback
         }
-        tuning = Tuning(enabled, safeBands, swapChannels)
+        val safeBalance = balance.takeIf(Float::isFinite)?.coerceIn(-1f, 1f) ?: 0f
+        tuning = Tuning(
+            enabled = enabled && !bypassAll,
+            bands = safeBands,
+            swapChannels = swapChannels && !bypassAll,
+            balance = if (bypassAll) 0f else safeBalance,
+            bypassAll = bypassAll,
+        )
     }
 
     override fun onConfigure(inputAudioFormat: AudioProcessor.AudioFormat): AudioProcessor.AudioFormat {
@@ -68,6 +86,8 @@ class ParametricEqAudioProcessor : BaseAudioProcessor() {
         y1 = FloatArray(stateCount)
         y2 = FloatArray(stateCount)
         coefficientsFor = emptyList()
+        currentBalance = tuning.balance
+        balanceGlideFrame = 0
         return inputAudioFormat
     }
 
@@ -77,6 +97,8 @@ class ParametricEqAudioProcessor : BaseAudioProcessor() {
         y1.fill(0f)
         y2.fill(0f)
         coefficientsFor = emptyList()
+        currentBalance = tuning.balance
+        balanceGlideFrame = 0
     }
 
     override fun onReset() {
@@ -87,6 +109,8 @@ class ParametricEqAudioProcessor : BaseAudioProcessor() {
         x2 = FloatArray(0)
         y1 = FloatArray(0)
         y2 = FloatArray(0)
+        currentBalance = 0f
+        balanceGlideFrame = 0
     }
 
     override fun queueInput(inputBuffer: ByteBuffer) {
@@ -94,9 +118,18 @@ class ParametricEqAudioProcessor : BaseAudioProcessor() {
         if (byteCount == 0) return
         val output = replaceOutputBuffer(byteCount)
         val current = tuning
+        if (current.bypassAll) {
+            currentBalance = 0f
+            output.put(inputBuffer)
+            output.flip()
+            return
+        }
         val applyEq = current.enabled && current.bands.any { it.gainDb != 0f }
         val swapChannels = current.swapChannels && channelCount >= 2
-        if (!applyEq && !swapChannels) {
+        val targetBalance = if (channelCount == 2) current.balance else 0f
+        val applyBalance = channelCount == 2 &&
+            (targetBalance != 0f || currentBalance != 0f)
+        if (!applyEq && !swapChannels && !applyBalance) {
             // Keep disabled and flat playback byte-for-byte identical.
             output.put(inputBuffer)
             output.flip()
@@ -119,6 +152,15 @@ class ParametricEqAudioProcessor : BaseAudioProcessor() {
         val frameBytes = bytesPerSample * channelCount
         val frame = FloatArray(channelCount)
         while (inputBuffer.remaining() >= frameBytes) {
+            if (channelCount == 2 && balanceGlideFrame == 0) {
+                currentBalance += (targetBalance - currentBalance) * BALANCE_GLIDE_RATE
+                if (abs(targetBalance - currentBalance) < BALANCE_SETTLED_THRESHOLD) {
+                    currentBalance = targetBalance
+                }
+                balanceGlideFrame = BALANCE_GLIDE_FRAMES - 1
+            } else if (channelCount == 2) {
+                balanceGlideFrame--
+            }
             for (channel in 0 until channelCount) {
                 frame[channel] = when (inputAudioFormat.encoding) {
                     C.ENCODING_PCM_16BIT -> inputBuffer.short.toFloat() / 32768f
@@ -147,6 +189,10 @@ class ParametricEqAudioProcessor : BaseAudioProcessor() {
                         y1[stateIndex] = if (kotlin.math.abs(sample) < 1e-20f) 0f else sample
                     }
                 }
+                if (channelCount == 2) {
+                    val balanceGain = if (outputChannel == 0) 1f - currentBalance else 1f + currentBalance
+                    sample *= balanceGain.coerceIn(0f, 1f)
+                }
                 when (inputAudioFormat.encoding) {
                     C.ENCODING_PCM_16BIT -> output.putShort(
                         (sample * 32768f).roundToInt()
@@ -159,6 +205,12 @@ class ParametricEqAudioProcessor : BaseAudioProcessor() {
         }
         if (inputBuffer.hasRemaining()) output.put(inputBuffer)
         output.flip()
+    }
+
+    private companion object {
+        const val BALANCE_GLIDE_FRAMES = 64
+        const val BALANCE_GLIDE_RATE = 0.08f
+        const val BALANCE_SETTLED_THRESHOLD = 0.0005f
     }
 
     private fun updateCoefficients(bands: List<ParametricEqBand>) {

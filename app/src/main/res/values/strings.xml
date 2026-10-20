@@ -283,6 +283,10 @@
     <string name="parametric_eq_frequency_khz">%1$.1f kHz</string>
     <string name="parametric_eq_q">Bandwidth (Q)</string>
     <string name="parametric_eq_gain">Gain</string>
+    <string name="equalizer_balance">Balance</string>
+    <string name="equalizer_balance_left">L</string>
+    <string name="equalizer_balance_right">R</string>
+    <string name="equalizer_balance_subtitle">Shifts stereo audio toward one side by reducing the other channel. Bit-perfect playback bypasses this processing.</string>
     <string name="channel_swap">Swap stereo channels</string>
     <string name="channel_swap_subtitle">Swap left and right channels in stereo playback. Bit-perfect playback bypasses this processing.</string>
     <string name="music_folder_root">Music folder root</string>
