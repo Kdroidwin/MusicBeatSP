@@ -81,6 +81,7 @@ import androidx.compose.material.icons.rounded.Share
 import androidx.compose.material.icons.rounded.ScreenRotation
 import androidx.compose.material.icons.rounded.Schedule
 import androidx.compose.material.icons.rounded.SkipPrevious
+import androidx.compose.material.icons.rounded.SwapHoriz
 import androidx.compose.material.icons.rounded.Speed
 import androidx.compose.material.icons.rounded.SurroundSound
 import androidx.compose.material.icons.rounded.Tune
@@ -380,6 +381,8 @@ fun SettingsScreen(
     val matchButtonAccentToArtwork by AppSettings.matchButtonAccentToArtwork.collectAsStateWithLifecycle()
     val miniPlayerArtworkColor by AppSettings.miniPlayerArtworkColor.collectAsStateWithLifecycle()
     val miniPlayerPreviousButton by AppSettings.miniPlayerPreviousButton.collectAsStateWithLifecycle()
+    val miniPlayerSwipeChangesTrack by AppSettings.miniPlayerSwipeChangesTrack.collectAsStateWithLifecycle()
+    val playlistTrackMenuUsesArtworkColor by AppSettings.playlistTrackMenuUsesArtworkColor.collectAsStateWithLifecycle()
     val parametricEqEnabled by AppSettings.parametricEqEnabled.collectAsStateWithLifecycle()
     val channelSwapEnabled by AppSettings.channelSwapEnabled.collectAsStateWithLifecycle()
     val reverbEnabled by AppSettings.reverbEnabled.collectAsStateWithLifecycle()
@@ -702,6 +705,18 @@ fun SettingsScreen(
             listOf("mini player", "previous", "back", "skip previous", "ミニプレイヤー", "前の曲", "前へ"),
             miniPlayerPreviousButton,
         ) { AppSettings.setMiniPlayerPreviousButton(!miniPlayerPreviousButton) },
+        SettingsSearchEntry(
+            stringResource(R.string.mini_player_swipe_changes_track),
+            stringResource(R.string.mini_player_swipe_changes_track_subtitle),
+            listOf("mini player", "swipe", "gesture", "previous", "next", "ミニプレイヤー", "スワイプ", "ジェスチャー", "前の曲", "次の曲"),
+            miniPlayerSwipeChangesTrack,
+        ) { AppSettings.setMiniPlayerSwipeChangesTrack(!miniPlayerSwipeChangesTrack) },
+        SettingsSearchEntry(
+            stringResource(R.string.playlist_track_menu_artwork_color),
+            stringResource(R.string.playlist_track_menu_artwork_color_subtitle),
+            listOf("playlist", "track menu", "artwork", "color", "プレイリスト", "曲メニュー", "アートワーク", "色"),
+            playlistTrackMenuUsesArtworkColor,
+        ) { AppSettings.setPlaylistTrackMenuUsesArtworkColor(!playlistTrackMenuUsesArtworkColor) },
         SettingsSearchEntry(stringResource(R.string.filter_non_music_audio), stringResource(R.string.filter_non_music_audio_subtitle), listOf("filter", "audio", "music", "音楽", "フィルター"), filterNonMusicAudio) { AppSettings.setFilterNonMusicAudio(!filterNonMusicAudio) },
         SettingsSearchEntry(stringResource(R.string.playlist_song_artwork), stringResource(R.string.playlist_song_artwork_subtitle), listOf("playlist", "artwork", "プレイリスト", "アルバムアート"), showPlaylistSongArtwork) { AppSettings.setShowPlaylistSongArtwork(!showPlaylistSongArtwork) },
         SettingsSearchEntry(stringResource(R.string.keep_collection_artwork_aspect_ratio), stringResource(R.string.keep_collection_artwork_aspect_ratio_subtitle), listOf("playlist", "album", "artwork", "aspect ratio", "cover", "プレイリスト", "アルバム", "アート", "縦横比"), keepCollectionArtworkAspectRatio) { AppSettings.setKeepCollectionArtworkAspectRatio(!keepCollectionArtworkAspectRatio) },
@@ -2340,6 +2355,40 @@ fun SettingsScreen(
                     )
                 },
                 onClick = { AppSettings.setMiniPlayerPreviousButton(!miniPlayerPreviousButton) },
+            )
+            RowDivider()
+            SettingsRow(
+                icon = Icons.Rounded.SwapHoriz,
+                title = stringResource(R.string.mini_player_swipe_changes_track),
+                subtitle = stringResource(R.string.mini_player_swipe_changes_track_subtitle),
+                trailing = {
+                    Switch(
+                        checked = miniPlayerSwipeChangesTrack,
+                        onCheckedChange = AppSettings::setMiniPlayerSwipeChangesTrack,
+                        colors = SwitchDefaults.colors(
+                            checkedTrackColor = MaterialTheme.colorScheme.primary,
+                            checkedBorderColor = MaterialTheme.colorScheme.primary,
+                        ),
+                    )
+                },
+                onClick = { AppSettings.setMiniPlayerSwipeChangesTrack(!miniPlayerSwipeChangesTrack) },
+            )
+            RowDivider()
+            SettingsRow(
+                icon = Icons.Rounded.AutoAwesome,
+                title = stringResource(R.string.playlist_track_menu_artwork_color),
+                subtitle = stringResource(R.string.playlist_track_menu_artwork_color_subtitle),
+                trailing = {
+                    Switch(
+                        checked = playlistTrackMenuUsesArtworkColor,
+                        onCheckedChange = AppSettings::setPlaylistTrackMenuUsesArtworkColor,
+                        colors = SwitchDefaults.colors(
+                            checkedTrackColor = MaterialTheme.colorScheme.primary,
+                            checkedBorderColor = MaterialTheme.colorScheme.primary,
+                        ),
+                    )
+                },
+                onClick = { AppSettings.setPlaylistTrackMenuUsesArtworkColor(!playlistTrackMenuUsesArtworkColor) },
             )
             RowDivider()
             SettingsRow(

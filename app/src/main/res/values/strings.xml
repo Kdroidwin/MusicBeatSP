@@ -960,6 +960,10 @@
     <string name="mini_player_artwork_color_subtitle">Use the current song’s artwork colors for the mini player. Off by default.</string>
     <string name="mini_player_previous_button">Show previous-track button in mini player</string>
     <string name="mini_player_previous_button_subtitle">Show the previous-track control beside play and next. On by default.</string>
+    <string name="mini_player_swipe_changes_track">Swipe mini player to change tracks</string>
+    <string name="mini_player_swipe_changes_track_subtitle">Swipe left for the next track or right for the previous track. Off by default.</string>
+    <string name="playlist_track_menu_artwork_color">Match playlist track menu to playlist artwork</string>
+    <string name="playlist_track_menu_artwork_color_subtitle">Use the playlist cover colors for a track menu opened inside that playlist. On by default.</string>
     <string name="preload_album_art">Preload local album art on startup</string>
     <string name="preload_album_art_subtitle">Preload every local track cover at launch and keep the extracted images in app storage</string>
     <string name="preload_album_art_now">Preload artwork now</string>

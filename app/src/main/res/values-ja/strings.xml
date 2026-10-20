@@ -870,6 +870,10 @@
     <string name="mini_player_artwork_color_subtitle">現在の曲のアートワーク色をミニプレイヤーに使います。初期設定はオフです</string>
     <string name="mini_player_previous_button">ミニプレイヤーに前の曲ボタンを表示</string>
     <string name="mini_player_previous_button_subtitle">再生・次の曲ボタンの横に前の曲へ戻るボタンを表示します。初期設定はオンです</string>
+    <string name="mini_player_swipe_changes_track">ミニプレイヤーのスワイプで曲を切り替える</string>
+    <string name="mini_player_swipe_changes_track_subtitle">左スワイプで次の曲、右スワイプで前の曲に移動します。初期設定はオフです</string>
+    <string name="playlist_track_menu_artwork_color">プレイリスト内の曲メニューをアートワークの色に合わせる</string>
+    <string name="playlist_track_menu_artwork_color_subtitle">プレイリスト内で開いた曲メニューに、そのプレイリストのカバー色を使います。初期設定はオンです</string>
     <string name="preload_album_art">起動時にローカルのアートを読み込む</string>
     <string name="preload_album_art_subtitle">起動時に端末内の全曲のアートを先読みし、取得画像をアプリ内ストレージに保存します</string>
     <string name="preload_album_art_now">今すぐアートを先読み</string>

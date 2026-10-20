@@ -202,6 +202,7 @@ fun LibraryScreen(
     val showPlaylistSongArtwork by AppSettings.showPlaylistSongArtwork.collectAsStateWithLifecycle()
     val fullScreenCollectionArtwork by AppSettings.fullScreenCollectionArtwork.collectAsStateWithLifecycle()
     val keepCollectionArtworkAspectRatio by AppSettings.keepCollectionArtworkAspectRatio.collectAsStateWithLifecycle()
+    val playlistTrackMenuUsesArtworkColor by AppSettings.playlistTrackMenuUsesArtworkColor.collectAsStateWithLifecycle()
     val playStatsRevision by LocalPlayStatsStore.revision.collectAsStateWithLifecycle()
     var recentlyPlayedSongs by remember { mutableStateOf<List<Song>>(emptyList()) }
     var mostPlayedSongs by remember { mutableStateOf<List<Song>>(emptyList()) }
@@ -435,6 +436,7 @@ fun LibraryScreen(
                 selectedPlaylistSongIds = setOf(songKey)
                 showAddSelectedToPlaylist = true
             },
+            artworkUrlForPalette = drillDownArt.takeIf { playlistTrackMenuUsesArtworkColor },
             onRemoveFromPlaylist = if (drillDownPlaylistId != null) {
                 {
                     activePlaylistMenuSong = null

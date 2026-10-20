@@ -59,13 +59,15 @@ fun LocalSongDropdownMenu(
     onDeleteFromDevice: () -> Unit,
     onDetails: () -> Unit,
     onRemoveFromPlaylist: (() -> Unit)? = null,
+    artworkUrlForPalette: String? = null,
     modifier: Modifier = Modifier,
     offset: DpOffset = DpOffset(0.dp, 0.dp),
 ) {
     var showingSubMenu by remember { mutableStateOf(false) }
-    // Use the same artwork size and palette derivation as the player's details
-    // sheet so a playlist row's menu follows that track's own sleeve.
-    val palette = if (expanded) rememberArtworkPalette(song.thumbnailUrl, artPx = CARD_ART_PX) else null
+    // Keep the usual track-specific palette. Playlist drill-downs may pass the
+    // collection cover so their menu matches the full-screen collection menu.
+    val paletteArtworkUrl = artworkUrlForPalette?.takeIf(String::isNotBlank) ?: song.thumbnailUrl
+    val palette = if (expanded) rememberArtworkPalette(paletteArtworkUrl, artPx = CARD_ART_PX) else null
     val menuForeground = palette?.onBackground ?: MaterialTheme.colorScheme.onSurface
 
     CompositionLocalProvider(LocalContentColor provides menuForeground) {

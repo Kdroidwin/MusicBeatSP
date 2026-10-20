@@ -10,6 +10,7 @@ import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.gestures.detectVerticalDragGestures
+import androidx.compose.foundation.gestures.detectHorizontalDragGestures
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
@@ -40,6 +41,7 @@ import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.input.pointer.pointerInput
+import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
@@ -140,6 +142,7 @@ fun MiniPlayer(
     val reduceDynamicBlur by AppSettings.reduceDynamicBlur.collectAsStateWithLifecycle()
     val useArtworkColor by AppSettings.miniPlayerArtworkColor.collectAsStateWithLifecycle()
     val showPreviousButton by AppSettings.miniPlayerPreviousButton.collectAsStateWithLifecycle()
+    val swipeChangesTrack by AppSettings.miniPlayerSwipeChangesTrack.collectAsStateWithLifecycle()
     val artworkPalette = rememberArtworkPalette(
         imageUrl = song.thumbnailUrl.takeIf { useArtworkColor },
         artPx = ROW_ART_PX,
@@ -150,6 +153,7 @@ fun MiniPlayer(
     val haptics = rememberHaptics()
     val density = LocalDensity.current
     val dismissThresholdPx = with(density) { 48.dp.toPx() }
+    val trackSwipeThresholdPx = with(density) { 64.dp.toPx() }
     val offsetY = remember { Animatable(0f) }
     val scope = rememberCoroutineScope()
 
@@ -193,6 +197,29 @@ fun MiniPlayer(
                     },
                 )
             }
+            .pointerInput(swipeChangesTrack, trackSwipeThresholdPx, onPrevious, onNext) {
+                if (swipeChangesTrack) {
+                    var horizontalDistance = 0f
+                    detectHorizontalDragGestures(
+                        onDragStart = { horizontalDistance = 0f },
+                        onDragEnd = {
+                            when {
+                                horizontalDistance <= -trackSwipeThresholdPx -> {
+                                    haptics.play(Haptic.SkipNext)
+                                    onNext()
+                                }
+                                horizontalDistance >= trackSwipeThresholdPx -> {
+                                    haptics.play(Haptic.SkipPrevious)
+                                    onPrevious()
+                                }
+                            }
+                            horizontalDistance = 0f
+                        },
+                        onDragCancel = { horizontalDistance = 0f },
+                        onHorizontalDrag = { _, dragAmount -> horizontalDistance += dragAmount },
+                    )
+                }
+            }
             .clip(shape)
             .then(
                 if (reduceDynamicBlur) {
@@ -226,6 +253,11 @@ fun MiniPlayer(
             AsyncImage(
                 model = song.artworkAt(ROW_ART_PX),
                 contentDescription = null,
+                // The mini-player has a fixed square thumbnail. Keep it square
+                // even when the full player is configured to preserve a sleeve's
+                // original aspect ratio; transition settings must not letterbox
+                // this compact, fixed-size slot.
+                contentScale = ContentScale.Crop,
                 modifier = Modifier
                     .size(40.dp)
                     .playerDockArt(LocalPlayerDock.current, ART_CORNER)

@@ -479,6 +479,10 @@ object AppSettings {
     val miniPlayerArtworkColor = MutableStateFlow(false)
     /** Shows a previous-track control in expanded mini-player surfaces. */
     val miniPlayerPreviousButton = MutableStateFlow(true)
+    /** Lets horizontal swipes on the mini-player move between tracks. */
+    val miniPlayerSwipeChangesTrack = MutableStateFlow(false)
+    /** Uses the playlist page artwork palette for track menus opened inside it. */
+    val playlistTrackMenuUsesArtworkColor = MutableStateFlow(true)
     val launcherIcon = MutableStateFlow(LauncherIcon.PINK)
     val frostedQueueManager = MutableStateFlow(true)
     val frostedPlayerDetails = MutableStateFlow(true)
@@ -1083,6 +1087,8 @@ object AppSettings {
         matchButtonAccentToArtwork.value = prefs.getBoolean(KEY_MATCH_BUTTON_ACCENT_TO_ARTWORK, false)
         miniPlayerArtworkColor.value = prefs.getBoolean(KEY_MINI_PLAYER_ARTWORK_COLOR, false)
         miniPlayerPreviousButton.value = prefs.getBoolean(KEY_MINI_PLAYER_PREVIOUS_BUTTON, true)
+        miniPlayerSwipeChangesTrack.value = prefs.getBoolean(KEY_MINI_PLAYER_SWIPE_CHANGES_TRACK, false)
+        playlistTrackMenuUsesArtworkColor.value = prefs.getBoolean(KEY_PLAYLIST_TRACK_MENU_ARTWORK_COLOR, true)
         launcherIcon.value = runCatching {
             LauncherIcon.valueOf(prefs.getString(KEY_LAUNCHER_ICON, LauncherIcon.PINK.name) ?: LauncherIcon.PINK.name)
         }.getOrDefault(LauncherIcon.PINK)
@@ -1526,6 +1532,16 @@ object AppSettings {
     fun setMiniPlayerPreviousButton(value: Boolean) {
         miniPlayerPreviousButton.value = value
         prefs.edit().putBoolean(KEY_MINI_PLAYER_PREVIOUS_BUTTON, value).apply()
+    }
+
+    fun setMiniPlayerSwipeChangesTrack(value: Boolean) {
+        miniPlayerSwipeChangesTrack.value = value
+        prefs.edit().putBoolean(KEY_MINI_PLAYER_SWIPE_CHANGES_TRACK, value).apply()
+    }
+
+    fun setPlaylistTrackMenuUsesArtworkColor(value: Boolean) {
+        playlistTrackMenuUsesArtworkColor.value = value
+        prefs.edit().putBoolean(KEY_PLAYLIST_TRACK_MENU_ARTWORK_COLOR, value).apply()
     }
 
     fun setParametricEqEnabled(value: Boolean) {
@@ -2944,6 +2960,8 @@ object AppSettings {
     private const val KEY_MATCH_BUTTON_ACCENT_TO_ARTWORK = "match_button_accent_to_artwork"
     private const val KEY_MINI_PLAYER_ARTWORK_COLOR = "mini_player_artwork_color"
     private const val KEY_MINI_PLAYER_PREVIOUS_BUTTON = "mini_player_previous_button"
+    private const val KEY_MINI_PLAYER_SWIPE_CHANGES_TRACK = "mini_player_swipe_changes_track"
+    private const val KEY_PLAYLIST_TRACK_MENU_ARTWORK_COLOR = "playlist_track_menu_artwork_color"
     private const val KEY_PARAMETRIC_EQ_ENABLED = "parametric_eq_enabled"
     private const val KEY_PARAMETRIC_EQ_BANDS = "parametric_eq_bands"
     private const val KEY_CHANNEL_SWAP_ENABLED = "channel_swap_enabled"

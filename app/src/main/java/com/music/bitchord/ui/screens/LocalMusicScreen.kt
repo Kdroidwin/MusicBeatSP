@@ -332,6 +332,7 @@ fun LocalMusicScreen(
     val artistsOpenAlbums by AppSettings.artistsOpenAlbums.collectAsStateWithLifecycle()
     val shuffleArtistAlbums by AppSettings.shuffleArtistAlbums.collectAsStateWithLifecycle()
     val onlineAlbumArtistArtwork by AppSettings.onlineAlbumArtistArtwork.collectAsStateWithLifecycle()
+    val playlistTrackMenuUsesArtworkColor by AppSettings.playlistTrackMenuUsesArtworkColor.collectAsStateWithLifecycle()
     val offlineMode by AppSettings.offlineMode.collectAsStateWithLifecycle()
     val drillDownViewType by if (isDownloads) {
         AppSettings.downloadedDrillDownSongsViewType.collectAsStateWithLifecycle()
@@ -491,6 +492,9 @@ fun LocalMusicScreen(
             onAddToPlaylist = {
                 activeMenuSong = null
                 addToPlaylistSongs = listOf(song)
+            },
+            artworkUrlForPalette = drillDownArt.takeIf {
+                drillDownPlaylistId != null && playlistTrackMenuUsesArtworkColor
             },
             onRemoveFromPlaylist = if (drillDownPlaylistId != null) {
                 {
