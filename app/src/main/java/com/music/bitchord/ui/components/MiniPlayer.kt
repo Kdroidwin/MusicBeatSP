@@ -142,6 +142,7 @@ fun MiniPlayer(
 ) {
     val reduceDynamicBlur by AppSettings.reduceDynamicBlur.collectAsStateWithLifecycle()
     val useArtworkColor by AppSettings.miniPlayerArtworkColor.collectAsStateWithLifecycle()
+    val showArtworkOutline by AppSettings.miniPlayerArtworkOutline.collectAsStateWithLifecycle()
     val showPreviousButton by AppSettings.miniPlayerPreviousButton.collectAsStateWithLifecycle()
     val swipeChangesTrack by AppSettings.miniPlayerSwipeChangesTrack.collectAsStateWithLifecycle()
     val swipeUpExpands by AppSettings.miniPlayerSwipeUpExpands.collectAsStateWithLifecycle()
@@ -246,10 +247,16 @@ fun MiniPlayer(
                     )
                 },
             )
-            .border(
-                0.5.dp,
-                if (useArtworkColor) artworkPalette.divider.copy(alpha = 0.55f) else Color.White.copy(alpha = 0.10f),
-                shape,
+            .then(
+                if (!useArtworkColor || showArtworkOutline) {
+                    Modifier.border(
+                        0.5.dp,
+                        if (useArtworkColor) artworkPalette.divider.copy(alpha = 0.55f) else Color.White.copy(alpha = 0.10f),
+                        shape,
+                    )
+                } else {
+                    Modifier
+                },
             )
             // Deliberately silent: the whole bar is the target, so it catches
             // stray taps meant for the page behind it, and the sheet rising is

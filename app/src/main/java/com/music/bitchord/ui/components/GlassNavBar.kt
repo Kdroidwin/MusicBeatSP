@@ -126,6 +126,7 @@ fun GlassNavBar(
     val reduceDynamicBlur by AppSettings.reduceDynamicBlur.collectAsStateWithLifecycle()
     val hideNavigationBarLabels by AppSettings.hideNavigationBarLabels.collectAsStateWithLifecycle()
     val useArtworkColor by AppSettings.miniPlayerArtworkColor.collectAsStateWithLifecycle()
+    val showMiniArtworkOutline by AppSettings.miniPlayerArtworkOutline.collectAsStateWithLifecycle()
     val themeMode by AppSettings.themeMode.collectAsStateWithLifecycle()
     val artworkThemeActive = themeMode == ThemeMode.ARTWORK && song?.thumbnailUrl != null
     val navigationArtworkPalette = rememberArtworkPalette(
@@ -192,18 +193,18 @@ fun GlassNavBar(
         {
             when {
                 useGlass -> Modifier
-                    .liquidGlass(shape = pillShape)
+                    .liquidGlass(shape = pillShape, drawEdge = showMiniArtworkOutline)
                     .background(miniArtworkPalette.background.copy(alpha = 0.24f), pillShape)
-                    .border(GLASS_EDGE_WIDTH, miniArtworkPalette.divider.copy(alpha = 0.55f), pillShape)
+                    .then(if (showMiniArtworkOutline) Modifier.border(GLASS_EDGE_WIDTH, miniArtworkPalette.divider.copy(alpha = 0.55f), pillShape) else Modifier)
                 reduceDynamicBlur || hazeState == null -> Modifier
                     .background(miniArtworkPalette.background.copy(alpha = 0.90f), pillShape)
-                    .border(GLASS_EDGE_WIDTH, miniArtworkPalette.divider.copy(alpha = 0.55f), pillShape)
+                    .then(if (showMiniArtworkOutline) Modifier.border(GLASS_EDGE_WIDTH, miniArtworkPalette.divider.copy(alpha = 0.55f), pillShape) else Modifier)
                 else -> Modifier
                     .optimizedHazeEffect(
                         state = hazeState,
                         style = HazeMaterials.regular(miniArtworkPalette.background),
                     )
-                    .border(GLASS_EDGE_WIDTH, miniArtworkPalette.divider.copy(alpha = 0.55f), pillShape)
+                    .then(if (showMiniArtworkOutline) Modifier.border(GLASS_EDGE_WIDTH, miniArtworkPalette.divider.copy(alpha = 0.55f), pillShape) else Modifier)
             }
         }
     }

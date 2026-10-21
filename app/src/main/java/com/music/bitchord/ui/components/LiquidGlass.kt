@@ -115,12 +115,13 @@ fun glassIndicatorColor(): Color =
  * throws for any other shape type.
  */
 @Composable
-fun Modifier.liquidGlass(shape: CornerBasedShape): Modifier {
+fun Modifier.liquidGlass(shape: CornerBasedShape, drawEdge: Boolean = true): Modifier {
     if (!isGlassSupported()) return this
     val reduceDynamicBlur by AppSettings.reduceDynamicBlur.collectAsStateWithLifecycle()
     if (reduceDynamicBlur) {
-        return background(MaterialTheme.colorScheme.surface, shape)
-            .border(GLASS_EDGE_WIDTH, GLASS_EDGE_COLOR, shape)
+        return background(MaterialTheme.colorScheme.surface, shape).then(
+            if (drawEdge) Modifier.border(GLASS_EDGE_WIDTH, GLASS_EDGE_COLOR, shape) else Modifier,
+        )
     }
     val backdrop = LocalAppBackdrop.current
     val density = LocalDensity.current
@@ -148,7 +149,7 @@ fun Modifier.liquidGlass(shape: CornerBasedShape): Modifier {
                 )
             }
         },
-        highlight = { Highlight.Default },
+        highlight = { if (drawEdge) Highlight.Default else null },
         shadow = { Shadow.Default },
         onDrawSurface = {
             drawRect(color = surfaceTintColor.copy(alpha = SURFACE_OPACITY), size = size)

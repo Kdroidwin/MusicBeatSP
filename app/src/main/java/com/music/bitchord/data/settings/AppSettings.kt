@@ -479,6 +479,8 @@ object AppSettings {
     val matchButtonAccentToArtwork = MutableStateFlow(false)
     /** Tints the mini-player surface from the current song sleeve. */
     val miniPlayerArtworkColor = MutableStateFlow(false)
+    /** Shows the mini-player outline while its surface is tinted from artwork. */
+    val miniPlayerArtworkOutline = MutableStateFlow(false)
     /** Shows a previous-track control in expanded mini-player surfaces. */
     val miniPlayerPreviousButton = MutableStateFlow(true)
     /** Lets horizontal swipes on the mini-player move between tracks. */
@@ -1096,6 +1098,7 @@ object AppSettings {
         ) ThemeMode.ARTWORK else savedThemeMode
         matchButtonAccentToArtwork.value = prefs.getBoolean(KEY_MATCH_BUTTON_ACCENT_TO_ARTWORK, false)
         miniPlayerArtworkColor.value = prefs.getBoolean(KEY_MINI_PLAYER_ARTWORK_COLOR, false)
+        miniPlayerArtworkOutline.value = prefs.getBoolean(KEY_MINI_PLAYER_ARTWORK_OUTLINE, false)
         miniPlayerPreviousButton.value = prefs.getBoolean(KEY_MINI_PLAYER_PREVIOUS_BUTTON, true)
         miniPlayerSwipeChangesTrack.value = prefs.getBoolean(KEY_MINI_PLAYER_SWIPE_CHANGES_TRACK, false)
         miniPlayerSwipeUpExpands.value = prefs.getBoolean(KEY_MINI_PLAYER_SWIPE_UP_EXPANDS, true)
@@ -1540,6 +1543,11 @@ object AppSettings {
     fun setMiniPlayerArtworkColor(value: Boolean) {
         miniPlayerArtworkColor.value = value
         prefs.edit().putBoolean(KEY_MINI_PLAYER_ARTWORK_COLOR, value).apply()
+    }
+
+    fun setMiniPlayerArtworkOutline(value: Boolean) {
+        miniPlayerArtworkOutline.value = value
+        prefs.edit().putBoolean(KEY_MINI_PLAYER_ARTWORK_OUTLINE, value).apply()
     }
 
     fun setMiniPlayerPreviousButton(value: Boolean) {
@@ -2993,6 +3001,7 @@ object AppSettings {
     private const val KEY_THEME_MATCHES_ARTWORK = "theme_matches_artwork"
     private const val KEY_MATCH_BUTTON_ACCENT_TO_ARTWORK = "match_button_accent_to_artwork"
     private const val KEY_MINI_PLAYER_ARTWORK_COLOR = "mini_player_artwork_color"
+    private const val KEY_MINI_PLAYER_ARTWORK_OUTLINE = "mini_player_artwork_outline"
     private const val KEY_MINI_PLAYER_PREVIOUS_BUTTON = "mini_player_previous_button"
     private const val KEY_MINI_PLAYER_SWIPE_CHANGES_TRACK = "mini_player_swipe_changes_track"
     private const val KEY_MINI_PLAYER_SWIPE_UP_EXPANDS = "mini_player_swipe_up_expands"

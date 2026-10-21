@@ -382,6 +382,7 @@ fun SettingsScreen(
     val theme by AppSettings.themeMode.collectAsStateWithLifecycle()
     val matchButtonAccentToArtwork by AppSettings.matchButtonAccentToArtwork.collectAsStateWithLifecycle()
     val miniPlayerArtworkColor by AppSettings.miniPlayerArtworkColor.collectAsStateWithLifecycle()
+    val miniPlayerArtworkOutline by AppSettings.miniPlayerArtworkOutline.collectAsStateWithLifecycle()
     val miniPlayerPreviousButton by AppSettings.miniPlayerPreviousButton.collectAsStateWithLifecycle()
     val miniPlayerSwipeChangesTrack by AppSettings.miniPlayerSwipeChangesTrack.collectAsStateWithLifecycle()
     val miniPlayerSwipeUpExpands by AppSettings.miniPlayerSwipeUpExpands.collectAsStateWithLifecycle()
@@ -704,6 +705,12 @@ fun SettingsScreen(
             listOf("mini player", "album art", "color", "ミニプレイヤー", "アルバムアート", "色"),
             miniPlayerArtworkColor,
         ) { AppSettings.setMiniPlayerArtworkColor(!miniPlayerArtworkColor) },
+        SettingsSearchEntry(
+            stringResource(R.string.mini_player_artwork_outline),
+            stringResource(R.string.mini_player_artwork_outline_subtitle),
+            listOf("mini player", "outline", "border", "edge", "album art", "ミニプレイヤー", "枠線", "縁", "アートワーク"),
+            miniPlayerArtworkOutline,
+        ) { AppSettings.setMiniPlayerArtworkOutline(!miniPlayerArtworkOutline) },
         SettingsSearchEntry(
             stringResource(R.string.mini_player_previous_button),
             stringResource(R.string.mini_player_previous_button_subtitle),
@@ -2349,6 +2356,23 @@ fun SettingsScreen(
                     )
                 },
                 onClick = { AppSettings.setMiniPlayerArtworkColor(!miniPlayerArtworkColor) },
+            )
+            RowDivider()
+            SettingsRow(
+                icon = Icons.Rounded.ViewStream,
+                title = stringResource(R.string.mini_player_artwork_outline),
+                subtitle = stringResource(R.string.mini_player_artwork_outline_subtitle),
+                trailing = {
+                    Switch(
+                        checked = miniPlayerArtworkOutline,
+                        onCheckedChange = AppSettings::setMiniPlayerArtworkOutline,
+                        colors = SwitchDefaults.colors(
+                            checkedTrackColor = MaterialTheme.colorScheme.primary,
+                            checkedBorderColor = MaterialTheme.colorScheme.primary,
+                        ),
+                    )
+                },
+                onClick = { AppSettings.setMiniPlayerArtworkOutline(!miniPlayerArtworkOutline) },
             )
             RowDivider()
             SettingsRow(
