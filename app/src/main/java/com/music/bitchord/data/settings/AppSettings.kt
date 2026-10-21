@@ -13,8 +13,10 @@ import com.music.bitchord.data.Http
 import com.music.bitchord.data.innertube.YoutubeStreamBootstrap
 import com.music.bitchord.data.sources.SourceKind
 import com.music.bitchord.feature.artistimage.model.ArtistSort
+import com.music.bitchord.playback.equalizer.EelEqParser
 import kotlinx.coroutines.flow.MutableStateFlow
 import java.util.Locale
+import java.util.UUID
 
 /** Maximum blur radius for the player-only artwork backdrop, in dp. */
 const val MAX_PLAYER_ARTWORK_BLUR_DP = 128f
@@ -463,9 +465,11 @@ object AppSettings {
      * us a stereo stream, so there's no Atmos-style source to render.
      */
     val spatialAudio = MutableStateFlow(false)
-    /** Optional three-band PCM parametric EQ; disabled until the listener opts in. */
+    /** Optional software PEQ; legacy flows remain for existing settings and callers. */
     val parametricEqEnabled = MutableStateFlow(false)
     val parametricEqBands = MutableStateFlow(ParametricEqBand.DEFAULTS)
+    val parametricEqConfig = MutableStateFlow(ParametricEqConfig())
+    val parametricEqPresets = MutableStateFlow<List<ParametricEqPreset>>(emptyList())
     /** Stereo balance trim, centred by default and bypassed during bit-perfect playback. */
     val equalizerBalance = MutableStateFlow(0f)
     val channelSwapEnabled = MutableStateFlow(false)
@@ -1080,10 +1084,41 @@ object AppSettings {
         diracAudioEnabled.value = prefs.getBoolean(KEY_DIRAC_AUDIO_ENABLED, false)
         diracAudioPreset.value = prefs.getInt(KEY_DIRAC_AUDIO_PRESET, 0).coerceIn(0, 2)
         spatialAudio.value = prefs.getBoolean(KEY_SPATIAL_AUDIO, false)
-        parametricEqEnabled.value = prefs.getBoolean(KEY_PARAMETRIC_EQ_ENABLED, false)
-        parametricEqBands.value = ParametricEqBand.decode(prefs.getString(KEY_PARAMETRIC_EQ_BANDS, null))
+        val legacyPeqEnabled = prefs.getBoolean(KEY_PARAMETRIC_EQ_ENABLED, false)
+        val legacyPeqBands = ParametricEqBand.decode(prefs.getString(KEY_PARAMETRIC_EQ_BANDS, null))
+        val savedPeqConfig = ParametricEqConfig.fromJsonString(prefs.getString(KEY_PARAMETRIC_EQ_CONFIG_JSON, null))
+            ?: ParametricEqConfig(
+                enabled = legacyPeqEnabled,
+                swapChannels = prefs.getBoolean(KEY_CHANNEL_SWAP_ENABLED, false),
+                globalBands = legacyPeqBands,
+            )
+        parametricEqConfig.value = savedPeqConfig
+        parametricEqEnabled.value = savedPeqConfig.enabled
+        parametricEqBands.value = savedPeqConfig.globalBands
+        channelSwapEnabled.value = savedPeqConfig.swapChannels
+        parametricEqPresets.value = ParametricEqPreset.decodeList(
+            prefs.getString(KEY_PARAMETRIC_EQ_PRESETS_JSON, null),
+        )
+        // One-time preset seed is bundled as data only; EEL code is never executed.
+        if (!prefs.getBoolean(KEY_PARAMETRIC_EQ_SEEDED_SAMPLE, false) && this::appContext.isInitialized) {
+            runCatching {
+                val sampleText = appContext.assets.open(BUNDLED_EEL_ASSET_PATH)
+                    .bufferedReader()
+                    .use { it.readText() }
+                val sample = EelEqParser.parse(sampleText, BUNDLED_EEL_ASSET_PATH.substringAfterLast('/')).preset
+                val existing = parametricEqPresets.value
+                val seeded = if (existing.any { it.name == sample.name }) existing else listOf(sample) + existing
+                parametricEqPresets.value = seeded
+                prefs.edit()
+                    .putString(KEY_PARAMETRIC_EQ_PRESETS_JSON, ParametricEqPreset.encodeList(seeded))
+                    .putBoolean(KEY_PARAMETRIC_EQ_SEEDED_SAMPLE, true)
+                    .apply()
+            }.onFailure {
+                // A missing or malformed optional sample must never block startup.
+                prefs.edit().putBoolean(KEY_PARAMETRIC_EQ_SEEDED_SAMPLE, true).apply()
+            }
+        }
         equalizerBalance.value = prefs.getFloat(KEY_EQUALIZER_BALANCE, 0f).coerceIn(-1f, 1f)
-        channelSwapEnabled.value = prefs.getBoolean(KEY_CHANNEL_SWAP_ENABLED, false)
         reverbEnabled.value = prefs.getBoolean(KEY_REVERB_ENABLED, false)
         reverbAmount.value = prefs.getInt(KEY_REVERB_AMOUNT, 35).coerceIn(0, 100)
         playbackSpeed.value = prefs.getFloat(KEY_SPEED, 1.0f).coerceIn(0.1f, 10.0f)
@@ -1571,8 +1606,7 @@ object AppSettings {
     }
 
     fun setParametricEqEnabled(value: Boolean) {
-        parametricEqEnabled.value = value
-        prefs.edit().putBoolean(KEY_PARAMETRIC_EQ_ENABLED, value).apply()
+        setParametricEqConfig(parametricEqConfig.value.copy(enabled = value))
     }
 
     fun setEqualizerBalance(value: Float) {
@@ -1582,16 +1616,149 @@ object AppSettings {
     }
 
     fun setChannelSwapEnabled(value: Boolean) {
-        channelSwapEnabled.value = value
-        prefs.edit().putBoolean(KEY_CHANNEL_SWAP_ENABLED, value).apply()
+        setParametricEqSwapChannels(value)
     }
 
     fun setParametricEqBand(index: Int, band: ParametricEqBand) {
-        if (index !in ParametricEqBand.DEFAULTS.indices) return
-        val safeBand = band.sanitized(ParametricEqBand.DEFAULTS[index])
-        val updated = parametricEqBands.value.toMutableList().apply { this[index] = safeBand }
-        parametricEqBands.value = updated
-        prefs.edit().putString(KEY_PARAMETRIC_EQ_BANDS, ParametricEqBand.encode(updated)).apply()
+        val updated = parametricEqConfig.value.globalBands.toMutableList()
+        if (index !in updated.indices) return
+        updated[index] = band.sanitized(updated[index])
+        setParametricEqChannelBands(ParametricEqChannelTarget.GLOBAL, updated)
+    }
+
+    fun setParametricEqConfig(newConfig: ParametricEqConfig) {
+        val safe = newConfig.sanitized()
+        parametricEqConfig.value = safe
+        parametricEqEnabled.value = safe.enabled
+        parametricEqBands.value = safe.globalBands
+        channelSwapEnabled.value = safe.swapChannels
+        prefs.edit()
+            .putBoolean(KEY_PARAMETRIC_EQ_ENABLED, safe.enabled)
+            .putBoolean(KEY_CHANNEL_SWAP_ENABLED, safe.swapChannels)
+            .putString(KEY_PARAMETRIC_EQ_BANDS, ParametricEqBand.encode(safe.globalBands))
+            .putString(KEY_PARAMETRIC_EQ_CONFIG_JSON, safe.toJsonString())
+            .apply()
+    }
+
+    fun setParametricEqSwapChannels(
+        swap: Boolean,
+        swapBeforeEq: Boolean = parametricEqConfig.value.swapBeforeEq,
+    ) {
+        setParametricEqConfig(
+            parametricEqConfig.value.copy(
+                swapChannels = swap,
+                swapBeforeEq = swapBeforeEq,
+            ),
+        )
+    }
+
+    fun setParametricEqPreamps(
+        globalDb: Float = parametricEqConfig.value.globalPreampDb,
+        lrDb: Float = parametricEqConfig.value.lrPreampDb,
+        leftDb: Float = parametricEqConfig.value.leftGainDb,
+        rightDb: Float = parametricEqConfig.value.rightGainDb,
+    ) {
+        setParametricEqConfig(
+            parametricEqConfig.value.copy(
+                globalPreampDb = globalDb,
+                lrPreampDb = lrDb,
+                leftGainDb = leftDb,
+                rightGainDb = rightDb,
+                activePresetId = null,
+            ),
+        )
+    }
+
+    fun setParametricEqChannelBands(target: ParametricEqChannelTarget, bands: List<ParametricEqBand>) {
+        val current = parametricEqConfig.value
+        val updated = when (target) {
+            ParametricEqChannelTarget.GLOBAL -> current.copy(globalBands = bands, activePresetId = null)
+            ParametricEqChannelTarget.LEFT -> current.copy(leftBands = bands, activePresetId = null)
+            ParametricEqChannelTarget.RIGHT -> current.copy(rightBands = bands, activePresetId = null)
+        }
+        setParametricEqConfig(updated)
+    }
+
+    fun importEelPreset(content: String, fileName: String? = null): EelEqParser.ParseResult {
+        val result = EelEqParser.parse(content, fileName)
+        val incoming = result.preset
+        val existing = parametricEqPresets.value.toMutableList()
+        val matchIndex = existing.indexOfFirst {
+            it.id == incoming.id || it.name.equals(incoming.name, ignoreCase = true)
+        }
+        val saved = if (matchIndex >= 0) {
+            incoming.copy(id = existing[matchIndex].id, createdAt = System.currentTimeMillis())
+                .sanitized()
+                .also { existing[matchIndex] = it }
+        } else {
+            incoming.sanitized().also { existing.add(0, it) }
+        }
+        saveParametricEqPresets(existing)
+        setParametricEqConfig(saved.toConfig(enabled = true))
+        return result.copy(preset = saved)
+    }
+
+    fun loadBundledSampleEel(): EelEqParser.ParseResult? {
+        if (!this::appContext.isInitialized) return null
+        return runCatching {
+            val text = appContext.assets.open(BUNDLED_EEL_ASSET_PATH).bufferedReader().use { it.readText() }
+            importEelPreset(text, BUNDLED_EEL_ASSET_PATH.substringAfterLast('/'))
+        }.getOrNull()
+    }
+
+    fun saveCurrentAsParametricEqPreset(name: String): ParametricEqPreset {
+        val cleanName = name.trim().take(MAX_PARAMETRIC_EQ_PRESET_NAME_LENGTH).ifEmpty { "Custom PEQ" }
+        val current = parametricEqConfig.value
+        val existing = parametricEqPresets.value.toMutableList()
+        val matchIndex = existing.indexOfFirst { it.name.equals(cleanName, ignoreCase = true) }
+        val preset = ParametricEqPreset(
+            id = if (matchIndex >= 0) existing[matchIndex].id else UUID.randomUUID().toString(),
+            name = cleanName,
+            fileName = current.sourceFileName,
+            sourceFileName = current.sourceFileName,
+            notes = current.notes,
+            createdAt = System.currentTimeMillis(),
+            swapChannels = current.swapChannels,
+            swapBeforeEq = current.swapBeforeEq,
+            globalPreampDb = current.globalPreampDb,
+            lrPreampDb = current.lrPreampDb,
+            leftGainDb = current.leftGainDb,
+            rightGainDb = current.rightGainDb,
+            globalBands = current.globalBands,
+            leftBands = current.leftBands,
+            rightBands = current.rightBands,
+        ).sanitized()
+        if (matchIndex >= 0) existing[matchIndex] = preset else existing.add(0, preset)
+        saveParametricEqPresets(existing)
+        setParametricEqConfig(current.copy(activePresetId = preset.id, activePresetName = preset.name))
+        return preset
+    }
+
+    fun selectParametricEqPreset(presetId: String) {
+        val preset = parametricEqPresets.value.firstOrNull { it.id == presetId } ?: return
+        setParametricEqConfig(preset.toConfig(enabled = true))
+    }
+
+    fun deleteParametricEqPreset(presetId: String) {
+        saveParametricEqPresets(parametricEqPresets.value.filterNot { it.id == presetId })
+        if (parametricEqConfig.value.activePresetId == presetId) {
+            setParametricEqConfig(parametricEqConfig.value.copy(activePresetId = null, activePresetName = null))
+        }
+    }
+
+    fun resetParametricEqConfig() {
+        setParametricEqConfig(
+            ParametricEqConfig(
+                enabled = parametricEqConfig.value.enabled,
+                globalBands = ParametricEqBand.DEFAULTS,
+            ),
+        )
+    }
+
+    private fun saveParametricEqPresets(presets: List<ParametricEqPreset>) {
+        val safe = presets.take(MAX_SAVED_PARAMETRIC_EQ_PRESETS).map(ParametricEqPreset::sanitized)
+        parametricEqPresets.value = safe
+        prefs.edit().putString(KEY_PARAMETRIC_EQ_PRESETS_JSON, ParametricEqPreset.encodeList(safe)).apply()
     }
 
     fun setReverbEnabled(value: Boolean) {
@@ -3008,6 +3175,12 @@ object AppSettings {
     private const val KEY_PLAYLIST_TRACK_MENU_ARTWORK_COLOR = "playlist_track_menu_artwork_color"
     private const val KEY_PARAMETRIC_EQ_ENABLED = "parametric_eq_enabled"
     private const val KEY_PARAMETRIC_EQ_BANDS = "parametric_eq_bands"
+    private const val KEY_PARAMETRIC_EQ_CONFIG_JSON = "parametric_eq_config_json"
+    private const val KEY_PARAMETRIC_EQ_PRESETS_JSON = "parametric_eq_presets_json"
+    private const val KEY_PARAMETRIC_EQ_SEEDED_SAMPLE = "parametric_eq_seeded_sample"
+    private const val BUNDLED_EEL_ASSET_PATH = "eq/upper 6kHz no touch ig955 eq_swap.eel"
+    private const val MAX_SAVED_PARAMETRIC_EQ_PRESETS = 32
+    private const val MAX_PARAMETRIC_EQ_PRESET_NAME_LENGTH = 80
     private const val KEY_EQUALIZER_BALANCE = "equalizer_balance"
     private const val KEY_CHANNEL_SWAP_ENABLED = "channel_swap_enabled"
     private const val KEY_REVERB_ENABLED = "reverb_enabled"

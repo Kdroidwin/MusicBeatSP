@@ -74,11 +74,10 @@ fun EqualizerSheet(
     val replayGainAlbumMode by AppSettings.replayGainAlbumMode.collectAsStateWithLifecycle()
     val replayGainPreampDb by AppSettings.replayGainPreampDb.collectAsStateWithLifecycle()
     val replayGainPreventClipping by AppSettings.replayGainPreventClipping.collectAsStateWithLifecycle()
-    val parametricEqEnabled by AppSettings.parametricEqEnabled.collectAsStateWithLifecycle()
-    val parametricEqBands by AppSettings.parametricEqBands.collectAsStateWithLifecycle()
+    val parametricEqConfig by AppSettings.parametricEqConfig.collectAsStateWithLifecycle()
+    val parametricEqPresets by AppSettings.parametricEqPresets.collectAsStateWithLifecycle()
     val equalizerBalance by AppSettings.equalizerBalance.collectAsStateWithLifecycle()
     val bitPerfectPlayback by AppSettings.bitPerfectPlayback.collectAsStateWithLifecycle()
-    val channelSwapEnabled by AppSettings.channelSwapEnabled.collectAsStateWithLifecycle()
     val reverbEnabled by AppSettings.reverbEnabled.collectAsStateWithLifecycle()
     val reverbAmount by AppSettings.reverbAmount.collectAsStateWithLifecycle()
     val replayGainScanState by ReplayGainScanner.state.collectAsStateWithLifecycle()
@@ -241,44 +240,10 @@ fun EqualizerSheet(
                 },
             )
 
-            Surface(
-                modifier = Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 6.dp),
-                shape = RoundedCornerShape(16.dp),
-                color = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.35f),
-            ) {
-                Row(
-                    modifier = Modifier.fillMaxWidth().padding(16.dp),
-                    verticalAlignment = Alignment.CenterVertically,
-                ) {
-                    Icon(Icons.Rounded.SwapHoriz, contentDescription = null, tint = MaterialTheme.colorScheme.primary)
-                    Column(modifier = Modifier.weight(1f).padding(start = 8.dp, end = 12.dp)) {
-                        Text(
-                            text = stringResource(R.string.channel_swap),
-                            style = MaterialTheme.typography.titleSmall,
-                            fontWeight = FontWeight.SemiBold,
-                        )
-                        Text(
-                            text = stringResource(R.string.channel_swap_subtitle),
-                            style = MaterialTheme.typography.bodySmall,
-                            color = MaterialTheme.colorScheme.onSurfaceVariant,
-                        )
-                    }
-                    Switch(
-                        checked = channelSwapEnabled,
-                        onCheckedChange = AppSettings::setChannelSwapEnabled,
-                        colors = SwitchDefaults.colors(
-                            checkedTrackColor = MaterialTheme.colorScheme.primary,
-                            checkedBorderColor = MaterialTheme.colorScheme.primary,
-                        ),
-                    )
-                }
-            }
-
             ParametricEqControls(
-                enabled = parametricEqEnabled,
-                bands = parametricEqBands,
-                onEnabledChange = AppSettings::setParametricEqEnabled,
-                onBandChange = AppSettings::setParametricEqBand,
+                config = parametricEqConfig,
+                presets = parametricEqPresets,
+                onConfigChange = AppSettings::setParametricEqConfig,
             )
 
             Surface(

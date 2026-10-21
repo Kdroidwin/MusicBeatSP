@@ -4312,10 +4312,11 @@ class PlaybackService : MediaLibraryService() {
         player.skipSilenceEnabled = AppSettings.skipSilence.value && !bitPerfect
         chain.resampler.cutoffHz = if (bitPerfect) 0 else AppSettings.resamplerCutoffHz.value
         chain.spatial.enabled = !bitPerfect && AppSettings.spatialAudio.value
-        chain.parametricEq.setTuning(
-            enabled = AppSettings.parametricEqEnabled.value && !bitPerfect,
-            bands = AppSettings.parametricEqBands.value,
-            swapChannels = AppSettings.channelSwapEnabled.value && !bitPerfect,
+        chain.parametricEq.setConfig(
+            AppSettings.parametricEqConfig.value.copy(
+                enabled = AppSettings.parametricEqEnabled.value,
+                swapChannels = AppSettings.channelSwapEnabled.value,
+            ),
             balance = AppSettings.equalizerBalance.value,
             bypassAll = bitPerfect,
         )
@@ -4724,6 +4725,9 @@ class PlaybackService : MediaLibraryService() {
             AppSettings.spatialAudio.collect { applySpatialAudioEnabled() }
         }
         scope.launch {
+            AppSettings.parametricEqConfig.collect { updateAdvancedAudioEffects() }
+        }
+        scope.launch {
             AppSettings.parametricEqEnabled.collect { updateAdvancedAudioEffects() }
         }
         scope.launch {
@@ -4836,21 +4840,18 @@ class PlaybackService : MediaLibraryService() {
     /** Keeps optional PCM and platform effects aligned on both crossfade players. */
     private fun updateAdvancedAudioEffects() {
         val bitPerfect = AppSettings.bitPerfectPlayback.value
-        val bands = AppSettings.parametricEqBands.value
-        val parametricEqEnabled = AppSettings.parametricEqEnabled.value && !bitPerfect
-        val channelSwapEnabled = AppSettings.channelSwapEnabled.value && !bitPerfect
+        val parametricEqConfig = AppSettings.parametricEqConfig.value.copy(
+            enabled = AppSettings.parametricEqEnabled.value,
+            swapChannels = AppSettings.channelSwapEnabled.value,
+        )
         val balance = AppSettings.equalizerBalance.value
-        activeAudioChain.parametricEq.setTuning(
-            parametricEqEnabled,
-            bands,
-            channelSwapEnabled,
+        activeAudioChain.parametricEq.setConfig(
+            parametricEqConfig,
             balance = balance,
             bypassAll = bitPerfect,
         )
-        spareAudioChain.parametricEq.setTuning(
-            parametricEqEnabled,
-            bands,
-            channelSwapEnabled,
+        spareAudioChain.parametricEq.setConfig(
+            parametricEqConfig,
             balance = balance,
             bypassAll = bitPerfect,
         )

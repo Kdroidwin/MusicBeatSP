@@ -1,0 +1,217 @@
+// Title: upper 6kHz no touch ig955 eq (swap)
+// Converted for RootlessJamesDSP (LiveProg/EEL2)
+// Source: upper 6kHz no touch ig955 eq.txt
+//
+// Global Preamp: -1.5 dB
+// L/R Preamp: -1.7 dB
+// Note: Input channels are swapped (Left <-> Right) before processing.
+
+desc: upper 6kHz no touch ig955 eq (swap)
+
+@init
+PI = 3.14159265359;
+srate = srate; // Ensure sample rate is available
+
+// --- Preamp Calculation ---
+global_preamp_db = -1.5;
+lr_preamp_db = -1.7;
+
+// Calculate total linear gain
+total_gain = 10 ^ ((global_preamp_db + lr_preamp_db) / 20);
+
+// --- RBJ Biquad Calculation Functions ---
+
+function calc_peak(freq, q, gain_db) (
+w0 = 2 * PI * freq / srate;
+alpha = sin(w0) / (2 * q);
+A = 10 ^ (gain_db / 40);
+
+b0 = 1 + alpha * A;
+b1 = -2 * cos(w0);
+b2 = 1 - alpha * A;
+a0 = 1 + alpha / A;
+a1 = -2 * cos(w0);
+a2 = 1 - alpha / A;
+
+inv_a0 = 1 / a0;
+this.b0 = b0 * inv_a0;
+this.b1 = b1 * inv_a0;
+this.b2 = b2 * inv_a0;
+this.a1 = a1 * inv_a0;
+this.a2 = a2 * inv_a0;
+
+
+);
+
+function calc_lshelf(freq, q, gain_db) (
+w0 = 2 * PI * freq / srate;
+alpha = sin(w0) / (2 * q);
+A = 10 ^ (gain_db / 40);
+
+cos_w0 = cos(w0);
+sqrt_A = sqrt(A);
+
+b0 = A * ((A + 1) - (A - 1) * cos_w0 + 2 * sqrt_A * alpha);
+b1 = 2 * A * ((A - 1) - (A + 1) * cos_w0);
+b2 = A * ((A + 1) - (A - 1) * cos_w0 - 2 * sqrt_A * alpha);
+a0 = (A + 1) + (A - 1) * cos_w0 + 2 * sqrt_A * alpha;
+a1 = -2 * ((A - 1) + (A + 1) * cos_w0);
+a2 = (A + 1) + (A - 1) * cos_w0 - 2 * sqrt_A * alpha;
+
+inv_a0 = 1 / a0;
+this.b0 = b0 * inv_a0;
+this.b1 = b1 * inv_a0;
+this.b2 = b2 * inv_a0;
+this.a1 = a1 * inv_a0;
+this.a2 = a2 * inv_a0;
+
+
+);
+
+function calc_hshelf(freq, q, gain_db) (
+w0 = 2 * PI * freq / srate;
+alpha = sin(w0) / (2 * q);
+A = 10 ^ (gain_db / 40);
+
+cos_w0 = cos(w0);
+sqrt_A = sqrt(A);
+
+b0 = A * ((A + 1) + (A - 1) * cos_w0 + 2 * sqrt_A * alpha);
+b1 = -2 * A * ((A - 1) + (A + 1) * cos_w0);
+b2 = A * ((A + 1) + (A - 1) * cos_w0 - 2 * sqrt_A * alpha);
+a0 = (A + 1) - (A - 1) * cos_w0 + 2 * sqrt_A * alpha;
+a1 = 2 * ((A - 1) - (A + 1) * cos_w0);
+a2 = (A + 1) - (A - 1) * cos_w0 - 2 * sqrt_A * alpha;
+
+inv_a0 = 1 / a0;
+this.b0 = b0 * inv_a0;
+this.b1 = b1 * inv_a0;
+this.b2 = b2 * inv_a0;
+this.a1 = a1 * inv_a0;
+this.a2 = a2 * inv_a0;
+
+
+);
+
+function process_biquad(xn) (
+yn = this.b0 * xn + this.b1 * this.x1 + this.b2 * this.x2 - this.a1 * this.y1 - this.a2 * this.y2;
+this.x2 = this.x1;
+this.x1 = xn;
+this.y2 = this.y1;
+this.y1 = yn;
+yn;
+);
+
+// --- Filter Definitions ---
+
+// 1. GLOBAL FILTERS (Applied to BOTH channels)
+// Filter 1: ON LSC Fc 23 Hz Gain 1.37 dB Q 0.758
+g_band1L.calc_lshelf(23, 0.758, 1.37); g_band1R.calc_lshelf(23, 0.758, 1.37);
+// Filter 2: ON PK Fc 31 Hz Gain -0.75 dB Q 1.414
+g_band2L.calc_peak(31, 1.414, -0.75); g_band2R.calc_peak(31, 1.414, -0.75);
+// Filter 3: ON PK Fc 141 Hz Gain -6.31 dB Q 0.297
+g_band3L.calc_peak(141, 0.297, -6.31); g_band3R.calc_peak(141, 0.297, -6.31);
+// Filter 4: ON PK Fc 697 Hz Gain 2.35 dB Q 0.915
+g_band4L.calc_peak(697, 0.915, 2.35); g_band4R.calc_peak(697, 0.915, 2.35);
+// Filter 5: ON PK Fc 1595 Hz Gain -0.76 dB Q 1.414
+g_band5L.calc_peak(1595, 1.414, -0.76); g_band5R.calc_peak(1595, 1.414, -0.76);
+// Filter 6: ON PK Fc 3200 Hz Gain -3.73 dB Q 1.789
+g_band6L.calc_peak(3200, 1.789, -3.73); g_band6R.calc_peak(3200, 1.789, -3.73);
+// Filter 7: ON PK Fc 4456 Hz Gain 1.24 dB Q 1.609
+g_band7L.calc_peak(4456, 1.609, 1.24); g_band7R.calc_peak(4456, 1.609, 1.24);
+
+// 2. CHANNEL SPECIFIC FILTERS
+
+// Channel L
+// Filter 1: ON LSC Fc 36 Hz Gain 0.81 dB Q 0.405
+l_band1.calc_lshelf(36, 0.405, 0.81);
+// Filter 2: ON HSC Fc 41 Hz Gain 0.07 dB Q 0.895
+l_band2.calc_hshelf(41, 0.895, 0.07);
+// Filter 3: ON PK Fc 8978 Hz Gain -1.74 dB Q 3.180
+l_band3.calc_peak(8978, 3.18, -1.74);
+// Filter 4: ON PK Fc 118 Hz Gain 0.24 dB Q 1.742
+l_band4.calc_peak(118, 1.742, 0.24);
+// Filter 5: ON PK Fc 3813 Hz Gain -0.48 dB Q 1.101
+l_band5.calc_peak(3813, 1.101, -0.48);
+// Filter 6: ON PK Fc 130 Hz Gain 1.24 dB Q 4.000
+l_band6.calc_peak(130, 4.0, 1.24);
+// Filter 7: ON PK Fc 280 Hz Gain 0.20 dB Q 1.061
+l_band7.calc_peak(280, 1.061, 0.2);
+// Filter 8: ON PK Fc 7068 Hz Gain 0.80 dB Q 3.003
+l_band8.calc_peak(7068, 3.003, 0.8);
+// Filter 9: ON PK Fc 123 Hz Gain -1.34 dB Q 4.000
+l_band9.calc_peak(123, 4.0, -1.34);
+// Filter 10: ON PK Fc 20 Hz Gain 0.05 dB Q 1.696
+l_band10.calc_peak(20, 1.696, 0.05);
+
+// Channel R
+// Filter 1: ON LSC Fc 36 Hz Gain -0.81 dB Q 0.405
+r_band1.calc_lshelf(36, 0.405, -0.81);
+// Filter 2: ON HSC Fc 41 Hz Gain -0.07 dB Q 0.895
+r_band2.calc_hshelf(41, 0.895, -0.07);
+// Filter 3: ON PK Fc 8978 Hz Gain 1.74 dB Q 3.180
+r_band3.calc_peak(8978, 3.18, 1.74);
+// Filter 4: ON PK Fc 118 Hz Gain -0.24 dB Q 1.742
+r_band4.calc_peak(118, 1.742, -0.24);
+// Filter 5: ON PK Fc 3813 Hz Gain 0.48 dB Q 1.101
+r_band5.calc_peak(3813, 1.101, 0.48);
+// Filter 6: ON PK Fc 130 Hz Gain -1.24 dB Q 4.000
+r_band6.calc_peak(130, 4.0, -1.24);
+// Filter 7: ON PK Fc 280 Hz Gain -0.20 dB Q 1.061
+r_band7.calc_peak(280, 1.061, -0.2);
+// Filter 8: ON PK Fc 7068 Hz Gain -0.80 dB Q 3.003
+r_band8.calc_peak(7068, 3.003, -0.8);
+// Filter 9: ON PK Fc 123 Hz Gain 1.34 dB Q 4.000
+r_band9.calc_peak(123, 4.0, 1.34);
+// Filter 10: ON PK Fc 20 Hz Gain -0.05 dB Q 1.696
+r_band10.calc_peak(20, 1.696, -0.05);
+
+@sample
+// 1. Swap Channels First (Left <-> Right)
+swap_temp = spl0;
+spl0 = spl1;
+spl1 = swap_temp;
+
+// 2. Apply Total Preamp Gain (Global + L/R Preamp)
+spl0 = spl0 * total_gain;
+spl1 = spl1 * total_gain;
+
+// 3. Apply Global Filters (Same for both)
+spl0 = g_band1L.process_biquad(spl0);
+spl0 = g_band2L.process_biquad(spl0);
+spl0 = g_band3L.process_biquad(spl0);
+spl0 = g_band4L.process_biquad(spl0);
+spl0 = g_band5L.process_biquad(spl0);
+spl0 = g_band6L.process_biquad(spl0);
+spl0 = g_band7L.process_biquad(spl0);
+
+spl1 = g_band1R.process_biquad(spl1);
+spl1 = g_band2R.process_biquad(spl1);
+spl1 = g_band3R.process_biquad(spl1);
+spl1 = g_band4R.process_biquad(spl1);
+spl1 = g_band5R.process_biquad(spl1);
+spl1 = g_band6R.process_biquad(spl1);
+spl1 = g_band7R.process_biquad(spl1);
+
+// 4. Apply Channel Specific Filters (L filters to spl0, R filters to spl1)
+spl0 = l_band1.process_biquad(spl0);
+spl0 = l_band2.process_biquad(spl0);
+spl0 = l_band3.process_biquad(spl0);
+spl0 = l_band4.process_biquad(spl0);
+spl0 = l_band5.process_biquad(spl0);
+spl0 = l_band6.process_biquad(spl0);
+spl0 = l_band7.process_biquad(spl0);
+spl0 = l_band8.process_biquad(spl0);
+spl0 = l_band9.process_biquad(spl0);
+spl0 = l_band10.process_biquad(spl0);
+
+spl1 = r_band1.process_biquad(spl1);
+spl1 = r_band2.process_biquad(spl1);
+spl1 = r_band3.process_biquad(spl1);
+spl1 = r_band4.process_biquad(spl1);
+spl1 = r_band5.process_biquad(spl1);
+spl1 = r_band6.process_biquad(spl1);
+spl1 = r_band7.process_biquad(spl1);
+spl1 = r_band8.process_biquad(spl1);
+spl1 = r_band9.process_biquad(spl1);
+spl1 = r_band10.process_biquad(spl1);
