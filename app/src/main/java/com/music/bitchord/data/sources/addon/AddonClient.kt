@@ -10,9 +10,12 @@ import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.withContext
 import kotlinx.serialization.json.Json
+import kotlinx.serialization.json.JsonObject
+import kotlinx.serialization.json.JsonPrimitive
 import okhttp3.HttpUrl.Companion.toHttpUrlOrNull
 import okhttp3.OkHttpClient
 import okhttp3.Request
+import java.util.Locale
 import java.util.concurrent.TimeUnit
 
 /**
@@ -290,7 +293,10 @@ class AddonClient(rawBaseUrl: String) {
                     // painting a transient outage as a configuration error
                     // sends people to re-paste a URL that was always correct.
                     response.code >= 500 -> throw AddonUnavailable("HTTP ${response.code}")
-                    response.code != 429 -> throw AddonException("HTTP ${response.code}")
+                    response.code != 429 -> throw AddonException(
+                        "HTTP ${response.code}",
+                        responseHint = safeErrorHint(response),
+                    )
                     attempt >= MAX_RETRIES -> throw AddonUnavailable("This addon is rate limiting BitChord")
                     else -> retryAfterMs(response.header("Retry-After"), attempt)
                 }
@@ -302,6 +308,47 @@ class AddonClient(rawBaseUrl: String) {
         @Suppress("UNREACHABLE_CODE")
         throw AddonException("unreachable")
     }
+
+    /**
+     * A short, scrubbed explanation from an addon's error response, when it
+     * provided one. Never retain or display the raw body: some addons echo
+     * request details, credentials, or private URLs in their error pages.
+     */
+    private fun safeErrorHint(response: okhttp3.Response): String? = runCatching {
+        val raw = response.peekBody(MAX_ERROR_BODY_BYTES).string().trim()
+        if (raw.isEmpty()) return null
+        val contentType = response.header("Content-Type").orEmpty().lowercase(Locale.ROOT)
+        val candidate = if ("json" in contentType) {
+            val root = json.parseToJsonElement(raw) as? JsonObject ?: return null
+            val fields = sequenceOf("message", "error_description", "detail", "error", "reason", "code")
+            fields.mapNotNull { key ->
+                val value = root[key]
+                when (value) {
+                    is JsonPrimitive -> value.takeIf { it.isString }?.content
+                    is JsonObject -> sequenceOf("message", "description", "detail", "code")
+                        .mapNotNull { nested -> (value[nested] as? JsonPrimitive)?.takeIf { it.isString }?.content }
+                        .firstOrNull()
+                    else -> null
+                }
+            }.firstOrNull() ?: return null
+        } else if (contentType.startsWith("text/plain")) {
+            raw
+        } else {
+            return null
+        }
+
+        candidate
+            .replace(HTML_TAG, " ")
+            .replace(BEARER_VALUE, "Bearer [redacted]")
+            .replace(SENSITIVE_ASSIGNMENT) { "${it.groupValues[1]}=[redacted]" }
+            .replace(URL_VALUE, "[URL]")
+            .replace(EMAIL_VALUE, "[email]")
+            .replace(CONTROL_CHARS, " ")
+            .replace(WHITESPACE, " ")
+            .trim()
+            .take(MAX_ERROR_HINT_CHARS)
+            .ifBlank { null }
+    }.getOrNull()
 
     /** How long to wait after a 429, from the header when it sent one. */
     private fun retryAfterMs(header: String?, attempt: Int): Long {
@@ -412,8 +459,24 @@ class AddonClient(rawBaseUrl: String) {
         private const val MAX_RETRIES = 2
         private const val BACKOFF_BASE_MS = 500L
         private const val BACKOFF_CAP_MS = 8_000L
+        private const val MAX_ERROR_BODY_BYTES = 4_096L
+        private const val MAX_ERROR_HINT_CHARS = 120
+        private val HTML_TAG = Regex("<[^>]{0,256}>")
+        private val BEARER_VALUE = Regex("(?i)\\bBearer\\s+[^\\s,;]+")
+        private val SENSITIVE_ASSIGNMENT = Regex(
+            "(?i)\\b(token|api[_-]?key|access[_-]?token|authorization|password|secret)\\b\\s*[:=]\\s*[\\\"']?[^,\\s\\\"'}]+",
+        )
+        private val URL_VALUE = Regex("(?i)https?://[^\\s\\\"'<>]+")
+        private val EMAIL_VALUE = Regex("\\b[^\\s@]+@[^\\s@]+\\.[^\\s@]+\\b")
+        private val CONTROL_CHARS = Regex("[\\u0000-\\u001f\\u007f]")
+        private val WHITESPACE = Regex("\\s+")
 
-        private const val USER_AGENT = "BitChord"
+        // Addon servers may key provider access to the BitChord client identity.
+        // MusicBeatSP's app release version is independent from the upstream
+        // addon client this implementation is derived from; keep the wire
+        // identity aligned with the working BitChord source rather than
+        // changing it on every MusicBeatSP version bump.
+        private const val USER_AGENT = "BitChord/v1.8.1"
 
         /**
          * What [probeSearch] asks for. Deliberately an ordinary word rather
@@ -449,7 +512,7 @@ class AddonClient(rawBaseUrl: String) {
  * [SourceHealth.Rejected][com.music.bitchord.data.sources.SourceHealth.Rejected],
  * with a line fit to show a user.
  */
-class AddonException(message: String) : Exception(message)
+class AddonException(message: String, val responseHint: String? = null) : Exception(message)
 
 /**
  * The addon is momentarily not answering — down, overloaded, rate limiting.

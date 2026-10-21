@@ -77,8 +77,12 @@ import kotlinx.coroutines.sync.Semaphore
 import kotlinx.coroutines.sync.withPermit
 import com.music.bitchord.data.sources.SourceKind
 import com.music.bitchord.data.sources.SourceRegistry
+import com.music.bitchord.data.sources.addon.AddonException
+import com.music.bitchord.data.sources.RemoteServerHttpException
+import com.music.bitchord.data.sources.OpenSubsonicApiException
 import com.music.bitchord.data.sources.SourceResolver
 import com.music.bitchord.data.sources.TrackMatcher
+import com.music.bitchord.data.sources.AddonSource
 import com.music.bitchord.playback.StreamChoice
 import java.util.concurrent.atomic.AtomicLong
 import java.io.IOException
@@ -95,6 +99,12 @@ data class LocalArtworkPreloadState(
 )
 
 class MainViewModel(app: Application) : AndroidViewModel(app) {
+
+    private data class MusicServerSearchOutcome(
+        val sourceName: String,
+        val songs: List<Song>?,
+        val failure: Throwable?,
+    )
 
     private val authStore = AuthStore(app)
 
@@ -1597,23 +1607,59 @@ class MainViewModel(app: Application) : AndroidViewModel(app) {
                             val songs = kotlinx.coroutines.withTimeoutOrNull(SOURCE_SEARCH_TIMEOUT_MS) {
                                 source.search(query, SOURCE_SEARCH_LIMIT, waitForAll = true)
                             }
-                            songs to (if (songs == null) IOException("Server search timed out") else null)
+                            MusicServerSearchOutcome(
+                                sourceName = source.displayName,
+                                songs = songs,
+                                failure = if (songs == null) IOException("Server search timed out") else null,
+                            )
                         } catch (cancelled: CancellationException) {
                             throw cancelled
                         } catch (failure: Exception) {
-                            null to failure
+                            MusicServerSearchOutcome(source.displayName, null, failure)
                         }
                     }
                 }.awaitAll()
             }
             if (generation != musicServerSearchGeneration.get()) return@launch
-            val songs = outcomes.flatMap { it.first.orEmpty() }.distinctBy(Song::videoId)
+            val songs = outcomes.flatMap { it.songs.orEmpty() }.distinctBy(Song::videoId)
+            val failures = outcomes.filter { it.failure != null }
             _musicServerResults.value = when {
                 songs.isNotEmpty() -> UiState.Success(songs.map { SearchResult.Track(it) })
-                outcomes.all { it.second != null } -> UiState.Error(text(R.string.music_server_search_failed))
+                failures.isNotEmpty() -> UiState.Error(
+                    failures.joinToString(separator = "\n") { outcome ->
+                        musicServerSearchFailure(outcome.sourceName, outcome.failure)
+                    },
+                )
                 else -> UiState.Error(text(R.string.no_results))
             }
         }
+    }
+
+    private fun musicServerSearchFailure(sourceName: String, failure: Throwable?): String {
+        val context = getApplication<Application>()
+        val status = (failure as? RemoteServerHttpException)?.statusCode
+        val reason = when {
+            status != null -> sourceHttpReason(context, status)
+            failure is OpenSubsonicApiException -> context.getString(
+                R.string.music_server_protocol_error,
+                failure.protocolCode?.toString() ?: "?",
+            )
+            failure is SecurityException -> context.getString(R.string.music_server_auth_rejected)
+            failure is IOException && failure.message?.contains("timed out", ignoreCase = true) == true ->
+                context.getString(R.string.music_server_search_timeout)
+            failure is IOException -> context.getString(R.string.music_server_network_error)
+            else -> context.getString(R.string.music_server_invalid_response)
+        }
+        return context.getString(R.string.music_server_search_failure_detail, sourceName, reason)
+    }
+
+    private fun sourceHttpReason(context: android.content.Context, status: Int): String = when (status) {
+        402 -> context.getString(R.string.source_http_payment_required)
+        401, 403 -> context.getString(R.string.source_http_auth_rejected, status)
+        404 -> context.getString(R.string.source_http_not_found)
+        429 -> context.getString(R.string.source_http_rate_limited)
+        in 500..599 -> context.getString(R.string.source_http_server_error, status)
+        else -> context.getString(R.string.source_http_status, status)
     }
 
     /** Searches one configured source directly instead of silently using it only as a playback fallback. */
@@ -1632,7 +1678,7 @@ class MainViewModel(app: Application) : AndroidViewModel(app) {
         }
 
         val config = SourceRegistry.config(configId)
-        val source = SourceRegistry.instance(configId)
+        val source = SourceRegistry.active().firstOrNull { it.configId == configId }
         if (config == null || !config.enabled || !config.isComplete || source == null) {
             _configuredSourceResults.value = configId to UiState.Error(text(R.string.configured_source_unavailable))
             return
@@ -1645,18 +1691,34 @@ class MainViewModel(app: Application) : AndroidViewModel(app) {
         _configuredSourceResults.value = configId to UiState.Loading
         configuredSourceSearchJob = viewModelScope.launch {
             val outcome = try {
-                val songs = withTimeoutOrNull(SOURCE_SEARCH_TIMEOUT_MS) {
-                    source.search(query, limit = SOURCE_SEARCH_LIMIT, waitForAll = true)
-                }
-                if (songs == null) {
-                    UiState.Error(text(R.string.configured_source_search_timeout))
+                if (source is AddonSource) {
+                    val result = withTimeoutOrNull(ADDON_CONFIGURED_SEARCH_TIMEOUT_MS) {
+                        source.searchDetailed(query, limit = ADDON_CONFIGURED_SEARCH_LIMIT)
+                    }
+                    when {
+                        result == null -> UiState.Error(text(R.string.configured_source_search_timeout))
+                        result.isSuccess -> UiState.Success(result.getOrThrow().map { SearchResult.Track(it) })
+                        else -> {
+                            val failure = result.exceptionOrNull()
+                            if (failure is CancellationException) throw failure
+                            TrackLog.w(TAG, "${config.displayName}: direct search failed — ${failure?.message}")
+                            configuredSourceSearchError(config.displayName, failure)
+                        }
+                    }
                 } else {
-                    UiState.Success(songs.map { SearchResult.Track(it) })
+                    val songs = withTimeoutOrNull(SOURCE_SEARCH_TIMEOUT_MS) {
+                        source.search(query, limit = SOURCE_SEARCH_LIMIT, waitForAll = true)
+                    }
+                    if (songs == null) {
+                        UiState.Error(text(R.string.configured_source_search_timeout))
+                    } else {
+                        UiState.Success(songs.map { SearchResult.Track(it) })
+                    }
                 }
             } catch (cancelled: CancellationException) {
                 throw cancelled
-            } catch (_: Exception) {
-                UiState.Error(getApplication<Application>().getString(R.string.configured_source_search_failed, config.displayName))
+            } catch (failure: Exception) {
+                configuredSourceSearchError(config.displayName, failure)
             }
             if (generation == configuredSourceSearchGeneration.get()) {
                 val stillConfigured = SourceRegistry.config(configId)?.let { it.enabled && it.isComplete } == true
@@ -1664,6 +1726,27 @@ class MainViewModel(app: Application) : AndroidViewModel(app) {
                 else _configuredSourceResults.value = configId to UiState.Error(text(R.string.configured_source_unavailable))
             }
         }
+    }
+
+    private fun configuredSourceSearchError(sourceName: String, failure: Throwable?): UiState.Error {
+        val context = getApplication<Application>()
+        val status = HTTP_STATUS.find(failure?.message.orEmpty())?.groupValues?.getOrNull(1)
+        val responseHint = (failure as? AddonException)?.responseHint
+        val reason = when {
+            status != null -> {
+                val code = status.toIntOrNull()
+                val hint = responseHint?.takeUnless { it.equals("Payment Required", ignoreCase = true) }
+                val base = code?.let { sourceHttpReason(context, it) }
+                    ?: context.getString(R.string.configured_source_search_http_status, status)
+                if (hint.isNullOrBlank()) base
+                else context.getString(R.string.source_http_status_detail, base, hint)
+            }
+            failure is IOException -> context.getString(R.string.configured_source_search_network_error)
+            else -> context.getString(R.string.configured_source_search_invalid_response)
+        }
+        return UiState.Error(
+            context.getString(R.string.configured_source_search_failed_detail, sourceName, reason),
+        )
     }
 
     fun removeSearch(term: String) = SearchHistory.remove(term)
@@ -1977,6 +2060,8 @@ class MainViewModel(app: Application) : AndroidViewModel(app) {
     }
 
     private companion object {
+        private const val TAG = "BitChord"
+
         /**
          * How long a keystroke waits before the typeahead is asked about it.
          *
@@ -2003,6 +2088,14 @@ class MainViewModel(app: Application) : AndroidViewModel(app) {
 
         /** Enough to be worth scrolling, short enough not to bury YouTube's own rows. */
         const val SOURCE_SEARCH_LIMIT = 12
+
+        /** Addon servers can need a manifest lookup before their catalogue query. */
+        const val ADDON_CONFIGURED_SEARCH_TIMEOUT_MS = 12_000L
+
+        /** Matches BitChord's direct Addons search result size. */
+        const val ADDON_CONFIGURED_SEARCH_LIMIT = 20
+
+        private val HTTP_STATUS = Regex("HTTP\\s+(\\d{3})", RegexOption.IGNORE_CASE)
 
         /**
          * What a page with an empty listing says.

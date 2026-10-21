@@ -9,6 +9,7 @@ import com.music.bitchord.data.sources.addon.AddonNotFound
 import com.music.bitchord.data.sources.addon.AddonStream
 import com.music.bitchord.data.sources.addon.AddonTrack
 import com.music.bitchord.playback.StreamContainer
+import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
 import java.util.Collections
@@ -140,31 +141,46 @@ class AddonSource(
      * rows are the recording and [SourceResolver] decides which to open; an
      * addon knows its own catalogue better than a re-sort here would.
      */
-    override suspend fun search(query: String, limit: Int, waitForAll: Boolean): List<Song> =
+    /**
+     * Search used by the source-specific search screen.
+     *
+     * The generic [MusicSource.search] contract deliberately turns a failed
+     * source into an empty list so it cannot break a multi-source search. A
+     * dedicated source screen must retain the distinction between a valid
+     * empty answer and a failed request, otherwise HTTP/protocol errors are
+     * shown as "No results" and give no clue that the catalogue was never
+     * searched successfully.
+     */
+    suspend fun searchDetailed(query: String, limit: Int): Result<List<Song>> =
         withContext(Dispatchers.IO) {
-            if (query.isBlank()) return@withContext emptyList()
-            val tracks = client.search(query, AddonClient.TIER_LOSSLESS).getOrElse { failure ->
-                TrackLog.w(TAG, "${config.displayName}: search failed — ${failure.message}")
-                return@withContext emptyList()
+            if (query.isBlank()) return@withContext Result.success(emptyList())
+            client.search(query, AddonClient.TIER_LOSSLESS).map { tracks ->
+                tracks.asSequence()
+                    .filter { it.id.isNotBlank() && it.title.isNotBlank() }
+                    .take(limit)
+                    .map { track ->
+                        rows[track.id] = track
+                        Song(
+                            videoId = SourceRegistry.trackKey(config.id, track.id),
+                            title = track.title,
+                            artist = track.artist,
+                            albumName = track.album.ifBlank { null },
+                            thumbnailUrl = track.artwork,
+                            durationText = track.durationSec?.let {
+                                "${it / 60}:${"%02d".format(Locale.ROOT, it % 60)}"
+                            },
+                            sourceQuality = ModuleSource.qualityTier("${track.audioQuality} ${track.format}"),
+                        )
+                    }
+                    .toList()
             }
-            tracks.asSequence()
-                .filter { it.id.isNotBlank() && it.title.isNotBlank() }
-                .take(limit)
-                .map { track ->
-                    rows[track.id] = track
-                    Song(
-                        videoId = SourceRegistry.trackKey(config.id, track.id),
-                        title = track.title,
-                        artist = track.artist,
-                        albumName = track.album.ifBlank { null },
-                        thumbnailUrl = track.artwork,
-                        durationText = track.durationSec?.let {
-                            "${it / 60}:${"%02d".format(Locale.ROOT, it % 60)}"
-                        },
-                        sourceQuality = ModuleSource.qualityTier("${track.audioQuality} ${track.format}"),
-                    )
-                }
-                .toList()
+        }
+
+    override suspend fun search(query: String, limit: Int, waitForAll: Boolean): List<Song> =
+        searchDetailed(query, limit).getOrElse { failure ->
+            if (failure is CancellationException) throw failure
+            TrackLog.w(TAG, "${config.displayName}: search failed — ${failure.message}")
+            emptyList()
         }
 
     // ── Stream ────────────────────────────────────────────────────────────

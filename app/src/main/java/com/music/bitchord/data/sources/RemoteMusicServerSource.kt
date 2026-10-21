@@ -105,7 +105,7 @@ abstract class RemoteMusicServerSource(
                 override fun onResponse(call: Call, response: Response) {
                     try {
                         val bytes = response.use {
-                            if (!it.isSuccessful) throw ServerHttpException(it.code, operation)
+                            if (!it.isSuccessful) throw RemoteServerHttpException(it.code, operation)
                             val body = it.body
                             val contentLength = body.contentLength()
                             if (contentLength > maxBytes) throw IOException("Server response exceeded the size limit")
@@ -148,7 +148,7 @@ abstract class RemoteMusicServerSource(
     protected fun sourceArtworkUri(imageId: String): String = SourceRegistry.remoteServerArtworkUri(configId, imageId)
 
     protected fun healthFrom(error: Throwable): SourceHealth = when (error) {
-        is ServerHttpException -> if (error.statusCode == 401 || error.statusCode == 403) {
+        is RemoteServerHttpException -> if (error.statusCode == 401 || error.statusCode == 403) {
             SourceHealth.Rejected("HTTP ${error.statusCode}: authentication was rejected during ${error.operation}")
         } else {
             SourceHealth.Unreachable("HTTP ${error.statusCode} during ${error.operation}")
@@ -495,7 +495,7 @@ class NavidromeMusicSource(
         if (code == 40 || code == 41 || code == 43) {
             throw SecurityException("OpenSubsonic authentication was rejected")
         }
-        throw IOException("OpenSubsonic request failed")
+        throw OpenSubsonicApiException(code)
     }
 
     companion object {
@@ -504,7 +504,11 @@ class NavidromeMusicSource(
     }
 }
 
-private class ServerHttpException(val statusCode: Int, val operation: String) : IOException("HTTP $statusCode during $operation")
+internal class RemoteServerHttpException(val statusCode: Int, val operation: String) :
+    IOException("HTTP $statusCode during $operation")
+
+internal class OpenSubsonicApiException(val protocolCode: Int?) :
+    IOException("OpenSubsonic error ${protocolCode ?: "unknown"}")
 
 private fun safeServerMessage(message: String): String =
     message.filterNot(Char::isISOControl).trim().take(160).ifBlank { "Server is unreachable" }
