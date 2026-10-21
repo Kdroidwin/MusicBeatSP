@@ -42,6 +42,7 @@ The standard Android package is `io.pockets.musicbestsp`. Because this differs f
 - Optionally pause playback when the volume reaches zero.
 - Play CUE sheets as separate tracks when their referenced local audio is available.
 - Choose bit-perfect output on supported Android 14+ USB DAC paths. Optional parametric EQ and reverb default to off; equalizer profiles can be saved per output device.
+- Search the AutoEQ headphone catalog and apply a downloaded profile as an approximation for the built-in five-band EQ. Profile lookup requires an internet connection; it is a separate convenience from the parametric EQ.
 - Use high-precision parametric EQ with up to 64 filters per channel, shared Global filters and independent Left/Right filters, per-channel preamp, and peak, shelf, low-pass, high-pass, band-pass, notch, and all-pass filter types.
 - Save and select EQ presets, import or export supported EEL2 and Equalizer APO filter data, and retain EQ settings in app backup. Imported EEL files are parsed as data; scripts are not executed.
 - Enable Automix for analyzed, beat-aware transitions, or use regular crossfade. Automix and crossfade are mutually exclusive; choose an Efficient, Balanced, or Performance analysis mode.
@@ -58,6 +59,9 @@ The standard Android package is `io.pockets.musicbestsp`. Because this differs f
 - Show, hide, and reorder available player actions, including Shuffle, Repeat, Like, Playlist/Library, Search, and Queue. Hiding a control does not change its playback state; the Playlist control can use a Library icon.
 - Choose and reorder player shortcuts beside the favorite button, including Lyrics, Add to Playlist, Speed and Pitch, Queue, Playlists, Search, Chromecast, and track details. The favorite button can also be reordered.
 - Adjust the player background blur independently of the app-wide theme, up to 128 dp.
+- Switch to the optional Walkman-style player with a centered cover and track information plus circular playback controls. Tune artwork and lyric transition animations independently from Reduce animation.
+- Choose whether portrait and landscape cover art keeps its original proportions in the player, album and playlist pages, and compact-player transitions.
+- Keep the floating tab bar or replace it with a popup navigation menu; customize tab order, visibility, labels, and the mini-player's swipe gestures.
 - Optionally use full-bleed artwork in the player and keep the cover at full size while playback is paused.
 - Use translucent frosted-glass surfaces for the queue manager, player details, and compact lyrics artwork area; each has its own setting.
 - Match player action accents and the mini-player surface to the current album art.
@@ -90,7 +94,7 @@ The standard Android package is `io.pockets.musicbestsp`. Because this differs f
 ### Lyrics and artwork
 
 - Display the first lyric line for timed and plain lyrics while preserving synchronized scrolling and highlighting.
-- Create synchronized lyrics with the audio-guided editor, which records line timestamps during playback. Optionally render `漢字((かんじ))` readings above kanji.
+- Create synchronized lyrics with the audio-guided editor, which records line timestamps during playback. The optional furigana setting renders `漢字((かんじ))` readings above their kanji as ruby text instead of showing the marker parentheses.
 - Hide generated lyric status text, unavailable and saved-lyrics labels, or instrumental gap notes. Set lyric size and alignment, and choose which playback controls appear on the lyrics screen.
 - Configure double-tap seeking and optional skip buttons, including their intervals and whether seconds labels appear.
 - Cache and prefetch local album artwork to speed up track changes; optionally load the local artwork library at startup.
