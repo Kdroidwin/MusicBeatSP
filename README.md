@@ -19,7 +19,7 @@
 
 ---
 
-> **MusicBeatSP 2.3.0** is the MusicBeat fork under a new name and Android application ID. It builds on the open-source BitChord foundation and adds an extensive local music library, playlist, playback, lyrics, artwork, and customization feature set.
+> **MusicBeatSP 2.5.1** is the MusicBeat fork under a new name and Android application ID. It builds on the open-source BitChord foundation and adds an extensive local music library, playlist, playback, lyrics, artwork, and customization feature set.
 
 The standard Android package is `io.pockets.musicbestsp`. Because this differs from the previous MusicBeat package, Android installs MusicBeatSP as a separate app; app-private settings and data are not migrated automatically.
 
@@ -42,6 +42,9 @@ The standard Android package is `io.pockets.musicbestsp`. Because this differs f
 - Optionally pause playback when the volume reaches zero.
 - Play CUE sheets as separate tracks when their referenced local audio is available.
 - Choose bit-perfect output on supported Android 14+ USB DAC paths. Optional parametric EQ and reverb default to off; equalizer profiles can be saved per output device.
+- Use high-precision parametric EQ with up to 64 filters per channel, shared Global filters and independent Left/Right filters, per-channel preamp, and peak, shelf, low-pass, high-pass, band-pass, notch, and all-pass filter types.
+- Save and select EQ presets, import or export supported EEL2 and Equalizer APO filter data, and retain EQ settings in app backup. Imported EEL files are parsed as data; scripts are not executed.
+- Enable Automix for analyzed, beat-aware transitions, or use regular crossfade. Automix and crossfade are mutually exclusive; choose an Efficient, Balanced, or Performance analysis mode.
 - Save and restore the position of tracks that are at least 15 minutes long, including when switching tracks or stopping playback.
 - Open the playback queue with both upcoming tracks and recently played tracks.
 - Save named queue snapshots, switch between them, replace or remove them, and load their saved current track and position after a restart.
@@ -74,6 +77,8 @@ The standard Android package is `io.pockets.musicbestsp`. Because this differs f
 - Long-press to select multiple tracks and add them to a playlist in one action. Search folder results can act on all tracks in that folder.
 - Sort folder search results by filename, including numbered names such as `1-01. example.flac`, while displaying the track title and artist from metadata.
 - Import `.m3u` and `.m3u8` playlists through Android's file picker. Import playlists from Musicolet backup ZIP files; unavailable tracks are skipped so the rest can still be imported.
+- Connect self-hosted Jellyfin and Navidrome/OpenSubsonic libraries, or configure WebDAV and SMB locations for remote music files.
+- Add compatible HTTP music-source endpoints and select them alongside built-in sources when searching. The app queries the configured endpoint and does not download or run add-on code; available catalogs, streams, and account access depend on that endpoint.
 - Export playlists as M3U from the playlist menu.
 - Open audio files from file managers such as MiXplorer. Optionally show a floating player over other apps for files opened this way.
 - Choose a persistent app-private storage location for extracted local album artwork so it survives cache cleanup and app restarts, without requesting additional storage access.
