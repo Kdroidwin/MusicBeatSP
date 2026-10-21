@@ -144,8 +144,11 @@ enum class DownloadQuality(
 }
 
 enum class ThemeMode(val label: String) {
-    SYSTEM("System"), LIGHT("Light"), DARK("Dark"), AMOLED("AMOLED black"), ARTWORK("Album art")
+    SYSTEM("System"), LIGHT("Light"), DARK("Dark"), AMOLED("AMOLED black"), ARTWORK("Album art"), CUSTOM_IMAGE("Custom image")
 }
+
+/** Secondary action shown beside the favorite action in Android media controls. */
+enum class MediaControlSecondaryAction { SHUFFLE, PLAYLISTS, LYRICS, QUEUE }
 
 /** Motion used by the floating navigation selection indicator. */
 enum class PillMotionStyle {
@@ -479,6 +482,8 @@ object AppSettings {
     val playbackSpeed = MutableStateFlow(1.0f)
     val playbackPitch = MutableStateFlow(1.0f)
     val themeMode = MutableStateFlow(ThemeMode.DARK)
+    /** Persisted SAF URI used by the optional user-selected image theme. */
+    val customThemeImageUri = MutableStateFlow<String?>(null)
     /** Uses the current track artwork for Material accents without recolouring app surfaces. */
     val matchButtonAccentToArtwork = MutableStateFlow(false)
     /** Tints the mini-player surface from the current song sleeve. */
@@ -496,6 +501,8 @@ object AppSettings {
     val launcherIcon = MutableStateFlow(LauncherIcon.PINK)
     val frostedQueueManager = MutableStateFlow(true)
     val frostedPlayerDetails = MutableStateFlow(true)
+    /** Artwork-colored background for local track metadata and file details. */
+    val detailsSheetArtworkBackdrop = MutableStateFlow(true)
     /** Replaces the queue manager's text action with a compact equals glyph. */
     val queueManagerEqualsIcon = MutableStateFlow(false)
     /** Hides the queue heading while keeping its actions available. */
@@ -516,6 +523,11 @@ object AppSettings {
 
     /** Repeat mode for the player — Off, All, or One. */
     val repeatMode = MutableStateFlow(Player.REPEAT_MODE_OFF)
+    /** Restart the first queue item after the last item ends. */
+    val restartQueueWhenEnded = MutableStateFlow(false)
+    val mediaControlFavoriteUsesStar = MutableStateFlow(false)
+    val mediaControlSecondaryAction = MutableStateFlow(MediaControlSecondaryAction.SHUFFLE)
+    val hideMediaControlCustomActions = MutableStateFlow(false)
 
     /** Put the playing track's codec, bitrate and sample rate on the player. */
     val showNerdStats = MutableStateFlow(false)
@@ -1131,6 +1143,7 @@ object AppSettings {
         themeMode.value = if (
             savedThemeMode == ThemeMode.ARTWORK || prefs.getBoolean(KEY_THEME_MATCHES_ARTWORK, false)
         ) ThemeMode.ARTWORK else savedThemeMode
+        customThemeImageUri.value = prefs.getString(KEY_CUSTOM_THEME_IMAGE_URI, null)
         matchButtonAccentToArtwork.value = prefs.getBoolean(KEY_MATCH_BUTTON_ACCENT_TO_ARTWORK, false)
         miniPlayerArtworkColor.value = prefs.getBoolean(KEY_MINI_PLAYER_ARTWORK_COLOR, false)
         miniPlayerArtworkOutline.value = prefs.getBoolean(KEY_MINI_PLAYER_ARTWORK_OUTLINE, false)
@@ -1143,6 +1156,7 @@ object AppSettings {
         }.getOrDefault(LauncherIcon.PINK)
         frostedQueueManager.value = prefs.getBoolean(KEY_FROSTED_QUEUE_MANAGER, true)
         frostedPlayerDetails.value = prefs.getBoolean(KEY_FROSTED_PLAYER_DETAILS, true)
+        detailsSheetArtworkBackdrop.value = prefs.getBoolean(KEY_DETAILS_SHEET_ARTWORK_BACKDROP, true)
         queueManagerEqualsIcon.value = prefs.getBoolean(KEY_QUEUE_MANAGER_EQUALS_ICON, false)
         hideQueueLabel.value = prefs.getBoolean(KEY_HIDE_QUEUE_LABEL, true)
         queueClearTrashIcon.value = prefs.getBoolean(KEY_QUEUE_CLEAR_TRASH_ICON, false)
@@ -1151,6 +1165,15 @@ object AppSettings {
         shuffleEnabled.value = prefs.getBoolean(KEY_SHUFFLE_ENABLED, false)
         audioFocusLevel.value = prefs.getInt(KEY_AUDIO_FOCUS_LEVEL, 1).coerceIn(0, 4)
         repeatMode.value = prefs.getInt(KEY_REPEAT_MODE, Player.REPEAT_MODE_OFF)
+        restartQueueWhenEnded.value = prefs.getBoolean(KEY_RESTART_QUEUE_WHEN_ENDED, false)
+        mediaControlFavoriteUsesStar.value = prefs.getBoolean(KEY_MEDIA_CONTROL_FAVORITE_USES_STAR, false)
+        mediaControlSecondaryAction.value = runCatching {
+            MediaControlSecondaryAction.valueOf(
+                prefs.getString(KEY_MEDIA_CONTROL_SECONDARY_ACTION, null)
+                    ?: MediaControlSecondaryAction.SHUFFLE.name,
+            )
+        }.getOrDefault(MediaControlSecondaryAction.SHUFFLE)
+        hideMediaControlCustomActions.value = prefs.getBoolean(KEY_HIDE_MEDIA_CONTROL_CUSTOM_ACTIONS, false)
         showNerdStats.value = prefs.getBoolean(KEY_NERD_STATS, false)
         reduceAnimation.value = prefs.getBoolean(KEY_REDUCE_ANIMATION, false)
         playerArtworkTransition.value = prefs.getBoolean(KEY_PLAYER_ARTWORK_TRANSITION, true)
@@ -1468,6 +1491,26 @@ object AppSettings {
         prefs.edit().putInt(KEY_REPEAT_MODE, value).apply()
     }
 
+    fun setRestartQueueWhenEnded(value: Boolean) {
+        restartQueueWhenEnded.value = value
+        prefs.edit().putBoolean(KEY_RESTART_QUEUE_WHEN_ENDED, value).apply()
+    }
+
+    fun setMediaControlFavoriteUsesStar(value: Boolean) {
+        mediaControlFavoriteUsesStar.value = value
+        prefs.edit().putBoolean(KEY_MEDIA_CONTROL_FAVORITE_USES_STAR, value).apply()
+    }
+
+    fun setMediaControlSecondaryAction(value: MediaControlSecondaryAction) {
+        mediaControlSecondaryAction.value = value
+        prefs.edit().putString(KEY_MEDIA_CONTROL_SECONDARY_ACTION, value.name).apply()
+    }
+
+    fun setHideMediaControlCustomActions(value: Boolean) {
+        hideMediaControlCustomActions.value = value
+        prefs.edit().putBoolean(KEY_HIDE_MEDIA_CONTROL_CUSTOM_ACTIONS, value).apply()
+    }
+
     fun setAudioQualityWifi(value: AudioQuality) {
         audioQualityWifi.value = value
         prefs.edit().putString(KEY_QUALITY_WIFI, value.name).apply()
@@ -1568,6 +1611,14 @@ object AppSettings {
             .putString(KEY_THEME, value.name)
             .putBoolean(KEY_THEME_MATCHES_ARTWORK, value == ThemeMode.ARTWORK)
             .apply()
+    }
+
+    fun setCustomThemeImageUri(value: String?) {
+        customThemeImageUri.value = value
+        prefs.edit().apply {
+            if (value.isNullOrBlank()) remove(KEY_CUSTOM_THEME_IMAGE_URI)
+            else putString(KEY_CUSTOM_THEME_IMAGE_URI, value)
+        }.apply()
     }
 
     fun setMatchButtonAccentToArtwork(value: Boolean) {
@@ -1786,6 +1837,11 @@ object AppSettings {
     fun setFrostedPlayerDetails(value: Boolean) {
         frostedPlayerDetails.value = value
         prefs.edit().putBoolean(KEY_FROSTED_PLAYER_DETAILS, value).apply()
+    }
+
+    fun setDetailsSheetArtworkBackdrop(value: Boolean) {
+        detailsSheetArtworkBackdrop.value = value
+        prefs.edit().putBoolean(KEY_DETAILS_SHEET_ARTWORK_BACKDROP, value).apply()
     }
 
     fun setQueueManagerEqualsIcon(value: Boolean) {
@@ -3166,6 +3222,7 @@ object AppSettings {
     private const val KEY_PITCH = "playback_pitch"
     private const val KEY_THEME = "theme_mode"
     private const val KEY_THEME_MATCHES_ARTWORK = "theme_matches_artwork"
+    private const val KEY_CUSTOM_THEME_IMAGE_URI = "custom_theme_image_uri"
     private const val KEY_MATCH_BUTTON_ACCENT_TO_ARTWORK = "match_button_accent_to_artwork"
     private const val KEY_MINI_PLAYER_ARTWORK_COLOR = "mini_player_artwork_color"
     private const val KEY_MINI_PLAYER_ARTWORK_OUTLINE = "mini_player_artwork_outline"
@@ -3188,6 +3245,7 @@ object AppSettings {
     private const val KEY_LAUNCHER_ICON = "launcher_icon"
     private const val KEY_FROSTED_QUEUE_MANAGER = "frosted_queue_manager"
     private const val KEY_FROSTED_PLAYER_DETAILS = "frosted_player_details"
+    private const val KEY_DETAILS_SHEET_ARTWORK_BACKDROP = "details_sheet_artwork_backdrop"
     private const val KEY_QUEUE_MANAGER_EQUALS_ICON = "queue_manager_equals_icon"
     private const val KEY_HIDE_QUEUE_LABEL = "hide_queue_label"
     private const val KEY_QUEUE_CLEAR_TRASH_ICON = "queue_clear_trash_icon"
@@ -3196,6 +3254,10 @@ object AppSettings {
     private const val KEY_SHUFFLE_ENABLED = "shuffle_enabled"
     private const val KEY_AUDIO_FOCUS_LEVEL = "audio_focus_level"
     private const val KEY_REPEAT_MODE = "repeat_mode"
+    private const val KEY_RESTART_QUEUE_WHEN_ENDED = "restart_queue_when_ended"
+    private const val KEY_MEDIA_CONTROL_FAVORITE_USES_STAR = "media_control_favorite_uses_star"
+    private const val KEY_MEDIA_CONTROL_SECONDARY_ACTION = "media_control_secondary_action"
+    private const val KEY_HIDE_MEDIA_CONTROL_CUSTOM_ACTIONS = "hide_media_control_custom_actions"
     private const val KEY_NERD_STATS = "show_nerd_stats"
     private const val KEY_CACHE_LIMIT = "audio_cache_limit_bytes"
     private const val KEY_REDUCE_ANIMATION = "reduce_animation"

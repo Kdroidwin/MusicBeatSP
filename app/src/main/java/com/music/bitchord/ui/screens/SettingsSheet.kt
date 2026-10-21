@@ -175,6 +175,7 @@ import com.music.bitchord.data.settings.MainNavigationTab
 import com.music.bitchord.data.settings.PlayerControl
 import com.music.bitchord.data.settings.PlayerQuickAction
 import com.music.bitchord.data.settings.PlayerDetailsAction
+import com.music.bitchord.data.settings.MediaControlSecondaryAction
 import com.music.bitchord.data.settings.ScreenOrientationMode
 import com.music.bitchord.data.settings.OutputPcmMode
 import com.music.bitchord.data.settings.LyricsTextAlignment
@@ -313,6 +314,7 @@ fun SettingsScreen(
     val hideFloatingCollectionControls by AppSettings.hideFloatingCollectionControls.collectAsStateWithLifecycle()
     val frostedQueueManager by AppSettings.frostedQueueManager.collectAsStateWithLifecycle()
     val frostedPlayerDetails by AppSettings.frostedPlayerDetails.collectAsStateWithLifecycle()
+    val detailsSheetArtworkBackdrop by AppSettings.detailsSheetArtworkBackdrop.collectAsStateWithLifecycle()
     val queueManagerEqualsIcon by AppSettings.queueManagerEqualsIcon.collectAsStateWithLifecycle()
     val hideQueueLabel by AppSettings.hideQueueLabel.collectAsStateWithLifecycle()
     val queueClearTrashIcon by AppSettings.queueClearTrashIcon.collectAsStateWithLifecycle()
@@ -332,6 +334,10 @@ fun SettingsScreen(
     val showNavigationBar by AppSettings.showNavigationBar.collectAsStateWithLifecycle()
     val orientationMode by AppSettings.screenOrientationMode.collectAsStateWithLifecycle()
     val favoriteUsesStar by AppSettings.favoriteUsesStar.collectAsStateWithLifecycle()
+    val mediaControlFavoriteUsesStar by AppSettings.mediaControlFavoriteUsesStar.collectAsStateWithLifecycle()
+    val mediaControlSecondaryAction by AppSettings.mediaControlSecondaryAction.collectAsStateWithLifecycle()
+    val hideMediaControlCustomActions by AppSettings.hideMediaControlCustomActions.collectAsStateWithLifecycle()
+    val restartQueueWhenEnded by AppSettings.restartQueueWhenEnded.collectAsStateWithLifecycle()
     val persistentLocalArtwork by AppSettings.persistentLocalArtwork.collectAsStateWithLifecycle()
     val resamplerCutoffHz by AppSettings.resamplerCutoffHz.collectAsStateWithLifecycle()
     val liquidGlassSupported = isGlassSupported()
@@ -380,6 +386,7 @@ fun SettingsScreen(
     val lyricsSourceOrder by AppSettings.lyricsSourceOrder.collectAsStateWithLifecycle()
     val showLyricsLogs by AppSettings.showLyricsLogs.collectAsStateWithLifecycle()
     val theme by AppSettings.themeMode.collectAsStateWithLifecycle()
+    val customThemeImageUri by AppSettings.customThemeImageUri.collectAsStateWithLifecycle()
     val matchButtonAccentToArtwork by AppSettings.matchButtonAccentToArtwork.collectAsStateWithLifecycle()
     val miniPlayerArtworkColor by AppSettings.miniPlayerArtworkColor.collectAsStateWithLifecycle()
     val miniPlayerArtworkOutline by AppSettings.miniPlayerArtworkOutline.collectAsStateWithLifecycle()
@@ -419,9 +426,37 @@ fun SettingsScreen(
     }
     var settingsSearchQuery by rememberSaveable { mutableStateOf("") }
     var showLauncherIconPicker by rememberSaveable { mutableStateOf(false) }
+    var showThemePicker by rememberSaveable { mutableStateOf(false) }
+    var showMediaControlActionPicker by rememberSaveable { mutableStateOf(false) }
     var showPerformanceWarning by remember { mutableStateOf(false) }
     var showEqualizerSheet by remember { mutableStateOf(false) }
     var showAutomixPerformanceSheet by rememberSaveable { mutableStateOf(false) }
+    val themeImagePicker = rememberLauncherForActivityResult(ActivityResultContracts.OpenDocument()) { selected ->
+        if (selected == null) return@rememberLauncherForActivityResult
+        val retained = runCatching {
+            context.contentResolver.takePersistableUriPermission(
+                selected,
+                Intent.FLAG_GRANT_READ_URI_PERMISSION,
+            )
+        }.isSuccess
+        if (retained) {
+            customThemeImageUri
+                ?.takeIf { it != selected.toString() }
+                ?.let { old ->
+                    runCatching {
+                        context.contentResolver.releasePersistableUriPermission(
+                            Uri.parse(old),
+                            Intent.FLAG_GRANT_READ_URI_PERMISSION,
+                        )
+                    }
+                }
+            AppSettings.setCustomThemeImageUri(selected.toString())
+            AppSettings.setThemeMode(ThemeMode.CUSTOM_IMAGE)
+        } else {
+            Toast.makeText(context, R.string.theme_image_permission_failed, Toast.LENGTH_LONG).show()
+        }
+    }
+    val chooseThemeImage: () -> Unit = { themeImagePicker.launch(arrayOf("image/*")) }
 
     @Composable
     fun buildSettingsSearchEntries(): List<SettingsSearchEntry> {
@@ -458,6 +493,12 @@ fun SettingsScreen(
             listOf("player", "details", "glass", "frosted", "プレーヤー", "詳細", "すりガラス"),
             frostedPlayerDetails,
         ) { AppSettings.setFrostedPlayerDetails(!frostedPlayerDetails) },
+        SettingsSearchEntry(
+            stringResource(R.string.details_sheet_artwork_backdrop),
+            stringResource(R.string.details_sheet_artwork_backdrop_subtitle),
+            listOf("metadata", "file information", "details", "artwork", "メタデータ", "ファイル情報", "詳細", "アートワーク"),
+            detailsSheetArtworkBackdrop,
+        ) { AppSettings.setDetailsSheetArtworkBackdrop(!detailsSheetArtworkBackdrop) },
         SettingsSearchEntry(
             stringResource(R.string.queue_manage_equals_icon),
             stringResource(R.string.queue_manage_equals_icon_subtitle),
@@ -842,12 +883,41 @@ fun SettingsScreen(
         SettingsSearchEntry(
             title = stringResource(R.string.theme),
             subtitle = theme.localizedLabel(),
-            keywords = listOf("theme", "appearance", "system", "light", "dark", "AMOLED", "artwork", "テーマ", "外観"),
-            activate = {
-                val next = (ThemeMode.entries.indexOf(theme) + 1) % ThemeMode.entries.size
-                AppSettings.setThemeMode(ThemeMode.entries[next])
-            },
+            keywords = listOf("theme", "appearance", "system", "light", "dark", "AMOLED", "artwork", "image", "画像", "写真", "テーマ", "外観"),
+            activate = { showThemePicker = true },
         ),
+        SettingsSearchEntry(
+            title = stringResource(R.string.choose_theme_image),
+            subtitle = stringResource(R.string.choose_theme_image_subtitle),
+            keywords = listOf("theme", "wallpaper", "image", "photo", "local image", "テーマ", "壁紙", "画像", "写真", "ローカル"),
+            valueLabel = stringResource(if (customThemeImageUri.isNullOrBlank()) R.string.choose_image else R.string.theme_image_selected),
+            activate = chooseThemeImage,
+        ),
+        SettingsSearchEntry(
+            title = stringResource(R.string.media_control_secondary_action),
+            subtitle = stringResource(R.string.media_control_secondary_action_subtitle),
+            keywords = listOf("media controls", "notification", "shuffle", "queue", "lyrics", "playlists", "通知", "メディアコントロール", "再生キュー", "歌詞", "プレイリスト"),
+            valueLabel = mediaControlSecondaryAction.localizedLabel(),
+            activate = { showMediaControlActionPicker = true },
+        ),
+        SettingsSearchEntry(
+            title = stringResource(R.string.media_control_favorite_star),
+            subtitle = stringResource(R.string.media_control_favorite_star_subtitle),
+            keywords = listOf("notification", "media controls", "star", "favorite", "heart", "通知", "メディアコントロール", "星", "ハート", "お気に入り"),
+            checked = mediaControlFavoriteUsesStar,
+        ) { AppSettings.setMediaControlFavoriteUsesStar(!mediaControlFavoriteUsesStar) },
+        SettingsSearchEntry(
+            title = stringResource(R.string.hide_media_control_custom_actions),
+            subtitle = stringResource(R.string.hide_media_control_custom_actions_subtitle),
+            keywords = listOf("notification", "media controls", "hide", "custom buttons", "通知", "メディアコントロール", "非表示", "ボタン"),
+            checked = hideMediaControlCustomActions,
+        ) { AppSettings.setHideMediaControlCustomActions(!hideMediaControlCustomActions) },
+        SettingsSearchEntry(
+            title = stringResource(R.string.restart_queue_when_ended),
+            subtitle = stringResource(R.string.restart_queue_when_ended_subtitle),
+            keywords = listOf("queue", "repeat", "restart", "end", "再生キュー", "リピート", "先頭", "最初"),
+            checked = restartQueueWhenEnded,
+        ) { AppSettings.setRestartQueueWhenEnded(!restartQueueWhenEnded) },
         SettingsSearchEntry(
             title = stringResource(R.string.screen_orientation),
             subtitle = stringResource(R.string.screen_orientation_subtitle),
@@ -1948,6 +2018,55 @@ fun SettingsScreen(
                     setPopupExternalAudioPlayerWithPermission(!popupExternalAudioPlayer)
                 },
             )
+            RowDivider()
+            SettingsRow(
+                icon = Icons.Rounded.History,
+                title = stringResource(R.string.restart_queue_when_ended),
+                subtitle = stringResource(R.string.restart_queue_when_ended_subtitle),
+                trailing = {
+                    Switch(
+                        checked = restartQueueWhenEnded,
+                        onCheckedChange = AppSettings::setRestartQueueWhenEnded,
+                    )
+                },
+                onClick = { AppSettings.setRestartQueueWhenEnded(!restartQueueWhenEnded) },
+            )
+        }
+
+        SettingsGroup(header = stringResource(R.string.media_controls)) {
+            SettingsRow(
+                icon = Icons.Rounded.Tune,
+                title = stringResource(R.string.media_control_secondary_action),
+                subtitle = stringResource(R.string.media_control_secondary_action_subtitle),
+                value = mediaControlSecondaryAction.localizedLabel(),
+                onClick = { showMediaControlActionPicker = true },
+            )
+            RowDivider()
+            SettingsRow(
+                icon = BitChordIcons.Star,
+                title = stringResource(R.string.media_control_favorite_star),
+                subtitle = stringResource(R.string.media_control_favorite_star_subtitle),
+                trailing = {
+                    Switch(
+                        checked = mediaControlFavoriteUsesStar,
+                        onCheckedChange = AppSettings::setMediaControlFavoriteUsesStar,
+                    )
+                },
+                onClick = { AppSettings.setMediaControlFavoriteUsesStar(!mediaControlFavoriteUsesStar) },
+            )
+            RowDivider()
+            SettingsRow(
+                icon = Icons.Rounded.VisibilityOff,
+                title = stringResource(R.string.hide_media_control_custom_actions),
+                subtitle = stringResource(R.string.hide_media_control_custom_actions_subtitle),
+                trailing = {
+                    Switch(
+                        checked = hideMediaControlCustomActions,
+                        onCheckedChange = AppSettings::setHideMediaControlCustomActions,
+                    )
+                },
+                onClick = { AppSettings.setHideMediaControlCustomActions(!hideMediaControlCustomActions) },
+            )
         }
 
         SettingsGroup(header = stringResource(R.string.player_controls)) {
@@ -2304,12 +2423,49 @@ fun SettingsScreen(
         }
 
         SettingsGroup(header = stringResource(R.string.appearance)) {
-            SettingsRow(icon = Icons.Rounded.Brightness4, title = stringResource(R.string.theme))
-            SegmentedControl(
-                options = ThemeMode.entries.map { it.localizedLabel() },
-                selectedIndex = ThemeMode.entries.indexOf(theme),
-                onSelect = { AppSettings.setThemeMode(ThemeMode.entries[it]) },
-                modifier = Modifier.padding(start = ROW_INSET, end = ROW_INSET, bottom = 14.dp),
+            SettingsRow(
+                icon = Icons.Rounded.Brightness4,
+                title = stringResource(R.string.theme),
+                value = theme.localizedLabel(),
+                onClick = { showThemePicker = true },
+            )
+            RowDivider()
+            SettingsRow(
+                icon = Icons.Rounded.AutoAwesome,
+                title = stringResource(R.string.choose_theme_image),
+                subtitle = stringResource(R.string.choose_theme_image_subtitle),
+                value = stringResource(if (customThemeImageUri.isNullOrBlank()) R.string.choose_image else R.string.theme_image_selected),
+                onClick = chooseThemeImage,
+            )
+            if (!customThemeImageUri.isNullOrBlank()) {
+                RowDivider()
+                SettingsRow(
+                    icon = Icons.Rounded.DeleteSweep,
+                    title = stringResource(R.string.clear_theme_image),
+                    onClick = {
+                        runCatching {
+                            context.contentResolver.releasePersistableUriPermission(
+                                Uri.parse(customThemeImageUri),
+                                Intent.FLAG_GRANT_READ_URI_PERMISSION,
+                            )
+                        }
+                        AppSettings.setCustomThemeImageUri(null)
+                        if (theme == ThemeMode.CUSTOM_IMAGE) AppSettings.setThemeMode(ThemeMode.DARK)
+                    },
+                )
+            }
+            RowDivider()
+            SettingsRow(
+                icon = Icons.Rounded.AutoAwesome,
+                title = stringResource(R.string.details_sheet_artwork_backdrop),
+                subtitle = stringResource(R.string.details_sheet_artwork_backdrop_subtitle),
+                trailing = {
+                    Switch(
+                        checked = detailsSheetArtworkBackdrop,
+                        onCheckedChange = AppSettings::setDetailsSheetArtworkBackdrop,
+                    )
+                },
+                onClick = { AppSettings.setDetailsSheetArtworkBackdrop(!detailsSheetArtworkBackdrop) },
             )
             RowDivider()
             SettingsRow(
@@ -3643,6 +3799,88 @@ fun SettingsScreen(
             )
         }
 
+        if (showThemePicker) {
+            AlertDialog(
+                onDismissRequest = { showThemePicker = false },
+                title = { Text(stringResource(R.string.theme)) },
+                text = {
+                    Column {
+                        ThemeMode.entries.forEach { mode ->
+                            Row(
+                                modifier = Modifier
+                                    .fillMaxWidth()
+                                    .clickable {
+                                        showThemePicker = false
+                                        if (mode == ThemeMode.CUSTOM_IMAGE && customThemeImageUri.isNullOrBlank()) {
+                                            chooseThemeImage()
+                                        } else {
+                                            AppSettings.setThemeMode(mode)
+                                        }
+                                    }
+                                    .padding(vertical = 6.dp),
+                                verticalAlignment = Alignment.CenterVertically,
+                            ) {
+                                RadioButton(
+                                    selected = theme == mode,
+                                    onClick = {
+                                        showThemePicker = false
+                                        if (mode == ThemeMode.CUSTOM_IMAGE && customThemeImageUri.isNullOrBlank()) {
+                                            chooseThemeImage()
+                                        } else {
+                                            AppSettings.setThemeMode(mode)
+                                        }
+                                    },
+                                )
+                                Text(mode.localizedLabel(), modifier = Modifier.padding(start = 8.dp))
+                            }
+                        }
+                    }
+                },
+                confirmButton = {
+                    TextButton(onClick = { showThemePicker = false }) {
+                        Text(stringResource(R.string.done))
+                    }
+                },
+            )
+        }
+
+        if (showMediaControlActionPicker) {
+            AlertDialog(
+                onDismissRequest = { showMediaControlActionPicker = false },
+                title = { Text(stringResource(R.string.media_control_secondary_action)) },
+                text = {
+                    Column {
+                        MediaControlSecondaryAction.entries.forEach { action ->
+                            Row(
+                                modifier = Modifier
+                                    .fillMaxWidth()
+                                    .clickable {
+                                        AppSettings.setMediaControlSecondaryAction(action)
+                                        showMediaControlActionPicker = false
+                                    }
+                                    .padding(vertical = 6.dp),
+                                verticalAlignment = Alignment.CenterVertically,
+                            ) {
+                                RadioButton(
+                                    selected = mediaControlSecondaryAction == action,
+                                    onClick = {
+                                        AppSettings.setMediaControlSecondaryAction(action)
+                                        showMediaControlActionPicker = false
+                                    },
+                                )
+                                Text(action.localizedLabel(), modifier = Modifier.padding(start = 8.dp))
+                            }
+                        }
+                    }
+                },
+                confirmButton = {
+                    TextButton(onClick = { showMediaControlActionPicker = false }) {
+                        Text(stringResource(R.string.done))
+                    }
+                },
+            )
+        }
+
         if (showLauncherIconPicker) {
             AlertDialog(
                 onDismissRequest = { showLauncherIconPicker = false },
@@ -4628,6 +4866,17 @@ private fun ThemeMode.localizedLabel(): String = stringResource(
         ThemeMode.DARK -> R.string.dark
         ThemeMode.AMOLED -> R.string.theme_amoled
         ThemeMode.ARTWORK -> R.string.theme_match_artwork
+        ThemeMode.CUSTOM_IMAGE -> R.string.theme_custom_image
+    },
+)
+
+@Composable
+private fun MediaControlSecondaryAction.localizedLabel(): String = stringResource(
+    when (this) {
+        MediaControlSecondaryAction.SHUFFLE -> R.string.media_control_shuffle
+        MediaControlSecondaryAction.PLAYLISTS -> R.string.media_control_playlists
+        MediaControlSecondaryAction.LYRICS -> R.string.media_control_lyrics
+        MediaControlSecondaryAction.QUEUE -> R.string.media_control_queue
     },
 )
 

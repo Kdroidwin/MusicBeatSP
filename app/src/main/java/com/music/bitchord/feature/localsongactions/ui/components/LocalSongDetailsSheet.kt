@@ -48,6 +48,7 @@ import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.layout.ContentScale
+import androidx.compose.ui.graphics.luminance
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.res.stringResource
 import com.music.bitchord.R
@@ -60,6 +61,9 @@ import coil3.compose.AsyncImage
 import com.music.bitchord.data.model.Song
 import com.music.bitchord.data.model.artworkAt
 import com.music.bitchord.data.settings.AppSettings
+import com.music.bitchord.data.model.ROW_ART_PX
+import com.music.bitchord.ui.components.ArtworkBackdrop
+import com.music.bitchord.ui.theme.rememberArtworkPalette
 import com.music.bitchord.feature.localsongactions.data.LocalSongMetadataRetriever
 import com.music.bitchord.feature.localsongactions.domain.model.LocalSongFullMetadata
 
@@ -80,6 +84,28 @@ fun LocalSongDetailsSheet(
     val context = LocalContext.current
     val sheetState = rememberModalBottomSheetState(skipPartiallyExpanded = true)
     val audioCutterEnabled by AppSettings.audioCutterEnabled.collectAsStateWithLifecycle()
+    val useArtworkBackdrop by AppSettings.detailsSheetArtworkBackdrop.collectAsStateWithLifecycle()
+    val palette = rememberArtworkPalette(song.thumbnailUrl, dark = true, artPx = ROW_ART_PX)
+    val baseColors = MaterialTheme.colorScheme
+    val sheetColors = if (useArtworkBackdrop) {
+        baseColors.copy(
+            primary = palette.accent,
+            onPrimary = if (palette.accent.luminance() > 0.52f) Color.Black else Color.White,
+            primaryContainer = palette.elevated,
+            onPrimaryContainer = palette.onBackground,
+            background = palette.background,
+            onBackground = palette.onBackground,
+            surface = palette.background,
+            onSurface = palette.onBackground,
+            surfaceVariant = palette.elevated,
+            onSurfaceVariant = palette.onBackgroundVariant,
+            outline = palette.divider,
+            outlineVariant = palette.divider,
+            surfaceContainerLow = palette.elevated,
+            surfaceContainerHigh = palette.elevated,
+            surfaceContainerHighest = palette.elevated,
+        )
+    } else baseColors
 
     var metadata by remember { mutableStateOf<LocalSongFullMetadata?>(null) }
     var isLoading by remember { mutableStateOf(true) }
@@ -94,46 +120,68 @@ fun LocalSongDetailsSheet(
         onDismissRequest = onDismissRequest,
         sheetState = sheetState,
         shape = RoundedCornerShape(topStart = 28.dp, topEnd = 28.dp),
-        containerColor = MaterialTheme.colorScheme.surface,
+        containerColor = if (useArtworkBackdrop) Color.Transparent else MaterialTheme.colorScheme.surface,
+        dragHandle = {
+            Box(
+                Modifier.fillMaxWidth().padding(top = 8.dp, bottom = 4.dp),
+                contentAlignment = Alignment.Center,
+            ) {
+                Box(
+                    Modifier
+                        .size(width = 34.dp, height = 4.dp)
+                        .clip(CircleShape)
+                        .background((if (useArtworkBackdrop) palette.onBackground else MaterialTheme.colorScheme.onSurface).copy(alpha = 0.38f)),
+                )
+            }
+        },
         modifier = modifier,
     ) {
-        LazyColumn(
-            modifier = Modifier
-                .fillMaxWidth()
-                .navigationBarsPadding(),
-            contentPadding = PaddingValues(start = 20.dp, end = 20.dp, bottom = 24.dp),
-            verticalArrangement = Arrangement.spacedBy(16.dp),
-        ) {
-            item {
-                DetailsHeader(
-                    song = song,
-                    metadata = metadata,
-                    isLoading = isLoading,
-                )
-            }
-
-            item {
-                DetailsActionButtons(
-                    onLyricsEditorClick = onLyricsEditorClick,
-                    onTagEditorClick = onTagEditorClick,
-                )
-            }
-
-            if (audioCutterEnabled && onAudioCutterClick != null &&
-                (!song.localUri.isNullOrBlank() || !song.localPath.isNullOrBlank())
-            ) {
-                item {
-                    AudioCutterAction(onClick = onAudioCutterClick)
+        MaterialTheme(colorScheme = sheetColors) {
+            Box(Modifier.fillMaxWidth().clip(RoundedCornerShape(topStart = 28.dp, topEnd = 28.dp))) {
+                if (useArtworkBackdrop) {
+                    ArtworkBackdrop(
+                        palette = palette,
+                        imageUrl = song.thumbnailUrl,
+                        modifier = Modifier.matchParentSize(),
+                        washFraction = 0.75f,
+                        artPx = ROW_ART_PX,
+                    )
                 }
-            }
+                LazyColumn(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .navigationBarsPadding(),
+                    contentPadding = PaddingValues(start = 20.dp, end = 20.dp, bottom = 24.dp),
+                    verticalArrangement = Arrangement.spacedBy(16.dp),
+                ) {
+                    item {
+                        DetailsHeader(song = song, metadata = metadata, isLoading = isLoading)
+                    }
 
-            item {
-                MetadataCard(metadata = metadata)
-            }
+                    item {
+                        DetailsActionButtons(
+                            onLyricsEditorClick = onLyricsEditorClick,
+                            onTagEditorClick = onTagEditorClick,
+                        )
+                    }
 
-            if (metadata != null) {
-                item {
-                    FileInfoCard(metadata = metadata!!)
+                    if (audioCutterEnabled && onAudioCutterClick != null &&
+                        (!song.localUri.isNullOrBlank() || !song.localPath.isNullOrBlank())
+                    ) {
+                        item {
+                            AudioCutterAction(onClick = onAudioCutterClick)
+                        }
+                    }
+
+                    item {
+                        MetadataCard(metadata = metadata)
+                    }
+
+                    if (metadata != null) {
+                        item {
+                            FileInfoCard(metadata = metadata!!)
+                        }
+                    }
                 }
             }
         }

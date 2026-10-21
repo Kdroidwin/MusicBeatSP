@@ -751,6 +751,9 @@ fun NowPlayingScreen(
      */
     docked: Boolean = false,
     modifier: Modifier = Modifier,
+    openLyricsOnShow: Boolean = false,
+    openQueueOnShow: Boolean = false,
+    onExternalPanelRequestHandled: () -> Unit = {},
 ) {
     val context = LocalContext.current
     val density = LocalDensity.current
@@ -1036,6 +1039,20 @@ fun NowPlayingScreen(
     var quickSleepTimerOpen by remember { mutableStateOf(false) }
     var lyricsOpen by remember { mutableStateOf(false) }
     var lyricsLogsOpen by remember { mutableStateOf(false) }
+    LaunchedEffect(openLyricsOnShow, openQueueOnShow) {
+        when {
+            openLyricsOnShow -> {
+                lyricsOpen = true
+                queueOpen = false
+            }
+            openQueueOnShow -> {
+                queueOpen = true
+                lyricsOpen = false
+            }
+            else -> return@LaunchedEffect
+        }
+        onExternalPanelRequestHandled()
+    }
     val showLyricsLogsEnabled by AppSettings.showLyricsLogs.collectAsStateWithLifecycle()
     LaunchedEffect(song.videoId) {
         // Keep the full lyrics view open as playback advances. The lyrics

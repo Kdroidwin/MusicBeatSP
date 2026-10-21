@@ -19,7 +19,7 @@
 
 ---
 
-> **MusicBeatSP 2.5.1** is the MusicBeat fork under a new name and Android application ID. It builds on the open-source BitChord foundation and adds an extensive local music library, playlist, playback, lyrics, artwork, and customization feature set.
+> **MusicBeatSP 2.5.2** is the MusicBeat fork under a new name and Android application ID. It builds on the open-source BitChord foundation and adds an extensive local music library, playlist, playback, lyrics, artwork, and customization feature set.
 
 The standard Android package is `io.pockets.musicbestsp`. Because this differs from the previous MusicBeat package, Android installs MusicBeatSP as a separate app; app-private settings and data are not migrated automatically.
 
@@ -48,13 +48,15 @@ The standard Android package is `io.pockets.musicbestsp`. Because this differs f
 - Enable Automix for analyzed, beat-aware transitions, or use regular crossfade. Automix and crossfade are mutually exclusive; choose an Efficient, Balanced, or Performance analysis mode.
 - Save and restore the position of tracks that are at least 15 minutes long, including when switching tracks or stopping playback.
 - Open the playback queue with both upcoming tracks and recently played tracks.
+- Optionally restart from the first queue item when playback reaches the end.
+- Customize Android media controls with a star favorite, a selectable Shuffle/Playlists/Lyrics/Queue action, or hide the app's custom actions while keeping standard playback controls.
 - Save named queue snapshots, switch between them, replace or remove them, and load their saved current track and position after a restart.
 - Cast supported local tracks to Google Cast receivers on the local network.
 - View audio codec, sample rate, bit depth, bitrate, channels, and buffer information in Stats for Nerds.
 
 ### Player customization
 
-- Choose System, Light, Dark, AMOLED Black, or Album Art theme. Album Art colors the app background, surfaces, controls, and accents from the playing cover.
+- Choose System, Light, Dark, AMOLED Black, Album Art, or a theme based on a locally selected image. Album Art colors the app background, surfaces, controls, and accents from the playing cover.
 - Hide lyrics status messages, the saved-lyrics indicator, and audio-quality labels such as Lossless and Hi-Res.
 - Show, hide, and reorder available player actions, including Shuffle, Repeat, Like, Playlist/Library, Search, and Queue. Hiding a control does not change its playback state; the Playlist control can use a Library icon.
 - Choose and reorder player shortcuts beside the favorite button, including Lyrics, Add to Playlist, Speed and Pitch, Queue, Playlists, Search, Chromecast, and track details. The favorite button can also be reordered.
@@ -64,6 +66,7 @@ The standard Android package is `io.pockets.musicbestsp`. Because this differs f
 - Keep the floating tab bar or replace it with a popup navigation menu; customize tab order, visibility, labels, and the mini-player's swipe gestures.
 - Optionally use full-bleed artwork in the player and keep the cover at full size while playback is paused.
 - Use translucent frosted-glass surfaces for the queue manager, player details, and compact lyrics artwork area; each has its own setting.
+- Match the local track details sheet backdrop to the selected track's artwork.
 - Match player action accents and the mini-player surface to the current album art.
 - Replace only the artwork area with lyrics while keeping playback controls, progress, volume, and player shortcuts visible.
 - Choose whether the favorite button appears beside the More menu, keep artwork full-size while paused, and open lyrics by tapping the cover.

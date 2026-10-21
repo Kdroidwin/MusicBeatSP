@@ -103,6 +103,7 @@ import com.music.bitchord.data.scrobbling.LastFM
 import com.music.bitchord.data.scrobbling.ListenBrainzManager
 import com.music.bitchord.data.scrobbling.ScrobbleManager
 import com.music.bitchord.data.settings.AppSettings
+import com.music.bitchord.data.settings.MediaControlSecondaryAction
 import com.music.bitchord.data.settings.OutputPcmMode
 import com.music.bitchord.data.sources.SourceResolver
 import com.music.bitchord.data.sources.SourceStream
@@ -157,6 +158,9 @@ const val ACTION_TOGGLE_AUTOPLAY = "com.music.bitchord.action.TOGGLE_AUTOPLAY"
 
 /** Session command used by the media notification's Shuffle button. */
 const val ACTION_TOGGLE_SHUFFLE = "com.music.bitchord.action.TOGGLE_SHUFFLE"
+private const val ACTION_OPEN_MEDIA_PLAYLISTS = "com.music.bitchord.action.OPEN_MEDIA_PLAYLISTS"
+private const val ACTION_OPEN_MEDIA_LYRICS = "com.music.bitchord.action.OPEN_MEDIA_LYRICS"
+private const val ACTION_OPEN_MEDIA_QUEUE = "com.music.bitchord.action.OPEN_MEDIA_QUEUE"
 
 /** Session commands bracketing an explicit radio queue replacement. */
 const val ACTION_BEGIN_RADIO_QUEUE = "com.music.bitchord.action.BEGIN_RADIO_QUEUE"
@@ -620,6 +624,9 @@ class PlaybackService : MediaLibraryService() {
     private val favoriteCommand = SessionCommand(ACTION_TOGGLE_FAVORITE, Bundle.EMPTY)
     private val autoplayCommand = SessionCommand(ACTION_TOGGLE_AUTOPLAY, Bundle.EMPTY)
     private val shuffleCommand = SessionCommand(ACTION_TOGGLE_SHUFFLE, Bundle.EMPTY)
+    private val mediaPlaylistsCommand = SessionCommand(ACTION_OPEN_MEDIA_PLAYLISTS, Bundle.EMPTY)
+    private val mediaLyricsCommand = SessionCommand(ACTION_OPEN_MEDIA_LYRICS, Bundle.EMPTY)
+    private val mediaQueueCommand = SessionCommand(ACTION_OPEN_MEDIA_QUEUE, Bundle.EMPTY)
     private val beginRadioQueueCommand = SessionCommand(ACTION_BEGIN_RADIO_QUEUE, Bundle.EMPTY)
     private val commitRadioQueueCommand = SessionCommand(ACTION_COMMIT_RADIO_QUEUE, Bundle.EMPTY)
     private val upgradeQualityCommand = SessionCommand(ACTION_UPGRADE_QUALITY, Bundle.EMPTY)
@@ -975,8 +982,13 @@ class PlaybackService : MediaLibraryService() {
                 return
             }
             if (state == Player.STATE_ENDED) {
+                val restartQueue = AppSettings.restartQueueWhenEnded.value &&
+                    exoPlayer.repeatMode == Player.REPEAT_MODE_OFF &&
+                    !SingleSongPlaybackManager.enabled.value &&
+                    exoPlayer.mediaItemCount > 0 &&
+                    exoPlayer.currentMediaItemIndex == exoPlayer.mediaItemCount - 1
                 SleepTimer.cancel()
-                if (exoPlayer.repeatMode == Player.REPEAT_MODE_OFF || SingleSongPlaybackManager.enabled.value) {
+                if ((exoPlayer.repeatMode == Player.REPEAT_MODE_OFF && !restartQueue) || SingleSongPlaybackManager.enabled.value) {
                     SingleSongPlaybackManager.triggerClosePlayer()
                 }
                 // The queue ran dry, so no transition will ever close the last
@@ -998,6 +1010,13 @@ class PlaybackService : MediaLibraryService() {
                 listenBrainzSong = null
                 listenBrainzStartMs = 0L
                 listenBrainzDurationMs = null
+                if (restartQueue) {
+                    // Preserve the queue and selected repeat mode; restart via
+                    // the ordinary Media3 transition path after finalizing the
+                    // last track's history and scrobble state.
+                    exoPlayer.seekToDefaultPosition(0)
+                    exoPlayer.play()
+                }
             }
         }
 
@@ -1234,6 +1253,15 @@ class PlaybackService : MediaLibraryService() {
         }
         scope.launch {
             LikeState.overrides.collectLatest {
+                mediaSession?.setCustomLayout(notificationButtons())
+            }
+        }
+        scope.launch {
+            combine(
+                AppSettings.mediaControlFavoriteUsesStar,
+                AppSettings.mediaControlSecondaryAction,
+                AppSettings.hideMediaControlCustomActions,
+            ) { _, _, _ -> Unit }.collectLatest {
                 mediaSession?.setCustomLayout(notificationButtons())
             }
         }
@@ -1615,28 +1643,56 @@ class PlaybackService : MediaLibraryService() {
      * this service, it just isn't offered as a notification button.
      */
     private fun notificationButtons(): List<CommandButton> {
+        if (AppSettings.hideMediaControlCustomActions.value) return emptyList()
         val favorite = CommandButton.Builder(
-            if (LikeState.overrides.value[player?.currentMediaItem?.mediaId] == LikeStatus.LIKE) {
-                CommandButton.ICON_HEART_FILLED
+            if (AppSettings.mediaControlFavoriteUsesStar.value) {
+                if (LikeState.overrides.value[player?.currentMediaItem?.mediaId] == LikeStatus.LIKE) {
+                    CommandButton.ICON_STAR_FILLED
+                } else {
+                    CommandButton.ICON_STAR_UNFILLED
+                }
             } else {
-                CommandButton.ICON_HEART_UNFILLED
+                if (LikeState.overrides.value[player?.currentMediaItem?.mediaId] == LikeStatus.LIKE) {
+                    CommandButton.ICON_HEART_FILLED
+                } else {
+                    CommandButton.ICON_HEART_UNFILLED
+                }
             },
         )
             .setSessionCommand(favoriteCommand)
-            .setDisplayName("Favorite")
+            .setDisplayName(getString(R.string.media_control_favorite))
             .build()
-        val shuffleEnabled = QueueShuffle.enabled.value
-        val shuffle = CommandButton.Builder(
-            if (shuffleEnabled) {
-                CommandButton.ICON_SHUFFLE_ON
-            } else {
-                CommandButton.ICON_SHUFFLE_OFF
-            },
-        )
-            .setSessionCommand(shuffleCommand)
-            .setDisplayName(if (shuffleEnabled) "Shuffle off" else "Shuffle on")
-            .build()
-        return listOf(favorite, shuffle)
+        val action = when (AppSettings.mediaControlSecondaryAction.value) {
+            MediaControlSecondaryAction.SHUFFLE -> {
+                val enabled = QueueShuffle.enabled.value
+                CommandButton.Builder(if (enabled) CommandButton.ICON_SHUFFLE_ON else CommandButton.ICON_SHUFFLE_OFF)
+                    .setSessionCommand(shuffleCommand)
+                    .setDisplayName(getString(if (enabled) R.string.media_control_shuffle_on else R.string.media_control_shuffle_off))
+                    .build()
+            }
+            MediaControlSecondaryAction.PLAYLISTS -> CommandButton.Builder(CommandButton.ICON_PLAYLIST_ADD)
+                .setSessionCommand(mediaPlaylistsCommand)
+                .setDisplayName(getString(R.string.media_control_open_playlists))
+                .build()
+            MediaControlSecondaryAction.LYRICS -> CommandButton.Builder(CommandButton.ICON_SUBTITLES)
+                .setSessionCommand(mediaLyricsCommand)
+                .setDisplayName(getString(R.string.media_control_open_lyrics))
+                .build()
+            MediaControlSecondaryAction.QUEUE -> CommandButton.Builder(CommandButton.ICON_QUEUE_ADD)
+                .setSessionCommand(mediaQueueCommand)
+                .setDisplayName(getString(R.string.media_control_open_queue))
+                .build()
+        }
+        return listOf(favorite, action)
+    }
+
+    private fun openMediaControlDestination(destination: MediaControlDestination) {
+        val intent = Intent(this, MainActivity::class.java).apply {
+            flags = Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_SINGLE_TOP
+            putExtra(MediaControlDeepLink.EXTRA_DESTINATION, destination.name)
+        }
+        runCatching { startActivity(intent) }
+            .onFailure { TrackLog.w("BitChord", "could not open media-control destination", it) }
     }
 
     private fun toggleShuffleFromNotification() {
@@ -5669,6 +5725,9 @@ class PlaybackService : MediaLibraryService() {
                 .add(favoriteCommand)
                 .add(autoplayCommand)
                 .add(shuffleCommand)
+                .add(mediaPlaylistsCommand)
+                .add(mediaLyricsCommand)
+                .add(mediaQueueCommand)
                 .add(beginRadioQueueCommand)
                 .add(commitRadioQueueCommand)
                 .add(upgradeQualityCommand)
@@ -5690,6 +5749,9 @@ class PlaybackService : MediaLibraryService() {
             when (customCommand.customAction) {
                 ACTION_TOGGLE_AUTOPLAY -> toggleAutoplayFromNotification()
                 ACTION_TOGGLE_SHUFFLE -> toggleShuffleFromNotification()
+                ACTION_OPEN_MEDIA_PLAYLISTS -> openMediaControlDestination(MediaControlDestination.PLAYLISTS)
+                ACTION_OPEN_MEDIA_LYRICS -> openMediaControlDestination(MediaControlDestination.LYRICS)
+                ACTION_OPEN_MEDIA_QUEUE -> openMediaControlDestination(MediaControlDestination.QUEUE)
                 ACTION_BEGIN_RADIO_QUEUE -> beginRadioQueue()
                 ACTION_COMMIT_RADIO_QUEUE -> player?.let(::saveQueueSnapshotImmediately)
                 ACTION_UPGRADE_QUALITY -> upgradeQualityNow()

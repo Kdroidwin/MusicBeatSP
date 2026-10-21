@@ -132,6 +132,7 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.draw.alpha
 import androidx.compose.ui.draw.drawBehind
 import androidx.compose.ui.draw.rotate
 import androidx.compose.ui.focus.FocusRequester
@@ -142,6 +143,7 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.Outline
 import androidx.compose.ui.graphics.RectangleShape
 import androidx.compose.ui.graphics.Shape
+import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.platform.LocalClipboardManager
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalDensity
@@ -158,6 +160,7 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.layout.onSizeChanged
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.lifecycle.viewmodel.compose.viewModel
+import coil3.compose.AsyncImage
 import com.music.bitchord.data.LocalMediaRepository
 import com.music.bitchord.data.NerdStats
 import com.music.bitchord.data.TrackLog
@@ -184,6 +187,8 @@ import com.music.bitchord.playback.LinkRequest
 import com.music.bitchord.playback.MusicLink
 import com.music.bitchord.playback.OriginalVersion
 import com.music.bitchord.playback.PlayerDeepLink
+import com.music.bitchord.playback.MediaControlDeepLink
+import com.music.bitchord.playback.MediaControlDestination
 import com.music.bitchord.playback.QueueBuilder
 import com.music.bitchord.playback.QueueShuffle
 import com.music.bitchord.playback.autoplaySectionStart
@@ -302,18 +307,20 @@ class MainActivity : AppCompatActivity() {
         // Before the composition, so a cold launch from a widget's artwork has
         // the request already standing by the time BitChordApp first reads it.
         PlayerDeepLink.consume(intent)
+        MediaControlDeepLink.consume(intent)
         // Likewise for a link tapped or shared from another app — see [MusicLink].
         MusicLink.retainPersistableAudioPermission(this, intent)
         MusicLink.consume(intent)
         setContent {
             val theme by AppSettings.themeMode.collectAsStateWithLifecycle()
+            val customThemeImageUri by AppSettings.customThemeImageUri.collectAsStateWithLifecycle()
             val matchButtonAccentToArtwork by AppSettings.matchButtonAccentToArtwork.collectAsStateWithLifecycle()
             val controller = rememberMediaController()
             val player = rememberPlayerState(controller)
-            val currentArtwork = if (theme == ThemeMode.ARTWORK || matchButtonAccentToArtwork) {
-                player.song?.artworkAt(PLAYER_ART_PX)
-            } else {
-                null
+            val currentArtwork = when {
+                theme == ThemeMode.CUSTOM_IMAGE -> customThemeImageUri
+                theme == ThemeMode.ARTWORK || matchButtonAccentToArtwork -> player.song?.artworkAt(PLAYER_ART_PX)
+                else -> null
             }
             val highPerformance by AppSettings.highPerformanceMode.collectAsStateWithLifecycle()
             val liquidGlassEnabled by AppSettings.liquidGlass.collectAsStateWithLifecycle()
@@ -346,12 +353,13 @@ class MainActivity : AppCompatActivity() {
                 ThemeMode.LIGHT -> false
                 ThemeMode.DARK, ThemeMode.AMOLED -> true
                 ThemeMode.ARTWORK -> isSystemInDarkTheme()
+                ThemeMode.CUSTOM_IMAGE -> true
             }
             BitChordTheme(
                 darkTheme = darkTheme,
                 amoledBlack = theme == ThemeMode.AMOLED,
                 artworkUrl = currentArtwork,
-                matchArtwork = theme == ThemeMode.ARTWORK,
+                matchArtwork = theme == ThemeMode.ARTWORK || theme == ThemeMode.CUSTOM_IMAGE,
                 matchButtonAccentToArtwork = matchButtonAccentToArtwork,
             ) {
                 // The glass surfaces sample this layer, and a layer records only
@@ -387,14 +395,29 @@ class MainActivity : AppCompatActivity() {
                 // longer exists and a page squeezed to a sliver to pay for it.
                 // A measured constraint cannot be stale — it is the very width
                 // the split is about to be laid out in.
-                BoxWithConstraints(Modifier.fillMaxSize()) {
-                    BitChordApp(
-                        darkTheme = darkTheme,
-                        windowWidth = maxWidth,
-                        appBackdrop = appBackdrop,
-                        controller = controller,
-                        player = player,
-                    )
+                Box(Modifier.fillMaxSize()) {
+                    if (theme == ThemeMode.CUSTOM_IMAGE && !customThemeImageUri.isNullOrBlank()) {
+                        AsyncImage(
+                            model = customThemeImageUri,
+                            contentDescription = null,
+                            contentScale = ContentScale.Crop,
+                            modifier = Modifier.matchParentSize().alpha(0.72f),
+                        )
+                        Box(
+                            Modifier
+                                .matchParentSize()
+                                .background(MaterialTheme.colorScheme.background.copy(alpha = 0.36f)),
+                        )
+                    }
+                    BoxWithConstraints(Modifier.fillMaxSize()) {
+                        BitChordApp(
+                            darkTheme = darkTheme,
+                            windowWidth = maxWidth,
+                            appBackdrop = appBackdrop,
+                            controller = controller,
+                            player = player,
+                        )
+                    }
                 }
                 }
             }
@@ -451,6 +474,7 @@ class MainActivity : AppCompatActivity() {
         // one that just arrived and not the one the task was started with.
         setIntent(intent)
         PlayerDeepLink.consume(intent)
+        MediaControlDeepLink.consume(intent)
         MusicLink.retainPersistableAudioPermission(this, intent)
         MusicLink.consume(intent)
     }
@@ -486,6 +510,7 @@ private fun BitChordApp(
     val useCollapsibleNavBar = !classicNavBar
     val glassSamplesBackdrop = glassActive && !reduceDynamicBlur
     var selectedTab by rememberSaveable { mutableIntStateOf(AppSettings.startupTab.value.index) }
+    val mediaControlRequest by MediaControlDeepLink.pending.collectAsStateWithLifecycle()
     val hideCollectionTopBar by AppSettings.hideCollectionTopBar.collectAsStateWithLifecycle()
     val hideFloatingCollectionControls by AppSettings.hideFloatingCollectionControls.collectAsStateWithLifecycle()
     val collectionBackHandlers = remember { mutableStateMapOf<String, () -> Unit>() }
@@ -665,6 +690,23 @@ private fun BitChordApp(
     // which SearchScreen uses as a signal to focus the input field.
     var searchFocusTrigger by remember { mutableIntStateOf(0) }
     var libraryFilterRequest by remember { mutableStateOf<LibraryFilter?>(null) }
+    var requestedMediaPanel by remember { mutableStateOf<MediaControlDestination?>(null) }
+    LaunchedEffect(mediaControlRequest) {
+        when (mediaControlRequest) {
+            null -> Unit
+            MediaControlDestination.PLAYLISTS -> {
+                libraryFilterRequest = LibraryFilter.PLAYLISTS
+                selectedTab = MainNavigationTab.LIBRARY.index
+                viewModel.clearDetail()
+                MediaControlDeepLink.handled()
+            }
+            MediaControlDestination.LYRICS,
+            MediaControlDestination.QUEUE -> {
+                requestedMediaPanel = mediaControlRequest
+                openNowPlaying()
+            }
+        }
+    }
     // Invalidates an in-flight radio lookup when a later play request wins.
     var playRequestGeneration by remember { mutableIntStateOf(0) }
     // Single-flight playback job to cancel previous in-flight requests on rapid taps
@@ -1943,6 +1985,12 @@ private fun BitChordApp(
             lyricsSource = lyricsSource,
             lyricsUnavailable = lyricsChecked && lyrics.isNullOrEmpty(),
             docked = docked,
+            openLyricsOnShow = requestedMediaPanel == MediaControlDestination.LYRICS,
+            openQueueOnShow = requestedMediaPanel == MediaControlDestination.QUEUE,
+            onExternalPanelRequestHandled = {
+                requestedMediaPanel = null
+                MediaControlDeepLink.handled()
+            },
             onClearQueue = {
                 // Keep what's playing; drop everything queued after it.
                 controller?.let { c ->
