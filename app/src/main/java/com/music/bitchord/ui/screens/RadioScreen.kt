@@ -17,6 +17,7 @@ import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
+import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.rememberScrollState
@@ -412,12 +413,21 @@ private fun RadioStationDetail(
                     Text(stringResource(R.string.radio_program_schedule), style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Bold)
                 }
                 if (days.isNotEmpty()) {
-                    Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                    Row(
+                        modifier = Modifier.fillMaxWidth().horizontalScroll(rememberScrollState()),
+                        horizontalArrangement = Arrangement.spacedBy(8.dp),
+                    ) {
                         days.take(7).forEach { day ->
                             FilterChip(
                                 selected = day == selectedDay,
                                 onClick = { onSelectDay(day) },
-                                label = { Text(RadioRepository.formatProgramDay(day)) },
+                                label = {
+                                    Text(
+                                        RadioRepository.formatProgramDay(day),
+                                        maxLines = 1,
+                                        softWrap = false,
+                                    )
+                                },
                             )
                         }
                     }
@@ -498,7 +508,22 @@ private fun RadioProgramDialog(program: ProgramEntry, onDismiss: () -> Unit) {
                         contentScale = ContentScale.Crop,
                     )
                 }
-                Text("${RadioRepository.formatProgramDay(program.startAt)}  ${RadioRepository.formatProgramTime(program.startAt)}–${RadioRepository.formatProgramTime(program.endAt)}", style = MaterialTheme.typography.labelMedium, color = MaterialTheme.colorScheme.primary)
+                Column {
+                    Text(
+                        RadioRepository.formatProgramDay(program.startAt),
+                        style = MaterialTheme.typography.labelMedium,
+                        color = MaterialTheme.colorScheme.primary,
+                        maxLines = 1,
+                        softWrap = false,
+                    )
+                    Text(
+                        "${RadioRepository.formatProgramTime(program.startAt)}–${RadioRepository.formatProgramTime(program.endAt)}",
+                        style = MaterialTheme.typography.labelMedium,
+                        color = MaterialTheme.colorScheme.primary,
+                        maxLines = 1,
+                        softWrap = false,
+                    )
+                }
                 program.performer?.takeIf(String::isNotBlank)?.let { Text(it, style = MaterialTheme.typography.titleSmall, fontWeight = FontWeight.SemiBold) }
                 program.description.takeIf(String::isNotBlank)?.let { Text(it, style = MaterialTheme.typography.bodyMedium) }
                 program.info?.takeIf(String::isNotBlank)?.let { Text(it, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant) }

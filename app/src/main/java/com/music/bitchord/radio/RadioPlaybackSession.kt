@@ -16,12 +16,17 @@ object RadioPlaybackSession {
         authHeaders = emptyMap()
     }
 
-    /** Applies credentials only to Radiko's own HTTPS host family. */
-    fun addHeadersFor(uri: Uri, dataSpec: DataSpec): DataSpec {
-        val host = uri.host?.lowercase() ?: return dataSpec
+    /** Live Radiko playlists and segments must bypass the app's persistent audio cache. */
+    fun isRadikoUri(uri: Uri): Boolean {
+        val host = uri.host?.lowercase() ?: return false
         val allowedHost = host == "radiko.jp" || host.endsWith(".radiko.jp") ||
             host == "smartstream.ne.jp" || host.endsWith(".smartstream.ne.jp")
-        if (!allowedHost || !uri.scheme.equals("https", ignoreCase = true)) return dataSpec
+        return allowedHost && uri.scheme.equals("https", ignoreCase = true)
+    }
+
+    /** Applies credentials only to Radiko's own HTTPS host family. */
+    fun addHeadersFor(uri: Uri, dataSpec: DataSpec): DataSpec {
+        if (!isRadikoUri(uri)) return dataSpec
         val headers = authHeaders
         if (headers.isEmpty()) return dataSpec
         return dataSpec.buildUpon()

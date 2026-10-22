@@ -1,6 +1,7 @@
 package com.music.bitchord.radio.data
 
 import android.net.Uri
+import android.text.Html
 import com.music.bitchord.data.Http
 import com.music.bitchord.data.settings.AppSettings
 import com.music.bitchord.radio.RadioPlaybackSession
@@ -61,16 +62,16 @@ object RadioRepository {
             val payload = match.groupValues[2]
             val startAt = attributes["ft"] ?: return@mapNotNull null
             val endAt = attributes["to"] ?: return@mapNotNull null
-            val title = extractTag(payload, "title").orEmpty().takeIf(String::isNotBlank)
+            val title = extractHtmlText(payload, "title").orEmpty().takeIf(String::isNotBlank)
                 ?: return@mapNotNull null
             ProgramEntry(
                 stationId = stationId,
                 title = title,
-                description = extractTag(payload, "desc").orEmpty(),
-                performer = extractTag(payload, "pfm"),
+                description = extractHtmlText(payload, "desc").orEmpty(),
+                performer = extractHtmlText(payload, "pfm"),
                 startAt = startAt,
                 endAt = endAt,
-                info = extractTag(payload, "info"),
+                info = extractHtmlText(payload, "info"),
                 imageUrl = extractTag(payload, "img")?.takeIf(::isHttpsUrl),
                 url = extractTag(payload, "url")?.takeIf(::isHttpsUrl),
             )
@@ -188,6 +189,17 @@ object RadioRepository {
             ?.trim()
             ?.takeIf(String::isNotEmpty)
             ?.let { Parser.unescapeEntities(it, false) }
+
+    /** Radiko description fields contain HTML fragments inside their XML tags. */
+    private fun extractHtmlText(payload: String, tag: String): String? =
+        extractTag(payload, tag)
+            ?.let { Html.fromHtml(it, Html.FROM_HTML_MODE_COMPACT).toString() }
+            ?.replace('\u00A0', ' ')
+            ?.replace(Regex("[\\t\\x0B\\f ]+"), " ")
+            ?.replace(Regex(" *\\n *"), "\n")
+            ?.replace(Regex("\\n{3,}"), "\n\n")
+            ?.trim()
+            ?.takeIf(String::isNotBlank)
 
     private fun isHttpsUrl(value: String): Boolean =
         runCatching { Uri.parse(value).scheme.equals("https", ignoreCase = true) }.getOrDefault(false)

@@ -20,6 +20,7 @@ import androidx.media3.datasource.cache.ContentMetadataMutations
 import androidx.media3.datasource.cache.SimpleCache
 import java.io.IOException
 import com.music.bitchord.data.settings.AppSettings
+import com.music.bitchord.radio.RadioPlaybackSession
 import com.music.bitchord.data.sources.SourceRegistry
 import com.music.bitchord.data.sources.SourceResolver
 import com.music.bitchord.data.sources.TrackMatcher
@@ -378,6 +379,8 @@ object AudioCache {
      * Wraps [upstream] so everything played is written to disk on the way
      * through, and anything already there is served without a request.
      * Local file and content URIs bypass disk caching to prevent redundant writes.
+     * Radiko live HLS playlists and segments also bypass it: caching the short
+     * rolling playlist prevents Media3 from seeing newly published segments.
      */
     fun playbackFactory(upstream: DataSource.Factory): DataSource.Factory = DataSource.Factory {
         val cacheDs = cacheFactory(upstream).createDataSource()
@@ -392,7 +395,9 @@ object AudioCache {
 
             override fun open(dataSpec: DataSpec): Long {
                 val scheme = dataSpec.uri.scheme
-                activeDs = if (scheme == "file" || scheme == "content") {
+                activeDs = if (scheme == "file" || scheme == "content" ||
+                    RadioPlaybackSession.isRadikoUri(dataSpec.uri)
+                ) {
                     upstreamDs
                 } else {
                     cacheDs
