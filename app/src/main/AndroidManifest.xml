@@ -19,6 +19,9 @@
          this, so granting it doesn't override a user who turned buzzing off. -->
     <uses-permission android:name="android.permission.VIBRATE" />
 
+    <!-- USB optical drives are optional; access is granted per-device by Android. -->
+    <uses-feature android:name="android.hardware.usb.host" android:required="false" />
+
 
     <!-- Reading local audio files across the device -->
     <uses-permission android:name="android.permission.READ_MEDIA_AUDIO" />

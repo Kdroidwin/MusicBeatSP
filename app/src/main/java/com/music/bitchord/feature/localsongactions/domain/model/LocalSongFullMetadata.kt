@@ -25,6 +25,7 @@ data class LocalSongFullMetadata(
     val channels: String? = null,
     val isLossless: Boolean = false,
     val lyrics: String? = null,
+    val comment: String? = null,
 ) {
     val isMissingMetadata: Boolean
         get() = album.isNullOrBlank() && trackNumber.isNullOrBlank() && publisher.isNullOrBlank() && composer.isNullOrBlank()

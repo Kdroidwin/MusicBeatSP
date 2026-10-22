@@ -967,7 +967,11 @@ fun LocalMusicScreen(
                         folders = nonBlacklistedFolders,
                         onFolderClick = { folder ->
                             drillDownLabel = folder.name
-                            drillDownSongs = songs.filter { (it.localPath ?: "").substringBeforeLast('/') == folder.path }
+                            drillDownSongs = songs.filter { song ->
+                                val songFolder = song.localFolderPath
+                                    ?: song.localPath?.substringBeforeLast('/')
+                                songFolder?.trimEnd('/') == folder.path.trimEnd('/')
+                            }
                             drillDownArt = null
                             drillDownFullScreenArtwork = false
                         },

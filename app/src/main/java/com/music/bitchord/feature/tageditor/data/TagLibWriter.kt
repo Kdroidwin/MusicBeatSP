@@ -23,6 +23,22 @@ object TagLibWriter {
 
     private const val TAG = "TagLibWriter"
 
+    /** Reads only the embedded comment tag; this avoids decoding artwork on the details path. */
+    suspend fun readEmbeddedComment(context: Context, song: Song): String? = withContext(Dispatchers.IO) {
+        runCatching {
+            val descriptor = openFileDescriptor(context, song, "r") ?: return@runCatching null
+            descriptor.use { pfd ->
+                val properties = TagLib.getMetadata(pfd.dup().detachFd(), readPictures = false)
+                    ?.propertyMap
+                    .orEmpty()
+                (properties["COMMENT"] ?: properties["comment"])
+                    ?.firstOrNull()
+                    ?.trim()
+                    ?.takeIf(String::isNotBlank)
+            }
+        }.getOrNull()
+    }
+
     suspend fun readTags(context: Context, song: Song): SongTagData = withContext(Dispatchers.IO) {
         try {
             val pfd = openFileDescriptor(context, song, "r") ?: return@withContext fallbackSongTagData(song)

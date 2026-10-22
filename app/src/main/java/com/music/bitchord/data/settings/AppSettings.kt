@@ -415,6 +415,11 @@ object AppSettings {
     /** Equal-power overlap between consecutive tracks; zero keeps current transitions unchanged. */
     val crossfadeSeconds = MutableStateFlow(0)
 
+    /** Settings for optional USB CD-DA ripping. The SAF folder URI is device-local. */
+    val cdRippingOutputTreeUri = MutableStateFlow<String?>(null)
+    val cdRippingRetries = MutableStateFlow(2)
+    val cdRippingSpeedX = MutableStateFlow(4)
+
     /** Lets the analyzer plan transition timing from each track; falls back to fixed crossfade while analysis is unavailable. */
     val smartFadeEnabled = MutableStateFlow(false)
     val automixPerformanceMode = MutableStateFlow(AutomixPerformanceMode.BALANCED)
@@ -506,6 +511,8 @@ object AppSettings {
     val frostedPlayerDetails = MutableStateFlow(true)
     /** Artwork-colored background for local track metadata and file details. */
     val detailsSheetArtworkBackdrop = MutableStateFlow(true)
+    /** Shows a non-empty COMMENT tag in the local track details sheet. */
+    val showEmbeddedComment = MutableStateFlow(true)
     /** Replaces the queue manager's text action with a compact equals glyph. */
     val queueManagerEqualsIcon = MutableStateFlow(false)
     /** Hides the queue heading while keeping its actions available. */
@@ -1080,6 +1087,9 @@ object AppSettings {
         downloadQuality.value = readDownloadQuality()
         wifiOnlyDownloads.value = prefs.getBoolean(KEY_WIFI_ONLY_DOWNLOADS, true)
         exportDownloads.value = prefs.getBoolean(KEY_EXPORT_DOWNLOADS, false)
+        cdRippingOutputTreeUri.value = prefs.getString(KEY_CD_RIPPING_OUTPUT_TREE_URI, null)
+        cdRippingRetries.value = prefs.getInt(KEY_CD_RIPPING_RETRIES, 2).coerceIn(0, 5)
+        cdRippingSpeedX.value = prefs.getInt(KEY_CD_RIPPING_SPEED_X, 4).coerceIn(1, 12)
         skipSilence.value = prefs.getBoolean(KEY_SKIP_SILENCE, false)
         crossfadeSeconds.value = prefs.getInt(KEY_CROSSFADE_SECONDS, 0).coerceIn(0, MAX_CROSSFADE_SECONDS)
         smartFadeEnabled.value = prefs.getBoolean(KEY_SMART_FADE, false)
@@ -1169,6 +1179,7 @@ object AppSettings {
         frostedQueueManager.value = prefs.getBoolean(KEY_FROSTED_QUEUE_MANAGER, true)
         frostedPlayerDetails.value = prefs.getBoolean(KEY_FROSTED_PLAYER_DETAILS, true)
         detailsSheetArtworkBackdrop.value = prefs.getBoolean(KEY_DETAILS_SHEET_ARTWORK_BACKDROP, true)
+        showEmbeddedComment.value = prefs.getBoolean(KEY_SHOW_EMBEDDED_COMMENT, true)
         queueManagerEqualsIcon.value = prefs.getBoolean(KEY_QUEUE_MANAGER_EQUALS_ICON, false)
         hideQueueLabel.value = prefs.getBoolean(KEY_HIDE_QUEUE_LABEL, true)
         queueClearTrashIcon.value = prefs.getBoolean(KEY_QUEUE_CLEAR_TRASH_ICON, false)
@@ -1564,6 +1575,26 @@ object AppSettings {
         prefs.edit().putInt(KEY_CROSSFADE_SECONDS, normalized).apply()
     }
 
+    fun setCdRippingOutputTreeUri(value: String?) {
+        cdRippingOutputTreeUri.value = value
+        prefs.edit().apply {
+            if (value.isNullOrBlank()) remove(KEY_CD_RIPPING_OUTPUT_TREE_URI)
+            else putString(KEY_CD_RIPPING_OUTPUT_TREE_URI, value)
+        }.apply()
+    }
+
+    fun setCdRippingRetries(value: Int) {
+        val normalized = value.coerceIn(0, 5)
+        cdRippingRetries.value = normalized
+        prefs.edit().putInt(KEY_CD_RIPPING_RETRIES, normalized).apply()
+    }
+
+    fun setCdRippingSpeedX(value: Int) {
+        val normalized = value.coerceIn(1, 12)
+        cdRippingSpeedX.value = normalized
+        prefs.edit().putInt(KEY_CD_RIPPING_SPEED_X, normalized).apply()
+    }
+
     fun setSmartFadeEnabled(value: Boolean) {
         if (value) setAudioOffloadEnabled(false)
         smartFadeEnabled.value = value
@@ -1856,6 +1887,11 @@ object AppSettings {
     fun setDetailsSheetArtworkBackdrop(value: Boolean) {
         detailsSheetArtworkBackdrop.value = value
         prefs.edit().putBoolean(KEY_DETAILS_SHEET_ARTWORK_BACKDROP, value).apply()
+    }
+
+    fun setShowEmbeddedComment(value: Boolean) {
+        showEmbeddedComment.value = value
+        prefs.edit().putBoolean(KEY_SHOW_EMBEDDED_COMMENT, value).apply()
     }
 
     fun setQueueManagerEqualsIcon(value: Boolean) {
@@ -3188,6 +3224,7 @@ object AppSettings {
         "downloaded_collections",
         KEY_LAST_VERSION_CODE,
         KEY_LOCAL_MUSIC_FOLDER_PATH,
+        KEY_CD_RIPPING_OUTPUT_TREE_URI,
     )
 
     private val OBSOLETE_ONLINE_KEYS = setOf(
@@ -3232,6 +3269,9 @@ object AppSettings {
     private const val KEY_SKIP_SILENCE = "skip_silence"
     private const val KEY_AUDIO_OFFLOAD_ENABLED = "audio_offload_enabled"
     private const val KEY_CROSSFADE_SECONDS = "crossfade_seconds"
+    private const val KEY_CD_RIPPING_OUTPUT_TREE_URI = "cd_ripping_output_tree_uri"
+    private const val KEY_CD_RIPPING_RETRIES = "cd_ripping_retries"
+    private const val KEY_CD_RIPPING_SPEED_X = "cd_ripping_speed_x"
     private const val KEY_SMART_FADE = "smart_fade_enabled"
     private const val KEY_AUTOMIX_PERFORMANCE_MODE = "automix_performance_mode"
     private const val KEY_RESAMPLER_CUTOFF_HZ = "resampler_cutoff_hz"
@@ -3270,6 +3310,7 @@ object AppSettings {
     private const val KEY_FROSTED_QUEUE_MANAGER = "frosted_queue_manager"
     private const val KEY_FROSTED_PLAYER_DETAILS = "frosted_player_details"
     private const val KEY_DETAILS_SHEET_ARTWORK_BACKDROP = "details_sheet_artwork_backdrop"
+    private const val KEY_SHOW_EMBEDDED_COMMENT = "show_embedded_comment"
     private const val KEY_QUEUE_MANAGER_EQUALS_ICON = "queue_manager_equals_icon"
     private const val KEY_HIDE_QUEUE_LABEL = "hide_queue_label"
     private const val KEY_QUEUE_CLEAR_TRASH_ICON = "queue_clear_trash_icon"

@@ -39,6 +39,9 @@
     <string name="loudness_normalization_subtitle">Reduces loudness differences between streamed tracks when loudness data is available. Local files use ReplayGain separately.</string>
     <string name="loudness_off_on_speaker">Do not normalize on phone speaker</string>
     <string name="loudness_off_on_speaker_subtitle">Turns off track-by-track volume correction only on the phone’s built-in speaker. Headphones and Bluetooth keep it on.</string>
+    <string name="show_embedded_comment">Show embedded comment</string>
+    <string name="show_embedded_comment_subtitle">Show a file’s comment tag in track details when one is present.</string>
+    <string name="embedded_comment">Comment</string>
     <string name="replaygain_description">Adjust track loudness using ReplayGain tags</string>
     <string name="replaygain_scan_description">Analyze local tracks with no ReplayGain tags. Results stay in app storage; audio files are not changed.</string>
     <string name="replaygain_scan_action">Analyze local tracks</string>
@@ -939,6 +942,33 @@
     <string name="playlist_tools">Playlists</string>
     <string name="import_m3u_playlist">Import M3U playlist</string>
     <string name="import_m3u_subtitle">Choose an M3U or M3U8 file from your device</string>
+    <string name="cd_ripping_settings">Rip audio CDs</string>
+    <string name="cd_ripping_settings_subtitle">Read an audio CD from a USB optical drive and save WAV tracks</string>
+    <string name="cd_ripping_title">CD ripping</string>
+    <string name="cd_ripping_description">Extracts standard 16-bit, 44.1 kHz stereo WAV without re-encoding. No network requests are made. USB access is requested only when you select a drive.</string>
+    <string name="cd_ripping_scan">Scan for USB CD drives</string>
+    <string name="cd_ripping_no_drive">No compatible USB CD drive found. Connect a USB optical drive and scan again.</string>
+    <string name="cd_ripping_select_drive">Choose a USB CD drive</string>
+    <string name="cd_ripping_output_folder">Output folder</string>
+    <string name="cd_ripping_choose_folder">Choose output folder</string>
+    <string name="cd_ripping_folder_not_selected">No output folder selected</string>
+    <string name="cd_ripping_album_title">Album title</string>
+    <string name="cd_ripping_album_artist">Album artist</string>
+    <string name="cd_ripping_tracks">Audio tracks</string>
+    <string name="cd_ripping_select_all">Select all</string>
+    <string name="cd_ripping_deselect_all">Clear selection</string>
+    <string name="cd_ripping_read_speed">Read speed</string>
+    <string name="cd_ripping_retries">Read retries</string>
+    <string name="cd_ripping_start">Rip selected tracks</string>
+    <string name="cd_ripping_cancel">Cancel rip</string>
+    <string name="cd_ripping_close">Close</string>
+    <string name="cd_ripping_progress">Track %1$d of %2$d · %3$d%%</string>
+    <string name="cd_ripping_result">Finished: %1$d added, %2$d skipped, %3$d failed</string>
+    <string name="cd_ripping_success">CD ripping completed</string>
+    <string name="cd_ripping_permission_denied">USB access was not granted</string>
+    <string name="cd_ripping_output_unavailable">The selected output folder is unavailable</string>
+    <string name="cd_ripping_folder_permission_failed">Could not keep access to this folder. Please choose it again.</string>
+    <string name="cd_ripping_no_tracks">No audio tracks found. Make sure an audio CD is inserted.</string>
     <string name="export_m3u">Export as M3U</string>
     <string name="m3u_export_result">Exported %1$d tracks; skipped %2$d unavailable tracks.</string>
     <string name="m3u_export_failed">Could not export this playlist as M3U.</string>
@@ -1310,6 +1340,8 @@
 <string name="webdav_test_failed">Couldn’t reach it: %1$s</string>
 <string name="webdav_allow_insecure_http">Allow unencrypted HTTP</string>
 <string name="webdav_allow_insecure_http_subtitle">Only enable this for a trusted local network. HTTPS remains preferred.</string>
+
+    <!-- Wear OS companion -->
     <string name="wear_os_section">MusicBeatSP for Wear OS</string>
     <string name="wear_os_page_title">Wear OS</string>
     <string name="wear_os_your_watches">Your watches</string>

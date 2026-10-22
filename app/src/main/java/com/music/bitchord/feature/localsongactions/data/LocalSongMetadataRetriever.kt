@@ -5,6 +5,7 @@ import android.media.MediaMetadataRetriever
 import android.net.Uri
 import android.os.Build
 import com.music.bitchord.data.model.Song
+import com.music.bitchord.feature.tageditor.data.TagLibWriter
 import com.music.bitchord.feature.localsongactions.domain.model.LocalSongFullMetadata
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
@@ -16,7 +17,11 @@ import java.util.Locale
  */
 object LocalSongMetadataRetriever {
 
-    suspend fun retrieve(context: Context, song: Song): LocalSongFullMetadata = withContext(Dispatchers.IO) {
+    suspend fun retrieve(
+        context: Context,
+        song: Song,
+        includeEmbeddedComment: Boolean = false,
+    ): LocalSongFullMetadata = withContext(Dispatchers.IO) {
         val retriever = MediaMetadataRetriever()
         var hasDataSource = false
 
@@ -86,6 +91,10 @@ object LocalSongMetadataRetriever {
             val durationMs = rawDuration?.toLongOrNull()
             val durationFormatted = durationMs?.let { formatDuration(it) } ?: song.durationText
 
+            val comment = if (includeEmbeddedComment) {
+                TagLibWriter.readEmbeddedComment(context, song)
+            } else null
+
             LocalSongFullMetadata(
                 title = rawTitle?.takeUnless { it.isBlank() } ?: song.title,
                 artist = rawArtist?.takeUnless { it.isBlank() } ?: song.artist,
@@ -105,6 +114,7 @@ object LocalSongMetadataRetriever {
                 sampleRate = sampleRateFormatted,
                 channels = "Stereo",
                 isLossless = isLossless,
+                comment = comment,
             )
         } finally {
             runCatching { retriever.release() }

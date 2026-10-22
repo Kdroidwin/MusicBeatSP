@@ -344,12 +344,12 @@ object LocalMediaRepository {
                     val durationMs = cursor.getLong(durationCol)
                     val path = cursor.getString(dataCol)
                     if (filterNonMusic && !isEligibleLocalMusic(durationMs, displayName, path)) continue
-                    if (AppSettings.isFolderBlacklisted(path?.substringBeforeLast('/'))) continue
                     val relativePath = relativePathCol.takeIf { it >= 0 }?.let(cursor::getString)
                     val volumeName = volumeNameCol.takeIf { it >= 0 }?.let(cursor::getString)
                     val folderPath = path?.substringBeforeLast('/')
                         ?.takeIf(String::isNotBlank)
                         ?: resolveMediaStoreFolderPath(relativePath, volumeName)
+                    if (AppSettings.isFolderBlacklisted(folderPath)) continue
 
                     val contentUri = ContentUris.withAppendedId(MediaStore.Audio.Media.EXTERNAL_CONTENT_URI, id).toString()
                     val title = rawTitle.cleanTag()?.removeAudioExtension()
@@ -419,11 +419,15 @@ object LocalMediaRepository {
     suspend fun getAllDiscoveredFolders(context: Context): List<LocalFolder> = withContext(Dispatchers.IO) {
         if (!hasStoragePermission(context)) return@withContext emptyList()
         val counts = mutableMapOf<String, Int>()
-        val projection = arrayOf(
-            MediaStore.Audio.Media.DATA,
-            MediaStore.Audio.Media.DURATION,
-            MediaStore.Audio.Media.DISPLAY_NAME,
-        )
+        val projection = buildList {
+            add(MediaStore.Audio.Media.DATA)
+            add(MediaStore.Audio.Media.DURATION)
+            add(MediaStore.Audio.Media.DISPLAY_NAME)
+            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
+                add(MediaStore.MediaColumns.RELATIVE_PATH)
+                add(MediaStore.MediaColumns.VOLUME_NAME)
+            }
+        }.toTypedArray()
         val selection = "${MediaStore.Audio.Media.IS_MUSIC} != 0"
 
         runCatching {
@@ -434,15 +438,25 @@ object LocalMediaRepository {
                 null,
                 null,
             )?.use { cursor ->
-                val dataCol = cursor.getColumnIndexOrThrow(MediaStore.Audio.Media.DATA)
+                val dataCol = cursor.getColumnIndex(MediaStore.Audio.Media.DATA)
                 val durCol = cursor.getColumnIndexOrThrow(MediaStore.Audio.Media.DURATION)
                 val nameCol = cursor.getColumnIndexOrThrow(MediaStore.Audio.Media.DISPLAY_NAME)
+                val relativePathCol = cursor.getColumnIndex(MediaStore.MediaColumns.RELATIVE_PATH)
+                val volumeNameCol = cursor.getColumnIndex(MediaStore.MediaColumns.VOLUME_NAME)
                 while (cursor.moveToNext()) {
-                    val path = cursor.getString(dataCol) ?: continue
                     val dur = cursor.getLong(durCol)
                     val name = cursor.getString(nameCol).orEmpty()
-                    if (!isEligibleLocalMusic(dur, name, path)) continue
-                    val folderPath = path.substringBeforeLast('/')
+                    val rawPath = dataCol.takeIf { it >= 0 }?.let(cursor::getString)
+                    val folderPath = rawPath
+                        ?.substringBeforeLast('/')
+                        ?.takeIf(String::isNotBlank)
+                        ?: resolveMediaStoreFolderPath(
+                            relativePathCol.takeIf { it >= 0 }?.let(cursor::getString),
+                            volumeNameCol.takeIf { it >= 0 }?.let(cursor::getString),
+                        )
+                        ?: continue
+                    if (!isEligibleLocalMusic(dur, name, rawPath)) continue
+                    if (AppSettings.isFolderBlacklisted(folderPath)) continue
                     counts[folderPath] = (counts[folderPath] ?: 0) + 1
                 }
             }

@@ -843,6 +843,33 @@
     <string name="playlist_tools">プレイリスト</string>
     <string name="import_m3u_playlist">M3Uプレイリストを取り込む</string>
     <string name="import_m3u_subtitle">端末からM3UまたはM3U8ファイルを選択します</string>
+    <string name="cd_ripping_settings">音楽CDを取り込む</string>
+    <string name="cd_ripping_settings_subtitle">USB光学ドライブから音楽CDを読み込み、WAVで保存します</string>
+    <string name="cd_ripping_title">CD取り込み</string>
+    <string name="cd_ripping_description">16bit・44.1kHz・ステレオのWAVへ再エンコードせずに取り込みます。通信は行いません。USBアクセスはドライブ選択時だけ許可を求めます。</string>
+    <string name="cd_ripping_scan">USB CDドライブを検索</string>
+    <string name="cd_ripping_no_drive">対応するUSB CDドライブがありません。USB光学ドライブを接続して再検索してください。</string>
+    <string name="cd_ripping_select_drive">USB CDドライブを選択</string>
+    <string name="cd_ripping_output_folder">保存先フォルダー</string>
+    <string name="cd_ripping_choose_folder">保存先を選択</string>
+    <string name="cd_ripping_folder_not_selected">保存先が選択されていません</string>
+    <string name="cd_ripping_album_title">アルバム名</string>
+    <string name="cd_ripping_album_artist">アルバムアーティスト</string>
+    <string name="cd_ripping_tracks">音楽トラック</string>
+    <string name="cd_ripping_select_all">すべて選択</string>
+    <string name="cd_ripping_deselect_all">選択解除</string>
+    <string name="cd_ripping_read_speed">読み取り速度</string>
+    <string name="cd_ripping_retries">読み取り再試行回数</string>
+    <string name="cd_ripping_start">選択した曲を取り込む</string>
+    <string name="cd_ripping_cancel">取り込みを中止</string>
+    <string name="cd_ripping_close">閉じる</string>
+    <string name="cd_ripping_progress">トラック %1$d / %2$d ・ %3$d%%</string>
+    <string name="cd_ripping_result">完了: %1$d曲追加、%2$d曲スキップ、%3$d曲失敗</string>
+    <string name="cd_ripping_success">CDの取り込みが完了しました</string>
+    <string name="cd_ripping_permission_denied">USBアクセスが許可されませんでした</string>
+    <string name="cd_ripping_output_unavailable">選択した保存先にアクセスできません</string>
+    <string name="cd_ripping_folder_permission_failed">保存先へのアクセスを保持できませんでした。もう一度選択してください。</string>
+    <string name="cd_ripping_no_tracks">音楽トラックがありません。音楽CDが挿入されているか確認してください。</string>
     <string name="export_m3u">M3Uとしてエクスポート</string>
     <string name="m3u_export_result">%1$d曲を書き出し、利用できない%2$d曲をスキップしました。</string>
     <string name="m3u_export_failed">M3Uプレイリストを書き出せませんでした。</string>
@@ -1122,6 +1149,9 @@
     <string name="details_genre">ジャンル</string>
     <string name="details_year">年</string>
     <string name="details_composer">作曲者</string>
+    <string name="show_embedded_comment">埋め込みコメントを表示</string>
+    <string name="show_embedded_comment_subtitle">音源ファイルにコメントがある場合、曲の詳細に表示します。</string>
+    <string name="embedded_comment">コメント</string>
     <string name="loudness_normalization">音量の正規化</string>
     <string name="loudness_normalization_subtitle">配信曲の音量情報がある場合に、曲ごとの音量差を自動で補正します。ローカル曲はReplayGain設定が別にあります。</string>
     <string name="loudness_off_on_speaker">端末スピーカーでは音量補正しない</string>
@@ -1225,6 +1255,8 @@
 <string name="webdav_test_failed">接続できません: %1$s</string>
 <string name="webdav_allow_insecure_http">暗号化されていないHTTPを許可</string>
 <string name="webdav_allow_insecure_http_subtitle">信頼できるローカルネットワークでのみ有効にしてください。通常はHTTPSを使用します。</string>
+
+    <!-- Wear OS companion -->
     <string name="wear_os_section">Wear OS 向け MusicBeatSP</string>
     <string name="wear_os_page_title">Wear OS</string>
     <string name="wear_os_your_watches">お使いのウォッチ</string>

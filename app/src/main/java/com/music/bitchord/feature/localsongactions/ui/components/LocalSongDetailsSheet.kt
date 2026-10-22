@@ -85,6 +85,7 @@ fun LocalSongDetailsSheet(
     val sheetState = rememberModalBottomSheetState(skipPartiallyExpanded = true)
     val audioCutterEnabled by AppSettings.audioCutterEnabled.collectAsStateWithLifecycle()
     val useArtworkBackdrop by AppSettings.detailsSheetArtworkBackdrop.collectAsStateWithLifecycle()
+    val showEmbeddedComment by AppSettings.showEmbeddedComment.collectAsStateWithLifecycle()
     val palette = rememberArtworkPalette(song.thumbnailUrl, dark = true, artPx = ROW_ART_PX)
     val baseColors = MaterialTheme.colorScheme
     val sheetColors = if (useArtworkBackdrop) {
@@ -112,7 +113,7 @@ fun LocalSongDetailsSheet(
 
     LaunchedEffect(song) {
         isLoading = true
-        metadata = LocalSongMetadataRetriever.retrieve(context, song)
+        metadata = LocalSongMetadataRetriever.retrieve(context, song, includeEmbeddedComment = showEmbeddedComment)
         isLoading = false
     }
 
@@ -182,8 +183,31 @@ fun LocalSongDetailsSheet(
                             FileInfoCard(metadata = metadata!!)
                         }
                     }
+
+                    metadata?.comment?.takeIf(String::isNotBlank)?.let { comment ->
+                        item {
+                            EmbeddedCommentCard(comment = comment)
+                        }
+                    }
                 }
             }
+        }
+    }
+}
+
+@Composable
+private fun EmbeddedCommentCard(comment: String) {
+    Card(
+        shape = RoundedCornerShape(20.dp),
+        colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceContainerLow),
+        modifier = Modifier.fillMaxWidth(),
+    ) {
+        Column(
+            modifier = Modifier.fillMaxWidth().padding(16.dp),
+            verticalArrangement = Arrangement.spacedBy(12.dp),
+        ) {
+            SectionHeader(icon = Icons.AutoMirrored.Rounded.Notes, title = stringResource(R.string.embedded_comment))
+            Text(text = comment, style = MaterialTheme.typography.bodyMedium)
         }
     }
 }

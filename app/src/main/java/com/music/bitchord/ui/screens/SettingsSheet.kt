@@ -128,6 +128,7 @@ import androidx.lifecycle.Lifecycle
 import androidx.lifecycle.LifecycleEventObserver
 import androidx.lifecycle.lifecycleScope
 import androidx.lifecycle.compose.LocalLifecycleOwner
+import androidx.lifecycle.viewmodel.compose.viewModel
 import android.content.pm.PackageManager
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -320,6 +321,7 @@ fun SettingsScreen(
     val frostedQueueManager by AppSettings.frostedQueueManager.collectAsStateWithLifecycle()
     val frostedPlayerDetails by AppSettings.frostedPlayerDetails.collectAsStateWithLifecycle()
     val detailsSheetArtworkBackdrop by AppSettings.detailsSheetArtworkBackdrop.collectAsStateWithLifecycle()
+    val showEmbeddedComment by AppSettings.showEmbeddedComment.collectAsStateWithLifecycle()
     val queueManagerEqualsIcon by AppSettings.queueManagerEqualsIcon.collectAsStateWithLifecycle()
     val hideQueueLabel by AppSettings.hideQueueLabel.collectAsStateWithLifecycle()
     val queueClearTrashIcon by AppSettings.queueClearTrashIcon.collectAsStateWithLifecycle()
@@ -438,6 +440,7 @@ fun SettingsScreen(
     var showPerformanceWarning by remember { mutableStateOf(false) }
     var showEqualizerSheet by remember { mutableStateOf(false) }
     var showAutomixPerformanceSheet by rememberSaveable { mutableStateOf(false) }
+    var showCdRippingSheet by rememberSaveable { mutableStateOf(false) }
     val themeImagePicker = rememberLauncherForActivityResult(ActivityResultContracts.OpenDocument()) { selected ->
         if (selected == null) return@rememberLauncherForActivityResult
         val retained = runCatching {
@@ -507,6 +510,12 @@ fun SettingsScreen(
             detailsSheetArtworkBackdrop,
         ) { AppSettings.setDetailsSheetArtworkBackdrop(!detailsSheetArtworkBackdrop) },
         SettingsSearchEntry(
+            stringResource(R.string.show_embedded_comment),
+            stringResource(R.string.show_embedded_comment_subtitle),
+            listOf("comment", "embedded tag", "metadata", "コメント", "埋め込み", "タグ", "詳細"),
+            showEmbeddedComment,
+        ) { AppSettings.setShowEmbeddedComment(!showEmbeddedComment) },
+        SettingsSearchEntry(
             stringResource(R.string.queue_manage_equals_icon),
             stringResource(R.string.queue_manage_equals_icon_subtitle),
             listOf("queue", "manage", "equals", "icon", "再生キュー", "管理", "イコール", "アイコン"),
@@ -548,6 +557,12 @@ fun SettingsScreen(
             popupExternalAudioPlayer,
         ) { setPopupExternalAudioPlayerWithPermission(!popupExternalAudioPlayer) },
         SettingsSearchEntry(stringResource(R.string.audio_cutter_enabled), stringResource(R.string.audio_cutter_enabled_subtitle), listOf("audio cutter", "cut", "edit", "オーディオカッター", "曲編集"), audioCutterEnabled) { AppSettings.setAudioCutterEnabled(!audioCutterEnabled) },
+        SettingsSearchEntry(
+            title = stringResource(R.string.cd_ripping_settings),
+            subtitle = stringResource(R.string.cd_ripping_settings_subtitle),
+            keywords = listOf("CD", "CD-DA", "rip", "ripping", "optical drive", "USB", "CD取り込み", "CDリッピング", "光学ドライブ"),
+            activate = { showCdRippingSheet = true },
+        ),
         SettingsSearchEntry(
             title = stringResource(R.string.artwork_backdrop_blur),
             subtitle = stringResource(R.string.artwork_backdrop_blur_subtitle),
@@ -2522,6 +2537,19 @@ fun SettingsScreen(
             )
             RowDivider()
             SettingsRow(
+                icon = Icons.AutoMirrored.Rounded.Notes,
+                title = stringResource(R.string.show_embedded_comment),
+                subtitle = stringResource(R.string.show_embedded_comment_subtitle),
+                trailing = {
+                    Switch(
+                        checked = showEmbeddedComment,
+                        onCheckedChange = AppSettings::setShowEmbeddedComment,
+                    )
+                },
+                onClick = { AppSettings.setShowEmbeddedComment(!showEmbeddedComment) },
+            )
+            RowDivider()
+            SettingsRow(
                 icon = Icons.Rounded.AutoAwesome,
                 title = stringResource(R.string.app_icon),
                 subtitle = stringResource(R.string.app_icon_subtitle),
@@ -3594,6 +3622,13 @@ fun SettingsScreen(
 
         SettingsGroup(header = stringResource(R.string.storage)) {
             SettingsRow(
+                icon = Icons.Rounded.Album,
+                title = stringResource(R.string.cd_ripping_settings),
+                subtitle = stringResource(R.string.cd_ripping_settings_subtitle),
+                onClick = { showCdRippingSheet = true },
+            )
+            RowDivider()
+            SettingsRow(
                 icon = Icons.Rounded.DeleteSweep,
                 title = stringResource(R.string.clear_image_cache),
                 subtitle = stringResource(R.string.clear_image_cache_subtitle),
@@ -4523,6 +4558,13 @@ fun SettingsScreen(
                 },
             )
         }
+    }
+
+    if (showCdRippingSheet) {
+        CdRippingDialog(
+            onDismiss = { showCdRippingSheet = false },
+            onRipComplete = onCdRipComplete,
+        )
     }
 
 }
