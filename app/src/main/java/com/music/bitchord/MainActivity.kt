@@ -181,6 +181,7 @@ import com.music.bitchord.data.settings.MainNavigationTabs
 import com.music.bitchord.data.settings.PlayerQuickAction
 import com.music.bitchord.data.settings.ThemeMode
 import com.music.bitchord.ui.screens.SettingsScreen
+import com.music.bitchord.ui.screens.WearOsScreen
 import com.music.bitchord.ui.screens.SourcesScreen
 import com.music.bitchord.ui.screens.SourceEditorAlert
 import com.music.bitchord.playback.LinkRequest
@@ -630,6 +631,7 @@ private fun BitChordApp(
     }
 
     var showSettings by remember { mutableStateOf(false) }
+    var showWearOs by rememberSaveable { mutableStateOf(false) }
     var showSources by rememberSaveable { mutableStateOf(false) }
     var editingSource by remember { mutableStateOf<SourceConfig?>(null) }
     var showWebDavEditor by remember { mutableStateOf(false) }
@@ -2023,7 +2025,8 @@ private fun BitChordApp(
         ) { viewModel.closeDetail() }
         BackHandler(enabled = showSources) { showSources = false }
         // One back step out of Settings lands on Songs rather than exiting
-        BackHandler(enabled = showSettings && detail == null) {
+        BackHandler(enabled = showWearOs) { showWearOs = false }
+        BackHandler(enabled = showSettings && detail == null && !showWearOs) {
             showSettings = false
             if (!showReplay) selectedTab = TAB_SONGS
         }
@@ -2046,6 +2049,7 @@ private fun BitChordApp(
                     targetState = when {
                         detail != null -> detail.browseId
                         showSources -> "sources"
+                        showWearOs -> "wear_os"
                         showSettings -> "settings"
                         showReplay -> "replay"
                         else -> "$TAB_KEY$selectedTab"
@@ -2086,7 +2090,7 @@ private fun BitChordApp(
                         }
                     }
                     val live = detailStack.lastOrNull()?.takeIf {
-                        it.browseId == key && key != "settings" && key != "replay" && key != "sources"
+                        it.browseId == key && key != "settings" && key != "replay" && key != "sources" && key != "wear_os"
                     }
                     // Held for the same reason, one step further on: a popped
                     // page is off the stack before it has finished animating
@@ -2096,7 +2100,9 @@ private fun BitChordApp(
                     val held = remember(key) { mutableStateOf(live) }
                     if (live != null) held.value = live
                     val page = held.value
-                    if (key == "replay") {
+                    if (key == "wear_os") {
+                        WearOsScreen(contentPadding = listPadding)
+                    } else if (key == "replay") {
                         ReplayScreen(
                             state = replay,
                             holder = "",
@@ -2139,6 +2145,8 @@ private fun BitChordApp(
                             onPreloadArtworkNow = { viewModel.preloadLocalArtwork() },
                             onPlayCueSheet = { cueSongs -> play(cueSongs, 0) },
                             onManageSources = { showSources = true },
+                            onWearOs = { showWearOs = true },
+                            onCdRipComplete = { viewModel.loadLocalMusic(isPullToRefresh = true) },
                             contentPadding = listPadding,
                         )
                     } else if (key == "sources") {
@@ -2633,13 +2641,14 @@ private fun BitChordApp(
                     FrostedTopBar(
                         title = when {
                             showSources -> stringResource(R.string.sources)
+                            showWearOs -> stringResource(R.string.wear_os_page_title)
                             showSettings -> stringResource(R.string.settings)
                             showReplay -> stringResource(R.string.replay)
                             detail != null -> detail.title
                             else -> allTabs.getOrElse(selectedTab) { allTabs.first() }.label
                         },
                         scrolled = when {
-                            showSources -> true
+                            showSources || showWearOs -> true
                             showSettings -> true
                             showReplay -> replayScrolled
                             detail != null -> detailScrolled
@@ -2655,6 +2664,7 @@ private fun BitChordApp(
                         floatingOnly = hideCollectionHeaderNow,
                         onBack = if (hideFloatingCollectionControlsNow) null else when {
                             showSources -> ({ showSources = false })
+                            showWearOs -> ({ showWearOs = false })
                             showSettings -> ({ showSettings = false })
                             showReplay -> ({ showReplay = false })
                             localCollectionBackHandler != null -> localCollectionBackHandler

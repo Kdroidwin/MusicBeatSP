@@ -355,6 +355,9 @@ object AppSettings {
     val audioQualityWifi = MutableStateFlow(AudioQuality.LOSSLESS)
     val audioQualityCellular = MutableStateFlow(AudioQuality.LOSSLESS)
 
+    /** Temporary quality ceiling while audio is streamed to a Wear OS watch. */
+    val streamCeilingOverride = MutableStateFlow<AudioQuality?>(null)
+
     /**
      * What a saved file should be, answered on its own terms.
      *
@@ -666,6 +669,11 @@ object AppSettings {
     val replayGainAlbumMode = MutableStateFlow(false)
     val replayGainPreampDb = MutableStateFlow(0f)
     val replayGainPreventClipping = MutableStateFlow(true)
+
+    /** Normalizes YouTube-origin tracks from the loudness metadata already returned by StreamResolver. */
+    val loudnessNormalization = MutableStateFlow(true)
+    /** Skips loudness normalization while the phone's built-in speaker is the active output. */
+    val loudnessOffOnSpeaker = MutableStateFlow(true)
 
     /** Places the favorite action beside the track menu instead of under playback controls. */
     val favoriteBesideTrackMenu = MutableStateFlow(false)
@@ -982,10 +990,14 @@ object AppSettings {
 
     /** The ceiling that applies to a stream started right now. */
     val effectiveAudioQuality: AudioQuality
-        get() = if (meteredConnection.value == true) {
-            audioQualityCellular.value
-        } else {
-            audioQualityWifi.value
+        get() {
+            val chosen = if (meteredConnection.value == true) {
+                audioQualityCellular.value
+            } else {
+                audioQualityWifi.value
+            }
+            val cap = streamCeilingOverride.value ?: return chosen
+            return if (chosen.ordinal > cap.ordinal) cap else chosen
         }
 
     /**
@@ -1249,6 +1261,8 @@ object AppSettings {
         replayGainAlbumMode.value = prefs.getBoolean(KEY_REPLAYGAIN_ALBUM_MODE, false)
         replayGainPreampDb.value = prefs.getFloat(KEY_REPLAYGAIN_PREAMP_DB, 0f).coerceIn(-12f, 12f)
         replayGainPreventClipping.value = prefs.getBoolean(KEY_REPLAYGAIN_PREVENT_CLIPPING, true)
+        loudnessNormalization.value = prefs.getBoolean(KEY_LOUDNESS_NORMALIZATION, true)
+        loudnessOffOnSpeaker.value = prefs.getBoolean(KEY_LOUDNESS_OFF_ON_SPEAKER, true)
         favoriteBesideTrackMenu.value = prefs.getBoolean(KEY_FAVORITE_BESIDE_TRACK_MENU, false)
         preventPlayAtZeroVolume.value = prefs.getBoolean(KEY_PREVENT_PLAY_AT_ZERO_VOLUME, false)
         pausePlaybackAtZeroVolume.value = prefs.getBoolean(KEY_PAUSE_PLAYBACK_AT_ZERO_VOLUME, false)
@@ -2277,6 +2291,16 @@ object AppSettings {
     fun setReplayGainPreventClipping(value: Boolean) {
         replayGainPreventClipping.value = value
         prefs.edit().putBoolean(KEY_REPLAYGAIN_PREVENT_CLIPPING, value).apply()
+    }
+
+    fun setLoudnessNormalization(value: Boolean) {
+        loudnessNormalization.value = value
+        prefs.edit().putBoolean(KEY_LOUDNESS_NORMALIZATION, value).apply()
+    }
+
+    fun setLoudnessOffOnSpeaker(value: Boolean) {
+        loudnessOffOnSpeaker.value = value
+        prefs.edit().putBoolean(KEY_LOUDNESS_OFF_ON_SPEAKER, value).apply()
     }
 
     fun setFavoriteBesideTrackMenu(value: Boolean) {
@@ -3315,6 +3339,8 @@ object AppSettings {
     private const val KEY_REPLAYGAIN_ALBUM_MODE = "replaygain_album_mode"
     private const val KEY_REPLAYGAIN_PREAMP_DB = "replaygain_preamp_db"
     private const val KEY_REPLAYGAIN_PREVENT_CLIPPING = "replaygain_prevent_clipping"
+    private const val KEY_LOUDNESS_NORMALIZATION = "loudness_normalization"
+    private const val KEY_LOUDNESS_OFF_ON_SPEAKER = "loudness_off_on_speaker"
     private const val KEY_FAVORITE_BESIDE_TRACK_MENU = "favorite_beside_track_menu"
     private const val KEY_PREVENT_PLAY_AT_ZERO_VOLUME = "prevent_play_at_zero_volume"
     private const val KEY_PAUSE_PLAYBACK_AT_ZERO_VOLUME = "pause_playback_at_zero_volume"

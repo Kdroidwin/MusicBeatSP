@@ -1,11 +1,63 @@
 import java.util.Properties
 import java.io.FileInputStream
+import java.security.MessageDigest
+import org.gradle.api.DefaultTask
+import org.gradle.api.file.ConfigurableFileCollection
+import org.gradle.api.file.DirectoryProperty
+import org.gradle.api.tasks.InputFiles
+import org.gradle.api.tasks.OutputDirectory
+import org.gradle.api.tasks.TaskAction
 
 plugins {
     id("com.android.application")
     id("org.jetbrains.kotlin.android")
     id("org.jetbrains.kotlin.plugin.compose")
     id("org.jetbrains.kotlin.plugin.serialization")
+}
+
+/** Bundle the matching Wear APK in the phone build for Settings' install/update flow. */
+abstract class BundleWearApk : DefaultTask() {
+    @get:InputFiles
+    abstract val apks: ConfigurableFileCollection
+
+    @get:OutputDirectory
+    abstract val outputDir: DirectoryProperty
+
+    @TaskAction
+    fun bundle() {
+        val out = outputDir.get().asFile.resolve("wear")
+        out.deleteRecursively()
+        out.mkdirs()
+        val apk = apks.asFileTree.matching { include("*.apk") }.files.singleOrNull()
+            ?: throw GradleException("Expected exactly one watch APK in ${apks.files}")
+        val target = out.resolve("BitChordWear.apk")
+        apk.copyTo(target, overwrite = true)
+        val digest = MessageDigest.getInstance("SHA-256")
+        target.inputStream().use { input ->
+            val buffer = ByteArray(64 * 1024)
+            while (true) {
+                val read = input.read(buffer)
+                if (read < 0) break
+                digest.update(buffer, 0, read)
+            }
+        }
+        out.resolve("BitChordWear.sha256").writeText(digest.digest().joinToString("") { "%02x".format(it) })
+    }
+}
+
+if (providers.gradleProperty("musicbeat.bundleWear").orNull != "false" && findProject(":wearos") != null) {
+    androidComponents.onVariants { variant ->
+        val flavor = variant.productFlavors.firstOrNull { it.first == "distribution" }?.second
+            ?: return@onVariants
+        val type = variant.buildType ?: return@onVariants
+        if (type != "debug" && type != "release") return@onVariants
+        val cap = variant.name.replaceFirstChar { it.uppercase() }
+        val bundle = tasks.register<BundleWearApk>("bundleWearApk$cap") {
+            dependsOn(":wearos:assemble$cap")
+            apks.from(rootProject.layout.projectDirectory.dir("wearos/build/outputs/apk/$flavor/$type"))
+        }
+        variant.sources.assets?.addGeneratedSourceDirectory(bundle, BundleWearApk::outputDir)
+    }
 }
 
 /**
@@ -46,14 +98,18 @@ android {
     compileSdk = 37
     ndkVersion = "27.0.12077973"
 
+    sourceSets {
+        getByName("main") { java.srcDir("../wearos/protocol") }
+    }
+
     defaultConfig {
         applicationId = "io.pockets.musicbestsp"
         // 26 keeps reach wide; real-time blur (RenderEffect) kicks in on API 31+,
         // Haze falls back to a translucent scrim below that.
         minSdk = 26
         targetSdk = 36
-        versionCode = 47
-        versionName = "2.5.2"
+        versionCode = rootProject.extra["musicBeatVersionCode"] as Int
+        versionName = rootProject.extra["musicBeatVersionName"] as String
 
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
 
@@ -152,6 +208,8 @@ android {
     packaging {
         resources {
             excludes += "/META-INF/versions/9/OSGI-INF/MANIFEST.MF"
+            // Bouncy Castle's split artifacts ship the same license resource.
+            excludes += "META-INF/LICENSE.md"
         }
     }
     compileOptions {
@@ -222,6 +280,14 @@ dependencies {
     // Official Google Cast sender framework. Device discovery and route UI
     // are initialized only when the player details menu is opened.
     implementation("com.google.android.gms:play-services-cast-framework:22.3.1")
+    // Wear OS companion: phone-side Data Layer bridge and watch output.
+    implementation("com.google.android.gms:play-services-wearable:20.0.1")
+    implementation("androidx.wear:wear-remote-interactions:1.1.0")
+    implementation("com.github.MuntashirAkon:libadb-android:3.1.1") {
+        exclude(group = "org.bouncycastle")
+    }
+    implementation("org.conscrypt:conscrypt-android:2.5.3")
+    implementation("org.bouncycastle:bcpkix-jdk18on:1.85")
     // Audio is progressive, but Apple serves its motion artwork as HLS — this
     // is what lets the animated sleeve play it. See CanvasArtworkPlayer.
     implementation("androidx.media3:media3-exoplayer-hls:1.11.0")

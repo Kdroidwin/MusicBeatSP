@@ -116,6 +116,9 @@ import com.music.bitchord.playback.cast.CastPlayback
 import com.music.bitchord.playback.cast.CastSink
 import com.music.bitchord.playback.cast.CastStream
 import com.music.bitchord.playback.cast.LocalCastHttpServer
+import com.music.bitchord.playback.cast.RemoteSpeaker
+import com.music.bitchord.playback.cast.Speakers
+import com.music.bitchord.wear.WearBridge
 import kotlinx.coroutines.CompletableDeferred
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.CoroutineExceptionHandler
@@ -152,12 +155,15 @@ private const val LONG_TRACK_RESUME_START_CLEAR_MS = 1_000L
 private const val LONG_TRACK_POSITION_ALREADY_SET_MS = 1_500L
 private const val LONG_TRACK_RESUME_END_CLEAR_MS = 5_000L
 private const val MAX_CAST_LOCAL_SERVERS = 8
+private const val WATCH_SESSION_FOREGROUND_MS = 6 * 60 * 60 * 1000L
 
 /** Session command used by both the player UI and the media notification. */
 const val ACTION_TOGGLE_AUTOPLAY = "com.music.bitchord.action.TOGGLE_AUTOPLAY"
 
 /** Session command used by the media notification's Shuffle button. */
 const val ACTION_TOGGLE_SHUFFLE = "com.music.bitchord.action.TOGGLE_SHUFFLE"
+/** Session command used by Wear OS to toggle the current track's favorite state. */
+const val ACTION_TOGGLE_FAVORITE = "com.music.bitchord.action.TOGGLE_FAVORITE"
 private const val ACTION_OPEN_MEDIA_PLAYLISTS = "com.music.bitchord.action.OPEN_MEDIA_PLAYLISTS"
 private const val ACTION_OPEN_MEDIA_LYRICS = "com.music.bitchord.action.OPEN_MEDIA_LYRICS"
 private const val ACTION_OPEN_MEDIA_QUEUE = "com.music.bitchord.action.OPEN_MEDIA_QUEUE"
@@ -330,6 +336,9 @@ class PlaybackService : MediaLibraryService() {
     }
 
     private val audioManager by lazy { getSystemService(AudioManager::class.java) }
+    /** Conservative until routing is known; only the built-in phone speaker is excluded. */
+    @Volatile
+    private var phoneSpeakerOutputActive = true
 
     private fun canStartPlaybackAtCurrentVolume(): Boolean {
         if (!AppSettings.preventPlayAtZeroVolume.value) return true
@@ -620,6 +629,14 @@ class PlaybackService : MediaLibraryService() {
         say = { message -> Toast.makeText(applicationContext, message, Toast.LENGTH_SHORT).show() },
     )
 
+    /** The companion watch follows the same queue and can also act as its speaker. */
+    private val watchSpeaker by lazy {
+        WearBridge.createSpeaker(this, scope, localPlayer = { player }, onChanged = { publishWidgetState() })
+    }
+
+    /** A single remote output presented to the media session; the phone remains queue owner. */
+    private val speakers by lazy { Speakers(listOf(castPlayback, watchSpeaker)) }
+
     /** Commands exposed as the secondary buttons on the media notification. */
     private val favoriteCommand = SessionCommand(ACTION_TOGGLE_FAVORITE, Bundle.EMPTY)
     private val autoplayCommand = SessionCommand(ACTION_TOGGLE_AUTOPLAY, Bundle.EMPTY)
@@ -807,7 +824,7 @@ class PlaybackService : MediaLibraryService() {
             handleAudioFocusPlaybackChange(playWhenReady)
             publishWidgetState(playing = playWhenReady)
             QuickPlayTileState.setActive(this@PlaybackService, playWhenReady)
-            if (playWhenReady) player?.let(castPlayback::onLocalStartedPlaying)
+            if (playWhenReady) player?.let(speakers::onLocalStartedPlaying)
         }
 
         override fun onShuffleModeEnabledChanged(shuffleModeEnabled: Boolean) {
@@ -839,6 +856,7 @@ class PlaybackService : MediaLibraryService() {
                 savePlaybackState(exoPlayer)
                 if (exoPlayer.isPlaying) pushDiscordPresence(exoPlayer)
                 updateLyricSubtitle()
+                WearBridge.republish(this@PlaybackService, exoPlayer)
             }
         }
 
@@ -890,7 +908,7 @@ class PlaybackService : MediaLibraryService() {
                 externalAudioPopupWindow?.dismiss()
                 externalPreviewReturnState = null
             }
-            castPlayback.onLocalTransition(mediaItem, reason)
+            speakers.onLocalTransition(mediaItem, reason)
             // A quality swap replaces the playing item, which Media3
             // reports here as a playlist change — indistinguishable, from
             // this callback's point of view, from the queue moving on. It
@@ -1025,7 +1043,7 @@ class PlaybackService : MediaLibraryService() {
                 lastRepeatMode = repeatMode
                 return
             }
-            castPlayback.onLocalRepeatChanged(repeatMode)
+            speakers.onLocalRepeatChanged(repeatMode)
             val previous = lastRepeatMode
             lastRepeatMode = repeatMode
             // Repeat-all loops the queue as it stands; AutoPlay's tracks are the
@@ -1068,7 +1086,7 @@ class PlaybackService : MediaLibraryService() {
                 externalAudioPopupWindow?.dismiss()
                 externalPreviewReturnState = null
             }
-            castPlayback.onLocalQueueChanged()
+            speakers.onLocalQueueChanged()
             if (exoPlayer.isPlaying) prefetchAround(exoPlayer)
             if (reason == Player.TIMELINE_CHANGE_REASON_PLAYLIST_CHANGED) {
                 saveQueueSnapshot(exoPlayer)
@@ -1476,6 +1494,8 @@ class PlaybackService : MediaLibraryService() {
         // while routing the smb:// scheme to the upstream SMB reader.
         val routedDataSourceFactory = SmbDataSource.RoutingFactory(defaultDataSourceFactory)
         AudioCache.setUpstream(routedDataSourceFactory)
+        // The watch speaker reads through the same resolver/cache route as this player.
+        WearBridge.attachStreams(AudioCache.playbackFactory(routedDataSourceFactory))
         mediaSourceFactory = DefaultMediaSourceFactory(AudioCache.playbackFactory(routedDataSourceFactory))
             .setLoadErrorHandlingPolicy(PermanentAwareLoadErrorPolicy())
 
@@ -1549,6 +1569,13 @@ class PlaybackService : MediaLibraryService() {
         crossfade = createCrossfadeController().also { it.start() }
         CastController.ensureStarted(this)
         CastController.attach(castPlayback)
+        scope.launch {
+            WearBridge.watchSession.collect { onWatch ->
+                setForegroundServiceTimeoutMs(
+                    if (onWatch) WATCH_SESSION_FOREGROUND_MS else DEFAULT_FOREGROUND_SERVICE_TIMEOUT_MS,
+                )
+            }
+        }
     }
 
     /** Resolve the same stream the local player uses, or expose a local file over a session token. */
@@ -1890,7 +1917,7 @@ class PlaybackService : MediaLibraryService() {
         { lastPublishedSubtitle },
         ::canStartPlaybackAtCurrentVolume,
         { savePlaybackState(target) },
-        castPlayback,
+        speakers,
         ::closeLocalCastServers,
         onBeforeManualNavigation = { crossfade?.cancelTransition() },
     )
@@ -1901,6 +1928,8 @@ class PlaybackService : MediaLibraryService() {
         if (target.currentMediaItem?.mediaId != item.mediaId) return
         val chain = spareAudioChain
         val bitPerfect = AppSettings.bitPerfectPlayback.value
+        chain.replayGain.normalizationMediaId = item.mediaId
+        chain.replayGain.normalizationBypassed = bitPerfect
         chain.resampler.cutoffHz = if (bitPerfect) 0 else AppSettings.resamplerCutoffHz.value
         chain.spatial.enabled = !bitPerfect && AppSettings.spatialAudio.value &&
             NerdStats.declaredFormat(item.mediaId)?.isDolbyAtmos != true
@@ -2104,6 +2133,7 @@ class PlaybackService : MediaLibraryService() {
         val mediaItem = player?.currentMediaItem
         val song = mediaItem?.toSong()
         val mediaId = mediaItem?.mediaId
+        activeAudioChain.replayGain.normalizationMediaId = mediaId
         val enabled = AppSettings.replayGainEnabled.value
         val bitPerfect = AppSettings.bitPerfectPlayback.value
         val albumMode = AppSettings.replayGainAlbumMode.value
@@ -4104,21 +4134,23 @@ class PlaybackService : MediaLibraryService() {
     private fun publishWidgetState(playing: Boolean? = null) {
         val exoPlayer = player ?: return
         val song = exoPlayer.currentMediaItem?.toSong() ?: return
-        MediaWidgetSnapshot.save(
-            this,
-            MediaWidgetSnapshot(
+        val reported: Player = mediaSession?.player ?: exoPlayer
+        val snapshot = MediaWidgetSnapshot(
                 mediaId = song.videoId,
                 title = song.title,
                 artist = song.artist,
                 artworkUrl = song.thumbnailUrl,
                 // playWhenReady, not isPlaying — see MediaWidgetSnapshot.isPlaying.
-                isPlaying = playing ?: exoPlayer.playWhenReady,
+                isPlaying = playing ?: reported.playWhenReady,
                 hasPrevious = exoPlayer.hasPreviousMediaItem(),
                 hasNext = exoPlayer.hasNextMediaItem(),
                 shuffleEnabled = exoPlayer.shuffleModeEnabled,
-            ),
-        )
+                isLiked = LikeState.overrides.value[song.videoId] == LikeStatus.LIKE,
+                canLike = song.localUri == null && com.music.bitchord.data.innertube.Innertube.cookie != null,
+            )
+        MediaWidgetSnapshot.save(this, snapshot)
         MediaWidget.refresh(this)
+        WearBridge.publish(this, snapshot, reported, playing)
     }
 
     /**
@@ -4364,6 +4396,8 @@ class PlaybackService : MediaLibraryService() {
      */
     private fun applySettings(player: ExoPlayer, chain: PlaybackAudioChain) {
         val bitPerfect = AppSettings.bitPerfectPlayback.value
+        chain.replayGain.normalizationGainDbFor = ::loudnessNormalizationGainDbFor
+        chain.replayGain.normalizationBypassed = bitPerfect
         applyAudioOffloadPreference(player)
         player.skipSilenceEnabled = AppSettings.skipSilence.value && !bitPerfect
         chain.resampler.cutoffHz = if (bitPerfect) 0 else AppSettings.resamplerCutoffHz.value
@@ -4398,6 +4432,8 @@ class PlaybackService : MediaLibraryService() {
         val preferred = usb.takeIf { AppSettings.preferUsbDac.value }
         eachPlayer { it.setPreferredAudioDevice(preferred) }
         val routedDevice = currentOutputDevice(manager, preferred)
+        phoneSpeakerOutputActive = !castPlayback.active &&
+            (routedDevice == null || routedDevice.type == AudioDeviceInfo.TYPE_BUILTIN_SPEAKER)
         val outputProfileKey = routedDevice?.let { device ->
             "out-${(device.type.toString() + ":" + device.productName.toString().lowercase()).hashCode().toUInt().toString(16)}"
         } ?: "default"
@@ -4538,6 +4574,14 @@ class PlaybackService : MediaLibraryService() {
         }
         return outputs.firstOrNull { it.type in preferredTypes } ?: outputs.firstOrNull { it.type == AudioDeviceInfo.TYPE_BUILTIN_SPEAKER }
             ?: outputs.firstOrNull()
+    }
+
+    /** Reads only the resolver's in-memory figure; no request is made from the audio thread. */
+    private fun loudnessNormalizationGainDbFor(mediaId: String): Float? {
+        if (!AppSettings.loudnessNormalization.value || AppSettings.bitPerfectPlayback.value) return null
+        if (AppSettings.loudnessOffOnSpeaker.value && phoneSpeakerOutputActive) return null
+        val loudnessDb = StreamResolver.loudnessDbFor(mediaId) ?: return null
+        return (-loudnessDb).toFloat().takeIf { it.isFinite() }?.coerceIn(-15f, 3f)
     }
 
     private fun outputTypeLabel(type: Int): Int {
@@ -4703,6 +4747,8 @@ class PlaybackService : MediaLibraryService() {
         scope.launch {
             AppSettings.bitPerfectPlayback.drop(1).collect { enabled ->
                 crossfade?.cancelTransition()
+                activeAudioChain.replayGain.normalizationBypassed = enabled
+                spareAudioChain.replayGain.normalizationBypassed = enabled
                 eachPlayer { current ->
                     current.skipSilenceEnabled = AppSettings.skipSilence.value && !enabled
                     current.playbackParameters = if (enabled) PlaybackParameters(1f, 1f) else PlaybackParameters(
@@ -5226,6 +5272,8 @@ class PlaybackService : MediaLibraryService() {
 
 
     override fun onDestroy() {
+        WearBridge.attachStreams(null)
+        WearBridge.releaseSpeaker()
         externalAudioPopupWindow?.dismiss()
         externalAudioPopupWindow = null
         runCatching { contentResolver.unregisterContentObserver(systemVolumeObserver) }
@@ -5458,7 +5506,7 @@ class PlaybackService : MediaLibraryService() {
         private val getSubtitle: () -> String?,
         private val canStartPlayback: () -> Boolean,
         private val beforeStop: () -> Unit,
-        private val cast: CastPlayback,
+        private val cast: RemoteSpeaker,
         private val onCastEnded: () -> Unit,
         private val onBeforeManualNavigation: () -> Unit,
     ) : ForwardingPlayer(player), CastSink {
@@ -5509,12 +5557,12 @@ class PlaybackService : MediaLibraryService() {
         override fun isDeviceMuted(): Boolean = if (cast.active) false else super.isDeviceMuted()
 
         override fun setDeviceVolume(volume: Int, flags: Int) {
-            if (cast.active) CastController.setVolume(volume / 100f) else super.setDeviceVolume(volume, flags)
+            if (cast.active) cast.setVolume(volume / 100f) else super.setDeviceVolume(volume, flags)
         }
 
         @Suppress("DEPRECATION")
         override fun setDeviceVolume(volume: Int) {
-            if (cast.active) CastController.setVolume(volume / 100f) else super.setDeviceVolume(volume)
+            if (cast.active) cast.setVolume(volume / 100f) else super.setDeviceVolume(volume)
         }
 
         override fun increaseDeviceVolume(flags: Int) {
@@ -5545,7 +5593,7 @@ class PlaybackService : MediaLibraryService() {
         }
 
         private fun nudgeReceiverVolume(delta: Float) =
-            CastController.setVolume(CastController.volume.value + delta)
+            cast.setVolume(cast.deviceVolume / 100f + delta)
 
         override fun play() {
             if (!canStartPlayback()) return
@@ -5692,7 +5740,7 @@ class PlaybackService : MediaLibraryService() {
         }
 
         override fun onRemoteRouteChanged() {
-            if (!cast.active) onCastEnded()
+            if (!CastController.state.value.casting) onCastEnded()
             val info = deviceInfo
             listeners.forEach { it.onDeviceInfoChanged(info) }
             listeners.forEach {
@@ -6443,7 +6491,6 @@ class PlaybackService : MediaLibraryService() {
 
         const val CHANNEL_ID = "bitchord_playback"
         const val SESSION_ID = "BitChordPlayback"
-        const val ACTION_TOGGLE_FAVORITE = "com.music.bitchord.action.TOGGLE_FAVORITE"
 
         /** How often played-seconds are sampled off the player. */
         const val PROGRESS_SAMPLE_MS = 5_000L

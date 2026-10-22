@@ -17,4 +17,5 @@ dependencyResolutionManagement {
 
 rootProject.name = "BitChord"
 include(":app")
- 
+include(":wearos")
+

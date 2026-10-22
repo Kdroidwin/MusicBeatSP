@@ -38,3 +38,7 @@ plugins {
     id("org.jetbrains.kotlin.plugin.compose") version "2.3.20" apply false
     id("org.jetbrains.kotlin.plugin.serialization") version "2.3.20" apply false
 }
+
+// The companion watch app must report the same version as the phone app.
+extra["musicBeatVersionCode"] = 48
+extra["musicBeatVersionName"] = "2.6.0"

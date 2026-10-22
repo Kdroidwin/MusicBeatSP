@@ -82,8 +82,8 @@ class CastPlayback(
     private val localPlayer: () -> ExoPlayer?,
     private val resolve: suspend (MediaItem, Inet4Address?) -> CastStream?,
     private val say: (Int) -> Unit,
-) {
-    var sink: CastSink? = null
+) : RemoteSpeaker {
+    override var sink: CastSink? = null
 
     init {
         scope.launch {
@@ -92,7 +92,7 @@ class CastPlayback(
     }
 
     /** Whether the receiver is the speaker. Everything else here is meaningful only while it is. */
-    var active = false
+    override var active = false
         private set
 
     /** Set by [CastController.disconnect]: the listener chose this phone, so keep playing on it. */
@@ -128,14 +128,14 @@ class CastPlayback(
     private var endMediaId: String? = null
     private var endWasPlaying = false
 
-    val isPlaying: Boolean
+    override val isPlaying: Boolean
         get() = active && !loading && !bufferingTimedOut &&
             client?.mediaStatus?.playerState == MediaStatus.PLAYER_STATE_PLAYING
 
-    val playWhenReady: Boolean get() = wantsPlay
+    override val playWhenReady: Boolean get() = wantsPlay
 
     /** In [Player]'s own terms, so the session player can answer with it directly. */
-    val playbackState: Int
+    override val playbackState: Int
         get() = when {
             loading -> Player.STATE_BUFFERING
             bufferingTimedOut -> Player.STATE_IDLE
@@ -146,7 +146,7 @@ class CastPlayback(
             }
         }
 
-    val positionMs: Long
+    override val positionMs: Long
         get() {
             val live = client?.takeIf { !loading }?.approximateStreamPosition
             val asked = requestedPositionMs
@@ -160,13 +160,15 @@ class CastPlayback(
             }
         }
 
-    val durationMs: Long
+    override val durationMs: Long
         get() = client?.streamDuration?.takeIf { it > 0 } ?: C.TIME_UNSET
 
     /** The receiver's own volume as the whole number 0..100 a [Player] device expects. */
-    val deviceVolume: Int get() = (CastController.volume.value * 100f).toInt()
+    override val deviceVolume: Int get() = (CastController.volume.value * 100f).toInt()
 
-    fun play() {
+    override fun setVolume(fraction: Float) = CastController.setVolume(fraction)
+
+    override fun play() {
         if (!active) return
         if (bufferingTimedOut) {
             val item = localPlayer()?.currentMediaItem
@@ -183,7 +185,7 @@ class CastPlayback(
         sink?.onRemotePlaybackChanged()
     }
 
-    fun pause() {
+    override fun pause() {
         if (!active) return
         wantsPlay = false
         bufferingTimeoutJob?.cancel()
@@ -191,7 +193,7 @@ class CastPlayback(
         sink?.onRemotePlaybackChanged()
     }
 
-    fun seekTo(positionMs: Long) {
+    override fun seekTo(positionMs: Long) {
         val client = client ?: return
         if (!active) return
         requestedPositionMs = positionMs.coerceAtLeast(0L)
@@ -295,7 +297,7 @@ class CastPlayback(
     // ---- the phone's player moved -------------------------------------------
 
     /** A new track became the phone's current one. */
-    fun onLocalTransition(item: MediaItem?, reason: Int) {
+    override fun onLocalTransition(item: MediaItem?, reason: Int) {
         if (!active || item == null) return
         val remote = client ?: return
         if (item.mediaId == remoteMediaId()) {
@@ -320,9 +322,9 @@ class CastPlayback(
     }
 
     /** The phone's queue changed under the playing track. */
-    fun onLocalQueueChanged() = scheduleReconcile()
+    override fun onLocalQueueChanged() = scheduleReconcile()
 
-    fun onLocalRepeatChanged(repeatMode: Int) {
+    override fun onLocalRepeatChanged(repeatMode: Int) {
         if (!active) return
         client?.queueSetRepeatMode(receiverRepeat(repeatMode), null)
     }
@@ -332,7 +334,7 @@ class CastPlayback(
      * while the receiver is the speaker. The phone goes quiet again and the
      * request is made of the receiver instead.
      */
-    fun onLocalStartedPlaying(player: Player) {
+    override fun onLocalStartedPlaying(player: Player) {
         if (!active) return
         player.pause()
         play()

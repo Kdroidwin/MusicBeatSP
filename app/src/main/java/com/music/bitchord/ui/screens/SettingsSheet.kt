@@ -34,6 +34,7 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.rounded.Notes
 import androidx.compose.material.icons.automirrored.rounded.PlaylistAdd
 import androidx.compose.material.icons.automirrored.rounded.VolumeOff
+import androidx.compose.material.icons.automirrored.rounded.VolumeUp
 import androidx.compose.material.icons.rounded.Album
 import androidx.compose.material.icons.rounded.AudioFile
 import androidx.compose.material.icons.rounded.ArrowDownward
@@ -195,6 +196,8 @@ import com.music.bitchord.feature.localmusic.data.MusicoletImportException
 import com.music.bitchord.feature.localmusic.data.MusicoletImportFailure
 import com.music.bitchord.feature.localmusic.data.PreparedMusicoletBackup
 import com.music.bitchord.ui.player.fullBleedArtworkAvailable
+import com.music.bitchord.ui.screens.WearOsSettingsRow
+import com.music.bitchord.wear.WatchInstaller
 import kotlinx.coroutines.launch
 import java.util.Locale
 import kotlin.math.roundToInt
@@ -248,6 +251,8 @@ fun SettingsScreen(
     onPreloadArtworkNow: () -> Unit,
     onPlayCueSheet: (List<com.music.bitchord.data.model.Song>) -> Unit,
     onManageSources: () -> Unit,
+    onWearOs: () -> Unit,
+    onCdRipComplete: () -> Unit,
     contentPadding: PaddingValues,
     modifier: Modifier = Modifier,
 ) {
@@ -340,6 +345,8 @@ fun SettingsScreen(
     val restartQueueWhenEnded by AppSettings.restartQueueWhenEnded.collectAsStateWithLifecycle()
     val persistentLocalArtwork by AppSettings.persistentLocalArtwork.collectAsStateWithLifecycle()
     val resamplerCutoffHz by AppSettings.resamplerCutoffHz.collectAsStateWithLifecycle()
+    val loudnessNormalization by AppSettings.loudnessNormalization.collectAsStateWithLifecycle()
+    val loudnessOffOnSpeaker by AppSettings.loudnessOffOnSpeaker.collectAsStateWithLifecycle()
     val liquidGlassSupported = isGlassSupported()
     val lyricsBlur by AppSettings.lyricsBlur.collectAsStateWithLifecycle()
     val lyricsFontScale by AppSettings.lyricsFontScale.collectAsStateWithLifecycle()
@@ -589,6 +596,19 @@ fun SettingsScreen(
             hidePlayerHeaderDuringLyrics,
         ) { AppSettings.setHidePlayerHeaderDuringLyrics(!hidePlayerHeaderDuringLyrics) },
         SettingsSearchEntry(stringResource(R.string.skip_silence), stringResource(R.string.skip_silence_subtitle), listOf("silence", "無音", "再生"), skipSilence) { AppSettings.setSkipSilence(!skipSilence) },
+        SettingsSearchEntry(
+            stringResource(R.string.loudness_normalization),
+            stringResource(R.string.loudness_normalization_subtitle),
+            listOf("loudness", "normalization", "volume", "音量", "正規化", "ラウドネス"),
+            loudnessNormalization,
+        ) { AppSettings.setLoudnessNormalization(!loudnessNormalization) },
+        SettingsSearchEntry(
+            stringResource(R.string.loudness_off_on_speaker),
+            stringResource(R.string.loudness_off_on_speaker_subtitle),
+            listOf("loudness", "normalization", "speaker", "phone", "音量", "正規化", "スマートフォン", "スピーカー"),
+            loudnessOffOnSpeaker,
+            enabled = loudnessNormalization,
+        ) { if (loudnessNormalization) AppSettings.setLoudnessOffOnSpeaker(!loudnessOffOnSpeaker) },
         SettingsSearchEntry(
             title = stringResource(R.string.automix),
             subtitle = stringResource(if (smartFade) R.string.automix_enabled_subtitle else R.string.automix_disabled_subtitle),
@@ -1522,7 +1542,19 @@ fun SettingsScreen(
         )
 
         if (settingsSearchQuery.isNotBlank()) {
-            val matches = (settingsSearchEntries + settingsActionSearchEntries).filter { entry ->
+            val wearSearchEntry = if (WatchInstaller.available(context)) {
+                listOf(
+                    SettingsSearchEntry(
+                        title = stringResource(R.string.wear_os_section),
+                        subtitle = stringResource(R.string.wear_os_page_title),
+                        keywords = listOf("wear", "watch", "wear os", "galaxy watch", "pixel watch", "ウォッチ", "時計"),
+                        activate = onWearOs,
+                    ),
+                )
+            } else {
+                emptyList()
+            }
+            val matches = (settingsSearchEntries + settingsActionSearchEntries + wearSearchEntry).filter { entry ->
                 (entry.title + " " + entry.subtitle + " " + entry.keywords.joinToString(" "))
                     .contains(settingsSearchQuery.trim(), ignoreCase = true)
             }
@@ -1648,6 +1680,27 @@ fun SettingsScreen(
                 },
                 onClick = { AppSettings.setSkipSilence(!skipSilence) },
             )
+            RowDivider()
+            SettingsRow(
+                icon = Icons.AutoMirrored.Rounded.VolumeUp,
+                title = stringResource(R.string.loudness_normalization),
+                subtitle = stringResource(R.string.loudness_normalization_subtitle),
+                trailing = {
+                    Switch(
+                        checked = loudnessNormalization,
+                        onCheckedChange = AppSettings::setLoudnessNormalization,
+                    )
+                },
+                onClick = { AppSettings.setLoudnessNormalization(!loudnessNormalization) },
+            )
+            if (loudnessNormalization) {
+                SettingsSubRow(
+                    title = stringResource(R.string.loudness_off_on_speaker),
+                    subtitle = stringResource(R.string.loudness_off_on_speaker_subtitle),
+                    checked = loudnessOffOnSpeaker,
+                    onCheckedChange = AppSettings::setLoudnessOffOnSpeaker,
+                )
+            }
             RowDivider()
             SettingsRow(
                 icon = Icons.Rounded.AutoAwesome,
@@ -3504,6 +3557,10 @@ fun SettingsScreen(
 
         SourcesSettingsGroup(onClick = onManageSources)
 
+        if (WatchInstaller.available(context)) {
+            WearOsSettingsRow(onClick = onWearOs)
+        }
+
         if (!context.packageName.endsWith(".nointernet")) {
             MusicServersSettingsGroup(onClick = { showMusicServersSheet = true })
         }
@@ -5073,6 +5130,7 @@ internal fun SettingsRow(
 @Composable
 internal fun SettingsSubRow(
     title: String,
+    subtitle: String? = null,
     checked: Boolean,
     onCheckedChange: (Boolean) -> Unit,
     badge: String? = null,
@@ -5084,17 +5142,29 @@ internal fun SettingsSubRow(
             .padding(start = ROW_INSET, end = ROW_INSET, top = 0.dp, bottom = 10.dp),
         verticalAlignment = Alignment.CenterVertically,
     ) {
-        Row(verticalAlignment = Alignment.CenterVertically, modifier = Modifier.weight(1f)) {
-            Text(
-                text = title,
-                style = MaterialTheme.typography.bodyLarge,
-                color = MaterialTheme.colorScheme.onBackground,
-                maxLines = 1,
-                overflow = TextOverflow.Ellipsis,
-            )
-            if (badge != null) {
-                Spacer(Modifier.width(8.dp))
-                Badge(badge)
+        Column(modifier = Modifier.weight(1f)) {
+            Row(verticalAlignment = Alignment.CenterVertically) {
+                Text(
+                    text = title,
+                    style = MaterialTheme.typography.bodyLarge,
+                    color = MaterialTheme.colorScheme.onBackground,
+                    maxLines = 1,
+                    overflow = TextOverflow.Ellipsis,
+                    modifier = Modifier.weight(1f, fill = false),
+                )
+                if (badge != null) {
+                    Spacer(Modifier.width(8.dp))
+                    Badge(badge)
+                }
+            }
+            subtitle?.let {
+                Text(
+                    text = it,
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    maxLines = 2,
+                    overflow = TextOverflow.Ellipsis,
+                )
             }
         }
         Switch(

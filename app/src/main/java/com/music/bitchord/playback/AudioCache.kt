@@ -320,7 +320,7 @@ object AudioCache {
      * read-ahead builds the same URI, so both land on one cache entry.
      */
     private val keyFactory = CacheKeyFactory { spec ->
-        spec.uri.getQueryParameter("v")
+        val key = spec.uri.getQueryParameter("v")
             // A YouTube id can name several different recordings on disk: the
             // Opus rendition YouTube serves, whatever a source ranked above it
             // hands over instead — see [SourceResolver.substituteForYouTube] —
@@ -363,7 +363,11 @@ object AudioCache {
             }
             ?: spec.key
             ?: spec.uri.toString()
+        if (spec.uri.getQueryParameter(WATCH_READ_PARAM) != null) "$key#watch" else key
     }
+
+    /** Keeps the watch's capped stream separate from a higher-quality phone cache entry. */
+    const val WATCH_READ_PARAM = "watch_read"
 
     private const val CACHE_STATE_PREFS = "audio_cache_state"
     private const val KEY_MATCHING_SCHEMA = "matching_schema"
