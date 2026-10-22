@@ -170,6 +170,8 @@
     <string name="widget_wide_description">Album art with the track and playback controls, full width.</string>
     <string name="widget_album_square_description">Track title above square album art, with shuffle and playback controls below.</string>
     <string name="widget_mini_description">A compact mini player with album art, track details, and playback controls.</string>
+    <string name="widget_pill_label">Now playing pill</string>
+    <string name="widget_pill_description">A wide translucent player with album art, the current title, and previous, play or pause, and next controls.</string>
     <string name="widget_shuffle">Shuffle</string>
     <string name="widget_shuffle_on">Shuffle on</string>
     <string name="widget_play">Play</string>
@@ -181,6 +183,12 @@
     <string name="widget_open_bitchord">Open MusicBeat</string>
     <string name="widget_preview_title">Song title</string>
     <string name="widget_preview_artist">Artist</string>
+    <string name="volume_boost">Volume boost</string>
+    <string name="volume_boost_subtitle">Raises decoded PCM by the selected amount. Peaks are limited to the PCM range; unavailable in bit-perfect mode.</string>
+    <string name="volume_boost_value">%1$.1f dB</string>
+    <string name="pill_widget_opacity">Now playing pill background opacity</string>
+    <string name="pill_widget_opacity_subtitle">Changes only the tint behind the artwork and controls; lower values reveal more of the wallpaper.</string>
+    <string name="pill_widget_opacity_value">%1$d%%</string>
     <string name="download_quality">Download quality</string>
     <string name="download_wifi_only">Download over Wi-Fi only</string>
     <string name="convert_to_audio">Convert to audio</string>

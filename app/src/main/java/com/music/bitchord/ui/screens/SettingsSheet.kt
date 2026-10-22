@@ -349,6 +349,9 @@ fun SettingsScreen(
     val resamplerCutoffHz by AppSettings.resamplerCutoffHz.collectAsStateWithLifecycle()
     val loudnessNormalization by AppSettings.loudnessNormalization.collectAsStateWithLifecycle()
     val loudnessOffOnSpeaker by AppSettings.loudnessOffOnSpeaker.collectAsStateWithLifecycle()
+    val volumeBoostEnabled by AppSettings.volumeBoostEnabled.collectAsStateWithLifecycle()
+    val volumeBoostDb by AppSettings.volumeBoostDb.collectAsStateWithLifecycle()
+    val pillWidgetOpacity by AppSettings.pillWidgetOpacity.collectAsStateWithLifecycle()
     val liquidGlassSupported = isGlassSupported()
     val lyricsBlur by AppSettings.lyricsBlur.collectAsStateWithLifecycle()
     val lyricsFontScale by AppSettings.lyricsFontScale.collectAsStateWithLifecycle()
@@ -666,6 +669,24 @@ fun SettingsScreen(
             dolbyAtmos,
         ) { AppSettings.setDolbyAtmos(!dolbyAtmos) },
         SettingsSearchEntry(
+            title = stringResource(R.string.volume_boost),
+            subtitle = stringResource(R.string.volume_boost_subtitle),
+            keywords = listOf("volume", "boost", "gain", "音量", "ブースト", "増幅"),
+            checked = volumeBoostEnabled,
+            activate = { AppSettings.setVolumeBoostEnabled(!volumeBoostEnabled) },
+        ),
+        SettingsSearchEntry(
+            title = stringResource(R.string.volume_boost),
+            subtitle = stringResource(R.string.volume_boost_subtitle),
+            keywords = listOf("volume", "boost", "gain", "dB", "音量", "ブースト", "増幅"),
+            valueLabel = stringResource(R.string.volume_boost_value, volumeBoostDb),
+            sliderValue = volumeBoostDb,
+            sliderValueRange = 0f..12f,
+            enabled = volumeBoostEnabled,
+            onSliderValueChange = AppSettings::setVolumeBoostDb,
+            activate = {},
+        ),
+        SettingsSearchEntry(
             stringResource(R.string.dirac_audio_eq),
             stringResource(R.string.dirac_audio_eq_subtitle),
             listOf("dirac", "eq", "equalizer", "ディラック", "イコライザー"),
@@ -781,6 +802,16 @@ fun SettingsScreen(
             listOf("mini player", "album art", "color", "ミニプレイヤー", "アルバムアート", "色"),
             miniPlayerArtworkColor,
         ) { AppSettings.setMiniPlayerArtworkColor(!miniPlayerArtworkColor) },
+        SettingsSearchEntry(
+            title = stringResource(R.string.pill_widget_opacity),
+            subtitle = stringResource(R.string.pill_widget_opacity_subtitle),
+            keywords = listOf("widget", "opacity", "transparency", "ウィジェット", "透明度", "ピル型"),
+            valueLabel = stringResource(R.string.pill_widget_opacity_value, pillWidgetOpacity.roundToInt()),
+            sliderValue = pillWidgetOpacity,
+            sliderValueRange = 0f..100f,
+            onSliderValueChange = AppSettings::setPillWidgetOpacity,
+            activate = {},
+        ),
         SettingsSearchEntry(
             stringResource(R.string.mini_player_artwork_outline),
             stringResource(R.string.mini_player_artwork_outline_subtitle),
@@ -1718,6 +1749,38 @@ fun SettingsScreen(
             }
             RowDivider()
             SettingsRow(
+                icon = Icons.AutoMirrored.Rounded.VolumeUp,
+                title = stringResource(R.string.volume_boost),
+                subtitle = stringResource(R.string.volume_boost_subtitle),
+                trailing = {
+                    Switch(
+                        checked = volumeBoostEnabled,
+                        onCheckedChange = AppSettings::setVolumeBoostEnabled,
+                    )
+                },
+                onClick = { AppSettings.setVolumeBoostEnabled(!volumeBoostEnabled) },
+            )
+            if (volumeBoostEnabled) {
+                SettingsRow(
+                    icon = Icons.Rounded.Tune,
+                    title = stringResource(R.string.volume_boost),
+                    trailing = {
+                        Text(
+                            text = stringResource(R.string.volume_boost_value, volumeBoostDb),
+                            color = MaterialTheme.colorScheme.primary,
+                            style = MaterialTheme.typography.labelLarge,
+                        )
+                    },
+                )
+                Slider(
+                    value = volumeBoostDb,
+                    onValueChange = AppSettings::setVolumeBoostDb,
+                    valueRange = 0f..12f,
+                    modifier = Modifier.padding(start = ROW_INSET, end = ROW_INSET, bottom = 14.dp),
+                )
+            }
+            RowDivider()
+            SettingsRow(
                 icon = Icons.Rounded.AutoAwesome,
                 title = stringResource(R.string.automix),
                 subtitle = stringResource(if (smartFade) R.string.automix_enabled_subtitle else R.string.automix_disabled_subtitle),
@@ -2504,6 +2567,25 @@ fun SettingsScreen(
                 subtitle = stringResource(R.string.choose_theme_image_subtitle),
                 value = stringResource(if (customThemeImageUri.isNullOrBlank()) R.string.choose_image else R.string.theme_image_selected),
                 onClick = chooseThemeImage,
+            )
+            RowDivider()
+            SettingsRow(
+                icon = Icons.Rounded.ViewStream,
+                title = stringResource(R.string.pill_widget_opacity),
+                subtitle = stringResource(R.string.pill_widget_opacity_subtitle),
+                trailing = {
+                    Text(
+                        text = stringResource(R.string.pill_widget_opacity_value, pillWidgetOpacity.roundToInt()),
+                        color = MaterialTheme.colorScheme.primary,
+                        style = MaterialTheme.typography.labelLarge,
+                    )
+                },
+            )
+            Slider(
+                value = pillWidgetOpacity,
+                onValueChange = AppSettings::setPillWidgetOpacity,
+                valueRange = 0f..100f,
+                modifier = Modifier.padding(start = ROW_INSET, end = ROW_INSET, bottom = 14.dp),
             )
             if (!customThemeImageUri.isNullOrBlank()) {
                 RowDivider()

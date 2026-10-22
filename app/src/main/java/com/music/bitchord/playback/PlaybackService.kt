@@ -1930,6 +1930,7 @@ class PlaybackService : MediaLibraryService() {
         val bitPerfect = AppSettings.bitPerfectPlayback.value
         chain.replayGain.normalizationMediaId = item.mediaId
         chain.replayGain.normalizationBypassed = bitPerfect
+        applyVolumeBoost(chain)
         chain.resampler.cutoffHz = if (bitPerfect) 0 else AppSettings.resamplerCutoffHz.value
         chain.spatial.enabled = !bitPerfect && AppSettings.spatialAudio.value &&
             NerdStats.declaredFormat(item.mediaId)?.isDolbyAtmos != true
@@ -4398,6 +4399,7 @@ class PlaybackService : MediaLibraryService() {
         val bitPerfect = AppSettings.bitPerfectPlayback.value
         chain.replayGain.normalizationGainDbFor = ::loudnessNormalizationGainDbFor
         chain.replayGain.normalizationBypassed = bitPerfect
+        applyVolumeBoost(chain)
         applyAudioOffloadPreference(player)
         player.skipSilenceEnabled = AppSettings.skipSilence.value && !bitPerfect
         chain.resampler.cutoffHz = if (bitPerfect) 0 else AppSettings.resamplerCutoffHz.value
@@ -4419,6 +4421,12 @@ class PlaybackService : MediaLibraryService() {
             QueueShuffle.setEnabled(true)
         }
         player.repeatMode = AppSettings.repeatMode.value
+    }
+
+    private fun applyVolumeBoost(chain: PlaybackAudioChain) {
+        chain.replayGain.volumeBoostDb = if (
+            !AppSettings.bitPerfectPlayback.value && AppSettings.volumeBoostEnabled.value
+        ) AppSettings.volumeBoostDb.value else 0f
     }
 
     /**
@@ -4705,6 +4713,14 @@ class PlaybackService : MediaLibraryService() {
 
     private fun observeSettings() {
         scope.launch {
+            combine(AppSettings.volumeBoostEnabled, AppSettings.volumeBoostDb) { enabled, gainDb ->
+                enabled to gainDb
+            }.distinctUntilChanged().collect {
+                applyVolumeBoost(activeAudioChain)
+                applyVolumeBoost(spareAudioChain)
+            }
+        }
+        scope.launch {
             combine(
                 AppSettings.replayGainEnabled,
                 AppSettings.replayGainAlbumMode,
@@ -4749,6 +4765,8 @@ class PlaybackService : MediaLibraryService() {
                 crossfade?.cancelTransition()
                 activeAudioChain.replayGain.normalizationBypassed = enabled
                 spareAudioChain.replayGain.normalizationBypassed = enabled
+                applyVolumeBoost(activeAudioChain)
+                applyVolumeBoost(spareAudioChain)
                 eachPlayer { current ->
                     current.skipSilenceEnabled = AppSettings.skipSilence.value && !enabled
                     current.playbackParameters = if (enabled) PlaybackParameters(1f, 1f) else PlaybackParameters(

@@ -144,6 +144,7 @@ abstract class MediaWidget : AppWidgetProvider() {
                 }
                 MediaWidgetAlbumSquare.refresh(app)
                 MediaWidgetMini.refresh(app)
+                MediaWidgetPill.refresh(app)
             }
         }
 

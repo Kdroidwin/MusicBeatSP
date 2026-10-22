@@ -144,6 +144,8 @@
     <string name="widget_wide_description">曲名と再生コントロール付きのアルバムアート（横幅いっぱい）。</string>
     <string name="widget_album_square_description">上部に曲名、中央に正方形のアルバムアート、下部にシャッフルと再生操作を表示します。</string>
     <string name="widget_mini_description">アルバムアート、曲情報、再生操作を表示するコンパクトなミニプレイヤーです。</string>
+    <string name="widget_pill_label">再生中ピル型</string>
+    <string name="widget_pill_description">アルバムアート、曲名、前の曲・再生／一時停止・次の曲の操作を表示する横長の半透明ウィジェットです。</string>
     <string name="widget_shuffle">シャッフル</string>
     <string name="widget_shuffle_on">シャッフル中</string>
     <string name="widget_play">再生</string>
@@ -155,6 +157,12 @@
     <string name="widget_open_bitchord">MusicBeatを開く</string>
     <string name="widget_preview_title">曲名</string>
     <string name="widget_preview_artist">アーティスト</string>
+    <string name="volume_boost">音量ブースト</string>
+    <string name="volume_boost_subtitle">デコード後の音声を指定量だけ増幅します。ピークをPCMの範囲に制限し、ビットパーフェクト再生中は無効です。</string>
+    <string name="volume_boost_value">%1$.1f dB</string>
+    <string name="pill_widget_opacity">再生中ピル型ウィジェットの背景透明度</string>
+    <string name="pill_widget_opacity_subtitle">アルバムアートや操作ボタンではなく背景だけを調整します。値を下げると壁紙が見えやすくなります。</string>
+    <string name="pill_widget_opacity_value">%1$d%%</string>
     <string name="download_quality">ダウンロード品質</string>
     <string name="download_wifi_only">Wi-Fi接続時のみダウンロード</string>
     <string name="spatial_audio">空間オーディオ</string>

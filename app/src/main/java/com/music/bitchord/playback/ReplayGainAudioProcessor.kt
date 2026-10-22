@@ -17,6 +17,11 @@ class ReplayGainAudioProcessor : BaseAudioProcessor() {
     var gainDb: Float = 0f
         set(value) { field = value.coerceIn(-24f, 12f) }
 
+    /** Independent user boost, kept separate from per-track ReplayGain metadata. */
+    @Volatile
+    var volumeBoostDb: Float = 0f
+        set(value) { field = value.takeIf { it.isFinite() }?.coerceIn(0f, 12f) ?: 0f }
+
     @Volatile
     var preventClipping: Boolean = true
 
@@ -67,7 +72,8 @@ class ReplayGainAudioProcessor : BaseAudioProcessor() {
         val bytes = inputBuffer.remaining()
         if (bytes == 0) return
         val output = replaceOutputBuffer(bytes)
-        val replayGain = 10f.pow(gainDb / 20f) * blendTrim
+        val boostDb = volumeBoostDb
+        val replayGain = 10f.pow(gainDb / 20f) * 10f.pow(boostDb / 20f) * blendTrim
         val mediaId = normalizationMediaId
         val targetNormalizationGain = if (normalizationBypassed || mediaId.isNullOrBlank()) 1f else {
             runCatching { normalizationGainDbFor(mediaId) }
@@ -106,7 +112,7 @@ class ReplayGainAudioProcessor : BaseAudioProcessor() {
                     repeat(channels) {
                         val sample = inputBuffer.float
                         val scaled = if (sample.isFinite()) sample * frameGain else 0f
-                        output.putFloat(if (preventClipping) scaled.coerceIn(-1f, 1f) else scaled)
+                        output.putFloat(if (preventClipping || boostDb > 0f) scaled.coerceIn(-1f, 1f) else scaled)
                     }
                 }
             }

@@ -677,6 +677,13 @@ object AppSettings {
     val replayGainPreampDb = MutableStateFlow(0f)
     val replayGainPreventClipping = MutableStateFlow(true)
 
+    /** Adds a bounded, clipping-limited gain stage to decoded PCM. Disabled by default. */
+    val volumeBoostEnabled = MutableStateFlow(false)
+    val volumeBoostDb = MutableStateFlow(6f)
+
+    /** Opacity of the background surface on the dedicated wide pill widget. */
+    val pillWidgetOpacity = MutableStateFlow(65f)
+
     /** Normalizes YouTube-origin tracks from the loudness metadata already returned by StreamResolver. */
     val loudnessNormalization = MutableStateFlow(true)
     /** Skips loudness normalization while the phone's built-in speaker is the active output. */
@@ -1272,6 +1279,9 @@ object AppSettings {
         replayGainAlbumMode.value = prefs.getBoolean(KEY_REPLAYGAIN_ALBUM_MODE, false)
         replayGainPreampDb.value = prefs.getFloat(KEY_REPLAYGAIN_PREAMP_DB, 0f).coerceIn(-12f, 12f)
         replayGainPreventClipping.value = prefs.getBoolean(KEY_REPLAYGAIN_PREVENT_CLIPPING, true)
+        volumeBoostEnabled.value = prefs.getBoolean(KEY_VOLUME_BOOST_ENABLED, false)
+        volumeBoostDb.value = prefs.getFloat(KEY_VOLUME_BOOST_DB, 6f).coerceIn(0f, 12f)
+        pillWidgetOpacity.value = prefs.getFloat(KEY_PILL_WIDGET_OPACITY, 65f).coerceIn(0f, 100f)
         loudnessNormalization.value = prefs.getBoolean(KEY_LOUDNESS_NORMALIZATION, true)
         loudnessOffOnSpeaker.value = prefs.getBoolean(KEY_LOUDNESS_OFF_ON_SPEAKER, true)
         favoriteBesideTrackMenu.value = prefs.getBoolean(KEY_FAVORITE_BESIDE_TRACK_MENU, false)
@@ -2329,6 +2339,26 @@ object AppSettings {
         prefs.edit().putBoolean(KEY_REPLAYGAIN_PREVENT_CLIPPING, value).apply()
     }
 
+    fun setVolumeBoostEnabled(value: Boolean) {
+        volumeBoostEnabled.value = value
+        prefs.edit().putBoolean(KEY_VOLUME_BOOST_ENABLED, value).apply()
+    }
+
+    fun setVolumeBoostDb(value: Float) {
+        val normalized = value.coerceIn(0f, 12f)
+        volumeBoostDb.value = normalized
+        prefs.edit().putFloat(KEY_VOLUME_BOOST_DB, normalized).apply()
+    }
+
+    fun setPillWidgetOpacity(value: Float) {
+        val normalized = value.coerceIn(0f, 100f)
+        pillWidgetOpacity.value = normalized
+        prefs.edit().putFloat(KEY_PILL_WIDGET_OPACITY, normalized).apply()
+        if (this::appContext.isInitialized) {
+            com.music.bitchord.widget.MediaWidgetPill.refresh(appContext)
+        }
+    }
+
     fun setLoudnessNormalization(value: Boolean) {
         loudnessNormalization.value = value
         prefs.edit().putBoolean(KEY_LOUDNESS_NORMALIZATION, value).apply()
@@ -3380,6 +3410,9 @@ object AppSettings {
     private const val KEY_REPLAYGAIN_ALBUM_MODE = "replaygain_album_mode"
     private const val KEY_REPLAYGAIN_PREAMP_DB = "replaygain_preamp_db"
     private const val KEY_REPLAYGAIN_PREVENT_CLIPPING = "replaygain_prevent_clipping"
+    private const val KEY_VOLUME_BOOST_ENABLED = "volume_boost_enabled"
+    private const val KEY_VOLUME_BOOST_DB = "volume_boost_db"
+    private const val KEY_PILL_WIDGET_OPACITY = "pill_widget_opacity"
     private const val KEY_LOUDNESS_NORMALIZATION = "loudness_normalization"
     private const val KEY_LOUDNESS_OFF_ON_SPEAKER = "loudness_off_on_speaker"
     private const val KEY_FAVORITE_BESIDE_TRACK_MENU = "favorite_beside_track_menu"
