@@ -77,6 +77,7 @@ import androidx.compose.material.icons.rounded.Person
 import androidx.compose.material.icons.rounded.PlaylistPlay
 import androidx.compose.material.icons.rounded.Pause
 import androidx.compose.material.icons.rounded.PlayArrow
+import androidx.compose.material.icons.rounded.Radio
 import androidx.compose.material.icons.rounded.SmartDisplay
 import androidx.compose.material.icons.rounded.Share
 import androidx.compose.material.icons.rounded.ScreenRotation
@@ -1115,6 +1116,7 @@ fun SettingsScreen(
             MainNavigationTab.SEARCH -> R.string.search
             MainNavigationTab.ALBUM_ARTISTS -> R.string.album_artists
             MainNavigationTab.FOLDERS -> R.string.folders
+            MainNavigationTab.RADIO -> R.string.radio
         })
         SettingsSearchEntry(
             title = stringResource(R.string.show_tab_setting, tabTitle),
@@ -3533,6 +3535,7 @@ fun SettingsScreen(
                 MainNavigationTab.SEARCH -> R.string.search
                 MainNavigationTab.ALBUM_ARTISTS -> R.string.album_artists
                 MainNavigationTab.FOLDERS -> R.string.folders
+                MainNavigationTab.RADIO -> R.string.radio
             })
             SettingsRow(
                 icon = Icons.Rounded.MusicNote,
@@ -3552,6 +3555,7 @@ fun SettingsScreen(
                     MainNavigationTab.SEARCH -> R.string.search
                     MainNavigationTab.ALBUM_ARTISTS -> R.string.album_artists
                     MainNavigationTab.FOLDERS -> R.string.folders
+                    MainNavigationTab.RADIO -> R.string.radio
                 }
                 val icon = when (tab) {
                     MainNavigationTab.SONGS -> Icons.Rounded.MusicNote
@@ -3561,6 +3565,7 @@ fun SettingsScreen(
                     MainNavigationTab.SEARCH -> BitChordIcons.Search
                     MainNavigationTab.ALBUM_ARTISTS -> Icons.Rounded.Person
                     MainNavigationTab.FOLDERS -> Icons.Rounded.Folder
+                    MainNavigationTab.RADIO -> Icons.Rounded.Radio
                 }
                 val checked = if (tab == MainNavigationTab.ALBUM_ARTISTS) {
                     com.music.bitchord.data.settings.LocalLibraryTab.ALBUM_ARTISTS in localTabs
@@ -4117,6 +4122,7 @@ fun SettingsScreen(
                                 MainNavigationTab.SEARCH -> stringResource(R.string.search)
                                 MainNavigationTab.ALBUM_ARTISTS -> stringResource(R.string.album_artists)
                                 MainNavigationTab.FOLDERS -> stringResource(R.string.folders)
+                                MainNavigationTab.RADIO -> stringResource(R.string.radio)
                             }
                             Row(
                                 modifier = Modifier

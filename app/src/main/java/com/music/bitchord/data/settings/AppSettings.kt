@@ -247,6 +247,7 @@ enum class MainNavigationTab(val index: Int) {
     SEARCH(4),
     ALBUM_ARTISTS(5),
     FOLDERS(6),
+    RADIO(7),
 }
 
 enum class ScreenOrientationMode { SYSTEM, PORTRAIT, LANDSCAPE }
@@ -654,6 +655,8 @@ object AppSettings {
 
     /** Blocks app-managed network requests while keeping local and cached media available. */
     val offlineMode = MutableStateFlow(false)
+    /** Last selected Radiko prefecture; kept in the shared settings backup. */
+    val radioAreaId = MutableStateFlow("JP13")
 
     /** YouTube Music catalog/search/playback is opt-in; fresh installs make no YouTube requests. */
     val youtubeMusicEnabled = MutableStateFlow(false)
@@ -1267,6 +1270,9 @@ object AppSettings {
         showPlayerLyricsStrip.value = prefs.getBoolean(KEY_SHOW_PLAYER_LYRICS_STRIP, true)
         val wasOffline = offlineMode.value
         offlineMode.value = prefs.getBoolean(KEY_OFFLINE_MODE, false)
+        radioAreaId.value = prefs.getString(KEY_RADIO_AREA_ID, "JP13")
+            ?.takeIf { it.matches(Regex("JP\\d{1,2}")) }
+            ?: "JP13"
         val wasYoutubeMusicEnabled = youtubeMusicEnabled.value
         youtubeMusicEnabled.value = prefs.getBoolean(KEY_YOUTUBE_MUSIC_ENABLED, false)
         if (wasYoutubeMusicEnabled && !youtubeMusicEnabled.value) Http.cancelYoutubeMusicRequests()
@@ -2175,16 +2181,30 @@ object AppSettings {
         val saved = raw.orEmpty()
             .mapNotNull { name -> MainNavigationTab.entries.firstOrNull { it.name == name } }
             .toSet()
-        if (!prefs.getBoolean(KEY_MAIN_FOLDER_TAB_MIGRATED, false)) {
-            val migrated = if (raw == null) MainNavigationTab.entries.toSet() else saved + MainNavigationTab.FOLDERS
+        val migrateFolders = !prefs.getBoolean(KEY_MAIN_FOLDER_TAB_MIGRATED, false)
+        val migrateRadio = !prefs.getBoolean(KEY_RADIO_TAB_MIGRATED, false)
+        if (raw == null) {
+            if (migrateFolders || migrateRadio) {
+                prefs.edit()
+                    .putBoolean(KEY_MAIN_FOLDER_TAB_MIGRATED, true)
+                    .putBoolean(KEY_RADIO_TAB_MIGRATED, true)
+                    .putStringSet(KEY_VISIBLE_MAIN_NAVIGATION_TABS, MainNavigationTab.entries.map { it.name }.toSet())
+                    .apply()
+            }
+            return MainNavigationTab.entries.toSet()
+        }
+        val migrated = saved.toMutableSet().apply {
+            if (migrateFolders) add(MainNavigationTab.FOLDERS)
+            if (migrateRadio) add(MainNavigationTab.RADIO)
+        }
+        if (migrateFolders || migrateRadio) {
             prefs.edit()
                 .putBoolean(KEY_MAIN_FOLDER_TAB_MIGRATED, true)
+                .putBoolean(KEY_RADIO_TAB_MIGRATED, true)
                 .putStringSet(KEY_VISIBLE_MAIN_NAVIGATION_TABS, migrated.map { it.name }.toSet())
                 .apply()
-            return migrated
         }
-        if (raw == null) return MainNavigationTab.entries.toSet()
-        return saved.ifEmpty { MainNavigationTab.entries.toSet() }
+        return migrated.ifEmpty { MainNavigationTab.entries.toSet() }
     }
 
     fun setHighPerformanceMode(value: Boolean) {
@@ -2292,7 +2312,14 @@ object AppSettings {
         offlineMode.value = value
         prefs.edit().putBoolean(KEY_OFFLINE_MODE, value).apply()
         if (!wasOffline && value) Http.cancelAllNetworkRequests()
+        if (value) com.music.bitchord.radio.RadioPlaybackSession.clear()
         if (!value && youtubeMusicEnabled.value) YoutubeStreamBootstrap.initializeIfAllowed(appContext)
+    }
+
+    fun setRadioAreaId(value: String) {
+        if (!value.matches(Regex("JP\\d{1,2}"))) return
+        radioAreaId.value = value
+        prefs.edit().putString(KEY_RADIO_AREA_ID, value).apply()
     }
 
     fun setYoutubeMusicEnabled(value: Boolean) {
@@ -3402,6 +3429,8 @@ object AppSettings {
     private const val KEY_HIDE_PLAYER_HEADER_DURING_LYRICS = "hide_player_header_during_lyrics"
     private const val KEY_SHOW_PLAYER_LYRICS_STRIP = "show_player_lyrics_strip"
     private const val KEY_OFFLINE_MODE = "offline_mode"
+    private const val KEY_RADIO_AREA_ID = "radio_area_id"
+    private const val KEY_RADIO_TAB_MIGRATED = "radio_tab_migrated"
     private const val KEY_YOUTUBE_MUSIC_ENABLED = "youtube_music_enabled"
     private const val KEY_HIDE_LOSSLESS_LABEL = "hide_lossless_label"
     private const val KEY_SHOW_TRACK_DURATION_INSTEAD_OF_REMAINING = "show_track_duration_instead_of_remaining"

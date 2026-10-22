@@ -70,6 +70,7 @@ import androidx.compose.material.icons.rounded.Check
 import androidx.compose.material.icons.rounded.Close
 import androidx.compose.material.icons.rounded.History
 import androidx.compose.material.icons.rounded.Person
+import androidx.compose.material.icons.rounded.Radio
 import androidx.compose.material.icons.rounded.Settings
 import androidx.compose.material.icons.rounded.Sort
 import androidx.compose.material3.DropdownMenu
@@ -106,6 +107,7 @@ import com.music.bitchord.ui.screens.LOCAL_TAB_ALBUM_ARTISTS
 import com.music.bitchord.ui.screens.LOCAL_TAB_ARTISTS
 import com.music.bitchord.ui.screens.LOCAL_TAB_FOLDERS
 import com.music.bitchord.ui.screens.LOCAL_TAB_PLAYLISTS
+import com.music.bitchord.ui.screens.RadioScreen
 import com.music.bitchord.feature.localsearch.ui.LocalSearchScreen
 import androidx.compose.material3.pulltorefresh.rememberPullToRefreshState
 import androidx.compose.material3.rememberModalBottomSheetState
@@ -520,15 +522,18 @@ private fun BitChordApp(
         { palette -> localCollectionArtwork = palette?.let { selectedTab to it } }
     }
     val visibleMainNavigationTabs by AppSettings.visibleMainNavigationTabs.collectAsStateWithLifecycle()
+    val offlineMode by AppSettings.offlineMode.collectAsStateWithLifecycle()
+    val radioAvailable = !offlineMode && !context.packageName.endsWith(".nointernet")
     val visibleLocalLibraryTabs by AppSettings.visibleLocalLibraryTabs.collectAsStateWithLifecycle()
     val localMusicFolderRoot by AppSettings.localMusicFolderUri.collectAsStateWithLifecycle()
     val mainNavigationTabOrder by AppSettings.mainNavigationTabOrder.collectAsStateWithLifecycle()
-    val effectiveVisibleMainTabs = remember(visibleMainNavigationTabs, visibleLocalLibraryTabs) {
-        if (com.music.bitchord.data.settings.LocalLibraryTab.ALBUM_ARTISTS in visibleLocalLibraryTabs) {
+    val effectiveVisibleMainTabs = remember(visibleMainNavigationTabs, visibleLocalLibraryTabs, radioAvailable) {
+        val tabs = if (com.music.bitchord.data.settings.LocalLibraryTab.ALBUM_ARTISTS in visibleLocalLibraryTabs) {
             visibleMainNavigationTabs + MainNavigationTab.ALBUM_ARTISTS
         } else {
             visibleMainNavigationTabs - MainNavigationTab.ALBUM_ARTISTS
         }
+        if (radioAvailable) tabs else tabs - MainNavigationTab.RADIO
     }
     val visibleTabIndices = remember(effectiveVisibleMainTabs, mainNavigationTabOrder) {
         mainNavigationTabOrder
@@ -854,7 +859,6 @@ private fun BitChordApp(
     val musicServerSearchResults by viewModel.musicServerResults.collectAsStateWithLifecycle()
     val configuredSourceSearchResults by viewModel.configuredSourceResults.collectAsStateWithLifecycle()
     val remoteServerConfigs by SourceRegistry.configs.collectAsStateWithLifecycle()
-    val offlineMode by AppSettings.offlineMode.collectAsStateWithLifecycle()
     val individuallySearchableSources = remember(remoteServerConfigs, offlineMode, context.packageName) {
         if (offlineMode || context.packageName.endsWith(".nointernet")) {
             emptyList()
@@ -962,7 +966,8 @@ private fun BitChordApp(
     val libraryLabel = stringResource(R.string.library)
     val searchLabel = stringResource(R.string.search)
     val foldersLabel = stringResource(R.string.folders)
-    val allTabs = remember(songsLabel, albumsLabel, artistsLabel, albumArtistsLabel, libraryLabel, searchLabel, foldersLabel) {
+    val radioLabel = stringResource(R.string.radio)
+    val allTabs = remember(songsLabel, albumsLabel, artistsLabel, albumArtistsLabel, libraryLabel, searchLabel, foldersLabel, radioLabel) {
         listOf(
             BottomTab(songsLabel, Icons.Rounded.MusicNote),
             BottomTab(albumsLabel, Icons.Rounded.Album),
@@ -971,6 +976,7 @@ private fun BitChordApp(
             BottomTab(searchLabel, BitChordIcons.Search),
             BottomTab(albumArtistsLabel, Icons.Rounded.Person),
             BottomTab(foldersLabel, Icons.Rounded.Folder),
+            BottomTab(radioLabel, Icons.Rounded.Radio),
         )
     }
     val tabs = remember(allTabs, visibleTabIndices) {
@@ -2594,6 +2600,12 @@ private fun BitChordApp(
                                 onNavigationChanged = onCollectionNavigationChanged,
                             )
                         }
+                        TAB_RADIO -> RadioScreen(
+                            controller = controller,
+                            currentSong = player.song,
+                            isPlaying = player.isPlaying,
+                            contentPadding = listPadding,
+                        )
                         else -> Box(modifier = Modifier.fillMaxSize())
                     }
                 }
@@ -4041,6 +4053,7 @@ private const val TAB_LIBRARY = 3
 private const val TAB_SEARCH = 4
 private const val TAB_ALBUM_ARTISTS = 5
 private const val TAB_FOLDERS = 6
+private const val TAB_RADIO = 7
 
 
 

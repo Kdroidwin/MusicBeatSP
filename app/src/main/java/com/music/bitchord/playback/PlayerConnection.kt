@@ -18,6 +18,7 @@ import androidx.core.net.toUri
 import androidx.core.os.bundleOf
 import androidx.media3.common.MediaItem
 import androidx.media3.common.MediaMetadata
+import androidx.media3.common.MimeTypes
 import androidx.media3.common.Player
 import androidx.media3.common.C
 import androidx.media3.session.MediaController
@@ -311,6 +312,8 @@ fun MediaItem.toSong() = Song(
     localStartMs = mediaMetadata.extras?.get(EXTRA_LOCAL_START_MS) as? Long,
     localEndMs = mediaMetadata.extras?.get(EXTRA_LOCAL_END_MS) as? Long,
     isExternalPreview = mediaMetadata.extras?.getBoolean(EXTRA_EXTERNAL_PREVIEW) == true,
+    isLiveRadio = mediaMetadata.extras?.getBoolean(EXTRA_LIVE_RADIO) == true,
+    radioStreamUrl = mediaMetadata.extras?.getString(EXTRA_RADIO_STREAM_URL),
 )
 
 /** @see Song.fromAutoplay */
@@ -354,6 +357,8 @@ internal const val EXTRA_LOCAL_URI = "bitchord.localUri"
 /** @see Song.localPath */
 internal const val EXTRA_LOCAL_PATH = "bitchord.localPath"
 internal const val EXTRA_EXTERNAL_PREVIEW = "bitchord.externalPreview"
+private const val EXTRA_LIVE_RADIO = "bitchord.liveRadio"
+private const val EXTRA_RADIO_STREAM_URL = "bitchord.radioStreamUrl"
 
 /**
  * How long the track runs, as the row that queued it said.
@@ -483,7 +488,7 @@ fun Song.toMediaItem(): MediaItem {
         localUri?.takeUnless(Downloads::isMissingLocalFile)
         ?: localPath?.takeIf { java.io.File(it).exists() }?.let { android.net.Uri.fromFile(java.io.File(it)).toString() }
         ?: Downloads.verifiedSavedUri(videoId)
-    val uriString = remoteFileUri ?: offlineUri ?: when {
+    val uriString = radioStreamUrl ?: remoteFileUri ?: offlineUri ?: when {
         WebDavConfig.isWebDavId(videoId) || SmbConfig.isSmbId(videoId) ->
             "bitchord://unavailable?source=remote-file"
         videoId.startsWith("content://") || videoId.startsWith("file://") -> videoId
@@ -520,7 +525,8 @@ fun Song.toMediaItem(): MediaItem {
 
     return MediaItem.Builder()
         .setMediaId(videoId)
-        .setUri(resolvePlaybackUri(uriString, localPath))
+        .setUri(resolvePlaybackUri(uriString, if (isLiveRadio) null else localPath))
+        .apply { if (isLiveRadio) setMimeType(MimeTypes.APPLICATION_M3U8) }
         .apply { clipping?.let(::setClippingConfiguration) }
     .setMediaMetadata(
         MediaMetadata.Builder()
@@ -568,7 +574,7 @@ fun Song.toMediaItem(): MediaItem {
             // depends on.
             .apply {
                 if (fromAutoplay || offlineUri != null || durationText != null || isExternalPreview ||
-                    artistId != null || albumId != null || setVideoId != null ||
+                    artistId != null || albumId != null || setVideoId != null || isLiveRadio ||
                     isExplicit != null || isVideo || isVideoOrigin || radioName != null ||
                     thumbnailUrl != null
                 ) {
@@ -591,6 +597,8 @@ fun Song.toMediaItem(): MediaItem {
                             EXTRA_IS_VIDEO to isVideo,
                             EXTRA_VIDEO_ORIGIN to isVideoOrigin,
                             EXTRA_EXTERNAL_PREVIEW to isExternalPreview,
+                            EXTRA_LIVE_RADIO to isLiveRadio,
+                            EXTRA_RADIO_STREAM_URL to radioStreamUrl,
                         ),
                     )
                 }

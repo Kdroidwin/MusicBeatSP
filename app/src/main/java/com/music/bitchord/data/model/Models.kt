@@ -85,6 +85,10 @@ data class Song(
     val isExplicit: Boolean? = null,
     /** A one-item preview queue opened from another Android app. */
     val isExternalPreview: Boolean = false,
+    /** True for a live Radiko stream, which has no seekable duration or source upgrade. */
+    val isLiveRadio: Boolean = false,
+    /** Ephemeral live HLS URL; the durable station identity remains [videoId]. */
+    val radioStreamUrl: String? = null,
 )
 
 /**

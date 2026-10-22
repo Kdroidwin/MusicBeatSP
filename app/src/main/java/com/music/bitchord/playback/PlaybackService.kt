@@ -103,6 +103,7 @@ import com.music.bitchord.data.scrobbling.LastFM
 import com.music.bitchord.data.scrobbling.ListenBrainzManager
 import com.music.bitchord.data.scrobbling.ScrobbleManager
 import com.music.bitchord.data.settings.AppSettings
+import com.music.bitchord.radio.RadioPlaybackSession
 import com.music.bitchord.data.settings.MediaControlSecondaryAction
 import com.music.bitchord.data.settings.OutputPcmMode
 import com.music.bitchord.data.sources.SourceResolver
@@ -1483,7 +1484,8 @@ class PlaybackService : MediaLibraryService() {
             // end of a `bitchord://` URI and nothing below it knows which
             // track's bytes it is fetching; this is the seam where both are in
             // hand. See [StreamContainer].
-            streamResolver.resolveDataSpec(dataSpec).also { resolved ->
+            val resolved = streamResolver.resolveDataSpec(dataSpec)
+            RadioPlaybackSession.addHeadersFor(resolved.uri, resolved).also { resolved ->
                 mediaIdIn(dataSpec.uri)?.let { StreamContainer.served(it, resolved.uri.toString()) }
             }
         }
@@ -1762,6 +1764,7 @@ class PlaybackService : MediaLibraryService() {
             return
         }
         val current = exoPlayer.currentMediaItem?.toSong() ?: return
+        if (current.isLiveRadio) return
         // A file opened from a file manager is a one-track preview session.
         // Do not append unrelated online suggestions when its player activates.
         if (current.isExternalPreview) return
@@ -1898,7 +1901,13 @@ class PlaybackService : MediaLibraryService() {
         ownsSession: Boolean = true,
     ): ExoPlayer = ExoPlayer.Builder(this)
         .setRenderersFactory(
-            silenceSkippingRenderers(chain.spatial, chain.parametricEq, chain.transition, chain.replayGain, chain.resampler),
+            silenceSkippingRenderers(
+                chain.spatial,
+                chain.parametricEq,
+                chain.transition,
+                chain.replayGain,
+                chain.resampler,
+            ),
         )
         .setMediaSourceFactory(requireNotNull(mediaSourceFactory))
         .setLoadControl(farBufferingLoadControl())
@@ -2905,6 +2914,7 @@ class PlaybackService : MediaLibraryService() {
      */
     private fun lookForBetterCopy(player: ExoPlayer) {
         val item = player.currentMediaItem ?: return
+        if (item.toSong().isLiveRadio) return
         val mediaId = item.mediaId
         // Local files have no remote quality candidates. A duplicate queue
         // entry can share this media id with a remote copy that has a pending
@@ -3857,6 +3867,7 @@ class PlaybackService : MediaLibraryService() {
     /** Serialize only the bounded window needed for a future cold-start resume. */
     private fun saveQueueSnapshot(player: ExoPlayer) {
         if (isExternalPreviewPlaying(player)) return
+        if (player.currentMediaItem?.toSong()?.isLiveRadio == true) return
         if (player.mediaItemCount == 0) {
             persistedQueueStart = 0
             LastPlayed.clear()
@@ -3875,6 +3886,7 @@ class PlaybackService : MediaLibraryService() {
     /** Make the newly installed radio queue the durable cold-start boundary. */
     private fun saveQueueSnapshotImmediately(player: ExoPlayer) {
         if (isExternalPreviewPlaying(player)) return
+        if (player.currentMediaItem?.toSong()?.isLiveRadio == true) return
         if (player.mediaItemCount == 0) {
             persistedQueueStart = 0
             LastPlayed.clearImmediately()
@@ -3904,6 +3916,7 @@ class PlaybackService : MediaLibraryService() {
     /** Persist index and position without touching or serializing queue contents. */
     private fun savePlaybackState(player: ExoPlayer) {
         if (isExternalPreviewPlaying(player)) return
+        if (player.currentMediaItem?.toSong()?.isLiveRadio == true) return
         if (player.mediaItemCount == 0) return
         player.currentMediaItem?.toSong()?.let { saveLongTrackPosition(player, it) }
         LastPlayed.savePlaybackState(
