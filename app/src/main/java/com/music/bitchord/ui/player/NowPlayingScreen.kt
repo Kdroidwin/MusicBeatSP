@@ -932,6 +932,7 @@ fun NowPlayingScreen(
     val useLibraryIconForPlaylistControl by AppSettings.useLibraryIconForPlaylistControl.collectAsStateWithLifecycle()
     val keepArtworkFullSizeWhenPaused by AppSettings.keepArtworkFullSizeWhenPaused.collectAsStateWithLifecycle()
     val hideVolumeBar by AppSettings.hideVolumeBar.collectAsStateWithLifecycle()
+    val hideRadioPlaybackBar by AppSettings.hideRadioPlaybackBar.collectAsStateWithLifecycle()
     val favoriteIds by LocalFavoritesStore.favoriteIds.collectAsStateWithLifecycle()
     val localUri = song.localUri
     val normalizedArtistName = song.artist.trim().lowercase(Locale.ROOT)
@@ -2819,22 +2820,22 @@ fun NowPlayingScreen(
                     }
                 }
             }
-            ThinSlider(
-                value = shown,
-                onValueChange = {
-                    scrubbing = true
-                    scrubValue = it
-                },
-                onValueChangeFinished = {
-                    // On release only. Ticking the whole way along the bar turns
-                    // a scrub into a rattle, and the beat that matters is the one
-                    // that says where the playhead landed.
-                    haptics.play(Haptic.Select)
-                    pendingSeek = scrubValue
-                    onSeekFraction(scrubValue)
-                    scrubbing = false
-                },
-            )
+            if (!song.isLiveRadio || !hideRadioPlaybackBar) {
+                ThinSlider(
+                    value = shown,
+                    onValueChange = {
+                        scrubbing = true
+                        scrubValue = it
+                    },
+                    onValueChangeFinished = {
+                        // Seek only once the user releases the slider.
+                        haptics.play(Haptic.Select)
+                        pendingSeek = scrubValue
+                        onSeekFraction(scrubValue)
+                        scrubbing = false
+                    },
+                )
+            }
             val wifiQuality by AppSettings.audioQualityWifi.collectAsStateWithLifecycle()
             val cellularQuality by AppSettings.audioQualityCellular.collectAsStateWithLifecycle()
             val metered by AppSettings.meteredConnection.collectAsStateWithLifecycle()
@@ -2854,47 +2855,49 @@ fun NowPlayingScreen(
             // possibly say "loading" again a moment later.
             val racingLossless by NerdStats.racingLossless.collectAsStateWithLifecycle()
             val stillRacing = song.videoId in racingLossless
-            Box(
-                modifier = Modifier
-                    .fillMaxWidth()
-                    // The slider's touch target extends well past the drawn
-                    // bar, so pull the labels back up under it.
-                    .offset(y = (-9).dp),
-            ) {
-                Row(
-                    modifier = Modifier.fillMaxWidth(),
-                    horizontalArrangement = Arrangement.SpaceBetween,
+            if (!song.isLiveRadio || !hideRadioPlaybackBar) {
+                Box(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        // The slider's touch target extends well past the drawn
+                        // bar, so pull the labels back up under it.
+                        .offset(y = (-9).dp),
                 ) {
-                    Text(
-                        text = formatTime((shown * effectiveDurationMs).toLong()),
-                        style = MaterialTheme.typography.labelMedium,
-                        color = Color.White.copy(alpha = 0.55f),
-                    )
-                    Text(
-                        text = if (showTrackDurationInsteadOfRemaining) {
-                            formatTime(effectiveDurationMs)
-                        } else {
-                            "-" + formatTime(effectiveDurationMs - (shown * effectiveDurationMs).toLong())
-                        },
-                        style = MaterialTheme.typography.labelMedium,
-                        color = Color.White.copy(alpha = 0.55f),
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        horizontalArrangement = Arrangement.SpaceBetween,
+                    ) {
+                        Text(
+                            text = formatTime((shown * effectiveDurationMs).toLong()),
+                            style = MaterialTheme.typography.labelMedium,
+                            color = Color.White.copy(alpha = 0.55f),
+                        )
+                        Text(
+                            text = if (showTrackDurationInsteadOfRemaining) {
+                                formatTime(effectiveDurationMs)
+                            } else {
+                                "-" + formatTime(effectiveDurationMs - (shown * effectiveDurationMs).toLong())
+                            },
+                            style = MaterialTheme.typography.labelMedium,
+                            color = Color.White.copy(alpha = 0.55f),
+                        )
+                    }
+                    // Pinned to the box's own center rather than squeezed into the
+                    // gap between the two timestamps: that gap's width changes by
+                    // a digit's worth every time a minute rolls over, which was
+                    // dragging this along with it every tick. The screen's center
+                    // doesn't move.
+                    LosslessOrStats(
+                        isLocalAudio = isLocalAudio,
+                        isLoading = isLoading,
+                        stillRacing = stillRacing,
+                        losslessRequested = losslessRequested,
+                        nerdStats = nerdStats,
+                        modifier = Modifier
+                            .align(Alignment.Center)
+                            .padding(horizontal = 8.dp),
                     )
                 }
-                // Pinned to the box's own center rather than squeezed into the
-                // gap between the two timestamps: that gap's width changes by
-                // a digit's worth every time a minute rolls over, which was
-                // dragging this along with it every tick. The screen's center
-                // doesn't move.
-                LosslessOrStats(
-                    isLocalAudio = isLocalAudio,
-                    isLoading = isLoading,
-                    stillRacing = stillRacing,
-                    losslessRequested = losslessRequested,
-                    nerdStats = nerdStats,
-                    modifier = Modifier
-                        .align(Alignment.Center)
-                        .padding(horizontal = 8.dp),
-                )
             }
 
             if (lyricsOpen && !lyricsReplaceArtworkOnly) {

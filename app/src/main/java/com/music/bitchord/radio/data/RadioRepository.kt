@@ -15,6 +15,7 @@ import kotlinx.coroutines.withContext
 import okhttp3.Request
 import org.jsoup.parser.Parser
 import java.io.IOException
+import java.time.LocalDate
 import java.time.LocalDateTime
 import java.time.ZoneId
 import java.time.format.DateTimeFormatter
@@ -55,9 +56,32 @@ object RadioRepository {
 
     suspend fun fetchWeeklyPrograms(stationId: String): List<ProgramEntry> = withContext(Dispatchers.IO) {
         ensureNetworkAllowed()
-        val xml = getText("https://api.radiko.jp/program/v3/weekly/${Uri.encode(stationId)}.xml")
+        val encodedStationId = Uri.encode(stationId)
+        val weeklyXml = fetchScheduleXml("https://api.radiko.jp/program/v3/weekly/$encodedStationId.xml")
+        val weeklyPrograms = parsePrograms(weeklyXml, stationId)
+        val today = LocalDate.now(tokyo).format(DateTimeFormatter.BASIC_ISO_DATE)
+
+        // Radiko's weekly feed can temporarily stop at the previous broadcast day.
+        // Fetch today's schedule directly in that case instead of silently showing yesterday only.
+        if (weeklyPrograms.any { programDay(it.startAt) == today }) {
+            return@withContext weeklyPrograms.sortedBy(ProgramEntry::startAt)
+        }
+
+        val todayPrograms = runCatching {
+            val todayXml = fetchScheduleXml(
+                "https://radiko.jp/v3/program/station/date/$today/$encodedStationId.xml",
+            )
+            parsePrograms(todayXml, stationId)
+        }.getOrDefault(emptyList())
+
+        (weeklyPrograms + todayPrograms)
+            .distinctBy(ProgramEntry::startAt)
+            .sortedBy(ProgramEntry::startAt)
+    }
+
+    private fun parsePrograms(xml: String, stationId: String): List<ProgramEntry> {
         val programRegex = Regex("""<prog\b([^>]*)>([\s\S]*?)</prog>""")
-        programRegex.findAll(xml).mapNotNull { match ->
+        return programRegex.findAll(xml).mapNotNull { match ->
             val attributes = parseAttributes(match.groupValues[1])
             val payload = match.groupValues[2]
             val startAt = attributes["ft"] ?: return@mapNotNull null
@@ -78,6 +102,17 @@ object RadioRepository {
         }.toList()
     }
 
+    private suspend fun fetchScheduleXml(url: String): String {
+        val freshUrl = Uri.parse(url).buildUpon()
+            .appendQueryParameter("_", System.currentTimeMillis().toString())
+            .build()
+            .toString()
+        return request(freshUrl) {
+            header("Cache-Control", "no-cache, no-store, max-age=0")
+            header("Pragma", "no-cache")
+        }.body
+    }
+
     fun currentProgram(programs: List<ProgramEntry>, now: LocalDateTime = LocalDateTime.now(tokyo)): ProgramEntry? {
         val current = now.format(dateTimeFormatter)
         return programs.firstOrNull { current >= it.startAt && current < it.endAt }
@@ -88,6 +123,15 @@ object RadioRepository {
     }.getOrDefault(value.takeLast(4).let { if (it.length == 4) "${it.take(2)}:${it.takeLast(2)}" else value })
 
     fun programDay(value: String): String = value.take(8)
+
+    fun defaultProgramDay(programs: List<ProgramEntry>): String? {
+        val availableDays = programs.map { programDay(it.startAt) }
+            .filter { it.matches(Regex("\\d{8}")) }
+            .distinct()
+            .sorted()
+        val today = LocalDate.now(tokyo).format(DateTimeFormatter.BASIC_ISO_DATE)
+        return today.takeIf(availableDays::contains) ?: availableDays.firstOrNull()
+    }
 
     fun formatProgramDay(value: String): String = runCatching {
         LocalDateTime.parse(value.take(8) + "000000", dateTimeFormatter)

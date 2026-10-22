@@ -122,10 +122,7 @@ fun RadioScreen(
         runCatching { RadioRepository.fetchWeeklyPrograms(station.id) }
             .onSuccess { programs ->
                 weeklyPrograms = programs
-                val days = programs.map { RadioRepository.programDay(it.startAt) }.distinct().sorted()
-                val today = java.time.LocalDate.now(java.time.ZoneId.of("Asia/Tokyo"))
-                    .format(java.time.format.DateTimeFormatter.BASIC_ISO_DATE)
-                selectedDay = today.takeIf(days::contains) ?: days.firstOrNull()
+                selectedDay = RadioRepository.defaultProgramDay(programs)
             }
             .onFailure {
                 hasProgramError = true
@@ -304,7 +301,10 @@ fun RadioScreen(
                 scope.launch {
                     isLoadingPrograms = true
                     runCatching { RadioRepository.fetchWeeklyPrograms(station.id) }
-                        .onSuccess { weeklyPrograms = it; selectedDay = it.firstOrNull()?.let { p -> RadioRepository.programDay(p.startAt) } }
+                        .onSuccess {
+                            weeklyPrograms = it
+                            selectedDay = RadioRepository.defaultProgramDay(it)
+                        }
                         .onFailure { hasProgramError = true }
                     isLoadingPrograms = false
                 }
@@ -417,7 +417,7 @@ private fun RadioStationDetail(
                         modifier = Modifier.fillMaxWidth().horizontalScroll(rememberScrollState()),
                         horizontalArrangement = Arrangement.spacedBy(8.dp),
                     ) {
-                        days.take(7).forEach { day ->
+                        days.forEach { day ->
                             FilterChip(
                                 selected = day == selectedDay,
                                 onClick = { onSelectDay(day) },

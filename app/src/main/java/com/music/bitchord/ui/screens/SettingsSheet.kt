@@ -423,6 +423,7 @@ fun SettingsScreen(
     val replayGenres by AppSettings.replayGenres.collectAsStateWithLifecycle()
     val stopOnTaskRemoved by AppSettings.stopOnTaskRemoved.collectAsStateWithLifecycle()
     val hideVolumeBar by AppSettings.hideVolumeBar.collectAsStateWithLifecycle()
+    val hideRadioPlaybackBar by AppSettings.hideRadioPlaybackBar.collectAsStateWithLifecycle()
     val swipeToPlayNext by AppSettings.swipeToPlayNext.collectAsStateWithLifecycle()
     val dontRepeatSuggestions by AppSettings.dontRepeatSuggestions.collectAsStateWithLifecycle()
     val filterNonMusicAudio by AppSettings.filterNonMusicAudio.collectAsStateWithLifecycle()
@@ -896,6 +897,12 @@ fun SettingsScreen(
             listOf("volume", "slider", "bar", "音量", "スライダー"),
             hideVolumeBar,
         ) { AppSettings.setHideVolumeBar(!hideVolumeBar) },
+        SettingsSearchEntry(
+            stringResource(R.string.hide_radio_playback_bar),
+            stringResource(R.string.hide_radio_playback_bar_subtitle),
+            listOf("radio", "radiko", "progress", "seek bar", "ラジオ", "ラジコ", "再生バー", "シークバー"),
+            hideRadioPlaybackBar,
+        ) { AppSettings.setHideRadioPlaybackBar(!hideRadioPlaybackBar) },
         SettingsSearchEntry(
             stringResource(R.string.show_nerd_stats),
             stringResource(R.string.show_nerd_stats_subtitle),
@@ -3894,6 +3901,23 @@ fun SettingsScreen(
                     )
                 },
                 onClick = { AppSettings.setHideVolumeBar(!hideVolumeBar) },
+            )
+            RowDivider()
+            SettingsRow(
+                icon = Icons.Rounded.Radio,
+                title = stringResource(R.string.hide_radio_playback_bar),
+                subtitle = stringResource(R.string.hide_radio_playback_bar_subtitle),
+                trailing = {
+                    Switch(
+                        checked = hideRadioPlaybackBar,
+                        onCheckedChange = AppSettings::setHideRadioPlaybackBar,
+                        colors = SwitchDefaults.colors(
+                            checkedTrackColor = MaterialTheme.colorScheme.primary,
+                            checkedBorderColor = MaterialTheme.colorScheme.primary,
+                        ),
+                    )
+                },
+                onClick = { AppSettings.setHideRadioPlaybackBar(!hideRadioPlaybackBar) },
             )
         }
 

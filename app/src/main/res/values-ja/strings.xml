@@ -347,6 +347,8 @@
     <string name="stop_music_on_close_subtitle">アプリを最近のアプリから消すと再生を停止します</string>
     <string name="hide_volume_bar">音量バーを隠す</string>
     <string name="hide_volume_bar_subtitle">メインプレイヤーから音量スライダーを削除します</string>
+    <string name="hide_radio_playback_bar">ラジオ再生中に再生バーを隠す</string>
+    <string name="hide_radio_playback_bar_subtitle">ラジオ再生中にシークバーと再生時間を非表示にします</string>
     <string name="off">オフ</string>
     <string name="low">低</string>
     <string name="medium">中</string>
