@@ -185,6 +185,10 @@ The Linux edition is a dedicated offline fork of BitChord's Compose Desktop app,
 - **[Haze](https://github.com/chrisbanes/haze)** — Compose backdrop blur effects.
 - **[AndroidX Media3](https://github.com/androidx/media)** — Android playback and media-session APIs.
 - **Google Cast SDK** — Cast sender integration.
+- **[Uyatame-CD-Ripping-Tool-UCRT](https://github.com/uyatame/Uyatame-CD-Ripping-Tool-UCRT)** — Android app to rip and play audio CDs with a USB optical drive (FLAC, AAC, MP3, MusicBrainz).
+- **[Radikall](https://github.com/baudmusic/radikall)** — Android radio client for Japanese stations — listen to every Radiko station from anywhere in the world.
+
+
 
 <div align="center">
 
