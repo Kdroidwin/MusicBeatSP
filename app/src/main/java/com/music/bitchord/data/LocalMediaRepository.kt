@@ -311,86 +311,142 @@ object LocalMediaRepository {
         }
         val sortOrder = "${MediaStore.Audio.Media.TITLE} ASC"
 
-        runCatching {
-            context.contentResolver.query(
-                MediaStore.Audio.Media.EXTERNAL_CONTENT_URI,
-                projection,
-                selection,
-                selectionArgs,
-                sortOrder,
-            )?.use { cursor ->
-                val idCol = cursor.getColumnIndexOrThrow(MediaStore.Audio.Media._ID)
-                val displayNameCol = cursor.getColumnIndexOrThrow(MediaStore.Audio.Media.DISPLAY_NAME)
-                val titleCol = cursor.getColumnIndexOrThrow(MediaStore.Audio.Media.TITLE)
-                val artistCol = cursor.getColumnIndexOrThrow(MediaStore.Audio.Media.ARTIST)
-                val albumArtistCol = cursor.getColumnIndex("album_artist")
-                val albumCol = cursor.getColumnIndexOrThrow(MediaStore.Audio.Media.ALBUM)
-                val trackCol = cursor.getColumnIndexOrThrow(MediaStore.Audio.Media.TRACK)
-                val albumIdCol = cursor.getColumnIndexOrThrow(MediaStore.Audio.Media.ALBUM_ID)
-                val durationCol = cursor.getColumnIndexOrThrow(MediaStore.Audio.Media.DURATION)
-                val dataCol = cursor.getColumnIndexOrThrow(MediaStore.Audio.Media.DATA)
-                val relativePathCol = cursor.getColumnIndex(MediaStore.MediaColumns.RELATIVE_PATH)
-                val volumeNameCol = cursor.getColumnIndex(MediaStore.MediaColumns.VOLUME_NAME)
-                val dateAddedCol = cursor.getColumnIndexOrThrow(MediaStore.Audio.Media.DATE_ADDED)
-                val dateModifiedCol = cursor.getColumnIndexOrThrow(MediaStore.Audio.Media.DATE_MODIFIED)
+        // Query each mounted volume separately on Android 10+. The aggregate
+        // EXTERNAL_CONTENT_URI may report VOLUME_NAME="external" and omit DATA
+        // on scoped-storage devices. In that case the song still appears in
+        // the library, but has no localFolderPath, so the Folder tab has no
+        // directory names to build. A per-volume URI supplies the real volume
+        // name without requesting broader storage access.
+        val volumeTargets = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
+            runCatching {
+                MediaStore.getExternalVolumeNames(context)
+                    .filter { it.isNotBlank() && it != MediaStore.VOLUME_EXTERNAL }
+                    .map { volumeName -> volumeName to MediaStore.Audio.Media.getContentUri(volumeName) }
+            }.getOrDefault(emptyList())
+        } else emptyList()
+        val queryTargets = volumeTargets.ifEmpty {
+            listOf(null to MediaStore.Audio.Media.EXTERNAL_CONTENT_URI)
+        }
 
-                while (cursor.moveToNext()) {
-                    val id = cursor.getLong(idCol)
-                    val displayName = cursor.getString(displayNameCol).orEmpty()
-                    val rawTitle = cursor.getString(titleCol)
-                    val rawArtist = cursor.getString(artistCol)
-                    val rawAlbum = cursor.getString(albumCol)
-                    val albumId = cursor.getLong(albumIdCol)
-                    val durationMs = cursor.getLong(durationCol)
-                    val path = cursor.getString(dataCol)
-                    if (filterNonMusic && !isEligibleLocalMusic(durationMs, displayName, path)) continue
-                    val relativePath = relativePathCol.takeIf { it >= 0 }?.let(cursor::getString)
-                    val volumeName = volumeNameCol.takeIf { it >= 0 }?.let(cursor::getString)
-                    val folderPath = path?.substringBeforeLast('/')
-                        ?.takeIf(String::isNotBlank)
-                        ?: resolveMediaStoreFolderPath(relativePath, volumeName)
-                    if (AppSettings.isFolderBlacklisted(folderPath)) continue
+        fun queryVolume(knownVolumeName: String?, collectionUri: Uri): Boolean {
+            var cursorReturned = false
+            runCatching {
+                context.contentResolver.query(
+                    collectionUri,
+                    projection,
+                    selection,
+                    selectionArgs,
+                    sortOrder,
+                )?.use { cursor ->
+                    cursorReturned = true
+                    val idCol = cursor.getColumnIndexOrThrow(MediaStore.Audio.Media._ID)
+                    val displayNameCol = cursor.getColumnIndexOrThrow(MediaStore.Audio.Media.DISPLAY_NAME)
+                    val titleCol = cursor.getColumnIndexOrThrow(MediaStore.Audio.Media.TITLE)
+                    val artistCol = cursor.getColumnIndexOrThrow(MediaStore.Audio.Media.ARTIST)
+                    val albumArtistCol = cursor.getColumnIndex("album_artist")
+                    val albumCol = cursor.getColumnIndexOrThrow(MediaStore.Audio.Media.ALBUM)
+                    val trackCol = cursor.getColumnIndexOrThrow(MediaStore.Audio.Media.TRACK)
+                    val albumIdCol = cursor.getColumnIndexOrThrow(MediaStore.Audio.Media.ALBUM_ID)
+                    val durationCol = cursor.getColumnIndexOrThrow(MediaStore.Audio.Media.DURATION)
+                    val dataCol = cursor.getColumnIndexOrThrow(MediaStore.Audio.Media.DATA)
+                    val relativePathCol = cursor.getColumnIndex(MediaStore.MediaColumns.RELATIVE_PATH)
+                    val volumeNameCol = cursor.getColumnIndex(MediaStore.MediaColumns.VOLUME_NAME)
+                    val dateAddedCol = cursor.getColumnIndexOrThrow(MediaStore.Audio.Media.DATE_ADDED)
+                    val dateModifiedCol = cursor.getColumnIndexOrThrow(MediaStore.Audio.Media.DATE_MODIFIED)
 
-                    val contentUri = ContentUris.withAppendedId(MediaStore.Audio.Media.EXTERNAL_CONTENT_URI, id).toString()
-                    val title = rawTitle.cleanTag()?.removeAudioExtension()
-                        ?: displayName.substringBeforeLast('.').takeIf { it.isNotBlank() }
-                        ?: "Track $id"
-                    val artist = rawArtist.takeUnless { it.isNullOrBlank() || it == "<unknown>" } ?: "Unknown Artist"
-                    val albumArtist = albumArtistCol.takeIf { it >= 0 }
-                        ?.let(cursor::getString)
-                        .cleanTag()
-                    val albumName = rawAlbum.takeUnless { it.isNullOrBlank() || it == "<unknown>" }
-                    val dateModified = cursor.getLong(dateModifiedCol)
-                    val artworkUrl = ContentUris.withAppendedId(MediaStore.Audio.Media.EXTERNAL_CONTENT_URI, id)
-                        .buildUpon()
-                        .apply {
-                            if (albumId > 0) appendQueryParameter("albumId", albumId.toString())
-                            if (dateModified > 0) appendQueryParameter("t", dateModified.toString())
+                    while (cursor.moveToNext()) {
+                        val id = cursor.getLong(idCol)
+                        val displayName = cursor.getString(displayNameCol).orEmpty()
+                        val rawTitle = cursor.getString(titleCol)
+                        val rawArtist = cursor.getString(artistCol)
+                        val rawAlbum = cursor.getString(albumCol)
+                        val albumId = cursor.getLong(albumIdCol)
+                        val durationMs = cursor.getLong(durationCol)
+                        val path = dataCol.takeIf { it >= 0 }?.let(cursor::getString)
+                        if (filterNonMusic && !isEligibleLocalMusic(durationMs, displayName, path)) continue
+                        val relativePath = relativePathCol.takeIf { it >= 0 }?.let(cursor::getString)
+                        val rowVolumeName = volumeNameCol.takeIf { it >= 0 }
+                            ?.let(cursor::getString)
+                            ?.takeIf(String::isNotBlank)
+                        val volumeName = when {
+                            rowVolumeName == null || rowVolumeName.equals(MediaStore.VOLUME_EXTERNAL, ignoreCase = true) ->
+                                knownVolumeName ?: rowVolumeName
+                            else -> rowVolumeName
                         }
-                        .build()
-                        .toString()
-                    val durationText = formatDuration(durationMs)
+                        // Prefer the MediaStore-relative location on scoped-storage
+                        // Android. DATA can be null, inaccessible, or inconsistent
+                        // between the aggregate and per-volume MediaStore views;
+                        // using it first made folder rows and their songs disagree.
+                        val folderPath = resolveMediaStoreFolderPath(context, relativePath, volumeName)
+                            ?: path?.let(::folderForMediaPath)
+                        if (AppSettings.isFolderBlacklisted(folderPath)) continue
 
-                    songs.add(
-                        Song(
-                            videoId = videoIdByUri[contentUri] ?: contentUri,
-                            title = title,
-                            artist = artist,
-                            thumbnailUrl = artworkUrl,
-                            durationText = durationText,
-                            albumName = albumName,
-                            albumArtist = albumArtist,
-                            trackNumber = cursor.getInt(trackCol).takeIf { it > 0 },
-                            localUri = contentUri,
-                            localPath = path,
-                            localFolderPath = folderPath,
-                            localDateAddedSeconds = cursor.getLong(dateAddedCol),
-                            localDateModifiedSeconds = cursor.getLong(dateModifiedCol),
+                        val contentUri = ContentUris.withAppendedId(collectionUri, id).toString()
+                        val aggregateContentUri = ContentUris.withAppendedId(
+                            MediaStore.Audio.Media.EXTERNAL_CONTENT_URI,
+                            id,
+                        ).toString()
+                        val title = rawTitle.cleanTag()?.removeAudioExtension()
+                            ?: displayName.substringBeforeLast('.').takeIf { it.isNotBlank() }
+                            ?: "Track $id"
+                        val artist = rawArtist.takeUnless { it.isNullOrBlank() || it == "<unknown>" } ?: "Unknown Artist"
+                        val albumArtist = albumArtistCol.takeIf { it >= 0 }
+                            ?.let(cursor::getString)
+                            .cleanTag()
+                        val albumName = rawAlbum.takeUnless { it.isNullOrBlank() || it == "<unknown>" }
+                        val dateModified = cursor.getLong(dateModifiedCol)
+                        val artworkUrl = ContentUris.withAppendedId(collectionUri, id)
+                            .buildUpon()
+                            .apply {
+                                if (albumId > 0) appendQueryParameter("albumId", albumId.toString())
+                                if (dateModified > 0) appendQueryParameter("t", dateModified.toString())
+                            }
+                            .build()
+                            .toString()
+                        val durationText = formatDuration(durationMs)
+                        val savedVideoId = videoIdByUri[contentUri]
+                            ?: if (volumeName.equals("external_primary", ignoreCase = true) || knownVolumeName == null) {
+                                videoIdByUri[aggregateContentUri]
+                            } else {
+                                null
+                            }
+
+                        songs.add(
+                            Song(
+                                videoId = savedVideoId ?: contentUri,
+                                title = title,
+                                artist = artist,
+                                thumbnailUrl = artworkUrl,
+                                durationText = durationText,
+                                albumName = albumName,
+                                albumArtist = albumArtist,
+                                trackNumber = cursor.getInt(trackCol).takeIf { it > 0 },
+                                localUri = contentUri,
+                                localPath = path,
+                                localFolderPath = folderPath,
+                                localDateAddedSeconds = cursor.getLong(dateAddedCol),
+                                localDateModifiedSeconds = cursor.getLong(dateModifiedCol),
+                            )
                         )
-                    )
+                    }
                 }
+            }.onFailure {
+                Log.w(TAG, "Failed scanning device local music from $knownVolumeName: ${it.message}")
             }
-        }.onFailure { Log.w(TAG, "Failed scanning device local music: ${it.message}") }
+            return cursorReturned
+        }
+
+        var anyVolumeQueryReturned = false
+        queryTargets.forEach { (volumeName, uri) ->
+            if (queryVolume(volumeName, uri)) anyVolumeQueryReturned = true
+        }
+        // Some vendor MediaStore providers do not implement per-volume query
+        // URIs. Fall back to the long-standing aggregate query only when none
+        // of the individual queries returned a cursor, avoiding duplicate rows
+        // on providers that support per-volume access.
+        if (!anyVolumeQueryReturned && queryTargets.size > 1) {
+            queryVolume(null, MediaStore.Audio.Media.EXTERNAL_CONTENT_URI)
+        }
 
         songs
     }
@@ -400,16 +456,54 @@ object LocalMediaRepository {
      * MediaStore row. RELATIVE_PATH and VOLUME_NAME are enough to build a path
      * for folder display without pretending it is a playable raw-file path.
      */
-    private fun resolveMediaStoreFolderPath(relativePath: String?, volumeName: String?): String? {
+    private fun resolveMediaStoreFolderPath(context: Context, relativePath: String?, volumeName: String?): String? {
         val relative = relativePath?.trim('/')?.takeIf(String::isNotBlank) ?: return null
         val storageRoot = when {
             volumeName.equals("external_primary", ignoreCase = true) ->
                 Environment.getExternalStorageDirectory().absolutePath
             !volumeName.isNullOrBlank() && !volumeName.equals("external", ignoreCase = true) ->
-                "/storage/${volumeName.trim('/')}"
+                resolveExternalVolumeRoot(context, volumeName)
             else -> return null
-        }
-        return File(storageRoot, relative).path.replace('\\', '/')
+        } ?: return null
+        return normalizeFolderPath(File(storageRoot, relative).path)
+    }
+
+    private fun resolveExternalVolumeRoot(context: Context, volumeName: String): String? {
+        val volumeId = volumeName.trim('/')
+        if (!SAFE_EXTERNAL_VOLUME_ID.matches(volumeId)) return null
+
+        // getExternalFilesDirs is available on the app's minimum API and gives
+        // the mounted root for removable volumes without requesting broad
+        // storage access. Fall back to Android's standard mount point only if
+        // the volume is temporarily absent from that list.
+        val mountedRoot = runCatching {
+            context.getExternalFilesDirs(null)
+                .asSequence()
+                .filterNotNull()
+                .mapNotNull { directory ->
+                    val path = normalizeFolderPath(directory.absolutePath) ?: return@mapNotNull null
+                    val marker = "/Android/data/"
+                    val markerIndex = path.indexOf(marker, ignoreCase = true)
+                    if (markerIndex <= 0) return@mapNotNull null
+                    path.substring(0, markerIndex).takeIf {
+                        it.substringAfterLast('/').equals(volumeId, ignoreCase = true)
+                    }
+                }
+                .firstOrNull()
+        }.getOrNull()
+        return mountedRoot ?: "/storage/$volumeId"
+    }
+
+    private fun folderForMediaPath(path: String): String? {
+        val normalized = normalizeFolderPath(path)?.takeIf { it.startsWith('/') } ?: return null
+        val lastSlash = normalized.lastIndexOf('/')
+        if (lastSlash <= 0) return null
+        return normalized.substring(0, lastSlash).ifBlank { "/" }
+    }
+
+    private fun normalizeFolderPath(path: String): String? {
+        val normalized = path.replace('\\', '/').replace(Regex("/{2,}"), "/").trimEnd('/')
+        return normalized.takeIf { it.isNotBlank() && it.startsWith('/') }
     }
 
     /**
@@ -419,6 +513,7 @@ object LocalMediaRepository {
     suspend fun getAllDiscoveredFolders(context: Context): List<LocalFolder> = withContext(Dispatchers.IO) {
         if (!hasStoragePermission(context)) return@withContext emptyList()
         val counts = mutableMapOf<String, Int>()
+        val folderDisplayNames = mutableMapOf<String, String>()
         val projection = buildList {
             add(MediaStore.Audio.Media.DATA)
             add(MediaStore.Audio.Media.DURATION)
@@ -426,44 +521,81 @@ object LocalMediaRepository {
             if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
                 add(MediaStore.MediaColumns.RELATIVE_PATH)
                 add(MediaStore.MediaColumns.VOLUME_NAME)
+                // Some providers retain a bucket label even when DATA is
+                // omitted. It is only a last-resort display name below.
+                add(MediaStore.MediaColumns.BUCKET_DISPLAY_NAME)
             }
         }.toTypedArray()
         val selection = "${MediaStore.Audio.Media.IS_MUSIC} != 0"
 
-        runCatching {
-            context.contentResolver.query(
-                MediaStore.Audio.Media.EXTERNAL_CONTENT_URI,
-                projection,
-                selection,
-                null,
-                null,
-            )?.use { cursor ->
-                val dataCol = cursor.getColumnIndex(MediaStore.Audio.Media.DATA)
-                val durCol = cursor.getColumnIndexOrThrow(MediaStore.Audio.Media.DURATION)
-                val nameCol = cursor.getColumnIndexOrThrow(MediaStore.Audio.Media.DISPLAY_NAME)
-                val relativePathCol = cursor.getColumnIndex(MediaStore.MediaColumns.RELATIVE_PATH)
-                val volumeNameCol = cursor.getColumnIndex(MediaStore.MediaColumns.VOLUME_NAME)
-                while (cursor.moveToNext()) {
-                    val dur = cursor.getLong(durCol)
-                    val name = cursor.getString(nameCol).orEmpty()
-                    val rawPath = dataCol.takeIf { it >= 0 }?.let(cursor::getString)
-                    val folderPath = rawPath
-                        ?.substringBeforeLast('/')
-                        ?.takeIf(String::isNotBlank)
-                        ?: resolveMediaStoreFolderPath(
-                            relativePathCol.takeIf { it >= 0 }?.let(cursor::getString),
-                            volumeNameCol.takeIf { it >= 0 }?.let(cursor::getString),
-                        )
-                        ?: continue
-                    if (!isEligibleLocalMusic(dur, name, rawPath)) continue
-                    if (AppSettings.isFolderBlacklisted(folderPath)) continue
-                    counts[folderPath] = (counts[folderPath] ?: 0) + 1
+        val volumeUris = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
+            runCatching {
+                MediaStore.getExternalVolumeNames(context)
+                    .filter { it != MediaStore.VOLUME_EXTERNAL }
+                    .map { volumeName -> volumeName to MediaStore.Audio.Media.getContentUri(volumeName) }
+            }.getOrDefault(emptyList())
+        } else emptyList()
+        val queryTargets = volumeUris.ifEmpty {
+            listOf(null to MediaStore.Audio.Media.EXTERNAL_CONTENT_URI)
+        }
+
+        queryTargets.forEach { (knownVolumeName, contentUri) ->
+            runCatching {
+                context.contentResolver.query(
+                    contentUri,
+                    projection,
+                    selection,
+                    null,
+                    null,
+                )?.use { cursor ->
+                    val dataCol = cursor.getColumnIndex(MediaStore.Audio.Media.DATA)
+                    val durCol = cursor.getColumnIndexOrThrow(MediaStore.Audio.Media.DURATION)
+                    val nameCol = cursor.getColumnIndexOrThrow(MediaStore.Audio.Media.DISPLAY_NAME)
+                    val relativePathCol = cursor.getColumnIndex(MediaStore.MediaColumns.RELATIVE_PATH)
+                    val volumeNameCol = cursor.getColumnIndex(MediaStore.MediaColumns.VOLUME_NAME)
+                    val bucketNameCol = cursor.getColumnIndex(MediaStore.MediaColumns.BUCKET_DISPLAY_NAME)
+                    while (cursor.moveToNext()) {
+                        val dur = cursor.getLong(durCol)
+                        val displayName = cursor.getString(nameCol).orEmpty()
+                        val rawPath = dataCol.takeIf { it >= 0 }?.let(cursor::getString)
+                        if (!isEligibleLocalMusic(dur, displayName, rawPath)) continue
+                        val relativePath = relativePathCol.takeIf { it >= 0 }?.let(cursor::getString)
+                        val rowVolumeName = volumeNameCol.takeIf { it >= 0 }
+                            ?.let(cursor::getString)
+                            ?.takeIf(String::isNotBlank)
+                        val volumeName = when {
+                            rowVolumeName == null || rowVolumeName.equals(MediaStore.VOLUME_EXTERNAL, ignoreCase = true) ->
+                                knownVolumeName ?: rowVolumeName
+                            else -> rowVolumeName
+                        }
+                        val folderPath = resolveMediaStoreFolderPath(context, relativePath, volumeName)
+                            ?: rawPath?.let(::folderForMediaPath)
+                            ?: continue
+                        if (AppSettings.isFolderBlacklisted(folderPath)) continue
+                        val count = counts[folderPath] ?: 0
+                        counts[folderPath] = count + 1
+                        val relativeName = relativePath
+                            ?.replace('\\', '/')
+                            ?.trimEnd('/')
+                            ?.substringAfterLast('/')
+                            ?.takeIf(String::isNotBlank)
+                        val name = relativeName
+                            ?: bucketNameCol.takeIf { it >= 0 }
+                                ?.let(cursor::getString)
+                                ?.takeIf(String::isNotBlank)
+                            ?: folderPath.trimEnd('/').substringAfterLast('/').takeIf(String::isNotBlank)
+                            ?: folderPath
+                        folderDisplayNames[folderPath] = name
+                    }
                 }
-            }
-        }.onFailure { Log.w(TAG, "Failed discovering local folders: ${it.message}") }
+            }.onFailure { Log.w(TAG, "Failed discovering local folders from $knownVolumeName: ${it.message}") }
+        }
 
         counts.map { (folderPath, count) ->
-            val name = folderPath.substringAfterLast('/').takeIf { it.isNotBlank() } ?: folderPath
+            val name = folderDisplayNames[folderPath]
+                ?.takeIf(String::isNotBlank)
+                ?: folderPath.trimEnd('/').substringAfterLast('/').takeIf(String::isNotBlank)
+                ?: folderPath
             val parent = folderPath.substringBeforeLast('/').takeIf { it.isNotBlank() && it != folderPath }
             LocalFolder(
                 path = folderPath,
@@ -474,6 +606,8 @@ object LocalMediaRepository {
             )
         }.sortedWith(compareBy({ it.isBlacklisted }, { it.name.lowercase(Locale.ROOT) }))
     }
+
+    private val SAFE_EXTERNAL_VOLUME_ID = Regex("[A-Za-z0-9_-]{1,64}")
 
     /**
      * MediaStore's `IS_MUSIC` flag is advisory and often includes notification

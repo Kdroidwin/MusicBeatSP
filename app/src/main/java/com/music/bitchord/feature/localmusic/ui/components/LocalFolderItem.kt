@@ -53,6 +53,10 @@ fun LocalFolderItem(
     modifier: Modifier = Modifier,
 ) {
     var menuOpen by remember { mutableStateOf(false) }
+    val displayName = remember(folder.name, folder.path) {
+        folder.name.trim().takeIf(String::isNotBlank)
+            ?: folder.path.replace('\\', '/').trimEnd('/').substringAfterLast('/').ifBlank { folder.path }
+    }
 
     Surface(
         modifier = modifier
@@ -100,7 +104,7 @@ fun LocalFolderItem(
                 verticalArrangement = Arrangement.Center,
             ) {
                 Text(
-                    text = folder.name,
+                    text = displayName,
                     style = MaterialTheme.typography.titleMedium,
                     fontWeight = FontWeight.SemiBold,
                     color = if (folder.isBlacklisted) {
