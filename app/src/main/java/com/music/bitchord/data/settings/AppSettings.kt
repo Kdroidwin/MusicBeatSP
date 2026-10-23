@@ -672,6 +672,9 @@ object AppSettings {
     /** YouTube Music catalog/search/playback is opt-in; fresh installs make no YouTube requests. */
     val youtubeMusicEnabled = MutableStateFlow(false)
 
+    /** Whether the search screen should start on YouTube Music instead of this device. */
+    val youtubeMusicSearchDefault = MutableStateFlow(false)
+
     /** Whether an app-managed YouTube Music request may leave this device. */
     val youtubeMusicNetworkAllowed: Boolean
         get() = youtubeMusicEnabled.value && !offlineMode.value
@@ -1290,6 +1293,7 @@ object AppSettings {
             ?: "JP13"
         val wasYoutubeMusicEnabled = youtubeMusicEnabled.value
         youtubeMusicEnabled.value = prefs.getBoolean(KEY_YOUTUBE_MUSIC_ENABLED, false)
+        youtubeMusicSearchDefault.value = prefs.getBoolean(KEY_YOUTUBE_MUSIC_SEARCH_DEFAULT, false)
         if (wasYoutubeMusicEnabled && !youtubeMusicEnabled.value) Http.cancelYoutubeMusicRequests()
         if (!wasOffline && offlineMode.value) Http.cancelAllNetworkRequests()
         hideLosslessLabel.value = prefs.getBoolean(KEY_HIDE_LOSSLESS_LABEL, false)
@@ -2365,6 +2369,11 @@ object AppSettings {
         prefs.edit().putBoolean(KEY_YOUTUBE_MUSIC_ENABLED, value).apply()
         if (wasEnabled && !value) Http.cancelYoutubeMusicRequests()
         if (value && !offlineMode.value) YoutubeStreamBootstrap.initializeIfAllowed(appContext)
+    }
+
+    fun setYoutubeMusicSearchDefault(value: Boolean) {
+        youtubeMusicSearchDefault.value = value
+        prefs.edit().putBoolean(KEY_YOUTUBE_MUSIC_SEARCH_DEFAULT, value).apply()
     }
 
     fun setHideLosslessLabel(value: Boolean) {
@@ -3473,6 +3482,7 @@ object AppSettings {
     private const val KEY_RADIO_AREA_ID = "radio_area_id"
     private const val KEY_RADIO_TAB_MIGRATED = "radio_tab_migrated"
     private const val KEY_YOUTUBE_MUSIC_ENABLED = "youtube_music_enabled"
+    private const val KEY_YOUTUBE_MUSIC_SEARCH_DEFAULT = "youtube_music_search_default"
     private const val KEY_HIDE_LOSSLESS_LABEL = "hide_lossless_label"
     private const val KEY_SHOW_TRACK_DURATION_INSTEAD_OF_REMAINING = "show_track_duration_instead_of_remaining"
     private const val KEY_POPUP_EXTERNAL_AUDIO_PLAYER = "popup_external_audio_player"

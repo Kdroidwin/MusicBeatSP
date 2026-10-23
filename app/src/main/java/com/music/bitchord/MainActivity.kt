@@ -129,6 +129,7 @@ import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.saveable.rememberSaveable
+import androidx.compose.runtime.saveable.rememberSaveableStateHolder
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -696,6 +697,7 @@ private fun BitChordApp(
     // Incremented each time the search tab is re-tapped while already selected,
     // which SearchScreen uses as a signal to focus the input field.
     var searchFocusTrigger by remember { mutableIntStateOf(0) }
+    val searchSaveableStateHolder = rememberSaveableStateHolder()
     var libraryFilterRequest by remember { mutableStateOf<LibraryFilter?>(null) }
     var requestedMediaPanel by remember { mutableStateOf<MediaControlDestination?>(null) }
     LaunchedEffect(mediaControlRequest) {
@@ -856,6 +858,8 @@ private fun BitChordApp(
 
     val localSongsState by viewModel.localSongs.collectAsStateWithLifecycle()
     val youtubeMusicSearchResults by viewModel.results.collectAsStateWithLifecycle()
+    val youtubeMusicSearchHasMore by viewModel.searchHasMore.collectAsStateWithLifecycle()
+    val youtubeMusicSearchLoadingMore by viewModel.searchLoadingMore.collectAsStateWithLifecycle()
     val musicServerSearchResults by viewModel.musicServerResults.collectAsStateWithLifecycle()
     val configuredSourceSearchResults by viewModel.configuredSourceResults.collectAsStateWithLifecycle()
     val remoteServerConfigs by SourceRegistry.configs.collectAsStateWithLifecycle()
@@ -2061,11 +2065,11 @@ private fun BitChordApp(
             Box(Modifier.weight(1f).fillMaxHeight()) {
                 AnimatedContent(
                     targetState = when {
-                        detail != null -> detail.browseId
                         showSources -> "sources"
                         showWearOs -> "wear_os"
                         showSettings -> "settings"
                         showReplay -> "replay"
+                        detail != null -> detail.browseId
                         else -> "$TAB_KEY$selectedTab"
                     },
                     transitionSpec = {
@@ -2536,15 +2540,16 @@ private fun BitChordApp(
                                 onCollectionNavigationChanged = onCollectionNavigationChanged,
                             )
                         }
-                        TAB_SEARCH -> if (!hasStoragePermission) {
-                            Box(modifier = Modifier.fillMaxSize().padding(listPadding), contentAlignment = Alignment.Center) {
-                                LocalPermissionCard(
-                                    onRequestPermission = requestDefaultPermission,
-                                    onFallbackPermission = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.R) requestAudioPermission else null,
-                                )
-                            }
-                        } else {
-                            LocalSearchScreen(
+                        TAB_SEARCH -> searchSaveableStateHolder.SaveableStateProvider("main-search") {
+                            if (!hasStoragePermission) {
+                                Box(modifier = Modifier.fillMaxSize().padding(listPadding), contentAlignment = Alignment.Center) {
+                                    LocalPermissionCard(
+                                        onRequestPermission = requestDefaultPermission,
+                                        onFallbackPermission = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.R) requestAudioPermission else null,
+                                    )
+                                }
+                            } else {
+                                LocalSearchScreen(
                                 songs = localSongs,
                                 currentSong = player.song,
                                 isPlaying = player.isPlaying,
@@ -2561,6 +2566,9 @@ private fun BitChordApp(
                                 onRemoveSearch = viewModel::removeSearch,
                                 onClearSearchHistory = viewModel::clearSearchHistory,
                                 youtubeMusicResults = youtubeMusicSearchResults,
+                                youtubeMusicHasMore = youtubeMusicSearchHasMore,
+                                youtubeMusicLoadingMore = youtubeMusicSearchLoadingMore,
+                                onLoadMoreYoutubeMusicResults = viewModel::loadMoreSearchResults,
                                 onYoutubeMusicSearch = { term -> viewModel.searchFor(term, youtubeMusicOnly = true) },
                                 onYoutubeMusicTrackClick = playRadio,
                                 musicServerResults = musicServerSearchResults,

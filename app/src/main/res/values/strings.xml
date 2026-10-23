@@ -1408,4 +1408,8 @@
     <string name="wear_os_unsupported">Installing on a watch needs Android 11 or later on this phone.</string>
     <string name="wear_os_code_hint">Pairing code</string>
     <string name="wear_os_done">Done</string>
+    <string name="youtube_playlist_track_added">Added to %1$s</string>
+    <string name="youtube_playlist_track_add_failed">Couldn’t add the track to that playlist</string>
+    <string name="youtube_music_search_default">Use YouTube Music as the default search target</string>
+    <string name="youtube_music_search_default_subtitle">Start searches on YouTube Music when it is enabled; otherwise search this device.</string>
 </resources>

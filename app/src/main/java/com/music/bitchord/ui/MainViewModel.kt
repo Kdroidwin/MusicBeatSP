@@ -176,6 +176,9 @@ class MainViewModel(app: Application) : AndroidViewModel(app) {
     private val _searchLoadingMore = MutableStateFlow(false)
     val searchLoadingMore: StateFlow<Boolean> = _searchLoadingMore.asStateFlow()
 
+    private val _searchHasMore = MutableStateFlow(false)
+    val searchHasMore: StateFlow<Boolean> = _searchHasMore.asStateFlow()
+
     /** Increments once per first-page request so the UI can reset its list. */
     private val _searchScrollReset = MutableStateFlow(0)
     val searchScrollReset: StateFlow<Int> = _searchScrollReset.asStateFlow()
@@ -1799,6 +1802,7 @@ class MainViewModel(app: Application) : AndroidViewModel(app) {
             newestRequestId.incrementAndGet()
             searchSession = null
             _searchLoadingMore.value = false
+            _searchHasMore.value = false
             _results.value = null
             return
         }
@@ -1806,6 +1810,7 @@ class MainViewModel(app: Application) : AndroidViewModel(app) {
         _searchScrollReset.value += 1
         searchSession = null
         _searchLoadingMore.value = false
+        _searchHasMore.value = false
         searchRequests.tryEmit(SearchRequest(query, _filter.value, id, forceYoutubeMusicSearch))
     }
 
@@ -1840,6 +1845,7 @@ class MainViewModel(app: Application) : AndroidViewModel(app) {
                 _results.value = cached?.let { UiState.Success(it) } ?: UiState.Loading
                 if (exact != null) {
                     searchSession = SearchSession(key, request.requestId, request.filter, exact.continuation)
+                    _searchHasMore.value = exact.continuation != null
                     return@collectLatest
                 }
 
@@ -1853,6 +1859,7 @@ class MainViewModel(app: Application) : AndroidViewModel(app) {
                 }
                 if (matchingLocal.isNotEmpty()) {
                     val searchResults = matchingLocal.map { SearchResult.Track(it) }
+                    _searchHasMore.value = false
                     _results.value = UiState.Success(searchResults)
                     return@collectLatest
                 }
@@ -1896,7 +1903,12 @@ class MainViewModel(app: Application) : AndroidViewModel(app) {
                     val merged = (current + page.rows).distinctBy(::searchResultKey)
                     searchCache.put(session.key, SearchCacheEntry(merged, page.continuation))
                     searchSession = session.copy(continuation = page.continuation)
+                    _searchHasMore.value = page.continuation != null
                     _results.value = UiState.Success(merged)
+                }.onFailure {
+                    // Keep the current rows usable and stop automatic retries
+                    // until the user starts a fresh search.
+                    _searchHasMore.value = false
                 }
                 _searchLoadingMore.value = false
             }
@@ -1953,6 +1965,7 @@ class MainViewModel(app: Application) : AndroidViewModel(app) {
         if (rows.isEmpty()) return UiState.Error(text(R.string.no_results))
         searchCache.put(key, SearchCacheEntry(rows, page.continuation))
         searchSession = SearchSession(key, requestId, _filter.value, page.continuation)
+        _searchHasMore.value = page.continuation != null
         prefetchTopResult(rows)
         return UiState.Success(rows)
     }

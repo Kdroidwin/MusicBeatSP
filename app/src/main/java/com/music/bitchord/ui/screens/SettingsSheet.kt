@@ -79,6 +79,7 @@ import androidx.compose.material.icons.rounded.PlaylistPlay
 import androidx.compose.material.icons.rounded.Pause
 import androidx.compose.material.icons.rounded.PlayArrow
 import androidx.compose.material.icons.rounded.Radio
+import androidx.compose.material.icons.rounded.Search
 import androidx.compose.material.icons.rounded.SmartDisplay
 import androidx.compose.material.icons.rounded.Share
 import androidx.compose.material.icons.rounded.ScreenRotation
@@ -376,6 +377,7 @@ fun SettingsScreen(
     val showPlayerLyricsStrip by AppSettings.showPlayerLyricsStrip.collectAsStateWithLifecycle()
     val offlineMode by AppSettings.offlineMode.collectAsStateWithLifecycle()
     val youtubeMusicEnabled by AppSettings.youtubeMusicEnabled.collectAsStateWithLifecycle()
+    val youtubeMusicSearchDefault by AppSettings.youtubeMusicSearchDefault.collectAsStateWithLifecycle()
     val hideLosslessLabel by AppSettings.hideLosslessLabel.collectAsStateWithLifecycle()
     val showTrackDurationInsteadOfRemaining by AppSettings.showTrackDurationInsteadOfRemaining.collectAsStateWithLifecycle()
     val popupExternalAudioPlayer by AppSettings.popupExternalAudioPlayer.collectAsStateWithLifecycle()
@@ -590,6 +592,12 @@ fun SettingsScreen(
             listOf("youtube", "youtube music", "ytmusic", "ネット検索", "オンライン音楽", "通信"),
             youtubeMusicEnabled,
         ) { AppSettings.setYoutubeMusicEnabled(!youtubeMusicEnabled) },
+        SettingsSearchEntry(
+            stringResource(R.string.youtube_music_search_default),
+            stringResource(R.string.youtube_music_search_default_subtitle),
+            listOf("youtube", "youtube music", "ytmusic", "default search", "search target", "検索先", "検索対象", "初期値"),
+            youtubeMusicSearchDefault,
+        ) { AppSettings.setYoutubeMusicSearchDefault(!youtubeMusicSearchDefault) },
         SettingsSearchEntry(stringResource(R.string.keep_screen_on), stringResource(R.string.keep_screen_on_subtitle), listOf("screen", "display", "画面", "常時"), keepScreenOn) { AppSettings.setKeepScreenOn(!keepScreenOn) },
         SettingsSearchEntry(
             stringResource(R.string.keep_screen_on_during_lyrics),
@@ -4037,6 +4045,23 @@ fun SettingsScreen(
                     )
                 },
                 onClick = { AppSettings.setYoutubeMusicEnabled(!youtubeMusicEnabled) },
+            )
+            RowDivider()
+            SettingsRow(
+                icon = Icons.Rounded.Search,
+                title = stringResource(R.string.youtube_music_search_default),
+                subtitle = stringResource(R.string.youtube_music_search_default_subtitle),
+                trailing = {
+                    Switch(
+                        checked = youtubeMusicSearchDefault,
+                        onCheckedChange = AppSettings::setYoutubeMusicSearchDefault,
+                        colors = SwitchDefaults.colors(
+                            checkedTrackColor = MaterialTheme.colorScheme.primary,
+                            checkedBorderColor = MaterialTheme.colorScheme.primary,
+                        ),
+                    )
+                },
+                onClick = { AppSettings.setYoutubeMusicSearchDefault(!youtubeMusicSearchDefault) },
             )
             RowDivider()
             SettingsRow(

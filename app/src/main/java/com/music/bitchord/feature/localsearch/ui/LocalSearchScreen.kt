@@ -50,6 +50,7 @@ import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
+import androidx.compose.runtime.snapshotFlow
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -100,6 +101,9 @@ fun LocalSearchScreen(
     onRemoveSearch: (String) -> Unit = {},
     onClearSearchHistory: () -> Unit = {},
     youtubeMusicResults: UiState<List<SearchResult>>? = null,
+    youtubeMusicHasMore: Boolean = false,
+    youtubeMusicLoadingMore: Boolean = false,
+    onLoadMoreYoutubeMusicResults: (() -> Unit)? = null,
     onYoutubeMusicSearch: ((String) -> Unit)? = null,
     onYoutubeMusicTrackClick: ((Song) -> Unit)? = null,
     onYoutubeMusicBrowseClick: ((com.music.bitchord.data.model.BrowseItem) -> Unit)? = null,
@@ -117,10 +121,11 @@ fun LocalSearchScreen(
     val context = LocalContext.current
     val folderHierarchy by AppSettings.localFolderHierarchy.collectAsStateWithLifecycle()
     val youtubeMusicEnabled by AppSettings.youtubeMusicEnabled.collectAsStateWithLifecycle()
+    val youtubeMusicSearchDefault by AppSettings.youtubeMusicSearchDefault.collectAsStateWithLifecycle()
     val offlineMode by AppSettings.offlineMode.collectAsStateWithLifecycle()
     val canSearchYoutubeMusic = youtubeMusicEnabled && !offlineMode
     var query by rememberSaveable { mutableStateOf("") }
-    var useYoutubeMusic by rememberSaveable { mutableStateOf(false) }
+    var useYoutubeMusic by rememberSaveable { mutableStateOf(youtubeMusicSearchDefault) }
     var submittedYoutubeQuery by rememberSaveable { mutableStateOf<String?>(null) }
     var useMusicServers by rememberSaveable { mutableStateOf(false) }
     var submittedMusicServerQuery by rememberSaveable { mutableStateOf<String?>(null) }
@@ -133,6 +138,15 @@ fun LocalSearchScreen(
         if (!canSearchYoutubeMusic) {
             useYoutubeMusic = false
             submittedYoutubeQuery = null
+        }
+    }
+
+    LaunchedEffect(canSearchYoutubeMusic, youtubeMusicSearchDefault) {
+        if (
+            query.isBlank() && submittedYoutubeQuery == null &&
+            submittedMusicServerQuery == null && submittedConfiguredSourceQuery == null
+        ) {
+            useYoutubeMusic = canSearchYoutubeMusic && youtubeMusicSearchDefault
         }
     }
 
@@ -549,6 +563,9 @@ fun LocalSearchScreen(
                         query = query,
                         submittedQuery = submittedYoutubeQuery,
                         state = youtubeMusicResults,
+                        hasMore = youtubeMusicHasMore,
+                        loadingMore = youtubeMusicLoadingMore,
+                        onLoadMore = onLoadMoreYoutubeMusicResults,
                         currentSong = currentSong,
                         isPlaying = isPlaying,
                         onTrackClick = onYoutubeMusicTrackClick ?: { song -> onSongClick(listOf(song), 0) },
@@ -955,6 +972,9 @@ private fun YoutubeMusicSearchResults(
     query: String,
     submittedQuery: String?,
     state: UiState<List<SearchResult>>?,
+    hasMore: Boolean,
+    loadingMore: Boolean,
+    onLoadMore: (() -> Unit)?,
     currentSong: Song?,
     isPlaying: Boolean,
     onTrackClick: (Song) -> Unit,
@@ -989,6 +1009,18 @@ private fun YoutubeMusicSearchResults(
         }
         is UiState.Success -> {
             val results = state.data
+            LaunchedEffect(listState, results.size, hasMore, loadingMore, onLoadMore) {
+                if (!hasMore || loadingMore || onLoadMore == null) return@LaunchedEffect
+                snapshotFlow { listState.layoutInfo.visibleItemsInfo.lastOrNull()?.index ?: -1 }
+                    .collect { lastVisible ->
+                        // One header precedes the results. Start fetching when
+                        // the user is near the end so the next page is ready
+                        // without blocking the first-page render.
+                        if (lastVisible >= (results.size - 4).coerceAtLeast(0)) {
+                            onLoadMore()
+                        }
+                    }
+            }
             if (results.isEmpty()) {
                 Box(modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
                     Text("No YouTube Music results", color = MaterialTheme.colorScheme.onSurfaceVariant)
@@ -1037,6 +1069,16 @@ private fun YoutubeMusicSearchResults(
                                 )
                                 is SearchResult.Browse -> YoutubeMusicBrowseRow(result.item) {
                                     onBrowseClick(result.item)
+                                }
+                            }
+                        }
+                        if (loadingMore) {
+                            item(key = "youtube_loading_more") {
+                                Box(
+                                    Modifier.fillMaxWidth().padding(vertical = 18.dp),
+                                    contentAlignment = Alignment.Center,
+                                ) {
+                                    CircularProgressIndicator(strokeWidth = 2.dp)
                                 }
                             }
                         }

@@ -1323,4 +1323,8 @@
     <string name="wear_os_unsupported">ウォッチへのインストールには、このスマートフォンが Android 11 以降である必要があります。</string>
     <string name="wear_os_code_hint">ペア設定コード</string>
     <string name="wear_os_done">完了</string>
+    <string name="youtube_playlist_track_added">%1$s に追加しました</string>
+    <string name="youtube_playlist_track_add_failed">プレイリストに追加できませんでした</string>
+    <string name="youtube_music_search_default">検索先の初期値をYouTube Musicにする</string>
+    <string name="youtube_music_search_default_subtitle">有効時は検索画面をYouTube Musicから開始します。YouTube Musicが無効またはオフライン時はこの端末を検索します。</string>
 </resources>
