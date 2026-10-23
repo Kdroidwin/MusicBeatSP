@@ -686,20 +686,30 @@ const val FAST_START_QUEUE_BATCH_SIZE = 50
 
 fun MediaController.playSongs(songs: List<Song>, startIndex: Int) {
     if (songs.isEmpty()) return
+    val selectedIndex = startIndex.coerceIn(songs.indices)
     // A queue started while shuffle is on goes in shuffled rather than being
     // played out of order — see [QueueShuffle]. The track the user picked still
     // leads, so it ends up at the top instead of at [startIndex].
     val shuffled = QueueShuffle.enabled.value
+    val queueStartIndex: Int
     val queue = if (shuffled) {
-        QueueShuffle.startingOrder(songs, startIndex.coerceIn(songs.indices))
+        queueStartIndex = 0
+        QueueShuffle.startingOrder(songs, selectedIndex)
     } else {
-        queueStartingAt(songs, startIndex)
+        // Keep a bounded window of the items before the selected row. Dropping
+        // the prefix made Previous appear to do nothing on the first selected
+        // track in album, playlist, and artist queues.
+        val historyStart = (selectedIndex - MAX_QUEUE_HISTORY).coerceAtLeast(0)
+        queueStartIndex = selectedIndex - historyStart
+        songs.drop(historyStart)
     }
     if (queue.isEmpty()) return
 
     // Fast-start: Send the initial batch immediately so playback starts with 0ms delay
-    val initialBatch = queue.take(FAST_START_QUEUE_BATCH_SIZE)
-    setMediaItems(initialBatch.map { it.toMediaItem() }, 0, 0L)
+    // Include the selected row even when a long history prefix precedes it.
+    val initialCount = maxOf(FAST_START_QUEUE_BATCH_SIZE, queueStartIndex + 1)
+    val initialBatch = queue.take(initialCount)
+    setMediaItems(initialBatch.map { it.toMediaItem() }, queueStartIndex, 0L)
     prepare()
     play()
 

@@ -270,6 +270,8 @@ enum class PlayerQuickAction {
     DETAILS,
     SHARE_FILE,
     FAVORITE,
+    SHUFFLE,
+    REPEAT,
 }
 
 /** Items shown in the player’s song actions sheet opened from the More button. */
@@ -568,6 +570,10 @@ object AppSettings {
 
     /** Hides the seek bar and timestamps while a live radio station is playing. */
     val hideRadioPlaybackBar = MutableStateFlow(true)
+    /** Visible player seek-bar thickness in dp. */
+    val playerSeekBarThicknessDp = MutableStateFlow(7)
+    /** Visible player volume-bar thickness in dp. */
+    val playerVolumeBarThicknessDp = MutableStateFlow(6)
 
     /** Swiping a song row plays it next instead of adding it to the end of the queue. */
     val swipeToPlayNext = MutableStateFlow(false)
@@ -604,6 +610,8 @@ object AppSettings {
     val screenOrientationMode = MutableStateFlow(ScreenOrientationMode.SYSTEM)
     val favoriteUsesStar = MutableStateFlow(false)
     val playerQuickActions = MutableStateFlow<List<PlayerQuickAction>>(emptyList())
+    /** Removes translucent circular discs behind quick action glyphs. */
+    val hidePlayerQuickActionCircles = MutableStateFlow(false)
     val hiddenPlayerDetailsActions = MutableStateFlow<Set<PlayerDetailsAction>>(emptySet())
     /** The cutter is opt-in because it exports a re-encoded, edited copy of a track. */
     val audioCutterEnabled = MutableStateFlow(false)
@@ -1224,6 +1232,8 @@ object AppSettings {
         stopOnTaskRemoved.value = prefs.getBoolean(KEY_STOP_ON_TASK_REMOVED, false)
         hideVolumeBar.value = prefs.getBoolean(KEY_HIDE_VOLUME_BAR, false)
         hideRadioPlaybackBar.value = prefs.getBoolean(KEY_HIDE_RADIO_PLAYBACK_BAR, true)
+        playerSeekBarThicknessDp.value = prefs.getInt(KEY_PLAYER_SEEK_BAR_THICKNESS_DP, 7).coerceIn(2, 14)
+        playerVolumeBarThicknessDp.value = prefs.getInt(KEY_PLAYER_VOLUME_BAR_THICKNESS_DP, 6).coerceIn(2, 14)
         swipeToPlayNext.value = prefs.getBoolean(KEY_SWIPE_TO_PLAY_NEXT, false)
         dontRepeatSuggestions.value = prefs.getBoolean(KEY_DONT_REPEAT_SUGGESTIONS, false)
         reduceDynamicBlur.value = prefs.getBoolean(KEY_REDUCE_BLUR, false)
@@ -1245,6 +1255,7 @@ object AppSettings {
         }.getOrDefault(ScreenOrientationMode.SYSTEM)
         favoriteUsesStar.value = prefs.getBoolean(KEY_FAVORITE_USES_STAR, false)
         playerQuickActions.value = readPlayerQuickActions()
+        hidePlayerQuickActionCircles.value = prefs.getBoolean(KEY_HIDE_PLAYER_QUICK_ACTION_CIRCLES, false)
         hiddenPlayerDetailsActions.value = readHiddenPlayerDetailsActions()
         audioCutterEnabled.value = prefs.getBoolean(KEY_AUDIO_CUTTER_ENABLED, false)
         artworkBackdropBlurDp.value = prefs.getFloat(KEY_ARTWORK_BACKDROP_BLUR_DP, 32f)
@@ -1972,6 +1983,18 @@ object AppSettings {
         prefs.edit().putBoolean(KEY_HIDE_RADIO_PLAYBACK_BAR, value).apply()
     }
 
+    fun setPlayerSeekBarThicknessDp(value: Int) {
+        val normalized = value.coerceIn(2, 14)
+        playerSeekBarThicknessDp.value = normalized
+        prefs.edit().putInt(KEY_PLAYER_SEEK_BAR_THICKNESS_DP, normalized).apply()
+    }
+
+    fun setPlayerVolumeBarThicknessDp(value: Int) {
+        val normalized = value.coerceIn(2, 14)
+        playerVolumeBarThicknessDp.value = normalized
+        prefs.edit().putInt(KEY_PLAYER_VOLUME_BAR_THICKNESS_DP, normalized).apply()
+    }
+
     fun setSwipeToPlayNext(value: Boolean) {
         swipeToPlayNext.value = value
         prefs.edit().putBoolean(KEY_SWIPE_TO_PLAY_NEXT, value).apply()
@@ -2126,6 +2149,11 @@ object AppSettings {
         val showFavoriteBesideMenu = PlayerQuickAction.FAVORITE in normalized
         favoriteBesideTrackMenu.value = showFavoriteBesideMenu
         prefs.edit().putBoolean(KEY_FAVORITE_BESIDE_TRACK_MENU, showFavoriteBesideMenu).apply()
+    }
+
+    fun setHidePlayerQuickActionCircles(value: Boolean) {
+        hidePlayerQuickActionCircles.value = value
+        prefs.edit().putBoolean(KEY_HIDE_PLAYER_QUICK_ACTION_CIRCLES, value).apply()
     }
 
     fun setPlayerDetailsActionVisible(action: PlayerDetailsAction, visible: Boolean) {
@@ -3400,6 +3428,8 @@ object AppSettings {
     private const val KEY_STOP_ON_TASK_REMOVED = "stop_on_task_removed"
     private const val KEY_HIDE_VOLUME_BAR = "hide_volume_bar"
     private const val KEY_HIDE_RADIO_PLAYBACK_BAR = "hide_radio_playback_bar"
+    private const val KEY_PLAYER_SEEK_BAR_THICKNESS_DP = "player_seek_bar_thickness_dp"
+    private const val KEY_PLAYER_VOLUME_BAR_THICKNESS_DP = "player_volume_bar_thickness_dp"
     private const val KEY_SWIPE_TO_PLAY_NEXT = "swipe_to_play_next"
     private const val KEY_DONT_REPEAT_SUGGESTIONS = "dont_repeat_suggestions"
     private const val KEY_REDUCE_BLUR = "reduce_dynamic_blur"
@@ -3418,6 +3448,7 @@ object AppSettings {
     private const val KEY_SCREEN_ORIENTATION = "screen_orientation_mode"
     private const val KEY_FAVORITE_USES_STAR = "favorite_uses_star"
     private const val KEY_PLAYER_QUICK_ACTIONS = "player_quick_actions"
+    private const val KEY_HIDE_PLAYER_QUICK_ACTION_CIRCLES = "hide_player_quick_action_circles"
     private const val KEY_HIDDEN_PLAYER_DETAILS_ACTIONS = "hidden_player_details_actions"
     private const val KEY_AUDIO_CUTTER_ENABLED = "audio_cutter_enabled"
     private const val KEY_ARTWORK_BACKDROP_BLUR_DP = "artwork_backdrop_blur_dp"

@@ -56,6 +56,7 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.res.stringResource
@@ -69,6 +70,7 @@ import coil3.compose.AsyncImage
 import com.music.bitchord.R
 import com.music.bitchord.data.model.Song
 import com.music.bitchord.data.settings.AppSettings
+import com.music.bitchord.data.settings.ThemeMode
 import com.music.bitchord.playback.beginRadioQueue
 import com.music.bitchord.playback.playSongs
 import com.music.bitchord.radio.RadioPlaybackSession
@@ -89,6 +91,8 @@ fun RadioScreen(
 ) {
     val context = LocalContext.current
     val offlineMode by AppSettings.offlineMode.collectAsStateWithLifecycle()
+    val themeMode by AppSettings.themeMode.collectAsStateWithLifecycle()
+    val amoledBlack = themeMode == ThemeMode.AMOLED
     val selectedAreaId by AppSettings.radioAreaId.collectAsStateWithLifecycle()
     var stationDetail by remember { mutableStateOf<Station?>(null) }
     var showRegionPicker by remember { mutableStateOf(false) }
@@ -143,12 +147,19 @@ fun RadioScreen(
                 startingStationId = station.id
                 runCatching {
                     val live = RadioRepository.prepareLiveStream(station, selectedAreaId)
+                    val currentProgram = if (stationDetail?.id == station.id) {
+                        RadioRepository.currentProgram(weeklyPrograms)
+                    } else {
+                        runCatching {
+                            RadioRepository.currentProgram(RadioRepository.fetchWeeklyPrograms(station.id))
+                        }.getOrNull()
+                    }
                     controller.beginRadioQueue()
                     val song = Song(
                         videoId = "radiko:${station.id}",
-                        title = station.name,
+                        title = currentProgram?.title ?: station.name,
                         artist = station.name,
-                        thumbnailUrl = station.logoUrl,
+                        thumbnailUrl = currentProgram?.imageUrl ?: station.logoUrl,
                         radioName = station.name,
                         isLiveRadio = true,
                         radioStreamUrl = live.streamUrl,
@@ -166,6 +177,7 @@ fun RadioScreen(
     if (showRegionPicker) {
         RadioRegionDialog(
             selectedAreaId = selectedAreaId,
+            amoledBlack = amoledBlack,
             onSelect = { areaId ->
                 AppSettings.setRadioAreaId(areaId)
                 showRegionPicker = false
@@ -175,7 +187,7 @@ fun RadioScreen(
     }
 
     selectedProgram?.let { program ->
-        RadioProgramDialog(program = program, onDismiss = { selectedProgram = null })
+        RadioProgramDialog(program = program, amoledBlack = amoledBlack, onDismiss = { selectedProgram = null })
     }
 
     val station = stationDetail
@@ -226,7 +238,9 @@ fun RadioScreen(
                         label = { Text(stringResource(R.string.radio_search_station)) },
                     )
                     if (networkUnavailable) {
-                        Card(colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceVariant)) {
+                        Card(colors = CardDefaults.cardColors(
+                            containerColor = if (amoledBlack) Color.Black else MaterialTheme.colorScheme.surfaceVariant,
+                        )) {
                             Text(
                                 text = stringResource(R.string.radio_offline_unavailable),
                                 modifier = Modifier.padding(16.dp),
@@ -236,7 +250,9 @@ fun RadioScreen(
                     }
                     currentSong?.takeIf { it.isLiveRadio }?.let { song ->
                         Card(
-                            colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.secondaryContainer),
+                            colors = CardDefaults.cardColors(
+                                containerColor = if (amoledBlack) Color.Black else MaterialTheme.colorScheme.secondaryContainer,
+                            ),
                             shape = RoundedCornerShape(20.dp),
                         ) {
                             Row(
@@ -271,6 +287,7 @@ fun RadioScreen(
                 items(stations, key = { it.id }) { item ->
                     RadioStationRow(
                         station = item,
+                        amoledBlack = amoledBlack,
                         isPlaying = item.id == playingStationId,
                         isStarting = item.id == startingStationId,
                         onDetails = { stationDetail = item },
@@ -282,6 +299,7 @@ fun RadioScreen(
     } else {
         RadioStationDetail(
             station = station,
+            amoledBlack = amoledBlack,
             isPlaying = station.id == playingStationId && isPlaying,
             isStarting = station.id == startingStationId,
             programs = weeklyPrograms,
@@ -316,6 +334,7 @@ fun RadioScreen(
 @Composable
 private fun RadioStationRow(
     station: Station,
+    amoledBlack: Boolean,
     isPlaying: Boolean,
     isStarting: Boolean,
     onDetails: () -> Unit,
@@ -324,7 +343,9 @@ private fun RadioStationRow(
     Card(
         modifier = Modifier.fillMaxWidth().padding(horizontal = 16.dp),
         shape = RoundedCornerShape(20.dp),
-        colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceContainerHigh),
+        colors = CardDefaults.cardColors(
+            containerColor = if (amoledBlack) Color.Black else MaterialTheme.colorScheme.surfaceContainerHigh,
+        ),
     ) {
         Row(
             modifier = Modifier.fillMaxWidth().clickable(onClick = onDetails).padding(14.dp),
@@ -333,7 +354,9 @@ private fun RadioStationRow(
             AsyncImage(
                 model = station.logoUrl,
                 contentDescription = station.name,
-                modifier = Modifier.size(58.dp).clip(RoundedCornerShape(14.dp)).background(MaterialTheme.colorScheme.surfaceVariant),
+                modifier = Modifier.size(58.dp).clip(RoundedCornerShape(14.dp)).background(
+                    if (amoledBlack) Color.Black else MaterialTheme.colorScheme.surfaceVariant,
+                ),
                 contentScale = ContentScale.Fit,
             )
             Spacer(Modifier.width(14.dp))
@@ -354,6 +377,7 @@ private fun RadioStationRow(
 @Composable
 private fun RadioStationDetail(
     station: Station,
+    amoledBlack: Boolean,
     isPlaying: Boolean,
     isStarting: Boolean,
     programs: List<ProgramEntry>,
@@ -384,13 +408,17 @@ private fun RadioStationDetail(
                 }
                 Card(
                     shape = RoundedCornerShape(24.dp),
-                    colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceContainerHigh),
+                    colors = CardDefaults.cardColors(
+                        containerColor = if (amoledBlack) Color.Black else MaterialTheme.colorScheme.surfaceContainerHigh,
+                    ),
                 ) {
                     Row(Modifier.fillMaxWidth().padding(16.dp), verticalAlignment = Alignment.CenterVertically) {
                         AsyncImage(
                             model = station.logoUrl,
                             contentDescription = station.name,
-                            modifier = Modifier.size(70.dp).clip(RoundedCornerShape(16.dp)).background(MaterialTheme.colorScheme.surfaceVariant),
+                            modifier = Modifier.size(70.dp).clip(RoundedCornerShape(16.dp)).background(
+                                if (amoledBlack) Color.Black else MaterialTheme.colorScheme.surfaceVariant,
+                            ),
                             contentScale = ContentScale.Fit,
                         )
                         Spacer(Modifier.width(14.dp))
@@ -449,6 +477,7 @@ private fun RadioStationDetail(
             else -> items(dayPrograms, key = { "${it.stationId}-${it.startAt}" }) { program ->
                 RadioScheduleRow(
                     program = program,
+                    amoledBlack = amoledBlack,
                     isCurrent = currentProgram?.startAt == program.startAt,
                     onClick = { onSelectProgram(program) },
                 )
@@ -458,12 +487,14 @@ private fun RadioStationDetail(
 }
 
 @Composable
-private fun RadioScheduleRow(program: ProgramEntry, isCurrent: Boolean, onClick: () -> Unit) {
+private fun RadioScheduleRow(program: ProgramEntry, isCurrent: Boolean, amoledBlack: Boolean, onClick: () -> Unit) {
     Card(
         modifier = Modifier.fillMaxWidth().padding(horizontal = 16.dp).clickable(onClick = onClick),
         shape = RoundedCornerShape(16.dp),
         colors = CardDefaults.cardColors(
-            containerColor = if (isCurrent) MaterialTheme.colorScheme.secondaryContainer else MaterialTheme.colorScheme.surfaceContainerHigh,
+            containerColor = if (amoledBlack) {
+                if (isCurrent) Color(0xFF171717) else Color.Black
+            } else if (isCurrent) MaterialTheme.colorScheme.secondaryContainer else MaterialTheme.colorScheme.surfaceContainerHigh,
         ),
     ) {
         Row(Modifier.fillMaxWidth().padding(horizontal = 14.dp, vertical = 12.dp), verticalAlignment = Alignment.CenterVertically) {
@@ -490,10 +521,11 @@ private fun RadioScheduleMessage(message: String) {
 }
 
 @Composable
-private fun RadioProgramDialog(program: ProgramEntry, onDismiss: () -> Unit) {
+private fun RadioProgramDialog(program: ProgramEntry, amoledBlack: Boolean, onDismiss: () -> Unit) {
     val context = LocalContext.current
     AlertDialog(
         onDismissRequest = onDismiss,
+        containerColor = if (amoledBlack) Color.Black else MaterialTheme.colorScheme.surface,
         title = { Text(program.title) },
         text = {
             Column(
@@ -545,11 +577,13 @@ private fun RadioProgramDialog(program: ProgramEntry, onDismiss: () -> Unit) {
 @Composable
 private fun RadioRegionDialog(
     selectedAreaId: String,
+    amoledBlack: Boolean,
     onSelect: (String) -> Unit,
     onDismiss: () -> Unit,
 ) {
     AlertDialog(
         onDismissRequest = onDismiss,
+        containerColor = if (amoledBlack) Color.Black else MaterialTheme.colorScheme.surface,
         title = { Text(stringResource(R.string.radio_select_area)) },
         text = {
             LazyColumn(modifier = Modifier.heightIn(max = 520.dp)) {
@@ -566,7 +600,14 @@ private fun RadioRegionDialog(
                         Row(
                             modifier = Modifier.fillMaxWidth().clip(RoundedCornerShape(12.dp))
                                 .clickable { onSelect(prefecture.id) }
-                                .background(if (prefecture.id == selectedAreaId) MaterialTheme.colorScheme.secondaryContainer else MaterialTheme.colorScheme.surface)
+                                .background(
+                                    when {
+                                        !amoledBlack && prefecture.id == selectedAreaId -> MaterialTheme.colorScheme.secondaryContainer
+                                        !amoledBlack -> MaterialTheme.colorScheme.surface
+                                        prefecture.id == selectedAreaId -> Color(0xFF171717)
+                                        else -> Color.Black
+                                    },
+                                )
                                 .padding(horizontal = 12.dp, vertical = 10.dp),
                             verticalAlignment = Alignment.CenterVertically,
                         ) {

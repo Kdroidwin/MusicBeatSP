@@ -130,6 +130,7 @@ import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.ModalBottomSheet
 import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.Switch
 import androidx.compose.material3.Text
 import androidx.compose.material3.rememberModalBottomSheetState
 import androidx.compose.runtime.Composable
@@ -911,6 +912,7 @@ fun NowPlayingScreen(
     val lyricsTransportControlsCentered by AppSettings.lyricsTransportControlsCentered.collectAsStateWithLifecycle()
     val favoriteUsesStar by AppSettings.favoriteUsesStar.collectAsStateWithLifecycle()
     val playerQuickActions by AppSettings.playerQuickActions.collectAsStateWithLifecycle()
+    val hidePlayerQuickActionCircles by AppSettings.hidePlayerQuickActionCircles.collectAsStateWithLifecycle()
     val keepScreenOn by AppSettings.keepScreenOn.collectAsStateWithLifecycle()
     val keepScreenOnDuringLyrics by AppSettings.keepScreenOnDuringLyrics.collectAsStateWithLifecycle()
     val showTrackDurationInsteadOfRemaining by AppSettings.showTrackDurationInsteadOfRemaining.collectAsStateWithLifecycle()
@@ -933,6 +935,8 @@ fun NowPlayingScreen(
     val keepArtworkFullSizeWhenPaused by AppSettings.keepArtworkFullSizeWhenPaused.collectAsStateWithLifecycle()
     val hideVolumeBar by AppSettings.hideVolumeBar.collectAsStateWithLifecycle()
     val hideRadioPlaybackBar by AppSettings.hideRadioPlaybackBar.collectAsStateWithLifecycle()
+    val playerSeekBarThicknessDp by AppSettings.playerSeekBarThicknessDp.collectAsStateWithLifecycle()
+    val playerVolumeBarThicknessDp by AppSettings.playerVolumeBarThicknessDp.collectAsStateWithLifecycle()
     val favoriteIds by LocalFavoritesStore.favoriteIds.collectAsStateWithLifecycle()
     val localUri = song.localUri
     val normalizedArtistName = song.artist.trim().lowercase(Locale.ROOT)
@@ -2567,6 +2571,8 @@ fun NowPlayingScreen(
                                 PlayerQuickAction.DETAILS -> R.string.details
                                 PlayerQuickAction.SHARE_FILE -> R.string.share_file
                                 PlayerQuickAction.FAVORITE -> R.string.quick_action_favorite
+                                PlayerQuickAction.SHUFFLE -> R.string.player_control_shuffle
+                                PlayerQuickAction.REPEAT -> R.string.player_control_repeat
                             }
                             val title = stringResource(titleRes)
                             if (action == PlayerQuickAction.CHROMECAST) {
@@ -2590,19 +2596,29 @@ fun NowPlayingScreen(
                                     PlayerQuickAction.DETAILS -> Icons.Rounded.Info
                                     PlayerQuickAction.SHARE_FILE -> Icons.Rounded.Share
                                     PlayerQuickAction.FAVORITE -> likeIcon
+                                    PlayerQuickAction.SHUFFLE -> BitChordIcons.Shuffle
+                                    PlayerQuickAction.REPEAT -> BitChordIcons.Repeat
                                 }
                                 CircleGlyph(
                                     icon = actionIcon,
+                                    label = if (action == PlayerQuickAction.REPEAT && repeatMode == Player.REPEAT_MODE_ONE) "1" else null,
                                     contentDescription = title,
+                                    showDisc = !hidePlayerQuickActionCircles,
                                     active = when (action) {
                                         PlayerQuickAction.LYRICS -> lyricsOpen
                                         PlayerQuickAction.QUEUE -> queueOpen
                                         PlayerQuickAction.FAVORITE -> liked
+                                        PlayerQuickAction.SHUFFLE -> shuffleEnabled
+                                        PlayerQuickAction.REPEAT -> repeatMode != Player.REPEAT_MODE_OFF
                                         else -> false
                                     },
                                     enabled = action != PlayerQuickAction.FAVORITE || likeAvailable,
                                     haptic = if (action == PlayerQuickAction.FAVORITE) {
                                         if (liked) Haptic.ToggleOff else Haptic.ToggleOn
+                                    } else if (action == PlayerQuickAction.SHUFFLE) {
+                                        if (shuffleEnabled) Haptic.ToggleOff else Haptic.ToggleOn
+                                    } else if (action == PlayerQuickAction.REPEAT) {
+                                        if (repeatMode == Player.REPEAT_MODE_OFF) Haptic.ToggleOn else Haptic.Select
                                     } else Haptic.Tap,
                                     onClick = {
                                         when (action) {
@@ -2618,6 +2634,8 @@ fun NowPlayingScreen(
                                                 ?: onQuickMenuAction(action)
                                             PlayerQuickAction.SLEEP_TIMER -> quickSleepTimerOpen = true
                                             PlayerQuickAction.FAVORITE -> toggleLike()
+                                            PlayerQuickAction.SHUFFLE -> onToggleShuffle()
+                                            PlayerQuickAction.REPEAT -> onCycleRepeat()
                                             PlayerQuickAction.EQUALIZER,
                                             PlayerQuickAction.TAG_EDITOR,
                                             PlayerQuickAction.EDIT_LYRICS,
@@ -2640,6 +2658,7 @@ fun NowPlayingScreen(
                             else -> Icons.Rounded.MoreHoriz
                         },
                         contentDescription = stringResource(R.string.more),
+                        showDisc = !hidePlayerQuickActionCircles,
                         onClick = onOpenMenu,
                     )
                     }
@@ -2745,6 +2764,7 @@ fun NowPlayingScreen(
                             queue = queue,
                             currentIndex = queueIndex,
                             autoplayEnabled = autoplayEnabled,
+                            onToggleAutoplay = onToggleAutoplay,
                             onJumpTo = onJumpTo,
                             onRemove = onRemoveFromQueue,
                             onMove = onMoveInQueue,
@@ -2834,6 +2854,8 @@ fun NowPlayingScreen(
                         onSeekFraction(scrubValue)
                         scrubbing = false
                     },
+                    idleHeight = playerSeekBarThicknessDp.dp,
+                    activeHeight = (playerSeekBarThicknessDp + 4).dp,
                 )
             }
             val wifiQuality by AppSettings.audioQualityWifi.collectAsStateWithLifecycle()
@@ -3204,8 +3226,8 @@ fun NowPlayingScreen(
                             )
                         },
                         onValueChangeFinished = { volumeDragging = false },
-                        idleHeight = 6.dp,
-                        activeHeight = 10.dp,
+                        idleHeight = playerVolumeBarThicknessDp.dp,
+                        activeHeight = (playerVolumeBarThicknessDp + 4).dp,
                         modifier = Modifier.weight(1f),
                     )
                     Spacer(Modifier.width(10.dp))
@@ -3496,7 +3518,10 @@ private fun SweptLyricLine(
         }
         val displayedMaxLines = if (autoFit) 1 else maxLines
         val displayedOverflow = if (autoFit) TextOverflow.Clip else overflow
-        Box(Modifier.fillMaxSize()) {
+        // This line is used both in the full lyrics panel and above the player
+        // scrubber. Filling the parent height here lets word-synced lyrics
+        // cover the remaining transport controls in the compact strip.
+        Box(Modifier.fillMaxWidth()) {
         Text(
             text = richText.annotated,
             inlineContent = richText.inlineContent,
@@ -4339,18 +4364,28 @@ private fun fitLyricTextStyle(
     enabled: Boolean,
     textMeasurer: androidx.compose.ui.text.TextMeasurer,
 ): TextStyle {
-    if (!enabled || availableWidth <= 0 || style.fontSize.value <= MIN_AUTOFIT_LYRIC_SP) return style
+    val originalFontSize = style.fontSize.value
+    if (!enabled || availableWidth <= 0 || !originalFontSize.isFinite() || originalFontSize <= MIN_AUTOFIT_LYRIC_SP) return style
     val measured = textMeasurer.measure(text = text, style = style, maxLines = 1, softWrap = false)
     if (measured.size.width <= availableWidth) return style
     var low = MIN_AUTOFIT_LYRIC_SP
-    var high = style.fontSize.value
+    var high = originalFontSize
     repeat(12) {
         val candidate = (low + high) / 2f
         val candidateStyle = style.copy(fontSize = candidate.sp)
         val layout = textMeasurer.measure(text = text, style = candidateStyle, maxLines = 1, softWrap = false)
         if (layout.size.width <= availableWidth) low = candidate else high = candidate
     }
-    return style.copy(fontSize = low.sp, lineHeight = minOf(style.lineHeight.value, low * 1.25f).sp)
+    val lineHeight = style.lineHeight
+    val fittedLineHeight = if (lineHeight.isSp && lineHeight.value.isFinite() && lineHeight.value > 0f) {
+        minOf(lineHeight.value, low * 1.25f).sp
+    } else {
+        // Typography styles commonly leave lineHeight unspecified. Converting
+        // its NaN sentinel to Sp creates an invalid TextStyle when a long
+        // synced lyric starts rendering.
+        lineHeight
+    }
+    return style.copy(fontSize = low.sp, lineHeight = fittedLineHeight)
 }
 
 private const val MIN_AUTOFIT_LYRIC_SP = 8f
@@ -4671,6 +4706,8 @@ private fun CircleGlyph(
     icon: ImageVector,
     contentDescription: String,
     onClick: () -> Unit,
+    label: String? = null,
+    showDisc: Boolean = true,
     active: Boolean = false,
     enabled: Boolean = true,
     haptic: Haptic = Haptic.Tap,
@@ -4684,7 +4721,10 @@ private fun CircleGlyph(
         modifier = Modifier
             .size(34.dp)
             .clip(CircleShape)
-            .background(Color.White.copy(alpha = discAlpha))
+            .then(
+                if (showDisc) Modifier.background(Color.White.copy(alpha = discAlpha)) else Modifier,
+            )
+            .semantics { this.contentDescription = contentDescription }
             .clickable(
                 enabled = enabled,
                 interactionSource = remember { MutableInteractionSource() },
@@ -4695,17 +4735,21 @@ private fun CircleGlyph(
             },
         contentAlignment = Alignment.Center,
     ) {
-        Crossfade(
-            targetState = icon,
-            animationSpec = tween(durationMillis = 180),
-            label = "playerMenuGlyph",
-        ) { glyph ->
-            Icon(
-                imageVector = glyph,
-                contentDescription = contentDescription,
-                tint = Color.White,
-                modifier = Modifier.size(19.dp),
-            )
+        if (label != null) {
+            Text(label, color = Color.White, fontSize = 15.sp, fontWeight = FontWeight.Bold)
+        } else {
+            Crossfade(
+                targetState = icon,
+                animationSpec = tween(durationMillis = 180),
+                label = "playerMenuGlyph",
+            ) { glyph ->
+                Icon(
+                    imageVector = glyph,
+                    contentDescription = contentDescription,
+                    tint = Color.White,
+                    modifier = Modifier.size(19.dp),
+                )
+            }
         }
     }
 }
@@ -5101,6 +5145,7 @@ private fun InlineQueue(
     queue: List<Song>,
     currentIndex: Int,
     autoplayEnabled: Boolean,
+    onToggleAutoplay: () -> Unit,
     onJumpTo: (Int) -> Unit,
     onRemove: (Int) -> Unit,
     onMove: (Int, Int) -> Unit,
@@ -5145,8 +5190,10 @@ private fun InlineQueue(
     // The heading is a row of the same LazyColumn, so it shifts every
     // AutoPlay index below it along by one — hence the offset back to queue
     // indices, which is what [onMove] and the rest of the callbacks take.
-    val headingShown = autoplayEnabled || autoplayStart < queue.size
-    val headingCount = if (headingShown) 1 else 0
+    // Keep the AutoPlay control visible while off too, so the queue itself
+    // always offers a way to enable it.
+    val headingShown = true
+    val headingCount = 1
     // Nothing moves at or above the track playing right now: what's already
     // been played is history, and the current row is the boundary the sections
     // are drawn from. Only what's still to come is the user's to reorder.
@@ -5289,7 +5336,7 @@ private fun InlineQueue(
             }
             // Heading first, then what AutoPlay has lined up under it. With
             // nothing lined up yet it closes the queue as a promise instead.
-            if (autoplayEnabled || autoplayStart < queue.size) {
+            if (headingShown) {
                 item(key = "autoplay-heading") {
                     Row(
                         modifier = Modifier
@@ -5304,22 +5351,28 @@ private fun InlineQueue(
                             modifier = Modifier.size(18.dp),
                         )
                         Spacer(Modifier.width(8.dp))
-                        Column {
+                        Column(
+                            modifier = Modifier.weight(1f).clickable(onClick = onToggleAutoplay),
+                        ) {
                             Text(
                                 text = stringResource(R.string.autoplay),
                                 style = MaterialTheme.typography.titleMedium,
                                 color = Color.White,
                             )
                             Text(
-                                text = if (autoplayStart < queue.size) {
-                                    stringResource(R.string.autoplay_queue_description)
-                                } else {
-                                    stringResource(R.string.autoplay_empty_description)
+                                text = when {
+                                    autoplayStart < queue.size -> stringResource(R.string.autoplay_queue_description)
+                                    autoplayEnabled -> stringResource(R.string.autoplay_empty_description)
+                                    else -> stringResource(R.string.autoplay_disabled_description)
                                 },
                                 style = MaterialTheme.typography.bodyMedium,
                                 color = Color.White.copy(alpha = 0.55f),
                             )
                         }
+                        Switch(
+                            checked = autoplayEnabled,
+                            onCheckedChange = { onToggleAutoplay() },
+                        )
                     }
                 }
             }

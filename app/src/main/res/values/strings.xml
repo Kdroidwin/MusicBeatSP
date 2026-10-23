@@ -488,6 +488,8 @@
     <string name="autoplay_off">AutoPlay off</string>
     <string name="autoplay_queue_description">Similar music, selected to play next</string>
     <string name="autoplay_empty_description">Similar music will keep playing</string>
+    <string name="autoplay_disabled_description">Tap to add similar music after this queue</string>
+    <string name="video_audio_version_unavailable">No matching audio version was found</string>
     <string name="high_quality_upgrading">High quality, upgrading</string>
     <string name="upgrading_quality">Upgrading quality</string>
     <string name="hi_res_lossless">Hi-Res Lossless</string>
@@ -1199,6 +1201,12 @@
     <string name="player_quick_actions">Player quick actions</string>
     <string name="player_quick_actions_subtitle">Choose any number of shortcuts, including actions from the player menu, and arrange them beside the track title. Turn all off to show none.</string>
     <string name="player_quick_action_order_subtitle">Shown beside the title; use arrows to change its position</string>
+    <string name="hide_player_quick_action_circles">Hide quick action circles</string>
+    <string name="hide_player_quick_action_circles_subtitle">Remove the faint circular background behind player quick action icons</string>
+    <string name="player_seek_bar_thickness">Playback bar thickness</string>
+    <string name="player_volume_bar_thickness">Volume bar thickness</string>
+    <string name="player_bar_thickness_subtitle">Adjust the visible bar thickness from 2 to 14 dp</string>
+    <string name="player_bar_thickness_value">%1$d dp</string>
     <string name="player_details_actions">Player details menu</string>
     <string name="player_details_actions_subtitle">Choose which actions appear in the player’s More menu.</string>
     <string name="player_menu_action_visibility">Show in player menu: %1$s</string>

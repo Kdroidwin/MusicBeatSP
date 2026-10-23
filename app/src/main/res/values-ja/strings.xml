@@ -442,6 +442,8 @@
     <string name="autoplay_off">AutoPlay: オフ</string>
     <string name="autoplay_queue_description">次に再生される、似た曲</string>
     <string name="autoplay_empty_description">似た曲が引き続き再生されます</string>
+    <string name="autoplay_disabled_description">タップするとキューの後に似た曲を追加します</string>
+    <string name="video_audio_version_unavailable">一致する音楽版が見つかりませんでした</string>
     <string name="high_quality_upgrading">高音質、アップグレード中</string>
     <string name="upgrading_quality">音質をアップグレード中</string>
     <string name="hi_res_lossless">ハイレゾロスレス</string>
@@ -1102,6 +1104,12 @@
     <string name="player_quick_actions">プレーヤーのクイック操作</string>
     <string name="player_quick_actions_subtitle">「…」メニュー内の操作も含め、曲名の横に表示するショートカットを自由に選んで並べ替えます。すべてオフにすると表示しません。</string>
     <string name="player_quick_action_order_subtitle">曲名の横に表示します。矢印で順序を変更できます</string>
+    <string name="hide_player_quick_action_circles">クイック操作の円を隠す</string>
+    <string name="hide_player_quick_action_circles_subtitle">プレーヤーのクイック操作アイコンの背後にある薄い円形背景を削除します</string>
+    <string name="player_seek_bar_thickness">再生バーの太さ</string>
+    <string name="player_volume_bar_thickness">音量バーの太さ</string>
+    <string name="player_bar_thickness_subtitle">表示するバーの太さを2〜14 dpで調整します</string>
+    <string name="player_bar_thickness_value">%1$d dp</string>
     <string name="player_details_actions">プレーヤーの詳細メニュー</string>
     <string name="player_details_actions_subtitle">プレーヤーの「…」メニューに表示する操作を選択します。</string>
     <string name="player_menu_action_visibility">メニューに表示: %1$s</string>

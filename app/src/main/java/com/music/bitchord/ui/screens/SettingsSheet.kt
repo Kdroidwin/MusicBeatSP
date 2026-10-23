@@ -48,6 +48,7 @@ import androidx.compose.material.icons.rounded.Bedtime
 import androidx.compose.material.icons.rounded.Cast
 import androidx.compose.material.icons.rounded.Check
 import androidx.compose.material.icons.rounded.CheckCircle
+import androidx.compose.material.icons.rounded.Circle
 import androidx.compose.material.icons.rounded.ChevronRight
 import androidx.compose.material.icons.rounded.FolderSpecial
 import androidx.compose.material.icons.rounded.Cloud
@@ -333,6 +334,7 @@ fun SettingsScreen(
     val onlineAlbumArtistArtwork by AppSettings.onlineAlbumArtistArtwork.collectAsStateWithLifecycle()
     val startupTab by AppSettings.startupTab.collectAsStateWithLifecycle()
     val quickActions by AppSettings.playerQuickActions.collectAsStateWithLifecycle()
+    val hidePlayerQuickActionCircles by AppSettings.hidePlayerQuickActionCircles.collectAsStateWithLifecycle()
     val hiddenPlayerDetailsActions by AppSettings.hiddenPlayerDetailsActions.collectAsStateWithLifecycle()
     val audioCutterEnabled by AppSettings.audioCutterEnabled.collectAsStateWithLifecycle()
     val artworkBackdropBlurDp by AppSettings.artworkBackdropBlurDp.collectAsStateWithLifecycle()
@@ -424,6 +426,8 @@ fun SettingsScreen(
     val stopOnTaskRemoved by AppSettings.stopOnTaskRemoved.collectAsStateWithLifecycle()
     val hideVolumeBar by AppSettings.hideVolumeBar.collectAsStateWithLifecycle()
     val hideRadioPlaybackBar by AppSettings.hideRadioPlaybackBar.collectAsStateWithLifecycle()
+    val playerSeekBarThicknessDp by AppSettings.playerSeekBarThicknessDp.collectAsStateWithLifecycle()
+    val playerVolumeBarThicknessDp by AppSettings.playerVolumeBarThicknessDp.collectAsStateWithLifecycle()
     val swipeToPlayNext by AppSettings.swipeToPlayNext.collectAsStateWithLifecycle()
     val dontRepeatSuggestions by AppSettings.dontRepeatSuggestions.collectAsStateWithLifecycle()
     val filterNonMusicAudio by AppSettings.filterNonMusicAudio.collectAsStateWithLifecycle()
@@ -904,6 +908,34 @@ fun SettingsScreen(
             hideRadioPlaybackBar,
         ) { AppSettings.setHideRadioPlaybackBar(!hideRadioPlaybackBar) },
         SettingsSearchEntry(
+            stringResource(R.string.player_seek_bar_thickness),
+            stringResource(R.string.player_bar_thickness_subtitle),
+            listOf("player", "seek", "progress", "bar", "thickness", "再生バー", "シークバー", "太さ"),
+            valueLabel = stringResource(R.string.player_bar_thickness_value, playerSeekBarThicknessDp),
+            sliderValue = playerSeekBarThicknessDp.toFloat(),
+            sliderValueRange = 2f..14f,
+            sliderSteps = 11,
+            onSliderValueChange = { AppSettings.setPlayerSeekBarThicknessDp(it.roundToInt()) },
+            activate = {},
+        ),
+        SettingsSearchEntry(
+            stringResource(R.string.player_volume_bar_thickness),
+            stringResource(R.string.player_bar_thickness_subtitle),
+            listOf("player", "volume", "bar", "thickness", "音量バー", "太さ"),
+            valueLabel = stringResource(R.string.player_bar_thickness_value, playerVolumeBarThicknessDp),
+            sliderValue = playerVolumeBarThicknessDp.toFloat(),
+            sliderValueRange = 2f..14f,
+            sliderSteps = 11,
+            onSliderValueChange = { AppSettings.setPlayerVolumeBarThicknessDp(it.roundToInt()) },
+            activate = {},
+        ),
+        SettingsSearchEntry(
+            stringResource(R.string.hide_player_quick_action_circles),
+            stringResource(R.string.hide_player_quick_action_circles_subtitle),
+            listOf("player", "quick action", "circle", "outline", "icon", "クイック操作", "丸", "円", "アイコン"),
+            hidePlayerQuickActionCircles,
+        ) { AppSettings.setHidePlayerQuickActionCircles(!hidePlayerQuickActionCircles) },
+        SettingsSearchEntry(
             stringResource(R.string.show_nerd_stats),
             stringResource(R.string.show_nerd_stats_subtitle),
             listOf("stats", "codec", "bitrate", "sample rate", "情報", "ビットレート"),
@@ -1080,6 +1112,8 @@ fun SettingsScreen(
             PlayerQuickAction.DETAILS -> R.string.details
             PlayerQuickAction.SHARE_FILE -> R.string.share_file
             PlayerQuickAction.FAVORITE -> R.string.quick_action_favorite
+            PlayerQuickAction.SHUFFLE -> R.string.player_control_shuffle
+            PlayerQuickAction.REPEAT -> R.string.player_control_repeat
         }
         val title = stringResource(titleRes)
         SettingsSearchEntry(
@@ -2385,6 +2419,19 @@ fun SettingsScreen(
             header = stringResource(R.string.player_quick_actions),
             footer = stringResource(R.string.player_quick_actions_subtitle),
         ) {
+            SettingsRow(
+                icon = Icons.Rounded.Circle,
+                title = stringResource(R.string.hide_player_quick_action_circles),
+                subtitle = stringResource(R.string.hide_player_quick_action_circles_subtitle),
+                trailing = {
+                    Switch(
+                        checked = hidePlayerQuickActionCircles,
+                        onCheckedChange = AppSettings::setHidePlayerQuickActionCircles,
+                    )
+                },
+                onClick = { AppSettings.setHidePlayerQuickActionCircles(!hidePlayerQuickActionCircles) },
+            )
+            RowDivider()
             PlayerQuickAction.entries.forEachIndexed { actionIndex, action ->
                 if (actionIndex > 0) RowDivider()
                 val titleRes = when (action) {
@@ -2404,6 +2451,8 @@ fun SettingsScreen(
                     PlayerQuickAction.DETAILS -> R.string.details
                     PlayerQuickAction.SHARE_FILE -> R.string.share_file
                     PlayerQuickAction.FAVORITE -> R.string.quick_action_favorite
+            PlayerQuickAction.SHUFFLE -> R.string.player_control_shuffle
+            PlayerQuickAction.REPEAT -> R.string.player_control_repeat
                 }
                 val selectedIndex = quickActions.indexOf(action)
                 SettingsRow(
@@ -2423,6 +2472,8 @@ fun SettingsScreen(
                         PlayerQuickAction.DETAILS -> Icons.Rounded.Info
                         PlayerQuickAction.SHARE_FILE -> Icons.Rounded.Share
                         PlayerQuickAction.FAVORITE -> BitChordIcons.Heart
+                        PlayerQuickAction.SHUFFLE -> BitChordIcons.Shuffle
+                        PlayerQuickAction.REPEAT -> BitChordIcons.Repeat
                     },
                     title = stringResource(titleRes),
                     subtitle = if (selectedIndex >= 0) stringResource(R.string.player_quick_action_order_subtitle) else null,
@@ -3918,6 +3969,44 @@ fun SettingsScreen(
                     )
                 },
                 onClick = { AppSettings.setHideRadioPlaybackBar(!hideRadioPlaybackBar) },
+            )
+            RowDivider()
+            SettingsRow(
+                icon = Icons.Rounded.GraphicEq,
+                title = stringResource(R.string.player_seek_bar_thickness),
+                subtitle = stringResource(R.string.player_bar_thickness_subtitle),
+                trailing = {
+                    Text(
+                        stringResource(R.string.player_bar_thickness_value, playerSeekBarThicknessDp),
+                        color = MaterialTheme.colorScheme.primary,
+                    )
+                },
+            )
+            Slider(
+                value = playerSeekBarThicknessDp.toFloat(),
+                onValueChange = { AppSettings.setPlayerSeekBarThicknessDp(it.roundToInt()) },
+                valueRange = 2f..14f,
+                steps = 11,
+                modifier = Modifier.padding(start = ROW_INSET, end = ROW_INSET, bottom = 12.dp),
+            )
+            RowDivider()
+            SettingsRow(
+                icon = Icons.AutoMirrored.Rounded.VolumeUp,
+                title = stringResource(R.string.player_volume_bar_thickness),
+                subtitle = stringResource(R.string.player_bar_thickness_subtitle),
+                trailing = {
+                    Text(
+                        stringResource(R.string.player_bar_thickness_value, playerVolumeBarThicknessDp),
+                        color = MaterialTheme.colorScheme.primary,
+                    )
+                },
+            )
+            Slider(
+                value = playerVolumeBarThicknessDp.toFloat(),
+                onValueChange = { AppSettings.setPlayerVolumeBarThicknessDp(it.roundToInt()) },
+                valueRange = 2f..14f,
+                steps = 11,
+                modifier = Modifier.padding(start = ROW_INSET, end = ROW_INSET, bottom = 12.dp),
             )
         }
 

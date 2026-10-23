@@ -1798,12 +1798,20 @@ private fun BitChordApp(
                 scope.launch {
                     switchingAudioVersion = true
                     TrackLog.d("Player", "audio switch requested for '${song.title}'", song.videoId)
-                    val audio = runCatching { YtMusicRepository.resolveAudio(song) }.getOrNull()
+                    val audio = try {
+                        YtMusicRepository.resolveAudio(song)
+                    } catch (cancelled: CancellationException) {
+                        throw cancelled
+                    } catch (error: Exception) {
+                        TrackLog.w("Player", "audio version lookup failed", error, song.videoId)
+                        null
+                    }
                     switchingAudioVersion = false
                     // A match can be absent or the listener may have skipped
                     // while it was being found. Neither should change a queue.
                     if (audio == null || audio.videoId == song.videoId) {
                         TrackLog.w("Player", "audio switch found no distinct official song", song.videoId)
+                        Toast.makeText(context, R.string.video_audio_version_unavailable, Toast.LENGTH_SHORT).show()
                         return@launch
                     }
                     if (c.currentMediaItemIndex != index || c.currentMediaItem?.mediaId != song.videoId) {
