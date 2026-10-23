@@ -19,7 +19,7 @@
 
 ---
 
-> **MusicBeatSP 2.5.2** is the MusicBeat fork under a new name and Android application ID. It builds on the open-source BitChord foundation and adds an extensive local music library, playlist, playback, lyrics, artwork, and customization feature set.
+> **MusicBeatSP** is the MusicBeat fork under a new name and Android application ID. It builds on the open-source BitChord foundation and adds an extensive local music library, playlist, playback, lyrics, artwork, and customization feature set.
 
 The standard Android package is `io.pockets.musicbestsp`. Because this differs from the previous MusicBeat package, Android installs MusicBeatSP as a separate app; app-private settings and data are not migrated automatically.
 
@@ -110,7 +110,13 @@ The standard Android package is `io.pockets.musicbestsp`. Because this differs f
 - Expose playback state, track metadata, and artwork through Android's standard media session for external music widgets such as KWGT.
 - Use the album-art color theme throughout the app, in addition to the System, Light, Dark, and AMOLED Black themes.
 - Enable Offline Mode to block the app's network requests; local files and saved caches remain available. Online catalog, lyrics, casting, and connected services need their respective network or device connections.
+
+### Supported Sources
 - YouTube Music search and playback are opt-in and disabled by default; the app does not make YouTube Music requests while the feature is disabled or Offline Mode is active.
+- radiko
+- BitChord addon(Navidrome)
+- webDAB
+- SMB
 
 ### Lyrics and metadata tools
 
