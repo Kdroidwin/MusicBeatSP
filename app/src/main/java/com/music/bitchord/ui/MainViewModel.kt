@@ -828,10 +828,15 @@ class MainViewModel(app: Application) : AndroidViewModel(app) {
      * and a page that doesn't show what was just added to it is the bug this is
      * part of fixing. Still after the answer, not ahead of it.
      */
-    fun addToPlaylist(playlist: UserPlaylist, song: Song) {
+    fun addToPlaylist(
+        playlist: UserPlaylist,
+        song: Song,
+        onComplete: ((Result<Unit>) -> Unit)? = null,
+    ) {
         if (!requireSignIn()) return
         viewModelScope.launch {
-            YtMusicRepository.addToPlaylist(playlist.playlistId, listOf(song.videoId)).fold(
+            val result = YtMusicRepository.addToPlaylist(playlist.playlistId, listOf(song.videoId))
+            result.fold(
                 onSuccess = { added ->
                     libraryStale = true
                     // The playlist's page may be open behind the picker — it is
@@ -841,6 +846,7 @@ class MainViewModel(app: Application) : AndroidViewModel(app) {
                 },
                 onFailure = {},
             )
+            onComplete?.invoke(result.map { Unit })
         }
     }
 
@@ -2302,13 +2308,16 @@ class MainViewModel(app: Application) : AndroidViewModel(app) {
                         onSuccess = { page ->
                             sections = page.sections
                             artwork = page.thumbnailUrl
+                                ?.takeIf(String::isNotBlank)
+                                ?: initialArt
                             name = page.name
                             description = page.description
                             subscriberCountText = page.subscriberCountText
                             monthlyListenerCount = page.monthlyListenerCount
                             subscription = page.subscription
-                            if (page.songs.isEmpty()) UiState.Error("No tracks found for this artist")
-                            else UiState.Success(page.songs)
+                            val artistSongs = page.songs.withArtwork(artwork)
+                            if (artistSongs.isEmpty()) UiState.Error("No tracks found for this artist")
+                            else UiState.Success(artistSongs)
                         },
                         onFailure = { UiState.Error(it.friendly()) },
                     )
@@ -2322,14 +2331,28 @@ class MainViewModel(app: Application) : AndroidViewModel(app) {
                         onSuccess = { page ->
                             sections = emptyList()
                             artwork = page.header?.thumbnailUrl
+                                ?.takeIf(String::isNotBlank)
+                                ?: initialArt
                             name = page.header?.title
                             credit = page.header?.subtitle
                             more = page.continuation
                             suggested = page.suggested
                             library = page.library
                             description = page.description
-                            if (page.songs.isEmpty()) UiState.Error("No tracks found")
-                            else UiState.Success(page.songs)
+                            val pageSongs = if (resolved == BrowseType.ALBUM) {
+                                page.songs.map { song ->
+                                    song.copy(
+                                        albumName = song.albumName?.takeIf(String::isNotBlank)
+                                            ?: page.header?.title ?: title,
+                                        thumbnailUrl = song.thumbnailUrl?.takeIf(String::isNotBlank)
+                                            ?: artwork,
+                                    )
+                                }
+                            } else {
+                                page.songs.withArtwork(artwork)
+                            }
+                            if (pageSongs.isEmpty()) UiState.Error("No tracks found")
+                            else UiState.Success(pageSongs)
                         },
                         onFailure = { UiState.Error(it.friendly()) },
                     )
@@ -2608,8 +2631,8 @@ class MainViewModel(app: Application) : AndroidViewModel(app) {
      * through to the queue and the notification. Fall back to the page's.
      */
     private fun List<Song>.withArtwork(fallback: String?): List<Song> {
-        if (fallback == null) return this
-        return map { if (it.thumbnailUrl == null) it.copy(thumbnailUrl = fallback) else it }
+        if (fallback.isNullOrBlank()) return this
+        return map { if (it.thumbnailUrl.isNullOrBlank()) it.copy(thumbnailUrl = fallback) else it }
     }
 
     /**
@@ -2670,6 +2693,10 @@ class MainViewModel(app: Application) : AndroidViewModel(app) {
                     LocalMediaRepository.getLocalMusic(context)
                         .ifEmpty { error(text(R.string.no_local_audio_found)) }
                 }
+                browseTypeOf(browseId) == BrowseType.ARTIST ->
+                    YtMusicRepository.artistPage(browseId)
+                        .map { it.songs }
+                        .mapCatching { songs -> songs.ifEmpty { error("No tracks found for this artist") } }
                 else -> YtMusicRepository.allSongs(browseId)
             }
             onResult(result.map { it.withArtwork(artworkFallback) })

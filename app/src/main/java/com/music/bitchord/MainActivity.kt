@@ -1221,7 +1221,15 @@ private fun BitChordApp(
     ) {
         val cleanName = name.trim()
         if (cleanName.isBlank()) return
-        if (type == BrowseType.ARTIST) {
+        if (!browseId.isNullOrBlank() && !browseId.startsWith("local:")) {
+            viewModel.openDetail(
+                browseId = browseId,
+                title = cleanName,
+                subtitle = subtitle.orEmpty(),
+                thumbnailUrl = artwork,
+                type = type,
+            )
+        } else if (type == BrowseType.ARTIST) {
             openLocalArtist(cleanName, artwork)
         } else {
             openLocalAlbum(cleanName, artwork)
@@ -1425,7 +1433,10 @@ private fun BitChordApp(
             )
         }
         when {
-            target.songs.isNotEmpty() -> stamp(target.songs)
+            // A remote detail page only holds its first visible page. Actions
+            // such as Download all and Add to queue must follow the page's
+            // continuation instead of treating that partial list as complete.
+            target.browseId == null && target.songs.isNotEmpty() -> stamp(target.songs)
             target.browseId == null ->
                 Toast.makeText(context, context.getString(R.string.no_tracks_here), Toast.LENGTH_SHORT).show()
             else -> viewModel.collectSongs(target.browseId, target.thumbnailUrl) { result ->
@@ -1746,11 +1757,15 @@ private fun BitChordApp(
         // clickable. The onOpenAlbum/onOpenArtist callbacks use albumName and
         // artist directly and ignore the browse ID parameter, so these are
         // purely a clickability trigger.
+        val isDeviceSong = enriched.isExternalPreview ||
+            !enriched.localUri.isNullOrBlank() || !enriched.localPath.isNullOrBlank()
         enriched.copy(
-            albumId = enriched.albumId
-                ?: enriched.albumName?.trim()?.takeIf { it.isNotBlank() }?.let { "local:album:$it" },
-            artistId = enriched.artistId
-                ?: enriched.artist.trim().takeIf { it.isNotBlank() }?.let { "local:artist:$it" },
+            albumId = enriched.albumId ?: if (isDeviceSong) {
+                enriched.albumName?.trim()?.takeIf(String::isNotBlank)?.let { "local:album:$it" }
+            } else null,
+            artistId = enriched.artistId ?: if (isDeviceSong) {
+                enriched.artist.trim().takeIf(String::isNotBlank)?.let { "local:artist:$it" }
+            } else null,
         )
     }
     // The three-dot menu snapshots the track into songActions when it's opened,
@@ -1978,24 +1993,26 @@ private fun BitChordApp(
                 selectedTab = TAB_SEARCH
                 searchFocusTrigger++
             },
-            onOpenAlbum = { _ ->
+            onOpenAlbum = { browseId ->
                 dismissNowPlaying()
-                val albumName = song.albumName?.trim().orEmpty()
+                val albumName = song.albumName?.trim().orEmpty().ifBlank { song.title }
                 if (albumName.isNotBlank()) {
-                    openLocalAlbum(albumName, song.thumbnailUrl)
+                    openByName(browseId, albumName, song.artist, BrowseType.ALBUM, song.thumbnailUrl)
                 } else {
                     Toast.makeText(context, "No album information", Toast.LENGTH_SHORT).show()
                 }
             },
-            onOpenArtist = { _ ->
+            onOpenArtist = { browseId ->
                 dismissNowPlaying()
                 val artists = com.music.bitchord.feature.artistimage.util.ArtistSplitter.split(song.artist)
-                if (artists.size > 1) {
+                if (browseId.isNotBlank() && !browseId.startsWith("local:")) {
+                    openByName(browseId, song.artist, null, BrowseType.ARTIST, song.thumbnailUrl)
+                } else if (artists.size > 1) {
                     songActions = song
                 } else {
                     val artistName = (artists.firstOrNull() ?: song.artist).trim()
                     if (artistName.isNotBlank()) {
-                        openLocalArtist(artistName, null)
+                        openByName(browseId, artistName, null, BrowseType.ARTIST, null)
                     } else {
                         Toast.makeText(context, "No artist information", Toast.LENGTH_SHORT).show()
                     }
@@ -2042,11 +2059,10 @@ private fun BitChordApp(
             enabled = detail != null,
         ) { viewModel.closeDetail() }
         BackHandler(enabled = showSources) { showSources = false }
-        // One back step out of Settings lands on Songs rather than exiting
         BackHandler(enabled = showWearOs) { showWearOs = false }
-        BackHandler(enabled = showSettings && detail == null && !showWearOs) {
+        BackHandler(enabled = showSettings && !showWearOs) {
             showSettings = false
-            if (!showReplay) selectedTab = TAB_SONGS
+            if (detail == null && !showReplay) selectedTab = TAB_SONGS
         }
         BackHandler(
             enabled = detail == null && !showSettings && !showReplay && selectedTab != TAB_SONGS,
@@ -2588,8 +2604,9 @@ private fun BitChordApp(
                                         type = item.type,
                                     )
                                 },
-                                contentPadding = listPadding,
-                            )
+                                    contentPadding = listPadding,
+                                )
+                            }
                         }
                         TAB_FOLDERS -> if (!hasStoragePermission) {
                             Box(modifier = Modifier.fillMaxSize().padding(listPadding), contentAlignment = Alignment.Center) {
@@ -3174,28 +3191,40 @@ private fun BitChordApp(
                         dismissNowPlaying()
                         val albumName = song.albumName?.trim().orEmpty()
                         if (albumName.isNotBlank()) {
-                            openLocalAlbum(albumName, song.thumbnailUrl)
+                            openByName(song.albumId, albumName, song.artist, BrowseType.ALBUM, song.thumbnailUrl)
                         } else {
                             Toast.makeText(context, "No album information", Toast.LENGTH_SHORT).show()
                         }
                     },
                     onGoToArtist = {
                         val artists = com.music.bitchord.feature.artistimage.util.ArtistSplitter.split(song.artist)
-                        if (artists.size > 1) {
+                        if (!song.artistId.isNullOrBlank() && !song.artistId.startsWith("local:")) {
+                            songActions = null
+                            dismissNowPlaying()
+                            openByName(song.artistId, song.artist, null, BrowseType.ARTIST, song.thumbnailUrl)
+                        } else if (artists.size > 1) {
                             showArtistPicker = true
                         } else {
                             songActions = null
                             dismissNowPlaying()
                             val artistName = (artists.firstOrNull() ?: song.artist).trim()
                             if (artistName.isNotBlank()) {
-                                openLocalArtist(artistName, null)
+                                openByName(song.artistId, artistName, null, BrowseType.ARTIST, null)
                             } else {
                                 Toast.makeText(context, "No artist information", Toast.LENGTH_SHORT).show()
                             }
                         }
                     },
                     onAddToPlaylist = {
-                        showAddToPlaylist = true
+                        val isDeviceSong = song.isExternalPreview ||
+                            !song.localUri.isNullOrBlank() || !song.localPath.isNullOrBlank()
+                        if (isDeviceSong) {
+                            showAddToPlaylist = true
+                        } else {
+                            songActions = null
+                            playlistTarget = song
+                            viewModel.loadPlaylists()
+                        }
                     },
                     onEqualizer = {
                         songActions = null
@@ -3266,6 +3295,9 @@ private fun BitChordApp(
         // One sheet for both, because they are one decision: the list of
         // playlists with a way to make another. `creatingPlaylist` opens it
         // straight onto the form, which is what the Library tile means.
+        LaunchedEffect(playlistTarget != null) {
+            if (playlistTarget != null) viewModel.loadPlaylists()
+        }
         if (playlistTarget != null || creatingPlaylist) {
             val target = playlistTarget
             val dismiss = {
@@ -3282,7 +3314,16 @@ private fun BitChordApp(
                     song = target,
                     startCreating = target == null,
                     onPick = { playlist ->
-                        target?.let { viewModel.addToPlaylist(playlist, it) }
+                        target?.let { targetSong ->
+                            viewModel.addToPlaylist(playlist, targetSong) { result ->
+                                val message = if (result.isSuccess) {
+                                    context.getString(R.string.youtube_playlist_track_added, playlist.title)
+                                } else {
+                                    context.getString(R.string.youtube_playlist_track_add_failed)
+                                }
+                                Toast.makeText(context, message, Toast.LENGTH_SHORT).show()
+                            }
+                        }
                         dismiss()
                     },
                     onCreate = { title, privacy ->
