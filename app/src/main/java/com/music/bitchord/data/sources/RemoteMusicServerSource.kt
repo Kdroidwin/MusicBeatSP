@@ -367,7 +367,17 @@ class NavidromeMusicSource(
     credentialProvider: () -> RemoteServerCredentials?,
 ) : RemoteMusicServerSource(config, credentialProvider) {
 
-    private data class Auth(val username: String, val salt: String, val token: String, val credentials: RemoteServerCredentials)
+    private enum class AuthMechanism { TOKEN, API_KEY, LEGACY_PASSWORD }
+
+    private data class Auth(
+        val username: String,
+        val salt: String,
+        val token: String,
+        val credentials: RemoteServerCredentials,
+        val mechanism: AuthMechanism = AuthMechanism.TOKEN,
+        val verified: Boolean = false,
+    )
+
     private val authMutex = Mutex()
     @Volatile private var cachedAuth: Auth? = null
 
@@ -389,31 +399,104 @@ class NavidromeMusicSource(
         parameters: Map<String, String> = emptyMap(),
         json: Boolean = true,
     ): HttpUrl? = endpoint(path, query = buildMap {
-        put("u", auth.username)
-        put("s", auth.salt)
-        put("t", auth.token)
         put("v", SUBSONIC_VERSION)
         put("c", CLIENT_ID)
         if (json) put("f", "json")
+        when (auth.mechanism) {
+            AuthMechanism.TOKEN -> {
+                put("u", auth.username)
+                put("s", auth.salt)
+                put("t", auth.token)
+            }
+            // OpenSubsonic requires apiKey authentication to omit u, p, t and s.
+            AuthMechanism.API_KEY -> put("apiKey", auth.credentials.password)
+            AuthMechanism.LEGACY_PASSWORD -> {
+                put("u", auth.username)
+                put("p", encodedPassword(auth.credentials.password))
+            }
+        }
         putAll(parameters)
     })
 
-    override suspend fun health(): SourceHealth = try {
-        val auth = authenticate()
-        val url = subsonicUrl("rest/ping.view", auth) ?: throw IOException("Invalid server URL")
-        val response = requestJson(url, operation = "OpenSubsonic connection check").subsonicResponse()
-        if (response.string("status") == "ok") {
-            SourceHealth.Ok(response.string("version")?.let { "OpenSubsonic $it" } ?: "OpenSubsonic connected")
-        } else {
-            val error = response.objectOrNull("error")
-            if (error?.int("code") in setOf(40, 41, 43)) {
-                SourceHealth.Rejected("OpenSubsonic authentication was rejected")
-            } else {
-                SourceHealth.Unreachable("OpenSubsonic request failed")
+    /**
+     * Every JSON endpoint uses the same conservative fallback sequence. Most
+     * servers continue to use the salted token. Nextcloud Music rejects that
+     * mechanism with code 41 and expects its generated API key instead. A
+     * server that explicitly says API-key auth is unsupported can still use
+     * the Subsonic-compatible encoded-password form.
+     */
+    private suspend fun requestSubsonic(
+        path: String,
+        parameters: Map<String, String> = emptyMap(),
+        json: Boolean = true,
+        operation: String,
+    ): JsonObject {
+        var auth = authenticate()
+        repeat(MAX_AUTH_ATTEMPTS) {
+            requireSecureFallback(auth)
+            val url = subsonicUrl(path, auth, parameters, json)
+                ?: throw IOException("Invalid server URL")
+            val response = requestJson(url, operation = operation).subsonicResponse()
+            try {
+                ensureSubsonicOk(response)
+                markVerified(auth)
+                return response
+            } catch (error: OpenSubsonicApiException) {
+                val next = nextMechanism(auth.mechanism, error.protocolCode) ?: throw error
+                auth = updateMechanism(auth, next)
             }
         }
+        throw IOException("OpenSubsonic authentication fallback failed")
+    }
+
+    private fun requireSecureFallback(auth: Auth) {
+        if (auth.mechanism != AuthMechanism.TOKEN && baseUrl?.scheme != "https") {
+            throw SecurityException("OpenSubsonic API-key and password authentication require HTTPS")
+        }
+    }
+
+    private suspend fun updateMechanism(previous: Auth, next: AuthMechanism): Auth = authMutex.withLock {
+        val current = cachedAuth?.takeIf { it.credentials == previous.credentials } ?: previous
+        if (current.mechanism != previous.mechanism) return@withLock current
+        current.copy(mechanism = next, verified = false).also { cachedAuth = it }
+    }
+
+    private suspend fun markVerified(auth: Auth): Auth = authMutex.withLock {
+        val current = cachedAuth?.takeIf { it.credentials == auth.credentials } ?: auth
+        if (current.mechanism != auth.mechanism) return@withLock current
+        current.copy(verified = true).also { cachedAuth = it }
+    }
+
+    /**
+     * Queued Subsonic items can be restored after process death, when there is
+     * no cached auth mode. Validate once before returning stream/art URLs so
+     * code 41 can switch the cached mode before the player requests the bytes.
+     */
+    private suspend fun verifiedAuth(): Auth {
+        val auth = authenticate()
+        if (!auth.verified) {
+            requestSubsonic("rest/ping.view", operation = "OpenSubsonic authentication check")
+        }
+        return authenticate()
+    }
+
+    private fun nextMechanism(current: AuthMechanism, code: Int?): AuthMechanism? = when {
+        current == AuthMechanism.TOKEN && code == TOKEN_AUTH_UNSUPPORTED -> AuthMechanism.API_KEY
+        current == AuthMechanism.API_KEY && code in API_KEY_AUTH_UNAVAILABLE_CODES -> AuthMechanism.LEGACY_PASSWORD
+        else -> null
+    }
+
+    override suspend fun health(): SourceHealth = try {
+        val response = requestSubsonic("rest/ping.view", operation = "OpenSubsonic connection check")
+        SourceHealth.Ok(response.string("version")?.let { "OpenSubsonic $it" } ?: "OpenSubsonic connected")
     } catch (error: CancellationException) {
         throw error
+    } catch (error: OpenSubsonicApiException) {
+        if (error.protocolCode in AUTH_REJECTION_CODES) {
+            SourceHealth.Rejected("OpenSubsonic authentication was rejected")
+        } else {
+            SourceHealth.Unreachable("OpenSubsonic request failed")
+        }
     } catch (error: Exception) {
         healthFrom(error)
     }
@@ -421,15 +504,12 @@ class NavidromeMusicSource(
     override suspend fun search(query: String, limit: Int, waitForAll: Boolean): List<Song> {
         val term = query.trim()
         if (term.isEmpty()) return emptyList()
-        val auth = authenticate()
-        val url = subsonicUrl("rest/search3.view", auth, mapOf(
+        val response = requestSubsonic("rest/search3.view", mapOf(
             "query" to term,
             "songCount" to requestLimit(limit).toString(),
             "albumCount" to "0",
             "artistCount" to "0",
-        )) ?: throw IOException("Invalid server URL")
-        val response = requestJson(url, operation = "OpenSubsonic search").subsonicResponse()
-        ensureSubsonicOk(response)
+        ), operation = "OpenSubsonic search")
         val songs = response.objectOrNull("searchResult3")?.arrayOrSingle("song") ?: return emptyList()
         return songs.mapNotNull { element ->
             val item = element.objectOrNull() ?: return@mapNotNull null
@@ -462,7 +542,7 @@ class NavidromeMusicSource(
     }
 
     override suspend fun stream(trackId: String, request: StreamRequest): SourceStream? {
-        val auth = authenticate()
+        val auth = verifiedAuth()
         val maxBitRate = (request as? StreamRequest.Capped)?.maxKbps
         val url = subsonicUrl(
             "rest/stream.view",
@@ -478,9 +558,10 @@ class NavidromeMusicSource(
     }
 
     override suspend fun artwork(imageId: String): ByteArray? = try {
-        val auth = authenticate()
+        val auth = verifiedAuth()
         val url = subsonicUrl("rest/getCoverArt.view", auth, mapOf("id" to imageId, "size" to "1200"), json = false)
             ?: return null
+        requireSecureFallback(auth)
         requestBytes(url, maxBytes = IMAGE_MAX_BYTES, operation = "OpenSubsonic artwork").takeIf { it.isNotEmpty() }
     } catch (error: CancellationException) {
         throw error
@@ -491,16 +572,24 @@ class NavidromeMusicSource(
     private fun ensureSubsonicOk(response: JsonObject) {
         if (response.string("status") == "ok") return
         val error = response.objectOrNull("error")
-        val code = error?.int("code")
-        if (code == 40 || code == 41 || code == 43) {
-            throw SecurityException("OpenSubsonic authentication was rejected")
-        }
-        throw OpenSubsonicApiException(code)
+        throw OpenSubsonicApiException(error?.int("code"))
     }
 
     companion object {
         private const val SUBSONIC_VERSION = "1.16.1"
         private const val CLIENT_ID = "MusicBeatSP"
+        private const val TOKEN_AUTH_UNSUPPORTED = 41
+        private const val MAX_AUTH_ATTEMPTS = 3
+        private val API_KEY_AUTH_UNAVAILABLE_CODES = setOf(10, 40, 42)
+        private val AUTH_REJECTION_CODES = setOf(40, 41, 43)
+    }
+}
+
+/** Subsonic's legacy `p=enc:` form is reversible, so only use it over HTTPS. */
+private fun encodedPassword(password: String): String = buildString {
+    append("enc:")
+    password.toByteArray(Charsets.UTF_8).forEach { byte ->
+        append((byte.toInt() and 0xff).toString(16).padStart(2, '0'))
     }
 }
 
