@@ -262,21 +262,31 @@ object YtMusicRepository {
      * search responsive; the UI asks [searchContinuation] for later pages as
      * the listener reaches the end of the list.
      */
-    suspend fun searchPage(query: String, filter: SearchFilter): Result<SearchPage> =
+    suspend fun searchPage(
+        query: String,
+        filter: SearchFilter,
+        includeVideosInAll: Boolean = false,
+    ): Result<SearchPage> =
         call("search:${filter.name}") {
             InnertubeParser.parseSearchPage(
                 Innertube.search(query, filter.params),
                 includeVideos = filter == SearchFilter.VIDEOS,
+                includeVideosInAll = includeVideosInAll && filter == SearchFilter.ALL,
             ).let { page ->
                 SearchPage(page.rows.distinctBy { it.identityKey() }, page.continuation)
             }
         }
 
     /** Fetches the next page of a search only when the result list needs it. */
-    suspend fun searchContinuation(token: String, filter: SearchFilter): Result<SearchPage> = call("search:continuation") {
+    suspend fun searchContinuation(
+        token: String,
+        filter: SearchFilter,
+        includeVideosInAll: Boolean = false,
+    ): Result<SearchPage> = call("search:continuation") {
         InnertubeParser.parseSearchPage(
             Innertube.searchContinuation(token),
             includeVideos = filter == SearchFilter.VIDEOS,
+            includeVideosInAll = includeVideosInAll && filter == SearchFilter.ALL,
         ).let { page ->
             SearchPage(page.rows.distinctBy { it.identityKey() }, page.continuation)
         }

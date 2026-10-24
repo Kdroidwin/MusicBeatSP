@@ -38,14 +38,13 @@ import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
+import android.net.Uri
 import com.music.bitchord.data.model.Song
 import com.music.bitchord.feature.localmusic.data.LocalPlaylistStore
 import com.music.bitchord.feature.localmusic.domain.model.LocalPlaylistSongMetadata
 import com.music.bitchord.feature.localmusic.ui.components.CreatePlaylistDialog
 
-/**
- * Bottom sheet to add a local song to an existing local playlist or create a new one.
- */
+/** Add device or catalogue tracks to an app-local playlist, or create one. */
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun LocalAddToPlaylistSheet(
@@ -59,12 +58,22 @@ fun LocalAddToPlaylistSheet(
     var showCreateDialog by remember { mutableStateOf(false) }
 
     val distinctSongs = remember(songs) {
-        songs.distinctBy { it.localUri ?: it.videoId }
+        songs.distinctBy { it.playlistEntryId() }
     }
-    val songIds = remember(distinctSongs) { distinctSongs.map { it.localUri ?: it.videoId } }
+    val songIds = remember(distinctSongs) { distinctSongs.map { it.playlistEntryId() } }
     val songMetadata = remember(distinctSongs) {
         distinctSongs.associate { song ->
-            (song.localUri ?: song.videoId) to LocalPlaylistSongMetadata(song.title, song.artist)
+            song.playlistEntryId() to LocalPlaylistSongMetadata(
+                title = song.title,
+                artist = song.artist,
+                thumbnailUrl = song.thumbnailUrl,
+                albumName = song.albumName,
+                artistId = song.artistId,
+                albumId = song.albumId,
+                durationText = song.durationText,
+                isVideo = song.isVideo,
+                isVideoOrigin = song.isVideoOrigin,
+            )
         }
     }
     val coverUrl = distinctSongs.firstNotNullOfOrNull { it.thumbnailUrl }
@@ -196,5 +205,15 @@ fun LocalAddToPlaylistSheet(
                 }
             }
         }
+    }
+}
+
+/** Store a file URI for local rows, and the source identity for remote rows. */
+private fun Song.playlistEntryId(): String {
+    val uri = localUri?.let { runCatching { Uri.parse(it) }.getOrNull() }
+    return if (uri?.scheme.equals("content", ignoreCase = true) || uri?.scheme.equals("file", ignoreCase = true)) {
+        localUri.orEmpty()
+    } else {
+        videoId
     }
 }

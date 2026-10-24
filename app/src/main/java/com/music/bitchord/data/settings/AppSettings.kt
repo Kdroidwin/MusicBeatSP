@@ -538,6 +538,8 @@ object AppSettings {
     val repeatMode = MutableStateFlow(Player.REPEAT_MODE_OFF)
     /** Restart the first queue item after the last item ends. */
     val restartQueueWhenEnded = MutableStateFlow(false)
+    /** Advance through queued tracks with Repeat off, then stop at the queue end. */
+    val advanceQueueWhenRepeatOff = MutableStateFlow(true)
     val mediaControlFavoriteUsesStar = MutableStateFlow(false)
     val mediaControlSecondaryAction = MutableStateFlow(MediaControlSecondaryAction.SHUFFLE)
     val hideMediaControlCustomActions = MutableStateFlow(false)
@@ -603,6 +605,8 @@ object AppSettings {
 
     /** System UI preferences; bars remain transiently revealable by swipe when hidden. */
     val showStatusBar = MutableStateFlow(true)
+    /** Status bar visibility while the player is expanded over the library. */
+    val showPlayerStatusBar = MutableStateFlow(true)
     val showNavigationBar = MutableStateFlow(true)
     val keepScreenOn = MutableStateFlow(false)
     /** Keeps the display awake while the full lyrics panel is open. */
@@ -674,6 +678,8 @@ object AppSettings {
 
     /** Whether the search screen should start on YouTube Music instead of this device. */
     val youtubeMusicSearchDefault = MutableStateFlow(false)
+    /** Include ordinary YouTube video uploads among YouTube Music search results. */
+    val includeYoutubeMusicVideosInSearch = MutableStateFlow(true)
 
     /** Whether an app-managed YouTube Music request may leave this device. */
     val youtubeMusicNetworkAllowed: Boolean
@@ -1213,6 +1219,7 @@ object AppSettings {
         audioFocusLevel.value = prefs.getInt(KEY_AUDIO_FOCUS_LEVEL, 1).coerceIn(0, 4)
         repeatMode.value = prefs.getInt(KEY_REPEAT_MODE, Player.REPEAT_MODE_OFF)
         restartQueueWhenEnded.value = prefs.getBoolean(KEY_RESTART_QUEUE_WHEN_ENDED, false)
+        advanceQueueWhenRepeatOff.value = prefs.getBoolean(KEY_ADVANCE_QUEUE_WHEN_REPEAT_OFF, true)
         mediaControlFavoriteUsesStar.value = prefs.getBoolean(KEY_MEDIA_CONTROL_FAVORITE_USES_STAR, false)
         mediaControlSecondaryAction.value = runCatching {
             MediaControlSecondaryAction.valueOf(
@@ -1250,6 +1257,15 @@ object AppSettings {
         mainNavigationTabOrder.value = readMainNavigationTabOrder()
         startupTab.value = readStartupTab()
         showStatusBar.value = prefs.getBoolean(KEY_SHOW_STATUS_BAR, true)
+        showPlayerStatusBar.value = if (prefs.contains(KEY_SHOW_PLAYER_STATUS_BAR)) {
+            prefs.getBoolean(KEY_SHOW_PLAYER_STATUS_BAR, true)
+        } else {
+            // Preserve the old single-toggle choice on upgrade, then let the
+            // newly split player and library choices diverge independently.
+            showStatusBar.value.also { migratedValue ->
+                prefs.edit().putBoolean(KEY_SHOW_PLAYER_STATUS_BAR, migratedValue).apply()
+            }
+        }
         showNavigationBar.value = prefs.getBoolean(KEY_SHOW_NAVIGATION_BAR, true)
         keepScreenOn.value = prefs.getBoolean(KEY_KEEP_SCREEN_ON, false)
         keepScreenOnDuringLyrics.value = prefs.getBoolean(KEY_KEEP_SCREEN_ON_DURING_LYRICS, true)
@@ -1294,6 +1310,7 @@ object AppSettings {
         val wasYoutubeMusicEnabled = youtubeMusicEnabled.value
         youtubeMusicEnabled.value = prefs.getBoolean(KEY_YOUTUBE_MUSIC_ENABLED, false)
         youtubeMusicSearchDefault.value = prefs.getBoolean(KEY_YOUTUBE_MUSIC_SEARCH_DEFAULT, false)
+        includeYoutubeMusicVideosInSearch.value = prefs.getBoolean(KEY_INCLUDE_YOUTUBE_MUSIC_VIDEOS_IN_SEARCH, true)
         if (wasYoutubeMusicEnabled && !youtubeMusicEnabled.value) Http.cancelYoutubeMusicRequests()
         if (!wasOffline && offlineMode.value) Http.cancelAllNetworkRequests()
         hideLosslessLabel.value = prefs.getBoolean(KEY_HIDE_LOSSLESS_LABEL, false)
@@ -1554,6 +1571,11 @@ object AppSettings {
     fun setRestartQueueWhenEnded(value: Boolean) {
         restartQueueWhenEnded.value = value
         prefs.edit().putBoolean(KEY_RESTART_QUEUE_WHEN_ENDED, value).apply()
+    }
+
+    fun setAdvanceQueueWhenRepeatOff(value: Boolean) {
+        advanceQueueWhenRepeatOff.value = value
+        prefs.edit().putBoolean(KEY_ADVANCE_QUEUE_WHEN_REPEAT_OFF, value).apply()
     }
 
     fun setMediaControlFavoriteUsesStar(value: Boolean) {
@@ -2119,6 +2141,11 @@ object AppSettings {
         prefs.edit().putBoolean(KEY_SHOW_STATUS_BAR, value).apply()
     }
 
+    fun setShowPlayerStatusBar(value: Boolean) {
+        showPlayerStatusBar.value = value
+        prefs.edit().putBoolean(KEY_SHOW_PLAYER_STATUS_BAR, value).apply()
+    }
+
     fun setShowNavigationBar(value: Boolean) {
         showNavigationBar.value = value
         prefs.edit().putBoolean(KEY_SHOW_NAVIGATION_BAR, value).apply()
@@ -2374,6 +2401,11 @@ object AppSettings {
     fun setYoutubeMusicSearchDefault(value: Boolean) {
         youtubeMusicSearchDefault.value = value
         prefs.edit().putBoolean(KEY_YOUTUBE_MUSIC_SEARCH_DEFAULT, value).apply()
+    }
+
+    fun setIncludeYoutubeMusicVideosInSearch(value: Boolean) {
+        includeYoutubeMusicVideosInSearch.value = value
+        prefs.edit().putBoolean(KEY_INCLUDE_YOUTUBE_MUSIC_VIDEOS_IN_SEARCH, value).apply()
     }
 
     fun setHideLosslessLabel(value: Boolean) {
@@ -3423,6 +3455,7 @@ object AppSettings {
     private const val KEY_AUDIO_FOCUS_LEVEL = "audio_focus_level"
     private const val KEY_REPEAT_MODE = "repeat_mode"
     private const val KEY_RESTART_QUEUE_WHEN_ENDED = "restart_queue_when_ended"
+    private const val KEY_ADVANCE_QUEUE_WHEN_REPEAT_OFF = "advance_queue_when_repeat_off"
     private const val KEY_MEDIA_CONTROL_FAVORITE_USES_STAR = "media_control_favorite_uses_star"
     private const val KEY_MEDIA_CONTROL_SECONDARY_ACTION = "media_control_secondary_action"
     private const val KEY_HIDE_MEDIA_CONTROL_CUSTOM_ACTIONS = "hide_media_control_custom_actions"
@@ -3451,6 +3484,7 @@ object AppSettings {
     private const val KEY_MAIN_FOLDER_TAB_MIGRATED = "main_folder_tab_migrated"
     private const val KEY_STARTUP_TAB = "startup_tab"
     private const val KEY_SHOW_STATUS_BAR = "show_status_bar"
+    private const val KEY_SHOW_PLAYER_STATUS_BAR = "show_player_status_bar"
     private const val KEY_SHOW_NAVIGATION_BAR = "show_navigation_bar"
     private const val KEY_KEEP_SCREEN_ON = "keep_screen_on"
     private const val KEY_KEEP_SCREEN_ON_DURING_LYRICS = "keep_screen_on_during_lyrics"
@@ -3483,6 +3517,7 @@ object AppSettings {
     private const val KEY_RADIO_TAB_MIGRATED = "radio_tab_migrated"
     private const val KEY_YOUTUBE_MUSIC_ENABLED = "youtube_music_enabled"
     private const val KEY_YOUTUBE_MUSIC_SEARCH_DEFAULT = "youtube_music_search_default"
+    private const val KEY_INCLUDE_YOUTUBE_MUSIC_VIDEOS_IN_SEARCH = "include_youtube_music_videos_in_search"
     private const val KEY_HIDE_LOSSLESS_LABEL = "hide_lossless_label"
     private const val KEY_SHOW_TRACK_DURATION_INSTEAD_OF_REMAINING = "show_track_duration_instead_of_remaining"
     private const val KEY_POPUP_EXTERNAL_AUDIO_PLAYER = "popup_external_audio_player"

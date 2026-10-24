@@ -341,8 +341,10 @@
     <string name="media_control_shuffle_off">Turn shuffle off</string>
     <string name="hide_media_control_custom_actions">Hide custom media-control buttons</string>
     <string name="hide_media_control_custom_actions_subtitle">Hide the favorite and secondary action buttons from Android media controls. Standard playback controls remain available.</string>
-    <string name="restart_queue_when_ended">Restart the queue when it ends</string>
-    <string name="restart_queue_when_ended_subtitle">Start again from the first queued track after the last track finishes. Off by default.</string>
+    <string name="restart_queue_when_ended">Restart from the first track at queue end</string>
+    <string name="restart_queue_when_ended_subtitle">With Repeat off, start the queue again after its last track. This is separate from advancing between queued tracks.</string>
+    <string name="advance_queue_when_repeat_off">Advance through the queue with Repeat off</string>
+    <string name="advance_queue_when_repeat_off_subtitle">Play the next queued track when one ends. AutoPlay can still add suggested tracks. Turn off to keep stopping after the current track.</string>
     <string name="details_sheet_artwork_backdrop">Use artwork colors for track details</string>
     <string name="details_sheet_artwork_backdrop_subtitle">Show metadata and file information over the same artwork-derived backdrop as queue and playback sheets. On by default.</string>
     <string name="reduce_animation">Reduce animation</string>
@@ -1125,7 +1127,9 @@
     <string name="keep_screen_on_subtitle">Prevent the display from timing out while MusicBeatSP is open</string>
     <string name="keep_screen_on_during_lyrics">Keep screen on while lyrics are open</string>
     <string name="keep_screen_on_during_lyrics_subtitle">Prevent the display from turning off while the lyrics panel is open</string>
-    <string name="show_status_bar">Show status bar</string>
+    <string name="show_status_bar">Show status bar outside the player</string>
+    <string name="show_player_status_bar">Show status bar in the player</string>
+    <string name="show_player_status_bar_subtitle">Control the Android status bar while the expanded player is open.</string>
     <string name="show_navigation_bar">Show navigation bar</string>
     <string name="system_bar_visibility_subtitle">Hidden bars can be revealed temporarily with a swipe</string>
     <string name="screen_orientation">Screen orientation</string>
@@ -1354,7 +1358,7 @@
     <string name="lyrics_transport_control_size_value">%1$d dp</string>
     <string name="lyrics_transport_controls_centered">Center lyrics controls</string>
     <string name="lyrics_transport_controls_centered_subtitle">Center the previous, play/pause, and next buttons in the lyrics header</string>
-    <string name="show_status_bar_search_help">Show Android time, battery, and status icons</string>
+    <string name="show_status_bar_search_help">Show Android time, battery, and status icons on library and other screens</string>
     <string name="show_navigation_bar_search_help">Show Android Back, Home, and app-switcher buttons</string>
     <string name="show_tab_setting">Show %1$s tab</string>
     <string name="show_tab_setting_subtitle">Include the %1$s destination in the main navigation</string>
@@ -1412,4 +1416,6 @@
     <string name="youtube_playlist_track_add_failed">Couldn’t add the track to that playlist</string>
     <string name="youtube_music_search_default">Use YouTube Music as the default search target</string>
     <string name="youtube_music_search_default_subtitle">Start searches on YouTube Music when it is enabled; otherwise search this device.</string>
+    <string name="youtube_music_include_videos">Include video uploads in YouTube Music search</string>
+    <string name="youtube_music_include_videos_subtitle">Show ordinary YouTube videos alongside music results. On by default.</string>
 </resources>

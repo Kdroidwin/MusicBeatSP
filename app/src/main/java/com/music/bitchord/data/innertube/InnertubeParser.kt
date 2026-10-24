@@ -48,7 +48,11 @@ object InnertubeParser {
      */
     fun parseSearch(response: JsonObject): List<SearchResult> = parseSearchPage(response).rows
 
-    fun parseSearchPage(response: JsonObject, includeVideos: Boolean = false): SearchPage {
+    fun parseSearchPage(
+        response: JsonObject,
+        includeVideos: Boolean = false,
+        includeVideosInAll: Boolean = false,
+    ): SearchPage {
         // The "All" tab spreads results across several shelf types (card shelf
         // for the top result, then one shelf per category). Its promoted top
         // result lives on the card itself, not in a responsive row, so read it
@@ -67,9 +71,11 @@ object InnertubeParser {
             topResults.forEach { result ->
                 when (result) {
                     is SearchResult.TopTrack -> {
-                        // The mixed All page stays music-only; music-video uploads
-                        // belong exclusively to the dedicated Videos tab.
-                        if (!result.song.isVideo && seen.add("v:${result.song.videoId}")) add(result)
+                        // Keep the old audio-only All results unless the user
+                        // enables ordinary video uploads in search.
+                        if ((!result.song.isVideo || includeVideosInAll) &&
+                            seen.add("v:${result.song.videoId}")
+                        ) add(result)
                     }
                     is SearchResult.Browse -> {
                         if (seen.add("b:${result.item.browseId}")) add(result)
@@ -86,9 +92,12 @@ object InnertubeParser {
                     if (seen.add("b:${browse.browseId}")) add(SearchResult.Browse(browse))
                 } else {
                     parseResponsiveListItem(renderer)?.let { song ->
-                        // The mixed All page stays music-only; the dedicated Videos
-                        // filter is the one place music-video uploads belong.
-                        if (song.isVideo == includeVideos && seen.add("v:${song.videoId}")) {
+                        val matchesFilter = if (includeVideos) {
+                            song.isVideo
+                        } else {
+                            !song.isVideo || includeVideosInAll
+                        }
+                        if (matchesFilter && seen.add("v:${song.videoId}")) {
                             add(SearchResult.Track(song))
                         }
                     }

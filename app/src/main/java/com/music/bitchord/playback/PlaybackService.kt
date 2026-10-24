@@ -717,6 +717,7 @@ class PlaybackService : MediaLibraryService() {
             val exoPlayer = player ?: return
             if (isExternalPreviewPlaying(exoPlayer)) {
                 updateCurrentLocalPlayStats(isPlaying = false, song = exoPlayer.currentMediaItem?.toSong())
+                savePlaybackState(exoPlayer)
                 updateExternalAudioPopup(exoPlayer)
                 ListeningRecorder.onStopped()
                 clearDiscordPresence()
@@ -845,7 +846,18 @@ class PlaybackService : MediaLibraryService() {
             reason: Int,
         ) {
             val exoPlayer = player ?: return
-            if (isExternalPreviewPlaying(exoPlayer)) return
+            if (isExternalPreviewPlaying(exoPlayer)) {
+                if (reason == Player.DISCONTINUITY_REASON_SEEK) {
+                    exoPlayer.currentMediaItem?.toSong()?.let { song ->
+                        if (exoPlayer.currentPosition <= LONG_TRACK_RESUME_START_CLEAR_MS) {
+                            LongTrackResumeStore.clear(applicationContext, song)
+                        } else {
+                            saveLongTrackPosition(exoPlayer, song)
+                        }
+                    }
+                }
+                return
+            }
             if (reason == Player.DISCONTINUITY_REASON_SEEK) {
                 exoPlayer.currentMediaItem?.toSong()?.let { song ->
                     if (exoPlayer.currentPosition <= LONG_TRACK_RESUME_START_CLEAR_MS) {
@@ -997,10 +1009,25 @@ class PlaybackService : MediaLibraryService() {
             // session is currently pointed at.
             val exoPlayer = player ?: return
             if (isExternalPreviewPlaying(exoPlayer)) {
-                if (state == Player.STATE_ENDED) restoreExternalPreview(exoPlayer)
+                if (state == Player.STATE_ENDED) {
+                    exoPlayer.currentMediaItem?.toSong()?.let {
+                        LongTrackResumeStore.clear(applicationContext, it)
+                    }
+                    restoreExternalPreview(exoPlayer)
+                }
                 return
             }
             if (state == Player.STATE_ENDED) {
+                exoPlayer.currentMediaItem?.toSong()?.let {
+                    LongTrackResumeStore.clear(applicationContext, it)
+                }
+                // ExoPlayer can reach ENDED without a final progress sample;
+                // close the audible segment here so qualified plays are not
+                // lost at the queue boundary.
+                updateCurrentLocalPlayStats(
+                    isPlaying = false,
+                    song = exoPlayer.currentMediaItem?.toSong(),
+                )
                 val restartQueue = AppSettings.restartQueueWhenEnded.value &&
                     exoPlayer.repeatMode == Player.REPEAT_MODE_OFF &&
                     !SingleSongPlaybackManager.enabled.value &&
@@ -2326,9 +2353,13 @@ class PlaybackService : MediaLibraryService() {
         // in between is Discord's own arithmetic.
         if (exoPlayer.isPlaying) pushDiscordPresence(exoPlayer)
 
-        // If Repeat is OFF (not toggled), play only this song, then stop and close the player.
-        // If Repeat All or Repeat One is toggled, continuous playback proceeds.
-        val shouldStopAndClose = exoPlayer.repeatMode == Player.REPEAT_MODE_OFF || SingleSongPlaybackManager.enabled.value
+        // With Repeat off, keep the old one-track stop available as a setting.
+        // Otherwise ExoPlayer advances through the queued tracks and its normal
+        // STATE_ENDED handling stops at the end of the queue.
+        val shouldStopAndClose =
+            (exoPlayer.repeatMode == Player.REPEAT_MODE_OFF &&
+                !AppSettings.advanceQueueWhenRepeatOff.value) ||
+                SingleSongPlaybackManager.enabled.value
         if (ended && (SleepTimer.afterTrack.value || shouldStopAndClose)) {
             exoPlayer.pause()
             if (shouldStopAndClose) {
@@ -3915,7 +3946,10 @@ class PlaybackService : MediaLibraryService() {
 
     /** Persist index and position without touching or serializing queue contents. */
     private fun savePlaybackState(player: ExoPlayer) {
-        if (isExternalPreviewPlaying(player)) return
+        if (isExternalPreviewPlaying(player)) {
+            player.currentMediaItem?.toSong()?.let { saveLongTrackPosition(player, it) }
+            return
+        }
         if (player.currentMediaItem?.toSong()?.isLiveRadio == true) return
         if (player.mediaItemCount == 0) return
         player.currentMediaItem?.toSong()?.let { saveLongTrackPosition(player, it) }
@@ -4000,6 +4034,7 @@ class PlaybackService : MediaLibraryService() {
             active.repeatMode = Player.REPEAT_MODE_OFF
             active.shuffleModeEnabled = false
             active.setMediaItems(listOf(song.toMediaItem()), 0, 0L)
+            restoreLongTrackPosition(active, song)
             active.prepare()
             if (!canStartPlaybackAtCurrentVolume()) {
                 restoreExternalPreview(active)
@@ -4217,6 +4252,7 @@ class PlaybackService : MediaLibraryService() {
                 if (player != null && player.isPlaying) {
                     if (isExternalPreviewPlaying(player)) {
                         updateCurrentLocalPlayStats(isPlaying = false, song = player.currentMediaItem?.toSong())
+                        savePlaybackState(player)
                         publishNerdStats()
                         delay(PROGRESS_SAMPLE_MS)
                         continue

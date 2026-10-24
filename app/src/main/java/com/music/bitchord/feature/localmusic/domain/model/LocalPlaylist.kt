@@ -28,4 +28,12 @@ data class LocalPlaylist(
 data class LocalPlaylistSongMetadata(
     val title: String,
     val artist: String = "",
+    /** Artwork for remote songs that are not part of the device library. */
+    val thumbnailUrl: String? = null,
+    val albumName: String? = null,
+    val artistId: String? = null,
+    val albumId: String? = null,
+    val durationText: String? = null,
+    val isVideo: Boolean = false,
+    val isVideoOrigin: Boolean = isVideo,
 )

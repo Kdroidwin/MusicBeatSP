@@ -26,9 +26,33 @@ fun resolvePlaylistSongs(playlist: LocalPlaylist, librarySongs: List<Song>): Lis
                     videoId = id,
                     title = metadata?.title?.takeIf(String::isNotBlank) ?: fallbackName,
                     artist = metadata?.artist?.takeIf(String::isNotBlank) ?: "Unknown artist",
-                    thumbnailUrl = null,
+                    thumbnailUrl = metadata?.thumbnailUrl,
+                    durationText = metadata?.durationText,
+                    artistId = metadata?.artistId,
+                    albumId = metadata?.albumId,
+                    albumName = metadata?.albumName,
+                    isVideo = metadata?.isVideo ?: false,
+                    isVideoOrigin = metadata?.isVideoOrigin ?: false,
                     localUri = id,
                     localPath = uri?.takeIf { it.scheme == "file" }?.path,
+                )
+            }
+            // Remote catalogue rows (including YouTube Music) are not in the
+            // device MediaStore list. Preserve their playable source ID and
+            // saved display metadata so a local playlist does not silently
+            // lose them when it is opened without a signed-in YouTube account.
+            ?: playlist.songMetadata[id]?.let { metadata ->
+                Song(
+                    videoId = id,
+                    title = metadata.title.takeIf(String::isNotBlank) ?: "Unknown track",
+                    artist = metadata.artist.takeIf(String::isNotBlank) ?: "Unknown artist",
+                    thumbnailUrl = metadata.thumbnailUrl,
+                    durationText = metadata.durationText,
+                    artistId = metadata.artistId,
+                    albumId = metadata.albumId,
+                    albumName = metadata.albumName,
+                    isVideo = metadata.isVideo,
+                    isVideoOrigin = metadata.isVideoOrigin,
                 )
             }
         resolved?.takeUnless { song ->

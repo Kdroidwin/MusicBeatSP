@@ -304,6 +304,9 @@ private const val INITIAL_RADIO_TRACKS = 24
 private const val PLAYER_SHEET_SCRIM_ALPHA = 0.32f
 
 class MainActivity : AppCompatActivity() {
+    /** The expanded player is a modal surface on compact layouts. */
+    private var expandedPlayerSurfaceActive = false
+
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         QuickPlayTileState.attach(this)
@@ -330,6 +333,7 @@ class MainActivity : AppCompatActivity() {
             val liquidGlassEnabled by AppSettings.liquidGlass.collectAsStateWithLifecycle()
             val keepScreenOn by AppSettings.keepScreenOn.collectAsStateWithLifecycle()
             val showStatusBar by AppSettings.showStatusBar.collectAsStateWithLifecycle()
+            val showPlayerStatusBar by AppSettings.showPlayerStatusBar.collectAsStateWithLifecycle()
             val showNavigationBar by AppSettings.showNavigationBar.collectAsStateWithLifecycle()
             val screenOrientation by AppSettings.screenOrientationMode.collectAsStateWithLifecycle()
             val iosOverscrollFactory = rememberIosOverscrollFactory()
@@ -342,7 +346,7 @@ class MainActivity : AppCompatActivity() {
             DisposableEffect(composeView) {
                 onDispose { composeView.keepScreenOn = false }
             }
-            LaunchedEffect(showStatusBar, showNavigationBar) {
+            LaunchedEffect(showStatusBar, showPlayerStatusBar, showNavigationBar) {
                 applySystemBarPreferences()
             }
             LaunchedEffect(screenOrientation) {
@@ -420,6 +424,12 @@ class MainActivity : AppCompatActivity() {
                             appBackdrop = appBackdrop,
                             controller = controller,
                             player = player,
+                            onPlayerSurfaceVisibilityChanged = { visible ->
+                                if (expandedPlayerSurfaceActive != visible) {
+                                    expandedPlayerSurfaceActive = visible
+                                    applySystemBarPreferences()
+                                }
+                            },
                         )
                     }
                 }
@@ -441,7 +451,12 @@ class MainActivity : AppCompatActivity() {
     private fun applySystemBarPreferences() {
         val bars = WindowInsetsControllerCompat(window, window.decorView)
         bars.systemBarsBehavior = WindowInsetsControllerCompat.BEHAVIOR_SHOW_TRANSIENT_BARS_BY_SWIPE
-        if (AppSettings.showStatusBar.value) bars.show(WindowInsetsCompat.Type.statusBars())
+        val showStatusBar = if (expandedPlayerSurfaceActive) {
+            AppSettings.showPlayerStatusBar.value
+        } else {
+            AppSettings.showStatusBar.value
+        }
+        if (showStatusBar) bars.show(WindowInsetsCompat.Type.statusBars())
         else bars.hide(WindowInsetsCompat.Type.statusBars())
         if (AppSettings.showNavigationBar.value) bars.show(WindowInsetsCompat.Type.navigationBars())
         else bars.hide(WindowInsetsCompat.Type.navigationBars())
@@ -493,6 +508,7 @@ private fun BitChordApp(
     appBackdrop: LayerBackdrop,
     controller: MediaController?,
     player: PlayerState,
+    onPlayerSurfaceVisibilityChanged: (Boolean) -> Unit,
     viewModel: MainViewModel = viewModel(),
 ) {
     val context = LocalContext.current
@@ -566,6 +582,9 @@ private fun BitChordApp(
      * question this used to answer on its own: is the player covering the page?
      */
     var showNowPlaying by remember { mutableStateOf(false) }
+    LaunchedEffect(showNowPlaying, playerDocked) {
+        onPlayerSurfaceVisibilityChanged(showNowPlaying && !playerDocked)
+    }
     val reducePlayerMotion by AppSettings.reduceAnimation.collectAsStateWithLifecycle()
     val playerArtworkTransitionEnabled by AppSettings.playerArtworkTransition.collectAsStateWithLifecycle()
     val playerTransitionScope = rememberCoroutineScope()
@@ -684,6 +703,9 @@ private fun BitChordApp(
     // Separate from [songActions] so the menu can close behind it — the picker
     // is the next step, not a second sheet stacked on the first.
     var playlistTarget by remember { mutableStateOf<Song?>(null) }
+    // App-local playlists accept remote catalogue IDs without requiring a
+    // Google account or writing anything to the user's YouTube account.
+    var localPlaylistSongTarget by remember { mutableStateOf<Song?>(null) }
     // The picker opened from the Library tab, where there is no track and
     // creating the playlist is the whole errand.
     var creatingPlaylist by remember { mutableStateOf(false) }
@@ -1939,7 +1961,9 @@ private fun BitChordApp(
                 menuFromPlayer = true
                 songActions = song
             },
-            onQuickAddToPlaylist = { playlistTarget = song },
+            onQuickAddToPlaylist = {
+                if (signedIn) playlistTarget = song else localPlaylistSongTarget = song
+            },
             onQuickPlaybackTuning = { showPlaybackTuning = true },
             onQuickMenuAction = { action ->
                 when (action) {
@@ -3218,9 +3242,13 @@ private fun BitChordApp(
                     onAddToPlaylist = {
                         val isDeviceSong = song.isExternalPreview ||
                             !song.localUri.isNullOrBlank() || !song.localPath.isNullOrBlank()
-                        if (isDeviceSong) {
+                        if (isDeviceSong || !signedIn) {
+                            // A signed-out listener still gets a fully local
+                            // playlist picker; no Google account is required.
                             showAddToPlaylist = true
                         } else {
+                            // Keep the existing account-playlist route for
+                            // signed-in YouTube Music users.
                             songActions = null
                             playlistTarget = song
                             viewModel.loadPlaylists()
@@ -3297,6 +3325,12 @@ private fun BitChordApp(
         // straight onto the form, which is what the Library tile means.
         LaunchedEffect(playlistTarget != null) {
             if (playlistTarget != null) viewModel.loadPlaylists()
+        }
+        localPlaylistSongTarget?.let { targetSong ->
+            LocalAddToPlaylistSheet(
+                songs = listOf(targetSong),
+                onDismissRequest = { localPlaylistSongTarget = null },
+            )
         }
         if (playlistTarget != null || creatingPlaylist) {
             val target = playlistTarget

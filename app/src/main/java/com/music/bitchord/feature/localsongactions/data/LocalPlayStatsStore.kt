@@ -2,6 +2,7 @@ package com.music.bitchord.feature.localsongactions.data
 
 import android.content.Context
 import android.content.SharedPreferences
+import com.music.bitchord.data.model.Song
 import com.music.bitchord.feature.localsongactions.domain.model.LocalPlayStats
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.asStateFlow
@@ -35,6 +36,24 @@ object LocalPlayStatsStore {
             playedCount = playCount,
             skippedCount = skipCount,
             lastPlayedTimestamp = lastPlayed,
+        )
+    }
+
+    /**
+     * Reads both current and historical identifiers for a local track.
+     * Persisted stats may be keyed by videoId while the library now prefers
+     * localUri; using both keeps existing play history visible.
+     */
+    fun getStats(context: Context, song: Song): LocalPlayStats {
+        val ids = listOfNotNull(song.localUri, song.videoId, song.localPath)
+            .filter(String::isNotBlank)
+            .distinct()
+        if (ids.isEmpty()) return LocalPlayStats.Empty
+        val matches = ids.map { getStats(context, it) }
+        return LocalPlayStats(
+            playedCount = matches.maxOfOrNull { it.playedCount } ?: 0,
+            skippedCount = matches.maxOfOrNull { it.skippedCount } ?: 0,
+            lastPlayedTimestamp = matches.maxOfOrNull { it.lastPlayedTimestamp } ?: 0L,
         )
     }
 

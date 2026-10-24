@@ -308,8 +308,10 @@
     <string name="media_control_shuffle_off">シャッフルをオフ</string>
     <string name="hide_media_control_custom_actions">メディアコントロールの追加ボタンを隠す</string>
     <string name="hide_media_control_custom_actions_subtitle">Androidのメディアコントロールからお気に入りと追加操作を隠します。再生・前後など標準操作は残ります。</string>
-    <string name="restart_queue_when_ended">キュー終了時に先頭から再生</string>
-    <string name="restart_queue_when_ended_subtitle">最後の曲が終わると、キューの先頭から再生します。初期設定はオフです。</string>
+    <string name="restart_queue_when_ended">キュー終了時に先頭へ戻る</string>
+    <string name="restart_queue_when_ended_subtitle">リピートOFFでも最後の曲の後にキューの先頭へ戻ります。キュー内の次の曲へ進む設定とは別です。</string>
+    <string name="advance_queue_when_repeat_off">リピートOFFでもキューを順に再生</string>
+    <string name="advance_queue_when_repeat_off_subtitle">曲が終わると次のキュー曲を再生します。AutoPlayが有効な場合はおすすめ曲もキューに追加されます。OFFにすると現在のように曲ごとに停止します。</string>
     <string name="details_sheet_artwork_backdrop">曲の詳細にアートカラーを使う</string>
     <string name="details_sheet_artwork_backdrop_subtitle">メタデータとファイル情報を、キューや再生速度の画面と同じアートカラーの背景で表示します。初期設定はオンです。</string>
     <string name="reduce_animation">アニメーションを減らす</string>
@@ -1028,7 +1030,9 @@
     <string name="keep_screen_on_subtitle">MusicBeatSPの使用中に画面が消灯しないようにします</string>
     <string name="keep_screen_on_during_lyrics">歌詞表示中は画面を常にオンにする</string>
     <string name="keep_screen_on_during_lyrics_subtitle">歌詞画面を開いている間、画面が自動消灯しないようにします</string>
-    <string name="show_status_bar">ステータスバーを表示</string>
+    <string name="show_status_bar">プレイヤー以外でステータスバーを表示</string>
+    <string name="show_player_status_bar">プレイヤーでステータスバーを表示</string>
+    <string name="show_player_status_bar_subtitle">全画面プレイヤーを開いている間のAndroidステータスバーを設定します。</string>
     <string name="show_navigation_bar">ナビゲーションバーを表示</string>
     <string name="system_bar_visibility_subtitle">非表示のバーはスワイプすると一時的に表示できます</string>
     <string name="screen_orientation">画面の向き</string>
@@ -1264,7 +1268,7 @@
     <string name="lyrics_transport_control_size_value">%1$d dp</string>
     <string name="lyrics_transport_controls_centered">歌詞操作ボタンを中央揃え</string>
     <string name="lyrics_transport_controls_centered_subtitle">歌詞画面の前・再生／一時停止・次ボタンを中央に配置します</string>
-    <string name="show_status_bar_search_help">Androidの時刻、電池、ステータスアイコンを表示します</string>
+    <string name="show_status_bar_search_help">ライブラリなど、プレイヤー以外の画面でAndroidの時刻・電池・ステータスアイコンを表示します</string>
     <string name="show_navigation_bar_search_help">Androidの戻る、ホーム、アプリ切り替えボタンを表示します</string>
     <string name="show_tab_setting">%1$sタブを表示</string>
     <string name="show_tab_setting_subtitle">メインナビゲーションに%1$sを含めます</string>
@@ -1327,4 +1331,6 @@
     <string name="youtube_playlist_track_add_failed">プレイリストに追加できませんでした</string>
     <string name="youtube_music_search_default">検索先の初期値をYouTube Musicにする</string>
     <string name="youtube_music_search_default_subtitle">有効時は検索画面をYouTube Musicから開始します。YouTube Musicが無効またはオフライン時はこの端末を検索します。</string>
+    <string name="youtube_music_include_videos">YouTube Music検索に動画を含める</string>
+    <string name="youtube_music_include_videos_subtitle">音楽の検索結果に通常のYouTube動画も表示します。初期設定はオンです。</string>
 </resources>

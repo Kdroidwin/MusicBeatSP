@@ -342,6 +342,7 @@ fun SettingsScreen(
     val keepScreenOn by AppSettings.keepScreenOn.collectAsStateWithLifecycle()
     val keepScreenOnDuringLyrics by AppSettings.keepScreenOnDuringLyrics.collectAsStateWithLifecycle()
     val showStatusBar by AppSettings.showStatusBar.collectAsStateWithLifecycle()
+    val showPlayerStatusBar by AppSettings.showPlayerStatusBar.collectAsStateWithLifecycle()
     val showNavigationBar by AppSettings.showNavigationBar.collectAsStateWithLifecycle()
     val orientationMode by AppSettings.screenOrientationMode.collectAsStateWithLifecycle()
     val favoriteUsesStar by AppSettings.favoriteUsesStar.collectAsStateWithLifecycle()
@@ -349,6 +350,7 @@ fun SettingsScreen(
     val mediaControlSecondaryAction by AppSettings.mediaControlSecondaryAction.collectAsStateWithLifecycle()
     val hideMediaControlCustomActions by AppSettings.hideMediaControlCustomActions.collectAsStateWithLifecycle()
     val restartQueueWhenEnded by AppSettings.restartQueueWhenEnded.collectAsStateWithLifecycle()
+    val advanceQueueWhenRepeatOff by AppSettings.advanceQueueWhenRepeatOff.collectAsStateWithLifecycle()
     val persistentLocalArtwork by AppSettings.persistentLocalArtwork.collectAsStateWithLifecycle()
     val resamplerCutoffHz by AppSettings.resamplerCutoffHz.collectAsStateWithLifecycle()
     val loudnessNormalization by AppSettings.loudnessNormalization.collectAsStateWithLifecycle()
@@ -378,6 +380,7 @@ fun SettingsScreen(
     val offlineMode by AppSettings.offlineMode.collectAsStateWithLifecycle()
     val youtubeMusicEnabled by AppSettings.youtubeMusicEnabled.collectAsStateWithLifecycle()
     val youtubeMusicSearchDefault by AppSettings.youtubeMusicSearchDefault.collectAsStateWithLifecycle()
+    val includeYoutubeMusicVideosInSearch by AppSettings.includeYoutubeMusicVideosInSearch.collectAsStateWithLifecycle()
     val hideLosslessLabel by AppSettings.hideLosslessLabel.collectAsStateWithLifecycle()
     val showTrackDurationInsteadOfRemaining by AppSettings.showTrackDurationInsteadOfRemaining.collectAsStateWithLifecycle()
     val popupExternalAudioPlayer by AppSettings.popupExternalAudioPlayer.collectAsStateWithLifecycle()
@@ -598,6 +601,12 @@ fun SettingsScreen(
             listOf("youtube", "youtube music", "ytmusic", "default search", "search target", "検索先", "検索対象", "初期値"),
             youtubeMusicSearchDefault,
         ) { AppSettings.setYoutubeMusicSearchDefault(!youtubeMusicSearchDefault) },
+        SettingsSearchEntry(
+            stringResource(R.string.youtube_music_include_videos),
+            stringResource(R.string.youtube_music_include_videos_subtitle),
+            listOf("youtube", "youtube music", "video", "videos", "動画", "検索結果", "MV"),
+            includeYoutubeMusicVideosInSearch,
+        ) { AppSettings.setIncludeYoutubeMusicVideosInSearch(!includeYoutubeMusicVideosInSearch) },
         SettingsSearchEntry(stringResource(R.string.keep_screen_on), stringResource(R.string.keep_screen_on_subtitle), listOf("screen", "display", "画面", "常時"), keepScreenOn) { AppSettings.setKeepScreenOn(!keepScreenOn) },
         SettingsSearchEntry(
             stringResource(R.string.keep_screen_on_during_lyrics),
@@ -611,7 +620,8 @@ fun SettingsScreen(
             listOf("duration", "remaining", "time", "再生時間", "残り時間", "曲の長さ"),
             showTrackDurationInsteadOfRemaining,
         ) { AppSettings.setShowTrackDurationInsteadOfRemaining(!showTrackDurationInsteadOfRemaining) },
-        SettingsSearchEntry(stringResource(R.string.show_status_bar), stringResource(R.string.show_status_bar_search_help), listOf("status bar", "ステータスバー", "battery", "電池"), showStatusBar) { AppSettings.setShowStatusBar(!showStatusBar) },
+        SettingsSearchEntry(stringResource(R.string.show_status_bar), stringResource(R.string.show_status_bar_search_help), listOf("status bar", "library", "ステータスバー", "ライブラリ", "battery", "電池"), showStatusBar) { AppSettings.setShowStatusBar(!showStatusBar) },
+        SettingsSearchEntry(stringResource(R.string.show_player_status_bar), stringResource(R.string.show_player_status_bar_subtitle), listOf("status bar", "player", "ステータスバー", "プレイヤー", "battery", "電池"), showPlayerStatusBar) { AppSettings.setShowPlayerStatusBar(!showPlayerStatusBar) },
         SettingsSearchEntry(stringResource(R.string.show_navigation_bar), stringResource(R.string.show_navigation_bar_search_help), listOf("navigation bar", "ナビゲーションバー", "戻る", "home"), showNavigationBar) { AppSettings.setShowNavigationBar(!showNavigationBar) },
         SettingsSearchEntry(stringResource(R.string.hide_player_artist), stringResource(R.string.hide_player_artist_subtitle), listOf("artist", "アーティスト", "player"), hidePlayerArtist) { AppSettings.setHidePlayerArtist(!hidePlayerArtist) },
         SettingsSearchEntry(stringResource(R.string.player_lyrics_strip), stringResource(R.string.player_lyrics_strip_subtitle), listOf("lyrics", "歌詞", "strip", "player"), showPlayerLyricsStrip) { AppSettings.setShowPlayerLyricsStrip(!showPlayerLyricsStrip) },
@@ -1032,6 +1042,12 @@ fun SettingsScreen(
             keywords = listOf("queue", "repeat", "restart", "end", "再生キュー", "リピート", "先頭", "最初"),
             checked = restartQueueWhenEnded,
         ) { AppSettings.setRestartQueueWhenEnded(!restartQueueWhenEnded) },
+        SettingsSearchEntry(
+            title = stringResource(R.string.advance_queue_when_repeat_off),
+            subtitle = stringResource(R.string.advance_queue_when_repeat_off_subtitle),
+            keywords = listOf("queue", "repeat off", "auto advance", "next track", "再生キュー", "自動再生", "次の曲", "リピートオフ"),
+            checked = advanceQueueWhenRepeatOff,
+        ) { AppSettings.setAdvanceQueueWhenRepeatOff(!advanceQueueWhenRepeatOff) },
         SettingsSearchEntry(
             title = stringResource(R.string.screen_orientation),
             subtitle = stringResource(R.string.screen_orientation_subtitle),
@@ -2213,6 +2229,21 @@ fun SettingsScreen(
                 },
                 onClick = { AppSettings.setRestartQueueWhenEnded(!restartQueueWhenEnded) },
             )
+            RowDivider()
+            SettingsRow(
+                icon = Icons.Rounded.History,
+                title = stringResource(R.string.advance_queue_when_repeat_off),
+                subtitle = stringResource(R.string.advance_queue_when_repeat_off_subtitle),
+                trailing = {
+                    Switch(
+                        checked = advanceQueueWhenRepeatOff,
+                        onCheckedChange = AppSettings::setAdvanceQueueWhenRepeatOff,
+                    )
+                },
+                onClick = {
+                    AppSettings.setAdvanceQueueWhenRepeatOff(!advanceQueueWhenRepeatOff)
+                },
+            )
         }
 
         SettingsGroup(header = stringResource(R.string.media_controls)) {
@@ -2954,11 +2985,21 @@ fun SettingsScreen(
             SettingsRow(
                 icon = Icons.Rounded.Fullscreen,
                 title = stringResource(R.string.show_status_bar),
-                subtitle = stringResource(R.string.system_bar_visibility_subtitle),
+                subtitle = stringResource(R.string.show_status_bar_search_help),
                 trailing = {
                     Switch(checked = showStatusBar, onCheckedChange = AppSettings::setShowStatusBar)
                 },
                 onClick = { AppSettings.setShowStatusBar(!showStatusBar) },
+            )
+            RowDivider()
+            SettingsRow(
+                icon = Icons.Rounded.Fullscreen,
+                title = stringResource(R.string.show_player_status_bar),
+                subtitle = stringResource(R.string.show_player_status_bar_subtitle),
+                trailing = {
+                    Switch(checked = showPlayerStatusBar, onCheckedChange = AppSettings::setShowPlayerStatusBar)
+                },
+                onClick = { AppSettings.setShowPlayerStatusBar(!showPlayerStatusBar) },
             )
             RowDivider()
             SettingsRow(
@@ -4062,6 +4103,25 @@ fun SettingsScreen(
                     )
                 },
                 onClick = { AppSettings.setYoutubeMusicSearchDefault(!youtubeMusicSearchDefault) },
+            )
+            RowDivider()
+            SettingsRow(
+                icon = Icons.Rounded.MusicNote,
+                title = stringResource(R.string.youtube_music_include_videos),
+                subtitle = stringResource(R.string.youtube_music_include_videos_subtitle),
+                trailing = {
+                    Switch(
+                        checked = includeYoutubeMusicVideosInSearch,
+                        onCheckedChange = AppSettings::setIncludeYoutubeMusicVideosInSearch,
+                        colors = SwitchDefaults.colors(
+                            checkedTrackColor = MaterialTheme.colorScheme.primary,
+                            checkedBorderColor = MaterialTheme.colorScheme.primary,
+                        ),
+                    )
+                },
+                onClick = {
+                    AppSettings.setIncludeYoutubeMusicVideosInSearch(!includeYoutubeMusicVideosInSearch)
+                },
             )
             RowDivider()
             SettingsRow(

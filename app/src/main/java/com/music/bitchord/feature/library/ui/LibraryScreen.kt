@@ -213,7 +213,7 @@ fun LibraryScreen(
     LaunchedEffect(songs, playStatsRevision) {
         val ranked = withContext(Dispatchers.IO) {
             songs.map { song ->
-                song to LocalPlayStatsStore.getStats(context, song.localUri ?: song.videoId)
+                song to LocalPlayStatsStore.getStats(context, song)
             }.filter { (_, stats) -> stats.playedCount > 0 }
         }
         recentlyPlayedSongs = ranked
