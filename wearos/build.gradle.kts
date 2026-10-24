@@ -30,7 +30,8 @@ val signing = Properties().apply {
 
 android {
     namespace = "com.music.bitchord.wear"
-    compileSdk = 36
+    compileSdk = 37
+    buildToolsVersion = "36.0.0"
 
     defaultConfig {
         applicationId = "io.pockets.musicbestsp"

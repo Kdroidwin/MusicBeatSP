@@ -96,7 +96,15 @@ android {
     // package Android exposes to installers and to other applications.
     namespace = "com.music.bitchord"
     compileSdk = 37
+    buildToolsVersion = "36.0.0"
     ndkVersion = "27.0.12077973"
+
+    // AGP 9 disables generated BuildConfig and resValue resources by default;
+    // existing flavors and API key BuildConfig fields depend on both.
+    buildFeatures {
+        buildConfig = true
+        resValues = true
+    }
 
     sourceSets {
         getByName("main") { java.srcDir("../wearos/protocol") }
