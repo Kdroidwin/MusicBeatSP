@@ -29,7 +29,10 @@ object WebDavRepository {
         ).getOrNull() ?: return@withContext emptyList()
         val artByDir = listing.images.groupBy { dirKey(it.url) }
         listing.audio.map { entry ->
-            entry.toSong(artworkFor(entry.url, artByDir[dirKey(entry.url)].orEmpty()))
+            entry.toSong(
+                artworkUrl = artworkFor(entry.url, artByDir[dirKey(entry.url)].orEmpty()),
+                libraryRootUrl = url,
+            )
         }
     }
 
@@ -40,7 +43,10 @@ object WebDavRepository {
         allowInsecureHttp: Boolean = false,
     ): Result<Unit> = WebDavClient.testConnection(url, username, password, allowInsecureHttp)
 
-    fun WebDavClient.Entry.toSong(artworkUrl: String? = null): Song {
+    fun WebDavClient.Entry.toSong(
+        artworkUrl: String? = null,
+        libraryRootUrl: String = AppSettings.webdavUrl.value,
+    ): Song {
         val album = parentFolderName(url)
         return WebDavConfig.songFor(url, albumName = album).copy(
             // Prefer the server's display name over the URL-decoded guess when
@@ -49,6 +55,8 @@ object WebDavRepository {
                 ?.let { splitTitle(it).second } ?: WebDavConfig.songFor(url).title,
             artist = splitTitle(displayName.substringBeforeLast('.')).first
                 ?: WebDavConfig.songFor(url, album).artist,
+            albumArtist = splitTitle(displayName.substringBeforeLast('.')).first
+                ?: parentParentFolderName(url, libraryRootUrl),
             thumbnailUrl = artworkUrl,
         )
     }
@@ -79,5 +87,29 @@ object WebDavRepository {
         val path = java.net.URI(fileUrl).path.orEmpty().trimEnd('/')
         val parent = path.substringBeforeLast('/', "").substringAfterLast('/').trim()
         URLDecoder.decode(parent, "UTF-8").takeIf { it.isNotBlank() }
+    }.getOrNull()
+
+    /** In a root-relative Artist/Album/track layout, use its artist directory. */
+    private fun parentParentFolderName(fileUrl: String, libraryRootUrl: String): String? = runCatching {
+        val file = java.net.URI(fileUrl)
+        val root = java.net.URI(WebDavConfig.normalizeUrl(libraryRootUrl))
+        if (
+            !file.host.equals(root.host, ignoreCase = true) ||
+            !file.scheme.equals(root.scheme, ignoreCase = true) ||
+            file.port != root.port
+        ) return null
+
+        val rootPath = root.path.orEmpty().trimEnd('/')
+        val filePath = file.path.orEmpty().trimEnd('/')
+        if (rootPath.isNotEmpty() && filePath != rootPath && !filePath.startsWith("$rootPath/")) return null
+        val relativePath = filePath.removePrefix(rootPath).trim('/')
+        val segments = relativePath.split('/').filter(String::isNotBlank)
+        if (segments.size < 3) return null
+
+        // Skip the root-relative path prefix and only infer an artist when the
+        // file is nested at least Artist/Album/File below the configured root.
+        URLDecoder.decode(segments[segments.lastIndex - 2], "UTF-8")
+            .trim()
+            .takeIf { it.isNotBlank() }
     }.getOrNull()
 }

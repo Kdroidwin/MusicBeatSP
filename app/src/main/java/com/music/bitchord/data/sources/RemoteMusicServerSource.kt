@@ -4,8 +4,13 @@ import com.music.bitchord.BuildConfig
 import com.music.bitchord.data.Http
 import com.music.bitchord.data.model.Song
 import kotlinx.coroutines.CancellationException
+import kotlinx.coroutines.async
+import kotlinx.coroutines.awaitAll
+import kotlinx.coroutines.coroutineScope
 import kotlinx.coroutines.sync.Mutex
+import kotlinx.coroutines.sync.Semaphore
 import kotlinx.coroutines.sync.withLock
+import kotlinx.coroutines.sync.withPermit
 import kotlinx.coroutines.suspendCancellableCoroutine
 import kotlinx.serialization.json.Json
 import kotlinx.serialization.json.JsonArray
@@ -267,7 +272,37 @@ class JellyfinMusicSource(
         )) ?: throw IOException("Invalid server URL")
         val root = requestJson(url, authHeaders(auth), operation = "Jellyfin search")
         val items = root.array("Items") ?: return emptyList()
-        return items.mapNotNull { element ->
+        return mapItems(items)
+    }
+
+    override suspend fun libraryTracks(): List<Song> {
+        val auth = authenticate()
+        val result = ArrayList<Song>()
+        var startIndex = 0
+        var totalCount = Int.MAX_VALUE
+        while (startIndex < totalCount && result.size < MAX_LIBRARY_TRACKS) {
+            val pageLimit = minOf(LIBRARY_PAGE_SIZE, MAX_LIBRARY_TRACKS - result.size)
+            val url = endpoint("Users", auth.userId, "Items", query = mapOf(
+                "UserId" to auth.userId,
+                "IncludeItemTypes" to "Audio",
+                "Recursive" to "true",
+                "SortBy" to "SortName",
+                "SortOrder" to "Ascending",
+                "StartIndex" to startIndex.toString(),
+                "Limit" to pageLimit.toString(),
+                "Fields" to "MediaStreams,MediaSources,ProviderIds",
+            )) ?: throw IOException("Invalid server URL")
+            val root = requestJson(url, authHeaders(auth), operation = "Jellyfin library")
+            val items = root.array("Items") ?: break
+            if (items.isEmpty()) break
+            totalCount = root.int("TotalRecordCount") ?: (startIndex + items.size)
+            result += mapItems(items)
+            startIndex += items.size
+        }
+        return result
+    }
+
+    private fun mapItems(items: JsonArray): List<Song> = items.mapNotNull { element ->
             val item = element.objectOrNull() ?: return@mapNotNull null
             val id = item.string("Id")?.takeIf(String::isNotBlank) ?: return@mapNotNull null
             val title = item.string("Name")?.takeIf(String::isNotBlank) ?: return@mapNotNull null
@@ -307,10 +342,13 @@ class JellyfinMusicSource(
                 thumbnailUrl = imageId?.let(::sourceArtworkUri),
                 durationText = durationText(seconds),
                 albumName = album,
+                albumArtist = item.string("AlbumArtist"),
+                albumId = item.string("AlbumId"),
+                artistId = item.array("ArtistItems")?.firstOrNull()?.objectOrNull()?.string("Id"),
+                trackNumber = item.int("IndexNumber"),
                 sourceQuality = qualityLabel(format),
             )
         }
-    }
 
     override suspend fun stream(trackId: String, request: StreamRequest): SourceStream? {
         val auth = authenticate()
@@ -358,6 +396,8 @@ class JellyfinMusicSource(
 
     companion object {
         private const val TICKS_PER_SECOND = 10_000_000L
+        private const val LIBRARY_PAGE_SIZE = 500
+        private const val MAX_LIBRARY_TRACKS = 10_000
     }
 }
 
@@ -511,34 +551,105 @@ class NavidromeMusicSource(
             "artistCount" to "0",
         ), operation = "OpenSubsonic search")
         val songs = response.objectOrNull("searchResult3")?.arrayOrSingle("song") ?: return emptyList()
-        return songs.mapNotNull { element ->
-            val item = element.objectOrNull() ?: return@mapNotNull null
-            val id = item.string("id")?.takeIf(String::isNotBlank) ?: return@mapNotNull null
-            val title = item.string("title")?.takeIf(String::isNotBlank) ?: return@mapNotNull null
-            val seconds = item.int("duration")
-            val codec = item.string("suffix")?.lowercase(Locale.ROOT)
-            val format = StreamFormat(
-                codec = codec,
-                kbps = item.int("bitRate"),
-                sampleRateHz = item.int("samplingRate"),
-                bitDepth = item.int("bitDepth"),
+        return songs.mapNotNull { it.objectOrNull()?.let(::songFromSubsonic) }
+    }
+
+    /** Subsonic has no get-all-songs endpoint: page albums, then read their tracks. */
+    override suspend fun libraryTracks(): List<Song> {
+        val result = ArrayList<Song>()
+        var albumOffset = 0
+        val albumRequestSemaphore = Semaphore(MAX_CONCURRENT_LIBRARY_REQUESTS)
+        while (albumOffset < MAX_LIBRARY_ALBUMS && result.size < MAX_LIBRARY_TRACKS) {
+            val response = requestSubsonic(
+                "rest/getAlbumList2.view",
+                mapOf(
+                    "type" to "alphabeticalByName",
+                    "size" to LIBRARY_ALBUM_PAGE_SIZE.toString(),
+                    "offset" to albumOffset.toString(),
+                ),
+                operation = "OpenSubsonic library albums",
             )
-            rememberFormat(id, format)
-            val coverId = item.string("coverArt")?.takeIf(String::isNotBlank) ?: item.string("albumId")
-            Song(
-                videoId = SourceRegistry.trackKey(configId, id),
-                title = title,
-                artist = item.string("artist")?.takeIf(String::isNotBlank) ?: "Unknown Artist",
-                thumbnailUrl = coverId?.let(::sourceArtworkUri),
-                durationText = durationText(seconds),
-                albumName = item.string("album"),
-                sourceQuality = when (format.isLossless) {
-                    true -> "LOSSLESS"
-                    false -> "HIGH"
-                    null -> null
-                },
-            )
+            val albums = response.objectOrNull("albumList2")?.arrayOrSingle("album").orEmpty()
+            if (albums.isEmpty()) break
+            // OpenSubsonic has no single all-tracks endpoint, so each album
+            // needs one detail request. Keep only a few requests in flight and
+            // isolate a broken album so the rest of the library still loads.
+            val pageTracks = coroutineScope {
+                albums.map { element ->
+                    async {
+                        val album = element.objectOrNull() ?: return@async emptyList()
+                        val albumId = album.string("id")?.takeIf(String::isNotBlank)
+                            ?: return@async emptyList()
+                        val albumName = album.string("name")
+                        val albumArtist = album.string("artist")?.takeIf(String::isNotBlank)
+                        try {
+                            albumRequestSemaphore.withPermit {
+                                val albumResponse = requestSubsonic(
+                                    "rest/getAlbum.view",
+                                    mapOf("id" to albumId),
+                                    operation = "OpenSubsonic album tracks",
+                                )
+                                val trackItems = albumResponse.objectOrNull("album")
+                                    ?.arrayOrSingle("song").orEmpty()
+                                trackItems.mapNotNull { item ->
+                                    item.objectOrNull()?.let { songFromSubsonic(it, albumName, albumArtist) }
+                                }
+                            }
+                        } catch (cancelled: CancellationException) {
+                            throw cancelled
+                        } catch (_: Exception) {
+                            emptyList()
+                        }
+                    }
+                }
+            }
+            pageTracks.awaitAll().forEach { tracks ->
+                val remaining = MAX_LIBRARY_TRACKS - result.size
+                if (remaining > 0) result.addAll(tracks.take(remaining))
+            }
+            albumOffset += albums.size
+            if (albums.size < LIBRARY_ALBUM_PAGE_SIZE) break
         }
+        return result.take(MAX_LIBRARY_TRACKS)
+    }
+
+    private fun songFromSubsonic(
+        item: JsonObject,
+        fallbackAlbumName: String? = null,
+        fallbackAlbumArtist: String? = null,
+    ): Song? {
+        val id = item.string("id")?.takeIf(String::isNotBlank) ?: return null
+        val title = item.string("title")?.takeIf(String::isNotBlank) ?: return null
+        val seconds = item.int("duration")
+        val format = StreamFormat(
+            codec = item.string("suffix")?.lowercase(Locale.ROOT),
+            kbps = item.int("bitRate"),
+            sampleRateHz = item.int("samplingRate"),
+            bitDepth = item.int("bitDepth"),
+        )
+        rememberFormat(id, format)
+        val albumId = item.string("albumId")
+        val coverId = item.string("coverArt")?.takeIf(String::isNotBlank) ?: albumId
+        val disc = item.int("discNumber")?.takeIf { it > 0 } ?: 1
+        val track = item.int("track") ?: item.int("trackNumber")
+        val trackNumber = track?.takeIf { it > 0 }?.let { (disc * 1_000) + it }
+        return Song(
+            videoId = SourceRegistry.trackKey(configId, id),
+            title = title,
+            artist = item.string("artist")?.takeIf(String::isNotBlank) ?: "Unknown Artist",
+            thumbnailUrl = coverId?.let(::sourceArtworkUri),
+            durationText = durationText(seconds),
+            albumName = item.string("album")?.takeIf(String::isNotBlank) ?: fallbackAlbumName,
+            albumArtist = item.string("albumArtist")?.takeIf(String::isNotBlank) ?: fallbackAlbumArtist,
+            artistId = item.string("artistId"),
+            albumId = albumId,
+            trackNumber = trackNumber,
+            sourceQuality = when (format.isLossless) {
+                true -> "LOSSLESS"
+                false -> "HIGH"
+                null -> null
+            },
+        )
     }
 
     override suspend fun stream(trackId: String, request: StreamRequest): SourceStream? {
@@ -578,6 +689,10 @@ class NavidromeMusicSource(
     companion object {
         private const val SUBSONIC_VERSION = "1.16.1"
         private const val CLIENT_ID = "MusicBeatSP"
+        private const val LIBRARY_ALBUM_PAGE_SIZE = 200
+        private const val MAX_LIBRARY_ALBUMS = 10_000
+        private const val MAX_LIBRARY_TRACKS = 10_000
+        private const val MAX_CONCURRENT_LIBRARY_REQUESTS = 4
         private const val TOKEN_AUTH_UNSUPPORTED = 41
         private const val MAX_AUTH_ATTEMPTS = 3
         private val API_KEY_AUTH_UNAVAILABLE_CODES = setOf(10, 40, 42)

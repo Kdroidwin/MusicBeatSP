@@ -91,6 +91,7 @@ import androidx.compose.material3.Slider
 import androidx.compose.material3.SliderDefaults
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.CancellationException
+import kotlinx.coroutines.Dispatchers
 import androidx.compose.material.icons.automirrored.rounded.QueueMusic
 import androidx.compose.material.icons.rounded.Album
 import androidx.compose.material.icons.rounded.Folder
@@ -240,6 +241,7 @@ import com.music.bitchord.ui.components.isGlassSupported
 import com.music.bitchord.data.sources.SourceConfig
 import com.music.bitchord.data.sources.SourceRegistry
 import com.music.bitchord.data.sources.SourceKind
+import com.music.bitchord.data.webdav.WebDavRepository
 import com.music.bitchord.ui.components.FieldConfig
 import com.music.bitchord.ui.components.ServerEditorHost
 import com.music.bitchord.ui.components.ListenBrainzTokenAlert
@@ -297,6 +299,7 @@ import dev.chrisbanes.haze.materials.ExperimentalHazeMaterialsApi
 import dev.chrisbanes.haze.materials.HazeMaterials
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.async
+import kotlinx.coroutines.withContext
 import java.util.Locale
 
 /** A full first screen of a native YouTube Music radio before AutoPlay tops it up. */
@@ -901,6 +904,50 @@ private fun BitChordApp(
     val localArtworkPreload by viewModel.localArtworkPreload.collectAsStateWithLifecycle()
     val localSongs = (localSongsState as? UiState.Success)?.data.orEmpty()
     val localEmptyMessage = (localSongsState as? UiState.Error)?.message
+    val includeRemoteSourceMedia by AppSettings.includeRemoteSourceMediaInLibrary.collectAsStateWithLifecycle()
+    val webdavUrl by AppSettings.webdavUrl.collectAsStateWithLifecycle()
+    val webdavUsername by AppSettings.webdavUsername.collectAsStateWithLifecycle()
+    val webdavPassword by AppSettings.webdavPassword.collectAsStateWithLifecycle()
+    val webdavAllowInsecureHttp by AppSettings.webdavAllowInsecureHttp.collectAsStateWithLifecycle()
+    var remoteLibraryRefresh by remember { mutableIntStateOf(0) }
+    var remoteLibrarySongs by remember { mutableStateOf<List<com.music.bitchord.data.model.Song>>(emptyList()) }
+    LaunchedEffect(
+        includeRemoteSourceMedia,
+        offlineMode,
+        context.packageName,
+        remoteServerConfigs,
+        webdavUrl,
+        webdavUsername,
+        webdavPassword,
+        webdavAllowInsecureHttp,
+        remoteLibraryRefresh,
+    ) {
+        if (!includeRemoteSourceMedia || offlineMode || context.packageName.endsWith(".nointernet")) {
+            remoteLibrarySongs = emptyList()
+            return@LaunchedEffect
+        }
+        val loaded = withContext(Dispatchers.IO) {
+            val serverSongs = SourceRegistry.remoteLibraryTracks()
+            val webdavSongs = try {
+                WebDavRepository.getSongs()
+            } catch (cancelled: CancellationException) {
+                throw cancelled
+            } catch (_: Exception) {
+                emptyList()
+            }
+            (serverSongs + webdavSongs).distinctBy { it.videoId }
+        }
+        remoteLibrarySongs = loaded
+    }
+    val catalogSongs = remember(localSongs, remoteLibrarySongs, includeRemoteSourceMedia) {
+        if (includeRemoteSourceMedia) (localSongs + remoteLibrarySongs).distinctBy { it.videoId }
+        else localSongs
+    }
+    val catalogEmptyMessage = localEmptyMessage.takeIf { catalogSongs.isEmpty() }
+    val refreshCatalog: () -> Unit = {
+        viewModel.loadLocalMusic(isPullToRefresh = true)
+        if (includeRemoteSourceMedia) remoteLibraryRefresh++
+    }
     val preloadArtworkOnStartup by AppSettings.preloadAlbumArtOnStartup.collectAsStateWithLifecycle()
 
     LaunchedEffect(preloadArtworkOnStartup, hasStoragePermission) {
@@ -2358,7 +2405,7 @@ private fun BitChordApp(
                             contentPadding = listPadding,
                         )
                     } else when (key.removePrefix(TAB_KEY).toIntOrNull() ?: selectedTab) {
-                        TAB_SONGS -> if (!hasStoragePermission) {
+                        TAB_SONGS -> if (!hasStoragePermission && catalogSongs.isEmpty()) {
                             Box(modifier = Modifier.fillMaxSize().padding(listPadding), contentAlignment = Alignment.Center) {
                                 LocalPermissionCard(
                                     onRequestPermission = requestDefaultPermission,
@@ -2367,13 +2414,13 @@ private fun BitChordApp(
                             }
                         } else {
                             LocalMusicScreen(
-                                songs = localSongs,
+                                songs = catalogSongs,
                                 collections = emptyList(),
                                 isDownloads = false,
                                 currentSong = player.song,
                                 isPlaying = player.isPlaying,
                                 isRefreshing = isRefreshingLocalMusic,
-                                onRefresh = { viewModel.loadLocalMusic(isPullToRefresh = true) },
+                                onRefresh = refreshCatalog,
                                 onSongClick = play,
                                 onSongLongPress = openSongMenu,
                                 onSongSwipe = onSongSwipe,
@@ -2381,7 +2428,7 @@ private fun BitChordApp(
                                     QueueShuffle.enableForNextQueue()
                                     play(songs, songs.indices.random())
                                 },
-                                emptyMessage = localEmptyMessage,
+                                emptyMessage = catalogEmptyMessage,
                                 onCollectionLongPress = { label, grouped ->
                                     browseActions = BrowseTarget(
                                         browseId = null,
@@ -2405,7 +2452,7 @@ private fun BitChordApp(
                                 onCollectionNavigationChanged = onCollectionNavigationChanged,
                             )
                         }
-                        TAB_ALBUMS -> if (!hasStoragePermission) {
+                        TAB_ALBUMS -> if (!hasStoragePermission && catalogSongs.isEmpty()) {
                             Box(modifier = Modifier.fillMaxSize().padding(listPadding), contentAlignment = Alignment.Center) {
                                 LocalPermissionCard(
                                     onRequestPermission = requestDefaultPermission,
@@ -2414,13 +2461,13 @@ private fun BitChordApp(
                             }
                         } else {
                             LocalMusicScreen(
-                                songs = localSongs,
+                                songs = catalogSongs,
                                 collections = emptyList(),
                                 isDownloads = false,
                                 currentSong = player.song,
                                 isPlaying = player.isPlaying,
                                 isRefreshing = isRefreshingLocalMusic,
-                                onRefresh = { viewModel.loadLocalMusic(isPullToRefresh = true) },
+                                onRefresh = refreshCatalog,
                                 onSongClick = play,
                                 onSongLongPress = openSongMenu,
                                 onSongSwipe = onSongSwipe,
@@ -2428,7 +2475,7 @@ private fun BitChordApp(
                                     QueueShuffle.enableForNextQueue()
                                     play(songs, songs.indices.random())
                                 },
-                                emptyMessage = localEmptyMessage,
+                                emptyMessage = catalogEmptyMessage,
                                 onCollectionLongPress = { label, grouped ->
                                     browseActions = BrowseTarget(
                                         browseId = null,
@@ -2454,7 +2501,7 @@ private fun BitChordApp(
                                 onCollectionNavigationChanged = onCollectionNavigationChanged,
                             )
                         }
-                        TAB_ARTISTS -> if (!hasStoragePermission) {
+                        TAB_ARTISTS -> if (!hasStoragePermission && catalogSongs.isEmpty()) {
                             Box(modifier = Modifier.fillMaxSize().padding(listPadding), contentAlignment = Alignment.Center) {
                                 LocalPermissionCard(
                                     onRequestPermission = requestDefaultPermission,
@@ -2463,13 +2510,13 @@ private fun BitChordApp(
                             }
                         } else {
                             LocalMusicScreen(
-                                songs = localSongs,
+                                songs = catalogSongs,
                                 collections = emptyList(),
                                 isDownloads = false,
                                 currentSong = player.song,
                                 isPlaying = player.isPlaying,
                                 isRefreshing = isRefreshingLocalMusic,
-                                onRefresh = { viewModel.loadLocalMusic(isPullToRefresh = true) },
+                                onRefresh = refreshCatalog,
                                 onSongClick = play,
                                 onSongLongPress = openSongMenu,
                                 onSongSwipe = onSongSwipe,
@@ -2477,7 +2524,7 @@ private fun BitChordApp(
                                     QueueShuffle.enableForNextQueue()
                                     play(songs, songs.indices.random())
                                 },
-                                emptyMessage = localEmptyMessage,
+                                emptyMessage = catalogEmptyMessage,
                                 onCollectionLongPress = { label, grouped ->
                                     browseActions = BrowseTarget(
                                         browseId = null,
@@ -2503,7 +2550,7 @@ private fun BitChordApp(
                                 onCollectionNavigationChanged = onCollectionNavigationChanged,
                             )
                         }
-                        TAB_ALBUM_ARTISTS -> if (!hasStoragePermission) {
+                        TAB_ALBUM_ARTISTS -> if (!hasStoragePermission && catalogSongs.isEmpty()) {
                             Box(modifier = Modifier.fillMaxSize().padding(listPadding), contentAlignment = Alignment.Center) {
                                 LocalPermissionCard(
                                     onRequestPermission = requestDefaultPermission,
@@ -2512,13 +2559,13 @@ private fun BitChordApp(
                             }
                         } else {
                             LocalMusicScreen(
-                                songs = localSongs,
+                                songs = catalogSongs,
                                 collections = emptyList(),
                                 isDownloads = false,
                                 currentSong = player.song,
                                 isPlaying = player.isPlaying,
                                 isRefreshing = isRefreshingLocalMusic,
-                                onRefresh = { viewModel.loadLocalMusic(isPullToRefresh = true) },
+                                onRefresh = refreshCatalog,
                                 onSongClick = play,
                                 onSongLongPress = openSongMenu,
                                 onSongSwipe = onSongSwipe,
@@ -2526,7 +2573,7 @@ private fun BitChordApp(
                                     QueueShuffle.enableForNextQueue()
                                     play(songs, songs.indices.random())
                                 },
-                                emptyMessage = localEmptyMessage,
+                                emptyMessage = catalogEmptyMessage,
                                 onCollectionLongPress = { label, grouped ->
                                     browseActions = BrowseTarget(
                                         browseId = null,
@@ -2550,7 +2597,7 @@ private fun BitChordApp(
                                 onCollectionNavigationChanged = onCollectionNavigationChanged,
                             )
                         }
-                        TAB_LIBRARY -> if (!hasStoragePermission) {
+                        TAB_LIBRARY -> if (!hasStoragePermission && catalogSongs.isEmpty()) {
                             Box(modifier = Modifier.fillMaxSize().padding(listPadding), contentAlignment = Alignment.Center) {
                                 LocalPermissionCard(
                                     onRequestPermission = requestDefaultPermission,
@@ -2559,7 +2606,7 @@ private fun BitChordApp(
                             }
                         } else {
                             LibraryScreen(
-                                songs = localSongs,
+                                songs = catalogSongs,
                                 currentSong = player.song,
                                 isPlaying = player.isPlaying,
                                 onSongClick = play,
@@ -2831,6 +2878,7 @@ private fun BitChordApp(
                             hazeState = hazeState,
                             onTabSelected = onTabSelected,
                             modifier = Modifier.fillMaxWidth(),
+                            song = player.song?.takeUnless { playerDocked },
                         )
                     }
                 } else if (useCollapsibleNavBar) {
@@ -2897,6 +2945,7 @@ private fun BitChordApp(
                         selectedIndex = visibleTabIndices.indexOf(selectedTab).coerceAtLeast(0),
                         hazeState = hazeState,
                         onTabSelected = onTabSelected,
+                        song = player.song?.takeUnless { playerDocked },
                     )
                 }
                 }

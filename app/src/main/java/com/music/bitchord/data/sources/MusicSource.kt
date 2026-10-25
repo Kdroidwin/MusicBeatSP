@@ -171,6 +171,13 @@ interface MusicSource {
      */
     suspend fun search(query: String, limit: Int = 25, waitForAll: Boolean = false): List<Song>
 
+    /**
+     * Tracks in this source's own library, when the protocol exposes one.
+     * Search-only catalogues keep the default empty result; server sources
+     * override this for the opt-in combined library view.
+     */
+    suspend fun libraryTracks(): List<Song> = emptyList()
+
     /** Artwork bytes for an opaque server image id. Auth is kept inside the source. */
     suspend fun artwork(imageId: String): ByteArray? = null
 

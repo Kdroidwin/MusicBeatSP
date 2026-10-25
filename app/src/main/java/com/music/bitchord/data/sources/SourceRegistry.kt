@@ -201,6 +201,24 @@ object SourceRegistry {
         return active().filter { ceiling.permits(it.kind) }
     }
 
+    /**
+     * Lists tracks from configured server libraries for the optional unified
+     * Songs / Albums / Artists views. Each server is isolated: an unreachable
+     * server leaves the other libraries usable, and cancellation still stops
+     * the whole refresh promptly.
+     */
+    suspend fun remoteLibraryTracks(): List<com.music.bitchord.data.model.Song> = buildList {
+        active().filter { it.kind.isRemoteMusicServer }.forEach { source ->
+            try {
+                addAll(source.libraryTracks())
+            } catch (cancelled: kotlinx.coroutines.CancellationException) {
+                throw cancelled
+            } catch (error: Exception) {
+                TrackLog.w(TAG, "Could not list ${source.displayName} library: ${error.message}")
+            }
+        }
+    }
+
     fun instance(configId: String): MusicSource? = instances[configId]
 
     fun config(configId: String): SourceConfig? = configs.value.firstOrNull { it.id == configId }
