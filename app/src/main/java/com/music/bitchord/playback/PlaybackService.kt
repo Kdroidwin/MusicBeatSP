@@ -717,7 +717,12 @@ class PlaybackService : MediaLibraryService() {
             // session is currently pointed at.
             val exoPlayer = player ?: return
             if (isExternalPreviewPlaying(exoPlayer)) {
-                updateCurrentLocalPlayStats(isPlaying = false, song = exoPlayer.currentMediaItem?.toSong())
+                // The preview replaces the active queue temporarily, but the
+                // audible-time history tracker still follows it. Starting the
+                // segment here avoids losing the first five-second sample and
+                // lets file-manager plays meet the same threshold as other
+                // local tracks.
+                updateCurrentLocalPlayStats(isPlaying = isPlaying, song = exoPlayer.currentMediaItem?.toSong())
                 savePlaybackState(exoPlayer)
                 updateExternalAudioPopup(exoPlayer)
                 ListeningRecorder.onStopped()
@@ -2114,7 +2119,10 @@ class PlaybackService : MediaLibraryService() {
 
     /** Tracks only audible time; pausing or changing tracks closes the current segment. */
     private fun updateCurrentLocalPlayStats(isPlaying: Boolean, song: Song?) {
-        val statsSong = song?.takeUnless { it.isLiveRadio || it.isExternalPreview }
+        // Audio opened from a file manager is a real listen too. The preview
+        // flag only controls the temporary one-file queue and popup; it must
+        // not exclude that track from recent/most-played statistics.
+        val statsSong = song?.takeUnless { it.isLiveRadio }
         val songId = statsSong?.let(::localPlayStatsIdentity)
         if (songId != null && songId != currentPlayStatsSongId) {
             finishCurrentLocalPlayStatsSegment()
@@ -4260,7 +4268,10 @@ class PlaybackService : MediaLibraryService() {
                 val player = this@PlaybackService.player
                 if (player != null && player.isPlaying) {
                     if (isExternalPreviewPlaying(player)) {
-                        updateCurrentLocalPlayStats(isPlaying = false, song = player.currentMediaItem?.toSong())
+                        // File-manager previews intentionally skip scrobbling
+                        // and queue bookkeeping below, but still count audible
+                        // time toward this device's playback history.
+                        updateCurrentLocalPlayStats(isPlaying = true, song = player.currentMediaItem?.toSong())
                         savePlaybackState(player)
                         publishNerdStats()
                         delay(PROGRESS_SAMPLE_MS)
