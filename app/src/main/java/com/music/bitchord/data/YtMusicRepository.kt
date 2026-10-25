@@ -35,6 +35,7 @@ import java.util.concurrent.ConcurrentHashMap
 object YtMusicRepository {
 
     private const val TAG = "BitChord"
+    private val VIDEO_INCLUSIVE_FILTERS = setOf(SearchFilter.ALL, SearchFilter.SONGS)
     private val moodGenreShelfCache = ConcurrentHashMap<String, List<HomeShelf>>()
 
     class FeatureDisabledException : IllegalStateException("YouTube Music is disabled in settings")
@@ -255,6 +256,7 @@ object YtMusicRepository {
     data class SearchPage(
         val rows: List<SearchResult>,
         val continuation: String?,
+        val videoContinuation: String? = null,
     )
 
     /**
@@ -266,30 +268,107 @@ object YtMusicRepository {
         query: String,
         filter: SearchFilter,
         includeVideosInAll: Boolean = false,
-    ): Result<SearchPage> =
-        call("search:${filter.name}") {
-            InnertubeParser.parseSearchPage(
-                Innertube.search(query, filter.params),
-                includeVideos = filter == SearchFilter.VIDEOS,
-                includeVideosInAll = includeVideosInAll && filter == SearchFilter.ALL,
-            ).let { page ->
-                SearchPage(page.rows.distinctBy { it.identityKey() }, page.continuation)
+    ): Result<SearchPage> = coroutineScope {
+        val addVideoSearch = includeVideosInAll && filter in VIDEO_INCLUSIVE_FILTERS
+        val mainRequest = async {
+            call("search:${filter.name}") {
+                InnertubeParser.parseSearchPage(
+                    Innertube.search(query, filter.params),
+                    includeVideos = filter == SearchFilter.VIDEOS,
+                    includeVideosInAll = includeVideosInAll && filter == SearchFilter.ALL,
+                )
             }
         }
+        val videoRequest = if (addVideoSearch) async {
+            call("search:videos") {
+                InnertubeParser.parseSearchPage(
+                    Innertube.search(query, SearchFilter.VIDEOS.params),
+                    includeVideos = true,
+                )
+            }
+        } else null
+
+        val main = mainRequest.await().getOrElse { return@coroutineScope Result.failure(it) }
+        val videos = videoRequest?.await()?.getOrNull()
+        Result.success(
+            mergeSearchPages(
+                main = main,
+                videos = videos,
+                includeVideoRows = addVideoSearch,
+            ),
+        )
+    }
 
     /** Fetches the next page of a search only when the result list needs it. */
     suspend fun searchContinuation(
-        token: String,
+        token: String?,
         filter: SearchFilter,
         includeVideosInAll: Boolean = false,
-    ): Result<SearchPage> = call("search:continuation") {
-        InnertubeParser.parseSearchPage(
-            Innertube.searchContinuation(token),
-            includeVideos = filter == SearchFilter.VIDEOS,
-            includeVideosInAll = includeVideosInAll && filter == SearchFilter.ALL,
-        ).let { page ->
-            SearchPage(page.rows.distinctBy { it.identityKey() }, page.continuation)
+        videoContinuation: String? = null,
+    ): Result<SearchPage> = coroutineScope {
+        val addVideoSearch = includeVideosInAll && filter in VIDEO_INCLUSIVE_FILTERS
+        val mainRequest = token?.let { continuation ->
+            async {
+                call("search:continuation") {
+                    InnertubeParser.parseSearchPage(
+                        Innertube.searchContinuation(continuation),
+                        includeVideos = filter == SearchFilter.VIDEOS,
+                        includeVideosInAll = includeVideosInAll && filter == SearchFilter.ALL,
+                    )
+                }
+            }
         }
+        val videoRequest = if (addVideoSearch && videoContinuation != null) async {
+            call("search:videos:continuation") {
+                InnertubeParser.parseSearchPage(
+                    Innertube.searchContinuation(videoContinuation),
+                    includeVideos = true,
+                )
+            }
+        } else null
+
+        val mainResult = mainRequest?.await()
+        val videoResult = videoRequest?.await()
+        val main = mainResult?.getOrNull()
+        val videos = videoResult?.getOrNull()
+        if (main == null && videos == null) {
+            return@coroutineScope Result.failure(
+                mainResult?.exceptionOrNull()
+                    ?: videoResult?.exceptionOrNull()
+                    ?: IllegalStateException("No search continuation is available"),
+            )
+        }
+        Result.success(
+            mergeSearchPages(
+                main = main ?: InnertubeParser.SearchPage(emptyList(), null),
+                videos = videos,
+                includeVideoRows = addVideoSearch,
+            ),
+        )
+    }
+
+    private fun mergeSearchPages(
+        main: InnertubeParser.SearchPage,
+        videos: InnertubeParser.SearchPage?,
+        includeVideoRows: Boolean,
+    ): SearchPage {
+        val rows = LinkedHashMap<String, SearchResult>()
+        main.rows.forEach { rows[it.identityKey()] = it }
+        if (includeVideoRows && videos != null) {
+            videos.rows.mapNotNull(::asVideoSearchResult).forEach { rows[it.identityKey()] = it }
+        }
+        return SearchPage(
+            rows = rows.values.toList(),
+            continuation = main.continuation,
+            videoContinuation = videos?.continuation,
+        )
+    }
+
+    /** A result from YouTube's explicit Videos filter is a video even when its thumbnail is square. */
+    private fun asVideoSearchResult(result: SearchResult): SearchResult? = when (result) {
+        is SearchResult.TopTrack -> SearchResult.TopTrack(result.song.copy(isVideo = true))
+        is SearchResult.Track -> SearchResult.Track(result.song.copy(isVideo = true))
+        is SearchResult.Browse -> null
     }
 
     /**

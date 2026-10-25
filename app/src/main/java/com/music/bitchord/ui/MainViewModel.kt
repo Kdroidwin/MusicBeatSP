@@ -255,6 +255,7 @@ class MainViewModel(app: Application) : AndroidViewModel(app) {
     private data class SearchCacheEntry(
         val rows: List<SearchResult>,
         val continuation: String?,
+        val videoContinuation: String?,
     )
 
     private data class SearchSession(
@@ -263,6 +264,7 @@ class MainViewModel(app: Application) : AndroidViewModel(app) {
         val filter: SearchFilter,
         val includeVideosInAll: Boolean,
         val continuation: String?,
+        val videoContinuation: String?,
     )
 
     private val searchCache = LruCache<String, SearchCacheEntry>(SEARCH_CACHE_ENTRIES)
@@ -1792,7 +1794,7 @@ class MainViewModel(app: Application) : AndroidViewModel(app) {
         youtubeMusicOnly: Boolean,
         includeVideosInAll: Boolean,
     ) = "${if (youtubeMusicOnly) "youtube:" else "local:"}${filter.name}:" +
-        "${if (youtubeMusicOnly && filter == SearchFilter.ALL && includeVideosInAll) "videos" else "audio"}:$query"
+        "${if (youtubeMusicOnly && filter in VIDEO_INCLUSIVE_SEARCH_FILTERS && includeVideosInAll) "videos" else "audio"}:$query"
 
     /**
      * The results of the longest earlier query this one starts with — near
@@ -1805,7 +1807,7 @@ class MainViewModel(app: Application) : AndroidViewModel(app) {
         includeVideosInAll: Boolean,
     ): List<SearchResult>? {
         val scope = if (youtubeMusicOnly) "youtube" else "local"
-        val videoMode = if (youtubeMusicOnly && filter == SearchFilter.ALL && includeVideosInAll) "videos" else "audio"
+        val videoMode = if (youtubeMusicOnly && filter in VIDEO_INCLUSIVE_SEARCH_FILTERS && includeVideosInAll) "videos" else "audio"
         val prefix = "$scope:${filter.name}:$videoMode:"
         return searchCache.snapshot()
             .filterKeys { it.startsWith(prefix) && query.startsWith(it.removePrefix(prefix), true) }
@@ -1888,8 +1890,9 @@ class MainViewModel(app: Application) : AndroidViewModel(app) {
                         filter = request.filter,
                         includeVideosInAll = request.includeVideosInAll,
                         continuation = exact.continuation,
+                        videoContinuation = exact.videoContinuation,
                     )
-                    _searchHasMore.value = exact.continuation != null
+                    _searchHasMore.value = exact.continuation != null || exact.videoContinuation != null
                     return@collectLatest
                 }
 
@@ -1947,23 +1950,29 @@ class MainViewModel(app: Application) : AndroidViewModel(app) {
      */
     fun loadMoreSearchResults() {
         val session = searchSession ?: return
-        val token = session.continuation ?: return
+        if (session.continuation == null && session.videoContinuation == null) return
         if (_searchLoadingMore.value) return
         _searchLoadingMore.value = true
         viewModelScope.launch {
             val next = YtMusicRepository.searchContinuation(
-                token,
+                session.continuation,
                 session.filter,
                 includeVideosInAll = session.includeVideosInAll,
+                videoContinuation = session.videoContinuation,
             )
             val stillCurrent = searchSession == session && session.requestId == newestRequestId.get()
             if (stillCurrent) {
                 next.onSuccess { page ->
                     val current = (_results.value as? UiState.Success)?.data.orEmpty()
-                    val merged = (current + page.rows).distinctBy(::searchResultKey)
-                    searchCache.put(session.key, SearchCacheEntry(merged, page.continuation))
-                    searchSession = session.copy(continuation = page.continuation)
-                    _searchHasMore.value = page.continuation != null
+                    val mergedByKey = LinkedHashMap<String, SearchResult>()
+                    (current + page.rows).forEach { mergedByKey[searchResultKey(it)] = it }
+                    val merged = mergedByKey.values.toList()
+                    searchCache.put(session.key, SearchCacheEntry(merged, page.continuation, page.videoContinuation))
+                    searchSession = session.copy(
+                        continuation = page.continuation,
+                        videoContinuation = page.videoContinuation,
+                    )
+                    _searchHasMore.value = page.continuation != null || page.videoContinuation != null
                     _results.value = UiState.Success(merged)
                 }.onFailure {
                     // Keep the current rows usable and stop automatic retries
@@ -2025,9 +2034,16 @@ class MainViewModel(app: Application) : AndroidViewModel(app) {
     ): UiState<List<SearchResult>> {
         val rows = page.rows
         if (rows.isEmpty()) return UiState.Error(text(R.string.no_results))
-        searchCache.put(key, SearchCacheEntry(rows, page.continuation))
-        searchSession = SearchSession(key, requestId, filter, includeVideosInAll, page.continuation)
-        _searchHasMore.value = page.continuation != null
+        searchCache.put(key, SearchCacheEntry(rows, page.continuation, page.videoContinuation))
+        searchSession = SearchSession(
+            key,
+            requestId,
+            filter,
+            includeVideosInAll,
+            page.continuation,
+            page.videoContinuation,
+        )
+        _searchHasMore.value = page.continuation != null || page.videoContinuation != null
         prefetchTopResult(rows)
         return UiState.Success(rows)
     }
@@ -2037,6 +2053,8 @@ class MainViewModel(app: Application) : AndroidViewModel(app) {
         is SearchResult.Track -> "v:${row.song.videoId}"
         is SearchResult.Browse -> "b:${row.item.browseId}"
     }
+
+    private val VIDEO_INCLUSIVE_SEARCH_FILTERS = setOf(SearchFilter.ALL, SearchFilter.SONGS)
 
     /**
      * The enabled non-YouTube sources, asked at the same time and returned

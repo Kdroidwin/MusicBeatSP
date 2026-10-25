@@ -236,6 +236,7 @@ import coil3.toBitmap
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
 import com.music.bitchord.ui.theme.SystemBarIcons
+import com.music.bitchord.ui.theme.SystemBarVisibility
 import com.music.bitchord.ui.rememberIsForeground
 import com.music.bitchord.ui.theme.rememberArtworkPalette
 import com.music.bitchord.ui.components.ArtworkBackdrop
@@ -896,6 +897,12 @@ fun NowPlayingScreen(
         val artLuminance = rememberArtworkLuminance(backdropArtworkUrl)
         val isLightArtwork = artLuminance?.let { it > LIGHT_ARTWORK_LUMINANCE_THRESHOLD } ?: false
         SystemBarIcons(dark = isLightArtwork)
+        val showPlayerStatusBar by AppSettings.showPlayerStatusBar.collectAsStateWithLifecycle()
+        val showNavigationBar by AppSettings.showNavigationBar.collectAsStateWithLifecycle()
+        SystemBarVisibility(
+            showStatusBar = showPlayerStatusBar,
+            showNavigationBar = showNavigationBar,
+        )
     }
 
     // Kept local to the player: a modal player is not in the page's Haze
