@@ -6,12 +6,15 @@ import android.net.Uri
 import android.os.Build
 import android.os.Process
 import android.provider.MediaStore
+import android.util.Log
 import android.widget.Toast
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.IntentSenderRequest
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.activity.compose.BackHandler
 import androidx.compose.animation.AnimatedContent
+import androidx.compose.animation.EnterTransition
+import androidx.compose.animation.ExitTransition
 import androidx.compose.animation.fadeIn
 import androidx.compose.animation.fadeOut
 import androidx.compose.animation.slideInHorizontally
@@ -94,6 +97,7 @@ import com.music.bitchord.feature.localmusic.ui.components.rememberPlaylistCover
 import com.music.bitchord.ui.components.FastScroller
 import com.music.bitchord.ui.components.SectionIndexer
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.withContext
 
 @Composable
@@ -206,16 +210,66 @@ fun LibraryScreen(
     val playStatsRevision by LocalPlayStatsStore.revision.collectAsStateWithLifecycle()
     var recentlyPlayedSongs by remember { mutableStateOf<List<Song>>(emptyList()) }
     var mostPlayedSongs by remember { mutableStateOf<List<Song>>(emptyList()) }
+    var historyRefresh by remember { mutableStateOf(0) }
     val choosePlaylistCover = rememberPlaylistCoverPicker { playlistId, uri ->
         LocalPlaylistStore.setPlaylistCover(playlistId, uri)
     }
 
-    LaunchedEffect(songs, playStatsRevision) {
+    LaunchedEffect(songs, playStatsRevision, historyRefresh) {
         val ranked = withContext(Dispatchers.IO) {
-            songs.map { song ->
-                song to LocalPlayStatsStore.getStats(context, song)
-            }.filter { (_, stats) -> stats.playedCount > 0 }
-        }
+            try {
+                val snapshot = LocalPlayStatsStore.snapshot(context)
+                val byVideoId = LinkedHashMap<String, Pair<Song, com.music.bitchord.feature.localsongactions.domain.model.LocalPlayStats>>()
+
+                // The local library list is MediaStore-only. A track played
+                // from a YouTube Music playlist (especially a music video) is
+                // recorded by playback but is not a MediaStore row, so ranking
+                // only `songs` made that valid history invisible. Rebuild those
+                // rows from the metadata persisted beside each stats alias.
+                snapshot.values
+                    .asSequence()
+                    .filter { it.playedCount > 0 && !it.songVideoId.isNullOrBlank() && !it.songTitle.isNullOrBlank() }
+                    .groupBy { it.songVideoId!! }
+                    .forEach { (videoId, aliases) ->
+                        val latest = aliases.maxByOrNull { it.lastPlayedTimestamp } ?: return@forEach
+                        val stats = latest.copy(
+                            playedCount = aliases.maxOf { it.playedCount },
+                            skippedCount = aliases.maxOf { it.skippedCount },
+                            lastPlayedTimestamp = aliases.maxOf { it.lastPlayedTimestamp },
+                        )
+                        val savedSong = Song(
+                            videoId = videoId,
+                            title = latest.songTitle.orEmpty(),
+                            artist = latest.songArtist.orEmpty(),
+                            thumbnailUrl = latest.songThumbnailUrl,
+                            durationText = latest.songDurationText,
+                            artistId = latest.songArtistId,
+                            albumId = latest.songAlbumId,
+                            albumName = latest.songAlbumName,
+                            isVideo = latest.songIsVideo == true,
+                            isVideoOrigin = latest.songIsVideoOrigin ?: (latest.songIsVideo == true),
+                        )
+                        byVideoId[videoId] = savedSong to stats
+                    }
+
+                // Prefer the current MediaStore row when it exists, preserving
+                // its local URI, path, tags, and artwork behavior. This also
+                // keeps legacy history (which predates saved track metadata)
+                // visible exactly as before.
+                songs.forEach { song ->
+                    val stats = LocalPlayStatsStore.getStats(song, snapshot)
+                    if (stats.playedCount > 0) byVideoId[song.videoId] = song to stats
+                }
+                byVideoId.values.toList()
+            } catch (cancelled: CancellationException) {
+                throw cancelled
+            } catch (error: Exception) {
+                // Keep the last successfully computed lists rather than
+                // interpreting a transient read failure as an empty history.
+                Log.e("LibraryScreen", "Could not load local play history", error)
+                null
+            }
+        } ?: return@LaunchedEffect
         recentlyPlayedSongs = ranked
             .sortedByDescending { it.second.lastPlayedTimestamp }
             .map { it.first }
@@ -226,6 +280,15 @@ fun LibraryScreen(
     }
 
     var selectedFilter by rememberSaveable { mutableStateOf(LibraryFilter.ALL) }
+    val selectLibraryFilter: (LibraryFilter) -> Unit = { filter ->
+        if (filter == LibraryFilter.RECENTLY_PLAYED || filter == LibraryFilter.MOST_PLAYED) {
+            // The library can stay composed while another tab is visible, so
+            // take a fresh snapshot on each history visit instead of relying
+            // only on the in-process revision flow.
+            historyRefresh++
+        }
+        selectedFilter = filter
+    }
     val collectionListState = rememberLazyListState()
     val collectionGridState = rememberLazyGridState()
     var showCreateDialog by remember { mutableStateOf(false) }
@@ -544,11 +607,14 @@ fun LibraryScreen(
                 else -> "library_main"
             },
             transitionSpec = {
-                if (targetState.startsWith("drill:")) {
-                    (slideInHorizontally { it } + fadeIn()) togetherWith
-                        (slideOutHorizontally { -it / 3 } + fadeOut())
-                } else {
-                    (slideInHorizontally { -it / 3 } + fadeIn()) togetherWith
+                val enteringOrLeavingHistory =
+                    targetState.startsWith("history:") || initialState.startsWith("history:")
+                when {
+                    enteringOrLeavingHistory -> EnterTransition.None togetherWith ExitTransition.None
+                    targetState.startsWith("drill:") ->
+                        (slideInHorizontally { it } + fadeIn()) togetherWith
+                            (slideOutHorizontally { -it / 3 } + fadeOut())
+                    else -> (slideInHorizontally { -it / 3 } + fadeIn()) togetherWith
                         (slideOutHorizontally { it } + fadeOut())
                 }
             },
@@ -665,7 +731,7 @@ fun LibraryScreen(
                 ) {
                     LibraryHeaderBar(
                         selectedFilter = selectedFilter,
-                        onFilterSelect = { selectedFilter = it },
+                        onFilterSelect = selectLibraryFilter,
                         viewType = libraryViewType,
                         onToggleViewType = {
                             val next = if (libraryViewType == LibraryViewType.GRID) LibraryViewType.LIST else LibraryViewType.GRID
@@ -714,7 +780,7 @@ fun LibraryScreen(
                 ) {
                     LibraryHeaderBar(
                         selectedFilter = selectedFilter,
-                        onFilterSelect = { selectedFilter = it },
+                        onFilterSelect = selectLibraryFilter,
                         viewType = libraryViewType,
                         onToggleViewType = {
                             val next = if (libraryViewType == LibraryViewType.GRID) LibraryViewType.LIST else LibraryViewType.GRID
