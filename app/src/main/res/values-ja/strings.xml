@@ -25,6 +25,8 @@
     <string name="downloads">ダウンロード</string>
     <string name="downloaded_songs">ダウンロード済みの曲</string>
     <string name="local_music">ローカルの音楽</string>
+    <string name="music_folders">音楽フォルダー</string>
+    <string name="music_folders_subtitle">ライブラリに含めるオーディオフォルダーを管理・除外します</string>
     <string name="audio_files_on_device">デバイス内のオーディオファイル</string>
     <string name="on_device">デバイス内</string>
     <string name="playlists">プレイリスト</string>
@@ -75,6 +77,14 @@
     <string name="songs">曲</string>
     <string name="artists">アーティスト</string>
     <string name="albums">アルバム</string>
+    <string name="hide_nav_bar_labels">ナビゲーションラベルを非表示</string>
+    <string name="hide_nav_bar_labels_subtitle">下部ナビゲーションバーにアイコンのみ表示します</string>
+    <string name="classic_nav_bar">クラシックナビゲーションバー</string>
+    <string name="classic_nav_bar_subtitle">折りたたみ式バーの代わりにミニプレイヤーと下部バーを分けて表示します</string>
+    <string name="navigation_bar_matches_mini_player_color">タブバーをミニプレイヤーと同じ色にする</string>
+    <string name="navigation_bar_matches_mini_player_color_subtitle">ミニプレイヤーと同じアルバムアートの色と文字色を使います。初期設定はオフです。</string>
+    <string name="include_remote_source_media_in_library">リモート音源をライブラリに表示</string>
+    <string name="include_remote_source_media_in_library_subtitle">WebDAV、Jellyfin、Navidrome、OpenSubsonicの曲を曲・アルバム・アーティスト・アルバムアーティストに含めます。初期設定はオフです。</string>
     <string name="no_album_metadata">これらの曲はどのアルバムに属するか示されていません。</string>
     <string name="search_empty">YouTube Musicで何百万もの曲を検索できます。</string>
     <string name="recent_searches">最近の検索</string>

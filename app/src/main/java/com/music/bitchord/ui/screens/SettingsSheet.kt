@@ -312,6 +312,8 @@ fun SettingsScreen(
     val classicNavBar by AppSettings.classicNavBar.collectAsStateWithLifecycle()
     val mainNavigationTabsPopup by AppSettings.mainNavigationTabsPopup.collectAsStateWithLifecycle()
     val hideNavBarLabels by AppSettings.hideNavigationBarLabels.collectAsStateWithLifecycle()
+    val navigationBarMatchesMiniPlayerColor by AppSettings.navigationBarMatchesMiniPlayerColor.collectAsStateWithLifecycle()
+    val includeRemoteSourceMediaInLibrary by AppSettings.includeRemoteSourceMediaInLibrary.collectAsStateWithLifecycle()
     val visibleMainTabs by AppSettings.visibleMainNavigationTabs.collectAsStateWithLifecycle()
     val mainTabOrder by AppSettings.mainNavigationTabOrder.collectAsStateWithLifecycle()
     val localTabs by AppSettings.visibleLocalLibraryTabs.collectAsStateWithLifecycle()
@@ -811,6 +813,7 @@ fun SettingsScreen(
         },
         SettingsSearchEntry(stringResource(R.string.reduce_dynamic_blur), stringResource(R.string.reduce_dynamic_blur_subtitle), listOf("blur", "ぼかし", "performance", "動的"), reduceDynamicBlur) { AppSettings.setReduceDynamicBlur(!reduceDynamicBlur) },
         SettingsSearchEntry(stringResource(R.string.classic_nav_bar), stringResource(R.string.classic_nav_bar_subtitle), listOf("navigation", "nav bar", "ナビゲーション", "classic"), classicNavBar) { AppSettings.setClassicNavBar(!classicNavBar) },
+        SettingsSearchEntry(stringResource(R.string.navigation_bar_matches_mini_player_color), stringResource(R.string.navigation_bar_matches_mini_player_color_subtitle), listOf("navigation", "tab bar", "mini player", "artwork", "color", "タブバー", "ミニプレイヤー", "アルバムアート", "色"), navigationBarMatchesMiniPlayerColor) { AppSettings.setNavigationBarMatchesMiniPlayerColor(!navigationBarMatchesMiniPlayerColor) },
         SettingsSearchEntry(stringResource(R.string.main_navigation_popup), stringResource(R.string.main_navigation_popup_subtitle), listOf("navigation", "tabs", "popup", "menu", "bottom bar", "ナビゲーション", "タブ", "ポップアップ", "メニュー"), mainNavigationTabsPopup) { AppSettings.setMainNavigationTabsPopup(!mainNavigationTabsPopup) },
         SettingsSearchEntry(stringResource(R.string.hide_nav_bar_labels), stringResource(R.string.hide_nav_bar_labels_subtitle), listOf("navigation", "nav bar", "label", "ラベル", "ナビゲーション"), hideNavBarLabels) { AppSettings.setHideNavigationBarLabels(!hideNavBarLabels) },
         SettingsSearchEntry(stringResource(R.string.legacy_mesh_gradient), stringResource(R.string.legacy_mesh_gradient_subtitle), listOf("theme", "gradient", "テーマ", "グラデーション"), legacyMeshGradient) { AppSettings.setLegacyMeshGradient(!legacyMeshGradient) },
@@ -1220,6 +1223,12 @@ fun SettingsScreen(
             listOf("folder", "hierarchy", "search", "フォルダ", "階層", "検索"),
             localFolderHierarchy,
         ) { AppSettings.setLocalFolderHierarchy(!localFolderHierarchy) },
+        SettingsSearchEntry(
+            stringResource(R.string.include_remote_source_media_in_library),
+            stringResource(R.string.include_remote_source_media_in_library_subtitle),
+            listOf("library", "remote", "server", "webdav", "jellyfin", "navidrome", "subsonic", "nextcloud", "ライブラリ", "リモート", "サーバー", "音源"),
+            includeRemoteSourceMediaInLibrary,
+        ) { AppSettings.setIncludeRemoteSourceMediaInLibrary(!includeRemoteSourceMediaInLibrary) },
         musicFolderRootSearchEntry(localMusicFolderRoot) { musicFolderRootPicker.launch(null) },
         SettingsSearchEntry(
             stringResource(R.string.full_screen_collection_artwork),
@@ -3166,6 +3175,23 @@ fun SettingsScreen(
             )
             RowDivider()
             SettingsRow(
+                icon = Icons.Rounded.AutoAwesome,
+                title = stringResource(R.string.navigation_bar_matches_mini_player_color),
+                subtitle = stringResource(R.string.navigation_bar_matches_mini_player_color_subtitle),
+                trailing = {
+                    Switch(
+                        checked = navigationBarMatchesMiniPlayerColor,
+                        onCheckedChange = AppSettings::setNavigationBarMatchesMiniPlayerColor,
+                        colors = SwitchDefaults.colors(
+                            checkedTrackColor = MaterialTheme.colorScheme.primary,
+                            checkedBorderColor = MaterialTheme.colorScheme.primary,
+                        ),
+                    )
+                },
+                onClick = { AppSettings.setNavigationBarMatchesMiniPlayerColor(!navigationBarMatchesMiniPlayerColor) },
+            )
+            RowDivider()
+            SettingsRow(
                 icon = Icons.Rounded.MoreVert,
                 title = stringResource(R.string.main_navigation_popup),
                 subtitle = stringResource(R.string.main_navigation_popup_subtitle),
@@ -3791,6 +3817,7 @@ fun SettingsScreen(
             localTabs = localTabs,
             localTabOrder = localTabOrder,
             localFolderHierarchy = localFolderHierarchy,
+            includeRemoteSourceMediaInLibrary = includeRemoteSourceMediaInLibrary,
             localMusicFolderRoot = localMusicFolderRoot,
             fullScreenCollectionArtwork = fullScreenCollectionArtwork,
             hideCollectionTopBar = hideCollectionTopBar,
@@ -4947,6 +4974,7 @@ private fun LocalMusicSettingsGroup(
     localTabs: Set<LocalLibraryTab>,
     localTabOrder: List<LocalLibraryTab>,
     localFolderHierarchy: Boolean,
+    includeRemoteSourceMediaInLibrary: Boolean,
     localMusicFolderRoot: String,
     fullScreenCollectionArtwork: Boolean,
     hideCollectionTopBar: Boolean,
@@ -5039,6 +5067,23 @@ SettingsGroup(header = stringResource(R.string.local_music)) {
             Switch(checked = localFolderHierarchy, onCheckedChange = AppSettings::setLocalFolderHierarchy)
         },
         onClick = { AppSettings.setLocalFolderHierarchy(!localFolderHierarchy) },
+    )
+    RowDivider()
+    SettingsRow(
+        icon = Icons.Rounded.Cloud,
+        title = stringResource(R.string.include_remote_source_media_in_library),
+        subtitle = stringResource(R.string.include_remote_source_media_in_library_subtitle),
+        trailing = {
+            Switch(
+                checked = includeRemoteSourceMediaInLibrary,
+                onCheckedChange = AppSettings::setIncludeRemoteSourceMediaInLibrary,
+                colors = SwitchDefaults.colors(
+                    checkedTrackColor = MaterialTheme.colorScheme.primary,
+                    checkedBorderColor = MaterialTheme.colorScheme.primary,
+                ),
+            )
+        },
+        onClick = { AppSettings.setIncludeRemoteSourceMediaInLibrary(!includeRemoteSourceMediaInLibrary) },
     )
     RowDivider()
     LocalMusicFolderRootSettingsRow(

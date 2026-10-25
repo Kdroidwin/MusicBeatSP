@@ -365,6 +365,8 @@
     <string name="liquid_glass_unavailable">Requires Android 12 or newer</string>
     <string name="classic_nav_bar">Classic navigation bar</string>
     <string name="classic_nav_bar_subtitle">Use separate stacked mini player and bottom bar instead of collapsible floating bar</string>
+    <string name="navigation_bar_matches_mini_player_color">Match navigation bar to mini player color</string>
+    <string name="navigation_bar_matches_mini_player_color_subtitle">Use the same artwork tint and content colors as the mini player. Off by default.</string>
     <string name="main_navigation_popup">Show navigation tabs in a popup menu</string>
     <string name="main_navigation_popup_subtitle">Replace the bottom tab bar with one button that opens the available screens. Off by default.</string>
     <string name="hide_nav_bar_labels">Hide navigation bar labels</string>
@@ -861,6 +863,8 @@
     <string name="profile_unavailable">No signed-in profile is available on this page yet.</string>
     <string name="music_folders">Music folders</string>
     <string name="music_folders_subtitle">Manage and exclude audio folders from library</string>
+    <string name="include_remote_source_media_in_library">Show remote source media in library</string>
+    <string name="include_remote_source_media_in_library_subtitle">Include tracks from WebDAV, Jellyfin, Navidrome, and OpenSubsonic in Songs, Albums, Artists, and Album Artists. Off by default.</string>
     <string name="hide_lyrics_status_text">Hide lyrics status text</string>
     <string name="hide_lyrics_status_text_subtitle">Show the song lyrics instead of generated playback messages</string>
     <string name="player_lyrics_strip">Show lyric above seek bar</string>

@@ -59,6 +59,9 @@ import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.role
 import androidx.compose.ui.semantics.semantics
 import com.music.bitchord.data.settings.AppSettings
+import com.music.bitchord.data.model.ROW_ART_PX
+import com.music.bitchord.data.model.Song
+import com.music.bitchord.ui.theme.rememberArtworkPalette
 import com.music.bitchord.ui.haptics.Haptic
 import com.music.bitchord.ui.haptics.rememberHaptics
 import dev.chrisbanes.haze.HazeState
@@ -129,16 +132,28 @@ fun PopupNavigationBar(
     onTabSelected: (Int) -> Unit,
     hazeState: HazeState,
     modifier: Modifier = Modifier,
+    song: Song? = null,
 ) {
     if (tabs.isEmpty()) return
     var expanded by remember { mutableStateOf(false) }
     val reduceDynamicBlur by AppSettings.reduceDynamicBlur.collectAsStateWithLifecycle()
+    val matchMiniPlayerColor by AppSettings.navigationBarMatchesMiniPlayerColor.collectAsStateWithLifecycle()
+    val useMiniPlayerArtworkColor by AppSettings.miniPlayerArtworkColor.collectAsStateWithLifecycle()
+    val matchArtwork = matchMiniPlayerColor && useMiniPlayerArtworkColor
+    val showArtworkOutline by AppSettings.miniPlayerArtworkOutline.collectAsStateWithLifecycle()
+    val artworkPalette = rememberArtworkPalette(
+        imageUrl = song?.thumbnailUrl?.takeIf { matchArtwork },
+        artPx = ROW_ART_PX,
+    )
     val useGlass = LocalLiquidGlassEnabled.current && isGlassSupported()
     val currentIndex = selectedIndex.coerceIn(tabs.indices)
     val selectedTab = tabs[currentIndex]
     val popupDescription = stringResource(R.string.main_navigation_popup)
     val shape = RoundedCornerShape(percent = 50)
-    val container = MaterialTheme.colorScheme.surface
+    val container = if (matchArtwork) artworkPalette.background else MaterialTheme.colorScheme.surface
+    val contentColor = if (matchArtwork) artworkPalette.onBackground else MaterialTheme.colorScheme.onSurface
+    val secondaryContentColor = if (matchArtwork) artworkPalette.onBackgroundVariant else MaterialTheme.colorScheme.onSurfaceVariant
+    val selectedTint = if (matchArtwork) artworkPalette.onBackground else MaterialTheme.colorScheme.primary
 
     Box(
         modifier = modifier
@@ -154,6 +169,11 @@ fun PopupNavigationBar(
                 .clip(shape)
                 .then(
                     when {
+                        matchMiniPlayerColor && reduceDynamicBlur -> Modifier.background(container)
+                        matchMiniPlayerColor -> Modifier.optimizedHazeEffect(
+                            state = hazeState,
+                            style = HazeMaterials.thin(container),
+                        )
                         reduceDynamicBlur -> Modifier.background(container)
                         useGlass -> Modifier.liquidGlass(shape = shape)
                         else -> Modifier.optimizedHazeEffect(
@@ -162,7 +182,14 @@ fun PopupNavigationBar(
                         )
                     },
                 )
-                .border(GLASS_EDGE_WIDTH, GLASS_EDGE_COLOR, shape)
+                .then(
+                    if (matchMiniPlayerColor && matchArtwork && !showArtworkOutline) Modifier
+                    else Modifier.border(
+                        GLASS_EDGE_WIDTH,
+                        if (matchArtwork) artworkPalette.divider.copy(alpha = 0.55f) else GLASS_EDGE_COLOR,
+                        shape,
+                    ),
+                )
                 .clickable { expanded = true }
                 .semantics {
                     role = Role.Button
@@ -175,20 +202,20 @@ fun PopupNavigationBar(
             Icon(
                 imageVector = Icons.Rounded.MoreVert,
                 contentDescription = null,
-                tint = MaterialTheme.colorScheme.onSurfaceVariant,
+                tint = secondaryContentColor,
                 modifier = Modifier.size(22.dp),
             )
             Icon(
                 imageVector = selectedTab.icon,
                 contentDescription = null,
-                tint = MaterialTheme.colorScheme.primary,
+                tint = selectedTint,
                 modifier = Modifier.size(22.dp),
             )
             Text(
                 text = selectedTab.label,
                 style = MaterialTheme.typography.labelLarge,
                 fontWeight = FontWeight.SemiBold,
-                color = MaterialTheme.colorScheme.onSurface,
+                color = contentColor,
                 maxLines = 1,
                 overflow = TextOverflow.Ellipsis,
                 modifier = Modifier.weight(1f),
@@ -200,7 +227,7 @@ fun PopupNavigationBar(
         ModalBottomSheet(
             onDismissRequest = { expanded = false },
             sheetState = rememberModalBottomSheetState(skipPartiallyExpanded = true),
-            containerColor = MaterialTheme.colorScheme.surface,
+            containerColor = container.copy(alpha = if (matchMiniPlayerColor) 0.96f else 1f),
         ) {
             Column(
                 modifier = Modifier
@@ -214,7 +241,7 @@ fun PopupNavigationBar(
                     text = stringResource(R.string.main_navigation_popup),
                     style = MaterialTheme.typography.titleMedium,
                     fontWeight = FontWeight.SemiBold,
-                    color = MaterialTheme.colorScheme.onSurface,
+                    color = contentColor,
                     modifier = Modifier.padding(start = 24.dp, end = 24.dp, top = 8.dp, bottom = 12.dp),
                 )
                 HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.5f))
@@ -234,20 +261,20 @@ fun PopupNavigationBar(
                         Icon(
                             imageVector = tab.icon,
                             contentDescription = null,
-                            tint = if (selected) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurfaceVariant,
+                            tint = if (selected) selectedTint else secondaryContentColor,
                             modifier = Modifier.size(24.dp),
                         )
                         Text(
                             text = tab.label,
                             style = MaterialTheme.typography.bodyLarge,
-                            color = MaterialTheme.colorScheme.onSurface,
+                            color = contentColor,
                             modifier = Modifier.weight(1f),
                         )
                         if (selected) {
                             Icon(
                                 imageVector = Icons.Rounded.Check,
                                 contentDescription = null,
-                                tint = MaterialTheme.colorScheme.primary,
+                                tint = selectedTint,
                                 modifier = Modifier.size(22.dp),
                             )
                         }
@@ -293,10 +320,19 @@ fun FloatingBottomBar(
     onTabSelected: (Int) -> Unit,
     hazeState: HazeState,
     modifier: Modifier = Modifier,
+    song: Song? = null,
 ) {
     val pillShape = RoundedCornerShape(percent = 50)
-    val container = MaterialTheme.colorScheme.surface
     val reduceDynamicBlur by AppSettings.reduceDynamicBlur.collectAsStateWithLifecycle()
+    val matchMiniPlayerColor by AppSettings.navigationBarMatchesMiniPlayerColor.collectAsStateWithLifecycle()
+    val useMiniPlayerArtworkColor by AppSettings.miniPlayerArtworkColor.collectAsStateWithLifecycle()
+    val matchArtwork = matchMiniPlayerColor && useMiniPlayerArtworkColor
+    val showArtworkOutline by AppSettings.miniPlayerArtworkOutline.collectAsStateWithLifecycle()
+    val artworkPalette = rememberArtworkPalette(
+        imageUrl = song?.thumbnailUrl?.takeIf { matchArtwork },
+        artPx = ROW_ART_PX,
+    )
+    val container = if (matchArtwork) artworkPalette.background else MaterialTheme.colorScheme.surface
     val useGlass = LocalLiquidGlassEnabled.current && isGlassSupported()
     val reduceAnimation by AppSettings.reduceAnimation.collectAsStateWithLifecycle()
     val hideNavigationBarLabels by AppSettings.hideNavigationBarLabels.collectAsStateWithLifecycle()
@@ -357,7 +393,14 @@ fun FloatingBottomBar(
             .fillMaxWidth()
             .clip(pillShape)
             .then(
-                if (reduceDynamicBlur) {
+                if (matchMiniPlayerColor && reduceDynamicBlur) {
+                    Modifier.background(container)
+                } else if (matchMiniPlayerColor) {
+                    Modifier.optimizedHazeEffect(
+                        state = hazeState,
+                        style = HazeMaterials.thin(container),
+                    )
+                } else if (reduceDynamicBlur) {
                     Modifier.background(container)
                 } else if (useGlass) {
                     Modifier.liquidGlass(shape = pillShape)
@@ -368,7 +411,14 @@ fun FloatingBottomBar(
                     )
                 },
             )
-            .border(GLASS_EDGE_WIDTH, GLASS_EDGE_COLOR, pillShape)
+            .then(
+                if (matchMiniPlayerColor && matchArtwork && !showArtworkOutline) Modifier
+                else Modifier.border(
+                    GLASS_EDGE_WIDTH,
+                    if (matchArtwork) artworkPalette.divider.copy(alpha = 0.55f) else GLASS_EDGE_COLOR,
+                    pillShape,
+                ),
+            )
             .padding(horizontal = PILL_INSET, vertical = PILL_INSET),
     ) {
         if (tabWidthPx > 0f) {
@@ -387,7 +437,10 @@ fun FloatingBottomBar(
                         scaleY = 1f - lag * STRETCH * SQUASH
                     }
                     .clip(pillShape)
-                    .background(MaterialTheme.colorScheme.primary.copy(alpha = 0.14f)),
+                    .background(
+                        (if (matchArtwork) artworkPalette.accent else MaterialTheme.colorScheme.primary)
+                            .copy(alpha = 0.14f),
+                    ),
             )
         }
 
@@ -446,14 +499,23 @@ fun FloatingBottomBar(
             // color instead and picks pure black or white, same as the tint
             // Echo's floating nav bar uses for its own liquid glass.
             val glassTint = glassContentColor()
-            val adaptiveTint = if (useGlass) glassTint else null
+            val adaptiveTint = when {
+                matchArtwork -> artworkPalette.onBackground
+                useGlass -> glassTint
+                else -> null
+            }
+            val adaptiveUnselectedTint = when {
+                matchArtwork -> artworkPalette.onBackgroundVariant
+                useGlass -> glassTint.copy(alpha = 0.65f)
+                else -> null
+            }
             tabs.forEachIndexed { index, tab ->
                 BottomBarItem(
                     tab = tab,
                     selected = index == selectedIndex,
                     glassSpec = glassSpec,
                     selectedTint = adaptiveTint,
-                    unselectedTint = adaptiveTint?.copy(alpha = 0.65f),
+                    unselectedTint = adaptiveUnselectedTint,
                     hideLabel = hideNavigationBarLabels,
                     onClick = { onTabSelected(index) },
                     modifier = Modifier.weight(1f),

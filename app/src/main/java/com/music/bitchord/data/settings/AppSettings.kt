@@ -499,6 +499,8 @@ object AppSettings {
     val matchButtonAccentToArtwork = MutableStateFlow(false)
     /** Tints the mini-player surface from the current song sleeve. */
     val miniPlayerArtworkColor = MutableStateFlow(false)
+    /** Lets the main navigation surface use the mini-player's artwork tint. */
+    val navigationBarMatchesMiniPlayerColor = MutableStateFlow(false)
     /** Shows the mini-player outline while its surface is tinted from artwork. */
     val miniPlayerArtworkOutline = MutableStateFlow(false)
     /** Shows a previous-track control in expanded mini-player surfaces. */
@@ -879,6 +881,8 @@ object AppSettings {
 
     /** Hides short clips, recorder output and non-music formats from Local Music. */
     val filterNonMusicAudio = MutableStateFlow(true)
+    /** Includes configured WebDAV/Jellyfin/OpenSubsonic libraries in local collection views. */
+    val includeRemoteSourceMediaInLibrary = MutableStateFlow(false)
 
     val localMusicSort = MutableStateFlow(LocalMusicSort.TITLE_ASC)
     val downloadedMusicSort = MutableStateFlow(LocalMusicSort.TITLE_ASC)
@@ -1198,6 +1202,7 @@ object AppSettings {
         customThemeImageUri.value = prefs.getString(KEY_CUSTOM_THEME_IMAGE_URI, null)
         matchButtonAccentToArtwork.value = prefs.getBoolean(KEY_MATCH_BUTTON_ACCENT_TO_ARTWORK, false)
         miniPlayerArtworkColor.value = prefs.getBoolean(KEY_MINI_PLAYER_ARTWORK_COLOR, false)
+        navigationBarMatchesMiniPlayerColor.value = prefs.getBoolean(KEY_NAVIGATION_BAR_MATCHES_MINI_PLAYER_COLOR, false)
         miniPlayerArtworkOutline.value = prefs.getBoolean(KEY_MINI_PLAYER_ARTWORK_OUTLINE, false)
         miniPlayerPreviousButton.value = prefs.getBoolean(KEY_MINI_PLAYER_PREVIOUS_BUTTON, true)
         miniPlayerSwipeChangesTrack.value = prefs.getBoolean(KEY_MINI_PLAYER_SWIPE_CHANGES_TRACK, false)
@@ -1392,6 +1397,7 @@ object AppSettings {
         spotifySpdcToken.value = authStore.getProtectedValue(KEY_SPOTIFY_SPDC_TOKEN).orEmpty()
         replayGenres.value = prefs.getBoolean(KEY_REPLAY_GENRES, true)
         filterNonMusicAudio.value = prefs.getBoolean(KEY_FILTER_NON_MUSIC_AUDIO, true)
+        includeRemoteSourceMediaInLibrary.value = prefs.getBoolean(KEY_INCLUDE_REMOTE_SOURCE_MEDIA_IN_LIBRARY, false)
         localMusicSort.value = readLocalMusicSort(KEY_LOCAL_MUSIC_SORT)
         downloadedMusicSort.value = readLocalMusicSort(KEY_DOWNLOADED_MUSIC_SORT)
         localArtistSort.value = readArtistSort(KEY_LOCAL_ARTIST_SORT)
@@ -1731,6 +1737,11 @@ object AppSettings {
     fun setMiniPlayerArtworkColor(value: Boolean) {
         miniPlayerArtworkColor.value = value
         prefs.edit().putBoolean(KEY_MINI_PLAYER_ARTWORK_COLOR, value).apply()
+    }
+
+    fun setNavigationBarMatchesMiniPlayerColor(value: Boolean) {
+        navigationBarMatchesMiniPlayerColor.value = value
+        prefs.edit().putBoolean(KEY_NAVIGATION_BAR_MATCHES_MINI_PLAYER_COLOR, value).apply()
     }
 
     fun setMiniPlayerArtworkOutline(value: Boolean) {
@@ -3012,6 +3023,11 @@ object AppSettings {
         prefs.edit().putBoolean(KEY_LOCAL_FOLDER_HIERARCHY, value).apply()
     }
 
+    fun setIncludeRemoteSourceMediaInLibrary(value: Boolean) {
+        includeRemoteSourceMediaInLibrary.value = value
+        prefs.edit().putBoolean(KEY_INCLUDE_REMOTE_SOURCE_MEDIA_IN_LIBRARY, value).apply()
+    }
+
     fun setLocalMusicFolderPath(path: String) {
         val safePath = path.trim().take(4096)
         localMusicFolderUri.value = safePath
@@ -3424,6 +3440,7 @@ object AppSettings {
     private const val KEY_CUSTOM_THEME_IMAGE_URI = "custom_theme_image_uri"
     private const val KEY_MATCH_BUTTON_ACCENT_TO_ARTWORK = "match_button_accent_to_artwork"
     private const val KEY_MINI_PLAYER_ARTWORK_COLOR = "mini_player_artwork_color"
+    private const val KEY_NAVIGATION_BAR_MATCHES_MINI_PLAYER_COLOR = "navigation_bar_matches_mini_player_color"
     private const val KEY_MINI_PLAYER_ARTWORK_OUTLINE = "mini_player_artwork_outline"
     private const val KEY_MINI_PLAYER_PREVIOUS_BUTTON = "mini_player_previous_button"
     private const val KEY_MINI_PLAYER_SWIPE_CHANGES_TRACK = "mini_player_swipe_changes_track"
@@ -3578,6 +3595,7 @@ object AppSettings {
     private const val KEY_ALBUM_ARTISTS_TAB_MIGRATED = "album_artists_tab_migrated"
     private const val KEY_LOCAL_LIBRARY_TAB_ORDER = "local_library_tab_order"
     private const val KEY_LOCAL_FOLDER_HIERARCHY = "local_folder_hierarchy"
+    private const val KEY_INCLUDE_REMOTE_SOURCE_MEDIA_IN_LIBRARY = "include_remote_source_media_in_library"
     private const val KEY_LOCAL_MUSIC_FOLDER_PATH = "local_music_folder_path"
     private const val KEY_WEBDAV_URL = "webdav_url"
     private const val KEY_WEBDAV_USERNAME = "webdav_username"

@@ -125,6 +125,7 @@ fun GlassNavBar(
     val borderColor = if (isDark) GLASS_EDGE_COLOR else Color.Black.copy(alpha = 0.08f)
     val reduceDynamicBlur by AppSettings.reduceDynamicBlur.collectAsStateWithLifecycle()
     val hideNavigationBarLabels by AppSettings.hideNavigationBarLabels.collectAsStateWithLifecycle()
+    val matchMiniPlayerColor by AppSettings.navigationBarMatchesMiniPlayerColor.collectAsStateWithLifecycle()
     val useArtworkColor by AppSettings.miniPlayerArtworkColor.collectAsStateWithLifecycle()
     val showMiniArtworkOutline by AppSettings.miniPlayerArtworkOutline.collectAsStateWithLifecycle()
     val themeMode by AppSettings.themeMode.collectAsStateWithLifecycle()
@@ -138,21 +139,23 @@ fun GlassNavBar(
         imageUrl = song?.thumbnailUrl?.takeIf { useArtworkColor },
         artPx = ROW_ART_PX,
     )
-
     val contentColor = if (useGlass) glassContentColor() else MaterialTheme.colorScheme.onSurface
     val miniContentColor = if (useArtworkColor) miniArtworkPalette.onBackground else contentColor
     val miniSecondaryColor = if (useArtworkColor) miniArtworkPalette.onBackgroundVariant else null
     val selectedColor = when {
+        matchMiniPlayerColor && useArtworkColor -> miniArtworkPalette.onBackground
         artworkThemeActive -> navigationArtworkPalette.accent
         useGlass -> contentColor
         else -> MaterialTheme.colorScheme.primary
     }
     val unselectedColor = when {
+        matchMiniPlayerColor && useArtworkColor -> miniArtworkPalette.onBackgroundVariant
         artworkThemeActive -> navigationArtworkPalette.onBackgroundVariant
         useGlass -> contentColor.copy(alpha = 0.65f)
         else -> MaterialTheme.colorScheme.onSurfaceVariant
     }
     val indicatorColor = when {
+        matchMiniPlayerColor && useArtworkColor -> miniArtworkPalette.accent.copy(alpha = 0.18f)
         artworkThemeActive -> navigationArtworkPalette.accent.copy(alpha = 0.18f)
         useGlass -> glassIndicatorColor().copy(alpha = 0.5f)
         else -> MaterialTheme.colorScheme.primary.copy(alpha = 0.14f)
@@ -208,6 +211,9 @@ fun GlassNavBar(
             }
         }
     }
+    // Reuse the mini-player's exact surface/material branch so the tab bar
+    // follows it in artwork tint, blur, and liquid-glass modes alike.
+    val navigationSurfaceModifier = if (matchMiniPlayerColor) miniSurfaceModifier else surfaceModifier
 
     FloatingTabBar(
         selectedTabKey = selectedIndex,
@@ -217,7 +223,7 @@ fun GlassNavBar(
             .padding(horizontal = PAGE_GUTTER)
             .padding(bottom = 2.dp)
             .fillMaxWidth(),
-        tabBarContentModifier = surfaceModifier,
+        tabBarContentModifier = navigationSurfaceModifier,
         inlineAccessory = song?.let { current ->
             { accessoryModifier, _ ->
                 GlassNowPlaying(
