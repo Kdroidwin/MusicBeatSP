@@ -12,6 +12,17 @@ data class LocalPlayStats(
     val playedCount: Int = 0,
     val skippedCount: Int = 0,
     val lastPlayedTimestamp: Long = 0L,
+    /** Track metadata lets library history include playable items absent from MediaStore. */
+    val songVideoId: String? = null,
+    val songTitle: String? = null,
+    val songArtist: String? = null,
+    val songThumbnailUrl: String? = null,
+    val songDurationText: String? = null,
+    val songArtistId: String? = null,
+    val songAlbumId: String? = null,
+    val songAlbumName: String? = null,
+    val songIsVideo: Boolean? = null,
+    val songIsVideoOrigin: Boolean? = null,
 ) {
     val playedText: String
         get() = when (playedCount) {

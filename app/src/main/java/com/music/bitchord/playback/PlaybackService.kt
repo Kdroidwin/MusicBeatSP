@@ -567,6 +567,7 @@ class PlaybackService : MediaLibraryService() {
     /** Prevents pause/resume callbacks from counting the same play twice. */
     private var currentPlayStatsRecorded = false
     private var currentPlayStatsSongId: String? = null
+    private var currentPlayStatsSong: Song? = null
     private var currentPlayStatsElapsedMs = 0L
     private var currentPlayStatsSegmentStartedAtMs = 0L
 
@@ -2113,7 +2114,8 @@ class PlaybackService : MediaLibraryService() {
 
     /** Tracks only audible time; pausing or changing tracks closes the current segment. */
     private fun updateCurrentLocalPlayStats(isPlaying: Boolean, song: Song?) {
-        val songId = song?.localUri ?: song?.videoId
+        val statsSong = song?.takeUnless { it.isLiveRadio || it.isExternalPreview }
+        val songId = statsSong?.let(::localPlayStatsIdentity)
         if (songId != null && songId != currentPlayStatsSongId) {
             finishCurrentLocalPlayStatsSegment()
             currentPlayStatsRecorded = false
@@ -2121,6 +2123,7 @@ class PlaybackService : MediaLibraryService() {
             currentPlayStatsSegmentStartedAtMs = 0L
             currentPlayStatsSongId = songId
         }
+        if (songId != null) currentPlayStatsSong = statsSong
 
         val now = SystemClock.elapsedRealtime()
         if (isPlaying && songId != null && !currentPlayStatsRecorded) {
@@ -2144,7 +2147,8 @@ class PlaybackService : MediaLibraryService() {
 
     private fun recordCurrentLocalPlayStatsIfQualified(now: Long = SystemClock.elapsedRealtime()) {
         if (currentPlayStatsRecorded) return
-        val songId = currentPlayStatsSongId ?: return
+        if (currentPlayStatsSongId == null) return
+        val song = currentPlayStatsSong ?: return
         val activeSegmentMs = if (currentPlayStatsSegmentStartedAtMs > 0L) {
             (now - currentPlayStatsSegmentStartedAtMs).coerceAtLeast(0L)
         } else {
@@ -2152,15 +2156,20 @@ class PlaybackService : MediaLibraryService() {
         }
         val requiredMs = AppSettings.recentlyPlayedThresholdSeconds.value * 1_000L
         if (currentPlayStatsElapsedMs + activeSegmentMs >= requiredMs) {
-            currentPlayStatsRecorded = true
-            LocalPlayStatsStore.recordPlay(applicationContext, songId)
+            currentPlayStatsRecorded =
+                LocalPlayStatsStore.recordPlay(applicationContext, song).playedCount > 0
         }
     }
+
+    private fun localPlayStatsIdentity(song: Song): String? =
+        listOfNotNull(song.localUri, song.videoId, song.localPath)
+            .firstOrNull(String::isNotBlank)
 
     private fun resetCurrentLocalPlayStatsForTrackChange() {
         finishCurrentLocalPlayStatsSegment()
         currentPlayStatsRecorded = false
         currentPlayStatsSongId = null
+        currentPlayStatsSong = null
         currentPlayStatsElapsedMs = 0L
         currentPlayStatsSegmentStartedAtMs = 0L
     }
@@ -5339,6 +5348,13 @@ class PlaybackService : MediaLibraryService() {
 
 
     override fun onDestroy() {
+        // Close the current audible segment before the service scope/player is
+        // torn down. This captures a track that crossed the configured history
+        // threshold since the last five-second sampler tick.
+        updateCurrentLocalPlayStats(
+            isPlaying = false,
+            song = player?.currentMediaItem?.toSong(),
+        )
         WearBridge.attachStreams(null)
         WearBridge.releaseSpeaker()
         externalAudioPopupWindow?.dismiss()
