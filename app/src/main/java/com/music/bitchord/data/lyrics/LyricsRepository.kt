@@ -8,15 +8,20 @@ import kotlinx.coroutines.coroutineScope
 /**
  * Where the player gets its lyrics.
  *
- * Eight sources, tried in [order] — the user's own priority list in Settings,
- * defaulting to [LyricsSource.entries]:
+ * Built-in providers and enabled script extensions, tried in [order] — the
+ * user's own priority list in Settings. Built-ins come from
+ * [BuiltinLyricsSources.sources]; their visible list follows BitChord upstream:
  *
  *  - [BetterLyrics] and [PaxSenix] — Apple Music TTML, per-syllable, from two
  *    independent hosts so one having a bad day doesn't cost the timing.
  *  - [LyricsPlus] — the YouLy+ backend; finest timing of the lot, flakiest hosting.
- *  - [SimpMusicLyrics] — keyed on the video id, so it can't fetch the wrong edit.
  *  - [LrcLib], [Musixmatch], [KuGou] — line-synced only, but between them
  *    almost always up, and [KuGou] carries a lot that the others don't.
+ *  - [Unison], [YouTubeMusicLyrics], [YouTubeTranscriptLyrics], and [Genius]
+ *    provide community, video-caption, and plain-text fallbacks.
+ *
+ * SimpMusic and Megalobiz source files are retained from upstream, but are not
+ * listed or queried because upstream marks those providers hidden.
  *
  * Every enabled source is asked *at the same time*, but their answers are
  * taken in [order]: the loop awaits them one at a time in that sequence, so a

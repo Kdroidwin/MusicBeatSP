@@ -8,6 +8,7 @@ import android.net.Uri
 import android.os.Build
 import android.os.Bundle
 import android.view.View
+import android.view.WindowManager
 import android.widget.Toast
 import androidx.activity.compose.BackHandler
 import androidx.activity.compose.rememberLauncherForActivityResult
@@ -310,6 +311,7 @@ private const val PLAYER_SHEET_SCRIM_ALPHA = 0.32f
 class MainActivity : AppCompatActivity() {
     /** The expanded player is a modal surface on compact layouts. */
     private var expandedPlayerSurfaceActive = false
+    private var musicOnlyModeLockTaskStarted = false
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
@@ -339,6 +341,7 @@ class MainActivity : AppCompatActivity() {
             val showStatusBar by AppSettings.showStatusBar.collectAsStateWithLifecycle()
             val showPlayerStatusBar by AppSettings.showPlayerStatusBar.collectAsStateWithLifecycle()
             val showNavigationBar by AppSettings.showNavigationBar.collectAsStateWithLifecycle()
+            val musicOnlyDeviceMode by AppSettings.musicOnlyDeviceMode.collectAsStateWithLifecycle()
             val screenOrientation by AppSettings.screenOrientationMode.collectAsStateWithLifecycle()
             val iosOverscrollFactory = rememberIosOverscrollFactory()
             val performanceRefreshRate by AppSettings.performanceRefreshRate.collectAsStateWithLifecycle()
@@ -347,6 +350,25 @@ class MainActivity : AppCompatActivity() {
                 applyPerformanceMode(highPerformance, performanceRefreshRate, composeView)
             }
             SideEffect { composeView.keepScreenOn = keepScreenOn }
+            LaunchedEffect(musicOnlyDeviceMode) {
+                if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O_MR1) {
+                    setShowWhenLocked(musicOnlyDeviceMode)
+                } else if (musicOnlyDeviceMode) {
+                    window.addFlags(WindowManager.LayoutParams.FLAG_SHOW_WHEN_LOCKED)
+                } else {
+                    window.clearFlags(WindowManager.LayoutParams.FLAG_SHOW_WHEN_LOCKED)
+                }
+                if (musicOnlyDeviceMode && !musicOnlyModeLockTaskStarted) {
+                    runCatching { startLockTask() }
+                        .onSuccess { musicOnlyModeLockTaskStarted = true }
+                    // Android's screen-pinning confirmation and exit gesture
+                    // remain controlled by the system; this mode never changes
+                    // the device's secure lock or replaces its Home app.
+                } else if (!musicOnlyDeviceMode && musicOnlyModeLockTaskStarted) {
+                    runCatching { stopLockTask() }
+                    musicOnlyModeLockTaskStarted = false
+                }
+            }
             DisposableEffect(composeView) {
                 onDispose { composeView.keepScreenOn = false }
             }

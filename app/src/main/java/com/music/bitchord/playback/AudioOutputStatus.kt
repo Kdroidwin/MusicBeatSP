@@ -23,6 +23,8 @@ object AudioOutputStatus {
         val actualEncoding: Int? = null,
         val actualSampleRateHz: Int? = null,
         val actualChannelConfig: Int? = null,
+        /** AudioTrack buffer size reported by Media3, in bytes when available. */
+        val audioTrackBufferSizeBytes: Int? = null,
         val floatFallback: Boolean = false,
         val bitPerfectMixerActive: Boolean = false,
     )
@@ -53,11 +55,12 @@ object AudioOutputStatus {
         )
     }
 
-    fun publishAudioTrack(encoding: Int, sampleRateHz: Int, channelConfig: Int) {
+    fun publishAudioTrack(encoding: Int, sampleRateHz: Int, channelConfig: Int, bufferSizeBytes: Int?) {
         current.value = current.value.copy(
             actualEncoding = encoding,
             actualSampleRateHz = sampleRateHz,
             actualChannelConfig = channelConfig,
+            audioTrackBufferSizeBytes = bufferSizeBytes?.takeIf { it > 0 },
             floatFallback = current.value.requestedPcmMode == OutputPcmMode.FLOAT_32 &&
                 encoding != AudioFormat.ENCODING_PCM_FLOAT,
         )

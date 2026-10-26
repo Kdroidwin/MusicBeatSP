@@ -170,12 +170,14 @@ import com.music.bitchord.ui.performance.resolvePerformanceRefreshRate
 import com.music.bitchord.ui.performance.supportedPerformanceRefreshRates
 import com.music.bitchord.data.model.Account
 import com.music.bitchord.data.LocalMediaRepository
+import com.music.bitchord.data.NerdStats
 import com.music.bitchord.data.scrobbling.LastFM
 import com.music.bitchord.data.settings.AppSettings
 import com.music.bitchord.data.settings.AutomixPerformanceMode
 import com.music.bitchord.data.settings.LocalLibraryTab
 import com.music.bitchord.data.settings.LauncherIcon
 import com.music.bitchord.data.settings.SeekButtonMode
+import com.music.bitchord.data.settings.TransportSideAction
 import com.music.bitchord.data.settings.MAX_PLAYER_ARTWORK_BLUR_DP
 import com.music.bitchord.data.settings.MainNavigationTab
 import com.music.bitchord.data.settings.PlayerControl
@@ -301,6 +303,8 @@ fun SettingsScreen(
     val seekIntervalSeconds by AppSettings.seekIntervalSeconds.collectAsStateWithLifecycle()
     val recentlyPlayedThresholdSeconds by AppSettings.recentlyPlayedThresholdSeconds.collectAsStateWithLifecycle()
     val seekButtonMode by AppSettings.seekButtonMode.collectAsStateWithLifecycle()
+    val transportLeftAction by AppSettings.transportLeftAction.collectAsStateWithLifecycle()
+    val transportRightAction by AppSettings.transportRightAction.collectAsStateWithLifecycle()
     val hideSeekButtonLabels by AppSettings.hideSeekButtonLabels.collectAsStateWithLifecycle()
     val spatialAudio by AppSettings.spatialAudio.collectAsStateWithLifecycle()
     val nerdStats by AppSettings.showNerdStats.collectAsStateWithLifecycle()
@@ -326,6 +330,7 @@ fun SettingsScreen(
     val hideFloatingCollectionControls by AppSettings.hideFloatingCollectionControls.collectAsStateWithLifecycle()
     val frostedQueueManager by AppSettings.frostedQueueManager.collectAsStateWithLifecycle()
     val redesignedSavedQueueManager by AppSettings.redesignedSavedQueueManager.collectAsStateWithLifecycle()
+    val hideSavedQueueHeading by AppSettings.hideSavedQueueHeading.collectAsStateWithLifecycle()
     val frostedPlayerDetails by AppSettings.frostedPlayerDetails.collectAsStateWithLifecycle()
     val detailsSheetArtworkBackdrop by AppSettings.detailsSheetArtworkBackdrop.collectAsStateWithLifecycle()
     val showEmbeddedComment by AppSettings.showEmbeddedComment.collectAsStateWithLifecycle()
@@ -349,6 +354,7 @@ fun SettingsScreen(
     val showStatusBar by AppSettings.showStatusBar.collectAsStateWithLifecycle()
     val showPlayerStatusBar by AppSettings.showPlayerStatusBar.collectAsStateWithLifecycle()
     val showNavigationBar by AppSettings.showNavigationBar.collectAsStateWithLifecycle()
+    val musicOnlyDeviceMode by AppSettings.musicOnlyDeviceMode.collectAsStateWithLifecycle()
     val orientationMode by AppSettings.screenOrientationMode.collectAsStateWithLifecycle()
     val favoriteUsesStar by AppSettings.favoriteUsesStar.collectAsStateWithLifecycle()
     val mediaControlFavoriteUsesStar by AppSettings.mediaControlFavoriteUsesStar.collectAsStateWithLifecycle()
@@ -426,7 +432,26 @@ fun SettingsScreen(
     val outputPcmMode by AppSettings.outputPcmMode.collectAsStateWithLifecycle()
     val bitPerfectPlayback by AppSettings.bitPerfectPlayback.collectAsStateWithLifecycle()
     val preferUsbDac by AppSettings.preferUsbDac.collectAsStateWithLifecycle()
+    val speakerPlaybackAllowed by AppSettings.speakerPlaybackAllowed.collectAsStateWithLifecycle()
     val outputStatus by AudioOutputStatus.current.collectAsStateWithLifecycle()
+    val sourceAudioStats by NerdStats.current.collectAsStateWithLifecycle()
+    val availableSystemAudioEffects = remember {
+        runCatching {
+            AudioEffect.queryEffects().orEmpty()
+                .mapNotNull { descriptor ->
+                    val name = descriptor.name?.trim().orEmpty()
+                    val maker = descriptor.implementor?.trim().orEmpty()
+                    when {
+                        name.isBlank() -> null
+                        maker.isBlank() -> name
+                        else -> "$name ($maker)"
+                    }
+                }
+                .distinct()
+                .take(4)
+        }.getOrDefault(emptyList())
+    }
+    var transportActionSlot by rememberSaveable { mutableStateOf("") }
     val bitPerfectOutputStatus = stringResource(
         if (outputStatus.bitPerfectMixerActive) R.string.bit_perfect_mixer_requested
         else R.string.bit_perfect_mixer_unavailable,
@@ -523,6 +548,12 @@ fun SettingsScreen(
             listOf("queue", "saved queues", "manager", "再生キュー", "保存済みキュー", "管理画面"),
             redesignedSavedQueueManager,
         ) { AppSettings.setRedesignedSavedQueueManager(!redesignedSavedQueueManager) },
+        SettingsSearchEntry(
+            stringResource(R.string.hide_saved_queue_heading),
+            stringResource(R.string.hide_saved_queue_heading_subtitle),
+            listOf("queue", "save queue", "heading", "再生キュー", "現在のキュー", "見出し"),
+            hideSavedQueueHeading,
+        ) { AppSettings.setHideSavedQueueHeading(!hideSavedQueueHeading) },
         SettingsSearchEntry(
             stringResource(R.string.frosted_player_details),
             stringResource(R.string.frosted_player_details_subtitle),
@@ -641,6 +672,7 @@ fun SettingsScreen(
         SettingsSearchEntry(stringResource(R.string.show_status_bar), stringResource(R.string.show_status_bar_search_help), listOf("status bar", "library", "ステータスバー", "ライブラリ", "battery", "電池"), showStatusBar) { AppSettings.setShowStatusBar(!showStatusBar) },
         SettingsSearchEntry(stringResource(R.string.show_player_status_bar), stringResource(R.string.show_player_status_bar_subtitle), listOf("status bar", "player", "ステータスバー", "プレイヤー", "battery", "電池"), showPlayerStatusBar) { AppSettings.setShowPlayerStatusBar(!showPlayerStatusBar) },
         SettingsSearchEntry(stringResource(R.string.show_navigation_bar), stringResource(R.string.show_navigation_bar_search_help), listOf("navigation bar", "ナビゲーションバー", "戻る", "home"), showNavigationBar) { AppSettings.setShowNavigationBar(!showNavigationBar) },
+        SettingsSearchEntry(stringResource(R.string.music_only_device_mode), stringResource(R.string.music_only_device_mode_subtitle), listOf("music only", "screen pinning", "lock screen", "home", "音楽専用", "画面固定", "ロック画面", "ホーム"), musicOnlyDeviceMode) { AppSettings.setMusicOnlyDeviceMode(!musicOnlyDeviceMode) },
         SettingsSearchEntry(stringResource(R.string.hide_player_artist), stringResource(R.string.hide_player_artist_subtitle), listOf("artist", "アーティスト", "player"), hidePlayerArtist) { AppSettings.setHidePlayerArtist(!hidePlayerArtist) },
         SettingsSearchEntry(stringResource(R.string.player_lyrics_strip), stringResource(R.string.player_lyrics_strip_subtitle), listOf("lyrics", "歌詞", "strip", "player"), showPlayerLyricsStrip) { AppSettings.setShowPlayerLyricsStrip(!showPlayerLyricsStrip) },
         SettingsSearchEntry(
@@ -787,6 +819,32 @@ fun SettingsScreen(
                 )
             },
         ),
+        SettingsSearchEntry(
+            title = stringResource(R.string.transport_left_action),
+            subtitle = stringResource(R.string.transport_side_action_subtitle),
+            keywords = listOf("transport", "left", "shuffle", "repeat", "left button", "再生", "左", "シャッフル", "リピート", "ボタン"),
+            valueLabel = transportLeftAction.localizedLabel(),
+            activate = {
+                val next = (TransportSideAction.entries.indexOf(transportLeftAction) + 1) % TransportSideAction.entries.size
+                AppSettings.setTransportLeftAction(TransportSideAction.entries[next])
+            },
+        ),
+        SettingsSearchEntry(
+            title = stringResource(R.string.transport_right_action),
+            subtitle = stringResource(R.string.transport_side_action_subtitle),
+            keywords = listOf("transport", "right", "shuffle", "repeat", "right button", "再生", "右", "シャッフル", "リピート", "ボタン"),
+            valueLabel = transportRightAction.localizedLabel(),
+            activate = {
+                val next = (TransportSideAction.entries.indexOf(transportRightAction) + 1) % TransportSideAction.entries.size
+                AppSettings.setTransportRightAction(TransportSideAction.entries[next])
+            },
+        ),
+        SettingsSearchEntry(
+            stringResource(R.string.speaker_playback_allowed),
+            stringResource(R.string.speaker_playback_allowed_subtitle),
+            listOf("speaker", "headphones", "bluetooth", "USB", "スピーカー", "イヤホン", "出力先", "音声出力"),
+            speakerPlaybackAllowed,
+        ) { AppSettings.setSpeakerPlaybackAllowed(!speakerPlaybackAllowed) },
         SettingsSearchEntry(stringResource(R.string.lyrics_furigana), stringResource(R.string.lyrics_furigana_subtitle), listOf("lyrics", "furigana", "ruby", "ふりがな", "ルビ"), showLyricsFurigana) { AppSettings.setShowLyricsFurigana(!showLyricsFurigana) },
         SettingsSearchEntry(stringResource(R.string.lyrics_auto_fit), stringResource(R.string.lyrics_auto_fit_subtitle), listOf("lyrics", "one line", "fit", "歌詞", "一行", "文字サイズ"), autoFitOneLineLyrics) { AppSettings.setAutoFitOneLineLyrics(!autoFitOneLineLyrics) },
         SettingsSearchEntry(stringResource(R.string.spatial_audio), stringResource(R.string.spatial_audio_subtitle), listOf("spatial", "空間オーディオ"), spatialAudio) { AppSettings.setSpatialAudio(!spatialAudio) },
@@ -1763,17 +1821,66 @@ fun SettingsScreen(
             SettingsRow(
                 icon = Icons.Rounded.GraphicEq,
                 title = stringResource(R.string.output_precision),
-                subtitle = buildString {
-                    append(outputStatus.sink)
-                    append(" · ")
-                    append(outputStatus.deviceName)
-                    (outputStatus.actualSampleRateHz ?: outputStatus.sampleRatesHz.firstOrNull())
-                        ?.let { append(" · ${it / 1000.0} kHz") }
-                    append(" · ")
-                    append(AudioOutputStatus.encodingLabel(outputStatus))
-                    if (bitPerfectPlayback) {
-                        append(" · ")
-                        append(bitPerfectOutputStatus)
+                subtitleContent = {
+                    Column(verticalArrangement = Arrangement.spacedBy(2.dp)) {
+                        Text(
+                            text = buildString {
+                                append(outputStatus.sink)
+                                append(" · ")
+                                append(outputStatus.deviceName)
+                                append(" · ")
+                                append(AudioOutputStatus.encodingLabel(outputStatus))
+                            },
+                            style = MaterialTheme.typography.bodyMedium,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant,
+                        )
+                        sourceAudioStats?.sampleRateHz?.let { sourceRate ->
+                            val appRate = outputStatus.actualSampleRateHz
+                            Text(
+                                text = if (appRate == null) {
+                                    stringResource(R.string.audio_source_rate_only, sourceRate / 1000f)
+                                } else if (sourceRate != appRate) {
+                                    stringResource(R.string.audio_rate_conversion, sourceRate / 1000f, appRate / 1000f)
+                                } else {
+                                    stringResource(R.string.audio_rate_no_app_conversion, sourceRate / 1000f)
+                                },
+                                style = MaterialTheme.typography.bodySmall,
+                                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                            )
+                        }
+                        outputStatus.audioTrackBufferSizeBytes?.let { bufferBytes ->
+                            Text(
+                                text = stringResource(R.string.audio_track_buffer_size, bufferBytes),
+                                style = MaterialTheme.typography.bodySmall,
+                                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                            )
+                        }
+                        Text(
+                            text = stringResource(
+                                if (availableSystemAudioEffects.isEmpty()) R.string.audio_system_effects_unknown
+                                else R.string.audio_system_effects_available,
+                                availableSystemAudioEffects.takeIf { it.isNotEmpty() }
+                                    ?.joinToString(", ")
+                                    ?: "",
+                            ),
+                            style = MaterialTheme.typography.bodySmall,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant,
+                            maxLines = 2,
+                            overflow = TextOverflow.Ellipsis,
+                        )
+                        if (bitPerfectPlayback) {
+                            Text(
+                                text = bitPerfectOutputStatus,
+                                style = MaterialTheme.typography.bodySmall,
+                                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                            )
+                        }
+                        Text(
+                            text = stringResource(R.string.audio_output_rate_caveat),
+                            style = MaterialTheme.typography.bodySmall,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant,
+                            maxLines = 2,
+                        )
                     }
                 },
             )
@@ -1806,6 +1913,23 @@ fun SettingsScreen(
                 checked = preferUsbDac,
                 onCheckedChange = AppSettings::setPreferUsbDac,
                 badge = stringResource(R.string.connected).takeIf { outputStatus.isUsb },
+            )
+            RowDivider()
+            SettingsRow(
+                icon = Icons.Rounded.Headphones,
+                title = stringResource(R.string.speaker_playback_allowed),
+                subtitle = stringResource(R.string.speaker_playback_allowed_subtitle),
+                trailing = {
+                    Switch(
+                        checked = speakerPlaybackAllowed,
+                        onCheckedChange = AppSettings::setSpeakerPlaybackAllowed,
+                        colors = SwitchDefaults.colors(
+                            checkedTrackColor = MaterialTheme.colorScheme.primary,
+                            checkedBorderColor = MaterialTheme.colorScheme.primary,
+                        ),
+                    )
+                },
+                onClick = { AppSettings.setSpeakerPlaybackAllowed(!speakerPlaybackAllowed) },
             )
             RowDivider()
             SettingsRow(
@@ -2094,6 +2218,22 @@ fun SettingsScreen(
                 selectedIndex = SeekButtonMode.entries.indexOf(seekButtonMode),
                 onSelect = { AppSettings.setSeekButtonMode(SeekButtonMode.entries[it]) },
                 modifier = Modifier.padding(start = ROW_INSET, end = ROW_INSET, bottom = 14.dp),
+            )
+            RowDivider()
+            SettingsRow(
+                icon = Icons.AutoMirrored.Rounded.QueueMusic,
+                title = stringResource(R.string.transport_left_action),
+                subtitle = stringResource(R.string.transport_side_action_subtitle),
+                value = transportLeftAction.localizedLabel(),
+                onClick = { transportActionSlot = "left" },
+            )
+            RowDivider()
+            SettingsRow(
+                icon = Icons.AutoMirrored.Rounded.QueueMusic,
+                title = stringResource(R.string.transport_right_action),
+                subtitle = stringResource(R.string.transport_side_action_subtitle),
+                value = transportRightAction.localizedLabel(),
+                onClick = { transportActionSlot = "right" },
             )
             RowDivider()
             SettingsRow(
@@ -2919,6 +3059,19 @@ fun SettingsScreen(
             )
             RowDivider()
             SettingsRow(
+                icon = Icons.AutoMirrored.Rounded.QueueMusic,
+                title = stringResource(R.string.hide_saved_queue_heading),
+                subtitle = stringResource(R.string.hide_saved_queue_heading_subtitle),
+                trailing = {
+                    Switch(
+                        checked = hideSavedQueueHeading,
+                        onCheckedChange = AppSettings::setHideSavedQueueHeading,
+                    )
+                },
+                onClick = { AppSettings.setHideSavedQueueHeading(!hideSavedQueueHeading) },
+            )
+            RowDivider()
+            SettingsRow(
                 icon = Icons.Rounded.BlurOn,
                 title = stringResource(R.string.frosted_player_details),
                 subtitle = stringResource(R.string.frosted_player_details_subtitle),
@@ -3067,6 +3220,19 @@ fun SettingsScreen(
                     Switch(checked = showNavigationBar, onCheckedChange = AppSettings::setShowNavigationBar)
                 },
                 onClick = { AppSettings.setShowNavigationBar(!showNavigationBar) },
+            )
+            RowDivider()
+            SettingsRow(
+                icon = Icons.Rounded.Headphones,
+                title = stringResource(R.string.music_only_device_mode),
+                subtitle = stringResource(R.string.music_only_device_mode_subtitle),
+                trailing = {
+                    Switch(
+                        checked = musicOnlyDeviceMode,
+                        onCheckedChange = AppSettings::setMusicOnlyDeviceMode,
+                    )
+                },
+                onClick = { AppSettings.setMusicOnlyDeviceMode(!musicOnlyDeviceMode) },
             )
             RowDivider()
             SettingsRow(
@@ -4929,6 +5095,53 @@ fun SettingsScreen(
         )
     }
 
+    if (transportActionSlot.isNotBlank()) {
+        val isLeft = transportActionSlot == "left"
+        val selectedAction = if (isLeft) transportLeftAction else transportRightAction
+        AlertDialog(
+            onDismissRequest = { transportActionSlot = "" },
+            title = {
+                Text(
+                    stringResource(
+                        if (isLeft) R.string.transport_left_action else R.string.transport_right_action,
+                    ),
+                )
+            },
+            text = {
+                Column {
+                    TransportSideAction.entries.forEach { action ->
+                        Row(
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .clickable {
+                                    if (isLeft) AppSettings.setTransportLeftAction(action)
+                                    else AppSettings.setTransportRightAction(action)
+                                    transportActionSlot = ""
+                                }
+                                .padding(vertical = 6.dp),
+                            verticalAlignment = Alignment.CenterVertically,
+                        ) {
+                            RadioButton(
+                                selected = selectedAction == action,
+                                onClick = {
+                                    if (isLeft) AppSettings.setTransportLeftAction(action)
+                                    else AppSettings.setTransportRightAction(action)
+                                    transportActionSlot = ""
+                                },
+                            )
+                            Text(action.localizedLabel(), modifier = Modifier.padding(start = 8.dp))
+                        }
+                    }
+                }
+            },
+            confirmButton = {
+                TextButton(onClick = { transportActionSlot = "" }) {
+                    Text(stringResource(R.string.cancel))
+                }
+            },
+        )
+    }
+
 }
 
 @Composable
@@ -5374,6 +5587,20 @@ private fun MediaControlSecondaryAction.localizedLabel(): String = stringResourc
         MediaControlSecondaryAction.PLAYLISTS -> R.string.media_control_playlists
         MediaControlSecondaryAction.LYRICS -> R.string.media_control_lyrics
         MediaControlSecondaryAction.QUEUE -> R.string.media_control_queue
+    },
+)
+
+@Composable
+private fun TransportSideAction.localizedLabel(): String = stringResource(
+    when (this) {
+        TransportSideAction.NONE -> R.string.transport_action_none
+        TransportSideAction.SHUFFLE -> R.string.shuffle
+        TransportSideAction.REPEAT -> R.string.repeat_all
+        TransportSideAction.FAVORITE -> R.string.quick_action_favorite
+        TransportSideAction.LYRICS -> R.string.quick_action_lyrics
+        TransportSideAction.QUEUE -> R.string.quick_action_queue
+        TransportSideAction.PLAYLISTS -> R.string.quick_action_playlists
+        TransportSideAction.SEARCH -> R.string.quick_action_search
     },
 )
 

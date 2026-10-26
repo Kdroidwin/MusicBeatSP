@@ -258,6 +258,7 @@ import com.music.bitchord.ui.player.components.DoubleTapSeekArea
 import com.music.bitchord.data.settings.AppSettings
 import com.music.bitchord.data.settings.LyricsTextAlignment
 import com.music.bitchord.data.settings.SeekButtonMode
+import com.music.bitchord.data.settings.TransportSideAction
 import com.music.bitchord.data.settings.PlayerControl
 import com.music.bitchord.data.settings.PlayerQuickAction
 import com.music.bitchord.data.settings.AudioQuality
@@ -929,6 +930,7 @@ fun NowPlayingScreen(
     val reducePlayerAnimations by AppSettings.reduceAnimation.collectAsStateWithLifecycle()
     val frostedQueueManager by AppSettings.frostedQueueManager.collectAsStateWithLifecycle()
     val redesignedSavedQueueManager by AppSettings.redesignedSavedQueueManager.collectAsStateWithLifecycle()
+    val hideSavedQueueHeading by AppSettings.hideSavedQueueHeading.collectAsStateWithLifecycle()
     val showPlayerLyricsStrip by AppSettings.showPlayerLyricsStrip.collectAsStateWithLifecycle()
     val offlineMode by AppSettings.offlineMode.collectAsStateWithLifecycle()
     val visiblePlayerControls by AppSettings.visiblePlayerControls.collectAsStateWithLifecycle()
@@ -1109,6 +1111,7 @@ fun NowPlayingScreen(
     if (savedQueueManagerOpen) {
         SavedQueuesDialog(
             redesigned = redesignedSavedQueueManager,
+            hideSaveCurrentQueueHeading = hideSavedQueueHeading,
             queues = savedQueues,
             // Use the same thumbnail size, source URL and dark palette as the
             // player-details sheet so the two surfaces share one colour set.
@@ -1370,6 +1373,8 @@ fun NowPlayingScreen(
     val doubleTapToSeek by AppSettings.doubleTapToSeek.collectAsStateWithLifecycle()
     val seekIntervalSeconds by AppSettings.seekIntervalSeconds.collectAsStateWithLifecycle()
     val seekButtonMode by AppSettings.seekButtonMode.collectAsStateWithLifecycle()
+    val transportLeftAction by AppSettings.transportLeftAction.collectAsStateWithLifecycle()
+    val transportRightAction by AppSettings.transportRightAction.collectAsStateWithLifecycle()
     val hideSeekButtonLabels by AppSettings.hideSeekButtonLabels.collectAsStateWithLifecycle()
     // Full-bleed is a phone idiom, and a docked pane is a phone's width — so it
     // is asked of the player's own width rather than of the window's. Asking the
@@ -3093,7 +3098,7 @@ fun NowPlayingScreen(
                     SeekButtonMode.ALWAYS -> true
                     SeekButtonMode.LONG_TRACKS_ONLY -> effectiveDurationMs >= 15L * 60L * 1000L
                 }
-                if (seekButtonsVisible) {
+                if (transportLeftAction == TransportSideAction.NONE && seekButtonsVisible) {
                     SeekTransportGlyph(
                         icon = Icons.Rounded.FastRewind,
                         contentDescription = stringResource(R.string.seek_back_seconds, seekIntervalSeconds),
@@ -3103,8 +3108,30 @@ fun NowPlayingScreen(
                             onSeek((positionMs - seekIntervalSeconds * 1000L).coerceAtLeast(0L))
                         },
                     )
+                } else if (transportLeftAction != TransportSideAction.NONE) {
+                    TransportSideActionGlyph(
+                        action = transportLeftAction,
+                        shuffleEnabled = shuffleEnabled,
+                        repeatMode = repeatMode,
+                        liked = liked,
+                        favoriteIcon = likeIcon,
+                        favoriteDescription = likeDescription,
+                        favoriteAvailable = likeAvailable,
+                        lyricsOpen = lyricsOpen,
+                        queueOpen = queueOpen,
+                        onToggleShuffle = onToggleShuffle,
+                        onCycleRepeat = onCycleRepeat,
+                        onToggleFavorite = toggleLike,
+                        onOpenLyrics = { lyricsOpen = true; queueOpen = false },
+                        onOpenQueue = { queueOpen = true; lyricsOpen = false },
+                        onOpenPlaylists = onOpenPlaylists,
+                        onOpenSearch = onOpenSearch,
+                    )
                 }
-                if (walkmanControlsActive && PlayerControl.SHUFFLE in visiblePlayerControls) {
+                if (walkmanControlsActive && PlayerControl.SHUFFLE in visiblePlayerControls &&
+                    transportLeftAction != TransportSideAction.SHUFFLE &&
+                    transportRightAction != TransportSideAction.SHUFFLE
+                ) {
                     BottomGlyph(
                         icon = BitChordIcons.Shuffle,
                         contentDescription = stringResource(
@@ -3168,7 +3195,10 @@ fun NowPlayingScreen(
                     haptic = Haptic.SkipNext,
                     outlined = walkmanControlsActive,
                 )
-                if (walkmanControlsActive && PlayerControl.REPEAT in visiblePlayerControls) {
+                if (walkmanControlsActive && PlayerControl.REPEAT in visiblePlayerControls &&
+                    transportLeftAction != TransportSideAction.REPEAT &&
+                    transportRightAction != TransportSideAction.REPEAT
+                ) {
                     BottomGlyph(
                         icon = if (repeatMode == Player.REPEAT_MODE_ONE) null else BitChordIcons.Repeat,
                         label = if (repeatMode == Player.REPEAT_MODE_ONE) "1" else null,
@@ -3187,7 +3217,7 @@ fun NowPlayingScreen(
                         outlined = true,
                     )
                 }
-                if (seekButtonsVisible) {
+                if (transportRightAction == TransportSideAction.NONE && seekButtonsVisible) {
                     SeekTransportGlyph(
                         icon = Icons.Rounded.FastForward,
                         contentDescription = stringResource(R.string.seek_forward_seconds, seekIntervalSeconds),
@@ -3197,6 +3227,25 @@ fun NowPlayingScreen(
                             val end = effectiveDurationMs.takeIf { it > 0L } ?: Long.MAX_VALUE
                             onSeek((positionMs + seekIntervalSeconds * 1000L).coerceAtMost(end))
                         },
+                    )
+                } else if (transportRightAction != TransportSideAction.NONE) {
+                    TransportSideActionGlyph(
+                        action = transportRightAction,
+                        shuffleEnabled = shuffleEnabled,
+                        repeatMode = repeatMode,
+                        liked = liked,
+                        favoriteIcon = likeIcon,
+                        favoriteDescription = likeDescription,
+                        favoriteAvailable = likeAvailable,
+                        lyricsOpen = lyricsOpen,
+                        queueOpen = queueOpen,
+                        onToggleShuffle = onToggleShuffle,
+                        onCycleRepeat = onCycleRepeat,
+                        onToggleFavorite = toggleLike,
+                        onOpenLyrics = { lyricsOpen = true; queueOpen = false },
+                        onOpenQueue = { queueOpen = true; lyricsOpen = false },
+                        onOpenPlaylists = onOpenPlaylists,
+                        onOpenSearch = onOpenSearch,
                     )
                 }
             }
@@ -4850,6 +4899,92 @@ private fun SeekTransportGlyph(
             )
         }
     }
+}
+
+@Composable
+private fun TransportSideActionGlyph(
+    action: TransportSideAction,
+    shuffleEnabled: Boolean,
+    repeatMode: Int,
+    liked: Boolean,
+    favoriteIcon: ImageVector,
+    favoriteDescription: String,
+    favoriteAvailable: Boolean,
+    lyricsOpen: Boolean,
+    queueOpen: Boolean,
+    onToggleShuffle: () -> Unit,
+    onCycleRepeat: () -> Unit,
+    onToggleFavorite: () -> Unit,
+    onOpenLyrics: () -> Unit,
+    onOpenQueue: () -> Unit,
+    onOpenPlaylists: () -> Unit,
+    onOpenSearch: () -> Unit,
+) {
+    val icon = when (action) {
+        TransportSideAction.NONE -> return
+        TransportSideAction.SHUFFLE -> BitChordIcons.Shuffle
+        TransportSideAction.REPEAT -> if (repeatMode == Player.REPEAT_MODE_ONE) null else BitChordIcons.Repeat
+        TransportSideAction.FAVORITE -> favoriteIcon
+        TransportSideAction.LYRICS -> BitChordIcons.Lyrics
+        TransportSideAction.QUEUE -> Icons.AutoMirrored.Rounded.QueueMusic
+        TransportSideAction.PLAYLISTS -> Icons.Rounded.LibraryMusic
+        TransportSideAction.SEARCH -> BitChordIcons.Search
+    }
+    val label = "1".takeIf { action == TransportSideAction.REPEAT && repeatMode == Player.REPEAT_MODE_ONE }
+    val contentDescription = when (action) {
+        TransportSideAction.NONE -> return
+        TransportSideAction.SHUFFLE -> stringResource(
+            if (shuffleEnabled) R.string.shuffle_on else R.string.shuffle_off,
+        )
+        TransportSideAction.REPEAT -> stringResource(
+            when (repeatMode) {
+                Player.REPEAT_MODE_ONE -> R.string.repeat_one
+                Player.REPEAT_MODE_ALL -> R.string.repeat_all
+                else -> R.string.repeat_off
+            },
+        )
+        TransportSideAction.FAVORITE -> favoriteDescription
+        TransportSideAction.LYRICS -> stringResource(R.string.quick_action_lyrics)
+        TransportSideAction.QUEUE -> stringResource(R.string.quick_action_queue)
+        TransportSideAction.PLAYLISTS -> stringResource(R.string.quick_action_playlists)
+        TransportSideAction.SEARCH -> stringResource(R.string.quick_action_search)
+    }
+    val highlighted = when (action) {
+        TransportSideAction.SHUFFLE -> shuffleEnabled
+        TransportSideAction.REPEAT -> repeatMode != Player.REPEAT_MODE_OFF
+        TransportSideAction.FAVORITE -> liked
+        TransportSideAction.LYRICS -> lyricsOpen
+        TransportSideAction.QUEUE -> queueOpen
+        else -> false
+    }
+    val enabled = action != TransportSideAction.FAVORITE || favoriteAvailable
+    val haptic = when (action) {
+        TransportSideAction.SHUFFLE -> if (shuffleEnabled) Haptic.ToggleOff else Haptic.ToggleOn
+        TransportSideAction.REPEAT -> if (repeatMode == Player.REPEAT_MODE_OFF) Haptic.ToggleOn else Haptic.Select
+        TransportSideAction.FAVORITE -> if (liked) Haptic.ToggleOff else Haptic.ToggleOn
+        TransportSideAction.LYRICS, TransportSideAction.QUEUE -> Haptic.Expand
+        else -> Haptic.Tap
+    }
+    BottomGlyph(
+        icon = icon,
+        label = label,
+        contentDescription = contentDescription,
+        highlighted = highlighted,
+        enabled = enabled,
+        haptic = haptic,
+        onClick = {
+            when (action) {
+                TransportSideAction.NONE -> Unit
+                TransportSideAction.SHUFFLE -> onToggleShuffle()
+                TransportSideAction.REPEAT -> onCycleRepeat()
+                TransportSideAction.FAVORITE -> onToggleFavorite()
+                TransportSideAction.LYRICS -> onOpenLyrics()
+                TransportSideAction.QUEUE -> onOpenQueue()
+                TransportSideAction.PLAYLISTS -> onOpenPlaylists()
+                TransportSideAction.SEARCH -> onOpenSearch()
+            }
+        },
+    )
 }
 
 @Composable

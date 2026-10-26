@@ -829,6 +829,13 @@ class PlaybackService : MediaLibraryService() {
          * on the audio, which is what the media notification shows too.
          */
         override fun onPlayWhenReadyChanged(playWhenReady: Boolean, reason: Int) {
+            if (playWhenReady && shouldBlockPlaybackOnCurrentRoute()) {
+                // Pause immediately before Media3 starts the AudioTrack. A route
+                // change never resumes playback automatically; the user must
+                // press play after connecting an allowed output.
+                eachPlayer { candidate -> if (candidate.playWhenReady) candidate.pause() }
+                return
+            }
             handleAudioFocusPlaybackChange(playWhenReady)
             publishWidgetState(playing = playWhenReady)
             QuickPlayTileState.setActive(this@PlaybackService, playWhenReady)
@@ -1231,6 +1238,7 @@ class PlaybackService : MediaLibraryService() {
                 encoding = audioTrackConfig.encoding,
                 sampleRateHz = audioTrackConfig.sampleRate,
                 channelConfig = audioTrackConfig.channelConfig,
+                bufferSizeBytes = audioTrackConfig.bufferSize,
             )
             if (AppSettings.bitPerfectPlayback.value) {
                 requestBitPerfectMixerAttributes(audioTrackConfig)
@@ -4511,6 +4519,11 @@ class PlaybackService : MediaLibraryService() {
         val routedDevice = currentOutputDevice(manager, preferred)
         phoneSpeakerOutputActive = !castPlayback.active &&
             (routedDevice == null || routedDevice.type == AudioDeviceInfo.TYPE_BUILTIN_SPEAKER)
+        if (!AppSettings.speakerPlaybackAllowed.value && !castPlayback.active &&
+            !isAllowedHeadphoneOrUsbRoute(routedDevice)
+        ) {
+            eachPlayer { candidate -> if (candidate.playWhenReady) candidate.pause() }
+        }
         val outputProfileKey = routedDevice?.let { device ->
             "out-${(device.type.toString() + ":" + device.productName.toString().lowercase()).hashCode().toUInt().toString(16)}"
         } ?: "default"
@@ -4651,6 +4664,19 @@ class PlaybackService : MediaLibraryService() {
         }
         return outputs.firstOrNull { it.type in preferredTypes } ?: outputs.firstOrNull { it.type == AudioDeviceInfo.TYPE_BUILTIN_SPEAKER }
             ?: outputs.firstOrNull()
+    }
+
+    private fun shouldBlockPlaybackOnCurrentRoute(): Boolean {
+        if (AppSettings.speakerPlaybackAllowed.value || castPlayback.active) return false
+        val manager = audioManager ?: return true
+        return !isAllowedHeadphoneOrUsbRoute(currentOutputDevice(manager, preferredUsbDevice()))
+    }
+
+    private fun isAllowedHeadphoneOrUsbRoute(device: AudioDeviceInfo?): Boolean = when (
+        device?.let { AudioRouting.kindOf(it.type) }
+    ) {
+        AudioRouting.Kind.WIRED, AudioRouting.Kind.USB, AudioRouting.Kind.BLUETOOTH -> true
+        else -> false
     }
 
     /** Reads only the resolver's in-memory figure; no request is made from the audio thread. */
@@ -4884,6 +4910,9 @@ class PlaybackService : MediaLibraryService() {
         }
         scope.launch {
             AppSettings.preferUsbDac.drop(1).collect { requestOutputReconfiguration() }
+        }
+        scope.launch {
+            AppSettings.speakerPlaybackAllowed.drop(1).collect { requestOutputReconfiguration() }
         }
         scope.launch {
             AppSettings.outputPcmMode.drop(1).collect { requestOutputReconfiguration() }

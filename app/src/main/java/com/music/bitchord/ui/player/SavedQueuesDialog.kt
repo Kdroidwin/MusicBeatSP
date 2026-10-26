@@ -63,6 +63,7 @@ import com.music.bitchord.data.model.ROW_ART_PX
 @Composable
 internal fun SavedQueuesDialog(
     redesigned: Boolean,
+    hideSaveCurrentQueueHeading: Boolean,
     queues: List<SavedQueue>,
     artworkPalette: ArtworkPalette,
     artworkUrl: String?,
@@ -78,6 +79,7 @@ internal fun SavedQueuesDialog(
 ) {
     if (redesigned) {
         ModernSavedQueuesDialog(
+            hideSaveCurrentQueueHeading = hideSaveCurrentQueueHeading,
             queues = queues,
             artworkPalette = artworkPalette,
             artworkUrl = artworkUrl,
@@ -302,6 +304,7 @@ private fun LegacySavedQueuesDialog(
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 private fun ModernSavedQueuesDialog(
+    hideSaveCurrentQueueHeading: Boolean,
     queues: List<SavedQueue>,
     artworkPalette: ArtworkPalette,
     artworkUrl: String?,
@@ -380,12 +383,14 @@ private fun ModernSavedQueuesDialog(
                     }
                 }
 
-                Text(
-                    text = stringResource(R.string.save_current_queue),
-                    style = MaterialTheme.typography.titleSmall,
-                    color = foreground,
-                )
-                Spacer(Modifier.height(8.dp))
+                if (!hideSaveCurrentQueueHeading) {
+                    Text(
+                        text = stringResource(R.string.save_current_queue),
+                        style = MaterialTheme.typography.titleSmall,
+                        color = foreground,
+                    )
+                    Spacer(Modifier.height(8.dp))
+                }
                 Row(verticalAlignment = Alignment.CenterVertically) {
                     OutlinedTextField(
                         value = name,

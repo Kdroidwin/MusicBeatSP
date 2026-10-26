@@ -570,18 +570,15 @@ fun DrillDownSongList(
     onArtworkPaletteChanged: ((ArtworkPalette?) -> Unit)? = null,
     modifier: Modifier = Modifier,
 ) {
-    val pageArtworkUrl = remember(fullScreenArtwork, artworkUrl, songs) {
-        if (!fullScreenArtwork) {
-            null
-        } else {
-            artworkUrl
-                ?.takeIf { it.isNotBlank() && it != "favorites" }
-                ?.artworkAt(HEADER_ART_PX)
-                ?: songs.firstNotNullOfOrNull { it.artworkAt(HEADER_ART_PX) }
-        }
+    val selectionArtworkUrl = remember(artworkUrl, songs) {
+        artworkUrl
+            ?.takeIf { it.isNotBlank() && it != "favorites" }
+            ?.artworkAt(HEADER_ART_PX)
+            ?: songs.firstNotNullOfOrNull { it.artworkAt(HEADER_ART_PX) }
     }
+    val pageArtworkUrl = selectionArtworkUrl.takeIf { fullScreenArtwork }
     val artworkPalette = rememberArtworkPalette(
-        imageUrl = pageArtworkUrl,
+        imageUrl = selectionArtworkUrl,
         artPx = HEADER_ART_PX,
     )
     SideEffect {
@@ -609,11 +606,7 @@ fun DrillDownSongList(
     } else {
         MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.5f)
     }
-    val selectionToolbarBackground = if (fullScreenArtwork) {
-        artworkPalette.wash
-    } else {
-        MaterialTheme.colorScheme.background
-    }
+    val selectionToolbarBackground = artworkPalette.wash
     val selectionToolbarContentColor = selectionToolbarBackground.highContrastBlackOrWhite()
 
     if (viewType == LibraryViewType.GRID) {
@@ -679,7 +672,15 @@ fun DrillDownSongList(
                     )
                 }
                 if (selectionToolbar != null) {
-                    item(span = { GridItemSpan(maxLineSpan) }) { selectionToolbar(selectionToolbarContentColor) }
+                    item(span = { GridItemSpan(maxLineSpan) }) {
+                        Box(
+                            Modifier
+                                .fillMaxWidth()
+                                .background(selectionToolbarBackground),
+                        ) {
+                            selectionToolbar(selectionToolbarContentColor)
+                        }
+                    }
                 }
                 itemsIndexed(songs) { index, song ->
                     SongGridCard(
@@ -789,7 +790,15 @@ fun DrillDownSongList(
                     )
                 }
                 if (selectionToolbar != null) {
-                    item { selectionToolbar(selectionToolbarContentColor) }
+                    item {
+                        Box(
+                            Modifier
+                                .fillMaxWidth()
+                                .background(selectionToolbarBackground),
+                        ) {
+                            selectionToolbar(selectionToolbarContentColor)
+                        }
+                    }
                 }
                 itemsIndexed(displayedSongs, key = { _, song -> song.localUri ?: song.videoId }) { index, song ->
                     val trackNumber = if ((isPlaylist && showArtworkInList) || showCollectionArtworkInList) {
