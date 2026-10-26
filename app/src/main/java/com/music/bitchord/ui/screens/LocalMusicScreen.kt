@@ -327,6 +327,7 @@ fun LocalMusicScreen(
         AppSettings.localArtistsViewType.collectAsStateWithLifecycle()
     }
     val localFolderHierarchy by AppSettings.localFolderHierarchy.collectAsStateWithLifecycle()
+    val showCollectionSongArtwork by AppSettings.showCollectionSongArtwork.collectAsStateWithLifecycle()
     val fullScreenCollectionArtwork by AppSettings.fullScreenCollectionArtwork.collectAsStateWithLifecycle()
     val keepCollectionArtworkAspectRatio by AppSettings.keepCollectionArtworkAspectRatio.collectAsStateWithLifecycle()
     val artistsOpenAlbums by AppSettings.artistsOpenAlbums.collectAsStateWithLifecycle()
@@ -758,6 +759,8 @@ fun LocalMusicScreen(
                             artworkUrl = drillDownArt,
                             songs = drillDownSongs,
                             isArtist = drillDownIsArtist,
+                            showCollectionArtworkInList = showCollectionSongArtwork &&
+                                drillDownPlaylistId == null && (drillDownIsArtist || drillDownFullScreenArtwork),
                             preserveArtworkAspectRatioInCollections =
                                 keepCollectionArtworkAspectRatio && !drillDownIsArtist && !drillDownShowsAlbums,
                             fullScreenArtwork = fullScreenCollectionArtwork && drillDownFullScreenArtwork,

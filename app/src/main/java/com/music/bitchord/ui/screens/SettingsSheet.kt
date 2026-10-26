@@ -439,6 +439,7 @@ fun SettingsScreen(
     val dontRepeatSuggestions by AppSettings.dontRepeatSuggestions.collectAsStateWithLifecycle()
     val filterNonMusicAudio by AppSettings.filterNonMusicAudio.collectAsStateWithLifecycle()
     val showPlaylistSongArtwork by AppSettings.showPlaylistSongArtwork.collectAsStateWithLifecycle()
+    val showCollectionSongArtwork by AppSettings.showCollectionSongArtwork.collectAsStateWithLifecycle()
     val keepCollectionArtworkAspectRatio by AppSettings.keepCollectionArtworkAspectRatio.collectAsStateWithLifecycle()
     val highPerformanceMode by AppSettings.highPerformanceMode.collectAsStateWithLifecycle()
     val performanceRefreshRate by AppSettings.performanceRefreshRate.collectAsStateWithLifecycle()
@@ -871,6 +872,12 @@ fun SettingsScreen(
         ) { AppSettings.setPlaylistTrackMenuUsesArtworkColor(!playlistTrackMenuUsesArtworkColor) },
         SettingsSearchEntry(stringResource(R.string.filter_non_music_audio), stringResource(R.string.filter_non_music_audio_subtitle), listOf("filter", "audio", "music", "音楽", "フィルター"), filterNonMusicAudio) { AppSettings.setFilterNonMusicAudio(!filterNonMusicAudio) },
         SettingsSearchEntry(stringResource(R.string.playlist_song_artwork), stringResource(R.string.playlist_song_artwork_subtitle), listOf("playlist", "artwork", "プレイリスト", "アルバムアート"), showPlaylistSongArtwork) { AppSettings.setShowPlaylistSongArtwork(!showPlaylistSongArtwork) },
+        SettingsSearchEntry(
+            stringResource(R.string.collection_song_artwork),
+            stringResource(R.string.collection_song_artwork_subtitle),
+            listOf("album", "artist", "album artist", "artwork", "アルバム", "アーティスト", "アルバムアーティスト", "アートワーク"),
+            showCollectionSongArtwork,
+        ) { AppSettings.setShowCollectionSongArtwork(!showCollectionSongArtwork) },
         SettingsSearchEntry(stringResource(R.string.keep_collection_artwork_aspect_ratio), stringResource(R.string.keep_collection_artwork_aspect_ratio_subtitle), listOf("playlist", "album", "artwork", "aspect ratio", "cover", "プレイリスト", "アルバム", "アート", "縦横比"), keepCollectionArtworkAspectRatio) { AppSettings.setKeepCollectionArtworkAspectRatio(!keepCollectionArtworkAspectRatio) },
     ) + listOf(
         SettingsSearchEntry(
@@ -3827,6 +3834,7 @@ fun SettingsScreen(
             onlineAlbumArtistArtwork = onlineAlbumArtistArtwork,
             filterNonMusicAudio = filterNonMusicAudio,
             showPlaylistSongArtwork = showPlaylistSongArtwork,
+            showCollectionSongArtwork = showCollectionSongArtwork,
             keepCollectionArtworkAspectRatio = keepCollectionArtworkAspectRatio,
             hasAllFiles = hasAllFiles,
             onManageFolders = { showManageFoldersSheet = true },
@@ -4984,6 +4992,7 @@ private fun LocalMusicSettingsGroup(
     onlineAlbumArtistArtwork: Boolean,
     filterNonMusicAudio: Boolean,
     showPlaylistSongArtwork: Boolean,
+    showCollectionSongArtwork: Boolean,
     keepCollectionArtworkAspectRatio: Boolean,
     hasAllFiles: Boolean,
     onManageFolders: () -> Unit,
@@ -5225,6 +5234,23 @@ SettingsGroup(header = stringResource(R.string.local_music)) {
             )
         },
         onClick = { AppSettings.setShowPlaylistSongArtwork(!showPlaylistSongArtwork) },
+    )
+    RowDivider()
+    SettingsRow(
+        icon = Icons.Rounded.Album,
+        title = stringResource(R.string.collection_song_artwork),
+        subtitle = stringResource(R.string.collection_song_artwork_subtitle),
+        trailing = {
+            Switch(
+                checked = showCollectionSongArtwork,
+                onCheckedChange = AppSettings::setShowCollectionSongArtwork,
+                colors = SwitchDefaults.colors(
+                    checkedTrackColor = MaterialTheme.colorScheme.primary,
+                    checkedBorderColor = MaterialTheme.colorScheme.primary,
+                ),
+            )
+        },
+        onClick = { AppSettings.setShowCollectionSongArtwork(!showCollectionSongArtwork) },
     )
     RowDivider()
     SettingsRow(

@@ -558,6 +558,7 @@ fun DrillDownSongList(
     onMore: (() -> Unit)? = null,
     isPlaylist: Boolean = false,
     showArtworkInList: Boolean = false,
+    showCollectionArtworkInList: Boolean = false,
     fullScreenArtwork: Boolean = false,
     preserveArtworkAspectRatioInCollections: Boolean = false,
     reorderEnabled: Boolean = false,
@@ -791,7 +792,9 @@ fun DrillDownSongList(
                     item { selectionToolbar(selectionToolbarContentColor) }
                 }
                 itemsIndexed(displayedSongs, key = { _, song -> song.localUri ?: song.videoId }) { index, song ->
-                    val trackNumber = if (isPlaylist && showArtworkInList) null else index + 1
+                    val trackNumber = if ((isPlaylist && showArtworkInList) || showCollectionArtworkInList) {
+                        null
+                    } else index + 1
                     if (reorderEnabled && isPlaylist) {
                         val songKey = song.localUri ?: song.videoId
                         val isDragging = dragState.draggedKey == songKey

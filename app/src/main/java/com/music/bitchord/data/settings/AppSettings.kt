@@ -912,6 +912,8 @@ object AppSettings {
     val librarySongsViewType = MutableStateFlow(LibraryViewType.LIST)
     /** Show each track's cover in a playlist detail list instead of its number. */
     val showPlaylistSongArtwork = MutableStateFlow(false)
+    /** Show track covers in album, artist, and album-artist detail lists instead of ordinal numbers. */
+    val showCollectionSongArtwork = MutableStateFlow(true)
     val localDrillDownSongsViewType = MutableStateFlow(LibraryViewType.LIST)
     val downloadedDrillDownSongsViewType = MutableStateFlow(LibraryViewType.LIST)
     val librarySort = MutableStateFlow(LibrarySort.DEFAULT)
@@ -1436,6 +1438,7 @@ object AppSettings {
         libraryPlaylistsViewType.value = readLibraryViewType(KEY_LIBRARY_PLAYLISTS_VIEW_TYPE, LibraryViewType.GRID)
         librarySongsViewType.value = readLibraryViewType(KEY_LIBRARY_SONGS_VIEW_TYPE, LibraryViewType.LIST)
         showPlaylistSongArtwork.value = prefs.getBoolean(KEY_SHOW_PLAYLIST_SONG_ARTWORK, false)
+        showCollectionSongArtwork.value = prefs.getBoolean(KEY_SHOW_COLLECTION_SONG_ARTWORK, true)
         localDrillDownSongsViewType.value = readLibraryViewType(KEY_LOCAL_DRILLDOWN_SONGS_VIEW_TYPE, LibraryViewType.LIST)
         downloadedDrillDownSongsViewType.value = readLibraryViewType(KEY_DOWNLOADED_DRILLDOWN_SONGS_VIEW_TYPE, LibraryViewType.LIST)
         librarySort.value = prefs.getString(KEY_LIBRARY_SORT, null)
@@ -3192,6 +3195,11 @@ object AppSettings {
         prefs.edit().putBoolean(KEY_SHOW_PLAYLIST_SONG_ARTWORK, value).apply()
     }
 
+    fun setShowCollectionSongArtwork(value: Boolean) {
+        showCollectionSongArtwork.value = value
+        prefs.edit().putBoolean(KEY_SHOW_COLLECTION_SONG_ARTWORK, value).apply()
+    }
+
     fun setLocalDrillDownSongsViewType(value: LibraryViewType) {
         localDrillDownSongsViewType.value = value
         prefs.edit().putString(KEY_LOCAL_DRILLDOWN_SONGS_VIEW_TYPE, value.name).apply()
@@ -3625,6 +3633,7 @@ object AppSettings {
     private const val KEY_LIBRARY_PLAYLISTS_VIEW_TYPE = "library_playlists_view_type"
     private const val KEY_LIBRARY_SONGS_VIEW_TYPE = "library_songs_view_type"
     private const val KEY_SHOW_PLAYLIST_SONG_ARTWORK = "show_playlist_song_artwork"
+    private const val KEY_SHOW_COLLECTION_SONG_ARTWORK = "show_collection_song_artwork"
     private const val KEY_LOCAL_DRILLDOWN_SONGS_VIEW_TYPE = "local_drilldown_songs_view_type"
     private const val KEY_DOWNLOADED_DRILLDOWN_SONGS_VIEW_TYPE = "downloaded_drilldown_songs_view_type"
     private const val KEY_BLACKLISTED_FOLDERS = "blacklisted_folders"

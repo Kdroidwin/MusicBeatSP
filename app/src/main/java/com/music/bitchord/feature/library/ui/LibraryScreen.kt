@@ -204,6 +204,7 @@ fun LibraryScreen(
     val libraryViewType by AppSettings.libraryPlaylistsViewType.collectAsStateWithLifecycle()
     val songsViewType by AppSettings.librarySongsViewType.collectAsStateWithLifecycle()
     val showPlaylistSongArtwork by AppSettings.showPlaylistSongArtwork.collectAsStateWithLifecycle()
+    val showCollectionSongArtwork by AppSettings.showCollectionSongArtwork.collectAsStateWithLifecycle()
     val fullScreenCollectionArtwork by AppSettings.fullScreenCollectionArtwork.collectAsStateWithLifecycle()
     val keepCollectionArtworkAspectRatio by AppSettings.keepCollectionArtworkAspectRatio.collectAsStateWithLifecycle()
     val playlistTrackMenuUsesArtworkColor by AppSettings.playlistTrackMenuUsesArtworkColor.collectAsStateWithLifecycle()
@@ -629,6 +630,7 @@ fun LibraryScreen(
                     isArtist = false,
                     isPlaylist = drillDownPlaylistId != null,
                     showArtworkInList = showPlaylistSongArtwork,
+                    showCollectionArtworkInList = drillDownPlaylistId == null && showCollectionSongArtwork,
                     fullScreenArtwork = fullScreenCollectionArtwork,
                     preserveArtworkAspectRatioInCollections = keepCollectionArtworkAspectRatio,
                     viewType = songsViewType,
