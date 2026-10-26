@@ -278,6 +278,7 @@ import androidx.compose.ui.window.Dialog
 import androidx.compose.ui.window.DialogProperties
 import androidx.compose.ui.window.DialogWindowProvider
 import com.music.bitchord.feature.localmusic.ui.components.DrillDownSongList
+import com.music.bitchord.feature.localmusic.data.LocalPlaylistStore
 import com.music.bitchord.widget.QuickPlayTileState
 import com.music.bitchord.ui.screens.LocalMusicScreen
 import com.music.bitchord.ui.replay.ReplayScreen
@@ -2647,6 +2648,7 @@ private fun BitChordApp(
                                 onAddToQueue = addToQueue,
                                 onDeleteSong = { viewModel.loadLocalMusic() },
                                 onSongTagsOrLyricsSaved = { viewModel.reloadLyrics(it) },
+                                onLocalMusicChanged = { viewModel.loadLocalMusic() },
                                 initialFilterRequest = libraryFilterRequest,
                                 onInitialFilterApplied = { libraryFilterRequest = null },
                                 onArtworkPaletteChanged = onLocalArtworkPaletteChanged,
@@ -3177,9 +3179,16 @@ private fun BitChordApp(
                             showTagEditor = false
                             songActions = null
                         },
-                        onTagsSaved = {
+                        onTagsSaved = { updatedTags ->
                             showTagEditor = false
                             songActions = null
+                            LocalPlaylistStore.updateEditedSongMetadata(
+                                song = song,
+                                title = updatedTags.title,
+                                artist = updatedTags.artist,
+                                albumName = updatedTags.album,
+                                albumArtist = updatedTags.albumArtist,
+                            )
                             viewModel.loadLocalMusic()
                             viewModel.reloadLyrics(song)
                         },

@@ -76,4 +76,24 @@ object AudioOutputStatus {
         null -> if (snapshot.floatFallback) "16-bit fallback" else snapshot.requestedPcmMode.label
         else -> "PCM (${snapshot.actualEncoding})"
     }
+
+    /**
+     * Estimates the duration represented by Media3's AudioTrack buffer from
+     * the accepted PCM format. This is not end-to-end latency; Android and the
+     * DAC may buffer additional audio after the app's track.
+     */
+    fun estimatedTrackBufferDurationMs(snapshot: Snapshot): Long? {
+        val bytes = snapshot.audioTrackBufferSizeBytes?.takeIf { it > 0 } ?: return null
+        val sampleRate = snapshot.actualSampleRateHz?.takeIf { it > 0 } ?: return null
+        val channelMask = snapshot.actualChannelConfig?.takeIf { it != 0 } ?: return null
+        val channelCount = Integer.bitCount(channelMask).takeIf { it > 0 } ?: return null
+        val bytesPerSample = when (snapshot.actualEncoding) {
+            AudioFormat.ENCODING_PCM_16BIT -> 2
+            AudioFormat.ENCODING_PCM_24BIT_PACKED -> 3
+            AudioFormat.ENCODING_PCM_32BIT, AudioFormat.ENCODING_PCM_FLOAT -> 4
+            else -> return null
+        }
+        return (bytes.toLong() * 1_000L / (sampleRate.toLong() * channelCount * bytesPerSample))
+            .takeIf { it >= 0L }
+    }
 }

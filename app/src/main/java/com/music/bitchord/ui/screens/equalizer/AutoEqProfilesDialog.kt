@@ -41,6 +41,7 @@ import androidx.compose.ui.window.Dialog
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.music.bitchord.R
 import com.music.bitchord.data.settings.AppSettings
+import com.music.bitchord.data.settings.ParametricEqConfig
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
@@ -50,17 +51,16 @@ import java.net.HttpURLConnection
 import java.net.URL
 import java.net.URLEncoder
 import java.nio.charset.StandardCharsets
-import kotlin.math.ln
 
 /**
- * AutoEQ profile picker adapted to MusicBeat's five-band platform EQ.
+ * AutoEQ profile picker adapted to MusicBeat's in-app parametric EQ.
  * The bundled headphone index and the GraphicEQ text files are from AutoEq;
  * the original Echo-Music loader this follows is GPL-3.0 licensed.
  */
 @Composable
 fun AutoEqProfilesDialog(
     onDismiss: () -> Unit,
-    onApplyEq: (List<Short>) -> Unit,
+    onApplyEq: (ParametricEqConfig) -> Unit,
 ) {
     val context = LocalContext.current
     val scope = rememberCoroutineScope()
@@ -163,10 +163,10 @@ fun AutoEqProfilesDialog(
                                             applying = true
                                             scope.launch {
                                                 val result = runCatching {
-                                                    withContext(Dispatchers.IO) { downloadProfileGains(profile) }
+                                                    withContext(Dispatchers.IO) { downloadProfileConfig(profile) }
                                                 }
-                                                result.onSuccess { gains ->
-                                                    onApplyEq(gains)
+                                                result.onSuccess { config ->
+                                                    onApplyEq(config)
                                                     Toast.makeText(context, profile.name, Toast.LENGTH_SHORT).show()
                                                     onDismiss()
                                                 }.onFailure {
@@ -229,7 +229,7 @@ private fun loadCatalog(context: Context): List<AutoEqProfile> {
     }
 }
 
-private fun downloadProfileGains(profile: AutoEqProfile): List<Short> {
+private fun downloadProfileConfig(profile: AutoEqProfile): ParametricEqConfig {
     val encodedName = URLEncoder.encode(profile.name, StandardCharsets.UTF_8.name()).replace("+", "%20")
     val url = URL("https://raw.githubusercontent.com/jaakkopasanen/AutoEq/master/results/${profile.path}/${encodedName}%20GraphicEQ.txt")
     val connection = (url.openConnection() as HttpURLConnection).apply {
@@ -254,28 +254,11 @@ private fun downloadProfileGains(profile: AutoEqProfile): List<Short> {
             if (pair.size < 2) return@mapNotNull null
             val frequency = pair[0].toFloatOrNull()?.takeIf { it > 0f && it.isFinite() } ?: return@mapNotNull null
             val gain = pair[1].toFloatOrNull()?.takeIf(Float::isFinite) ?: return@mapNotNull null
-            frequency to gain
+            AutoEqGraphicEqConverter.Point(frequency, gain)
         }
-        .sortedBy { it.first }
+        .sortedBy(AutoEqGraphicEqConverter.Point::frequencyHz)
     if (points.size < 10) throw IllegalStateException("AutoEQ profile data is incomplete")
-
-    val sampled = TARGET_FREQUENCIES_HZ.map { target -> interpolateAt(points, target) }
-    // Remove positive pre-gain before applying the platform EQ, which has no
-    // matching preamp control. This keeps the profile from clipping peaks.
-    val headroom = (sampled.maxOrNull() ?: 0f).coerceAtLeast(0f)
-    return sampled.map { gainDb ->
-        ((gainDb - headroom) * 100f).toInt().coerceIn(MIN_EQ_MILLIBELS, MAX_EQ_MILLIBELS).toShort()
-    }
-}
-
-private fun interpolateAt(points: List<Pair<Float, Float>>, targetHz: Float): Float {
-    val lower = points.lastOrNull { it.first <= targetHz } ?: return points.first().second
-    val upper = points.firstOrNull { it.first >= targetHz } ?: return points.last().second
-    if (lower.first == upper.first) return lower.second
-    val span = ln(upper.first / lower.first)
-    if (!span.isFinite() || span <= 0f) return lower.second
-    val fraction = (ln(targetHz / lower.first) / span).coerceIn(0f, 1f)
-    return lower.second + (upper.second - lower.second) * fraction
+    return AutoEqGraphicEqConverter.convert(points, profile.name)
 }
 
 private fun readCappedUtf8(input: java.io.InputStream): String {
@@ -293,9 +276,6 @@ private fun readCappedUtf8(input: java.io.InputStream): String {
 }
 
 private val WHITESPACE = Regex("\\s+")
-private val TARGET_FREQUENCIES_HZ = listOf(60f, 230f, 910f, 3_600f, 14_000f)
 private const val NETWORK_TIMEOUT_MS = 12_000
 private const val MAX_PROFILE_BYTES = 256 * 1024
 private const val MAX_VISIBLE_PROFILES = 100
-private const val MIN_EQ_MILLIBELS = -1_500
-private const val MAX_EQ_MILLIBELS = 1_500

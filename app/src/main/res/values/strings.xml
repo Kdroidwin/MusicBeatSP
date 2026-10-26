@@ -56,6 +56,18 @@
     <string name="track_gain">Track gain</string>
     <string name="album_gain">Album gain</string>
     <string name="new_playlist">New playlist</string>
+    <string name="playlist_name_prompt">Enter a name for this playlist</string>
+    <string name="tap_to_create">Tap to create</string>
+    <string name="localize_library_collection_count">Localize the Library collection count</string>
+    <string name="localize_library_collection_count_subtitle">Use the app language for the Collections label in the Library. On by default.</string>
+    <plurals name="library_collection_count">
+        <item quantity="one">%1$d Collection</item>
+        <item quantity="other">%1$d Collections</item>
+    </plurals>
+    <plurals name="library_collection_count_english">
+        <item quantity="one">%1$d Collection</item>
+        <item quantity="other">%1$d Collections</item>
+    </plurals>
     <string name="saved_to_youtube_music">Saved to YouTube Music</string>
     <string name="sign_in">Sign in</string>
     <string name="sign_out">Sign out</string>
@@ -203,7 +215,8 @@
     <string name="eq_profile_group_dirac">Dirac-inspired EQ</string>
     <string name="eq_profile_group_note">Tone presets only. They do not add Dolby or Dirac decoding.</string>
     <string name="autoeq_profiles">AutoEQ headphone profiles</string>
-    <string name="autoeq_profiles_subtitle">Find a headphone profile and approximate it with the built-in five-band EQ.</string>
+    <string name="autoeq_profiles_subtitle">Fit the headphone response to the 64-bit parametric EQ using 1/3-octave filters and automatic clipping headroom.</string>
+    <string name="autoeq_disabled_bitperfect">AutoEQ cannot be applied while bit-perfect playback is active.</string>
     <string name="autoeq_search_headphones">Search headphones</string>
     <string name="autoeq_catalog_loading">Loading headphone profiles…</string>
     <string name="autoeq_fetching">Downloading profile…</string>
@@ -292,6 +305,8 @@
     <string name="equalizer_subtitle">Built-in 5-band EQ &amp; audio effects</string>
     <string name="parametric_eq">Parametric EQ</string>
     <string name="parametric_eq_subtitle">Three adjustable peaking filters. Starts off; bit-perfect playback bypasses it.</string>
+    <string name="tpdf_dither">TPDF dither</string>
+    <string name="tpdf_dither_subtitle">Adds low-level triangular dither only when software DSP quantizes integer PCM. Off by default; bypassed in bit-perfect mode.</string>
     <string name="parametric_eq_band_number">Band %1$d</string>
     <string name="parametric_eq_frequency">Center frequency</string>
     <string name="parametric_eq_frequency_hz">%1$d Hz</string>
@@ -1145,7 +1160,7 @@
     <string name="startup_tab">Startup tab</string>
     <string name="startup_tab_subtitle">Choose the tab opened when the app starts</string>
     <string name="favorite_icon_star">Use a star for favorites</string>
-    <string name="favorite_icon_star_subtitle">Use a star instead of a heart for the player favorite button</string>
+    <string name="favorite_icon_star_subtitle">Use a star instead of a heart for favorites in the player and Library</string>
     <string name="persistent_local_artwork">Keep local artwork on storage</string>
     <string name="persistent_local_artwork_subtitle">Save extracted covers in app storage so they remain ready after restart</string>
     <string name="resampler_cutoff">PCM cutoff frequency</string>
@@ -1444,6 +1459,7 @@
     <string name="audio_rate_conversion">Decoder %1$.1f kHz → AudioTrack %2$.1f kHz; app output rate differs</string>
     <string name="audio_rate_no_app_conversion">Decoder and AudioTrack: %1$.1f kHz</string>
     <string name="audio_track_buffer_size">AudioTrack buffer: %1$d bytes</string>
+    <string name="audio_track_buffer_estimated_duration">Estimated app buffer: %1$d ms (not total output latency)</string>
     <string name="audio_system_effects_unknown">System audio effects: unavailable</string>
     <string name="audio_system_effects_available">System audio effects available (not necessarily active): %1$s</string>
     <string name="audio_output_rate_caveat">Android or the DAC may resample after AudioTrack. Final hardware rate is not exposed to ordinary apps.</string>

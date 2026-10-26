@@ -164,10 +164,19 @@ fun EqualizerSheet(
                 onClick = { showAutoEqDialog = true },
                 modifier = Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 4.dp),
                 shape = RoundedCornerShape(12.dp),
+                enabled = !bitPerfectPlayback,
             ) {
                 Icon(Icons.Rounded.Headphones, contentDescription = null, modifier = Modifier.size(18.dp))
                 Spacer(Modifier.width(8.dp))
                 Text(stringResource(R.string.autoeq_profiles))
+            }
+            if (bitPerfectPlayback) {
+                Text(
+                    text = stringResource(R.string.autoeq_disabled_bitperfect),
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    modifier = Modifier.padding(horizontal = 20.dp, vertical = 2.dp),
+                )
             }
 
             // Presets
@@ -310,10 +319,26 @@ fun EqualizerSheet(
     if (showAutoEqDialog) {
         AutoEqProfilesDialog(
             onDismiss = { showAutoEqDialog = false },
-            onApplyEq = { levels ->
+            onApplyEq = { profileConfig ->
                 AppSettings.setDiracAudioEnabled(false)
-                EqualizerSettings.setEnabled(true)
-                levels.forEachIndexed { index, level -> EqualizerSettings.setBandLevel(index, level) }
+                EqualizerSettings.setEnabled(false)
+                val current = AppSettings.parametricEqConfig.value
+                AppSettings.setParametricEqConfig(
+                    current.copy(
+                        enabled = true,
+                        globalPreampDb = profileConfig.globalPreampDb,
+                        lrPreampDb = 0f,
+                        leftGainDb = 0f,
+                        rightGainDb = 0f,
+                        globalBands = profileConfig.globalBands,
+                        leftBands = emptyList(),
+                        rightBands = emptyList(),
+                        activePresetId = null,
+                        activePresetName = profileConfig.activePresetName,
+                        sourceFileName = profileConfig.sourceFileName,
+                        notes = profileConfig.notes,
+                    ),
+                )
             },
         )
     }

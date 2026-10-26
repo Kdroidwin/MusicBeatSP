@@ -33,6 +33,7 @@ fun LibraryGridContent(
     onMovePlaylist: (LocalPlaylist, Int) -> Unit,
     onCreatePlaylist: () -> Unit,
     librarySongs: List<Song> = emptyList(),
+    favoriteUsesStar: Boolean = false,
     contentPadding: PaddingValues,
     modifier: Modifier = Modifier,
     state: LazyGridState = rememberLazyGridState(),
@@ -59,6 +60,7 @@ fun LibraryGridContent(
                     songCount = favoriteSongCount,
                     onClick = onFavoritesClick,
                     onPlay = onFavoritesPlay,
+                    useStarIcon = favoriteUsesStar,
                 )
             }
         }

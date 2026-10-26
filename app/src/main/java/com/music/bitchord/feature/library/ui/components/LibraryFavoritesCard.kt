@@ -45,6 +45,7 @@ fun LibraryFavoritesCard(
     songCount: Int,
     onClick: () -> Unit,
     onPlay: () -> Unit,
+    useStarIcon: Boolean = false,
     modifier: Modifier = Modifier,
 ) {
     Surface(
@@ -76,7 +77,7 @@ fun LibraryFavoritesCard(
                     ),
             ) {
                 Icon(
-                    imageVector = BitChordIcons.HeartFilled,
+                    imageVector = if (useStarIcon) BitChordIcons.StarFilled else BitChordIcons.HeartFilled,
                     contentDescription = null,
                     tint = Color.White.copy(alpha = 0.95f),
                     modifier = Modifier

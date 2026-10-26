@@ -22,6 +22,8 @@ data class LocalPlaylist(
     val customCoverUrl: String? = null,
     /** Imported display tags for playable URIs that are not present in MediaStore. */
     val songMetadata: Map<String, LocalPlaylistSongMetadata> = emptyMap(),
+    /** Explicit tag edits; separate from import snapshots so old cached tags never override fresh MediaStore data. */
+    val editedSongMetadata: Map<String, LocalPlaylistSongMetadata> = emptyMap(),
 )
 
 @Serializable
@@ -36,4 +38,7 @@ data class LocalPlaylistSongMetadata(
     val durationText: String? = null,
     val isVideo: Boolean = false,
     val isVideoOrigin: Boolean = isVideo,
+    /** Stable path hint used to refresh a local playlist row after MediaStore reindexes its URI. */
+    val localPath: String? = null,
+    val albumArtist: String? = null,
 )

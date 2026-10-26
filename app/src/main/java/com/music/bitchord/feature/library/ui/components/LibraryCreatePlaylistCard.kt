@@ -81,7 +81,7 @@ fun LibraryCreatePlaylistCard(
             Spacer(modifier = Modifier.height(2.dp))
 
             Text(
-                text = "Tap to create",
+                text = stringResource(R.string.tap_to_create),
                 style = MaterialTheme.typography.bodySmall,
                 color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.7f),
             )

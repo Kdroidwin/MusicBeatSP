@@ -16,7 +16,9 @@ import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.unit.dp
+import com.music.bitchord.R
 
 /**
  * Dialog to create a new local playlist or rename an existing one.
@@ -24,21 +26,26 @@ import androidx.compose.ui.unit.dp
 @Composable
 fun CreatePlaylistDialog(
     initialName: String = "",
-    title: String = "New Playlist",
-    confirmText: String = "Create",
+    title: String? = null,
+    confirmText: String? = null,
     onConfirm: (String) -> Unit,
     onDismiss: () -> Unit,
     modifier: Modifier = Modifier,
 ) {
     var name by remember { mutableStateOf(initialName) }
+    val dialogTitle = title ?: stringResource(R.string.new_playlist)
+    val confirmLabel = confirmText ?: stringResource(R.string.create_playlist)
 
     AlertDialog(
         onDismissRequest = onDismiss,
-        title = { Text(text = title, style = MaterialTheme.typography.titleLarge) },
+        containerColor = MaterialTheme.colorScheme.surface,
+        titleContentColor = MaterialTheme.colorScheme.onSurface,
+        textContentColor = MaterialTheme.colorScheme.onSurfaceVariant,
+        title = { Text(text = dialogTitle, style = MaterialTheme.typography.titleLarge) },
         text = {
             Column {
                 Text(
-                    text = "Enter a name for this playlist",
+                    text = stringResource(R.string.playlist_name_prompt),
                     style = MaterialTheme.typography.bodyMedium,
                     color = MaterialTheme.colorScheme.onSurfaceVariant,
                 )
@@ -49,7 +56,7 @@ fun CreatePlaylistDialog(
                     singleLine = true,
                     shape = RoundedCornerShape(12.dp),
                     modifier = Modifier.fillMaxWidth(),
-                    placeholder = { Text("Playlist Name") },
+                    placeholder = { Text(stringResource(R.string.playlist_name)) },
                 )
             }
         },
@@ -62,12 +69,12 @@ fun CreatePlaylistDialog(
                 },
                 enabled = name.isNotBlank(),
             ) {
-                Text(confirmText)
+                Text(confirmLabel)
             }
         },
         dismissButton = {
             TextButton(onClick = onDismiss) {
-                Text("Cancel")
+                Text(stringResource(R.string.cancel))
             }
         },
         shape = RoundedCornerShape(24.dp),

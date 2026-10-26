@@ -495,6 +495,8 @@ object AppSettings {
     val spatialAudio = MutableStateFlow(false)
     /** Optional software PEQ; legacy flows remain for existing settings and callers. */
     val parametricEqEnabled = MutableStateFlow(false)
+    /** Applies optional TPDF dither only when the software PEQ quantizes processed integer PCM. */
+    val tpdfDitherEnabled = MutableStateFlow(false)
     val parametricEqBands = MutableStateFlow(ParametricEqBand.DEFAULTS)
     val parametricEqConfig = MutableStateFlow(ParametricEqConfig())
     val parametricEqPresets = MutableStateFlow<List<ParametricEqPreset>>(emptyList())
@@ -801,6 +803,9 @@ object AppSettings {
 
     /** Shows album and playlist artwork without cropping it into a square tile. */
     val keepCollectionArtworkAspectRatio = MutableStateFlow(false)
+
+    /** Uses the active language for the Library's collection count label. */
+    val localizeLibraryCollectionCount = MutableStateFlow(true)
 
     /** Fits preserved non-square covers into square mini-player and lyrics transition frames. */
     val preserveArtworkShapeInCompactTransitions = MutableStateFlow(false)
@@ -1184,6 +1189,7 @@ object AppSettings {
         diracAudioPreset.value = prefs.getInt(KEY_DIRAC_AUDIO_PRESET, 0).coerceIn(0, 2)
         spatialAudio.value = prefs.getBoolean(KEY_SPATIAL_AUDIO, false)
         val legacyPeqEnabled = prefs.getBoolean(KEY_PARAMETRIC_EQ_ENABLED, false)
+        tpdfDitherEnabled.value = prefs.getBoolean(KEY_TPDF_DITHER_ENABLED, false)
         val legacyPeqBands = ParametricEqBand.decode(prefs.getString(KEY_PARAMETRIC_EQ_BANDS, null))
         val savedPeqConfig = ParametricEqConfig.fromJsonString(prefs.getString(KEY_PARAMETRIC_EQ_CONFIG_JSON, null))
             ?: ParametricEqConfig(
@@ -1387,6 +1393,7 @@ object AppSettings {
         fullBleedArtwork.value = prefs.getBoolean(KEY_FULL_BLEED_ARTWORK, true)
         keepOriginalArtworkAspectRatio.value = prefs.getBoolean(KEY_KEEP_ORIGINAL_ARTWORK_ASPECT_RATIO, false)
         keepCollectionArtworkAspectRatio.value = prefs.getBoolean(KEY_KEEP_COLLECTION_ARTWORK_ASPECT_RATIO, false)
+        localizeLibraryCollectionCount.value = prefs.getBoolean(KEY_LOCALIZE_LIBRARY_COLLECTION_COUNT, true)
         preserveArtworkShapeInCompactTransitions.value =
             prefs.getBoolean(KEY_PRESERVE_ARTWORK_SHAPE_IN_COMPACT_TRANSITIONS, false)
         keepArtworkFullSizeWhenPaused.value = prefs.getBoolean(KEY_KEEP_ARTWORK_FULL_SIZE_PAUSED, false)
@@ -1821,6 +1828,11 @@ object AppSettings {
 
     fun setParametricEqEnabled(value: Boolean) {
         setParametricEqConfig(parametricEqConfig.value.copy(enabled = value))
+    }
+
+    fun setTpdfDitherEnabled(value: Boolean) {
+        tpdfDitherEnabled.value = value
+        prefs.edit().putBoolean(KEY_TPDF_DITHER_ENABLED, value).apply()
     }
 
     fun setEqualizerBalance(value: Float) {
@@ -2780,6 +2792,11 @@ object AppSettings {
         prefs.edit().putBoolean(KEY_KEEP_COLLECTION_ARTWORK_ASPECT_RATIO, value).apply()
     }
 
+    fun setLocalizeLibraryCollectionCount(value: Boolean) {
+        localizeLibraryCollectionCount.value = value
+        prefs.edit().putBoolean(KEY_LOCALIZE_LIBRARY_COLLECTION_COUNT, value).apply()
+    }
+
     fun setPreserveArtworkShapeInCompactTransitions(value: Boolean) {
         preserveArtworkShapeInCompactTransitions.value = value
         prefs.edit().putBoolean(KEY_PRESERVE_ARTWORK_SHAPE_IN_COMPACT_TRANSITIONS, value).apply()
@@ -3547,6 +3564,7 @@ object AppSettings {
     private const val KEY_MINI_PLAYER_SWIPE_UP_EXPANDS = "mini_player_swipe_up_expands"
     private const val KEY_PLAYLIST_TRACK_MENU_ARTWORK_COLOR = "playlist_track_menu_artwork_color"
     private const val KEY_PARAMETRIC_EQ_ENABLED = "parametric_eq_enabled"
+    private const val KEY_TPDF_DITHER_ENABLED = "tpdf_dither_enabled"
     private const val KEY_PARAMETRIC_EQ_BANDS = "parametric_eq_bands"
     private const val KEY_PARAMETRIC_EQ_CONFIG_JSON = "parametric_eq_config_json"
     private const val KEY_PARAMETRIC_EQ_PRESETS_JSON = "parametric_eq_presets_json"
@@ -3668,6 +3686,7 @@ object AppSettings {
     private const val KEY_FULL_BLEED_ARTWORK = "full_bleed_artwork"
     private const val KEY_KEEP_ORIGINAL_ARTWORK_ASPECT_RATIO = "keep_original_artwork_aspect_ratio"
     private const val KEY_KEEP_COLLECTION_ARTWORK_ASPECT_RATIO = "keep_collection_artwork_aspect_ratio"
+    private const val KEY_LOCALIZE_LIBRARY_COLLECTION_COUNT = "localize_library_collection_count"
     private const val KEY_PRESERVE_ARTWORK_SHAPE_IN_COMPACT_TRANSITIONS = "preserve_artwork_shape_in_compact_transitions"
     private const val KEY_KEEP_ARTWORK_FULL_SIZE_PAUSED = "keep_artwork_full_size_when_paused"
     private const val KEY_DOUBLE_TAP_TO_SEEK = "double_tap_to_seek"

@@ -192,6 +192,7 @@ fun LibraryScreen(
     onAddToQueue: ((Song) -> Unit)? = null,
     onDeleteSong: ((Song) -> Unit)? = null,
     onSongTagsOrLyricsSaved: ((Song) -> Unit)? = null,
+    onLocalMusicChanged: (() -> Unit)? = null,
     songDropdownMenu: (@Composable (Song) -> Unit)? = null,
     initialFilterRequest: LibraryFilter? = null,
     onInitialFilterApplied: () -> Unit = {},
@@ -203,11 +204,14 @@ fun LibraryScreen(
     val favoriteIds by LocalFavoritesStore.favoriteIds.collectAsStateWithLifecycle()
     val libraryViewType by AppSettings.libraryPlaylistsViewType.collectAsStateWithLifecycle()
     val songsViewType by AppSettings.librarySongsViewType.collectAsStateWithLifecycle()
+    val favoriteUsesStar by AppSettings.favoriteUsesStar.collectAsStateWithLifecycle()
+    val localizeCollectionCount by AppSettings.localizeLibraryCollectionCount.collectAsStateWithLifecycle()
     val showPlaylistSongArtwork by AppSettings.showPlaylistSongArtwork.collectAsStateWithLifecycle()
     val showCollectionSongArtwork by AppSettings.showCollectionSongArtwork.collectAsStateWithLifecycle()
     val fullScreenCollectionArtwork by AppSettings.fullScreenCollectionArtwork.collectAsStateWithLifecycle()
     val keepCollectionArtworkAspectRatio by AppSettings.keepCollectionArtworkAspectRatio.collectAsStateWithLifecycle()
     val playlistTrackMenuUsesArtworkColor by AppSettings.playlistTrackMenuUsesArtworkColor.collectAsStateWithLifecycle()
+    val favoritesLabel = stringResource(R.string.favorites)
     val playStatsRevision by LocalPlayStatsStore.revision.collectAsStateWithLifecycle()
     var recentlyPlayedSongs by remember { mutableStateOf<List<Song>>(emptyList()) }
     var mostPlayedSongs by remember { mutableStateOf<List<Song>>(emptyList()) }
@@ -317,27 +321,40 @@ fun LibraryScreen(
     val scope = rememberCoroutineScope()
 
     suspend fun writeBulkTags(targets: List<Song>) {
-        val updated = withContext(Dispatchers.IO) {
-            targets.count { song ->
-                runCatching {
-                    val current = TagLibWriter.readTags(context, song)
-                    TagLibWriter.writeTags(
-                        context,
-                        song,
-                        current.copy(
+        val updatedTracks = withContext(Dispatchers.IO) {
+            buildList {
+                targets.forEach { song ->
+                    runCatching {
+                        val current = TagLibWriter.readTags(context, song)
+                        val updatedTags = current.copy(
                             artist = bulkArtist.trim().ifBlank { current.artist },
                             albumArtist = bulkAlbumArtist.trim().ifBlank { current.albumArtist },
                             album = bulkAlbum.trim().ifBlank { current.album },
                             genre = bulkGenre.trim().ifBlank { current.genre },
                             year = bulkYear.trim().ifBlank { current.year },
                             composer = bulkComposer.trim().ifBlank { current.composer },
-                        ),
-                    )
-                }.getOrDefault(false)
+                        )
+                        if (TagLibWriter.writeTags(context, song, updatedTags)) add(song to updatedTags)
+                    }
+                }
             }
         }
-        Toast.makeText(context, context.getString(R.string.bulk_tag_saved, updated, targets.size), Toast.LENGTH_LONG).show()
-        targets.forEach { onSongTagsOrLyricsSaved?.invoke(it) }
+        updatedTracks.forEach { (song, updatedTags) ->
+            LocalPlaylistStore.updateEditedSongMetadata(
+                song = song,
+                title = updatedTags.title,
+                artist = updatedTags.artist,
+                albumName = updatedTags.album,
+                albumArtist = updatedTags.albumArtist,
+            )
+            onSongTagsOrLyricsSaved?.invoke(song)
+        }
+        if (updatedTracks.isNotEmpty()) onLocalMusicChanged?.invoke()
+        Toast.makeText(
+            context,
+            context.getString(R.string.bulk_tag_saved, updatedTracks.size, targets.size),
+            Toast.LENGTH_LONG,
+        ).show()
         showBulkTagEditor = false
         bulkArtist = ""
         bulkAlbumArtist = ""
@@ -809,7 +826,7 @@ fun LibraryScreen(
                     val onFavoritesClick = {
                         drillDownPlaylistId = null
                         playlistReorderEnabled = false
-                        drillDownLabel = "Favorites"
+                        drillDownLabel = favoritesLabel
                         drillDownSongs = favoriteSongs
                         drillDownArt = "favorites"
                     }
@@ -852,6 +869,7 @@ fun LibraryScreen(
                             onMovePlaylist = { playlist, offset -> LocalPlaylistStore.movePlaylist(playlist.id, offset) },
                             onCreatePlaylist = { showCreateDialog = true },
                             librarySongs = songs,
+                            favoriteUsesStar = favoriteUsesStar,
                             contentPadding = PaddingValues(
                                 top = 0.dp,
                                 bottom = contentPadding.calculateBottomPadding(),
@@ -874,6 +892,8 @@ fun LibraryScreen(
                             onMovePlaylist = { playlist, offset -> LocalPlaylistStore.movePlaylist(playlist.id, offset) },
                             onCreatePlaylist = { showCreateDialog = true },
                             librarySongs = songs,
+                            favoriteUsesStar = favoriteUsesStar,
+                            localizeCollectionCount = localizeCollectionCount,
                             contentPadding = PaddingValues(
                                 top = 0.dp,
                                 bottom = contentPadding.calculateBottomPadding(),
@@ -932,8 +952,6 @@ fun LibraryScreen(
 
     if (showCreateDialog) {
         CreatePlaylistDialog(
-            title = "New Playlist",
-            confirmText = "Create",
             onConfirm = { name ->
                 LocalPlaylistStore.createPlaylist(name)
                 showCreateDialog = false
@@ -945,8 +963,8 @@ fun LibraryScreen(
     playlistToRename?.let { target ->
         CreatePlaylistDialog(
             initialName = target.name,
-            title = "Rename Playlist",
-            confirmText = "Save",
+            title = stringResource(R.string.rename_playlist),
+            confirmText = stringResource(R.string.save),
             onConfirm = { newName ->
                 LocalPlaylistStore.renamePlaylist(target.id, newName)
                 playlistToRename = null

@@ -68,11 +68,13 @@ fun LocalAddToPlaylistSheet(
                 artist = song.artist,
                 thumbnailUrl = song.thumbnailUrl,
                 albumName = song.albumName,
+                albumArtist = song.albumArtist,
                 artistId = song.artistId,
                 albumId = song.albumId,
                 durationText = song.durationText,
                 isVideo = song.isVideo,
                 isVideoOrigin = song.isVideoOrigin,
+                localPath = song.localPath,
             )
         }
     }

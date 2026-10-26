@@ -426,6 +426,7 @@ fun SettingsScreen(
     val miniPlayerSwipeUpExpands by AppSettings.miniPlayerSwipeUpExpands.collectAsStateWithLifecycle()
     val playlistTrackMenuUsesArtworkColor by AppSettings.playlistTrackMenuUsesArtworkColor.collectAsStateWithLifecycle()
     val parametricEqEnabled by AppSettings.parametricEqEnabled.collectAsStateWithLifecycle()
+    val tpdfDitherEnabled by AppSettings.tpdfDitherEnabled.collectAsStateWithLifecycle()
     val channelSwapEnabled by AppSettings.channelSwapEnabled.collectAsStateWithLifecycle()
     val reverbEnabled by AppSettings.reverbEnabled.collectAsStateWithLifecycle()
     val sessionId by AppSettings.audioSessionId.collectAsStateWithLifecycle()
@@ -469,6 +470,7 @@ fun SettingsScreen(
     val showPlaylistSongArtwork by AppSettings.showPlaylistSongArtwork.collectAsStateWithLifecycle()
     val showCollectionSongArtwork by AppSettings.showCollectionSongArtwork.collectAsStateWithLifecycle()
     val keepCollectionArtworkAspectRatio by AppSettings.keepCollectionArtworkAspectRatio.collectAsStateWithLifecycle()
+    val localizeLibraryCollectionCount by AppSettings.localizeLibraryCollectionCount.collectAsStateWithLifecycle()
     val highPerformanceMode by AppSettings.highPerformanceMode.collectAsStateWithLifecycle()
     val performanceRefreshRate by AppSettings.performanceRefreshRate.collectAsStateWithLifecycle()
     val currentDisplay = LocalView.current.display
@@ -849,6 +851,7 @@ fun SettingsScreen(
         SettingsSearchEntry(stringResource(R.string.lyrics_auto_fit), stringResource(R.string.lyrics_auto_fit_subtitle), listOf("lyrics", "one line", "fit", "歌詞", "一行", "文字サイズ"), autoFitOneLineLyrics) { AppSettings.setAutoFitOneLineLyrics(!autoFitOneLineLyrics) },
         SettingsSearchEntry(stringResource(R.string.spatial_audio), stringResource(R.string.spatial_audio_subtitle), listOf("spatial", "空間オーディオ"), spatialAudio) { AppSettings.setSpatialAudio(!spatialAudio) },
         SettingsSearchEntry(stringResource(R.string.parametric_eq), stringResource(R.string.parametric_eq_subtitle), listOf("parametric", "equalizer", "frequency", "Q", "gain", "パラメトリック", "イコライザー", "周波数"), parametricEqEnabled) { AppSettings.setParametricEqEnabled(!parametricEqEnabled) },
+        SettingsSearchEntry(stringResource(R.string.tpdf_dither), stringResource(R.string.tpdf_dither_subtitle), listOf("dither", "TPDF", "quantization", "PCM", "ディザー", "量子化", "音質"), tpdfDitherEnabled) { AppSettings.setTpdfDitherEnabled(!tpdfDitherEnabled) },
         SettingsSearchEntry(stringResource(R.string.channel_swap), stringResource(R.string.channel_swap_subtitle), listOf("channel swap", "swap channels", "stereo", "left", "right", "左右", "チャンネル", "反転"), channelSwapEnabled) { AppSettings.setChannelSwapEnabled(!channelSwapEnabled) },
         SettingsSearchEntry(stringResource(R.string.reverb), stringResource(R.string.reverb_subtitle), listOf("reverb", "room", "残響", "リバーブ"), reverbEnabled) { AppSettings.setReverbEnabled(!reverbEnabled) },
         SettingsSearchEntry(stringResource(R.string.favorite_icon_star), stringResource(R.string.favorite_icon_star_subtitle), listOf("favorite", "star", "お気に入り", "星", "ハート"), favoriteUsesStar) { AppSettings.setFavoriteUsesStar(!favoriteUsesStar) },
@@ -952,6 +955,7 @@ fun SettingsScreen(
             showCollectionSongArtwork,
         ) { AppSettings.setShowCollectionSongArtwork(!showCollectionSongArtwork) },
         SettingsSearchEntry(stringResource(R.string.keep_collection_artwork_aspect_ratio), stringResource(R.string.keep_collection_artwork_aspect_ratio_subtitle), listOf("playlist", "album", "artwork", "aspect ratio", "cover", "プレイリスト", "アルバム", "アート", "縦横比"), keepCollectionArtworkAspectRatio) { AppSettings.setKeepCollectionArtworkAspectRatio(!keepCollectionArtworkAspectRatio) },
+        SettingsSearchEntry(stringResource(R.string.localize_library_collection_count), stringResource(R.string.localize_library_collection_count_subtitle), listOf("library", "collections", "count", "language", "ライブラリ", "コレクション", "件数", "日本語"), localizeLibraryCollectionCount) { AppSettings.setLocalizeLibraryCollectionCount(!localizeLibraryCollectionCount) },
     ) + listOf(
         SettingsSearchEntry(
             stringResource(R.string.artwork_tap_opens_lyrics),
@@ -1855,6 +1859,13 @@ fun SettingsScreen(
                                 color = MaterialTheme.colorScheme.onSurfaceVariant,
                             )
                         }
+                        AudioOutputStatus.estimatedTrackBufferDurationMs(outputStatus)?.let { durationMs ->
+                            Text(
+                                text = stringResource(R.string.audio_track_buffer_estimated_duration, durationMs),
+                                style = MaterialTheme.typography.bodySmall,
+                                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                            )
+                        }
                         Text(
                             text = stringResource(
                                 if (availableSystemAudioEffects.isEmpty()) R.string.audio_system_effects_unknown
@@ -2304,6 +2315,23 @@ fun SettingsScreen(
                     )
                 },
                 onClick = { AppSettings.setParametricEqEnabled(!parametricEqEnabled) },
+            )
+            RowDivider()
+            SettingsRow(
+                icon = Icons.Rounded.Waves,
+                title = stringResource(R.string.tpdf_dither),
+                subtitle = stringResource(R.string.tpdf_dither_subtitle),
+                trailing = {
+                    Switch(
+                        checked = tpdfDitherEnabled,
+                        onCheckedChange = AppSettings::setTpdfDitherEnabled,
+                        colors = SwitchDefaults.colors(
+                            checkedTrackColor = MaterialTheme.colorScheme.primary,
+                            checkedBorderColor = MaterialTheme.colorScheme.primary,
+                        ),
+                    )
+                },
+                onClick = { AppSettings.setTpdfDitherEnabled(!tpdfDitherEnabled) },
             )
             RowDivider()
             ChannelSwapSettingsRow(
@@ -4043,6 +4071,7 @@ fun SettingsScreen(
             showPlaylistSongArtwork = showPlaylistSongArtwork,
             showCollectionSongArtwork = showCollectionSongArtwork,
             keepCollectionArtworkAspectRatio = keepCollectionArtworkAspectRatio,
+            localizeLibraryCollectionCount = localizeLibraryCollectionCount,
             hasAllFiles = hasAllFiles,
             onManageFolders = { showManageFoldersSheet = true },
             onChooseMusicFolder = { musicFolderRootPicker.launch(null) },
@@ -5248,6 +5277,7 @@ private fun LocalMusicSettingsGroup(
     showPlaylistSongArtwork: Boolean,
     showCollectionSongArtwork: Boolean,
     keepCollectionArtworkAspectRatio: Boolean,
+    localizeLibraryCollectionCount: Boolean,
     hasAllFiles: Boolean,
     onManageFolders: () -> Unit,
     onChooseMusicFolder: () -> Unit,
@@ -5505,6 +5535,23 @@ SettingsGroup(header = stringResource(R.string.local_music)) {
             )
         },
         onClick = { AppSettings.setShowCollectionSongArtwork(!showCollectionSongArtwork) },
+    )
+    RowDivider()
+    SettingsRow(
+        icon = Icons.Rounded.Language,
+        title = stringResource(R.string.localize_library_collection_count),
+        subtitle = stringResource(R.string.localize_library_collection_count_subtitle),
+        trailing = {
+            Switch(
+                checked = localizeLibraryCollectionCount,
+                onCheckedChange = AppSettings::setLocalizeLibraryCollectionCount,
+                colors = SwitchDefaults.colors(
+                    checkedTrackColor = MaterialTheme.colorScheme.primary,
+                    checkedBorderColor = MaterialTheme.colorScheme.primary,
+                ),
+            )
+        },
+        onClick = { AppSettings.setLocalizeLibraryCollectionCount(!localizeLibraryCollectionCount) },
     )
     RowDivider()
     SettingsRow(

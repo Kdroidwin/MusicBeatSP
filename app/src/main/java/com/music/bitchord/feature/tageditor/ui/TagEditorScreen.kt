@@ -47,7 +47,7 @@ fun TagEditorScreen(
     onNavigateBack: () -> Unit,
     modifier: Modifier = Modifier,
     viewModel: TagEditorViewModel = viewModel(),
-    onTagsSaved: (() -> Unit)? = null,
+    onTagsSaved: ((com.music.bitchord.feature.tageditor.domain.model.SongTagData) -> Unit)? = null,
 ) {
     val isDarkTheme = MaterialTheme.colorScheme.background.luminance() < 0.5f
     SystemBarIcons(dark = !isDarkTheme)
@@ -113,7 +113,7 @@ fun TagEditorScreen(
         viewModel.saveEvent.collect { success ->
             if (success) {
                 Toast.makeText(context, R.string.tag_editor_saved, Toast.LENGTH_SHORT).show()
-                onTagsSaved?.invoke()
+                onTagsSaved?.invoke(viewModel.tags.value)
                 onNavigateBack()
             } else {
                 Toast.makeText(context, R.string.tag_editor_save_failed, Toast.LENGTH_SHORT).show()

@@ -8,6 +8,7 @@ import java.io.File
 /** Resolves stored playlist IDs and recreates playable SAF/file references when needed. */
 fun resolvePlaylistSongs(playlist: LocalPlaylist, librarySongs: List<Song>): List<Song> =
     playlist.songIds.mapNotNull { id ->
+        val editedMetadata = playlist.editedSongMetadata[id]
         val resolved = librarySongs.firstOrNull { song -> song.localUri == id }
             ?: librarySongs.firstOrNull { song -> song.videoId == id }
             ?: id.takeIf { it.startsWith("content://") || it.startsWith("file://") }?.let { uriString ->
@@ -21,7 +22,7 @@ fun resolvePlaylistSongs(playlist: LocalPlaylist, librarySongs: List<Song>): Lis
                     ?.substringBeforeLast('.', uri.lastPathSegment.orEmpty())
                     ?.takeIf(String::isNotBlank)
                     ?: "Unknown track"
-                val metadata = playlist.songMetadata[id]
+                val metadata = editedMetadata ?: playlist.songMetadata[id]
                 Song(
                     videoId = id,
                     title = metadata?.title?.takeIf(String::isNotBlank) ?: fallbackName,
@@ -41,7 +42,7 @@ fun resolvePlaylistSongs(playlist: LocalPlaylist, librarySongs: List<Song>): Lis
             // device MediaStore list. Preserve their playable source ID and
             // saved display metadata so a local playlist does not silently
             // lose them when it is opened without a signed-in YouTube account.
-            ?: playlist.songMetadata[id]?.let { metadata ->
+            ?: (editedMetadata ?: playlist.songMetadata[id])?.let { metadata ->
                 Song(
                     videoId = id,
                     title = metadata.title.takeIf(String::isNotBlank) ?: "Unknown track",
@@ -55,7 +56,17 @@ fun resolvePlaylistSongs(playlist: LocalPlaylist, librarySongs: List<Song>): Lis
                     isVideoOrigin = metadata.isVideoOrigin,
                 )
             }
-        resolved?.takeUnless { song ->
+        val refreshed = if (editedMetadata == null || resolved == null) {
+            resolved
+        } else {
+            resolved.copy(
+                title = editedMetadata.title.takeIf(String::isNotBlank) ?: resolved.title,
+                artist = editedMetadata.artist.takeIf(String::isNotBlank) ?: resolved.artist,
+                albumName = editedMetadata.albumName,
+                albumArtist = editedMetadata.albumArtist,
+            )
+        }
+        refreshed?.takeUnless { song ->
             val localUri = song.localUri?.let { runCatching { Uri.parse(it) }.getOrNull() }
             if (localUri?.scheme != "file") return@takeUnless false
             val file = localUri.path?.let(::File)

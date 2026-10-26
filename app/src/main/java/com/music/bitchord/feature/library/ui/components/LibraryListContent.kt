@@ -23,7 +23,10 @@ import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.unit.dp
+import androidx.compose.ui.res.pluralStringResource
+import com.music.bitchord.R
 import com.music.bitchord.feature.localmusic.domain.model.LocalPlaylist
 import com.music.bitchord.data.model.Song
 import com.music.bitchord.feature.localmusic.ui.components.LocalPlaylistItem
@@ -47,6 +50,8 @@ fun LibraryListContent(
     onMovePlaylist: (LocalPlaylist, Int) -> Unit,
     onCreatePlaylist: () -> Unit,
     librarySongs: List<Song> = emptyList(),
+    favoriteUsesStar: Boolean = false,
+    localizeCollectionCount: Boolean = true,
     contentPadding: PaddingValues,
     modifier: Modifier = Modifier,
     state: LazyListState = rememberLazyListState(),
@@ -75,7 +80,12 @@ fun LibraryListContent(
             ) {
                 val totalCount = (if (showFavorites) 1 else 0) + (if (showPlaylists) playlists.size else 0)
                 Text(
-                    text = "$totalCount ${if (totalCount == 1) "Collection" else "Collections"}",
+                    text = pluralStringResource(
+                        if (localizeCollectionCount) R.plurals.library_collection_count
+                        else R.plurals.library_collection_count_english,
+                        totalCount,
+                        totalCount,
+                    ),
                     style = MaterialTheme.typography.titleMedium,
                     color = MaterialTheme.colorScheme.onSurfaceVariant,
                 )
@@ -92,7 +102,7 @@ fun LibraryListContent(
                             modifier = Modifier.size(18.dp),
                         )
                         Spacer(modifier = Modifier.width(6.dp))
-                        Text(text = "New Playlist", style = MaterialTheme.typography.labelMedium)
+                        Text(text = stringResource(R.string.new_playlist), style = MaterialTheme.typography.labelMedium)
                     }
                 }
             }
@@ -104,6 +114,7 @@ fun LibraryListContent(
                     songCount = favoriteSongCount,
                     onClick = onFavoritesClick,
                     onPlay = onFavoritesPlay,
+                    useStarIcon = favoriteUsesStar,
                 )
             }
         }

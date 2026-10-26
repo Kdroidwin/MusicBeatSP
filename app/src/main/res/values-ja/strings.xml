@@ -50,6 +50,13 @@
     <string name="track_gain">曲ごとのゲイン</string>
     <string name="album_gain">アルバム単位のゲイン</string>
     <string name="new_playlist">新しいプレイリスト</string>
+    <string name="playlist_name_prompt">プレイリスト名を入力してください</string>
+    <string name="tap_to_create">タップして作成</string>
+    <string name="localize_library_collection_count">ライブラリのコレクション数を日本語表示</string>
+    <string name="localize_library_collection_count_subtitle">ライブラリの「Collections」をアプリの言語に合わせて表示します。初期設定はオンです。</string>
+    <plurals name="library_collection_count">
+        <item quantity="other">%1$d コレクション</item>
+    </plurals>
     <string name="saved_to_youtube_music">YouTube Musicに保存済み</string>
     <string name="sign_in">ログイン</string>
     <string name="sign_out">ログアウト</string>
@@ -185,7 +192,8 @@
     <string name="eq_profile_group_dirac">Dirac風EQ</string>
     <string name="eq_profile_group_note">音色プリセットのみです。DolbyやDiracのデコード機能は追加されません。</string>
     <string name="autoeq_profiles">AutoEQヘッドホンプロファイル</string>
-    <string name="autoeq_profiles_subtitle">ヘッドホン別の補正を探し、内蔵5バンドEQ向けに近似します。</string>
+    <string name="autoeq_profiles_subtitle">ヘッドホン補正カーブを1/3オクターブのPEQフィルターへ近似し、クリッピング防止のヘッドルームを設定します。</string>
+    <string name="autoeq_disabled_bitperfect">ビットパーフェクト再生中はAutoEQを適用できません。</string>
     <string name="autoeq_search_headphones">ヘッドホンを検索</string>
     <string name="autoeq_catalog_loading">ヘッドホンプロファイルを読み込み中…</string>
     <string name="autoeq_fetching">プロファイルをダウンロード中…</string>
@@ -269,6 +277,8 @@
     <string name="equalizer_subtitle">デバイスのシステムパネル</string>
     <string name="parametric_eq">パラメトリックEQ</string>
     <string name="parametric_eq_subtitle">調整可能なピーキングフィルター3本。初期設定はオフで、ビットパーフェクト再生中は無効です</string>
+    <string name="tpdf_dither">TPDFディザー</string>
+    <string name="tpdf_dither_subtitle">ソフトウェアDSPが整数PCMを再量子化するときだけ微小な三角ディザーを加えます。初期設定はオフで、ビットパーフェクト再生中は適用されません。</string>
     <string name="parametric_eq_band_number">バンド %1$d</string>
     <string name="parametric_eq_frequency">中心周波数</string>
     <string name="parametric_eq_frequency_hz">%1$d Hz</string>
@@ -1053,7 +1063,7 @@
     <string name="startup_tab">起動時に開くタブ</string>
     <string name="startup_tab_subtitle">アプリ起動時に表示するタブを選択します</string>
     <string name="favorite_icon_star">お気に入りに星を使う</string>
-    <string name="favorite_icon_star_subtitle">プレーヤーのお気に入りボタンをハートから星に変更します</string>
+    <string name="favorite_icon_star_subtitle">プレーヤーとライブラリのお気に入りアイコンをハートから星に変更します</string>
     <string name="persistent_local_artwork">ローカルアートをストレージに保存</string>
     <string name="persistent_local_artwork_subtitle">取得したアートをアプリ内に保存し、再起動後もすぐ使えるようにします</string>
     <string name="resampler_cutoff">PCMカットオフ周波数</string>
@@ -1423,6 +1433,7 @@
     <string name="audio_rate_conversion">デコーダー %1$.1f kHz → AudioTrack %2$.1f kHz（アプリ出力レートが異なります）</string>
     <string name="audio_rate_no_app_conversion">デコーダー / AudioTrack: %1$.1f kHz</string>
     <string name="audio_track_buffer_size">AudioTrackバッファ: %1$d bytes</string>
+    <string name="audio_track_buffer_estimated_duration">アプリ側バッファの推定: %1$d ms（出力全体の遅延ではありません）</string>
     <string name="audio_system_effects_unknown">システム音響効果: 情報を取得できません</string>
     <string name="audio_system_effects_available">システム音響効果（利用可能なもの。実際に有効とは限りません）: %1$s</string>
     <string name="audio_output_rate_caveat">AudioTrackの後段でAndroidやDACが再サンプリングする場合があります。一般アプリから最終的なハードウェア出力レートは取得できません。</string>

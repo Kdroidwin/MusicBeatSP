@@ -39,6 +39,7 @@ fun LibraryFavoritesItem(
     songCount: Int,
     onClick: () -> Unit,
     onPlay: () -> Unit,
+    useStarIcon: Boolean = false,
     modifier: Modifier = Modifier,
 ) {
     Surface(
@@ -70,7 +71,7 @@ fun LibraryFavoritesItem(
                 contentAlignment = Alignment.Center,
             ) {
                 Icon(
-                    imageVector = BitChordIcons.HeartFilled,
+                    imageVector = if (useStarIcon) BitChordIcons.StarFilled else BitChordIcons.HeartFilled,
                     contentDescription = null,
                     tint = Color.White,
                     modifier = Modifier.size(28.dp),

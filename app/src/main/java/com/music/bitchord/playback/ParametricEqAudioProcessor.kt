@@ -61,6 +61,9 @@ class ParametricEqAudioProcessor : BaseAudioProcessor() {
     private var balance = 0f
     @Volatile
     private var bypassAll = false
+    @Volatile
+    private var tpdfDitherEnabled = false
+    private var ditherRandomState = 0x4D595DF4D0F33173L
 
     private var sampleRateHz = 0
     private var channelCount = 0
@@ -87,6 +90,10 @@ class ParametricEqAudioProcessor : BaseAudioProcessor() {
         config = newConfig.sanitized()
         this.balance = balance.takeIf(Float::isFinite)?.coerceIn(-1f, 1f) ?: 0f
         this.bypassAll = bypassAll
+    }
+
+    fun setTpdfDitherEnabled(enabled: Boolean) {
+        tpdfDitherEnabled = enabled
     }
 
     /** Legacy 3-band entry point kept for compatibility. */
@@ -205,6 +212,7 @@ class ParametricEqAudioProcessor : BaseAudioProcessor() {
         val lGain = leftLinearGain
         val rGain = rightLinearGain
         val encoding = inputAudioFormat.encoding
+        val addTpdfDither = tpdfDitherEnabled && applyEq && encoding != C.ENCODING_PCM_FLOAT
 
         if (channelCount == 2) {
             val gStateL = globalStates.getOrNull(0) ?: emptyArray()
@@ -257,8 +265,8 @@ class ParametricEqAudioProcessor : BaseAudioProcessor() {
                     spl1 *= (1f + currentBalance).coerceIn(0f, 1f).toDouble()
                 }
 
-                writeSampleNormalized(output, encoding, spl0)
-                writeSampleNormalized(output, encoding, spl1)
+                writeSampleNormalized(output, encoding, spl0, addTpdfDither)
+                writeSampleNormalized(output, encoding, spl1, addTpdfDither)
             }
         } else {
             while (inputBuffer.remaining() >= frameBytes) {
@@ -290,7 +298,7 @@ class ParametricEqAudioProcessor : BaseAudioProcessor() {
                     frameSamples[1] = tmp
                 }
                 for (ch in 0 until channelCount) {
-                    writeSampleNormalized(output, encoding, frameSamples[ch])
+                    writeSampleNormalized(output, encoding, frameSamples[ch], addTpdfDither)
                 }
             }
         }
@@ -322,8 +330,17 @@ class ParametricEqAudioProcessor : BaseAudioProcessor() {
         else -> 0.0
     }
 
-    private fun writeSampleNormalized(buf: ByteBuffer, encoding: Int, sample: Double) {
-        val safe = if (sample.isFinite()) sample else 0.0
+    private fun writeSampleNormalized(buf: ByteBuffer, encoding: Int, sample: Double, addDither: Boolean) {
+        val finiteSample = if (sample.isFinite()) sample else 0.0
+        val lsb = when (encoding) {
+            C.ENCODING_PCM_16BIT -> 1.0 / 32768.0
+            C.ENCODING_PCM_24BIT -> 1.0 / 8388608.0
+            C.ENCODING_PCM_32BIT -> 1.0 / 2147483648.0
+            else -> 0.0
+        }
+        val safe = if (addDither && lsb > 0.0) {
+            finiteSample + (nextDitherUniform() - nextDitherUniform()) * lsb
+        } else finiteSample
         when (encoding) {
             C.ENCODING_PCM_16BIT -> {
                 val scaled = (safe * 32768.0).roundToInt().coerceIn(Short.MIN_VALUE.toInt(), Short.MAX_VALUE.toInt())
@@ -343,6 +360,16 @@ class ParametricEqAudioProcessor : BaseAudioProcessor() {
                 buf.putFloat(safe.toFloat())
             }
         }
+    }
+
+    /** Allocation-free xorshift PRNG for triangular dither on the audio thread. */
+    private fun nextDitherUniform(): Double {
+        var value = ditherRandomState
+        value = value xor (value shl 13)
+        value = value xor (value ushr 7)
+        value = value xor (value shl 17)
+        ditherRandomState = value
+        return (value ushr 11).toDouble() * (1.0 / 9_007_199_254_740_992.0)
     }
 
     private fun rebuildFilterPipeline(target: ParametricEqConfig) {

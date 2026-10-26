@@ -4489,6 +4489,7 @@ class PlaybackService : MediaLibraryService() {
             balance = AppSettings.equalizerBalance.value,
             bypassAll = bitPerfect,
         )
+        chain.parametricEq.setTpdfDitherEnabled(AppSettings.tpdfDitherEnabled.value)
         player.playbackParameters = PlaybackParameters(
             if (bitPerfect) 1f else AppSettings.playbackSpeed.value,
             if (bitPerfect) 1f else AppSettings.playbackPitch.value,
@@ -4958,6 +4959,9 @@ class PlaybackService : MediaLibraryService() {
             AppSettings.equalizerBalance.collect { updateAdvancedAudioEffects() }
         }
         scope.launch {
+            AppSettings.tpdfDitherEnabled.collect { updateAdvancedAudioEffects() }
+        }
+        scope.launch {
             AppSettings.reverbEnabled.collect { updateAdvancedAudioEffects() }
         }
         scope.launch {
@@ -5068,11 +5072,13 @@ class PlaybackService : MediaLibraryService() {
             balance = balance,
             bypassAll = bitPerfect,
         )
+        activeAudioChain.parametricEq.setTpdfDitherEnabled(AppSettings.tpdfDitherEnabled.value)
         spareAudioChain.parametricEq.setConfig(
             parametricEqConfig,
             balance = balance,
             bypassAll = bitPerfect,
         )
+        spareAudioChain.parametricEq.setTpdfDitherEnabled(AppSettings.tpdfDitherEnabled.value)
 
         val reverbEnabled = AppSettings.reverbEnabled.value && !bitPerfect
         val reverbAmount = AppSettings.reverbAmount.value

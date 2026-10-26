@@ -1,6 +1,7 @@
 package com.music.bitchord.feature.localmusic.data
 
 import android.content.Context
+import com.music.bitchord.data.model.Song
 import com.music.bitchord.feature.localmusic.domain.model.LocalPlaylist
 import com.music.bitchord.feature.localmusic.domain.model.LocalPlaylistSongMetadata
 import kotlinx.coroutines.CoroutineScope
@@ -162,6 +163,82 @@ object LocalPlaylistStore {
         return addedCount
     }
 
+    /**
+     * Keeps playlist rows in sync with explicit tag edits, even while MediaStore
+     * is still indexing the rewritten file. Match by persisted entry identity;
+     * use a stored local path only as a secondary stable key, never by title.
+     */
+    fun updateEditedSongMetadata(
+        entryIds: Set<String>,
+        localPath: String?,
+        metadata: LocalPlaylistSongMetadata,
+    ): Int {
+        val ids = entryIds.filter(String::isNotBlank).toSet()
+        val path = normalizeLocalPath(localPath)
+        if (ids.isEmpty() && path == null) return 0
+
+        var updatedCount = 0
+        _playlists.value = _playlists.value.map { playlist ->
+            val matchingIds = playlist.songIds.filter { id ->
+                id in ids || (path != null && normalizeLocalPath(
+                    playlist.editedSongMetadata[id]?.localPath ?: playlist.songMetadata[id]?.localPath,
+                ) == path)
+            }
+            if (matchingIds.isEmpty()) return@map playlist
+
+            updatedCount += matchingIds.size
+            val overrides = playlist.editedSongMetadata.toMutableMap()
+            matchingIds.forEach { id ->
+                val previous = overrides[id] ?: playlist.songMetadata[id]
+                overrides[id] = metadata.copy(
+                    thumbnailUrl = previous?.thumbnailUrl ?: metadata.thumbnailUrl,
+                    artistId = previous?.artistId ?: metadata.artistId,
+                    albumId = previous?.albumId ?: metadata.albumId,
+                    durationText = previous?.durationText ?: metadata.durationText,
+                    isVideo = previous?.isVideo ?: metadata.isVideo,
+                    isVideoOrigin = previous?.isVideoOrigin ?: metadata.isVideoOrigin,
+                    localPath = path ?: metadata.localPath,
+                )
+            }
+            playlist.copy(editedSongMetadata = overrides)
+        }
+        if (updatedCount > 0) persist()
+        return updatedCount
+    }
+
+    fun updateEditedSongMetadata(
+        song: Song,
+        title: String,
+        artist: String,
+        albumName: String,
+        albumArtist: String,
+    ): Int {
+        val metadata = LocalPlaylistSongMetadata(
+            title = title.trim().ifBlank { song.title },
+            artist = artist.trim().ifBlank { "Unknown Artist" },
+            thumbnailUrl = song.thumbnailUrl,
+            albumName = albumName.trim().takeIf(String::isNotEmpty),
+            artistId = song.artistId,
+            albumId = song.albumId,
+            durationText = song.durationText,
+            isVideo = song.isVideo,
+            isVideoOrigin = song.isVideoOrigin,
+            localPath = song.localPath,
+            albumArtist = albumArtist.trim().takeIf(String::isNotEmpty),
+        )
+        return updateEditedSongMetadata(
+            entryIds = setOfNotNull(song.localUri, song.videoId),
+            localPath = song.localPath,
+            metadata = metadata,
+        )
+    }
+
+    private fun normalizeLocalPath(path: String?): String? = path
+        ?.replace('\\', '/')
+        ?.trim()
+        ?.trimEnd('/')
+        ?.takeIf(String::isNotEmpty)
+
     fun removeSongFromPlaylist(playlistId: String, songId: String) {
         var changed = false
         _playlists.value = _playlists.value.map { pl ->
@@ -170,6 +247,7 @@ object LocalPlaylistStore {
                 pl.copy(
                     songIds = pl.songIds - songId,
                     songMetadata = pl.songMetadata - songId,
+                    editedSongMetadata = pl.editedSongMetadata - songId,
                 )
             } else {
                 pl
@@ -188,6 +266,7 @@ object LocalPlaylistStore {
             pl.copy(
                 songIds = updatedIds,
                 songMetadata = pl.songMetadata.filterKeys { it !in songIds },
+                editedSongMetadata = pl.editedSongMetadata.filterKeys { it !in songIds },
             )
         }
         if (changed) persist()

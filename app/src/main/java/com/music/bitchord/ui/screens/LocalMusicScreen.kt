@@ -1053,8 +1053,8 @@ fun LocalMusicScreen(
     if (playlistToRename != null) {
         CreatePlaylistDialog(
             initialName = playlistToRename!!.name,
-            title = "Rename Playlist",
-            confirmText = "Rename",
+            title = stringResource(R.string.rename_playlist),
+            confirmText = stringResource(R.string.save),
             onConfirm = { name ->
                 LocalPlaylistStore.renamePlaylist(playlistToRename!!.id, name)
                 playlistToRename = null
@@ -1138,7 +1138,14 @@ fun LocalMusicScreen(
             TagEditorScreen(
                 song = song,
                 onNavigateBack = { tagEditorSong = null },
-                onTagsSaved = {
+                onTagsSaved = { updatedTags ->
+                    LocalPlaylistStore.updateEditedSongMetadata(
+                        song = song,
+                        title = updatedTags.title,
+                        artist = updatedTags.artist,
+                        albumName = updatedTags.album,
+                        albumArtist = updatedTags.albumArtist,
+                    )
                     tagEditorSong = null
                     onDeleteSong?.invoke(song)
                     onSongTagsOrLyricsSaved?.invoke(song)
