@@ -21,12 +21,15 @@ import androidx.compose.foundation.layout.widthIn
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
+import androidx.compose.foundation.text.KeyboardOptions
+import androidx.compose.material3.AlertDialog
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.rounded.Close
 import androidx.compose.material3.FilledTonalButton
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Switch
 import androidx.compose.material3.Text
@@ -48,6 +51,9 @@ import androidx.compose.ui.layout.onSizeChanged
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.input.ImeAction
+import androidx.compose.ui.text.input.KeyboardType
+import androidx.compose.ui.text.input.PasswordVisualTransformation
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.compose.ui.zIndex
@@ -80,11 +86,15 @@ fun LyricsSourcesDialog(
     val selected by AppSettings.lyricsSources.collectAsStateWithLifecycle()
     val savedOrder by AppSettings.lyricsSourceOrder.collectAsStateWithLifecycle()
     val prioritizeSyllableSync by AppSettings.prioritizeSyllableSync.collectAsStateWithLifecycle()
+    val paxSenixApiKey by AppSettings.paxSenixApiKey.collectAsStateWithLifecycle()
     val context = LocalContext.current
     val scope = rememberCoroutineScope()
     val isSyncing by LyricsExtensionManager.isSyncing.collectAsStateWithLifecycle()
     val syncMessage by LyricsExtensionManager.syncMessage.collectAsStateWithLifecycle()
+    val installedExtensions by LyricsExtensionManager.installedExtensions.collectAsStateWithLifecycle()
     var showRepoSettingsDialog by remember { mutableStateOf(false) }
+    var showPaxSenixKeyDialog by remember { mutableStateOf(false) }
+    var paxKeySaveFailed by remember { mutableStateOf(false) }
 
     Box(
         modifier = modifier
@@ -163,7 +173,7 @@ fun LyricsSourcesDialog(
 
             // 2. Extension Sync & Update Banner
             LyricsExtensionSyncHeader(
-                extensionCount = savedOrder.size,
+                extensionCount = installedExtensions.size,
                 isSyncing = isSyncing,
                 syncMessage = syncMessage,
                 onSyncClick = {
@@ -202,6 +212,18 @@ fun LyricsSourcesDialog(
                         checked = prioritizeSyllableSync,
                         onToggle = { AppSettings.setPrioritizeSyllableSync(!prioritizeSyllableSync) },
                     )
+                    TextButton(
+                        onClick = { showPaxSenixKeyDialog = true; paxKeySaveFailed = false },
+                        modifier = Modifier.fillMaxWidth().padding(horizontal = 12.dp),
+                    ) {
+                        Text(
+                            stringResource(
+                                if (paxSenixApiKey.isBlank()) R.string.paxsenix_api_key_missing
+                                else R.string.paxsenix_api_key_configured,
+                            ),
+                            color = MaterialTheme.colorScheme.onSurfaceVariant,
+                        )
+                    }
                 }
             }
 
@@ -245,6 +267,55 @@ fun LyricsSourcesDialog(
         LyricsRepoSettingsDialog(
             hazeState = hazeState,
             onDismiss = { showRepoSettingsDialog = false },
+        )
+    }
+
+    if (showPaxSenixKeyDialog) {
+        var input by remember(paxSenixApiKey) { mutableStateOf(paxSenixApiKey) }
+        AlertDialog(
+            onDismissRequest = { showPaxSenixKeyDialog = false },
+            title = { Text(stringResource(R.string.paxsenix_api_key)) },
+            text = {
+                Column {
+                    Text(
+                        stringResource(R.string.paxsenix_api_key_dialog_description),
+                        style = MaterialTheme.typography.bodyMedium,
+                    )
+                    Spacer(Modifier.height(12.dp))
+                    OutlinedTextField(
+                        value = input,
+                        onValueChange = { input = it },
+                        singleLine = true,
+                        visualTransformation = PasswordVisualTransformation(),
+                        keyboardOptions = KeyboardOptions(
+                            keyboardType = KeyboardType.Password,
+                            imeAction = ImeAction.Done,
+                        ),
+                        placeholder = { Text(stringResource(R.string.paxsenix_api_key_placeholder)) },
+                        supportingText = { Text(stringResource(R.string.paxsenix_api_key_helper)) },
+                        modifier = Modifier.fillMaxWidth(),
+                    )
+                    if (paxKeySaveFailed) {
+                        Spacer(Modifier.height(6.dp))
+                        Text(
+                            stringResource(R.string.paxsenix_api_key_save_failed),
+                            color = MaterialTheme.colorScheme.error,
+                            style = MaterialTheme.typography.bodySmall,
+                        )
+                    }
+                }
+            },
+            confirmButton = {
+                TextButton(onClick = {
+                    paxKeySaveFailed = !AppSettings.setPaxSenixApiKey(input)
+                    if (!paxKeySaveFailed) showPaxSenixKeyDialog = false
+                }) { Text(stringResource(R.string.save)) }
+            },
+            dismissButton = {
+                TextButton(onClick = { showPaxSenixKeyDialog = false }) {
+                    Text(stringResource(R.string.cancel))
+                }
+            },
         )
     }
 }
@@ -298,6 +369,7 @@ private fun ModernSyllableSyncCard(
             )
         }
     }
+
 }
 
 /**

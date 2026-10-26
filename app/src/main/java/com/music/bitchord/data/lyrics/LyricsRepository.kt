@@ -89,6 +89,30 @@ object LyricsRepository {
     ): List<LyricLine>? {
         LyricsLog.i(source.label, "Querying ${source.label} (${source.id})...")
 
+        if (source.id in BuiltinLyricsSources.nativeIds) {
+            // YouTube-backed lyric providers follow the existing opt-in and
+            // offline gates. Merely upgrading never starts YouTube requests.
+            if (source.id in BuiltinLyricsSources.youtubeIds &&
+                !com.music.bitchord.data.settings.AppSettings.youtubeMusicNetworkAllowed
+            ) {
+                LyricsLog.i(source.label, "Skipped: YouTube network access is disabled")
+                return null
+            }
+            val searchTitle = title.forLyricsSearch()
+            val searchArtist = artist.artistForLyricsSearch()
+            val native = BuiltinLyricsSources.fetch(
+                id = source.id,
+                videoId = videoId,
+                title = searchTitle,
+                artist = searchArtist,
+                durationMs = durationMs,
+                album = album,
+            )
+            if (native.isNullOrEmpty()) LyricsLog.w(source.label, "No lyrics returned")
+            else LyricsLog.s(source.label, "Returned ${native.size} lines")
+            return native
+        }
+
         val ext = com.music.bitchord.feature.lyrics.manager.LyricsExtensionManager.getExtension(source.id)
         var found: List<LyricLine>? = null
 

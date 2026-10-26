@@ -72,7 +72,7 @@ object LyricsExtensionManager {
         if (!enabled) {
             activeSyncCalls.forEach { call -> call.cancel() }
             _installedExtensions.value = emptyList()
-            _dynamicSources.value = emptyList()
+            publishSources(emptyList())
             // Keep the user's provider choices. The IDs can be resolved again
             // when extensions are re-enabled; disabling execution must not
             // silently erase their selection or ordering.
@@ -166,13 +166,13 @@ object LyricsExtensionManager {
     suspend fun loadInstalledExtensions(context: Context) = withContext(Dispatchers.IO) {
         if (!extensionsEnabled) {
             _installedExtensions.value = emptyList()
-            _dynamicSources.value = emptyList()
+            publishSources(emptyList())
             return@withContext
         }
         val extDir = File(context.filesDir, "$EXTENSIONS_DIR/extensions")
         if (!extDir.exists()) {
             _installedExtensions.value = emptyList()
-            _dynamicSources.value = emptyList()
+            publishSources(emptyList())
             return@withContext
         }
 
@@ -209,10 +209,20 @@ object LyricsExtensionManager {
         list.sortBy { it.defaultPriority }
         if (!extensionsEnabled) return@withContext
         _installedExtensions.value = list
-        val sources = list.map { com.music.bitchord.data.lyrics.LyricsSource.fromExtension(it) }
+        publishSources(list)
+        LyricsLog.i(TAG, "Loaded ${list.size} lyrics extensions: ${list.joinToString { it.name }}")
+    }
+
+    /** Native providers are always available; external scripts remain separately gated. */
+    private fun publishSources(extensions: List<LyricsExtension>) {
+        val scriptSources = extensions
+            .asSequence()
+            .map { com.music.bitchord.data.lyrics.LyricsSource.fromExtension(it) }
+            .filterNot { it.id in com.music.bitchord.data.lyrics.BuiltinLyricsSources.nativeIds }
+            .toList()
+        val sources = com.music.bitchord.data.lyrics.BuiltinLyricsSources.sources + scriptSources
         _dynamicSources.value = sources
         AppSettings.refreshLyricsSources(sources)
-        LyricsLog.i(TAG, "Loaded ${list.size} lyrics extensions: ${list.joinToString { it.name }}")
     }
 
     /**
@@ -409,7 +419,9 @@ object LyricsExtensionManager {
      * Gets installed extension by ID.
      */
     fun getExtension(id: String): LyricsExtension? =
-        if (extensionsEnabled) _installedExtensions.value.firstOrNull { it.id.equals(id, ignoreCase = true) } else null
+        if (extensionsEnabled && id !in com.music.bitchord.data.lyrics.BuiltinLyricsSources.nativeIds) {
+            _installedExtensions.value.firstOrNull { it.id.equals(id, ignoreCase = true) }
+        } else null
 
     private const val MAX_REGISTRY_BYTES = 512 * 1024
     private const val MAX_MANIFEST_BYTES = 64 * 1024

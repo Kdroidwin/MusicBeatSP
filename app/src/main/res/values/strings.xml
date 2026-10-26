@@ -600,6 +600,7 @@
     <string name="paxsenix_api_key_dialog_description">Enter your PaxSenix API key or Bearer token to enable Spotify and Musixmatch lyrics providers.</string>
     <string name="paxsenix_api_key_placeholder">Paste API key or Bearer token</string>
     <string name="paxsenix_api_key_helper">Leave blank to clear the saved key.</string>
+    <string name="paxsenix_api_key_save_failed">The key could not be stored securely on this device.</string>
     <string name="max_delay">Maximum delay</string>
     <string name="max_delay_subtitle">Maximum scrobble delay in seconds</string>
     <string name="min_song_duration">Minimum song duration</string>
@@ -1430,4 +1431,22 @@
     <string name="playback_tuning_thin_sliders_subtitle">Use the same slim track and touch behavior as the player’s seek and volume bars. On by default.</string>
     <string name="queue_name_placeholder">Queue name</string>
     <string name="saved_queues_section">Saved queues</string>
+    <string name="hide_saved_queue_heading">Hide save-current-queue heading</string>
+    <string name="hide_saved_queue_heading_subtitle">Hide the heading above the queue name field in the saved-queue manager. On by default.</string>
+
+    <string name="transport_left_action">Left transport side button</string>
+    <string name="transport_right_action">Right transport side button</string>
+    <string name="transport_side_action_subtitle">Replaces the short seek button on this side. With no action selected, tracks of 15 minutes or longer show the seek button by default.</string>
+    <string name="transport_action_none">None (use seek button rule)</string>
+    <string name="speaker_playback_allowed">Allow device speaker playback</string>
+    <string name="speaker_playback_allowed_subtitle">When off, local audio plays only through wired headphones, Bluetooth audio, or USB audio. Playback pauses if Android routes it elsewhere.</string>
+    <string name="audio_source_rate_only">Decoder: %1$.1f kHz (output rate not reported yet)</string>
+    <string name="audio_rate_conversion">Decoder %1$.1f kHz → AudioTrack %2$.1f kHz; app output rate differs</string>
+    <string name="audio_rate_no_app_conversion">Decoder and AudioTrack: %1$.1f kHz</string>
+    <string name="audio_track_buffer_size">AudioTrack buffer: %1$d bytes</string>
+    <string name="audio_system_effects_unknown">System audio effects: unavailable</string>
+    <string name="audio_system_effects_available">System audio effects available (not necessarily active): %1$s</string>
+    <string name="audio_output_rate_caveat">Android or the DAC may resample after AudioTrack. Final hardware rate is not exposed to ordinary apps.</string>
+    <string name="music_only_device_mode">Music-only device mode</string>
+    <string name="music_only_device_mode_subtitle">Uses Android screen pinning to keep this app in front and shows it over the lock screen. Android still controls unpinning and device security; this does not replace the Home app.</string>
 </resources>

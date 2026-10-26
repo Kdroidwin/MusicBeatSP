@@ -103,6 +103,18 @@ enum class SeekButtonMode {
     LONG_TRACKS_ONLY,
 }
 
+/** Optional actions placed in the two short-seek positions beside previous/next. */
+enum class TransportSideAction {
+    NONE,
+    SHUFFLE,
+    REPEAT,
+    FAVORITE,
+    LYRICS,
+    QUEUE,
+    PLAYLISTS,
+    SEARCH,
+}
+
 /** Destinations within the device-local music library. */
 enum class LocalLibraryTab { SONGS, ALBUMS, ARTISTS, FOLDERS, PLAYLISTS, ALBUM_ARTISTS }
 
@@ -446,6 +458,8 @@ object AppSettings {
 
     /** Prefer an attached USB audio output over the system's normal route. */
     val preferUsbDac = MutableStateFlow(false)
+    /** When disabled, pause local playback unless Android routes it to headphones, Bluetooth, or USB. */
+    val speakerPlaybackAllowed = MutableStateFlow(true)
 
     /**
      * Whether a source offering a Dolby Atmos rendition is allowed to serve it.
@@ -522,6 +536,8 @@ object AppSettings {
     val queueManagerEqualsIcon = MutableStateFlow(false)
     /** Uses the compact native-style saved queue manager in place of its legacy sheet. */
     val redesignedSavedQueueManager = MutableStateFlow(true)
+    /** Hides only the save-current-queue section heading in the redesigned queue manager. */
+    val hideSavedQueueHeading = MutableStateFlow(true)
     /** Hides the queue heading while keeping its actions available. */
     val hideQueueLabel = MutableStateFlow(true)
     /** Replaces the clear-queue label with a trash icon. */
@@ -614,6 +630,8 @@ object AppSettings {
     /** Status bar visibility while the player is expanded over the library. */
     val showPlayerStatusBar = MutableStateFlow(true)
     val showNavigationBar = MutableStateFlow(true)
+    /** Uses Android's user-confirmed screen pinning and exposes the player over the lock screen. */
+    val musicOnlyDeviceMode = MutableStateFlow(false)
     val keepScreenOn = MutableStateFlow(false)
     /** Keeps the display awake while the full lyrics panel is open. */
     val keepScreenOnDuringLyrics = MutableStateFlow(true)
@@ -797,7 +815,10 @@ object AppSettings {
     /** Minimum audible playback before a track enters recent/play-count history. */
     val recentlyPlayedThresholdSeconds = MutableStateFlow(DEFAULT_RECENT_PLAY_THRESHOLD_SECONDS)
     /** Optional seek-back/forward buttons beside previous/next. */
-    val seekButtonMode = MutableStateFlow(SeekButtonMode.OFF)
+    val seekButtonMode = MutableStateFlow(SeekButtonMode.LONG_TRACKS_ONLY)
+    /** Replaces the short seek button on either side of the transport when selected. */
+    val transportLeftAction = MutableStateFlow(TransportSideAction.NONE)
+    val transportRightAction = MutableStateFlow(TransportSideAction.NONE)
     /** Hides the numeric seconds caption beneath optional seek buttons. */
     val hideSeekButtonLabels = MutableStateFlow(false)
 
@@ -829,6 +850,9 @@ object AppSettings {
 
     /** The databases [syncedLyrics] may ask. Empty is the same as off. Populated dynamically from extensions. */
     val lyricsSources = MutableStateFlow<Set<LyricsSource>>(emptySet())
+
+    /** Optional PaxSenix credential, mirrored only from the encrypted AuthStore. */
+    val paxSenixApiKey = MutableStateFlow("")
 
     /**
      * The order [lyricsSources] are asked in.
@@ -1154,6 +1178,7 @@ object AppSettings {
         }.getOrDefault(OutputPcmMode.PCM_16)
         bitPerfectPlayback.value = prefs.getBoolean(KEY_BIT_PERFECT_PLAYBACK, false)
         preferUsbDac.value = prefs.getBoolean(KEY_PREFER_USB_DAC, false)
+        speakerPlaybackAllowed.value = prefs.getBoolean(KEY_SPEAKER_PLAYBACK_ALLOWED, true)
         dolbyAtmos.value = prefs.getBoolean(KEY_DOLBY_ATMOS, false)
         diracAudioEnabled.value = prefs.getBoolean(KEY_DIRAC_AUDIO_ENABLED, false)
         diracAudioPreset.value = prefs.getInt(KEY_DIRAC_AUDIO_PRESET, 0).coerceIn(0, 2)
@@ -1223,6 +1248,7 @@ object AppSettings {
         showEmbeddedComment.value = prefs.getBoolean(KEY_SHOW_EMBEDDED_COMMENT, true)
         queueManagerEqualsIcon.value = prefs.getBoolean(KEY_QUEUE_MANAGER_EQUALS_ICON, false)
         redesignedSavedQueueManager.value = prefs.getBoolean(KEY_REDESIGNED_SAVED_QUEUE_MANAGER, true)
+        hideSavedQueueHeading.value = prefs.getBoolean(KEY_HIDE_SAVED_QUEUE_HEADING, true)
         hideQueueLabel.value = prefs.getBoolean(KEY_HIDE_QUEUE_LABEL, true)
         queueClearTrashIcon.value = prefs.getBoolean(KEY_QUEUE_CLEAR_TRASH_ICON, false)
         hidePlaybackTuningTitle.value = prefs.getBoolean(KEY_HIDE_PLAYBACK_TUNING_TITLE, true)
@@ -1280,6 +1306,7 @@ object AppSettings {
             }
         }
         showNavigationBar.value = prefs.getBoolean(KEY_SHOW_NAVIGATION_BAR, true)
+        musicOnlyDeviceMode.value = prefs.getBoolean(KEY_MUSIC_ONLY_DEVICE_MODE, false)
         keepScreenOn.value = prefs.getBoolean(KEY_KEEP_SCREEN_ON, false)
         keepScreenOnDuringLyrics.value = prefs.getBoolean(KEY_KEEP_SCREEN_ON_DURING_LYRICS, true)
         screenOrientationMode.value = runCatching {
@@ -1370,8 +1397,20 @@ object AppSettings {
             DEFAULT_RECENT_PLAY_THRESHOLD_SECONDS,
         ).coerceIn(0, MAX_RECENT_PLAY_THRESHOLD_SECONDS)
         seekButtonMode.value = runCatching {
-            SeekButtonMode.valueOf(prefs.getString(KEY_SEEK_BUTTON_MODE, SeekButtonMode.OFF.name).orEmpty())
-        }.getOrDefault(SeekButtonMode.OFF)
+            SeekButtonMode.valueOf(
+                prefs.getString(KEY_SEEK_BUTTON_MODE, SeekButtonMode.LONG_TRACKS_ONLY.name).orEmpty(),
+            )
+        }.getOrDefault(SeekButtonMode.LONG_TRACKS_ONLY)
+        transportLeftAction.value = runCatching {
+            TransportSideAction.valueOf(
+                prefs.getString(KEY_TRANSPORT_LEFT_ACTION, TransportSideAction.NONE.name).orEmpty(),
+            )
+        }.getOrDefault(TransportSideAction.NONE)
+        transportRightAction.value = runCatching {
+            TransportSideAction.valueOf(
+                prefs.getString(KEY_TRANSPORT_RIGHT_ACTION, TransportSideAction.NONE.name).orEmpty(),
+            )
+        }.getOrDefault(TransportSideAction.NONE)
         hideSeekButtonLabels.value = prefs.getBoolean(KEY_HIDE_SEEK_BUTTON_LABELS, false)
         legacyMeshGradient.value = prefs.getBoolean(KEY_LEGACY_MESH_GRADIENT, false)
         syncedLyrics.value = prefs.getBoolean(KEY_SYNCED_LYRICS, true)
@@ -1385,6 +1424,8 @@ object AppSettings {
         lyricsExtensionsEnabled.value = prefs.getBoolean(KEY_LYRICS_EXTENSIONS_ENABLED, false)
         lyricsAutoUpdate.value = prefs.getBoolean(KEY_LYRICS_AUTO_UPDATE, false)
         lastLyricsExtensionSyncMs.value = prefs.getLong(KEY_LAST_LYRICS_EXTENSION_SYNC, 0L)
+        paxSenixApiKey.value = authStore.getProtectedValue(KEY_PAXSENIX_API_KEY).orEmpty()
+        com.music.bitchord.data.lyrics.PaxSenix.setApiKey(paxSenixApiKey.value)
         audioCacheLimitBytes.value = prefs.getLong(KEY_CACHE_LIMIT, DEFAULT_CACHE_LIMIT_BYTES)
             .coerceIn(DEFAULT_CACHE_LIMIT_BYTES, MAX_CACHE_LIMIT_BYTES)
         lastfmEnabled.value = prefs.getBoolean(KEY_LASTFM_ENABLED, false)
@@ -1981,6 +2022,11 @@ object AppSettings {
         prefs.edit().putBoolean(KEY_REDESIGNED_SAVED_QUEUE_MANAGER, value).apply()
     }
 
+    fun setHideSavedQueueHeading(value: Boolean) {
+        hideSavedQueueHeading.value = value
+        prefs.edit().putBoolean(KEY_HIDE_SAVED_QUEUE_HEADING, value).apply()
+    }
+
     fun setHideQueueLabel(value: Boolean) {
         hideQueueLabel.value = value
         prefs.edit().putBoolean(KEY_HIDE_QUEUE_LABEL, value).apply()
@@ -2179,6 +2225,11 @@ object AppSettings {
     fun setShowNavigationBar(value: Boolean) {
         showNavigationBar.value = value
         prefs.edit().putBoolean(KEY_SHOW_NAVIGATION_BAR, value).apply()
+    }
+
+    fun setMusicOnlyDeviceMode(value: Boolean) {
+        musicOnlyDeviceMode.value = value
+        prefs.edit().putBoolean(KEY_MUSIC_ONLY_DEVICE_MODE, value).apply()
     }
 
     fun setKeepScreenOn(value: Boolean) {
@@ -2611,6 +2662,15 @@ object AppSettings {
         prefs.edit().putString(KEY_LYRICS_SOURCES, value.joinToString(",") { it.id }).apply()
     }
 
+    /** Stores an optional provider key encrypted; failure never falls back to plain preferences. */
+    fun setPaxSenixApiKey(value: String): Boolean {
+        val normalized = com.music.bitchord.data.lyrics.normalizePaxSenixApiKey(value)
+        if (!authStore.setProtectedValueStrict(KEY_PAXSENIX_API_KEY, normalized)) return false
+        paxSenixApiKey.value = normalized
+        com.music.bitchord.data.lyrics.PaxSenix.setApiKey(normalized)
+        return true
+    }
+
     /**
      * Stored as a joined list of IDs rather than a string set: an ID that
      * no longer exists — a source dropped or deleted from the repo — falls out
@@ -2752,6 +2812,16 @@ object AppSettings {
         prefs.edit().putString(KEY_SEEK_BUTTON_MODE, value.name).apply()
     }
 
+    fun setTransportLeftAction(value: TransportSideAction) {
+        transportLeftAction.value = value
+        prefs.edit().putString(KEY_TRANSPORT_LEFT_ACTION, value.name).apply()
+    }
+
+    fun setTransportRightAction(value: TransportSideAction) {
+        transportRightAction.value = value
+        prefs.edit().putString(KEY_TRANSPORT_RIGHT_ACTION, value.name).apply()
+    }
+
     fun setHideSeekButtonLabels(value: Boolean) {
         hideSeekButtonLabels.value = value
         prefs.edit().putBoolean(KEY_HIDE_SEEK_BUTTON_LABELS, value).apply()
@@ -2832,6 +2902,11 @@ object AppSettings {
     fun setPreferUsbDac(value: Boolean) {
         preferUsbDac.value = value
         prefs.edit().putBoolean(KEY_PREFER_USB_DAC, value).apply()
+    }
+
+    fun setSpeakerPlaybackAllowed(value: Boolean) {
+        speakerPlaybackAllowed.value = value
+        prefs.edit().putBoolean(KEY_SPEAKER_PLAYBACK_ALLOWED, value).apply()
     }
 
     fun setExportDownloads(value: Boolean) {
@@ -3453,6 +3528,7 @@ object AppSettings {
     private const val KEY_OUTPUT_PCM_MODE = "output_pcm_mode"
     private const val KEY_BIT_PERFECT_PLAYBACK = "bit_perfect_playback"
     private const val KEY_PREFER_USB_DAC = "prefer_usb_dac"
+    private const val KEY_SPEAKER_PLAYBACK_ALLOWED = "speaker_playback_allowed"
     private const val KEY_DOLBY_ATMOS = "dolby_atmos"
     private const val KEY_DIRAC_AUDIO_ENABLED = "dirac_audio_enabled"
     private const val KEY_DIRAC_AUDIO_PRESET = "dirac_audio_preset"
@@ -3492,6 +3568,8 @@ object AppSettings {
     private const val KEY_QUEUE_CLEAR_TRASH_ICON = "queue_clear_trash_icon"
     private const val KEY_HIDE_PLAYBACK_TUNING_TITLE = "hide_playback_tuning_title"
     private const val KEY_REDESIGNED_SAVED_QUEUE_MANAGER = "redesigned_saved_queue_manager"
+    private const val KEY_HIDE_SAVED_QUEUE_HEADING = "hide_saved_queue_heading"
+    private const val KEY_PAXSENIX_API_KEY = "paxsenix_api_key"
     private const val KEY_PLAYBACK_TUNING_THIN_SLIDERS = "playback_tuning_thin_sliders"
     private const val KEY_AUTOPLAY = "autoplay"
     private const val KEY_SHUFFLE_ENABLED = "shuffle_enabled"
@@ -3529,6 +3607,7 @@ object AppSettings {
     private const val KEY_SHOW_STATUS_BAR = "show_status_bar"
     private const val KEY_SHOW_PLAYER_STATUS_BAR = "show_player_status_bar"
     private const val KEY_SHOW_NAVIGATION_BAR = "show_navigation_bar"
+    private const val KEY_MUSIC_ONLY_DEVICE_MODE = "music_only_device_mode"
     private const val KEY_KEEP_SCREEN_ON = "keep_screen_on"
     private const val KEY_KEEP_SCREEN_ON_DURING_LYRICS = "keep_screen_on_during_lyrics"
     private const val KEY_SCREEN_ORIENTATION = "screen_orientation_mode"
@@ -3595,6 +3674,8 @@ object AppSettings {
     private const val KEY_SEEK_INTERVAL_SECONDS = "seek_interval_seconds"
     private const val KEY_RECENT_PLAY_THRESHOLD_SECONDS = "recent_play_threshold_seconds"
     private const val KEY_SEEK_BUTTON_MODE = "seek_button_mode"
+    private const val KEY_TRANSPORT_LEFT_ACTION = "transport_left_action"
+    private const val KEY_TRANSPORT_RIGHT_ACTION = "transport_right_action"
     private const val KEY_HIDE_SEEK_BUTTON_LABELS = "hide_seek_button_labels"
     private const val KEY_LEGACY_MESH_GRADIENT = "legacy_mesh_gradient"
     private const val KEY_SYNCED_LYRICS = "synced_lyrics"

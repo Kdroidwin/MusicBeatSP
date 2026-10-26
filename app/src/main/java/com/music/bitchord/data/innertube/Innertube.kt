@@ -41,6 +41,7 @@ import kotlinx.serialization.json.putJsonArray
 import kotlinx.serialization.json.putJsonObject
 import java.io.IOException
 import java.security.MessageDigest
+import java.util.Base64
 import java.util.Locale
 
 /**
@@ -594,6 +595,17 @@ object Innertube {
         put("videoId", videoId)
         put("playlistId", "RDAMVM$videoId")
         put("isAudioOnly", true)
+    }
+
+    /** Timed caption transcript used only when the listener enables this lyrics source. */
+    suspend fun transcript(videoId: String): JsonObject {
+        require(videoId.matches(Regex("[A-Za-z0-9_-]{11}"))) { "Invalid YouTube video ID" }
+        return postMusic("get_transcript") {
+            // get_transcript expects a tiny protobuf: field 1, length, video id.
+            val bytes = byteArrayOf(10, videoId.toByteArray(Charsets.UTF_8).size.toByte()) +
+                videoId.toByteArray(Charsets.UTF_8)
+            put("params", Base64.getEncoder().encodeToString(bytes))
+        }
     }
 
     suspend fun search(query: String, params: String? = null): JsonObject =

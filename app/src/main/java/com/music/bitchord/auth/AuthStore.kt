@@ -127,6 +127,21 @@ class AuthStore(context: Context) {
         prefs?.edit()?.putString(protectedValueKey(name), value.ifEmpty { null })?.apply()
     }
 
+    /**
+     * Writes a protected value synchronously and reports failure to the caller.
+     * Settings that collect credentials use this instead of silently showing a
+     * value that was never durably encrypted.
+     */
+    fun setProtectedValueStrict(name: String, value: String): Boolean {
+        val securePrefs = prefs ?: return false
+        return runCatching {
+            val editor = securePrefs.edit()
+            if (value.isEmpty()) editor.remove(protectedValueKey(name))
+            else editor.putString(protectedValueKey(name), value)
+            editor.commit()
+        }.getOrDefault(false)
+    }
+
     /** Synchronous write used only while moving an old plaintext preference. */
     fun migrateProtectedValue(name: String, value: String): Boolean {
         val securePrefs = prefs ?: return false

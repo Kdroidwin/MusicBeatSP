@@ -1386,6 +1386,7 @@
     <string name="paxsenix_api_key_dialog_description">SpotifyとMusixmatchの歌詞プロバイダーを有効にするには、PaxSenix APIキーまたはBearerトークンを入力してください。</string>
     <string name="paxsenix_api_key_placeholder">APIキーまたはBearerトークンを貼り付け</string>
     <string name="paxsenix_api_key_helper">保存済みのキーを消去するには空欄のままにします。</string>
+    <string name="paxsenix_api_key_save_failed">この端末でキーを安全に保存できませんでした。</string>
     <string name="sort_date_added_oldest">追加日（古い順）</string>
     <string name="sort_date_added_toggle">追加日</string>
     <string name="sort_default">既定の順序</string>
@@ -1409,4 +1410,22 @@
     <string name="use_this_profile">このプロフィールを使用</string>
     <string name="switch_profile_hint">アバターから切り替えた後、このプロフィールを使用してください。</string>
     <string name="profile_unavailable">このページではログイン済みプロフィールを利用できません。</string>
+    <string name="hide_saved_queue_heading">「現在のキューを保存」の見出しを隠す</string>
+    <string name="hide_saved_queue_heading_subtitle">保存済みキュー管理画面で、キュー名入力欄の上にある見出しを隠します。初期設定はオンです。</string>
+
+    <string name="transport_left_action">再生ボタン左側の操作</string>
+    <string name="transport_right_action">再生ボタン右側の操作</string>
+    <string name="transport_side_action_subtitle">選んだ操作が短いスキップボタンの位置に表示されます。「なし」の場合、初期設定では15分以上の曲にスキップボタンを表示します。</string>
+    <string name="transport_action_none">なし（スキップ設定を使用）</string>
+    <string name="speaker_playback_allowed">端末スピーカーでの再生を許可</string>
+    <string name="speaker_playback_allowed_subtitle">オフにすると、有線イヤホン、Bluetooth音声、USB音声だけで再生します。Androidが別の出力先へ切り替えた場合は再生を一時停止します。</string>
+    <string name="audio_source_rate_only">デコーダー: %1$.1f kHz（出力レートはまだ未取得）</string>
+    <string name="audio_rate_conversion">デコーダー %1$.1f kHz → AudioTrack %2$.1f kHz（アプリ出力レートが異なります）</string>
+    <string name="audio_rate_no_app_conversion">デコーダー / AudioTrack: %1$.1f kHz</string>
+    <string name="audio_track_buffer_size">AudioTrackバッファ: %1$d bytes</string>
+    <string name="audio_system_effects_unknown">システム音響効果: 情報を取得できません</string>
+    <string name="audio_system_effects_available">システム音響効果（利用可能なもの。実際に有効とは限りません）: %1$s</string>
+    <string name="audio_output_rate_caveat">AudioTrackの後段でAndroidやDACが再サンプリングする場合があります。一般アプリから最終的なハードウェア出力レートは取得できません。</string>
+    <string name="music_only_device_mode">音楽専用機モード</string>
+    <string name="music_only_device_mode_subtitle">Androidの画面固定でアプリを前面に保ち、ロック画面上にも表示します。固定解除と端末のセキュリティはAndroidが管理します。ホームアプリの置き換えは行いません。</string>
 </resources>

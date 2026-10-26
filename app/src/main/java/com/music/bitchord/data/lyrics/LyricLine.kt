@@ -8,7 +8,41 @@ package com.music.bitchord.data.lyrics
  * [endMs] the last one's end. Whole words are what the sweep needs — a
  * highlight that ran across "e" and "nough" separately reads as a stutter.
  */
-data class LyricWord(val startMs: Long, val endMs: Long, val text: String)
+data class LyricWord(
+    val startMs: Long,
+    val endMs: Long,
+    val text: String,
+    /** Per-syllable timing retained for providers that supply it. */
+    val syllables: List<LyricSyllable> = emptyList(),
+)
+
+/** A separately timed run of characters within a displayed word. */
+data class LyricSyllable(
+    val startMs: Long,
+    val endMs: Long,
+    val startChar: Int,
+    val endChar: Int,
+) {
+    companion object {
+        fun normalized(parts: List<LyricSyllable>, length: Int): List<LyricSyllable> {
+            val usable = parts
+                .filter { it.endChar > it.startChar && it.startChar < length }
+                .sortedBy { it.startChar }
+            if (usable.size < 2) return emptyList()
+            return usable.mapIndexed { index, part ->
+                LyricSyllable(
+                    startMs = part.startMs,
+                    endMs = maxOf(part.startMs, part.endMs),
+                    startChar = if (index == 0) 0 else part.startChar,
+                    endChar = usable.getOrNull(index + 1)?.startChar ?: length,
+                )
+            }
+        }
+    }
+}
+
+/** Optional left/right alignment for duet lyrics that identify their singers. */
+enum class LyricAlignment { Start, End }
 
 /**
  * One synced line. [timeMs] is when it starts; a blank [text] is an
@@ -37,6 +71,7 @@ data class LyricLine(
     val words: List<LyricWord> = emptyList(),
     val sungUntilMs: Long? = null,
     val background: LyricLine? = null,
+    val alignment: LyricAlignment = LyricAlignment.Start,
 ) {
     val isGap: Boolean get() = text.isEmpty()
 
