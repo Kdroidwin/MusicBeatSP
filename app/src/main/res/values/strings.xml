@@ -1422,4 +1422,12 @@
     <string name="youtube_music_search_default_subtitle">Start searches on YouTube Music when it is enabled; otherwise search this device.</string>
     <string name="youtube_music_include_videos">Include video uploads in YouTube Music search</string>
     <string name="youtube_music_include_videos_subtitle">Show ordinary YouTube videos alongside music results. On by default.</string>
+    <string name="redesigned_saved_queue_manager">New saved-queue manager</string>
+    <string name="redesigned_saved_queue_manager_subtitle">Use a compact list layout for saving, loading, replacing, and deleting saved queues. On by default.</string>
+    <string name="collection_song_artwork">Show album art in artist and album song lists</string>
+    <string name="collection_song_artwork_subtitle">Show each track’s album cover instead of its number in album, artist, and album-artist lists. On by default.</string>
+    <string name="playback_tuning_thin_sliders">Use player-style speed and pitch bars</string>
+    <string name="playback_tuning_thin_sliders_subtitle">Use the same slim track and touch behavior as the player’s seek and volume bars. On by default.</string>
+    <string name="queue_name_placeholder">Queue name</string>
+    <string name="saved_queues_section">Saved queues</string>
 </resources>
