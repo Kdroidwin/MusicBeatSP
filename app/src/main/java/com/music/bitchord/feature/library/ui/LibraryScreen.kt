@@ -395,6 +395,21 @@ fun LibraryScreen(
         showDeleteFromPlaylistDialog = false
     }
 
+    // Keep an already-open playlist backed by the latest MediaStore rows.
+    // Tag editing refreshes `songs`; without re-resolving here, the visible
+    // playlist and its playback queue retain the pre-edit Song objects.
+    LaunchedEffect(songs, playlists, drillDownPlaylistId) {
+        val playlistId = drillDownPlaylistId ?: return@LaunchedEffect
+        val playlist = playlists.firstOrNull { it.id == playlistId } ?: return@LaunchedEffect
+        val refreshedSongs = resolvePlaylistSongs(playlist, songs)
+        if (refreshedSongs != drillDownSongs) {
+            drillDownSongs = refreshedSongs
+            drillDownArt = playlist.customCoverUrl
+                ?: playlist.coverUrl
+                ?: refreshedSongs.firstNotNullOfOrNull { it.thumbnailUrl }
+        }
+    }
+
     LaunchedEffect(initialFilterRequest) {
         val requestedFilter = initialFilterRequest ?: return@LaunchedEffect
         selectedFilter = requestedFilter

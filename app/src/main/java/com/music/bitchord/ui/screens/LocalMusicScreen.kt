@@ -401,6 +401,22 @@ fun LocalMusicScreen(
     var parentArtistAlbums by remember { mutableStateOf<List<AlbumEntry>?>(null) }
     var parentArtistLabel by remember { mutableStateOf<String?>(null) }
 
+    // A drill-down playlist initially resolves its IDs against the current
+    // library snapshot. Tag edits refresh `songs`, so resolve the same stored
+    // IDs again to keep both the visible rows and playback metadata current.
+    // This does not write to the playlist or change its saved track order.
+    LaunchedEffect(songs, localPlaylists, drillDownPlaylistId) {
+        val playlistId = drillDownPlaylistId ?: return@LaunchedEffect
+        val playlist = localPlaylists.firstOrNull { it.id == playlistId } ?: return@LaunchedEffect
+        val refreshedSongs = resolvePlaylistSongs(playlist, songs)
+        if (refreshedSongs != drillDownSongs) {
+            drillDownSongs = refreshedSongs
+            drillDownArt = playlist.customCoverUrl
+                ?: playlist.coverUrl
+                ?: refreshedSongs.firstNotNullOfOrNull { it.thumbnailUrl }
+        }
+    }
+
     val inDrillDown = drillDownLabel != null
     SideEffect {
         if (!inDrillDown || drillDownShowsAlbums || !fullScreenCollectionArtwork || !drillDownFullScreenArtwork) {
