@@ -260,6 +260,7 @@ import com.music.bitchord.ui.player.NowPlayingScreen
 import com.music.bitchord.ui.player.LocalPlayerDock
 import com.music.bitchord.ui.player.PlayerDock
 import com.music.bitchord.ui.player.PlayerSheetMotion
+import com.music.bitchord.ui.player.ThinSlider
 import com.music.bitchord.ui.player.dockedPlayerAvailable
 import com.music.bitchord.ui.player.dockedPlayerWidth
 import com.music.bitchord.data.settings.SongSort
@@ -4061,6 +4062,7 @@ private fun PlaybackTuningDialog(
     val palette = rememberArtworkPalette(song?.thumbnailUrl, dark = true, artPx = ROW_ART_PX)
     val useArtworkBackdrop by AppSettings.frostedPlayerDetails.collectAsStateWithLifecycle()
     val hideTitle by AppSettings.hidePlaybackTuningTitle.collectAsStateWithLifecycle()
+    val useThinSliders by AppSettings.playbackTuningThinSliders.collectAsStateWithLifecycle()
     val foreground = if (useArtworkBackdrop) palette.onBackground else MaterialTheme.colorScheme.onSurface
     val secondary = if (useArtworkBackdrop) palette.onBackgroundVariant else MaterialTheme.colorScheme.onSurfaceVariant
     val accent = if (useArtworkBackdrop) palette.accent else MaterialTheme.colorScheme.primary
@@ -4116,38 +4118,63 @@ private fun PlaybackTuningDialog(
                     style = MaterialTheme.typography.titleMedium,
                     color = foreground,
                 )
-                Slider(
-                    value = speed,
-                    onValueChange = { speed = it },
-                    valueRange = 0.1f..10.0f,
-                    steps = 98,
-                    colors = SliderDefaults.colors(
-                        thumbColor = accent,
-                        activeTrackColor = accent,
-                        inactiveTrackColor = secondary.copy(alpha = 0.28f),
-                        activeTickColor = foreground.copy(alpha = 0.65f),
-                        inactiveTickColor = secondary.copy(alpha = 0.45f),
-                    ),
-                )
+                if (useThinSliders) {
+                    ThinSlider(
+                        value = ((speed - 0.1f) / 9.9f).coerceIn(0f, 1f),
+                        onValueChange = { fraction ->
+                            speed = kotlin.math.round((0.1f + fraction * 9.9f) * 10f) / 10f
+                        },
+                        modifier = Modifier.fillMaxWidth(),
+                        activeColor = accent,
+                        inactiveColor = secondary.copy(alpha = 0.28f),
+                    )
+                } else {
+                    Slider(
+                        value = speed,
+                        onValueChange = { speed = it },
+                        valueRange = 0.1f..10.0f,
+                        steps = 98,
+                        colors = SliderDefaults.colors(
+                            thumbColor = accent,
+                            activeTrackColor = accent,
+                            inactiveTrackColor = secondary.copy(alpha = 0.28f),
+                            activeTickColor = foreground.copy(alpha = 0.65f),
+                            inactiveTickColor = secondary.copy(alpha = 0.45f),
+                        ),
+                    )
+                }
                 Spacer(Modifier.height(12.dp))
                 Text(
                     text = stringResource(R.string.playback_pitch) + " · " + String.format(Locale.ROOT, "%.2fx", pitch),
                     style = MaterialTheme.typography.titleMedium,
                     color = foreground,
                 )
-                Slider(
-                    value = pitch,
-                    onValueChange = { pitch = it },
-                    valueRange = 0.5f..2.0f,
-                    steps = 29,
-                    colors = SliderDefaults.colors(
-                        thumbColor = accent,
-                        activeTrackColor = accent,
-                        inactiveTrackColor = secondary.copy(alpha = 0.28f),
-                        activeTickColor = foreground.copy(alpha = 0.65f),
-                        inactiveTickColor = secondary.copy(alpha = 0.45f),
-                    ),
-                )
+                if (useThinSliders) {
+                    ThinSlider(
+                        value = ((pitch - 0.5f) / 1.5f).coerceIn(0f, 1f),
+                        onValueChange = { fraction ->
+                            val raw = 0.5f + fraction * 1.5f
+                            pitch = (kotlin.math.round(raw * 20f) / 20f).coerceIn(0.5f, 2f)
+                        },
+                        modifier = Modifier.fillMaxWidth(),
+                        activeColor = accent,
+                        inactiveColor = secondary.copy(alpha = 0.28f),
+                    )
+                } else {
+                    Slider(
+                        value = pitch,
+                        onValueChange = { pitch = it },
+                        valueRange = 0.5f..2.0f,
+                        steps = 29,
+                        colors = SliderDefaults.colors(
+                            thumbColor = accent,
+                            activeTrackColor = accent,
+                            inactiveTrackColor = secondary.copy(alpha = 0.28f),
+                            activeTickColor = foreground.copy(alpha = 0.65f),
+                            inactiveTickColor = secondary.copy(alpha = 0.45f),
+                        ),
+                    )
+                }
                 Row(
                     Modifier.fillMaxWidth().padding(top = 8.dp),
                     horizontalArrangement = Arrangement.End,

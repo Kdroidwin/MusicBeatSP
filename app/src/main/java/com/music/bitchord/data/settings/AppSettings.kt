@@ -520,12 +520,16 @@ object AppSettings {
     val showEmbeddedComment = MutableStateFlow(true)
     /** Replaces the queue manager's text action with a compact equals glyph. */
     val queueManagerEqualsIcon = MutableStateFlow(false)
+    /** Uses the compact native-style saved queue manager in place of its legacy sheet. */
+    val redesignedSavedQueueManager = MutableStateFlow(true)
     /** Hides the queue heading while keeping its actions available. */
     val hideQueueLabel = MutableStateFlow(true)
     /** Replaces the clear-queue label with a trash icon. */
     val queueClearTrashIcon = MutableStateFlow(false)
     /** Hides the heading and its vertical gap in the playback tuning sheet. */
     val hidePlaybackTuningTitle = MutableStateFlow(true)
+    /** Draws speed and pitch controls with the player's hairline seek/volume bars. */
+    val playbackTuningThinSliders = MutableStateFlow(true)
 
     /** Keep playing similar music once the queue runs out. */
     val autoplay = MutableStateFlow(true)
@@ -1218,9 +1222,11 @@ object AppSettings {
         detailsSheetArtworkBackdrop.value = prefs.getBoolean(KEY_DETAILS_SHEET_ARTWORK_BACKDROP, true)
         showEmbeddedComment.value = prefs.getBoolean(KEY_SHOW_EMBEDDED_COMMENT, true)
         queueManagerEqualsIcon.value = prefs.getBoolean(KEY_QUEUE_MANAGER_EQUALS_ICON, false)
+        redesignedSavedQueueManager.value = prefs.getBoolean(KEY_REDESIGNED_SAVED_QUEUE_MANAGER, true)
         hideQueueLabel.value = prefs.getBoolean(KEY_HIDE_QUEUE_LABEL, true)
         queueClearTrashIcon.value = prefs.getBoolean(KEY_QUEUE_CLEAR_TRASH_ICON, false)
         hidePlaybackTuningTitle.value = prefs.getBoolean(KEY_HIDE_PLAYBACK_TUNING_TITLE, true)
+        playbackTuningThinSliders.value = prefs.getBoolean(KEY_PLAYBACK_TUNING_THIN_SLIDERS, true)
         autoplay.value = prefs.getBoolean(KEY_AUTOPLAY, true)
         shuffleEnabled.value = prefs.getBoolean(KEY_SHUFFLE_ENABLED, false)
         audioFocusLevel.value = prefs.getInt(KEY_AUDIO_FOCUS_LEVEL, 1).coerceIn(0, 4)
@@ -1970,6 +1976,11 @@ object AppSettings {
         prefs.edit().putBoolean(KEY_QUEUE_MANAGER_EQUALS_ICON, value).apply()
     }
 
+    fun setRedesignedSavedQueueManager(value: Boolean) {
+        redesignedSavedQueueManager.value = value
+        prefs.edit().putBoolean(KEY_REDESIGNED_SAVED_QUEUE_MANAGER, value).apply()
+    }
+
     fun setHideQueueLabel(value: Boolean) {
         hideQueueLabel.value = value
         prefs.edit().putBoolean(KEY_HIDE_QUEUE_LABEL, value).apply()
@@ -1983,6 +1994,11 @@ object AppSettings {
     fun setHidePlaybackTuningTitle(value: Boolean) {
         hidePlaybackTuningTitle.value = value
         prefs.edit().putBoolean(KEY_HIDE_PLAYBACK_TUNING_TITLE, value).apply()
+    }
+
+    fun setPlaybackTuningThinSliders(value: Boolean) {
+        playbackTuningThinSliders.value = value
+        prefs.edit().putBoolean(KEY_PLAYBACK_TUNING_THIN_SLIDERS, value).apply()
     }
 
     fun setReduceAnimation(value: Boolean) {
@@ -3475,6 +3491,8 @@ object AppSettings {
     private const val KEY_HIDE_QUEUE_LABEL = "hide_queue_label"
     private const val KEY_QUEUE_CLEAR_TRASH_ICON = "queue_clear_trash_icon"
     private const val KEY_HIDE_PLAYBACK_TUNING_TITLE = "hide_playback_tuning_title"
+    private const val KEY_REDESIGNED_SAVED_QUEUE_MANAGER = "redesigned_saved_queue_manager"
+    private const val KEY_PLAYBACK_TUNING_THIN_SLIDERS = "playback_tuning_thin_sliders"
     private const val KEY_AUTOPLAY = "autoplay"
     private const val KEY_SHUFFLE_ENABLED = "shuffle_enabled"
     private const val KEY_AUDIO_FOCUS_LEVEL = "audio_focus_level"

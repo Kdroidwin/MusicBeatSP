@@ -33,6 +33,7 @@ import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.rounded.Notes
 import androidx.compose.material.icons.automirrored.rounded.PlaylistAdd
+import androidx.compose.material.icons.automirrored.rounded.QueueMusic
 import androidx.compose.material.icons.automirrored.rounded.VolumeOff
 import androidx.compose.material.icons.automirrored.rounded.VolumeUp
 import androidx.compose.material.icons.rounded.Album
@@ -324,6 +325,7 @@ fun SettingsScreen(
     val hideCollectionTopBar by AppSettings.hideCollectionTopBar.collectAsStateWithLifecycle()
     val hideFloatingCollectionControls by AppSettings.hideFloatingCollectionControls.collectAsStateWithLifecycle()
     val frostedQueueManager by AppSettings.frostedQueueManager.collectAsStateWithLifecycle()
+    val redesignedSavedQueueManager by AppSettings.redesignedSavedQueueManager.collectAsStateWithLifecycle()
     val frostedPlayerDetails by AppSettings.frostedPlayerDetails.collectAsStateWithLifecycle()
     val detailsSheetArtworkBackdrop by AppSettings.detailsSheetArtworkBackdrop.collectAsStateWithLifecycle()
     val showEmbeddedComment by AppSettings.showEmbeddedComment.collectAsStateWithLifecycle()
@@ -331,6 +333,7 @@ fun SettingsScreen(
     val hideQueueLabel by AppSettings.hideQueueLabel.collectAsStateWithLifecycle()
     val queueClearTrashIcon by AppSettings.queueClearTrashIcon.collectAsStateWithLifecycle()
     val hidePlaybackTuningTitle by AppSettings.hidePlaybackTuningTitle.collectAsStateWithLifecycle()
+    val playbackTuningThinSliders by AppSettings.playbackTuningThinSliders.collectAsStateWithLifecycle()
     val launcherIcon by AppSettings.launcherIcon.collectAsStateWithLifecycle()
     val artistsOpenAlbums by AppSettings.artistsOpenAlbums.collectAsStateWithLifecycle()
     val shuffleArtistAlbums by AppSettings.shuffleArtistAlbums.collectAsStateWithLifecycle()
@@ -515,6 +518,12 @@ fun SettingsScreen(
             frostedQueueManager,
         ) { AppSettings.setFrostedQueueManager(!frostedQueueManager) },
         SettingsSearchEntry(
+            stringResource(R.string.redesigned_saved_queue_manager),
+            stringResource(R.string.redesigned_saved_queue_manager_subtitle),
+            listOf("queue", "saved queues", "manager", "再生キュー", "保存済みキュー", "管理画面"),
+            redesignedSavedQueueManager,
+        ) { AppSettings.setRedesignedSavedQueueManager(!redesignedSavedQueueManager) },
+        SettingsSearchEntry(
             stringResource(R.string.frosted_player_details),
             stringResource(R.string.frosted_player_details_subtitle),
             listOf("player", "details", "glass", "frosted", "プレーヤー", "詳細", "すりガラス"),
@@ -556,6 +565,12 @@ fun SettingsScreen(
             listOf("speed", "pitch", "playback", "title", "再生速度", "ピッチ", "ラベル", "非表示"),
             hidePlaybackTuningTitle,
         ) { AppSettings.setHidePlaybackTuningTitle(!hidePlaybackTuningTitle) },
+        SettingsSearchEntry(
+            stringResource(R.string.playback_tuning_thin_sliders),
+            stringResource(R.string.playback_tuning_thin_sliders_subtitle),
+            listOf("playback", "speed", "pitch", "slider", "再生速度", "ピッチ", "バー", "スライダー"),
+            playbackTuningThinSliders,
+        ) { AppSettings.setPlaybackTuningThinSliders(!playbackTuningThinSliders) },
         SettingsSearchEntry(
             title = stringResource(R.string.app_icon),
             subtitle = stringResource(R.string.app_icon_subtitle),
@@ -2891,6 +2906,19 @@ fun SettingsScreen(
             )
             RowDivider()
             SettingsRow(
+                icon = Icons.AutoMirrored.Rounded.QueueMusic,
+                title = stringResource(R.string.redesigned_saved_queue_manager),
+                subtitle = stringResource(R.string.redesigned_saved_queue_manager_subtitle),
+                trailing = {
+                    Switch(
+                        checked = redesignedSavedQueueManager,
+                        onCheckedChange = AppSettings::setRedesignedSavedQueueManager,
+                    )
+                },
+                onClick = { AppSettings.setRedesignedSavedQueueManager(!redesignedSavedQueueManager) },
+            )
+            RowDivider()
+            SettingsRow(
                 icon = Icons.Rounded.BlurOn,
                 title = stringResource(R.string.frosted_player_details),
                 subtitle = stringResource(R.string.frosted_player_details_subtitle),
@@ -2953,6 +2981,19 @@ fun SettingsScreen(
                     )
                 },
                 onClick = { AppSettings.setHidePlaybackTuningTitle(!hidePlaybackTuningTitle) },
+            )
+            RowDivider()
+            SettingsRow(
+                icon = Icons.Rounded.Tune,
+                title = stringResource(R.string.playback_tuning_thin_sliders),
+                subtitle = stringResource(R.string.playback_tuning_thin_sliders_subtitle),
+                trailing = {
+                    Switch(
+                        checked = playbackTuningThinSliders,
+                        onCheckedChange = AppSettings::setPlaybackTuningThinSliders,
+                    )
+                },
+                onClick = { AppSettings.setPlaybackTuningThinSliders(!playbackTuningThinSliders) },
             )
             RowDivider()
             SettingsRow(

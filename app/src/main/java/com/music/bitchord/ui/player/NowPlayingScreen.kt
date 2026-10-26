@@ -928,6 +928,7 @@ fun NowPlayingScreen(
     val hidePlayerHeaderDuringLyrics by AppSettings.hidePlayerHeaderDuringLyrics.collectAsStateWithLifecycle()
     val reducePlayerAnimations by AppSettings.reduceAnimation.collectAsStateWithLifecycle()
     val frostedQueueManager by AppSettings.frostedQueueManager.collectAsStateWithLifecycle()
+    val redesignedSavedQueueManager by AppSettings.redesignedSavedQueueManager.collectAsStateWithLifecycle()
     val showPlayerLyricsStrip by AppSettings.showPlayerLyricsStrip.collectAsStateWithLifecycle()
     val offlineMode by AppSettings.offlineMode.collectAsStateWithLifecycle()
     val visiblePlayerControls by AppSettings.visiblePlayerControls.collectAsStateWithLifecycle()
@@ -1107,6 +1108,7 @@ fun NowPlayingScreen(
 
     if (savedQueueManagerOpen) {
         SavedQueuesDialog(
+            redesigned = redesignedSavedQueueManager,
             queues = savedQueues,
             // Use the same thumbnail size, source URL and dark palette as the
             // player-details sheet so the two surfaces share one colour set.
