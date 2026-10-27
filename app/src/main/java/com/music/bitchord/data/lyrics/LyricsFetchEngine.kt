@@ -52,7 +52,12 @@ object LyricsFetchEngine {
         prioritizeSyllableSync: Boolean,
         fetcher: suspend (source: LyricsSource, videoId: String, title: String, artist: String, durationMs: Long, album: String?) -> List<LyricLine>?,
     ): LyricsRepository.Result? {
-        val flightKey = "${artist.lowercase().trim()}|${title.lowercase().trim()}|${durationMs / 1000}"
+        val cacheVariant = buildString {
+            append("syllable=").append(prioritizeSyllableSync)
+            append(";sources=").append(sources.map { it.id }.sorted().joinToString(","))
+            append(";order=").append(order.map { it.id }.joinToString(","))
+        }
+        val flightKey = "${artist.lowercase().trim()}|${title.lowercase().trim()}|${durationMs / 1000}|$cacheVariant"
 
         // 1. Singleflight deduplication
         val deferred = inFlight.computeIfAbsent(flightKey) {
@@ -66,6 +71,7 @@ object LyricsFetchEngine {
                     sources = sources,
                     order = order,
                     prioritizeSyllableSync = prioritizeSyllableSync,
+                    cacheVariant = cacheVariant,
                     fetcher = fetcher,
                 )
             }
@@ -87,6 +93,7 @@ object LyricsFetchEngine {
         sources: Set<LyricsSource>,
         order: List<LyricsSource>,
         prioritizeSyllableSync: Boolean,
+        cacheVariant: String,
         fetcher: suspend (source: LyricsSource, videoId: String, title: String, artist: String, durationMs: Long, album: String?) -> List<LyricLine>?,
     ): LyricsRepository.Result? {
         // 2. Check Instrumental heuristic
@@ -96,7 +103,7 @@ object LyricsFetchEngine {
         }
 
         // 3. Check Cache
-        val (cachedResult, isNegativeHit) = LyricsFetchCache.get(title, artist, durationMs)
+        val (cachedResult, isNegativeHit) = LyricsFetchCache.get(title, artist, durationMs, cacheVariant)
         if (isNegativeHit) {
             LyricsLog.i("Engine", "Negative cache hit (no lyrics previously found): \"$title\"")
             return null
@@ -127,9 +134,9 @@ object LyricsFetchEngine {
 
         // 5. Update Cache
         if (result != null) {
-            LyricsFetchCache.putSuccess(title, artist, durationMs, result)
+            LyricsFetchCache.putSuccess(title, artist, durationMs, result, cacheVariant)
         } else {
-            LyricsFetchCache.putNegative(title, artist, durationMs)
+            LyricsFetchCache.putNegative(title, artist, durationMs, cacheVariant)
         }
 
         return result
@@ -166,7 +173,7 @@ object LyricsFetchEngine {
         }
 
         // Launch candidate searches
-        viableSourcesWithIndex.forEach { (index, source) ->
+        val providerJobs = viableSourcesWithIndex.map { (index, source) ->
             launch(Dispatchers.IO) {
                 semaphore.withPermit {
                     try {
@@ -185,21 +192,39 @@ object LyricsFetchEngine {
             }
         }
 
+        fun finish(best: CandidateResult): LyricsRepository.Result {
+            // Stop in-flight providers before closing their result channel.
+            // Closing alone leaves suspended requests alive and their later
+            // send() calls can fail the structured lookup scope.
+            providerJobs.forEach { it.cancel() }
+            resultsChannel.close()
+            return LyricsRepository.Result(best.source, best.lines!!)
+        }
+
         val completed = mutableSetOf<Int>()
         var bestCandidate: CandidateResult? = null
         var pendingCount = viableSourcesWithIndex.size
         var graceStartedAt = 0L
 
-        fun hasPendingEarlier(targetIndex: Int): Boolean {
-            return viableSourcesWithIndex.any { (idx, _) -> idx < targetIndex && idx !in completed }
+        fun hasPendingPreferred(best: CandidateResult): Boolean {
+            val bestIsWordSynced = best.lines.orEmpty().any { it.isWordSynced }
+            return viableSourcesWithIndex.any { (idx, source) ->
+                if (idx in completed) return@any false
+                when {
+                    prioritizeSyllableSync && !bestIsWordSynced -> source.wordSynced
+                    prioritizeSyllableSync -> source.wordSynced && idx < best.index
+                    else -> idx < best.index
+                }
+            }
         }
 
         while (pendingCount > 0) {
-            // Check if current best candidate has no earlier candidates pending
+            // When syllable lyrics are preferred, a line-synced answer must
+            // wait for enabled word-synced sources even when those sources are
+            // later in the user's source order.
             bestCandidate?.let { best ->
-                if (!hasPendingEarlier(best.index)) {
-                    resultsChannel.close()
-                    return@coroutineScope LyricsRepository.Result(best.source, best.lines!!)
+                if (!hasPendingPreferred(best)) {
+                    return@coroutineScope finish(best)
                 }
             }
 
@@ -212,8 +237,7 @@ object LyricsFetchEngine {
 
             if (bestCandidate != null && remainingGrace == 0L) {
                 LyricsLog.i("Engine", "Priority grace period expired, returning ${bestCandidate.source.label}")
-                resultsChannel.close()
-                return@coroutineScope LyricsRepository.Result(bestCandidate.source, bestCandidate.lines!!)
+                return@coroutineScope finish(bestCandidate)
             }
 
             // Await next result or timeout
@@ -229,8 +253,7 @@ object LyricsFetchEngine {
                 // Grace expired
                 if (bestCandidate != null) {
                     LyricsLog.i("Engine", "Priority grace expired, returning ${bestCandidate.source.label}")
-                    resultsChannel.close()
-                    return@coroutineScope LyricsRepository.Result(bestCandidate.source, bestCandidate.lines!!)
+                    return@coroutineScope finish(bestCandidate)
                 }
                 break
             }
@@ -241,15 +264,23 @@ object LyricsFetchEngine {
             val lines = candidate.lines
             if (!lines.isNullOrEmpty()) {
                 val isWordSynced = lines.any { it.isWordSynced }
-                val isLineSynced = lines.any { it.timeMs > 0 }
-
                 // Determine if this candidate is better than current best
-                val isBetter = bestCandidate == null ||
-                    (candidate.index < bestCandidate.index) ||
-                    (prioritizeSyllableSync && isWordSynced && !bestCandidate.lines!!.any { it.isWordSynced })
+                val currentBest = bestCandidate
+                val currentBestIsWordSynced = currentBest?.lines.orEmpty().any { it.isWordSynced }
+                val isBetter = when {
+                    currentBest == null -> true
+                    prioritizeSyllableSync && isWordSynced != currentBestIsWordSynced -> isWordSynced
+                    else -> candidate.index < currentBest.index
+                }
 
                 if (isBetter) {
                     bestCandidate = candidate
+                    if (prioritizeSyllableSync && !isWordSynced) {
+                        LyricsLog.i(
+                            "Engine",
+                            "Line-synced result from ${candidate.source.label}; checking enabled word-synced sources",
+                        )
+                    }
                     if (graceStartedAt == 0L) {
                         graceStartedAt = System.currentTimeMillis()
                     }
@@ -271,7 +302,7 @@ object LyricsFetchEngine {
         fetcher: suspend (source: LyricsSource, videoId: String, title: String, artist: String, durationMs: Long, album: String?) -> List<LyricLine>?,
     ): List<LyricLine>? {
         // 1. Direct query
-        var lines = runCatching { fetcher(source, videoId, title, artist, durationMs, album) }.getOrNull()
+        var lines = fetchAttempt(source, videoId, title, artist, durationMs, album, fetcher)
         if (!lines.isNullOrEmpty()) return lines
 
         // 2. Simplified title fallback
@@ -279,18 +310,35 @@ object LyricsFetchEngine {
         val cleanArtist = LrcParser.cleanArtistForSearch(artist)
 
         if (cleanTitle != title || cleanArtist != artist) {
-            lines = runCatching { fetcher(source, videoId, cleanTitle, cleanArtist, durationMs, album) }.getOrNull()
+            lines = fetchAttempt(source, videoId, cleanTitle, cleanArtist, durationMs, album, fetcher)
             if (!lines.isNullOrEmpty()) return lines
         }
 
         // 3. Primary artist fallback
         val primaryArtist = cleanArtist.split(",", "&", "/", "feat.", "ft.").firstOrNull()?.trim()
         if (!primaryArtist.isNullOrBlank() && primaryArtist != cleanArtist) {
-            lines = runCatching { fetcher(source, videoId, cleanTitle, primaryArtist, durationMs, album) }.getOrNull()
+            lines = fetchAttempt(source, videoId, cleanTitle, primaryArtist, durationMs, album, fetcher)
             if (!lines.isNullOrEmpty()) return lines
         }
 
         return null
+    }
+
+    private suspend fun fetchAttempt(
+        source: LyricsSource,
+        videoId: String,
+        title: String,
+        artist: String,
+        durationMs: Long,
+        album: String?,
+        fetcher: suspend (source: LyricsSource, videoId: String, title: String, artist: String, durationMs: Long, album: String?) -> List<LyricLine>?,
+    ): List<LyricLine>? = try {
+        fetcher(source, videoId, title, artist, durationMs, album)
+    } catch (cancelled: CancellationException) {
+        throw cancelled
+    } catch (error: Exception) {
+        LyricsLog.w(source.label, "Lookup failed (${error.javaClass.simpleName})")
+        null
     }
 
     private fun simplifyTitle(title: String): String {

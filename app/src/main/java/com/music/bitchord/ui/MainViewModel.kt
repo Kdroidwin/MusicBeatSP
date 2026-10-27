@@ -295,7 +295,14 @@ class MainViewModel(app: Application) : AndroidViewModel(app) {
      * than leaving the last answer sitting on a player that would now find a
      * different one.
      */
-    private var lyricsFor: Pair<String, Set<LyricsSource>>? = null
+    private data class LyricsLoadKey(
+        val videoId: String,
+        val sources: Set<LyricsSource>,
+        val sourceOrder: List<String>,
+        val prioritizeSyllableSync: Boolean,
+    )
+
+    private var lyricsFor: LyricsLoadKey? = null
     private var lastSong: Song? = null
 
     /**
@@ -331,7 +338,14 @@ class MainViewModel(app: Application) : AndroidViewModel(app) {
         } else {
             emptySet()
         }
-        val key = videoId to sources
+        val sourceOrder = AppSettings.lyricsSourceOrder.value
+        val prioritizeSyllableSync = AppSettings.prioritizeSyllableSync.value
+        val key = LyricsLoadKey(
+            videoId = videoId,
+            sources = sources,
+            sourceOrder = sourceOrder.map { it.id },
+            prioritizeSyllableSync = prioritizeSyllableSync,
+        )
         if (!force && lyricsFor == key) return
         lyricsFor = key
         _lyrics.value = null
@@ -381,7 +395,7 @@ class MainViewModel(app: Application) : AndroidViewModel(app) {
             val found = try {
                 LyricsRepository.lyrics(
                     videoId, title, artist, durationMs, album, sources,
-                    AppSettings.lyricsSourceOrder.value, AppSettings.prioritizeSyllableSync.value,
+                    sourceOrder, prioritizeSyllableSync,
                 )
             } catch (cancelled: CancellationException) {
                 throw cancelled

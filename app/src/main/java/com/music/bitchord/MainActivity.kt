@@ -880,7 +880,16 @@ private fun BitChordApp(
     // the track already playing rather than only the next one.
     val syncedLyricsEnabled by AppSettings.syncedLyrics.collectAsStateWithLifecycle()
     val lyricsSources by AppSettings.lyricsSources.collectAsStateWithLifecycle()
-    LaunchedEffect(player.song?.videoId, player.durationMs, syncedLyricsEnabled, lyricsSources) {
+    val lyricsSourceOrder by AppSettings.lyricsSourceOrder.collectAsStateWithLifecycle()
+    val prioritizeSyllableSync by AppSettings.prioritizeSyllableSync.collectAsStateWithLifecycle()
+    LaunchedEffect(
+        player.song?.videoId,
+        player.durationMs,
+        syncedLyricsEnabled,
+        lyricsSources,
+        lyricsSourceOrder,
+        prioritizeSyllableSync,
+    ) {
         player.song?.let {
             viewModel.loadLyrics(
                 it.videoId,

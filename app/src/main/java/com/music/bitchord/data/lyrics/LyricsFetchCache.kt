@@ -23,17 +23,22 @@ object LyricsFetchCache {
 
     private val cache = ConcurrentHashMap<String, CacheEntry>()
 
-    private fun cacheKey(title: String, artist: String, durationMs: Long): String {
+    private fun cacheKey(title: String, artist: String, durationMs: Long, cacheVariant: String): String {
         val roundedSec = (durationMs / 10000L) * 10L // round to nearest 10s
-        return "${artist.lowercase().trim()}|${title.lowercase().trim()}|$roundedSec"
+        return "${artist.lowercase().trim()}|${title.lowercase().trim()}|$roundedSec|$cacheVariant"
     }
 
     /**
      * Looks up cached lyrics for a track.
      * Returns a Pair: (foundResult, isNegativeCacheHit)
      */
-    fun get(title: String, artist: String, durationMs: Long): Pair<LyricsRepository.Result?, Boolean> {
-        val key = cacheKey(title, artist, durationMs)
+    fun get(
+        title: String,
+        artist: String,
+        durationMs: Long,
+        cacheVariant: String = "default",
+    ): Pair<LyricsRepository.Result?, Boolean> {
+        val key = cacheKey(title, artist, durationMs, cacheVariant)
         val entry = cache[key] ?: return Pair(null, false)
         val now = System.currentTimeMillis()
 
@@ -52,9 +57,15 @@ object LyricsFetchCache {
     /**
      * Stores a successful lyrics result in cache for 24 hours.
      */
-    fun putSuccess(title: String, artist: String, durationMs: Long, result: LyricsRepository.Result) {
+    fun putSuccess(
+        title: String,
+        artist: String,
+        durationMs: Long,
+        result: LyricsRepository.Result,
+        cacheVariant: String = "default",
+    ) {
         evictIfFull()
-        val key = cacheKey(title, artist, durationMs)
+        val key = cacheKey(title, artist, durationMs, cacheVariant)
         cache[key] = CacheEntry(
             result = result,
             expiresAt = System.currentTimeMillis() + SUCCESS_TTL_MS,
@@ -65,9 +76,9 @@ object LyricsFetchCache {
     /**
      * Stores a negative result in cache for 5 minutes.
      */
-    fun putNegative(title: String, artist: String, durationMs: Long) {
+    fun putNegative(title: String, artist: String, durationMs: Long, cacheVariant: String = "default") {
         evictIfFull()
-        val key = cacheKey(title, artist, durationMs)
+        val key = cacheKey(title, artist, durationMs, cacheVariant)
         cache[key] = CacheEntry(
             result = null,
             expiresAt = System.currentTimeMillis() + NEGATIVE_TTL_MS,

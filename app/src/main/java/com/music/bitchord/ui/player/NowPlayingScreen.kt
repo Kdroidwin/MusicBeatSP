@@ -1074,17 +1074,6 @@ fun NowPlayingScreen(
         // themselves are keyed to the new track below and will follow it.
         lyricsLogsOpen = false
     }
-    LaunchedEffect(song.videoId, lyricsUnavailable) {
-        // A new lookup can take a moment. Only leave the lyrics view after the
-        // lookup has actually finished without results, not while it is loading.
-        if (lyricsUnavailable) {
-            delay(150L)
-            if (lyricsUnavailable && lyricsOpen) {
-                lyricsOpen = false
-                lyricsLogsOpen = false
-            }
-        }
-    }
     // A brief, non-modal confirmation that the three-dot menu now contains a
     // way back to the original YouTube rendition. The control keeps its usual
     // action — opening the menu — so the cue teaches rather than surprises.
@@ -2705,15 +2694,38 @@ fun NowPlayingScreen(
                                 modifier = Modifier.fillMaxSize(),
                             )
                         }
-                        if (hidePlayerHeaderDuringLyrics) {
+                        Row(
+                            modifier = Modifier
+                                .align(Alignment.TopEnd)
+                                .padding(top = lyricsTopPadding + 4.dp, end = 8.dp),
+                            horizontalArrangement = Arrangement.spacedBy(4.dp),
+                            verticalAlignment = Alignment.CenterVertically,
+                        ) {
+                            if (showLyricsLogsEnabled) {
+                                IconButton(
+                                    onClick = {
+                                        haptics.play(Haptic.Tap)
+                                        lyricsLogsOpen = !lyricsLogsOpen
+                                    },
+                                    modifier = Modifier
+                                        .size(40.dp)
+                                        .clip(CircleShape)
+                                        .background(Color.Black.copy(alpha = 0.35f)),
+                                ) {
+                                    Icon(
+                                        imageVector = Icons.Rounded.History,
+                                        contentDescription = stringResource(R.string.lyrics_debug_logs),
+                                        tint = if (lyricsLogsOpen) Color(0xFFFFD54F) else Color.White.copy(alpha = 0.9f),
+                                        modifier = Modifier.size(20.dp),
+                                    )
+                                }
+                            }
                             IconButton(
                                 onClick = {
                                     lyricsLogsOpen = false
                                     lyricsOpen = false
                                 },
                                 modifier = Modifier
-                                    .align(Alignment.TopEnd)
-                                    .padding(4.dp)
                                     .size(40.dp)
                                     .clip(CircleShape)
                                     .background(Color.Black.copy(alpha = 0.35f)),
