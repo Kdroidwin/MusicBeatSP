@@ -29,6 +29,10 @@ import kotlinx.coroutines.withTimeout
 import netscape.javascript.JSObject
 import okhttp3.Headers.Companion.toHeaders
 import okhttp3.RequestBody.Companion.toRequestBody
+import org.json.JSONArray
+import org.json.JSONObject
+import java.io.ByteArrayOutputStream
+import java.nio.charset.StandardCharsets
 import java.time.Instant
 import java.time.temporal.ChronoUnit
 import java.util.Collections
@@ -61,6 +65,8 @@ class DesktopPoTokenWebView private constructor(
     // Guards the single-shot init continuation: an error can arrive from the page, from a
     // BotGuard request, or from a timeout, and a second resume would throw.
     private val initResumed = AtomicBoolean(false)
+    private val botguardCreateStarted = AtomicBoolean(false)
+    private val botguardResultStarted = AtomicBoolean(false)
 
     @Volatile
     private var closed = false
@@ -97,9 +103,9 @@ class DesktopPoTokenWebView private constructor(
 
     private fun onConsoleMessage(level: String, msg: String) {
         when (level) {
-            "error" -> TrackLog.e(TAG, "JS: $msg")
-            "warn" -> TrackLog.w(TAG, "JS: $msg")
-            else -> TrackLog.d(TAG, "JS: $msg")
+            "error" -> TrackLog.e(TAG, "JavaScript error event (${msg.length} chars)")
+            "warn" -> TrackLog.w(TAG, "JavaScript warning event (${msg.length} chars)")
+            else -> TrackLog.d(TAG, "JavaScript console event (${msg.length} chars)")
         }
     }
 
@@ -127,6 +133,13 @@ class DesktopPoTokenWebView private constructor(
         TrackLog.d(TAG, "loadHtmlAndObtainBotguard() called")
         engine = WebEngine()
         engine.userAgent = USER_AGENT
+        engine.locationProperty().addListener { _, _, location ->
+            // The page is fixed in-memory HTML. Do not let script navigation
+            // replace it with a document that inherits the native bridge.
+            if (!location.isNullOrBlank() && location != "about:blank") {
+                Platform.runLater { if (!closed) engine.load("about:blank") }
+            }
+        }
         engine.setOnError { event -> onUncaught(event.message ?: "WebEngine error") }
         engine.loadWorker.stateProperty().addListener { _, _, state ->
             when (state) {
@@ -164,6 +177,7 @@ class DesktopPoTokenWebView private constructor(
     }
 
     private fun downloadAndRunBotguard() {
+        if (closed || !botguardCreateStarted.compareAndSet(false, true)) return
         TrackLog.d(TAG, "downloadAndRunBotguard() called")
 
         makeBotguardServiceRequest(
@@ -188,15 +202,21 @@ class DesktopPoTokenWebView private constructor(
     }
 
     private fun onJsInitializationError(error: String) {
-        TrackLog.e(TAG, "PO-token JavaScript initialization failed: $error")
-        onInitializationErrorCloseAndCancel(buildExceptionForJsError(error))
+        TrackLog.e(TAG, "PO-token JavaScript initialization failed")
+        onInitializationErrorCloseAndCancel(buildExceptionForJsError(error.take(MAX_BRIDGE_ERROR_CHARS)))
     }
 
     private fun onRunBotguardResult(botguardResponse: String) {
+        if (closed) return
+        if (botguardResponse.length > MAX_BOTGUARD_RESPONSE_CHARS) {
+            onInitializationErrorCloseAndCancel(PoTokenException("Botguard result exceeded the size limit"))
+            return
+        }
+        if (!botguardResultStarted.compareAndSet(false, true)) return
         TrackLog.d(TAG, "botguardResponse received")
         makeBotguardServiceRequest(
             "https://www.youtube.com/api/jnn/v1/GenerateIT",
-            "[ \"$REQUEST_KEY\", \"$botguardResponse\" ]",
+            JSONArray().put(REQUEST_KEY).put(botguardResponse).toString(),
         ) { responseBody ->
             TrackLog.d(TAG, "GenerateIT response received")
             try {
@@ -232,6 +252,9 @@ class DesktopPoTokenWebView private constructor(
     }
 
     override suspend fun generatePoToken(identifier: String): String {
+        require(identifier.isNotBlank() && identifier.length <= MAX_IDENTIFIER_CHARS) {
+            "PO-token identifier is invalid"
+        }
         if (isDead || closed) {
             throw PoTokenException("PoToken WebView is dead/closed — instance must be recreated")
         }
@@ -255,7 +278,7 @@ class DesktopPoTokenWebView private constructor(
                 poTokenContinuations[requestKey] = cont
                 engine.executeScript(
                     """(function() {
-                        var requestKey = "$requestKey"
+                        var requestKey = ${JSONObject.quote(requestKey)}
                         try {
                             var u8Identifier = ${stringToU8(identifier)}
                             obtainPoToken(u8Identifier).then(function(poTokenU8) {
@@ -272,11 +295,17 @@ class DesktopPoTokenWebView private constructor(
         }
 
     private fun onObtainPoTokenError(requestKey: String, error: String) {
+        if (closed || requestKey.length > MAX_REQUEST_KEY_CHARS) return
         TrackLog.e(TAG, "PO-token JavaScript callback failed")
-        popPoTokenContinuation(requestKey)?.resumeWithException(PoTokenException(error))
+        popPoTokenContinuation(requestKey)?.resumeWithException(PoTokenException(error.take(MAX_BRIDGE_ERROR_CHARS)))
     }
 
     private fun onObtainPoTokenResult(requestKey: String, poTokenU8: String) {
+        if (closed || requestKey.length > MAX_REQUEST_KEY_CHARS || poTokenContinuations[requestKey] == null) return
+        if (poTokenU8.length > MAX_PO_TOKEN_BYTES * 4) {
+            popPoTokenContinuation(requestKey)?.resumeWithException(PoTokenException("PO token exceeded the size limit"))
+            return
+        }
         TrackLog.d(TAG, "Encoded PO-token result received")
         val poToken = try {
             u8ToBase64(poTokenU8)
@@ -305,6 +334,7 @@ class DesktopPoTokenWebView private constructor(
         data: String,
         handleResponseBody: (String) -> Unit,
     ) {
+        if (closed || url !in BOTGUARD_ENDPOINTS || data.length > MAX_BOTGUARD_REQUEST_CHARS) return
         scope.launch(exceptionHandler) {
             val request = okhttp3.Request.Builder()
                 .post(data.toRequestBody())
@@ -321,7 +351,7 @@ class DesktopPoTokenWebView private constructor(
                 .build()
             val (httpCode, body) = withContext(Dispatchers.IO) {
                 Http.client.newCall(request).execute().use { response ->
-                    response.code to if (response.code == 200) response.body?.string() else null
+                    response.code to if (response.code == 200) readBoundedBody(response.body) else null
                 }
             }
             if (body.isNullOrEmpty()) {
@@ -330,6 +360,24 @@ class DesktopPoTokenWebView private constructor(
                 handleResponseBody(body)
             }
         }
+    }
+
+    private fun readBoundedBody(body: okhttp3.ResponseBody?): String? {
+        body ?: return null
+        if (body.contentLength() > MAX_BOTGUARD_BODY_BYTES) return null
+        val output = ByteArrayOutputStream(minOf(MAX_BOTGUARD_BODY_BYTES, 8_192))
+        body.byteStream().use { input ->
+            val buffer = ByteArray(8_192)
+            var total = 0
+            while (true) {
+                val count = input.read(buffer)
+                if (count < 0) break
+                total += count
+                if (total > MAX_BOTGUARD_BODY_BYTES) return null
+                output.write(buffer, 0, count)
+            }
+        }
+        return output.toByteArray().toString(StandardCharsets.UTF_8)
     }
 
     private fun onInitializationErrorCloseAndCancel(error: Throwable) {
@@ -351,11 +399,26 @@ class DesktopPoTokenWebView private constructor(
 
     companion object {
         private const val TAG = "PoTokenWebView"
-        private const val GOOGLE_API_KEY = "AIzaSyDyT5W0Jh49F30Pqqtyfdf7pDLFKLJoAnw"
+        // Never embed a Google API key in source or a distributable. Configure
+        // this only in the launching process environment when desktop PoToken
+        // support is intentionally enabled.
+        private val GOOGLE_API_KEY: String
+            get() = System.getenv("YOUTUBE_PO_TOKEN_API_KEY")?.trim().orEmpty()
         private const val REQUEST_KEY = "O43z0dpjhgX20SCx4KAo"
         private const val USER_AGENT = "Mozilla/5.0 (Windows NT 10.0; Win64; x64) " +
             "AppleWebKit/537.36 (KHTML, like Gecko) Chrome/131.0.0.0 Safari/537.3"
         private const val JS_INTERFACE = "PoTokenWebView"
+        private const val MAX_IDENTIFIER_CHARS = 256
+        private const val MAX_REQUEST_KEY_CHARS = 300
+        private const val MAX_PO_TOKEN_BYTES = 256 * 1024
+        private const val MAX_BOTGUARD_RESPONSE_CHARS = 512 * 1024
+        private const val MAX_BOTGUARD_REQUEST_CHARS = 1024 * 1024
+        private const val MAX_BOTGUARD_BODY_BYTES = 2 * 1024 * 1024
+        private const val MAX_BRIDGE_ERROR_CHARS = 2_048
+        private val BOTGUARD_ENDPOINTS = setOf(
+            "https://www.youtube.com/api/jnn/v1/Create",
+            "https://www.youtube.com/api/jnn/v1/GenerateIT",
+        )
 
         private const val INIT_TIMEOUT_MS = 45_000L
 
@@ -365,6 +428,9 @@ class DesktopPoTokenWebView private constructor(
         val available: Boolean by lazy { startFx() }
 
         suspend fun getNewPoTokenGenerator(): DesktopPoTokenWebView {
+            if (GOOGLE_API_KEY.isBlank()) {
+                throw PoTokenException("YouTube PoToken API key is not configured for this process")
+            }
             var created: DesktopPoTokenWebView? = null
             try {
                 return withTimeout(INIT_TIMEOUT_MS) {

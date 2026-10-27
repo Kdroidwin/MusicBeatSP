@@ -154,15 +154,15 @@ object StreamResolver {
                 TrackLog.w(
                     TAG,
                     "extractor fetch FAILED after ${MonotonicClock.nowMs() - requestStart}ms " +
-                        "${request.httpMethod()} ${request.url()}: ${e.javaClass.simpleName}: ${e.message}",
+                        "${request.httpMethod()} ${logEndpoint(request.url())}: ${e.javaClass.simpleName}",
                 )
                 throw e
             }
             val took = MonotonicClock.nowMs() - requestStart
             if (took > SLOW_FETCH_MS) {
-                TrackLog.w(TAG, "extractor fetch ${took}ms ${request.httpMethod()} ${request.url()}")
+                TrackLog.w(TAG, "extractor fetch ${took}ms ${request.httpMethod()} ${logEndpoint(request.url())}")
             } else {
-                TrackLog.d(TAG, "extractor fetch ${took}ms ${request.httpMethod()} ${request.url()}")
+                TrackLog.d(TAG, "extractor fetch ${took}ms ${request.httpMethod()} ${logEndpoint(request.url())}")
             }
             if (response.code == 429) {
                 response.close()
@@ -179,6 +179,12 @@ object StreamResolver {
     }
 
     private val init by lazy { NewPipe.init(OkHttpDownloader()) }
+
+    /** Never write signed stream URLs or request query parameters to logcat. */
+    private fun logEndpoint(raw: String): String = runCatching {
+        val parsed = raw.toHttpUrlOrNull() ?: return "<invalid-url>"
+        "${parsed.scheme}://${parsed.host}"
+    }.getOrDefault("<invalid-url>")
 
     /**
      * The extractor's own leash on [Http.client].
@@ -468,10 +474,9 @@ object StreamResolver {
             TrackLog.w(
                 TAG,
                 "resolve hit a linkage failure for $videoId after " +
-                    "${MonotonicClock.nowMs() - resolveStart}ms: ${e.javaClass.name}: ${e.message}",
-                e,
+                    "${MonotonicClock.nowMs() - resolveStart}ms: ${e.javaClass.name}",
             )
-            throw IOException("Stream resolution cannot run on this device: $e", e)
+            throw IOException("Stream resolution cannot run on this device", e)
         } catch (e: Exception) {
             // The one path out of here that said nothing at all. A resolve that
             // throws is handed to ExoPlayer as a load error, which retries it on
@@ -484,8 +489,7 @@ object StreamResolver {
             TrackLog.w(
                 TAG,
                 "resolve failed for $videoId after ${MonotonicClock.nowMs() - resolveStart}ms: " +
-                    "${e.javaClass.name}: ${e.message}",
-                e,
+                    e.javaClass.name,
             )
             // Recorded before it is rethrown, so the retries stacked above this
             // — ExoPlayer's, the service's, read-ahead's — are answered from
@@ -520,7 +524,7 @@ object StreamResolver {
             } catch (e: CancellationException) {
                 throw e
             } catch (e: Exception) {
-                TrackLog.w(TAG, "InnerTubeX failed for $videoId: ${e.javaClass.simpleName}: ${e.message}")
+                TrackLog.w(TAG, "InnerTubeX failed for $videoId: ${e.javaClass.simpleName}")
                 return null
             } ?: return null
             val verdict = timed("$videoId InnerTubeX ${found.profileId} probe") { probe(found.url) }
@@ -693,7 +697,7 @@ object StreamResolver {
                         ?.also { offered = true }
                 }
             }.onSuccess { return@withContext it }
-                .onFailure { TrackLog.w(TAG, "extraction found no $format for $videoId: ${it.message}") }
+                .onFailure { TrackLog.w(TAG, "extraction found no $format for $videoId (${it.javaClass.simpleName})") }
 
             // A rung above the ceiling beats no download at all; extraction does the same.
             found?.let { return@withContext it }
@@ -760,7 +764,7 @@ object StreamResolver {
         return runCatching {
             jsPlayerManager { YoutubeJavaScriptPlayerManager.getSignatureTimestamp(videoId) }
         }
-            .onFailure { TrackLog.w(TAG, "no signature timestamp: ${it.message}") }
+            .onFailure { TrackLog.w(TAG, "no signature timestamp (${it.javaClass.simpleName})") }
             .getOrNull()
             ?.also { cachedSignatureTimestamp = it }
     }
@@ -827,7 +831,7 @@ object StreamResolver {
                 }
             }
         } catch (e: Exception) {
-            TrackLog.w(TAG, "probe failed: ${e.message}")
+            TrackLog.w(TAG, "probe failed (${e.javaClass.simpleName})")
             Probe.UNREACHABLE
         }
     }
@@ -954,7 +958,7 @@ object StreamResolver {
                 // is the last thing standing between the listener and silence.
                 TrackLog.w(
                     TAG,
-                    "extraction attempt ${attempt + 1} of $EXTRACTION_ATTEMPTS failed for $videoId: ${e.message}",
+                    "extraction attempt ${attempt + 1} of $EXTRACTION_ATTEMPTS failed for $videoId (${e.javaClass.simpleName})",
                 )
                 failure = e
             }

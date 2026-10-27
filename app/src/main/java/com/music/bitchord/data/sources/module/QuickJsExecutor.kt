@@ -14,6 +14,11 @@ import okhttp3.MediaType.Companion.toMediaType
 import okhttp3.Request
 import okhttp3.RequestBody.Companion.toRequestBody
 import org.json.JSONObject
+import org.json.JSONArray
+import okhttp3.HttpUrl.Companion.toHttpUrlOrNull
+import java.io.ByteArrayOutputStream
+import java.io.IOException
+import java.nio.charset.StandardCharsets
 import java.util.concurrent.TimeUnit
 import java.util.Locale
 
@@ -53,6 +58,20 @@ import java.util.Locale
 internal object QuickJsExecutor {
 
     private const val TAG = "BitChord"
+    private const val MAX_CALL_ARGUMENTS = 8
+    private const val MAX_CALL_ARGUMENT_CHARS = 64 * 1024
+    private const val MAX_MODULE_RESULT_CHARS = 4 * 1024 * 1024
+    private const val MAX_FETCH_URL_CHARS = 4_096
+    private const val MAX_FETCH_HEADERS_JSON_CHARS = 16 * 1024
+    private const val MAX_FETCH_HEADER_COUNT = 40
+    private const val MAX_FETCH_HEADER_NAME_CHARS = 128
+    private const val MAX_FETCH_HEADER_VALUE_CHARS = 8_192
+    private const val MAX_FETCH_REQUEST_BODY_BYTES = 1024 * 1024
+    private const val MAX_FETCH_RESPONSE_BODY_BYTES = 4 * 1024 * 1024
+    private const val MAX_TIMER_DELAY_MS = 60_000L
+    private const val MAX_MODULE_JS_MEMORY_BYTES = 32L * 1024L * 1024L
+    private const val MODULE_EVALUATION_TIMEOUT_MS = 30_000L
+    private val ALLOWED_EXPORTS = setOf("searchTracks", "getTrackStreamUrl")
 
     /**
      * How many modules stay resident.
@@ -108,6 +127,7 @@ internal object QuickJsExecutor {
         Http.client.newBuilder()
             .connectTimeout(20, TimeUnit.SECONDS)
             .readTimeout(20, TimeUnit.SECONDS)
+            .callTimeout(30, TimeUnit.SECONDS)
             .build()
     }
 
@@ -134,7 +154,7 @@ internal object QuickJsExecutor {
         }
         evicted.forEach(::retirePool)
 
-        TrackLog.d(TAG, "QuickJsExecutor.loadModule($moduleId) fetchBase=$fetchBase jsCodeLength=${jsCode.length}")
+        TrackLog.d(TAG, "QuickJsExecutor.loadModule($moduleId) fetchBase=${redactModuleUrl(fetchBase)} jsCodeLength=${jsCode.length}")
         return withContext(Dispatchers.Default) {
             runCatching { newEngine(jsCode, fetchBase) }
                 .onSuccess { qjs ->
@@ -147,7 +167,7 @@ internal object QuickJsExecutor {
                     pool.free.trySend(qjs)
                     synchronized(engineLock) { pools[moduleId] = pool }
                 }
-                .onFailure { TrackLog.e(TAG, "  ✗ loadModule FAILED for $moduleId: ${it.message}", it) }
+                .onFailure { TrackLog.e(TAG, "  ✗ loadModule FAILED for $moduleId (${it::class.simpleName})") }
                 .map { }
         }
     }
@@ -155,7 +175,9 @@ internal object QuickJsExecutor {
     /** A fresh interpreter with [jsCode] evaluated into it, or a throw saying why not. */
     private suspend fun newEngine(jsCode: String, fetchBase: String): QuickJs {
         val qjs = QuickJsLifecycle.create(Dispatchers.Default)
+        qjs.memoryLimit = MAX_MODULE_JS_MEMORY_BYTES
         qjs.maxStackSize = 512 * 1024L
+        qjs.evaluationTimeoutMillis = MODULE_EVALUATION_TIMEOUT_MS
         try {
             bindConsole(qjs)
             bindAsyncFetch(qjs, fetchBase)
@@ -266,10 +288,13 @@ internal object QuickJsExecutor {
     // ── Call ─────────────────────────────────────────────────────────────
 
     suspend fun callExport(moduleId: String, functionName: String, args: List<String>): Result<String> {
+        if (functionName !in ALLOWED_EXPORTS) {
+            return Result.failure(SecurityException("Unsupported module export"))
+        }
         val pool = synchronized(engineLock) { pools[moduleId] }
             ?: return Result.failure(IllegalStateException("Module $moduleId is not loaded"))
 
-        TrackLog.d(TAG, "QuickJsExecutor.callExport($moduleId, $functionName) args=$args")
+        TrackLog.d(TAG, "QuickJsExecutor.callExport($moduleId, $functionName) argumentCount=${args.size}")
         return withContext(Dispatchers.Default) {
             val qjs = try {
                 acquire(moduleId, pool)
@@ -328,12 +353,19 @@ internal object QuickJsExecutor {
     ): Result<String> =
         run {
             runCatching {
-                val hasFn = qjs.evaluate<String>("typeof __spine_mod['$functionName']")
+                require(args.size <= MAX_CALL_ARGUMENTS && args.sumOf(String::length) <= MAX_CALL_ARGUMENT_CHARS) {
+                    "Module call arguments exceed the allowed size"
+                }
+                // Parse and re-serialize as one JSON array so data values cannot
+                // escape their argument position when inserted into JavaScript.
+                val argsStr = JSONArray(args.joinToString(separator = ",", prefix = "[", postfix = "]"))
+                    .toString()
+                    .removeSurrounding("[", "]")
+                val functionNameJson = JSONObject.quote(functionName)
+                val hasFn = qjs.evaluate<String>("typeof __spine_mod[$functionNameJson]")
                 if (hasFn != "function") {
                     throw IllegalStateException("$functionName is not a function on module $moduleId")
                 }
-
-                val argsStr = args.joinToString(",")
 
                 // evaluate() converts a Promise via toString() instead of awaiting it.
                 // Workaround: store the resolved JSON in a global var inside the async
@@ -342,9 +374,9 @@ internal object QuickJsExecutor {
                     """
                     var __spine_resolved_json = undefined;
                     (async function() {
-                        var __fn = __spine_mod['$functionName'];
+                        var __fn = __spine_mod[$functionNameJson];
                         if (!__fn) {
-                            __spine_resolved_json = JSON.stringify({ error: '$functionName not found' });
+                            __spine_resolved_json = JSON.stringify({ error: ${JSONObject.quote("$functionName not found")} });
                             return;
                         }
                         try {
@@ -358,10 +390,13 @@ internal object QuickJsExecutor {
                 )
 
                 val rawResult = qjs.evaluate<String>("__spine_resolved_json")
-                TrackLog.d(TAG, "  callExport result (${rawResult.length} chars): ${rawResult.take(500)}")
+                require(rawResult.length <= MAX_MODULE_RESULT_CHARS) {
+                    "Module result exceeds the allowed size"
+                }
+                TrackLog.d(TAG, "  callExport result (${rawResult.length} chars)")
                 rawResult
             }.onFailure {
-                TrackLog.e(TAG, "  ✗ callExport FAILED for $moduleId.$functionName: ${it.message}", it)
+                TrackLog.e(TAG, "  ✗ callExport FAILED for $moduleId.$functionName (${it::class.simpleName})")
             }
         }
 
@@ -423,22 +458,22 @@ internal object QuickJsExecutor {
         qjs.define("console") {
             function("log", object : FunctionBinding<Unit> {
                 override fun invoke(args: Array<Any?>) {
-                    TrackLog.d(TAG, "[JS] ${args.joinToString(" ") { it?.toString() ?: "null" }}")
+                    TrackLog.d(TAG, "[JS] module log event (${args.size} values)")
                 }
             })
             function("error", object : FunctionBinding<Unit> {
                 override fun invoke(args: Array<Any?>) {
-                    TrackLog.e(TAG, "[JS-ERR] ${args.joinToString(" ") { it?.toString() ?: "null" }}")
+                    TrackLog.e(TAG, "[JS-ERR] module error event (${args.size} values)")
                 }
             })
             function("warn", object : FunctionBinding<Unit> {
                 override fun invoke(args: Array<Any?>) {
-                    TrackLog.w(TAG, "[JS-WARN] ${args.joinToString(" ") { it?.toString() ?: "null" }}")
+                    TrackLog.w(TAG, "[JS-WARN] module warning event (${args.size} values)")
                 }
             })
             function("info", object : FunctionBinding<Unit> {
                 override fun invoke(args: Array<Any?>) {
-                    TrackLog.i(TAG, "[JS-INFO] ${args.joinToString(" ") { it?.toString() ?: "null" }}")
+                    TrackLog.i(TAG, "[JS-INFO] module info event (${args.size} values)")
                 }
             })
         }
@@ -455,6 +490,7 @@ internal object QuickJsExecutor {
                     val method = args[1]?.toString() ?: "GET"
                     val headersJson = args[2]?.toString() ?: "{}"
                     val body = args[3]?.toString()
+                    require(rawUrl.length <= MAX_FETCH_URL_CHARS) { "fetch URL is too long" }
                     val url = resolveUrl(rawUrl, fetchBase)
 
                     TrackLog.d(TAG, "  → fetch $method ${redactModuleUrl(url)}")
@@ -471,7 +507,7 @@ internal object QuickJsExecutor {
             })
             asyncFunction("setTimeout", object : AsyncFunctionBinding<String> {
                 override suspend fun invoke(args: Array<Any?>): String {
-                    val ms = args.getOrNull(1)?.toString()?.toLongOrNull() ?: 0L
+                    val ms = args.getOrNull(1)?.toString()?.toLongOrNull()?.coerceIn(0L, MAX_TIMER_DELAY_MS) ?: 0L
                     kotlinx.coroutines.delay(ms)
                     return "0"
                 }
@@ -548,17 +584,29 @@ internal object QuickJsExecutor {
         headersJson: String,
         body: String?,
     ): Pair<Int, String> {
-        val builder = Request.Builder().url(url)
+        if (url.length > MAX_FETCH_URL_CHARS) throw IOException("Module fetch URL is too long")
+        val parsedUrl = url.toHttpUrlOrNull() ?: throw IOException("Module fetch URL is invalid")
+        if (parsedUrl.scheme !in setOf("https", "http")) throw IOException("Unsupported module fetch scheme")
+        if (headersJson.length > MAX_FETCH_HEADERS_JSON_CHARS) throw IOException("Module fetch headers are too large")
+        if ((body?.toByteArray(StandardCharsets.UTF_8)?.size ?: 0) > MAX_FETCH_REQUEST_BODY_BYTES) {
+            throw IOException("Module fetch request body is too large")
+        }
+        val builder = Request.Builder().url(parsedUrl)
 
         var hasUserAgent = false
-        try {
-            val headersObj = JSONObject(headersJson)
-            for (key in headersObj.keys()) {
-                val value = headersObj.optString(key, "")
-                builder.header(key, value)
-                if (key.equals("user-agent", ignoreCase = true)) hasUserAgent = true
+        val headersObj = try {
+            JSONObject(headersJson)
+        } catch (error: Exception) {
+            throw IOException("Module fetch headers are invalid", error)
+        }
+        if (headersObj.length() > MAX_FETCH_HEADER_COUNT) throw IOException("Too many module fetch headers")
+        for (key in headersObj.keys()) {
+            val rawValue = headersObj.get(key)
+            if (rawValue !is String || key.length > MAX_FETCH_HEADER_NAME_CHARS || rawValue.length > MAX_FETCH_HEADER_VALUE_CHARS) {
+                throw IOException("Module fetch header is invalid")
             }
-        } catch (_: Exception) {
+            builder.header(key, rawValue)
+            if (key.equals("user-agent", ignoreCase = true)) hasUserAgent = true
         }
 
         if (!hasUserAgent) {
@@ -570,17 +618,38 @@ internal object QuickJsExecutor {
         }
 
         when (method.uppercase(Locale.ROOT)) {
+            "GET" -> builder.get()
             "POST" -> builder.post((body ?: "").toRequestBody("application/json; charset=utf-8".toMediaType()))
             "PUT" -> builder.put((body ?: "").toRequestBody("application/json; charset=utf-8".toMediaType()))
             "DELETE" -> builder.delete()
             "HEAD" -> builder.head()
-            else -> builder.get()
+            else -> throw IOException("Unsupported module fetch method")
         }
 
         syncHttpClient.newCall(builder.build()).execute().use { response ->
-            val responseBody = response.body?.string() ?: ""
+            val responseBody = readBoundedResponse(response.body)
             return response.code to responseBody
         }
+    }
+
+    private fun readBoundedResponse(body: okhttp3.ResponseBody?): String {
+        body ?: return ""
+        if (body.contentLength() > MAX_FETCH_RESPONSE_BODY_BYTES) {
+            throw IOException("Module response body is too large")
+        }
+        val output = ByteArrayOutputStream(minOf(MAX_FETCH_RESPONSE_BODY_BYTES, 8_192))
+        body.byteStream().use { input ->
+            val buffer = ByteArray(8_192)
+            var total = 0
+            while (true) {
+                val count = input.read(buffer)
+                if (count < 0) break
+                total += count
+                if (total > MAX_FETCH_RESPONSE_BODY_BYTES) throw IOException("Module response body is too large")
+                output.write(buffer, 0, count)
+            }
+        }
+        return output.toString(StandardCharsets.UTF_8.name())
     }
 
     // ── Polyfills ────────────────────────────────────────────────────────

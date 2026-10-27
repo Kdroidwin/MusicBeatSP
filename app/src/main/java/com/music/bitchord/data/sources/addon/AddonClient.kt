@@ -250,7 +250,7 @@ class AddonClient(rawBaseUrl: String) {
                 // A miss is not worth a line. Everything else is: this is the
                 // only place that knows why an addon didn't answer.
                 if (failure !is AddonNotFound) {
-                    TrackLog.w(TAG, "  ✗ addon call failed ${redact(url)}: ${failure.message}")
+                    TrackLog.w(TAG, "  ✗ addon call failed ${redact(url)} (${failure.javaClass.simpleName})")
                 }
             }
 

@@ -221,6 +221,6 @@ object SourceFormats {
                 ?: throw AddonException("Empty response")
         }
     }.onFailure {
-        TrackLog.d(TAG, "identify(${AddonClient.redact(url)}) failed: ${it.message}")
+        TrackLog.d(TAG, "identify(${AddonClient.redact(url)}) failed (${it.javaClass.simpleName})")
     }
 }

@@ -21,11 +21,16 @@ import kotlinx.serialization.json.jsonPrimitive
 import kotlinx.serialization.json.put
 import org.graalvm.polyglot.Context
 import org.graalvm.polyglot.HostAccess
+import org.graalvm.polyglot.ResourceLimits
 import org.graalvm.polyglot.proxy.ProxyExecutable
 import java.net.URI
+import java.net.URISyntaxException
 import java.net.http.HttpClient
 import java.net.http.HttpRequest
 import java.net.http.HttpResponse
+import java.io.InputStream
+import java.io.ByteArrayOutputStream
+import java.nio.charset.StandardCharsets
 import java.time.Duration
 import java.util.Locale
 import java.util.concurrent.ConcurrentHashMap
@@ -94,50 +99,171 @@ private data class DesktopJsJson(val value: String)
 
 /** Minimal blocking HTTP bridge used only from the restricted module context. */
 private object DesktopModuleHttp {
+    private const val MAX_URL_CHARS = 4_096
+    private const val MAX_HEADER_COUNT = 40
+    private const val MAX_HEADER_NAME_CHARS = 128
+    private const val MAX_HEADER_VALUE_CHARS = 8_192
+    private const val MAX_REQUEST_BODY_BYTES = 1024 * 1024
+    private const val MAX_RESPONSE_BODY_BYTES = 4 * 1024 * 1024
+    private const val MAX_RESPONSE_HEADERS = 64
+    private const val MAX_REDIRECTS = 5
+    private val ALLOWED_METHODS = setOf("GET", "POST", "PUT", "DELETE", "HEAD")
+    private val REDIRECT_CODES = setOf(301, 302, 303, 307, 308)
+    private val HOP_BY_HOP_HEADERS = setOf(
+        "connection", "content-length", "expect", "host", "keep-alive", "proxy-authenticate",
+        "proxy-authorization", "te", "trailer", "transfer-encoding", "upgrade",
+    )
+    private val RESERVED_STREAM_HEADERS = setOf("range", "accept-encoding")
     private const val USER_AGENT =
         "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 " +
             "(KHTML, like Gecko) Chrome/141.0.0.0 Safari/537.36"
 
     private val client = HttpClient.newBuilder()
         .connectTimeout(Duration.ofSeconds(20))
-        .followRedirects(HttpClient.Redirect.NORMAL)
+        // Redirects are checked manually to prevent a module forwarding request
+        // credentials to another host or downgrading HTTPS to cleartext.
+        .followRedirects(HttpClient.Redirect.NEVER)
         .build()
 
-    fun get(url: String): DesktopHttpResponse = request(url, "GET", emptyMap(), null)
+    fun get(url: String, maxResponseBytes: Int = MAX_RESPONSE_BODY_BYTES): DesktopHttpResponse =
+        request(url, "GET", emptyMap(), null, maxResponseBytes)
 
     fun request(
         url: String,
         method: String,
         headers: Map<String, String>,
         body: String?,
+        maxResponseBytes: Int = MAX_RESPONSE_BODY_BYTES,
     ): DesktopHttpResponse {
-        val builder = HttpRequest.newBuilder(URI.create(url))
-            .timeout(Duration.ofSeconds(30))
-        val supplied = headers.keys.any { it.equals("user-agent", ignoreCase = true) }
-        if (!supplied) builder.header("User-Agent", USER_AGENT)
-        headers.forEach { (key, value) ->
-            // Java's HTTP client rejects a few connection-managed headers.
-            runCatching { builder.header(key, value) }
+        require(url.length in 1..MAX_URL_CHARS) { "Module request URL is invalid" }
+        require(headers.size <= MAX_HEADER_COUNT) { "Too many module request headers" }
+        require(maxResponseBytes in 1..MAX_RESPONSE_BODY_BYTES) { "Module response limit is invalid" }
+        val initialUri = parseHttpUri(url)
+        val seenHeaderNames = mutableSetOf<String>()
+        val safeHeaders = headers.map { (key, value) ->
+            require(seenHeaderNames.add(key.lowercase(Locale.ROOT))) { "Duplicate module request header" }
+            require(key.isNotBlank() && key.length <= MAX_HEADER_NAME_CHARS &&
+                key.matches(Regex("[!#$%&'*+.^_`|~0-9A-Za-z-]+"))) { "Module request header is invalid" }
+            require(value.length <= MAX_HEADER_VALUE_CHARS && value.none { it == '\r' || it == '\n' }) {
+                "Module request header is invalid"
+            }
+            require(key.lowercase(Locale.ROOT) !in HOP_BY_HOP_HEADERS) { "Module request header is not allowed" }
+            key to value
         }
-        val publisher = if (body == null) {
-            HttpRequest.BodyPublishers.noBody()
-        } else {
-            HttpRequest.BodyPublishers.ofString(body)
+        val safeMethod = method.uppercase(Locale.ROOT)
+        require(safeMethod in ALLOWED_METHODS) { "Unsupported module request method" }
+        val requestBody = body?.toByteArray(StandardCharsets.UTF_8)
+        require((requestBody?.size ?: 0) <= MAX_REQUEST_BODY_BYTES) { "Module request body is too large" }
+        require((safeMethod != "POST" && safeMethod != "PUT") || requestBody != null) {
+            "Module request body is required for this method"
         }
-        when (method.uppercase(Locale.ROOT)) {
-            "POST" -> builder.POST(publisher)
-            "PUT" -> builder.PUT(publisher)
-            "DELETE" -> if (body == null) builder.DELETE() else builder.method("DELETE", publisher)
-            "HEAD" -> builder.method("HEAD", HttpRequest.BodyPublishers.noBody())
-            else -> builder.GET()
+        require((safeMethod != "GET" && safeMethod != "HEAD") || requestBody == null) {
+            "GET and HEAD requests cannot include a body"
         }
-        val response = client.send(builder.build(), HttpResponse.BodyHandlers.ofString())
-        return DesktopHttpResponse(
-            status = response.statusCode(),
-            body = response.body(),
-            headers = response.headers().map().mapKeys { it.key.lowercase(Locale.ROOT) }
-                .mapValues { it.value.joinToString(",") },
-        )
+
+        var uri = initialUri
+        var redirects = 0
+        while (true) {
+            val builder = HttpRequest.newBuilder(uri).timeout(Duration.ofSeconds(30))
+            val supplied = safeHeaders.keys.any { it.equals("user-agent", ignoreCase = true) }
+            if (!supplied) builder.header("User-Agent", USER_AGENT)
+            safeHeaders.forEach { (key, value) -> builder.header(key, value) }
+            val publisher = if (requestBody == null) {
+                HttpRequest.BodyPublishers.noBody()
+            } else {
+                HttpRequest.BodyPublishers.ofByteArray(requestBody)
+            }
+            when (safeMethod) {
+                "POST" -> builder.POST(publisher)
+                "PUT" -> builder.PUT(publisher)
+                "DELETE" -> if (requestBody == null) builder.DELETE() else builder.method("DELETE", publisher)
+                "HEAD" -> builder.method("HEAD", HttpRequest.BodyPublishers.noBody())
+                "GET" -> builder.GET()
+            }
+            val response = client.send(builder.build(), HttpResponse.BodyHandlers.ofInputStream())
+            response.body().use { stream ->
+                val location = response.headers().firstValue("location").orElse(null)
+                if (response.statusCode() in REDIRECT_CODES && location != null) {
+                    require(safeMethod == "GET" || safeMethod == "HEAD") {
+                        "Only read-only module requests may follow redirects"
+                    }
+                    require(redirects++ < MAX_REDIRECTS) { "Too many module redirects" }
+                    val next = uri.resolve(location)
+                    require(isHttpUri(next)) { "Module redirect URL is invalid" }
+                    require(!initialUri.scheme.equals("https", ignoreCase = true) ||
+                        next.scheme.equals("https", ignoreCase = true)
+                    ) {
+                        "HTTPS module request cannot redirect to HTTP"
+                    }
+                    require(sameOrigin(initialUri, next)) {
+                        "Cross-origin module redirect is not allowed"
+                    }
+                    uri = next
+                } else {
+                    val responseBody = readBounded(stream, maxResponseBytes)
+                    val responseHeaders = response.headers().map().entries.take(MAX_RESPONSE_HEADERS)
+                        .associate { (key, values) ->
+                            key.lowercase(Locale.ROOT).take(MAX_HEADER_NAME_CHARS) to
+                                values.joinToString(",").take(MAX_HEADER_VALUE_CHARS)
+                        }
+                    return DesktopHttpResponse(response.statusCode(), responseBody, responseHeaders)
+                }
+            }
+        }
+    }
+
+    private fun parseHttpUri(value: String): URI {
+        val uri = try { URI(value) } catch (_: URISyntaxException) {
+            throw IllegalArgumentException("Module request URL is invalid")
+        }
+        require(isHttpUri(uri)) { "Module request must use HTTP or HTTPS" }
+        return uri
+    }
+
+    fun isHttpUri(uri: URI): Boolean =
+        uri.isAbsolute && uri.scheme?.lowercase(Locale.ROOT) in setOf("http", "https") &&
+            !uri.host.isNullOrBlank() && (uri.port == -1 || uri.port in 1..65_535) &&
+            uri.userInfo == null && uri.fragment == null && uri.toString().length <= MAX_URL_CHARS
+
+    fun validateStreamHeaders(headers: Map<String, String>): Map<String, String> {
+        require(headers.size <= MAX_HEADER_COUNT) { "Too many module stream headers" }
+        val seenHeaderNames = mutableSetOf<String>()
+        return headers.map { (key, value) ->
+            require(seenHeaderNames.add(key.lowercase(Locale.ROOT))) { "Duplicate module stream header" }
+            require(key.isNotBlank() && key.length <= MAX_HEADER_NAME_CHARS &&
+                key.matches(Regex("[!#$%&'*+.^_`|~0-9A-Za-z-]+"))) { "Module stream header is invalid" }
+            require(value.length <= MAX_HEADER_VALUE_CHARS && value.none { it == '\r' || it == '\n' }) {
+                "Module stream header is invalid"
+            }
+            require(key.lowercase(Locale.ROOT) !in HOP_BY_HOP_HEADERS &&
+                key.lowercase(Locale.ROOT) !in RESERVED_STREAM_HEADERS
+            ) { "Module stream header is not allowed" }
+            key to value
+        }.toMap()
+    }
+
+    private fun sameOrigin(first: URI, second: URI): Boolean =
+        first.scheme.equals(second.scheme, ignoreCase = true) &&
+            first.host.equals(second.host, ignoreCase = true) && effectivePort(first) == effectivePort(second)
+
+    private fun effectivePort(uri: URI): Int = when {
+        uri.port >= 0 -> uri.port
+        uri.scheme.equals("https", ignoreCase = true) -> 443
+        else -> 80
+    }
+
+    private fun readBounded(input: InputStream, limit: Int): String {
+        val output = ByteArrayOutputStream(minOf(limit, 8_192))
+        val buffer = ByteArray(8_192)
+        var total = 0
+        while (true) {
+            val count = input.read(buffer)
+            if (count < 0) break
+            total += count
+            require(total <= limit) { "Module response body is too large" }
+            output.write(buffer, 0, count)
+        }
+        return output.toString(StandardCharsets.UTF_8.name())
     }
 }
 
@@ -152,9 +278,14 @@ private class DesktopModuleEngine(
         .allowIO(false)
         .allowNativeAccess(false)
         .allowCreateThread(false)
+        .resourceLimits(ResourceLimits.newBuilder().statementLimit(MAX_JS_STATEMENTS, null).build())
         .build()
 
     init {
+        require(jsCode.isNotBlank() && jsCode.toByteArray(StandardCharsets.UTF_8).size <= MAX_MODULE_SCRIPT_BYTES) {
+            "Module script is empty or too large"
+        }
+        require(DesktopModuleHttp.isHttpUri(URI.create(baseUrl))) { "Module base URL must use HTTP or HTTPS" }
         val bindings = context.getBindings("js")
         bindings.putMember("__spine_fetch", ProxyExecutable { args ->
             val url = args.getOrNull(0)?.asString() ?: error("fetch requires a URL")
@@ -211,6 +342,18 @@ private class DesktopModuleEngine(
     }
 
     fun call(functionName: String, args: List<Any?>): String {
+        check(!context.isClosed) { "Module execution context is closed" }
+        context.resetLimits()
+        require(functionName in SUPPORTED_EXPORTS) { "Unsupported module function" }
+        require(args.size <= MAX_CALL_ARGUMENTS) { "Too many module arguments" }
+        require(args.all { arg ->
+            when (arg) {
+                null, is Boolean, is Number -> true
+                is String -> arg.length <= MAX_CALL_ARGUMENT_CHARS
+                is DesktopJsJson -> arg.value.length <= MAX_CALL_ARGUMENT_CHARS
+                else -> false
+            }
+        }) { "Module arguments are invalid or too large" }
         val function = context.getBindings("js").getMember("__spine_mod")
             ?.getMember(functionName)
         check(function != null && function.canExecute()) {
@@ -252,17 +395,24 @@ private class DesktopModuleEngine(
         }
         val error = bindings.getMember("__spine_call_error").asString()
         check(error.isBlank()) { error }
-        return bindings.getMember("__spine_call_output").asString()
+        return bindings.getMember("__spine_call_output").asString().also {
+            require(it.length <= MAX_MODULE_RESULT_CHARS) { "Module result is too large" }
+        }
     }
 
     override fun close() {
         context.close(true)
     }
 
+    fun isClosed(): Boolean = context.isClosed
+
     private fun resolveUrl(url: String): String {
+        require(url.length in 1..MAX_URL_CHARS) { "Module fetch URL is invalid" }
         val candidate = URI.create(url)
-        return if (candidate.isAbsolute) candidate.toString()
-        else URI.create(baseUrl.trimEnd('/') + "/").resolve(candidate).toString()
+        val resolved = if (candidate.isAbsolute) candidate
+        else URI.create(baseUrl.trimEnd('/') + "/").resolve(candidate)
+        require(DesktopModuleHttp.isHttpUri(resolved)) { "Module fetch URL must use HTTP or HTTPS" }
+        return resolved.toString()
     }
 
     private fun parseHeaders(raw: String): Map<String, String> = runCatching {
@@ -274,6 +424,13 @@ private class DesktopModuleEngine(
 
     private companion object {
         const val CALL_TIMEOUT_NS = 45_000_000_000L
+        const val MAX_URL_CHARS = 4_096
+        const val MAX_MODULE_SCRIPT_BYTES = 2 * 1024 * 1024
+        const val MAX_CALL_ARGUMENTS = 8
+        const val MAX_CALL_ARGUMENT_CHARS = 64 * 1024
+        const val MAX_MODULE_RESULT_CHARS = 4 * 1024 * 1024
+        const val MAX_JS_STATEMENTS = 1_000_000L
+        val SUPPORTED_EXPORTS = setOf("searchTracks", "getTrackStreamUrl")
 
         fun preprocessModuleCode(jsCode: String): String {
             val code = jsCode.trim()
@@ -375,7 +532,7 @@ private class DesktopModuleManager {
     suspend fun modules(indexUrl: String): Result<List<DesktopSpineModule>> = withContext(Dispatchers.IO) {
         runCatching {
             cachedIndex?.takeIf { it.first == indexUrl }?.second?.let { return@runCatching it }
-            val response = DesktopModuleHttp.get(indexUrl)
+            val response = DesktopModuleHttp.get(indexUrl, MAX_MODULE_INDEX_BYTES)
             check(response.status in 200..299) { "Module index returned HTTP ${response.status}" }
             val modules = parseIndex(response.body)
             cachedIndex = indexUrl to modules
@@ -385,6 +542,9 @@ private class DesktopModuleManager {
 
     /** The modules an index document lists. */
     internal fun parseIndex(body: String): List<DesktopSpineModule> {
+        require(body.toByteArray(StandardCharsets.UTF_8).size <= MAX_MODULE_INDEX_BYTES) {
+            "Module index is too large"
+        }
         val root = json.decodeFromString(JsonObject.serializer(), body)
         return root.entries
             .filter { it.key.startsWith("category:") && it.key !in EXCLUDED_CATEGORIES }
@@ -395,6 +555,7 @@ private class DesktopModuleManager {
             }
             .filter { it.id.isNotBlank() && it.download.isNotBlank() }
             .distinctBy(DesktopSpineModule::id)
+            .take(MAX_MODULE_COUNT)
     }
 
     suspend fun load(module: DesktopSpineModule, indexUrl: String): Result<DesktopModuleEngine> =
@@ -403,7 +564,7 @@ private class DesktopModuleManager {
                 val key = moduleKey(indexUrl, module.id)
                 engines[key]?.let { return@runCatching it }
                 val downloadUrl = URI.create(indexUrl).resolve(module.download).toString()
-                val response = DesktopModuleHttp.get(downloadUrl)
+                val response = DesktopModuleHttp.get(downloadUrl, MAX_MODULE_SCRIPT_BYTES)
                 check(response.status in 200..299) { "Module ${module.id} returned HTTP ${response.status}" }
                 val engine = DesktopModuleEngine(response.body, URI.create(downloadUrl).resolve(".").toString())
                 engines[key] = engine
@@ -421,6 +582,12 @@ private class DesktopModuleManager {
         val engine = load(module, indexUrl).getOrElse { return Result.failure(it) }
         val lock = locks.getOrPut(moduleKey(indexUrl, module.id)) { Mutex() }
         return runCatching { lock.withLock { engine.call(functionName, args) } }
+            .onFailure {
+                if (engine.isClosed()) {
+                    engines.remove(moduleKey(indexUrl, module.id), engine)
+                    locks.remove(moduleKey(indexUrl, module.id), lock)
+                }
+            }
     }
 
     fun close() {
@@ -431,6 +598,9 @@ private class DesktopModuleManager {
     }
 
     private companion object {
+        const val MAX_MODULE_INDEX_BYTES = 2 * 1024 * 1024
+        const val MAX_MODULE_SCRIPT_BYTES = 2 * 1024 * 1024
+        const val MAX_MODULE_COUNT = 200
         val EXCLUDED_CATEGORIES = setOf("category:artworks", "category:testing")
 
         fun moduleKey(indexUrl: String, moduleId: String): String = "$indexUrl::$moduleId"
@@ -514,7 +684,7 @@ internal object DesktopModuleSource {
             listOf(reference.trackId, quality, contextFor(quality, quality == LOSSLESS)),
         ).mapCatching { raw ->
             val response = json.decodeFromString<DesktopModuleStreamResponse>(raw)
-            val url = response.streamUrl?.takeIf(String::isNotBlank)
+            val url = response.streamUrl?.takeIf { it.isNotBlank() && it.length <= MAX_STREAM_URL_CHARS }
                 ?: error("Module ${module.name} returned no stream URL")
             val meta = response.track
             val format = DesktopStreamFormat(
@@ -524,7 +694,7 @@ internal object DesktopModuleSource {
                 bitDepth = meta?.bitDepth,
             )
             check(!malformed(url)) { "Module returned an invalid stream URL" }
-            DesktopStream(url, format, response.headers, sourceId = config.id)
+            DesktopStream(url, format, DesktopModuleHttp.validateStreamHeaders(response.headers), sourceId = config.id)
         }
     }
 
@@ -657,11 +827,12 @@ internal object DesktopModuleSource {
     /** Rejects the malformed/error URLs the Android module source rejects. */
     private fun malformed(url: String): Boolean {
         val parsed = runCatching { URI.create(url) }.getOrNull() ?: return true
-        if (parsed.scheme !in setOf("http", "https") || parsed.host.isNullOrBlank()) return true
+        if (url.length !in 1..MAX_STREAM_URL_CHARS || !DesktopModuleHttp.isHttpUri(parsed)) return true
         val origin = "${parsed.scheme}://${parsed.rawAuthority}"
         val pathStart = url.indexOf('/', url.indexOf("://") + 3)
         return pathStart >= 0 && url.indexOf(origin, pathStart) >= 0
     }
 
+    private const val MAX_STREAM_URL_CHARS = 4_096
     private val AUDIO_EXTENSIONS = setOf("flac", "alac", "wav", "aiff", "mp3", "aac", "m4a", "webm", "opus")
 }

@@ -74,6 +74,7 @@ import androidx.compose.material.icons.rounded.Person
 import androidx.compose.material.icons.rounded.Radio
 import androidx.compose.material.icons.rounded.Settings
 import androidx.compose.material.icons.rounded.Sort
+import androidx.compose.material.icons.rounded.MoreVert
 import androidx.compose.material3.DropdownMenu
 import androidx.compose.material3.DropdownMenuItem
 import androidx.compose.material3.AlertDialog
@@ -181,6 +182,7 @@ import com.music.bitchord.data.model.UiState
 import com.music.bitchord.data.model.durationMillis
 import com.music.bitchord.data.scrobbling.LastFM
 import com.music.bitchord.data.settings.AppSettings
+import com.music.bitchord.data.settings.SavedYoutubeCollection
 import com.music.bitchord.data.settings.MainNavigationTab
 import com.music.bitchord.data.settings.MainNavigationTabs
 import com.music.bitchord.data.settings.PlayerQuickAction
@@ -258,6 +260,7 @@ import com.music.bitchord.data.YtMusicRepository
 import com.music.bitchord.data.innertube.InnertubeParser
 import com.music.bitchord.playback.SingleSongPlaybackManager
 import com.music.bitchord.ui.player.NowPlayingScreen
+import com.music.bitchord.ui.player.TabletLyricsPane
 import com.music.bitchord.ui.player.LocalPlayerDock
 import com.music.bitchord.ui.player.PlayerDock
 import com.music.bitchord.ui.player.PlayerSheetMotion
@@ -808,6 +811,9 @@ private fun BitChordApp(
     val lyrics by viewModel.lyrics.collectAsStateWithLifecycle()
     val lyricsSource by viewModel.lyricsSource.collectAsStateWithLifecycle()
     val lyricsChecked by viewModel.lyricsChecked.collectAsStateWithLifecycle()
+    val savedYoutubeCollections by AppSettings.savedYoutubeCollections.collectAsStateWithLifecycle()
+    val tabletLyricsBesidePlayer by AppSettings.tabletLyricsBesidePlayer.collectAsStateWithLifecycle()
+    val settingsTopBarUsesMoreIcon by AppSettings.settingsTopBarUsesMoreIcon.collectAsStateWithLifecycle()
     val searchHistory by viewModel.searchHistory.collectAsStateWithLifecycle()
 
     // Settings has no tab of its own — it sits on top of whatever tab was
@@ -2127,6 +2133,7 @@ private fun BitChordApp(
             lyricsSource = lyricsSource,
             lyricsUnavailable = lyricsChecked && lyrics.isNullOrEmpty(),
             docked = docked,
+            artworkGesturesEnabled = !(docked && tabletLyricsBesidePlayer),
             openLyricsOnShow = requestedMediaPanel == MediaControlDestination.LYRICS,
             openQueueOnShow = requestedMediaPanel == MediaControlDestination.QUEUE,
             onExternalPanelRequestHandled = {
@@ -2184,6 +2191,16 @@ private fun BitChordApp(
         // one child it always had and changes nothing.
         Row(Modifier.fillMaxSize()) {
             Box(Modifier.weight(1f).fillMaxHeight()) {
+                if (playerDocked && tabletLyricsBesidePlayer && playerSong != null) {
+                    TabletLyricsPane(
+                        lines = lyrics,
+                        trackKey = playerSong.videoId,
+                        positionMs = player.position.positionMs,
+                        isPlaying = player.isPlaying,
+                        onSeek = { position -> controller?.seekTo(position) },
+                        modifier = Modifier.fillMaxSize(),
+                    )
+                } else {
                 AnimatedContent(
                     targetState = when {
                         showSources -> "sources"
@@ -2413,6 +2430,23 @@ private fun BitChordApp(
                             artworkUrl = page.thumbnailUrl,
                             songs = pageSongs,
                             isArtist = page.type == BrowseType.ARTIST,
+                            isSavedToLibrary = savedYoutubeCollections.any { it.browseId == page.browseId },
+                            onToggleLibrary = if (
+                                !page.browseId.startsWith("local:") &&
+                                page.type in setOf(BrowseType.ALBUM, BrowseType.PLAYLIST)
+                            ) {
+                                {
+                                    AppSettings.toggleSavedYoutubeCollection(
+                                        SavedYoutubeCollection(
+                                            browseId = page.browseId,
+                                            title = page.title,
+                                            subtitle = page.subtitle,
+                                            thumbnailUrl = page.thumbnailUrl,
+                                            type = page.type.name,
+                                        ),
+                                    )
+                                }
+                            } else null,
                             showCollectionArtworkInList = showCollectionSongArtwork &&
                                 page.type in setOf(BrowseType.ALBUM, BrowseType.ARTIST),
                             currentSong = player.song,
@@ -2662,6 +2696,17 @@ private fun BitChordApp(
                                 onInitialFilterApplied = { libraryFilterRequest = null },
                                 onArtworkPaletteChanged = onLocalArtworkPaletteChanged,
                                 onCollectionNavigationChanged = onCollectionNavigationChanged,
+                                onOpenYoutubeCollection = { collection ->
+                                    val type = runCatching { BrowseType.valueOf(collection.type) }
+                                        .getOrDefault(BrowseType.OTHER)
+                                    viewModel.openDetail(
+                                        browseId = collection.browseId,
+                                        title = collection.title,
+                                        subtitle = collection.subtitle,
+                                        thumbnailUrl = collection.thumbnailUrl,
+                                        type = type,
+                                    )
+                                },
                             )
                         }
                         TAB_SEARCH -> searchSaveableStateHolder.SaveableStateProvider("main-search") {
@@ -2749,6 +2794,7 @@ private fun BitChordApp(
                         )
                         else -> Box(modifier = Modifier.fillMaxSize())
                     }
+                }
                 }
 
                 // Every top bar is a fade rather than a pane — see [TopFadeBlur].
@@ -2839,7 +2885,7 @@ private fun BitChordApp(
                                 if (!hideFloatingCollectionControlsNow) {
                                     IconButton(onClick = { showSettings = true }) {
                                         Icon(
-                                            Icons.Rounded.Settings,
+                                            if (settingsTopBarUsesMoreIcon) Icons.Rounded.MoreVert else Icons.Rounded.Settings,
                                             contentDescription = stringResource(R.string.settings),
                                             tint = if (hideCollectionHeaderNow) Color.White else MaterialTheme.colorScheme.onSurface,
                                         )

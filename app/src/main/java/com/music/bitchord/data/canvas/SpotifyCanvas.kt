@@ -77,16 +77,16 @@ object SpotifyCanvas {
         val hit = searchViaPathfinder(title, artist, album, token)
             ?: searchViaRest(title, artist, album, token)
         if (hit == null) {
-            Log.d(TAG, "no canvas for '$title' by '$artist' (no matching track found)")
+            Log.d(TAG, "no canvas (no matching track found)")
             return null
         }
 
         val canvasUrl = fetchCanvasUrl(hit.uri, token)
         if (canvasUrl == null) {
-            Log.d(TAG, "no canvas for '$title' by '$artist' (matched '${hit.title}', no clip)")
+            Log.d(TAG, "no canvas clip found for matched track")
             return null
         }
-        Log.d(TAG, "canvas for '${hit.title}' by '${hit.artist}'")
+        Log.d(TAG, "canvas found for matched track")
         return CanvasArtwork(
             url = canvasUrl,
             title = hit.title,
@@ -155,7 +155,7 @@ object SpotifyCanvas {
             ?.jsonObject?.get("item")?.jsonObject
             ?.get("data")?.jsonObject
         if (firstItem == null) {
-            Log.w(TAG, "pathfinder response had no hit (http $code): ${body.take(200)}")
+            Log.w(TAG, "pathfinder response could not be parsed (http $code)")
             return null
         }
         val uri = firstItem["uri"]?.jsonPrimitive?.contentOrNull
@@ -188,7 +188,7 @@ object SpotifyCanvas {
         }
         val items = root["tracks"]?.jsonObject?.get("items")?.jsonArray
         if (items == null) {
-            Log.w(TAG, "search response had no tracks.items (http $code): ${body.take(200)}")
+            Log.w(TAG, "search response had no tracks.items (http $code)")
             return null
         }
 
@@ -237,7 +237,7 @@ object SpotifyCanvas {
             val trackUri = firstTrackUri(albumId, token) ?: continue
             val canvasUrl = fetchCanvasUrl(trackUri, token) ?: continue
 
-            Log.d(TAG, "canvas for album '$recordTitle' by ${artists.joinToString()}")
+            Log.d(TAG, "canvas found for matching album")
             return CanvasArtwork(
                 url = canvasUrl,
                 title = recordTitle,
@@ -301,11 +301,11 @@ object SpotifyCanvas {
         val bytes = runCatching {
             Http.client.newCall(request).execute().use { response ->
                 if (!response.isSuccessful) {
-                    Log.w(TAG, "canvaz-cache http ${response.code} for $trackUri")
+                    Log.w(TAG, "canvaz-cache returned HTTP ${response.code}")
                 }
                 if (response.isSuccessful) response.body?.bytes() else null
             }
-        }.onFailure { Log.w(TAG, "canvaz-cache request threw: ${it.message}") }.getOrNull() ?: return null
+        }.onFailure { Log.w(TAG, "canvaz-cache request failed (${it.javaClass.simpleName})") }.getOrNull() ?: return null
 
         // The structured parse first — it can tell this track's own clip apart
         // from another one Spotify bundled in the same response. The regex is
@@ -319,9 +319,9 @@ object SpotifyCanvas {
 
         val fallback = CANVAS_URL_REGEX.find(String(bytes, Charsets.ISO_8859_1))?.value
         if (fallback == null) {
-            Log.d(TAG, "canvaz-cache had nothing for $trackUri")
+            Log.d(TAG, "canvaz-cache had no playable clip")
         } else {
-            Log.d(TAG, "canvaz-cache url recovered by regex fallback for $trackUri")
+            Log.d(TAG, "canvaz-cache URL recovered by regex fallback")
         }
         return fallback
     }

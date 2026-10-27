@@ -28,6 +28,10 @@ import okhttp3.Headers.Companion.toHeaders
 import okhttp3.OkHttpClient
 import okhttp3.RequestBody.Companion.toRequestBody
 import com.music.bitchord.data.TrackLog
+import org.json.JSONArray
+import org.json.JSONObject
+import java.io.ByteArrayOutputStream
+import java.nio.charset.StandardCharsets
 import java.time.Instant
 import java.time.temporal.ChronoUnit
 import java.util.Collections
@@ -48,6 +52,8 @@ class PoTokenWebView private constructor(
     // paths (JS console "Uncaught", botguard request failure, renderer-gone) and a second resume
     // on a plain Continuation throws IllegalStateException.
     private val initResumed = AtomicBoolean(false)
+    private val botguardCreateStarted = AtomicBoolean(false)
+    private val botguardResultStarted = AtomicBoolean(false)
 
     @Volatile
     private var closed = false
@@ -75,22 +81,31 @@ class PoTokenWebView private constructor(
         webViewSettings.javaScriptEnabled = true
         webViewSettings.userAgentString = USER_AGENT
         webViewSettings.blockNetworkLoads = true // the WebView does not need internet access
+        webViewSettings.allowFileAccess = false
+        webViewSettings.allowContentAccess = false
+        webViewSettings.allowFileAccessFromFileURLs = false
+        webViewSettings.allowUniversalAccessFromFileURLs = false
+        webViewSettings.javaScriptCanOpenWindowsAutomatically = false
+        webViewSettings.setSupportMultipleWindows(false)
+        webViewSettings.mixedContentMode = android.webkit.WebSettings.MIXED_CONTENT_NEVER_ALLOW
+        webViewSettings.safeBrowsingEnabled = true
 
         // so that we can run async functions and get back the result
         webView.addJavascriptInterface(this, JS_INTERFACE)
 
         webView.webChromeClient = object : WebChromeClient() {
             override fun onConsoleMessage(m: ConsoleMessage): Boolean {
-                val msg = m.message()
-                // Log all console messages for debugging
+                val msg = m.message().orEmpty()
+                // Remote BotGuard output can contain request details. Keep
+                // logs useful for diagnosis without retaining arbitrary script text.
                 when (m.messageLevel()) {
-                    ConsoleMessage.MessageLevel.ERROR -> TrackLog.e(TAG, "JS: $msg")
-                    ConsoleMessage.MessageLevel.WARNING -> TrackLog.w(TAG, "JS: $msg")
-                    else -> TrackLog.d(TAG, "JS: $msg")
+                    ConsoleMessage.MessageLevel.ERROR -> TrackLog.e(TAG, "JavaScript error event (${msg.length} chars)")
+                    ConsoleMessage.MessageLevel.WARNING -> TrackLog.w(TAG, "JavaScript warning event (${msg.length} chars)")
+                    else -> TrackLog.d(TAG, "JavaScript console event (${msg.length} chars)")
                 }
 
                 if (msg.contains("Uncaught")) {
-                    val fmt = "\"$msg\", source: ${m.sourceId()} (${m.lineNumber()})"
+                    val fmt = "${msg.take(MAX_BRIDGE_ERROR_CHARS)} (line ${m.lineNumber()})"
                     if (initResumed.get()) {
                         // Post-init: our static HTML already executed fine, so an uncaught error
                         // here comes from Google's remotely-served botguard/minter JS — transient,
@@ -118,6 +133,12 @@ class PoTokenWebView private constructor(
         }
 
         webView.webViewClient = object : WebViewClient() {
+            override fun shouldOverrideUrlLoading(view: WebView, request: android.webkit.WebResourceRequest): Boolean =
+                true // This view runs one in-memory document; it never needs page navigation.
+
+            @Suppress("DEPRECATION")
+            override fun shouldOverrideUrlLoading(view: WebView, url: String): Boolean = true
+
             // API 26+ callback; on providers that don't deliver it the withTimeout nets in
             // getNewPoTokenGenerator()/generatePoToken() carry the recovery.
             @androidx.annotation.RequiresApi(android.os.Build.VERSION_CODES.O)
@@ -161,6 +182,7 @@ class PoTokenWebView private constructor(
      */
     @JavascriptInterface
     fun downloadAndRunBotguard() {
+        if (closed || !botguardCreateStarted.compareAndSet(false, true)) return
         TrackLog.d(TAG, "downloadAndRunBotguard() called")
 
         makeBotguardServiceRequest(
@@ -194,7 +216,7 @@ class PoTokenWebView private constructor(
         if (BuildConfig.DEBUG) {
             TrackLog.e(TAG, "PO-token JavaScript initialization failed")
         }
-        onInitializationErrorCloseAndCancel(buildExceptionForJsError(error))
+        onInitializationErrorCloseAndCancel(buildExceptionForJsError(error.take(MAX_BRIDGE_ERROR_CHARS)))
     }
 
     /**
@@ -203,10 +225,16 @@ class PoTokenWebView private constructor(
      */
     @JavascriptInterface
     fun onRunBotguardResult(botguardResponse: String) {
-        TrackLog.d(TAG, "botguardResponse: $botguardResponse")
+        if (closed) return
+        if (botguardResponse.length > MAX_BOTGUARD_RESPONSE_CHARS) {
+            onInitializationErrorCloseAndCancel(PoTokenException("Botguard result exceeded the size limit"))
+            return
+        }
+        if (!botguardResultStarted.compareAndSet(false, true)) return
+        TrackLog.d(TAG, "Botguard result received (${botguardResponse.length} chars)")
         makeBotguardServiceRequest(
             "https://www.youtube.com/api/jnn/v1/GenerateIT",
-            "[ \"$REQUEST_KEY\", \"$botguardResponse\" ]",
+            JSONArray().put(REQUEST_KEY).put(botguardResponse).toString(),
         ) { responseBody ->
             TrackLog.d(TAG, "GenerateIT response received")
             try {
@@ -257,6 +285,9 @@ class PoTokenWebView private constructor(
 
     //region Obtaining poTokens
     override suspend fun generatePoToken(identifier: String): String {
+        require(identifier.isNotBlank() && identifier.length <= MAX_IDENTIFIER_CHARS) {
+            "PO-token identifier is invalid"
+        }
         if (isDead || closed) {
             // Fail fast (no fixed timeout wait): PoTokenGenerator's retry path recreates the
             // WebView from scratch.
@@ -291,7 +322,7 @@ class PoTokenWebView private constructor(
                 // resolves, delivering this token to the other call's continuation.
                 webView.evaluateJavascript(
                     """(function() {
-                        var requestKey = "$requestKey"
+                        var requestKey = ${JSONObject.quote(requestKey)}
                         try {
                             var u8Identifier = ${stringToU8(identifier)}
                             obtainPoToken(u8Identifier).then(function(poTokenU8) {
@@ -315,6 +346,7 @@ class PoTokenWebView private constructor(
      */
     @JavascriptInterface
     fun onObtainPoTokenError(requestKey: String, error: String) {
+        if (closed || requestKey.length > MAX_REQUEST_KEY_CHARS) return
         if (BuildConfig.DEBUG) {
             TrackLog.e(TAG, "PO-token JavaScript callback failed")
         }
@@ -322,7 +354,7 @@ class PoTokenWebView private constructor(
         // "SyntaxError" comes from Google's challenge/program data, not a broken WebView engine —
         // buildExceptionForJsError's BadWebViewException mapping would permanently disable
         // poTokens for the session in PoTokenGenerator.
-        popPoTokenContinuation(requestKey)?.resumeWithException(PoTokenException(error))
+        popPoTokenContinuation(requestKey)?.resumeWithException(PoTokenException(error.take(MAX_BRIDGE_ERROR_CHARS)))
     }
 
     /**
@@ -331,6 +363,12 @@ class PoTokenWebView private constructor(
      */
     @JavascriptInterface
     fun onObtainPoTokenResult(requestKey: String, poTokenU8: String) {
+        if (closed || requestKey.length > MAX_REQUEST_KEY_CHARS) return
+        if (poTokenContinuations[requestKey] == null) return
+        if (poTokenU8.length > MAX_PO_TOKEN_BYTES * 4) {
+            popPoTokenContinuation(requestKey)?.resumeWithException(PoTokenException("PO token exceeded the size limit"))
+            return
+        }
         TrackLog.d(TAG, "Encoded PO-token result received")
         val poToken = try {
             u8ToBase64(poTokenU8)
@@ -369,6 +407,7 @@ class PoTokenWebView private constructor(
         data: String,
         handleResponseBody: (String) -> Unit,
     ) {
+        if (closed || url !in BOTGUARD_ENDPOINTS || data.length > MAX_BOTGUARD_REQUEST_CHARS) return
         scope.launch(exceptionHandler) {
             val requestBuilder = okhttp3.Request.Builder()
                 .post(data.toRequestBody())
@@ -384,7 +423,7 @@ class PoTokenWebView private constructor(
             // otherwise strand its connection).
             val (httpCode, body) = withContext(Dispatchers.IO) {
                 httpClient.newCall(requestBuilder.build()).execute().use { response ->
-                    response.code to if (response.code == 200) response.body?.string() else null
+                    response.code to if (response.code == 200) readBoundedBody(response.body) else null
                 }
             }
             // Treat an empty 200 body as a failure too: handleResponseBody would otherwise pass
@@ -395,6 +434,24 @@ class PoTokenWebView private constructor(
                 handleResponseBody(body)
             }
         }
+    }
+
+    private fun readBoundedBody(body: okhttp3.ResponseBody?): String? {
+        body ?: return null
+        if (body.contentLength() > MAX_BOTGUARD_BODY_BYTES) return null
+        val output = ByteArrayOutputStream(minOf(MAX_BOTGUARD_BODY_BYTES, 8_192))
+        body.byteStream().use { input ->
+            val buffer = ByteArray(8_192)
+            var total = 0
+            while (true) {
+                val count = input.read(buffer)
+                if (count < 0) break
+                total += count
+                if (total > MAX_BOTGUARD_BODY_BYTES) return null
+                output.write(buffer, 0, count)
+            }
+        }
+        return output.toByteArray().toString(StandardCharsets.UTF_8)
     }
 
     private fun onInitializationErrorCloseAndCancel(error: Throwable) {
@@ -444,6 +501,17 @@ class PoTokenWebView private constructor(
         private const val USER_AGENT = "Mozilla/5.0 (Windows NT 10.0; Win64; x64) " +
                 "AppleWebKit/537.36 (KHTML, like Gecko) Chrome/131.0.0.0 Safari/537.3"
         private const val JS_INTERFACE = "PoTokenWebView"
+        private const val MAX_IDENTIFIER_CHARS = 256
+        private const val MAX_REQUEST_KEY_CHARS = 300
+        private const val MAX_PO_TOKEN_BYTES = 256 * 1024
+        private const val MAX_BOTGUARD_RESPONSE_CHARS = 512 * 1024
+        private const val MAX_BOTGUARD_REQUEST_CHARS = 1024 * 1024
+        private const val MAX_BOTGUARD_BODY_BYTES = 2 * 1024 * 1024
+        private const val MAX_BRIDGE_ERROR_CHARS = 2_048
+        private val BOTGUARD_ENDPOINTS = setOf(
+            "https://www.youtube.com/api/jnn/v1/Create",
+            "https://www.youtube.com/api/jnn/v1/GenerateIT",
+        )
 
         // Init does network round-trips (botguard Create/GenerateIT) + JS execution; a WebView
         // that hasn't finished after this long has a dead/wedged renderer or dead network.

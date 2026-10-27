@@ -40,6 +40,9 @@ object MediaTagger {
 
     /** Long side of the embedded cover — plenty for a lock screen or a car head unit, without ballooning the file. */
     private const val COVER_MAX_SIDE = 1000
+    private const val MAX_COVER_BYTES = 12 * 1024 * 1024
+    private const val MAX_COVER_DIMENSION = 30_000
+    private const val MAX_COVER_PIXELS = 400_000_000L
 
     /**
      * How much of a FLAC has to be read to be sure the whole metadata chain is
@@ -53,6 +56,7 @@ object MediaTagger {
      * stops at the end of a small file regardless.
      */
     private const val FLAC_HEAD_BYTES = 16 * 1024 * 1024
+    private const val MAX_IN_MEMORY_TAG_BYTES = 32 * 1024 * 1024
 
     private const val COPY_BUFFER = 64 * 1024
 
@@ -189,7 +193,7 @@ object MediaTagger {
             // the user actually notices going missing. An OutOfMemoryError on a
             // large lossless file is the common one and reads as a track that
             // simply saved without its cover or its words.
-            Log.w(TAG, "could not build tags for ${track.videoId} (${original.size}B $extension): $it")
+            Log.w(TAG, "could not build downloaded audio tags ($extension, ${it.javaClass.simpleName})")
         }.getOrNull() ?: return
 
         // Every tagger hands back the same array reference when there was
@@ -259,12 +263,12 @@ object MediaTagger {
                 openInput(context, uri)?.use { source ->
                     source.skipFully(rewrite.audioStart.toLong())
                     source.copyTo(sink, COPY_BUFFER)
-                } ?: error("could not reopen $uri")
+                } ?: error("could not reopen downloaded audio")
             }
             replaceWith(context, uri, temp)
             true
         }.onFailure {
-            Log.w(TAG, "streaming flac tag failed for ${track.videoId}: ${it.message}")
+            Log.w(TAG, "streaming flac tag failed (${it.javaClass.simpleName})")
             temp.delete()
         }.getOrDefault(false)
     }
@@ -282,7 +286,7 @@ object MediaTagger {
                 File(requireNotNull(uri.path)).outputStream()
             } else {
                 context.contentResolver.openOutputStream(uri, "wt")
-                    ?: error("could not open $uri for writing")
+                    ?: error("could not open downloaded audio for writing")
             }
             sink.use { source.copyTo(it, COPY_BUFFER) }
         }
@@ -301,7 +305,7 @@ object MediaTagger {
             }
             out.toByteArray()
         }
-    }.onFailure { Log.w(TAG, "could not read the start of $uri: ${it.message}") }.getOrNull()
+    }.onFailure { Log.w(TAG, "could not read audio metadata prefix (${it.javaClass.simpleName})") }.getOrNull()
 
     private fun openInput(context: Context, uri: Uri): InputStream? =
         if (uri.scheme == "file") {
@@ -337,14 +341,54 @@ object MediaTagger {
             val request = okhttp3.Request.Builder().url(url).build()
             Http.client.newCall(request).execute().use { response ->
                 if (!response.isSuccessful) return@runCatching null
-                val raw = response.body?.bytes() ?: return@runCatching null
-                val bitmap = BitmapFactory.decodeByteArray(raw, 0, raw.size) ?: return@runCatching null
+                val body = response.body ?: return@runCatching null
+                if (body.contentLength() > MAX_COVER_BYTES) return@runCatching null
+                val raw = body.byteStream().use(::readBoundedCover) ?: return@runCatching null
+                val bounds = BitmapFactory.Options().apply { inJustDecodeBounds = true }
+                BitmapFactory.decodeByteArray(raw, 0, raw.size, bounds)
+                val width = bounds.outWidth
+                val height = bounds.outHeight
+                if (width <= 0 || height <= 0 || width > MAX_COVER_DIMENSION || height > MAX_COVER_DIMENSION ||
+                    width.toLong() * height.toLong() > MAX_COVER_PIXELS
+                ) return@runCatching null
+                val sample = calculateSampleSize(width, height, COVER_MAX_SIDE * 2)
+                val bitmap = BitmapFactory.decodeByteArray(
+                    raw,
+                    0,
+                    raw.size,
+                    BitmapFactory.Options().apply { inSampleSize = sample },
+                ) ?: return@runCatching null
                 val scaled = downscale(bitmap, COVER_MAX_SIDE)
                 val out = ByteArrayOutputStream()
-                scaled.compress(Bitmap.CompressFormat.JPEG, 92, out)
-                Artwork(out.toByteArray(), "image/jpeg")
+                try {
+                    scaled.compress(Bitmap.CompressFormat.JPEG, 92, out)
+                    Artwork(out.toByteArray(), "image/jpeg")
+                } finally {
+                    if (scaled !== bitmap) bitmap.recycle()
+                    scaled.recycle()
+                }
             }
-        }.onFailure { Log.d(TAG, "no cover embedded for ${track.videoId}: ${it.message}") }.getOrNull()
+        }.onFailure { Log.d(TAG, "no cover embedded (${it.javaClass.simpleName})") }.getOrNull()
+    }
+
+    private fun readBoundedCover(input: InputStream): ByteArray? {
+        val output = ByteArrayOutputStream()
+        val buffer = ByteArray(COPY_BUFFER)
+        var total = 0
+        while (true) {
+            val count = input.read(buffer)
+            if (count < 0) break
+            total += count
+            if (total > MAX_COVER_BYTES) return null
+            output.write(buffer, 0, count)
+        }
+        return output.toByteArray()
+    }
+
+    private fun calculateSampleSize(width: Int, height: Int, targetSide: Int): Int {
+        var sample = 1
+        while (max(width / sample, height / sample) > targetSide) sample *= 2
+        return sample
     }
 
     private fun downscale(bitmap: Bitmap, maxSide: Int): Bitmap {
@@ -360,12 +404,20 @@ object MediaTagger {
     }
 
     private fun readAll(context: Context, uri: Uri): ByteArray? = runCatching {
-        if (uri.scheme == "file") {
-            File(requireNotNull(uri.path)).readBytes()
-        } else {
-            context.contentResolver.openInputStream(uri)?.use { it.readBytes() }
+        openInput(context, uri)?.use { input ->
+            val output = ByteArrayOutputStream()
+            val buffer = ByteArray(COPY_BUFFER)
+            var total = 0
+            while (true) {
+                val count = input.read(buffer)
+                if (count < 0) break
+                total += count
+                require(total <= MAX_IN_MEMORY_TAG_BYTES) { "Audio file is too large for in-memory tagging" }
+                output.write(buffer, 0, count)
+            }
+            output.toByteArray()
         }
-    }.onFailure { Log.w(TAG, "could not read $uri for tagging: ${it.message}") }.getOrNull()
+    }.onFailure { Log.w(TAG, "could not read audio for tag update (${it.javaClass.simpleName})") }.getOrNull()
 
     private fun writeAll(context: Context, uri: Uri, bytes: ByteArray) {
         runCatching {
@@ -374,6 +426,6 @@ object MediaTagger {
             } else {
                 context.contentResolver.openOutputStream(uri, "wt")?.use { it.write(bytes) }
             }
-        }.onFailure { Log.w(TAG, "could not write tags to $uri: ${it.message}") }
+        }.onFailure { Log.w(TAG, "could not write audio tags (${it.javaClass.simpleName})") }
     }
 }

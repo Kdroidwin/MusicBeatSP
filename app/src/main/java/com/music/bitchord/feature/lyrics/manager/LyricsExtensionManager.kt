@@ -25,6 +25,8 @@ import okhttp3.Request
 import java.io.File
 import java.io.ByteArrayOutputStream
 import java.nio.charset.StandardCharsets
+import java.security.MessageDigest
+import java.util.Locale
 import java.util.concurrent.atomic.AtomicBoolean
 
 /**
@@ -118,6 +120,7 @@ object LyricsExtensionManager {
 
                 val manifestFile = File(targetDir, "manifest.json")
                 val scriptFile = File(targetDir, "index.js")
+                val checksumFile = File(targetDir, SCRIPT_CHECKSUM_FILE)
                 val assetPrefix = "$assetRoot/$extName"
 
                 // Read bundled manifest version to decide whether to overwrite
@@ -136,20 +139,18 @@ object LyricsExtensionManager {
                 } else null
 
                 val shouldOverwrite = !manifestFile.exists()
-                    || !scriptFile.exists()
+                    || !scriptFile.isFile
+                    || scriptFile.length() !in 1..MAX_SCRIPT_BYTES.toLong()
                     || (bundledVersion != null && (installedVersion == null || isNewerVersion(bundledVersion, installedVersion) || bundledVersion != installedVersion))
 
                 if (shouldOverwrite) {
-                    runCatching {
-                        assetManager.open("$assetPrefix/manifest.json").use { input ->
-                            manifestFile.outputStream().use { output -> input.copyTo(output) }
-                        }
-                    }
-                    runCatching {
-                        assetManager.open("$assetPrefix/index.js").use { input ->
-                            scriptFile.outputStream().use { output -> input.copyTo(output) }
-                        }
-                    }
+                    val manifestText = assetManager.open("$assetPrefix/manifest.json").bufferedReader().use { it.readText() }
+                    val scriptText = assetManager.open("$assetPrefix/index.js").bufferedReader().use { it.readText() }
+                    require(manifestText.toByteArray(StandardCharsets.UTF_8).size <= MAX_MANIFEST_BYTES)
+                    require(scriptText.isNotBlank() && scriptText.toByteArray(StandardCharsets.UTF_8).size <= MAX_SCRIPT_BYTES)
+                    writeAtomically(manifestFile, manifestText)
+                    writeAtomically(scriptFile, scriptText)
+                    writeAtomically(checksumFile, sha256(scriptText))
                     // Clear cached engine so the new script is loaded fresh
                     LyricsExtensionExecutor.unload(extName)
                     LyricsLog.i(TAG, "Bootstrapped $extName: ${installedVersion ?: "new"} -> ${bundledVersion ?: "?"}")
@@ -182,12 +183,25 @@ object LyricsExtensionManager {
             if (!LyricsExtensionSecurity.isSafeExtensionId(dir.name)) return@forEach
             val manifestFile = File(dir, "manifest.json")
             val scriptFile = File(dir, "index.js")
-            if (manifestFile.exists() && scriptFile.exists()) {
+            val checksumFile = File(dir, SCRIPT_CHECKSUM_FILE)
+            if (manifestFile.isFile && manifestFile.length() in 1..MAX_MANIFEST_BYTES.toLong() &&
+                scriptFile.isFile && scriptFile.length() in 1..MAX_SCRIPT_BYTES.toLong()
+            ) {
                 runCatching {
                     val content = manifestFile.readText()
                     val manifest = json.decodeFromString<LyricsExtensionManifest>(content)
-                    require(LyricsExtensionSecurity.isSafeExtensionId(manifest.id) && manifest.id == dir.name) {
-                        "Extension ID does not match its directory"
+                    validateManifest(manifest, dir.name)
+                    val actualChecksum = sha256(scriptFile.readBytes())
+                    if (checksumFile.exists()) {
+                        val expectedChecksum = checksumFile.readText().trim().lowercase(Locale.ROOT)
+                        require(LyricsExtensionSecurity.isSha256(expectedChecksum) && expectedChecksum == actualChecksum) {
+                            "Extension script integrity check failed"
+                        }
+                    } else {
+                        // One-time migration for scripts installed before checksums
+                        // were recorded. The app-private files directory prevents
+                        // other apps from replacing this pin.
+                        writeAtomically(checksumFile, actualChecksum)
                     }
                     list += LyricsExtension(
                         id = manifest.id,
@@ -260,6 +274,11 @@ object LyricsExtensionManager {
             require(remoteRegistry.extensions.all { LyricsExtensionSecurity.isSafeExtensionId(it.id) }) {
                 "Registry contains an invalid extension ID"
             }
+            require(remoteRegistry.extensions.all { item ->
+                item.name.length in 1..160 && item.version.length in 1..80 &&
+                    item.description.length <= 2_048 && item.author.length <= 160 &&
+                    (item.scriptSha256 == null || LyricsExtensionSecurity.isSha256(item.scriptSha256))
+            }) { "Registry contains invalid extension metadata" }
             if (!extensionsEnabled) return@withContext Result.failure(IllegalStateException("Lyrics extensions are disabled"))
             val currentMap = _installedExtensions.value.associateBy { it.id }
             val extDir = File(ctx.filesDir, "$EXTENSIONS_DIR/extensions")
@@ -307,11 +326,22 @@ object LyricsExtensionManager {
                     val manifest = downloadedManifest?.let {
                         runCatching { json.decodeFromString<LyricsExtensionManifest>(it) }.getOrNull()
                     }
-                    if (downloadedScript != null && downloadedManifest != null && manifest?.id == remoteItem.id) {
+                    val actualChecksum = downloadedScript?.let(::sha256)
+                    val checksumMatches = remoteItem.scriptSha256
+                        ?.lowercase(Locale.ROOT)
+                        ?.let { expected -> expected == actualChecksum }
+                        ?: true
+                    if (downloadedScript != null && downloadedScript.isNotBlank() &&
+                        downloadedManifest != null && manifest != null &&
+                        runCatching { validateManifest(manifest, remoteItem.id) }.isSuccess &&
+                        checksumMatches && actualChecksum != null
+                    ) {
                         val scriptFile = File(itemDir, "index.js")
                         val manifestFile = File(itemDir, "manifest.json")
+                        val checksumFile = File(itemDir, SCRIPT_CHECKSUM_FILE)
                         writeAtomically(scriptFile, downloadedScript)
                         writeAtomically(manifestFile, downloadedManifest)
+                        writeAtomically(checksumFile, actualChecksum)
                         LyricsExtensionExecutor.unload(remoteItem.id)
                         updatedCount++
                     } else {
@@ -402,6 +432,21 @@ object LyricsExtensionManager {
         }
     }
 
+    private fun validateManifest(manifest: LyricsExtensionManifest, expectedId: String) {
+        require(LyricsExtensionSecurity.isSafeExtensionId(manifest.id) && manifest.id == expectedId) {
+            "Extension ID does not match its directory"
+        }
+        require(manifest.name.length in 1..160 && manifest.version.length in 1..80)
+        require(manifest.description.length <= 2_048 && manifest.author.length <= 160)
+        require(manifest.defaultPriority in -1_000..1_000)
+    }
+
+    private fun sha256(value: String): String = sha256(value.toByteArray(StandardCharsets.UTF_8))
+
+    private fun sha256(value: ByteArray): String = MessageDigest.getInstance("SHA-256")
+        .digest(value)
+        .joinToString("") { "%02x".format(Locale.ROOT, it) }
+
     private fun isNewerVersion(remote: String, local: String): Boolean {
         if (remote == local) return false
         val rParts = remote.split(".").mapNotNull { it.toIntOrNull() }
@@ -427,4 +472,5 @@ object LyricsExtensionManager {
     private const val MAX_MANIFEST_BYTES = 64 * 1024
     private const val MAX_SCRIPT_BYTES = 1024 * 1024
     private const val MAX_EXTENSION_COUNT = 100
+    private const val SCRIPT_CHECKSUM_FILE = "index.js.sha256"
 }

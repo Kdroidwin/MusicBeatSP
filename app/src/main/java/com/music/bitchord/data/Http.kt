@@ -60,6 +60,14 @@ object Http {
         activeNetworkCalls.toList().forEach { call -> runCatching { call.cancel() } }
     }
 
+    /** Stops active cleartext requests when the app-wide HTTP consent is withdrawn. */
+    fun cancelCleartextRequests() {
+        activeNetworkCalls.toList().forEach { call ->
+            val isCleartext = runCatching { !call.request().url.isHttps }.getOrDefault(false)
+            if (isCleartext) runCatching { call.cancel() }
+        }
+    }
+
     /** Stops requests and streams tied to one configured remote-server origin. */
     fun cancelRequestsForOrigin(url: String) {
         val origin = url.trim().toHttpUrlOrNull() ?: return
@@ -157,13 +165,11 @@ object Http {
             response
         } else {
             val host = request.url.host
-            val range = request.header("Range")
             val counting = CountingSource(body.source()) { bytes ->
                 val total = usageTotals.computeIfAbsent(host) { AtomicLong() }.addAndGet(bytes)
                 Log.d(
                     USAGE_TAG,
-                    "$host ${request.method} ${request.url.encodedPath} " +
-                        "range=$range status=${response.code} bytes=$bytes total[$host]=$total",
+                    "$host ${request.method} status=${response.code} bytes=$bytes total[$host]=$total",
                 )
             }.buffer()
             response.newBuilder().body(CountedBody(body, counting)).build()
@@ -241,10 +247,11 @@ object Http {
             ) {
                 throw IOException("Remote-server credentials cannot be sent to an unconfigured host")
             }
-            val webDavCleartextAllowed = com.music.bitchord.data.webdav.WebDavAuth.isCleartextAllowed(request.url)
-            if (!request.url.isHttps && !webDavCleartextAllowed &&
-                !com.music.bitchord.data.sources.SourceRegistry.isCleartextAllowed(request.url)
-            ) {
+            val cleartextAllowed = AppSettings.cleartextHttpAllowed.value && (
+                com.music.bitchord.data.webdav.WebDavAuth.isCleartextAllowed(request.url) ||
+                    com.music.bitchord.data.sources.SourceRegistry.isCleartextAllowed(request.url)
+                )
+            if (!request.url.isHttps && !cleartextAllowed) {
                 throw IOException("Unencrypted HTTP is not enabled for this server")
             }
             chain.proceed(

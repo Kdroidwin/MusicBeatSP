@@ -579,7 +579,13 @@ object LocalMediaRepository {
                             ?.trimEnd('/')
                             ?.substringAfterLast('/')
                             ?.takeIf(String::isNotBlank)
-                        val name = relativeName
+                        // Provider labels vary between Android versions and
+                        // removable volumes. The resolved folder path is the
+                        // stable source of the name shown in the Folders tab.
+                        val pathName = folderPath.trimEnd('/').substringAfterLast('/')
+                            .takeIf(String::isNotBlank)
+                        val name = pathName
+                            ?: relativeName
                             ?: bucketNameCol.takeIf { it >= 0 }
                                 ?.let(cursor::getString)
                                 ?.takeIf(String::isNotBlank)

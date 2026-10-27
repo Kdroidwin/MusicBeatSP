@@ -14,4 +14,8 @@ internal object LyricsExtensionSecurity {
             uri.userInfo == null &&
             uri.fragment == null
     }.getOrDefault(false)
+
+    fun isSha256(value: String): Boolean = value.length == 64 && value.all {
+        it in '0'..'9' || it in 'a'..'f' || it in 'A'..'F'
+    }
 }

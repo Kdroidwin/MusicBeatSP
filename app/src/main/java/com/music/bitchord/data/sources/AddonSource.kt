@@ -179,7 +179,7 @@ class AddonSource(
     override suspend fun search(query: String, limit: Int, waitForAll: Boolean): List<Song> =
         searchDetailed(query, limit).getOrElse { failure ->
             if (failure is CancellationException) throw failure
-            TrackLog.w(TAG, "${config.displayName}: search failed — ${failure.message}")
+            TrackLog.w(TAG, "${config.displayName}: search failed (${failure.javaClass.simpleName})")
             emptyList()
         }
 
@@ -198,7 +198,7 @@ class AddonSource(
                 // search row had, else null so [SourceResolver] moves on.
                 val failure = result.exceptionOrNull()
                 if (failure !is AddonNotFound) {
-                    TrackLog.w(TAG, "${config.displayName}: stream failed for $trackId — ${failure?.message}")
+                    TrackLog.w(TAG, "${config.displayName}: stream failed for $trackId (${failure?.javaClass?.simpleName ?: "unknown"})")
                 }
                 return@withContext fromRow(trackId, tier)
             }
@@ -257,7 +257,7 @@ class AddonSource(
         if (ModuleSource.malformed(url)) {
             TrackLog.w(
                 TAG,
-                "${config.displayName}: malformed URL for $trackId; skipping it — ${url.take(120)}",
+                "${config.displayName}: malformed URL for $trackId; skipping it — ${AddonClient.redact(url)}",
             )
             return null
         }

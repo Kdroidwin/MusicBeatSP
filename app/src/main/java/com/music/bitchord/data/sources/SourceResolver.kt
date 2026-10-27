@@ -988,7 +988,7 @@ object SourceResolver {
     } catch (e: CancellationException) {
         throw e
     } catch (e: Exception) {
-        TrackLog.w(TAG, "${source.displayName} failed: ${e.javaClass.simpleName}: ${e.message}")
+        TrackLog.w(TAG, "${source.displayName} failed: ${e.javaClass.simpleName}")
         null
     }
 

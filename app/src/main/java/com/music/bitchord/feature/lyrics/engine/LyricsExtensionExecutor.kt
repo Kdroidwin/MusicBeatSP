@@ -38,6 +38,9 @@ object LyricsExtensionExecutor {
     private const val SEARCH_TIMEOUT_MS = 30_000L
     private const val MAX_EXTENSION_REQUEST_BODY_CHARS = 1_048_576
     private const val MAX_EXTENSION_RESPONSE_BYTES = 2 * 1_048_576
+    private const val MAX_EXTENSION_RESULT_CHARS = 1_048_576
+    private const val MAX_EXTENSION_TIMER_MS = 30_000L
+    private const val MAX_EXTENSION_JS_MEMORY_BYTES = 32L * 1024L * 1024L
 
     // QuickJS' Android JNI layer keeps process-global references. Creating or
     // disposing contexts concurrently (or from different Default dispatcher
@@ -78,6 +81,7 @@ object LyricsExtensionExecutor {
         Http.client.newBuilder()
             .callTimeout(10, TimeUnit.SECONDS)
             .connectTimeout(5, TimeUnit.SECONDS)
+            .readTimeout(10, TimeUnit.SECONDS)
             .build()
     }
 
@@ -144,14 +148,14 @@ object LyricsExtensionExecutor {
                         )
 
                         val result = request.result.await()
-                        LyricsLog.i(extensionId, "getLyrics result: ${result?.take(100)}")
+                        LyricsLog.i(extensionId, "getLyrics completed (${result?.length ?: 0} chars)")
                         if (result == "null" || result.isNullOrBlank()) null else result
                     } finally {
                         if (activeRequest?.id == request.id) activeRequest = null
                         if (activeExtensionId == extensionId) activeExtensionId = null
                     }
                 } catch (e: Throwable) {
-                    LyricsLog.w(extensionId, "Execution failed: ${e.message}")
+                    LyricsLog.w(extensionId, "Lyrics extension execution failed (${e::class.simpleName})")
                     null
                 }
             }
@@ -208,14 +212,14 @@ object LyricsExtensionExecutor {
                         )
 
                         val result = request.result.await()
-                        LyricsLog.i(extensionId, "searchLyrics result: ${result?.take(200)}")
+                        LyricsLog.i(extensionId, "searchLyrics completed (${result?.length ?: 0} chars)")
                         if (result == "[]" || result.isNullOrBlank()) null else result
                     } finally {
                         if (activeRequest?.id == request.id) activeRequest = null
                         if (activeExtensionId == extensionId) activeExtensionId = null
                     }
                 } catch (e: Throwable) {
-                    LyricsLog.e(extensionId, "searchLyrics exception: ${e.message}")
+                    LyricsLog.e(extensionId, "Lyrics extension search failed (${e::class.simpleName})")
                     null
                 }
             }
@@ -252,7 +256,9 @@ object LyricsExtensionExecutor {
             qjs = try {
                 QuickJsLifecycle.create(quickJsDispatcher).also { created ->
                     engine = created
+                    created.memoryLimit = MAX_EXTENSION_JS_MEMORY_BYTES
                     created.maxStackSize = 512 * 1024L
+                    created.evaluationTimeoutMillis = SEARCH_TIMEOUT_MS
                     bindConsole(created)
                     bindHttp(created)
                     bindBase64(created)
@@ -261,7 +267,7 @@ object LyricsExtensionExecutor {
                 }
             } catch (e: Throwable) {
                 engineSetupFailed = true
-                LyricsLog.e(extensionId, "Failed to initialize QuickJS: ${e.message}")
+                LyricsLog.e(extensionId, "Failed to initialize QuickJS (${e::class.simpleName})")
                 return null
             }
         }
@@ -270,6 +276,7 @@ object LyricsExtensionExecutor {
             return qjs
         }
 
+        if (!scriptFile.isFile || scriptFile.length() !in 1..(1024L * 1024L)) return null
         val code = runCatching { scriptFile.readText() }.getOrNull() ?: return null
         activeExtensionId = extensionId
         return try {
@@ -290,7 +297,7 @@ object LyricsExtensionExecutor {
             qjs
         } catch (e: Throwable) {
             loadedExtensionId = null
-            LyricsLog.e(extensionId, "Failed to initialize extension JS: ${e.message}")
+            LyricsLog.e(extensionId, "Failed to initialize extension JS (${e::class.simpleName})")
             null
         }
     }
@@ -299,22 +306,22 @@ object LyricsExtensionExecutor {
         qjs.define("console") {
             function("log", object : FunctionBinding<Unit> {
                 override fun invoke(args: Array<Any?>) {
-                    LyricsLog.i(activeExtensionId ?: TAG, args.joinToString(" ") { it?.toString() ?: "null" })
+                    LyricsLog.i(activeExtensionId ?: TAG, "Extension log event (${args.size} values)")
                 }
             })
             function("error", object : FunctionBinding<Unit> {
                 override fun invoke(args: Array<Any?>) {
-                    LyricsLog.e(activeExtensionId ?: TAG, args.joinToString(" ") { it?.toString() ?: "null" })
+                    LyricsLog.e(activeExtensionId ?: TAG, "Extension error event (${args.size} values)")
                 }
             })
             function("warn", object : FunctionBinding<Unit> {
                 override fun invoke(args: Array<Any?>) {
-                    LyricsLog.w(activeExtensionId ?: TAG, args.joinToString(" ") { it?.toString() ?: "null" })
+                    LyricsLog.w(activeExtensionId ?: TAG, "Extension warning event (${args.size} values)")
                 }
             })
             function("info", object : FunctionBinding<Unit> {
                 override fun invoke(args: Array<Any?>) {
-                    LyricsLog.i(activeExtensionId ?: TAG, args.joinToString(" ") { it?.toString() ?: "null" })
+                    LyricsLog.i(activeExtensionId ?: TAG, "Extension info event (${args.size} values)")
                 }
             })
         }
@@ -326,6 +333,7 @@ object LyricsExtensionExecutor {
                 override fun invoke(args: Array<Any?>) {
                     val result = args.firstOrNull()?.toString()
                     val requestId = args.getOrNull(1)?.toString()?.toLongOrNull() ?: return
+                    if (result != null && result.length > MAX_EXTENSION_RESULT_CHARS) return
                     activeRequest?.takeIf { it.id == requestId }?.result?.complete(result)
                 }
             })
@@ -382,7 +390,7 @@ object LyricsExtensionExecutor {
             })
             asyncFunction("setTimeout", object : AsyncFunctionBinding<String> {
                 override suspend fun invoke(args: Array<Any?>): String {
-                    val ms = args.getOrNull(1)?.toString()?.toLongOrNull() ?: 0L
+                    val ms = args.getOrNull(1)?.toString()?.toLongOrNull()?.coerceIn(0L, MAX_EXTENSION_TIMER_MS) ?: 0L
                     delay(ms)
                     return "0"
                 }
@@ -441,30 +449,33 @@ object LyricsExtensionExecutor {
     ): Pair<Int, String> = runCatching {
         if (!extensionsEnabled) return@runCatching Pair(0, "")
         if (!LyricsExtensionSecurity.isHttpsUrl(url) || headersJson.length > 16_384 ||
-            (body?.length ?: 0) > MAX_EXTENSION_REQUEST_BODY_CHARS
+            (body?.toByteArray(StandardCharsets.UTF_8)?.size ?: 0) > MAX_EXTENSION_REQUEST_BODY_CHARS
         ) return@runCatching Pair(0, "")
         val builder = Request.Builder().url(url)
         var hasUserAgent = false
 
-        val headersObj = runCatching { JSONObject(headersJson) }.getOrNull()
-        if (headersObj != null && headersObj.length() <= 40) {
-            for (key in headersObj.keys()) {
-                val value = headersObj.optString(key, "")
-                if (key.length > 128 || value.length > 8192) continue
-                builder.header(key, value)
-                if (key.equals("user-agent", ignoreCase = true)) hasUserAgent = true
+        val headersObj = runCatching { JSONObject(headersJson) }.getOrNull() ?: return@runCatching Pair(0, "")
+        if (headersObj.length() > 40) return@runCatching Pair(0, "")
+        for (key in headersObj.keys()) {
+            val rawValue = headersObj.opt(key)
+            if (rawValue !is String || key.length > 128 || rawValue.length > 8192) {
+                return@runCatching Pair(0, "")
             }
+            builder.header(key, rawValue)
+            if (key.equals("user-agent", ignoreCase = true)) hasUserAgent = true
         }
 
         if (!hasUserAgent) {
             builder.header("User-Agent", "BitChord (https://github.com/bitchord)")
         }
 
-        if (method.equals("POST", ignoreCase = true)) {
-            val mediaType = "application/json; charset=utf-8".toMediaType()
-            builder.post((body ?: "").toRequestBody(mediaType))
-        } else {
-            builder.get()
+        when (method.uppercase(java.util.Locale.ROOT)) {
+            "GET" -> builder.get()
+            "POST" -> {
+                val mediaType = "application/json; charset=utf-8".toMediaType()
+                builder.post((body ?: "").toRequestBody(mediaType))
+            }
+            else -> return@runCatching Pair(0, "")
         }
 
         val call = httpClient.newCall(builder.build())

@@ -7,6 +7,7 @@ import com.music.bitchord.data.settings.AppSettings
 import com.music.bitchord.data.sources.module.ModuleManager
 import com.music.bitchord.data.sources.module.ModuleSearchResult
 import com.music.bitchord.data.sources.module.SpineModule
+import com.music.bitchord.data.sources.module.redactModuleUrl
 import kotlinx.coroutines.CompletableDeferred
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.coroutineScope
@@ -60,7 +61,7 @@ class ModuleSource(
                 else -> SourceHealth.Ok("${modules.size} module${if (modules.size == 1) "" else "s"}")
             }
         } catch (e: Exception) {
-            TrackLog.w(TAG, "module index fetch failed for ${config.displayName}: ${e.message}")
+            TrackLog.w(TAG, "module index fetch failed for ${config.displayName} (${e.javaClass.simpleName})")
             SourceHealth.Unreachable(e.message ?: "Could not reach the module index")
         }
     }
@@ -101,7 +102,7 @@ class ModuleSource(
             val baseUrl = indexUrl.substringBeforeLast("/")
 
             val modules = manager.fetchIndex(indexUrl).getOrElse { e ->
-                TrackLog.w(TAG, "${config.displayName}: index fetch failed — ${e.message}")
+                TrackLog.w(TAG, "${config.displayName}: index fetch failed (${e.javaClass.simpleName})")
                 return@withContext emptyList()
             }
 
@@ -154,11 +155,11 @@ class ModuleSource(
         baseUrl: String,
     ): List<Song> {
         val loaded = manager.loadModule(module) { baseUrl }.getOrElse { e ->
-            TrackLog.w(TAG, "${config.displayName}: load failed for ${module.id} — ${e.message}")
+            TrackLog.w(TAG, "${config.displayName}: load failed for ${module.id} (${e.javaClass.simpleName})")
             return emptyList()
         }
         val searchResponse = manager.searchTracks(loaded, query, limit).getOrElse { e ->
-            TrackLog.w(TAG, "${config.displayName}: search failed for ${module.id} — ${e.message}")
+            TrackLog.w(TAG, "${config.displayName}: search failed for ${module.id} (${e.javaClass.simpleName})")
             return emptyList()
         }
         return searchResponse.tracks.map { track ->
@@ -222,7 +223,7 @@ class ModuleSource(
             // Find the module in the index, load it (cache hit after search),
             // then ask for the stream URL.
             val modules = manager.fetchIndex(config.baseUrl).getOrElse { e ->
-                TrackLog.w(TAG, "${config.displayName}: index fetch failed — ${e.message}")
+                TrackLog.w(TAG, "${config.displayName}: index fetch failed (${e.javaClass.simpleName})")
                 return@withContext null
             }
             val module = modules.firstOrNull { it.id == moduleId } ?: run {
@@ -231,7 +232,7 @@ class ModuleSource(
             }
             val baseUrl = config.baseUrl.substringBeforeLast("/")
             val loaded = manager.loadModule(module) { baseUrl }.getOrElse { e ->
-                TrackLog.w(TAG, "${config.displayName}: load failed for $moduleId — ${e.message}")
+                TrackLog.w(TAG, "${config.displayName}: load failed for $moduleId (${e.javaClass.simpleName})")
                 return@withContext null
             }
             val streamResponse = manager.getStreamUrl(
@@ -240,7 +241,7 @@ class ModuleSource(
                 quality = request.tier,
                 settings = settingsFor(request),
             ).getOrElse { e ->
-                TrackLog.w(TAG, "${config.displayName}: getStreamUrl failed for $upstreamId — ${e.message}")
+                TrackLog.w(TAG, "${config.displayName}: getStreamUrl failed for $upstreamId (${e.javaClass.simpleName})")
                 return@withContext null
             }
             val url = streamResponse.streamUrl?.ifBlank { null } ?: run {
@@ -251,7 +252,7 @@ class ModuleSource(
                 TrackLog.w(
                     TAG,
                     "${config.displayName}: $moduleId returned a malformed URL for " +
-                        "$upstreamId; skipping it — ${url.take(120)}",
+                        "$upstreamId; skipping it — ${redactModuleUrl(url)}",
                 )
                 return@withContext null
             }

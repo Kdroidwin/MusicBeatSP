@@ -11,4 +11,6 @@
     <exclude domain="sharedpref" path="bitchord_sources.xml" />
     <exclude domain="sharedpref" path="bitchord_sources_plain.xml" />
     <exclude domain="sharedpref" path="music_server_credentials_encrypted.xml" />
+    <!-- Downloaded executable extension code is reinstalled from its HTTPS registry. -->
+    <exclude domain="file" path="lyrics_extensions/" />
 </full-backup-content>

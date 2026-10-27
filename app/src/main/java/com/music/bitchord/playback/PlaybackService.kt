@@ -5897,20 +5897,27 @@ class PlaybackService : MediaLibraryService() {
             session: MediaSession,
             controller: MediaSession.ControllerInfo,
         ): MediaSession.ConnectionResult {
-            val sessionCommands = MediaSession.ConnectionResult.DEFAULT_SESSION_AND_LIBRARY_COMMANDS
+            val sessionCommandsBuilder = MediaSession.ConnectionResult.DEFAULT_SESSION_AND_LIBRARY_COMMANDS
                 .buildUpon()
-                .add(favoriteCommand)
-                .add(autoplayCommand)
-                .add(shuffleCommand)
-                .add(mediaPlaylistsCommand)
-                .add(mediaLyricsCommand)
-                .add(mediaQueueCommand)
-                .add(beginRadioQueueCommand)
-                .add(commitRadioQueueCommand)
-                .add(upgradeQualityCommand)
-                .add(reorderQueueCommand)
-                .add(externalPreviewCommand)
-                .build()
+            // Standard transport/browser commands remain available to Android
+            // media clients. App-specific commands can alter queue, favorites,
+            // radio and external-preview state, so expose them only to trusted
+            // controllers (the app/system media UI and allowlisted clients).
+            if (controller.isTrusted) {
+                sessionCommandsBuilder
+                    .add(favoriteCommand)
+                    .add(autoplayCommand)
+                    .add(shuffleCommand)
+                    .add(mediaPlaylistsCommand)
+                    .add(mediaLyricsCommand)
+                    .add(mediaQueueCommand)
+                    .add(beginRadioQueueCommand)
+                    .add(commitRadioQueueCommand)
+                    .add(upgradeQualityCommand)
+                    .add(reorderQueueCommand)
+                    .add(externalPreviewCommand)
+            }
+            val sessionCommands = sessionCommandsBuilder.build()
             return MediaSession.ConnectionResult.AcceptedResultBuilder(session)
                 .setAvailablePlayerCommands(MediaSession.ConnectionResult.DEFAULT_PLAYER_COMMANDS)
                 .setAvailableSessionCommands(sessionCommands)
@@ -5923,6 +5930,9 @@ class PlaybackService : MediaLibraryService() {
             customCommand: SessionCommand,
             args: Bundle,
         ): ListenableFuture<SessionResult> {
+            if (!controller.isTrusted) {
+                return Futures.immediateFuture(SessionResult(SessionError.ERROR_PERMISSION_DENIED))
+            }
             when (customCommand.customAction) {
                 ACTION_TOGGLE_AUTOPLAY -> toggleAutoplayFromNotification()
                 ACTION_TOGGLE_SHUFFLE -> toggleShuffleFromNotification()

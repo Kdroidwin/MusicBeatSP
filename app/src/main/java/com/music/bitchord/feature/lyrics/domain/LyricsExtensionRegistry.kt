@@ -1,6 +1,7 @@
 package com.music.bitchord.feature.lyrics.domain
 
 import kotlinx.serialization.Serializable
+import kotlinx.serialization.SerialName
 
 @Serializable
 data class RemoteLyricsRegistry(
@@ -20,6 +21,8 @@ data class RemoteLyricsExtensionItem(
     val defaultPriority: Int = 99,
     val manifest_url: String? = null,
     val script_url: String? = null,
+    /** Optional SHA-256 pin supplied by the registry for the downloaded script. */
+    @SerialName("script_sha256") val scriptSha256: String? = null,
 )
 
 @Serializable

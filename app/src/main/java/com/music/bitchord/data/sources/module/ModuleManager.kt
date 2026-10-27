@@ -12,7 +12,11 @@ import kotlinx.coroutines.sync.Mutex
 import kotlinx.coroutines.sync.withLock
 import kotlinx.coroutines.withContext
 import kotlinx.serialization.json.Json
+import org.json.JSONObject
 import okhttp3.Request
+import java.io.ByteArrayOutputStream
+import java.io.IOException
+import java.nio.charset.StandardCharsets
 
 /**
  * A module/index URL with its host hidden, for logging.
@@ -26,7 +30,7 @@ import okhttp3.Request
 internal fun redactModuleUrl(url: String): String =
     runCatching {
         val uri = java.net.URI(url)
-        "${uri.scheme}://***${uri.rawPath.orEmpty()}"
+        "${uri.scheme}://***"
     }.getOrDefault("***")
 
 /**
@@ -136,7 +140,7 @@ class ModuleManager {
                         if (!resp.isSuccessful) {
                             throw Exception("HTTP ${resp.code} from ${redactModuleUrl(sourceUrl)}")
                         }
-                        val body = resp.body?.string()
+                        val body = readBoundedBody(resp.body, MAX_INDEX_BYTES)
                             ?: throw Exception("Empty body from ${redactModuleUrl(sourceUrl)}")
                         val modules = ModuleIndex.parseModules(json, body)
                         TrackLog.d(TAG, "  Parsed ${modules.size} modules")
@@ -145,7 +149,7 @@ class ModuleManager {
                 }.onSuccess {
                     indexCache[sourceUrl] = CachedIndex(it, System.currentTimeMillis())
                 }.onFailure {
-                    TrackLog.e(TAG, "  ✗ fetchIndex FAILED for ${redactModuleUrl(sourceUrl)}: ${it.message}", it)
+                    TrackLog.e(TAG, "  ✗ fetchIndex FAILED for ${redactModuleUrl(sourceUrl)} (${it::class.simpleName})")
                 }
             }
         }
@@ -205,7 +209,7 @@ class ModuleManager {
             loadedModules.remove(module.id)
         }
 
-        TrackLog.d(TAG, "▶ loadModule(${module.id}) download=${module.download}")
+        TrackLog.d(TAG, "▶ loadModule(${module.id})")
         runCatching {
             val downloadUrl = if (module.download.startsWith("http")) {
                 module.download
@@ -220,7 +224,8 @@ class ModuleManager {
                 if (!resp.isSuccessful) {
                     throw Exception("HTTP ${resp.code} downloading module ${module.id}")
                 }
-                resp.body?.string() ?: throw Exception("Empty body for module ${module.id}")
+                readBoundedBody(resp.body, MAX_MODULE_SCRIPT_BYTES)
+                    ?: throw Exception("Empty body for module ${module.id}")
             }
             val baseUrl = downloadUrl.substringBeforeLast("/")
 
@@ -231,7 +236,7 @@ class ModuleManager {
             TrackLog.d(TAG, "  ✓ Loaded module ${module.id}: ${jsCode.length} chars, baseUrl=${redactModuleUrl(baseUrl)}")
             loaded
         }.onFailure {
-            TrackLog.e(TAG, "  ✗ loadModule FAILED for ${module.id}: ${it.message}", it)
+            TrackLog.e(TAG, "  ✗ loadModule FAILED for ${module.id} (${it::class.simpleName})")
         }
     }
 
@@ -248,7 +253,7 @@ class ModuleManager {
         // query does: the same search under a different quality tier is a
         // different question.
         key = keyOf(loaded.module.id, query, limit.toString(), contextArg(settings)),
-        describe = { "▶ searchTracks() module=${loaded.module.id} query=\"$query\" limit=$limit" },
+        describe = { "▶ searchTracks() module=${loaded.module.id} queryLength=${query.length} limit=$limit" },
     ) {
         searchTracksNow(loaded, query, limit, settings)
     }
@@ -260,18 +265,18 @@ class ModuleManager {
         settings: Map<String, String>,
     ): Result<ModuleSearchResponse> = withContext(Dispatchers.IO) {
         val contextArg = contextArg(settings)
-        TrackLog.d(TAG, "▶ searchTracks() module=${loaded.module.id} query=\"$query\" limit=$limit")
+        TrackLog.d(TAG, "▶ searchTracks() module=${loaded.module.id} queryLength=${query.length} limit=$limit")
         runCatching {
             val result = QuickJsExecutor.callExport(
                 moduleId = loaded.module.id,
                 functionName = "searchTracks",
-                args = listOf("\"$query\"", limit.toString(), contextArg),
+                args = listOf(JSONObject.quote(query), limit.toString(), contextArg),
             ).getOrThrow()
             json.decodeFromString<ModuleSearchResponse>(result).also {
                 TrackLog.d(TAG, "  ✓ Parsed ${it.tracks.size} tracks (total=${it.total})")
             }
         }.onCancellation().onFailure {
-            TrackLog.e(TAG, "  ✗ searchTracks FAILED for ${loaded.module.id} query='$query': ${it.message}", it)
+            TrackLog.e(TAG, "  ✗ searchTracks FAILED for ${loaded.module.id} queryLength=${query.length} (${it::class.simpleName})")
         }
     }
 
@@ -294,7 +299,7 @@ class ModuleManager {
         settings: Map<String, String> = emptyMap(),
     ): Result<ModuleStreamResponse> = streams.get(
         key = keyOf(loaded.module.id, trackId, quality, contextArg(settings)),
-        describe = { "▶ getStreamUrl() module=${loaded.module.id} trackId=$trackId quality=$quality" },
+        describe = { "▶ getStreamUrl() module=${loaded.module.id} quality=$quality" },
     ) {
         getStreamUrlNow(loaded, trackId, quality, settings)
     }
@@ -306,18 +311,19 @@ class ModuleManager {
         settings: Map<String, String>,
     ): Result<ModuleStreamResponse> = withContext(Dispatchers.IO) {
         val contextArg = contextArg(settings)
-        TrackLog.d(TAG, "▶ getStreamUrl() module=${loaded.module.id} trackId=$trackId quality=$quality")
+        TrackLog.d(TAG, "▶ getStreamUrl() module=${loaded.module.id} quality=$quality")
         runCatching {
             val result = QuickJsExecutor.callExport(
                 moduleId = loaded.module.id,
                 functionName = "getTrackStreamUrl",
-                args = listOf("\"$trackId\"", "\"$quality\"", contextArg),
+                args = listOf(JSONObject.quote(trackId), JSONObject.quote(quality), contextArg),
             ).getOrThrow()
             json.decodeFromString<ModuleStreamResponse>(result).also {
-                TrackLog.d(TAG, "  ✓ streamUrl=${it.streamUrl?.take(100) ?: "<none>"} quality=${it.track?.audioQuality}")
+                // Stream URLs can carry signed access tokens; never write the URL to logs.
+                TrackLog.d(TAG, "  ✓ stream resolved=${it.streamUrl != null} quality=${it.track?.audioQuality}")
             }
         }.onCancellation().onFailure {
-            TrackLog.e(TAG, "  ✗ getStreamUrl FAILED for ${loaded.module.id} trackId=$trackId: ${it.message}", it)
+            TrackLog.e(TAG, "  ✗ getStreamUrl FAILED for ${loaded.module.id} (${it::class.simpleName})")
         }
     }
 
@@ -353,12 +359,40 @@ class ModuleManager {
      * out of it: every lookup landed on undefined and fell through to the
      * module's own default. Silent, and worth exactly one misplaced brace.
      */
-    private fun contextArg(settings: Map<String, String>): String =
-        settings.entries.joinToString(
-            separator = ",",
-            prefix = "{settings:{",
-            postfix = "}}",
-        ) { (key, value) -> "\"$key\":{\"value\":\"$value\"}" }
+    private fun contextArg(settings: Map<String, String>): String {
+        // Settings can contain API keys. Construct valid JSON rather than
+        // interpolating them into JavaScript source, and keep module input bounded.
+        val values = JSONObject()
+        var usedChars = 0
+        settings.entries.asSequence().take(MAX_CONTEXT_SETTINGS).forEach { (key, value) ->
+            if (key.isBlank() || key.length > MAX_CONTEXT_KEY_CHARS || value.length > MAX_CONTEXT_VALUE_CHARS) {
+                return@forEach
+            }
+            val nextSize = usedChars + key.length + value.length
+            if (nextSize > MAX_CONTEXT_TOTAL_CHARS) return@forEach
+            usedChars = nextSize
+            values.put(key, JSONObject().put("value", value))
+        }
+        return JSONObject().put("settings", values).toString()
+    }
+
+    private fun readBoundedBody(body: okhttp3.ResponseBody?, maxBytes: Int): String? {
+        body ?: return null
+        if (body.contentLength() > maxBytes) throw IOException("Module source response is too large")
+        val output = ByteArrayOutputStream(minOf(maxBytes, 8_192))
+        body.byteStream().use { input ->
+            val buffer = ByteArray(8_192)
+            var total = 0
+            while (true) {
+                val count = input.read(buffer)
+                if (count < 0) break
+                total += count
+                if (total > maxBytes) throw IOException("Module source response is too large")
+                output.write(buffer, 0, count)
+            }
+        }
+        return output.toString(StandardCharsets.UTF_8.name())
+    }
 
     // ── Lifecycle ─────────────────────────────────────────────────────────
 
@@ -386,6 +420,10 @@ class ModuleManager {
 
     private companion object {
         const val TAG = "BitChord"
+        const val MAX_CONTEXT_SETTINGS = 64
+        const val MAX_CONTEXT_KEY_CHARS = 128
+        const val MAX_CONTEXT_VALUE_CHARS = 4_096
+        const val MAX_CONTEXT_TOTAL_CHARS = 16_384
 
         /**
          * How long a fetched index is trusted. Long enough that a run of
@@ -427,5 +465,7 @@ class ModuleManager {
          * spare — the point is a bound, not a budget.
          */
         const val MAX_SHARED = 128
+        const val MAX_INDEX_BYTES = 2 * 1024 * 1024
+        const val MAX_MODULE_SCRIPT_BYTES = 2 * 1024 * 1024
     }
 }

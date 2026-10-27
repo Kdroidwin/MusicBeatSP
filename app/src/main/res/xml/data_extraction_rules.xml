@@ -8,6 +8,7 @@
         <exclude domain="sharedpref" path="bitchord_sources.xml" />
         <exclude domain="sharedpref" path="bitchord_sources_plain.xml" />
         <exclude domain="sharedpref" path="music_server_credentials_encrypted.xml" />
+        <exclude domain="file" path="lyrics_extensions/" />
     </cloud-backup>
     <device-transfer>
         <!-- EncryptedSharedPreferences depends on this device's Keystore key. -->
@@ -17,5 +18,6 @@
         <exclude domain="sharedpref" path="bitchord_sources.xml" />
         <exclude domain="sharedpref" path="bitchord_sources_plain.xml" />
         <exclude domain="sharedpref" path="music_server_credentials_encrypted.xml" />
+        <exclude domain="file" path="lyrics_extensions/" />
     </device-transfer>
 </data-extraction-rules>

@@ -202,7 +202,7 @@ internal object SpotifyToken {
             handler.post(poller)
             withTimeoutOrNull(HARVEST_TIMEOUT_MS) { deferred.await() }
         } catch (e: Exception) {
-            Log.w(TAG, "token harvest threw: ${e.message}")
+            Log.w(TAG, "token harvest failed (${e.javaClass.simpleName})")
             null
         } finally {
             handler.removeCallbacks(poller)
@@ -342,7 +342,7 @@ internal object SpotifyToken {
                 lastCode = response.code
                 if (response.isSuccessful) response.body?.string() else null
             }
-        }.onFailure { Log.w(TAG, "client-token request threw: ${it.message}") }.getOrNull()
+        }.onFailure { Log.w(TAG, "client-token request failed (${it.javaClass.simpleName})") }.getOrNull()
         if (body == null) {
             Log.w(TAG, "client-token request failed, http $lastCode")
             return null
