@@ -952,7 +952,7 @@ fun SettingsScreen(
         SettingsSearchEntry(
             stringResource(R.string.playlist_track_menu_artwork_color),
             stringResource(R.string.playlist_track_menu_artwork_color_subtitle),
-            listOf("playlist", "track menu", "artwork", "color", "プレイリスト", "曲メニュー", "アートワーク", "色"),
+            listOf("playlist", "track menu", "tag editor", "bulk tag", "selected songs", "artwork", "color", "プレイリスト", "曲メニュー", "タグ編集", "一括タグ編集", "選択した曲", "アートワーク", "色"),
             playlistTrackMenuUsesArtworkColor,
         ) { AppSettings.setPlaylistTrackMenuUsesArtworkColor(!playlistTrackMenuUsesArtworkColor) },
         SettingsSearchEntry(

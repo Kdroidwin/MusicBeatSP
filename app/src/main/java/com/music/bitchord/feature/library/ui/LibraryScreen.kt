@@ -47,7 +47,9 @@ import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedTextField
+import androidx.compose.material3.OutlinedTextFieldDefaults
 import androidx.compose.material3.TextButton
+import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.Surface
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.rounded.ArrowDownward
@@ -83,11 +85,13 @@ import androidx.compose.ui.unit.dp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.music.bitchord.R
 import com.music.bitchord.data.model.Song
+import com.music.bitchord.data.model.CARD_ART_PX
 import com.music.bitchord.data.model.sortedByAlbumTrackOrder
 import com.music.bitchord.data.settings.AppSettings
 import com.music.bitchord.data.settings.LibraryViewType
 import com.music.bitchord.data.settings.SavedYoutubeCollection
 import com.music.bitchord.ui.theme.ArtworkPalette
+import com.music.bitchord.ui.theme.rememberArtworkPalette
 import com.music.bitchord.feature.library.ui.components.LibraryFilter
 import com.music.bitchord.feature.library.ui.components.LibraryGridContent
 import com.music.bitchord.feature.library.ui.components.LibraryHeaderBar
@@ -1218,6 +1222,32 @@ fun LibraryScreen(
     }
 
     if (showBulkTagEditor) {
+        val artworkUrl = selectedPlaylistSongs.firstNotNullOfOrNull {
+            it.thumbnailUrl?.takeIf(String::isNotBlank)
+        } ?: drillDownArt?.takeIf(String::isNotBlank)
+        val dialogPalette = if (artworkUrl != null && drillDownPlaylistId != null && playlistTrackMenuUsesArtworkColor) {
+            rememberArtworkPalette(artworkUrl, artPx = CARD_ART_PX)
+        } else {
+            null
+        }
+        val dialogContentColor = dialogPalette?.onBackground ?: MaterialTheme.colorScheme.onSurface
+        val dialogSecondaryColor = dialogPalette?.onBackgroundVariant ?: MaterialTheme.colorScheme.onSurfaceVariant
+        val fieldColors = dialogPalette?.let { palette ->
+            OutlinedTextFieldDefaults.colors(
+                focusedTextColor = palette.onBackground,
+                unfocusedTextColor = palette.onBackground,
+                focusedContainerColor = palette.background,
+                unfocusedContainerColor = palette.background,
+                focusedBorderColor = palette.accent,
+                unfocusedBorderColor = palette.divider,
+                focusedLabelColor = palette.accent,
+                unfocusedLabelColor = palette.onBackgroundVariant,
+                cursorColor = palette.accent,
+            )
+        } ?: OutlinedTextFieldDefaults.colors()
+        val actionColors = dialogPalette?.let { palette ->
+            ButtonDefaults.textButtonColors(contentColor = palette.accent)
+        } ?: ButtonDefaults.textButtonColors()
         AlertDialog(
             onDismissRequest = { showBulkTagEditor = false },
             title = { Text(stringResource(R.string.bulk_tag_edit)) },
@@ -1231,18 +1261,22 @@ fun LibraryScreen(
                     Text(
                         text = stringResource(R.string.bulk_tag_hint),
                         style = MaterialTheme.typography.bodySmall,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                        color = dialogSecondaryColor,
                     )
-                    OutlinedTextField(bulkArtist, { bulkArtist = it }, label = { Text(stringResource(R.string.bulk_tag_artist)) }, singleLine = true)
-                    OutlinedTextField(bulkAlbumArtist, { bulkAlbumArtist = it }, label = { Text(stringResource(R.string.bulk_tag_album_artist)) }, singleLine = true)
-                    OutlinedTextField(bulkAlbum, { bulkAlbum = it }, label = { Text(stringResource(R.string.bulk_tag_album)) }, singleLine = true)
-                    OutlinedTextField(bulkGenre, { bulkGenre = it }, label = { Text(stringResource(R.string.bulk_tag_genre)) }, singleLine = true)
-                    OutlinedTextField(bulkYear, { bulkYear = it }, label = { Text(stringResource(R.string.bulk_tag_year)) }, singleLine = true)
-                    OutlinedTextField(bulkComposer, { bulkComposer = it }, label = { Text(stringResource(R.string.bulk_tag_composer)) }, singleLine = true)
+                    OutlinedTextField(bulkArtist, { bulkArtist = it }, label = { Text(stringResource(R.string.bulk_tag_artist)) }, singleLine = true, colors = fieldColors)
+                    OutlinedTextField(bulkAlbumArtist, { bulkAlbumArtist = it }, label = { Text(stringResource(R.string.bulk_tag_album_artist)) }, singleLine = true, colors = fieldColors)
+                    OutlinedTextField(bulkAlbum, { bulkAlbum = it }, label = { Text(stringResource(R.string.bulk_tag_album)) }, singleLine = true, colors = fieldColors)
+                    OutlinedTextField(bulkGenre, { bulkGenre = it }, label = { Text(stringResource(R.string.bulk_tag_genre)) }, singleLine = true, colors = fieldColors)
+                    OutlinedTextField(bulkYear, { bulkYear = it }, label = { Text(stringResource(R.string.bulk_tag_year)) }, singleLine = true, colors = fieldColors)
+                    OutlinedTextField(bulkComposer, { bulkComposer = it }, label = { Text(stringResource(R.string.bulk_tag_composer)) }, singleLine = true, colors = fieldColors)
                 }
             },
+            containerColor = dialogPalette?.background ?: MaterialTheme.colorScheme.surfaceContainerHigh,
+            titleContentColor = dialogContentColor,
+            textContentColor = dialogContentColor,
             confirmButton = {
                 TextButton(
+                    colors = actionColors,
                     enabled = listOf(bulkArtist, bulkAlbumArtist, bulkAlbum, bulkGenre, bulkYear, bulkComposer).any { it.isNotBlank() } && selectedPlaylistSongs.isNotEmpty(),
                     onClick = { saveBulkTags(selectedPlaylistSongs) },
                 ) {
@@ -1250,7 +1284,7 @@ fun LibraryScreen(
                 }
             },
             dismissButton = {
-                TextButton(onClick = { showBulkTagEditor = false }) {
+                TextButton(onClick = { showBulkTagEditor = false }, colors = actionColors) {
                     Text(stringResource(R.string.cancel))
                 }
             },

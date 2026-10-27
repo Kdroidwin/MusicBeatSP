@@ -1011,8 +1011,8 @@
     <string name="mini_player_swipe_up_expands_subtitle">上にスワイプすると、ミニプレイヤーをタップしたときと同じように全画面プレイヤーを開きます。初期設定はオンです</string>
     <string name="main_navigation_popup">下部タブをポップアップメニューにする</string>
     <string name="main_navigation_popup_subtitle">下部のタブバーを1つのボタンにまとめ、メニューから画面を選びます。初期設定はオフです</string>
-    <string name="playlist_track_menu_artwork_color">プレイリスト内の曲メニューをアートワークの色に合わせる</string>
-    <string name="playlist_track_menu_artwork_color_subtitle">プレイリスト内で開いた曲メニューに、そのプレイリストのカバー色を使います。初期設定はオンです</string>
+    <string name="playlist_track_menu_artwork_color">プレイリスト内の曲メニューとタグ編集をアートワークの色に合わせる</string>
+    <string name="playlist_track_menu_artwork_color_subtitle">曲メニューにはプレイリストのカバー色を、一括タグ編集には選択中の曲のアルバムアート色を使います。初期設定はオンです。</string>
     <string name="preload_album_art">起動時にローカルのアートを読み込む</string>
     <string name="preload_album_art_subtitle">起動時に端末内の全曲のアートを先読みし、取得画像をアプリ内ストレージに保存します</string>
     <string name="preload_album_art_now">今すぐアートを先読み</string>
