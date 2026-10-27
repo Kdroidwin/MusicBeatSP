@@ -1112,10 +1112,14 @@
     <string name="selection_move_up">選択曲を1つ上へ</string>
     <string name="selection_move_down">選択曲を1つ下へ</string>
     <string name="selection_edit_tags">タグを編集</string>
+    <string name="selection_change_artwork">アルバムアートを変更</string>
     <string name="selection_share">共有</string>
     <string name="bulk_tag_edit">選択した曲のタグを編集</string>
     <string name="bulk_tag_hint">空欄の項目は各曲の現在の値を維持します。</string>
     <string name="bulk_tag_saved">%2$d曲中%1$d曲のタグを更新しました</string>
+    <string name="bulk_artwork_saved">%2$d曲中%1$d曲のアルバムアートを更新しました</string>
+    <string name="bulk_artwork_invalid">選択した画像を読み込めませんでした。</string>
+    <string name="bulk_artwork_permission_denied">音声ファイルの編集許可がAndroidから取得できませんでした。</string>
     <string name="bulk_tag_artist">アーティスト</string>
     <string name="bulk_tag_album_artist">アルバムアーティスト</string>
     <string name="bulk_tag_album">アルバム</string>

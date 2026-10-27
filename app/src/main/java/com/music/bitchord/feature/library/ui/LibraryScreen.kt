@@ -10,6 +10,7 @@ import android.util.Log
 import android.widget.Toast
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.IntentSenderRequest
+import androidx.activity.result.PickVisualMediaRequest
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.activity.compose.BackHandler
 import androidx.compose.animation.AnimatedContent
@@ -47,6 +48,7 @@ import androidx.compose.material.icons.rounded.ArrowUpward
 import androidx.compose.material.icons.rounded.Close
 import androidx.compose.material.icons.rounded.DeleteOutline
 import androidx.compose.material.icons.rounded.Edit
+import androidx.compose.material.icons.rounded.Image
 import androidx.compose.material.icons.rounded.KeyboardArrowDown
 import androidx.compose.material.icons.rounded.KeyboardArrowUp
 import androidx.compose.material.icons.rounded.PlaylistAdd
@@ -100,12 +102,18 @@ import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.withContext
 
+private data class PendingBulkArtworkWrite(
+    val songs: List<Song>,
+    val artwork: TagLibWriter.PreparedArtwork,
+)
+
 @Composable
 private fun PlaylistSelectionToolbar(
     count: Int,
     contentColor: Color,
     onAddToPlaylist: () -> Unit,
     onEditTags: () -> Unit,
+    onChangeArtwork: () -> Unit,
     onShare: () -> Unit,
     onDeleteFromPlaylist: () -> Unit,
     onMoveUp: () -> Unit,
@@ -136,6 +144,9 @@ private fun PlaylistSelectionToolbar(
         }
         IconButton(onClick = onEditTags) {
             Icon(Icons.Rounded.Edit, contentDescription = stringResource(R.string.selection_edit_tags), tint = contentColor)
+        }
+        IconButton(onClick = onChangeArtwork) {
+            Icon(Icons.Rounded.Image, contentDescription = stringResource(R.string.selection_change_artwork), tint = contentColor)
         }
         IconButton(onClick = onShare) {
             Icon(Icons.Rounded.Share, contentDescription = stringResource(R.string.selection_share), tint = contentColor)
@@ -318,6 +329,8 @@ fun LibraryScreen(
     var bulkYear by remember { mutableStateOf("") }
     var bulkComposer by remember { mutableStateOf("") }
     var pendingBulkTagSongs by remember { mutableStateOf<List<Song>?>(null) }
+    var bulkArtworkTargetsForPicker by remember { mutableStateOf<List<Song>>(emptyList()) }
+    var pendingBulkArtworkWrite by remember { mutableStateOf<PendingBulkArtworkWrite?>(null) }
     val scope = rememberCoroutineScope()
 
     suspend fun writeBulkTags(targets: List<Song>) {
@@ -444,6 +457,79 @@ fun LibraryScreen(
     val selectedPlaylistSongs = remember(drillDownSongs, selectedPlaylistSongIds) {
         drillDownSongs.filter { (it.localUri ?: it.videoId) in selectedPlaylistSongIds }
     }
+
+    suspend fun applyBulkArtwork(targets: List<Song>, artwork: TagLibWriter.PreparedArtwork) {
+        val uniqueTargets = targets.distinctBy { it.localUri ?: it.videoId }
+        val updated = withContext(Dispatchers.IO) {
+            uniqueTargets.filter { song -> TagLibWriter.writeArtwork(context, song, artwork) }
+        }
+        if (updated.isNotEmpty()) onLocalMusicChanged?.invoke()
+        Toast.makeText(
+            context,
+            context.getString(R.string.bulk_artwork_saved, updated.size, uniqueTargets.size),
+            Toast.LENGTH_LONG,
+        ).show()
+        selectedPlaylistSongIds = emptySet()
+        playlistSelectionMode = false
+    }
+
+    val bulkArtworkPermission = rememberLauncherForActivityResult(
+        ActivityResultContracts.StartIntentSenderForResult(),
+    ) { result ->
+        val pending = pendingBulkArtworkWrite
+        pendingBulkArtworkWrite = null
+        if (result.resultCode == Activity.RESULT_OK && pending != null) {
+            scope.launch { applyBulkArtwork(pending.songs, pending.artwork) }
+        } else if (pending != null) {
+            Toast.makeText(context, R.string.bulk_artwork_permission_denied, Toast.LENGTH_LONG).show()
+        }
+    }
+
+    fun writeSelectedArtwork(targets: List<Song>, artwork: TagLibWriter.PreparedArtwork) {
+        val mediaStoreUris = targets.mapNotNull { song ->
+            val rawUri = song.localUri ?: song.videoId
+            runCatching { Uri.parse(rawUri) }
+                .getOrNull()
+                ?.takeIf { it.scheme == "content" && it.authority == MediaStore.AUTHORITY }
+        }.distinct()
+        val needsApproval = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.R) {
+            mediaStoreUris.filter { uri ->
+                context.checkUriPermission(
+                    uri,
+                    Process.myPid(),
+                    Process.myUid(),
+                    Intent.FLAG_GRANT_WRITE_URI_PERMISSION,
+                ) != android.content.pm.PackageManager.PERMISSION_GRANTED
+            }
+        } else emptyList()
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.R && needsApproval.isNotEmpty()) {
+            val request = runCatching { MediaStore.createWriteRequest(context.contentResolver, needsApproval) }.getOrNull()
+            if (request != null) {
+                pendingBulkArtworkWrite = PendingBulkArtworkWrite(targets, artwork)
+                bulkArtworkPermission.launch(IntentSenderRequest.Builder(request.intentSender).build())
+                return
+            }
+        }
+        scope.launch { applyBulkArtwork(targets, artwork) }
+    }
+
+    val bulkArtworkPicker = rememberLauncherForActivityResult(
+        ActivityResultContracts.PickVisualMedia(),
+    ) { uri ->
+        val targets = bulkArtworkTargetsForPicker
+        bulkArtworkTargetsForPicker = emptyList()
+        if (uri != null && targets.isNotEmpty()) {
+            scope.launch {
+                val artwork = TagLibWriter.prepareArtwork(context, uri)
+                if (artwork == null) {
+                    Toast.makeText(context, R.string.bulk_artwork_invalid, Toast.LENGTH_LONG).show()
+                } else {
+                    writeSelectedArtwork(targets, artwork)
+                }
+            }
+        }
+    }
+
     fun togglePlaylistSongSelection(song: Song) {
         val key = song.localUri ?: song.videoId
         selectedPlaylistSongIds = if (key in selectedPlaylistSongIds) {
@@ -680,6 +766,12 @@ fun LibraryScreen(
                                 contentColor = contentColor,
                                 onAddToPlaylist = { showAddSelectedToPlaylist = true },
                                 onEditTags = { showBulkTagEditor = true },
+                                onChangeArtwork = {
+                                    bulkArtworkTargetsForPicker = selectedPlaylistSongs
+                                    bulkArtworkPicker.launch(
+                                        PickVisualMediaRequest(ActivityResultContracts.PickVisualMedia.ImageOnly),
+                                    )
+                                },
                                 onShare = { LocalSongActionsHelper.shareSongs(context, selectedPlaylistSongs) },
                                 onDeleteFromPlaylist = { showDeleteFromPlaylistDialog = true },
                                 onMoveUp = { moveSelectedSongsByOne(-1) },

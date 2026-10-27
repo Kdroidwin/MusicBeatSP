@@ -1209,10 +1209,14 @@
     <string name="selection_move_up">Move selected songs up one position</string>
     <string name="selection_move_down">Move selected songs down one position</string>
     <string name="selection_edit_tags">Edit tags</string>
+    <string name="selection_change_artwork">Change album artwork</string>
     <string name="selection_share">Share</string>
     <string name="bulk_tag_edit">Edit tags for selected songs</string>
     <string name="bulk_tag_hint">Leave a field blank to keep each song’s current value.</string>
     <string name="bulk_tag_saved">Updated tags for %1$d of %2$d songs</string>
+    <string name="bulk_artwork_saved">Updated album artwork for %1$d of %2$d songs</string>
+    <string name="bulk_artwork_invalid">Could not read the selected image.</string>
+    <string name="bulk_artwork_permission_denied">Android did not grant permission to edit these audio files.</string>
     <string name="bulk_tag_artist">Artist</string>
     <string name="bulk_tag_album_artist">Album artist</string>
     <string name="bulk_tag_album">Album</string>

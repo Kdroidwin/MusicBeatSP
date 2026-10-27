@@ -13,15 +13,91 @@ import com.kyant.taglib.TagLib
 import com.music.bitchord.data.model.Song
 import com.music.bitchord.feature.tageditor.domain.model.SongTagData
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.withContext
 import java.io.ByteArrayOutputStream
 import java.io.File
+import kotlin.math.max
 import kotlin.coroutines.resume
 import kotlinx.coroutines.suspendCancellableCoroutine
 
 object TagLibWriter {
 
     private const val TAG = "TagLibWriter"
+    private const val BULK_ARTWORK_MAX_DIMENSION = 1600
+
+    data class PreparedArtwork(val bytes: ByteArray, val mimeType: String)
+
+    /** Decode a picker image at a bounded resolution before it is applied to a selection. */
+    suspend fun prepareArtwork(context: Context, uri: Uri): PreparedArtwork? = withContext(Dispatchers.IO) {
+        try {
+            val bounds = BitmapFactory.Options().apply { inJustDecodeBounds = true }
+            context.contentResolver.openInputStream(uri)?.use { BitmapFactory.decodeStream(it, null, bounds) }
+            if (bounds.outWidth <= 0 || bounds.outHeight <= 0) return@withContext null
+
+            var sampleSize = 1
+            while (
+                max(bounds.outWidth / sampleSize, bounds.outHeight / sampleSize) > BULK_ARTWORK_MAX_DIMENSION &&
+                sampleSize <= Int.MAX_VALUE / 2
+            ) {
+                sampleSize *= 2
+            }
+            val options = BitmapFactory.Options().apply {
+                inSampleSize = sampleSize
+                inPreferredConfig = Bitmap.Config.ARGB_8888
+            }
+            val bitmap = context.contentResolver.openInputStream(uri)?.use {
+                BitmapFactory.decodeStream(it, null, options)
+            } ?: return@withContext null
+
+            try {
+                val mimeType = if (bitmap.hasAlpha()) "image/png" else "image/jpeg"
+                val output = ByteArrayOutputStream()
+                val format = if (bitmap.hasAlpha()) Bitmap.CompressFormat.PNG else Bitmap.CompressFormat.JPEG
+                val quality = if (format == Bitmap.CompressFormat.JPEG) 94 else 100
+                if (!bitmap.compress(format, quality, output)) return@withContext null
+                output.toByteArray().takeIf { it.isNotEmpty() && it.size <= 16 * 1024 * 1024 }
+                    ?.let { PreparedArtwork(it, mimeType) }
+            } finally {
+                bitmap.recycle()
+            }
+        } catch (cancelled: CancellationException) {
+            throw cancelled
+        } catch (error: Exception) {
+            Log.w(TAG, "Could not prepare artwork image", error)
+            null
+        }
+    }
+
+    /** Replace only the embedded front cover, preserving every audio tag. */
+    suspend fun writeArtwork(context: Context, song: Song, artwork: PreparedArtwork): Boolean =
+        withContext(Dispatchers.IO) {
+            try {
+                val descriptor = openFileDescriptor(context, song, "rw") ?: return@withContext false
+                descriptor.use { pfd ->
+                    TagLib.savePictures(
+                        pfd.dup().detachFd(),
+                        arrayOf(
+                            Picture(
+                                data = artwork.bytes,
+                                description = "Front Cover",
+                                pictureType = "Front Cover",
+                                mimeType = artwork.mimeType,
+                            ),
+                        ),
+                    )
+                }
+                val uri = getUriForSong(song)
+                val filePath = (if (uri != null) resolveFilePath(context, uri) else null) ?: song.localPath
+                if (!filePath.isNullOrBlank()) scanFile(context, filePath)
+                true
+            } catch (cancelled: CancellationException) {
+                throw cancelled
+            } catch (error: Exception) {
+                Log.w(TAG, "Failed writing artwork for ${song.videoId}", error)
+                false
+            }
+        }
 
     /** Reads only the embedded comment tag; this avoids decoding artwork on the details path. */
     suspend fun readEmbeddedComment(context: Context, song: Song): String? = withContext(Dispatchers.IO) {
