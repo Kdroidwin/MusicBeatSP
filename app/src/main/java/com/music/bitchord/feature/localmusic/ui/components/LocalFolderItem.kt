@@ -53,10 +53,7 @@ fun LocalFolderItem(
     modifier: Modifier = Modifier,
 ) {
     var menuOpen by remember { mutableStateOf(false) }
-    val displayName = remember(folder.name, folder.path) {
-        folder.name.trim().takeIf(String::isNotBlank)
-            ?: folder.path.replace('\\', '/').trimEnd('/').substringAfterLast('/').ifBlank { folder.path }
-    }
+    val displayName = folder.displayName
 
     Surface(
         modifier = modifier

@@ -29,6 +29,12 @@ import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.foundation.clickable
+import androidx.compose.foundation.lazy.LazyColumn
+import androidx.compose.foundation.lazy.items
+import androidx.compose.ui.draw.clip
 import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.foundation.lazy.grid.rememberLazyGridState
 import androidx.compose.foundation.horizontalScroll
@@ -42,6 +48,7 @@ import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.TextButton
+import androidx.compose.material3.Surface
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.rounded.ArrowDownward
 import androidx.compose.material.icons.rounded.ArrowUpward
@@ -54,6 +61,7 @@ import androidx.compose.material.icons.rounded.KeyboardArrowUp
 import androidx.compose.material.icons.rounded.PlaylistAdd
 import androidx.compose.material.icons.rounded.Reorder
 import androidx.compose.material.icons.rounded.Share
+import androidx.compose.material.icons.rounded.Album
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.LaunchedEffect
@@ -69,6 +77,7 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
@@ -77,6 +86,7 @@ import com.music.bitchord.data.model.Song
 import com.music.bitchord.data.model.sortedByAlbumTrackOrder
 import com.music.bitchord.data.settings.AppSettings
 import com.music.bitchord.data.settings.LibraryViewType
+import com.music.bitchord.data.settings.SavedYoutubeCollection
 import com.music.bitchord.ui.theme.ArtworkPalette
 import com.music.bitchord.feature.library.ui.components.LibraryFilter
 import com.music.bitchord.feature.library.ui.components.LibraryGridContent
@@ -94,6 +104,7 @@ import com.music.bitchord.feature.localsongactions.ui.components.LocalSongDropdo
 import com.music.bitchord.feature.localsongactions.ui.LocalSongActionsHelper
 import com.music.bitchord.feature.tageditor.data.TagLibWriter
 import kotlinx.coroutines.launch
+import coil3.compose.AsyncImage
 import com.music.bitchord.feature.localmusic.ui.components.DrillDownSongList
 import com.music.bitchord.feature.localmusic.ui.components.rememberPlaylistCoverPicker
 import com.music.bitchord.ui.components.FastScroller
@@ -209,10 +220,12 @@ fun LibraryScreen(
     onInitialFilterApplied: () -> Unit = {},
     onArtworkPaletteChanged: ((ArtworkPalette?) -> Unit)? = null,
     onCollectionNavigationChanged: ((Boolean, (() -> Unit)?) -> Unit)? = null,
+    onOpenYoutubeCollection: (SavedYoutubeCollection) -> Unit = {},
 ) {
     val context = LocalContext.current.applicationContext
     val playlists by LocalPlaylistStore.playlists.collectAsStateWithLifecycle()
     val favoriteIds by LocalFavoritesStore.favoriteIds.collectAsStateWithLifecycle()
+    val savedYoutubeCollections by AppSettings.savedYoutubeCollections.collectAsStateWithLifecycle()
     val libraryViewType by AppSettings.libraryPlaylistsViewType.collectAsStateWithLifecycle()
     val songsViewType by AppSettings.librarySongsViewType.collectAsStateWithLifecycle()
     val favoriteUsesStar by AppSettings.favoriteUsesStar.collectAsStateWithLifecycle()
@@ -619,6 +632,7 @@ fun LibraryScreen(
                 showAddSelectedToPlaylist = true
             },
             artworkUrlForPalette = drillDownArt.takeIf { playlistTrackMenuUsesArtworkColor },
+            disableArtworkPalette = drillDownPlaylistId != null && !playlistTrackMenuUsesArtworkColor,
             onRemoveFromPlaylist = if (drillDownPlaylistId != null) {
                 {
                     activePlaylistMenuSong = null
@@ -706,7 +720,7 @@ fun LibraryScreen(
         onDispose { collectionNavigationCallback.value?.invoke(false, null) }
     }
 
-    BackHandler(enabled = inDrillDown || inHistoryView) {
+    BackHandler(enabled = inDrillDown || inHistoryView || selectedFilter == LibraryFilter.YOUTUBE_MUSIC) {
         if (inDrillDown) leaveDrillDown() else selectedFilter = LibraryFilter.ALL
     }
 
@@ -723,6 +737,7 @@ fun LibraryScreen(
             targetState = if (inDrillDown) "drill:$drillDownLabel" else when (selectedFilter) {
                 LibraryFilter.RECENTLY_PLAYED -> "history:recent"
                 LibraryFilter.MOST_PLAYED -> "history:most"
+                LibraryFilter.YOUTUBE_MUSIC -> "library:youtube"
                 else -> "library_main"
             },
             transitionSpec = {
@@ -847,6 +862,100 @@ fun LibraryScreen(
                     songDropdownMenu = if (drillDownPlaylistId != null) playlistSongDropdownMenu else songDropdownMenu,
                     onArtworkPaletteChanged = onArtworkPaletteChanged,
                 )
+            } else if (key == "library:youtube") {
+                Column(
+                    modifier = Modifier
+                        .fillMaxSize()
+                        .padding(top = contentPadding.calculateTopPadding()),
+                ) {
+                    LibraryHeaderBar(
+                        selectedFilter = selectedFilter,
+                        onFilterSelect = selectLibraryFilter,
+                        viewType = libraryViewType,
+                        onToggleViewType = {
+                            val next = if (libraryViewType == LibraryViewType.GRID) LibraryViewType.LIST else LibraryViewType.GRID
+                            AppSettings.setLibraryPlaylistsViewType(next)
+                        },
+                        onCreatePlaylist = { showCreateDialog = true },
+                    )
+                    if (savedYoutubeCollections.isEmpty()) {
+                        Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
+                            Text(
+                                text = stringResource(R.string.youtube_music_library_empty),
+                                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                            )
+                        }
+                    } else {
+                        LazyColumn(
+                            modifier = Modifier.fillMaxSize(),
+                            contentPadding = PaddingValues(
+                                start = 16.dp,
+                                end = 16.dp,
+                                top = 8.dp,
+                                bottom = contentPadding.calculateBottomPadding() + 80.dp,
+                            ),
+                            verticalArrangement = Arrangement.spacedBy(8.dp),
+                        ) {
+                            items(savedYoutubeCollections, key = { it.browseId }) { collection ->
+                                Surface(
+                                    modifier = Modifier
+                                        .fillMaxWidth()
+                                        .clip(RoundedCornerShape(14.dp))
+                                        .clickable { onOpenYoutubeCollection(collection) },
+                                    color = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.32f),
+                                    shape = RoundedCornerShape(14.dp),
+                                ) {
+                                    Row(
+                                        modifier = Modifier.fillMaxWidth().padding(horizontal = 12.dp, vertical = 10.dp),
+                                        verticalAlignment = Alignment.CenterVertically,
+                                    ) {
+                                        if (!collection.thumbnailUrl.isNullOrBlank()) {
+                                            AsyncImage(
+                                                model = collection.thumbnailUrl,
+                                                contentDescription = null,
+                                                contentScale = ContentScale.Crop,
+                                                modifier = Modifier.size(52.dp).clip(RoundedCornerShape(10.dp)),
+                                            )
+                                        } else {
+                                            Icon(
+                                                imageVector = Icons.Rounded.Album,
+                                                contentDescription = null,
+                                                tint = MaterialTheme.colorScheme.primary,
+                                                modifier = Modifier.size(52.dp).padding(12.dp),
+                                            )
+                                        }
+                                        Column(modifier = Modifier.weight(1f).padding(horizontal = 12.dp)) {
+                                            Text(
+                                                text = collection.title,
+                                                style = MaterialTheme.typography.titleMedium,
+                                                maxLines = 1,
+                                                overflow = androidx.compose.ui.text.style.TextOverflow.Ellipsis,
+                                            )
+                                            Text(
+                                                text = collection.subtitle.ifBlank {
+                                                    stringResource(
+                                                        if (collection.type == "PLAYLIST") R.string.playlist else R.string.album,
+                                                    )
+                                                },
+                                                style = MaterialTheme.typography.bodySmall,
+                                                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                                                maxLines = 1,
+                                                overflow = androidx.compose.ui.text.style.TextOverflow.Ellipsis,
+                                            )
+                                        }
+                                        IconButton(onClick = { AppSettings.removeSavedYoutubeCollection(collection.browseId) }) {
+                                            Icon(
+                                                imageVector = androidx.compose.material.icons.Icons.Rounded.Close,
+                                                contentDescription = stringResource(R.string.remove_saved_youtube_collection),
+                                                tint = MaterialTheme.colorScheme.onSurfaceVariant,
+                                            )
+                                        }
+                                    }
+                                }
+                            }
+                        }
+                    }
+                }
             } else if (key.startsWith("history:")) {
                 val isRecent = key == "history:recent"
                 val historySongs = if (isRecent) recentlyPlayedSongs else mostPlayedSongs

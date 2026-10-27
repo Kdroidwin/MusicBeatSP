@@ -7,5 +7,5 @@ plugins {
 }
 
 // The companion watch app must report the same version as the phone app.
-extra["musicBeatVersionCode"] = 58
-extra["musicBeatVersionName"] = "2.7.8"
+extra["musicBeatVersionCode"] = 59
+extra["musicBeatVersionName"] = "2.8.0"

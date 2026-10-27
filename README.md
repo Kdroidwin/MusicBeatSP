@@ -68,6 +68,9 @@ The standard Android package is `io.pockets.musicbestsp`. Because this differs f
 - Use translucent frosted-glass surfaces for the queue manager, player details, and compact lyrics artwork area; each has its own setting.
 - Match the local track details sheet backdrop to the selected track's artwork.
 - Match player action accents and the mini-player surface to the current album art.
+- Optionally show white, black-icon Play and Shuffle controls below album and playlist artwork for stronger contrast on dark album-art themes.
+- Replace the main Settings gear with a three-dot overflow icon through a separate display option.
+- On wide screens, optionally show synchronized lyrics beside the player. This replaces the old left-side library pane only in this mode; the existing split layout remains available, and artwork taps are disabled only for the side-by-side lyrics mode.
 - Replace only the artwork area with lyrics while keeping playback controls, progress, volume, and player shortcuts visible.
 - Choose whether the favorite button appears beside the More menu, keep artwork full-size while paused, and open lyrics by tapping the cover.
 - Switch the player favorite glyph between a heart and a star.
@@ -79,11 +82,13 @@ The standard Android package is `io.pockets.musicbestsp`. Because this differs f
 ### Library and playlists
 
 - Browse Songs, Albums, Artists, Genres, Playlists, Folders, and other available library sections. Reorder tabs and hide individual tabs from navigation.
+- Save YouTube Music albums and playlists as library shortcuts and reopen them from the Library tab. When signed out, the player’s heart/star remains usable as a device-local favorite; signed-in YouTube Music ratings continue to use the account.
 - Add an Album Artists tab alongside Artists, choose to browse an artist's albums before its tracks, and reorder or hide available library tabs.
 - Choose whether artist pages open to albums, use a folder hierarchy in search results, and hide the collection top bar on detail pages.
 - Long-press to select multiple tracks and add them to a playlist in one action. Search folder results can act on all tracks in that folder.
 - Sort folder search results by filename, including numbered names such as `1-01. example.flac`, while displaying the track title and artist from metadata.
 - Import `.m3u` and `.m3u8` playlists through Android's file picker. Import playlists from Musicolet backup ZIP files; unavailable tracks are skipped so the rest can still be imported.
+- Display folder names from the resolved local directory path, including folders on removable storage, with provider labels as a fallback.
 - Connect self-hosted Jellyfin and Navidrome/OpenSubsonic libraries, or configure WebDAV and SMB locations for remote music files.
 - Add compatible HTTP music-source endpoints and select them alongside built-in sources when searching. The app queries the configured endpoint and does not download or run add-on code; available catalogs, streams, and account access depend on that endpoint.
 - Export playlists as M3U from the playlist menu.

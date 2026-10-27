@@ -513,6 +513,7 @@ fun LocalMusicScreen(
             artworkUrlForPalette = drillDownArt.takeIf {
                 drillDownPlaylistId != null && playlistTrackMenuUsesArtworkColor
             },
+            disableArtworkPalette = drillDownPlaylistId != null && !playlistTrackMenuUsesArtworkColor,
             onRemoveFromPlaylist = if (drillDownPlaylistId != null) {
                 {
                     activeMenuSong = null
@@ -985,7 +986,7 @@ fun LocalMusicScreen(
                     LocalFoldersTab(
                         folders = nonBlacklistedFolders,
                         onFolderClick = { folder ->
-                            drillDownLabel = folder.name
+                            drillDownLabel = folder.displayName
                             drillDownSongs = songs.filter { song ->
                                 val songFolder = song.localFolderPath
                                     ?: song.localPath?.substringBeforeLast('/')

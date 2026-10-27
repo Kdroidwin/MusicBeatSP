@@ -60,6 +60,7 @@ fun LocalSongDropdownMenu(
     onDetails: () -> Unit,
     onRemoveFromPlaylist: (() -> Unit)? = null,
     artworkUrlForPalette: String? = null,
+    disableArtworkPalette: Boolean = false,
     modifier: Modifier = Modifier,
     offset: DpOffset = DpOffset(0.dp, 0.dp),
 ) {
@@ -67,7 +68,11 @@ fun LocalSongDropdownMenu(
     // Keep the usual track-specific palette. Playlist drill-downs may pass the
     // collection cover so their menu matches the full-screen collection menu.
     val paletteArtworkUrl = artworkUrlForPalette?.takeIf(String::isNotBlank) ?: song.thumbnailUrl
-    val palette = if (expanded) rememberArtworkPalette(paletteArtworkUrl, artPx = CARD_ART_PX) else null
+    val palette = if (expanded && !disableArtworkPalette) {
+        rememberArtworkPalette(paletteArtworkUrl, artPx = CARD_ART_PX)
+    } else {
+        null
+    }
     val menuForeground = palette?.onBackground ?: MaterialTheme.colorScheme.onSurface
 
     CompositionLocalProvider(LocalContentColor provides menuForeground) {

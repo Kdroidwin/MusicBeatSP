@@ -16,6 +16,12 @@ data class FolderNode(
     val totalSongCount: Int,
     val coverSongs: List<Song>,
 ) {
+    val displayName: String
+        get() = path.replace('\\', '/').trimEnd('/').substringAfterLast('/')
+            .takeIf(String::isNotBlank)
+            ?: name.trim().takeIf(String::isNotBlank)
+            ?: path
+
     val isLeaf: Boolean get() = subfolders.isEmpty()
     val allSongs: List<Song> by lazy(LazyThreadSafetyMode.NONE) {
         directSongs + subfolders.flatMap { it.allSongs }

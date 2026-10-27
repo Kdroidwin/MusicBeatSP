@@ -1443,4 +1443,22 @@
     <string name="audio_output_rate_caveat">AudioTrackの後段でAndroidやDACが再サンプリングする場合があります。一般アプリから最終的なハードウェア出力レートは取得できません。</string>
     <string name="music_only_device_mode">音楽専用機モード</string>
     <string name="music_only_device_mode_subtitle">Androidの画面固定でアプリを前面に保ち、ロック画面上にも表示します。固定解除と端末のセキュリティはAndroidが管理します。ホームアプリの置き換えは行いません。</string>
+    <string name="white_collection_action_buttons">再生・シャッフルボタンを白くする</string>
+    <string name="white_collection_action_buttons_subtitle">アルバムやプレイリストのアート下にあるボタンを白背景・黒アイコンにします。オフでは現在の暗い配色を使います。</string>
+    <string name="settings_top_bar_more_icon">設定に三点アイコンを使う</string>
+    <string name="settings_top_bar_more_icon_subtitle">メイン画面上部の歯車を三点メニューのアイコンに変更します。</string>
+    <string name="tablet_lyrics_beside_player">タブレットでプレイヤーの横に歌詞を表示</string>
+    <string name="tablet_lyrics_beside_player_subtitle">横幅の広い画面で、左側のライブラリ表示を同期歌詞に置き換えます。このモードではアートをタップしても反応しません。オフでは従来の分割表示を使います。</string>
+    <string name="youtube_music_saved">YouTube Music</string>
+    <string name="youtube_music_library_empty">YouTube Musicから保存したアルバムやプレイリストがここに表示されます。</string>
+    <string name="remove_saved_youtube_collection">ライブラリから削除</string>
+    <string name="player_title_font_size">プレイヤーの曲名サイズ</string>
+    <string name="player_title_font_size_subtitle">プレイヤー画面に表示する曲名の文字サイズを調整します。</string>
+    <string name="player_artist_font_size">プレイヤーのアーティスト名サイズ</string>
+    <string name="player_artist_font_size_subtitle">プレイヤー画面に表示するアーティスト名の文字サイズを調整します。</string>
+    <string name="player_font_size_value">%1$d sp</string>
+    <string name="show_player_top_grabber">プレイヤー上部のハンドルを表示</string>
+    <string name="show_player_top_grabber_subtitle">プレイヤーを閉じるときに使う上部の線を表示します。</string>
+    <string name="allow_cleartext_http">暗号化されていないHTTPを許可</string>
+    <string name="allow_cleartext_http_subtitle">初期設定はオフです。HTTPの利用にはサーバーごとの許可も必要です。認証情報と音源は暗号化されません。</string>
 </resources>

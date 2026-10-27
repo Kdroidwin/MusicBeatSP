@@ -24,7 +24,7 @@ import androidx.compose.material.icons.rounded.FolderOpen
 import androidx.compose.material.icons.rounded.MusicNote
 import androidx.compose.material.icons.rounded.Save
 import androidx.compose.material.icons.rounded.SwapHoriz
-import androidx.compose.material3.AlertDialog
+import androidx.compose.ui.window.Dialog
 import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.Icon
@@ -278,25 +278,17 @@ private fun LegacySavedQueuesDialog(
     }
 
     deleting?.let { queue ->
-        AlertDialog(
-            onDismissRequest = { deleting = null },
-            shape = RoundedCornerShape(28.dp),
-            title = { Text(stringResource(R.string.delete_saved_queue), color = foreground) },
-            text = { Text(queue.name, color = foreground) },
-            containerColor = container,
-            titleContentColor = foreground,
-            textContentColor = foreground,
-            iconContentColor = accent,
-            confirmButton = {
-                TextButton(onClick = { onDelete(queue); deleting = null }) {
-                    Text(stringResource(R.string.delete), color = accent)
-                }
-            },
-            dismissButton = {
-                TextButton(onClick = { deleting = null }) {
-                    Text(stringResource(R.string.cancel), color = accent)
-                }
-            },
+        SavedQueueDeleteDialog(
+            queue = queue,
+            artworkPalette = artworkPalette,
+            artworkUrl = artworkUrl,
+            useFrostedGlass = useFrostedGlass,
+            container = container,
+            foreground = foreground,
+            secondary = secondary,
+            accent = accent,
+            onDismiss = { deleting = null },
+            onConfirm = { onDelete(queue); deleting = null },
         )
     }
 }
@@ -529,22 +521,80 @@ private fun ModernSavedQueuesDialog(
     }
 
     deleting?.let { queue ->
-        AlertDialog(
-            onDismissRequest = { deleting = null },
-            shape = RoundedCornerShape(24.dp),
-            title = { Text(stringResource(R.string.delete_saved_queue), color = foreground) },
-            text = { Text(queue.name, color = secondary, maxLines = 2) },
-            containerColor = container,
-            confirmButton = {
-                TextButton(onClick = { onDelete(queue); deleting = null }) {
-                    Text(stringResource(R.string.delete), color = MaterialTheme.colorScheme.error)
-                }
-            },
-            dismissButton = {
-                TextButton(onClick = { deleting = null }) {
-                    Text(stringResource(R.string.cancel), color = accent)
-                }
-            },
+        SavedQueueDeleteDialog(
+            queue = queue,
+            artworkPalette = artworkPalette,
+            artworkUrl = artworkUrl,
+            useFrostedGlass = useFrostedGlass,
+            container = container,
+            foreground = foreground,
+            secondary = secondary,
+            accent = accent,
+            onDismiss = { deleting = null },
+            onConfirm = { onDelete(queue); deleting = null },
         )
+    }
+}
+
+@Composable
+private fun SavedQueueDeleteDialog(
+    queue: SavedQueue,
+    artworkPalette: ArtworkPalette,
+    artworkUrl: String?,
+    useFrostedGlass: Boolean,
+    container: Color,
+    foreground: Color,
+    secondary: Color,
+    accent: Color,
+    onDismiss: () -> Unit,
+    onConfirm: () -> Unit,
+) {
+    val shape = RoundedCornerShape(24.dp)
+    Dialog(onDismissRequest = onDismiss) {
+        Surface(
+            shape = shape,
+            color = Color.Transparent,
+            tonalElevation = 8.dp,
+        ) {
+            Box(Modifier.fillMaxWidth().clip(shape)) {
+                if (useFrostedGlass) {
+                    ArtworkBackdrop(
+                        palette = artworkPalette,
+                        imageUrl = artworkUrl,
+                        modifier = Modifier.matchParentSize(),
+                        washFraction = 0.82f,
+                        artPx = ROW_ART_PX,
+                    )
+                } else {
+                    Box(Modifier.matchParentSize().background(container))
+                }
+                Column(Modifier.fillMaxWidth().padding(24.dp)) {
+                    Text(
+                        text = stringResource(R.string.delete_saved_queue),
+                        color = foreground,
+                        style = MaterialTheme.typography.titleLarge,
+                    )
+                    Spacer(Modifier.height(10.dp))
+                    Text(
+                        text = queue.name,
+                        color = secondary,
+                        style = MaterialTheme.typography.bodyLarge,
+                        maxLines = 2,
+                    )
+                    Row(
+                        Modifier.fillMaxWidth().padding(top = 18.dp),
+                        horizontalArrangement = Arrangement.End,
+                        verticalAlignment = Alignment.CenterVertically,
+                    ) {
+                        TextButton(onClick = onDismiss) {
+                            Text(stringResource(R.string.cancel), color = accent)
+                        }
+                        TextButton(onClick = onConfirm) {
+                            Text(stringResource(R.string.delete), color = accent)
+                        }
+                    }
+                }
+            }
+        }
     }
 }

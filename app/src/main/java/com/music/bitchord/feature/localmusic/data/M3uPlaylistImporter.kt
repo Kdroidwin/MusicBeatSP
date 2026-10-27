@@ -11,6 +11,8 @@ import com.music.bitchord.feature.localmusic.domain.model.LocalPlaylistSongMetad
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
 import java.io.File
+import java.io.ByteArrayOutputStream
+import java.io.InputStream
 import java.nio.charset.Charset
 import java.nio.charset.StandardCharsets
 import java.util.Locale
@@ -41,6 +43,7 @@ class M3uImportException(val reason: M3uImportFailure) : Exception()
 
 /** SAF based M3U/M3U8 import. Only references the app can resolve or open are retained. */
 object M3uPlaylistImporter {
+    private const val MAX_M3U_BYTES = 16 * 1024 * 1024
     private val supportedAudioExtensions = setOf(
         "mp3", "m4a", "m4b", "flac", "alac", "wav", "ogg", "opus", "aac", "webm", "mp4",
     )
@@ -48,13 +51,17 @@ object M3uPlaylistImporter {
     suspend fun prepare(context: Context, playlistUri: Uri, localSongs: List<Song>): PreparedM3uImport =
         withContext(Dispatchers.IO) {
             val fileName = displayName(context, playlistUri)
-            val bytes = context.contentResolver.openInputStream(playlistUri)?.use { it.readBytes() }
+            val bytes = context.contentResolver.openInputStream(playlistUri)?.use(::readBoundedPlaylist)
                 ?: throw M3uImportException(M3uImportFailure.CANNOT_OPEN)
             if (bytes.isEmpty()) throw M3uImportException(M3uImportFailure.EMPTY_FILE)
             val utf8 = String(bytes, StandardCharsets.UTF_8)
             val text = if ('\uFFFD' in utf8) String(bytes, Charset.forName("windows-1252")) else utf8
             if (text.any { it == '\u0000' }) throw M3uImportException(M3uImportFailure.INVALID_FILE)
-            val parsed = M3uParser.parse(text, fileName)
+            val parsed = try {
+                M3uParser.parse(text, fileName)
+            } catch (_: IllegalArgumentException) {
+                throw M3uImportException(M3uImportFailure.INVALID_FILE)
+            }
             if (parsed.entries.isEmpty()) throw M3uImportException(M3uImportFailure.NO_ENTRIES)
 
             val baseDirectory = playlistDirectory(context, playlistUri)
@@ -71,6 +78,20 @@ object M3uPlaylistImporter {
             }
             PreparedM3uImport(parsed.suggestedName, tracks, skipped)
         }
+
+    private fun readBoundedPlaylist(input: InputStream): ByteArray {
+        val output = ByteArrayOutputStream()
+        val buffer = ByteArray(8 * 1024)
+        var total = 0
+        while (true) {
+            val count = input.read(buffer)
+            if (count < 0) break
+            total += count
+            if (total > MAX_M3U_BYTES) throw M3uImportException(M3uImportFailure.INVALID_FILE)
+            output.write(buffer, 0, count)
+        }
+        return output.toByteArray()
+    }
 
     private fun resolveEntry(
         context: Context,

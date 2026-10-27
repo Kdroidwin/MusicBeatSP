@@ -1469,4 +1469,22 @@
     <string name="audio_output_rate_caveat">Android or the DAC may resample after AudioTrack. Final hardware rate is not exposed to ordinary apps.</string>
     <string name="music_only_device_mode">Music-only device mode</string>
     <string name="music_only_device_mode_subtitle">Uses Android screen pinning to keep this app in front and shows it over the lock screen. Android still controls unpinning and device security; this does not replace the Home app.</string>
+    <string name="white_collection_action_buttons">Use white play and shuffle buttons</string>
+    <string name="white_collection_action_buttons_subtitle">Use white backgrounds with black icons below album and playlist artwork. Off keeps the current dark style.</string>
+    <string name="settings_top_bar_more_icon">Use an overflow icon for Settings</string>
+    <string name="settings_top_bar_more_icon_subtitle">Show a three-dot icon instead of the gear in the main top bar.</string>
+    <string name="tablet_lyrics_beside_player">Show lyrics beside the tablet player</string>
+    <string name="tablet_lyrics_beside_player_subtitle">On wide screens, replace the left library page with synced lyrics beside the player. The player artwork does not respond to taps in this mode. Off keeps the existing split layout.</string>
+    <string name="youtube_music_saved">YouTube Music</string>
+    <string name="youtube_music_library_empty">Albums and playlists you save from YouTube Music will appear here.</string>
+    <string name="remove_saved_youtube_collection">Remove from library</string>
+    <string name="player_title_font_size">Player title size</string>
+    <string name="player_title_font_size_subtitle">Adjust the track title text size on the player screen.</string>
+    <string name="player_artist_font_size">Player artist size</string>
+    <string name="player_artist_font_size_subtitle">Adjust the artist text size on the player screen.</string>
+    <string name="player_font_size_value">%1$d sp</string>
+    <string name="show_player_top_grabber">Show player top handle</string>
+    <string name="show_player_top_grabber_subtitle">Show the line used to drag the player closed.</string>
+    <string name="allow_cleartext_http">Allow cleartext HTTP</string>
+    <string name="allow_cleartext_http_subtitle">Off by default. HTTP also requires the server-specific HTTP option. Credentials and media are unencrypted.</string>
 </resources>

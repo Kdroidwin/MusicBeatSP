@@ -18,6 +18,9 @@ data class ParsedM3uPlaylist(
 
 /** Parsing and path normalization kept free of Android APIs so both formats can be unit tested. */
 object M3uParser {
+    private const val MAX_ENTRIES = 50_000
+    private const val MAX_LINE_CHARS = 8_192
+
     fun parse(text: String, fileName: String): ParsedM3uPlaylist {
         val entries = mutableListOf<M3uEntry>()
         var pendingInfo: ExtInfo? = null
@@ -25,12 +28,17 @@ object M3uParser {
         text.removePrefix("\uFEFF").lineSequence().forEach { rawLine ->
             val line = rawLine.trim().removePrefix("\uFEFF").trim()
             if (line.isEmpty()) return@forEach
+            if (line.length > MAX_LINE_CHARS) {
+                pendingInfo = null
+                return@forEach
+            }
             if (line.startsWith("#EXTINF:", ignoreCase = true)) {
                 pendingInfo = parseExtInfo(line.substringAfter(':'))
                 return@forEach
             }
             if (line.startsWith('#')) return@forEach
 
+            require(entries.size < MAX_ENTRIES) { "Playlist contains too many entries" }
             val info = pendingInfo
             entries += M3uEntry(
                 location = line.trim('"'),

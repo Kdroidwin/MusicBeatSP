@@ -35,6 +35,8 @@ import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.rounded.Album
+import androidx.compose.material.icons.rounded.Bookmark
+import androidx.compose.material.icons.rounded.BookmarkAdd
 import androidx.compose.material.icons.rounded.GraphicEq
 import androidx.compose.material.icons.rounded.MoreHoriz
 import androidx.compose.material.icons.rounded.MusicNote
@@ -92,6 +94,7 @@ import com.music.bitchord.data.model.durationMillis
 import com.music.bitchord.data.model.isSameTrackAs
 import com.music.bitchord.data.settings.LibraryViewType
 import com.music.bitchord.data.settings.AppSettings
+import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.music.bitchord.ui.components.FastScroller
 import com.music.bitchord.ui.components.SectionIndexer
 import com.music.bitchord.feature.artistimage.model.ArtistImage
@@ -347,13 +350,16 @@ fun DrillDownActionRow(
     onSongClick: (List<Song>, Int) -> Unit,
     onShuffle: (List<Song>) -> Unit,
     onMore: (() -> Unit)? = null,
+    isSavedToLibrary: Boolean = false,
+    onToggleLibrary: (() -> Unit)? = null,
     reorderEnabled: Boolean = false,
     onReorderToggle: (() -> Unit)? = null,
     modifier: Modifier = Modifier,
 ) {
-    val buttonBackground = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.7f)
-    val buttonBorder = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.08f)
-    val buttonContentColor = MaterialTheme.colorScheme.onSurface
+    val whiteActionButtons by AppSettings.whiteCollectionActionButtons.collectAsStateWithLifecycle()
+    val buttonBackground = if (whiteActionButtons) Color.White else MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.7f)
+    val buttonBorder = if (whiteActionButtons) Color.Transparent else MaterialTheme.colorScheme.onSurface.copy(alpha = 0.08f)
+    val buttonContentColor = if (whiteActionButtons) Color.Black else MaterialTheme.colorScheme.onSurface
 
     Row(
         modifier = modifier
@@ -443,6 +449,26 @@ fun DrillDownActionRow(
                     Icons.Rounded.Reorder,
                     contentDescription = stringResource(R.string.toggle_playlist_reorder),
                     tint = if (reorderEnabled) MaterialTheme.colorScheme.primary else buttonContentColor,
+                    modifier = Modifier.size(20.dp),
+                )
+            }
+        }
+        if (onToggleLibrary != null) {
+            Box(
+                modifier = Modifier
+                    .size(50.dp)
+                    .clip(CircleShape)
+                    .background(buttonBackground)
+                    .border(0.5.dp, buttonBorder, CircleShape)
+                    .clickable(onClick = onToggleLibrary),
+                contentAlignment = Alignment.Center,
+            ) {
+                Icon(
+                    imageVector = if (isSavedToLibrary) Icons.Rounded.Bookmark else Icons.Rounded.BookmarkAdd,
+                    contentDescription = stringResource(
+                        if (isSavedToLibrary) R.string.remove_from_library else R.string.add_to_library,
+                    ),
+                    tint = buttonContentColor,
                     modifier = Modifier.size(20.dp),
                 )
             }
@@ -556,6 +582,8 @@ fun DrillDownSongList(
     onSongSwipe: (Song) -> Unit,
     onShuffle: (List<Song>) -> Unit,
     onMore: (() -> Unit)? = null,
+    isSavedToLibrary: Boolean = false,
+    onToggleLibrary: (() -> Unit)? = null,
     isPlaylist: Boolean = false,
     showArtworkInList: Boolean = false,
     showCollectionArtworkInList: Boolean = false,
@@ -667,6 +695,8 @@ fun DrillDownSongList(
                         onSongClick = onSongClick,
                         onShuffle = onShuffle,
                         onMore = onMore,
+                        isSavedToLibrary = isSavedToLibrary,
+                        onToggleLibrary = onToggleLibrary,
                         reorderEnabled = reorderEnabled,
                         onReorderToggle = onReorderToggle,
                     )
@@ -785,6 +815,8 @@ fun DrillDownSongList(
                         onSongClick = onSongClick,
                         onShuffle = onShuffle,
                         onMore = onMore,
+                        isSavedToLibrary = isSavedToLibrary,
+                        onToggleLibrary = onToggleLibrary,
                         reorderEnabled = reorderEnabled,
                         onReorderToggle = onReorderToggle,
                     )

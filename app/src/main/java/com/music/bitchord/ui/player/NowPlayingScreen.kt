@@ -753,6 +753,7 @@ fun NowPlayingScreen(
      * cover edge to edge exactly as a phone does — see [fullBleedArtworkAvailable].
      */
     docked: Boolean = false,
+    artworkGesturesEnabled: Boolean = true,
     modifier: Modifier = Modifier,
     openLyricsOnShow: Boolean = false,
     openQueueOnShow: Boolean = false,
@@ -910,6 +911,9 @@ fun NowPlayingScreen(
     // source tree, so it needs its own source for the same frosted material as
     // the bottom navigation pill.
     val syncedLyricsEnabled by AppSettings.syncedLyrics.collectAsStateWithLifecycle()
+    val playerTitleFontSizeSp by AppSettings.playerTitleFontSizeSp.collectAsStateWithLifecycle()
+    val playerArtistFontSizeSp by AppSettings.playerArtistFontSizeSp.collectAsStateWithLifecycle()
+    val showPlayerTopGrabber by AppSettings.showPlayerTopGrabber.collectAsStateWithLifecycle()
     val hideLyricsStatusText by AppSettings.hideLyricsStatusText.collectAsStateWithLifecycle()
     val hideLyricsSavedMessage by AppSettings.hideLyricsSavedMessage.collectAsStateWithLifecycle()
     val hideLyricsUnavailableLabel by AppSettings.hideLyricsUnavailableLabel.collectAsStateWithLifecycle()
@@ -958,12 +962,14 @@ fun NowPlayingScreen(
         "不明なアーティスト",
     )
     val showPlayerArtist = !hidePlayerArtist && !(hideUnknownPlayerArtist && isUnknownArtist)
-    val liked = if (localUri != null) {
-        localUri in favoriteIds || song.videoId in favoriteIds
+    val liked = if (localUri != null || !signedIn) {
+        (localUri ?: song.videoId) in favoriteIds || song.videoId in favoriteIds
     } else {
         likeStatus == LikeStatus.LIKE
     }
-    val likeAvailable = localUri != null || signedIn
+    // When signed out, keep remote favorites device-local instead of disabling
+    // the control. Signed-in users continue to use YouTube's account rating.
+    val likeAvailable = true
     val likeIcon = when {
         favoriteUsesStar && liked -> BitChordIcons.StarFilled
         favoriteUsesStar -> BitChordIcons.Star
@@ -972,7 +978,9 @@ fun NowPlayingScreen(
     }
     val likeDescription = stringResource(if (liked) R.string.remove_from_liked else R.string.like)
     val toggleLike: () -> Unit = {
-        if (localUri != null) LocalFavoritesStore.toggleFavorite(localUri) else onToggleLike()
+        if (localUri != null || !signedIn) {
+            LocalFavoritesStore.toggleFavorite(localUri ?: song.videoId)
+        } else onToggleLike()
         Unit
     }
 
@@ -1808,17 +1816,19 @@ fun NowPlayingScreen(
                 if (!docked) {
                     // Centred in the strip when it's the only thing there; nudged
                     // up when the radio caption needs the room below it.
-                    Box(
-                        (if (song.radioName != null) {
-                            Modifier.align(Alignment.TopCenter).offset(y = 6.dp)
-                        } else {
-                            Modifier.align(Alignment.Center)
-                        })
-                            .width(38.dp)
-                            .height(5.dp)
-                            .clip(RoundedCornerShape(3.dp))
-                            .background(Color.White.copy(alpha = 0.32f)),
-                    )
+                    if (showPlayerTopGrabber) {
+                        Box(
+                            (if (song.radioName != null) {
+                                Modifier.align(Alignment.TopCenter).offset(y = 6.dp)
+                            } else {
+                                Modifier.align(Alignment.Center)
+                            })
+                                .width(38.dp)
+                                .height(5.dp)
+                                .clip(RoundedCornerShape(3.dp))
+                                .background(Color.White.copy(alpha = 0.32f)),
+                        )
+                    }
                     song.radioName?.let { radioName ->
                         Text(
                             text = stringResource(R.string.playing_radio, radioName),
@@ -2228,9 +2238,9 @@ fun NowPlayingScreen(
                     }
 
                     DoubleTapSeekArea(
-                        enabled = doubleTapToSeek && !queueOpen && !lyricsOpen && p < 0.5f,
+                        enabled = artworkGesturesEnabled && doubleTapToSeek && !queueOpen && !lyricsOpen && p < 0.5f,
                         seekIntervalSeconds = seekIntervalSeconds,
-                        onSingleTap = if (artworkTapOpensLyrics && !queueOpen && !lyricsOpen && p < 0.5f) {
+                        onSingleTap = if (artworkGesturesEnabled && artworkTapOpensLyrics && !queueOpen && !lyricsOpen && p < 0.5f) {
                             {
                                 queueOpen = false
                                 lyricsOpen = true
@@ -2504,7 +2514,8 @@ fun NowPlayingScreen(
                     ) {
                         // Shrinks as the header collapses, so the queue's
                         // heading doesn't have to compete with it.
-                        val titleSize = lerp(20.sp, 16.sp, p)
+                        val titleSize = lerp(playerTitleFontSizeSp.sp, (playerTitleFontSizeSp * 0.8f).sp, p)
+                        val artistSize = lerp(playerArtistFontSizeSp.sp, (playerArtistFontSizeSp * 0.8f).sp, p)
                         // Only the title's own overflow gates the artist's stagger
                         // below — an artist line that's long on its own has no
                         // reason to wait on a title that already fits.
@@ -2536,7 +2547,7 @@ fun NowPlayingScreen(
                                 text = song.artist,
                                 style = MaterialTheme.typography.titleLarge.copy(
                                     fontWeight = FontWeight.W500,
-                                    fontSize = titleSize,
+                                    fontSize = artistSize,
                                 ),
                                 color = Color.White.copy(alpha = 0.55f),
                                 enabled = scrolls,
@@ -3776,6 +3787,48 @@ private fun ContentDrawScope.sweepTo(layout: TextLayoutResult, revealedChars: Fl
  * Scrolling by hand clears the blur and suspends the auto-follow, so you can
  * read ahead; a couple of seconds after you stop it snaps back to the song.
  */
+@Composable
+fun TabletLyricsPane(
+    lines: List<LyricLine>?,
+    trackKey: String,
+    positionMs: Long,
+    isPlaying: Boolean,
+    onSeek: (Long) -> Unit,
+    modifier: Modifier = Modifier,
+) {
+    Column(
+        modifier = modifier
+            .fillMaxSize()
+            .background(MaterialTheme.colorScheme.background)
+            .padding(horizontal = 18.dp, vertical = 20.dp),
+    ) {
+        Text(
+            text = stringResource(R.string.lyrics_display),
+            style = MaterialTheme.typography.titleLarge,
+            color = MaterialTheme.colorScheme.onBackground,
+        )
+        Spacer(Modifier.height(10.dp))
+        if (lines.isNullOrEmpty()) {
+            Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
+                Text(
+                    text = stringResource(R.string.no_lyrics_for_track),
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    style = MaterialTheme.typography.titleMedium,
+                )
+            }
+        } else {
+            LyricsPanel(
+                lines = lines,
+                trackKey = trackKey,
+                positionMs = positionMs,
+                isPlaying = isPlaying,
+                onSeekToLine = onSeek,
+                modifier = Modifier.weight(1f),
+            )
+        }
+    }
+}
+
 @Composable
 private fun LyricsPanel(
     lines: List<LyricLine>,

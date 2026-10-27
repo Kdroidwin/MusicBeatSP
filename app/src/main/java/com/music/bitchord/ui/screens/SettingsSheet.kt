@@ -316,6 +316,7 @@ fun SettingsScreen(
     val liquidGlass by AppSettings.liquidGlass.collectAsStateWithLifecycle()
     val classicNavBar by AppSettings.classicNavBar.collectAsStateWithLifecycle()
     val mainNavigationTabsPopup by AppSettings.mainNavigationTabsPopup.collectAsStateWithLifecycle()
+    val settingsTopBarUsesMoreIcon by AppSettings.settingsTopBarUsesMoreIcon.collectAsStateWithLifecycle()
     val hideNavBarLabels by AppSettings.hideNavigationBarLabels.collectAsStateWithLifecycle()
     val navigationBarMatchesMiniPlayerColor by AppSettings.navigationBarMatchesMiniPlayerColor.collectAsStateWithLifecycle()
     val includeRemoteSourceMediaInLibrary by AppSettings.includeRemoteSourceMediaInLibrary.collectAsStateWithLifecycle()
@@ -326,6 +327,8 @@ fun SettingsScreen(
     val localFolderHierarchy by AppSettings.localFolderHierarchy.collectAsStateWithLifecycle()
     val localMusicFolderRoot by AppSettings.localMusicFolderUri.collectAsStateWithLifecycle()
     val fullScreenCollectionArtwork by AppSettings.fullScreenCollectionArtwork.collectAsStateWithLifecycle()
+    val whiteCollectionActionButtons by AppSettings.whiteCollectionActionButtons.collectAsStateWithLifecycle()
+    val tabletLyricsBesidePlayer by AppSettings.tabletLyricsBesidePlayer.collectAsStateWithLifecycle()
     val hideCollectionTopBar by AppSettings.hideCollectionTopBar.collectAsStateWithLifecycle()
     val hideFloatingCollectionControls by AppSettings.hideFloatingCollectionControls.collectAsStateWithLifecycle()
     val frostedQueueManager by AppSettings.frostedQueueManager.collectAsStateWithLifecycle()
@@ -425,6 +428,10 @@ fun SettingsScreen(
     val miniPlayerSwipeChangesTrack by AppSettings.miniPlayerSwipeChangesTrack.collectAsStateWithLifecycle()
     val miniPlayerSwipeUpExpands by AppSettings.miniPlayerSwipeUpExpands.collectAsStateWithLifecycle()
     val playlistTrackMenuUsesArtworkColor by AppSettings.playlistTrackMenuUsesArtworkColor.collectAsStateWithLifecycle()
+    val playerTitleFontSizeSp by AppSettings.playerTitleFontSizeSp.collectAsStateWithLifecycle()
+    val playerArtistFontSizeSp by AppSettings.playerArtistFontSizeSp.collectAsStateWithLifecycle()
+    val showPlayerTopGrabber by AppSettings.showPlayerTopGrabber.collectAsStateWithLifecycle()
+    val cleartextHttpAllowed by AppSettings.cleartextHttpAllowed.collectAsStateWithLifecycle()
     val parametricEqEnabled by AppSettings.parametricEqEnabled.collectAsStateWithLifecycle()
     val tpdfDitherEnabled by AppSettings.tpdfDitherEnabled.collectAsStateWithLifecycle()
     val channelSwapEnabled by AppSettings.channelSwapEnabled.collectAsStateWithLifecycle()
@@ -892,6 +899,7 @@ fun SettingsScreen(
         SettingsSearchEntry(stringResource(R.string.classic_nav_bar), stringResource(R.string.classic_nav_bar_subtitle), listOf("navigation", "nav bar", "ナビゲーション", "classic"), classicNavBar) { AppSettings.setClassicNavBar(!classicNavBar) },
         SettingsSearchEntry(stringResource(R.string.navigation_bar_matches_mini_player_color), stringResource(R.string.navigation_bar_matches_mini_player_color_subtitle), listOf("navigation", "tab bar", "mini player", "artwork", "color", "タブバー", "ミニプレイヤー", "アルバムアート", "色"), navigationBarMatchesMiniPlayerColor) { AppSettings.setNavigationBarMatchesMiniPlayerColor(!navigationBarMatchesMiniPlayerColor) },
         SettingsSearchEntry(stringResource(R.string.main_navigation_popup), stringResource(R.string.main_navigation_popup_subtitle), listOf("navigation", "tabs", "popup", "menu", "bottom bar", "ナビゲーション", "タブ", "ポップアップ", "メニュー"), mainNavigationTabsPopup) { AppSettings.setMainNavigationTabsPopup(!mainNavigationTabsPopup) },
+        SettingsSearchEntry(stringResource(R.string.settings_top_bar_more_icon), stringResource(R.string.settings_top_bar_more_icon_subtitle), listOf("settings", "gear", "ellipsis", "more", "歯車", "設定", "三点", "︙"), settingsTopBarUsesMoreIcon) { AppSettings.setSettingsTopBarUsesMoreIcon(!settingsTopBarUsesMoreIcon) },
         SettingsSearchEntry(stringResource(R.string.hide_nav_bar_labels), stringResource(R.string.hide_nav_bar_labels_subtitle), listOf("navigation", "nav bar", "label", "ラベル", "ナビゲーション"), hideNavBarLabels) { AppSettings.setHideNavigationBarLabels(!hideNavBarLabels) },
         SettingsSearchEntry(stringResource(R.string.legacy_mesh_gradient), stringResource(R.string.legacy_mesh_gradient_subtitle), listOf("theme", "gradient", "テーマ", "グラデーション"), legacyMeshGradient) { AppSettings.setLegacyMeshGradient(!legacyMeshGradient) },
         SettingsSearchEntry(
@@ -946,6 +954,34 @@ fun SettingsScreen(
             listOf("playlist", "track menu", "artwork", "color", "プレイリスト", "曲メニュー", "アートワーク", "色"),
             playlistTrackMenuUsesArtworkColor,
         ) { AppSettings.setPlaylistTrackMenuUsesArtworkColor(!playlistTrackMenuUsesArtworkColor) },
+        SettingsSearchEntry(
+            title = stringResource(R.string.player_title_font_size),
+            subtitle = stringResource(R.string.player_title_font_size_subtitle),
+            keywords = listOf("player", "title", "font", "size", "プレーヤー", "曲名", "文字", "大きさ"),
+            valueLabel = stringResource(R.string.player_font_size_value, playerTitleFontSizeSp.roundToInt()),
+            sliderValue = playerTitleFontSizeSp,
+            sliderValueRange = 12f..36f,
+            sliderSteps = 23,
+            onSliderValueChange = AppSettings::setPlayerTitleFontSizeSp,
+            activate = {},
+        ),
+        SettingsSearchEntry(
+            title = stringResource(R.string.player_artist_font_size),
+            subtitle = stringResource(R.string.player_artist_font_size_subtitle),
+            keywords = listOf("player", "artist", "font", "size", "プレーヤー", "アーティスト", "文字", "大きさ"),
+            valueLabel = stringResource(R.string.player_font_size_value, playerArtistFontSizeSp.roundToInt()),
+            sliderValue = playerArtistFontSizeSp,
+            sliderValueRange = 12f..36f,
+            sliderSteps = 23,
+            onSliderValueChange = AppSettings::setPlayerArtistFontSizeSp,
+            activate = {},
+        ),
+        SettingsSearchEntry(
+            stringResource(R.string.show_player_top_grabber),
+            stringResource(R.string.show_player_top_grabber_subtitle),
+            listOf("player", "grabber", "handle", "line", "プレーヤー", "上部", "線", "バー"),
+            showPlayerTopGrabber,
+        ) { AppSettings.setShowPlayerTopGrabber(!showPlayerTopGrabber) },
         SettingsSearchEntry(stringResource(R.string.filter_non_music_audio), stringResource(R.string.filter_non_music_audio_subtitle), listOf("filter", "audio", "music", "音楽", "フィルター"), filterNonMusicAudio) { AppSettings.setFilterNonMusicAudio(!filterNonMusicAudio) },
         SettingsSearchEntry(stringResource(R.string.playlist_song_artwork), stringResource(R.string.playlist_song_artwork_subtitle), listOf("playlist", "artwork", "プレイリスト", "アルバムアート"), showPlaylistSongArtwork) { AppSettings.setShowPlaylistSongArtwork(!showPlaylistSongArtwork) },
         SettingsSearchEntry(
@@ -1313,6 +1349,12 @@ fun SettingsScreen(
             listOf("library", "remote", "server", "webdav", "jellyfin", "navidrome", "subsonic", "nextcloud", "ライブラリ", "リモート", "サーバー", "音源"),
             includeRemoteSourceMediaInLibrary,
         ) { AppSettings.setIncludeRemoteSourceMediaInLibrary(!includeRemoteSourceMediaInLibrary) },
+        SettingsSearchEntry(
+            stringResource(R.string.allow_cleartext_http),
+            stringResource(R.string.allow_cleartext_http_subtitle),
+            listOf("http", "cleartext", "insecure", "network", "HTTP", "平文", "通信", "セキュリティ", "安全でない"),
+            cleartextHttpAllowed,
+        ) { AppSettings.setCleartextHttpAllowed(!cleartextHttpAllowed) },
         musicFolderRootSearchEntry(localMusicFolderRoot) { musicFolderRootPicker.launch(null) },
         SettingsSearchEntry(
             stringResource(R.string.full_screen_collection_artwork),
@@ -1320,6 +1362,18 @@ fun SettingsScreen(
             listOf("artwork", "collection", "library", "album", "全画面", "アート", "背景"),
             fullScreenCollectionArtwork,
         ) { AppSettings.setFullScreenCollectionArtwork(!fullScreenCollectionArtwork) },
+        SettingsSearchEntry(
+            stringResource(R.string.white_collection_action_buttons),
+            stringResource(R.string.white_collection_action_buttons_subtitle),
+            listOf("album", "playlist", "play", "shuffle", "white", "アルバム", "プレイリスト", "再生", "シャッフル", "白背景"),
+            whiteCollectionActionButtons,
+        ) { AppSettings.setWhiteCollectionActionButtons(!whiteCollectionActionButtons) },
+        SettingsSearchEntry(
+            stringResource(R.string.tablet_lyrics_beside_player),
+            stringResource(R.string.tablet_lyrics_beside_player_subtitle),
+            listOf("tablet", "lyrics", "split", "player", "タブレット", "歌詞", "分割", "左右"),
+            tabletLyricsBesidePlayer,
+        ) { AppSettings.setTabletLyricsBesidePlayer(!tabletLyricsBesidePlayer) },
         SettingsSearchEntry(
             stringResource(R.string.hide_collection_top_bar),
             stringResource(R.string.hide_collection_top_bar_subtitle),
@@ -2638,6 +2692,47 @@ fun SettingsScreen(
             )
             RowDivider()
             SettingsRow(
+                icon = Icons.Rounded.Tune,
+                title = stringResource(R.string.player_title_font_size),
+                subtitle = stringResource(R.string.player_title_font_size_subtitle),
+                value = stringResource(R.string.player_font_size_value, playerTitleFontSizeSp.roundToInt()),
+            )
+            Slider(
+                value = playerTitleFontSizeSp,
+                onValueChange = AppSettings::setPlayerTitleFontSizeSp,
+                steps = 23,
+                valueRange = 12f..36f,
+                modifier = Modifier.padding(start = ROW_INSET, end = ROW_INSET, bottom = 14.dp),
+            )
+            RowDivider()
+            SettingsRow(
+                icon = Icons.Rounded.Tune,
+                title = stringResource(R.string.player_artist_font_size),
+                subtitle = stringResource(R.string.player_artist_font_size_subtitle),
+                value = stringResource(R.string.player_font_size_value, playerArtistFontSizeSp.roundToInt()),
+            )
+            Slider(
+                value = playerArtistFontSizeSp,
+                onValueChange = AppSettings::setPlayerArtistFontSizeSp,
+                steps = 23,
+                valueRange = 12f..36f,
+                modifier = Modifier.padding(start = ROW_INSET, end = ROW_INSET, bottom = 14.dp),
+            )
+            RowDivider()
+            SettingsRow(
+                icon = Icons.Rounded.VisibilityOff,
+                title = stringResource(R.string.show_player_top_grabber),
+                subtitle = stringResource(R.string.show_player_top_grabber_subtitle),
+                trailing = {
+                    Switch(
+                        checked = showPlayerTopGrabber,
+                        onCheckedChange = AppSettings::setShowPlayerTopGrabber,
+                    )
+                },
+                onClick = { AppSettings.setShowPlayerTopGrabber(!showPlayerTopGrabber) },
+            )
+            RowDivider()
+            SettingsRow(
                 icon = Icons.Rounded.MoreVert,
                 title = stringResource(R.string.player_details_vertical_menu),
                 subtitle = stringResource(R.string.player_details_vertical_menu_subtitle),
@@ -2849,6 +2944,19 @@ fun SettingsScreen(
                 trailing = { Switch(checked = autoFitOneLineLyrics, onCheckedChange = AppSettings::setAutoFitOneLineLyrics) },
                 onClick = { AppSettings.setAutoFitOneLineLyrics(!autoFitOneLineLyrics) },
             )
+            RowDivider()
+            SettingsRow(
+                icon = Icons.AutoMirrored.Rounded.Notes,
+                title = stringResource(R.string.tablet_lyrics_beside_player),
+                subtitle = stringResource(R.string.tablet_lyrics_beside_player_subtitle),
+                trailing = {
+                    Switch(
+                        checked = tabletLyricsBesidePlayer,
+                        onCheckedChange = AppSettings::setTabletLyricsBesidePlayer,
+                    )
+                },
+                onClick = { AppSettings.setTabletLyricsBesidePlayer(!tabletLyricsBesidePlayer) },
+            )
         }
 
         SettingsGroup(header = stringResource(R.string.appearance)) {
@@ -2956,6 +3064,19 @@ fun SettingsScreen(
                     )
                 },
                 onClick = { AppSettings.setMatchButtonAccentToArtwork(!matchButtonAccentToArtwork) },
+            )
+            RowDivider()
+            SettingsRow(
+                icon = Icons.Rounded.MoreVert,
+                title = stringResource(R.string.settings_top_bar_more_icon),
+                subtitle = stringResource(R.string.settings_top_bar_more_icon_subtitle),
+                trailing = {
+                    Switch(
+                        checked = settingsTopBarUsesMoreIcon,
+                        onCheckedChange = AppSettings::setSettingsTopBarUsesMoreIcon,
+                    )
+                },
+                onClick = { AppSettings.setSettingsTopBarUsesMoreIcon(!settingsTopBarUsesMoreIcon) },
             )
             RowDivider()
             SettingsRow(
@@ -4052,7 +4173,10 @@ fun SettingsScreen(
         }
 
         if (!context.packageName.endsWith(".nointernet")) {
-            MusicServersSettingsGroup(onClick = { showMusicServersSheet = true })
+            MusicServersSettingsGroup(
+                onClick = { showMusicServersSheet = true },
+                cleartextHttpAllowed = cleartextHttpAllowed,
+            )
         }
 
         LocalMusicSettingsGroup(
@@ -4072,6 +4196,7 @@ fun SettingsScreen(
             showCollectionSongArtwork = showCollectionSongArtwork,
             keepCollectionArtworkAspectRatio = keepCollectionArtworkAspectRatio,
             localizeLibraryCollectionCount = localizeLibraryCollectionCount,
+            whiteCollectionActionButtons = whiteCollectionActionButtons,
             hasAllFiles = hasAllFiles,
             onManageFolders = { showManageFoldersSheet = true },
             onChooseMusicFolder = { musicFolderRootPicker.launch(null) },
@@ -5278,6 +5403,7 @@ private fun LocalMusicSettingsGroup(
     showCollectionSongArtwork: Boolean,
     keepCollectionArtworkAspectRatio: Boolean,
     localizeLibraryCollectionCount: Boolean,
+    whiteCollectionActionButtons: Boolean,
     hasAllFiles: Boolean,
     onManageFolders: () -> Unit,
     onChooseMusicFolder: () -> Unit,
@@ -5393,6 +5519,19 @@ SettingsGroup(header = stringResource(R.string.local_music)) {
             Switch(checked = fullScreenCollectionArtwork, onCheckedChange = AppSettings::setFullScreenCollectionArtwork)
         },
         onClick = { AppSettings.setFullScreenCollectionArtwork(!fullScreenCollectionArtwork) },
+    )
+    RowDivider()
+    SettingsRow(
+        icon = Icons.Rounded.PlayArrow,
+        title = stringResource(R.string.white_collection_action_buttons),
+        subtitle = stringResource(R.string.white_collection_action_buttons_subtitle),
+        trailing = {
+            Switch(
+                checked = whiteCollectionActionButtons,
+                onCheckedChange = AppSettings::setWhiteCollectionActionButtons,
+            )
+        },
+        onClick = { AppSettings.setWhiteCollectionActionButtons(!whiteCollectionActionButtons) },
     )
     RowDivider()
     SettingsRow(
@@ -5576,7 +5715,10 @@ SettingsGroup(header = stringResource(R.string.local_music)) {
 }
 
 @Composable
-private fun MusicServersSettingsGroup(onClick: () -> Unit) {
+private fun MusicServersSettingsGroup(
+    onClick: () -> Unit,
+    cleartextHttpAllowed: Boolean,
+) {
     SettingsGroup(header = stringResource(R.string.music_servers)) {
         SettingsRow(
             icon = Icons.Rounded.Cloud,
@@ -5584,6 +5726,23 @@ private fun MusicServersSettingsGroup(onClick: () -> Unit) {
             subtitle = stringResource(R.string.music_servers_subtitle),
             trailing = { Chevron() },
             onClick = onClick,
+        )
+        RowDivider()
+        SettingsRow(
+            icon = Icons.Rounded.Dns,
+            title = stringResource(R.string.allow_cleartext_http),
+            subtitle = stringResource(R.string.allow_cleartext_http_subtitle),
+            trailing = {
+                Switch(
+                    checked = cleartextHttpAllowed,
+                    onCheckedChange = AppSettings::setCleartextHttpAllowed,
+                    colors = SwitchDefaults.colors(
+                        checkedTrackColor = MaterialTheme.colorScheme.primary,
+                        checkedBorderColor = MaterialTheme.colorScheme.primary,
+                    ),
+                )
+            },
+            onClick = { AppSettings.setCleartextHttpAllowed(!cleartextHttpAllowed) },
         )
     }
 }

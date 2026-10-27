@@ -139,7 +139,7 @@ fun LocalFoldersTab(
         FastScroller(
             listState = listState,
             itemCount = displayFolders.size,
-            sectionNameForIndex = { index -> SectionIndexer.getSectionName(displayFolders[index].name) },
+            sectionNameForIndex = { index -> SectionIndexer.getSectionName(displayFolders[index].displayName) },
             contentPadding = scrollPadding,
         )
     }

@@ -15,6 +15,8 @@ import com.music.bitchord.data.sources.SourceKind
 import com.music.bitchord.feature.artistimage.model.ArtistSort
 import com.music.bitchord.playback.equalizer.EelEqParser
 import kotlinx.coroutines.flow.MutableStateFlow
+import org.json.JSONArray
+import org.json.JSONObject
 import java.util.Locale
 import java.util.UUID
 
@@ -161,6 +163,15 @@ enum class ThemeMode(val label: String) {
 
 /** Secondary action shown beside the favorite action in Android media controls. */
 enum class MediaControlSecondaryAction { SHUFFLE, PLAYLISTS, LYRICS, QUEUE }
+
+/** A device-library reference to an album or playlist from YouTube Music. */
+data class SavedYoutubeCollection(
+    val browseId: String,
+    val title: String,
+    val subtitle: String,
+    val thumbnailUrl: String?,
+    val type: String,
+)
 
 /** Motion used by the floating navigation selection indicator. */
 enum class PillMotionStyle {
@@ -527,6 +538,17 @@ object AppSettings {
     val miniPlayerSwipeUpExpands = MutableStateFlow(true)
     /** Uses the playlist page artwork palette for track menus opened inside it. */
     val playlistTrackMenuUsesArtworkColor = MutableStateFlow(true)
+    /** Optional typography overrides on the expanded player header, in scaled-independent units. */
+    val playerTitleFontSizeSp = MutableStateFlow(20f)
+    val playerArtistFontSizeSp = MutableStateFlow(20f)
+    /** Shows the small drag handle at the top of the expanded player by default. */
+    val showPlayerTopGrabber = MutableStateFlow(true)
+    /** App-level second consent for cleartext connections to a configured local server. */
+    val cleartextHttpAllowed = MutableStateFlow(false)
+    /** Uses white controls with black glyphs below album and playlist artwork. */
+    val whiteCollectionActionButtons = MutableStateFlow(false)
+    /** Replaces the settings gear on the main top bar with an overflow glyph. */
+    val settingsTopBarUsesMoreIcon = MutableStateFlow(false)
     val launcherIcon = MutableStateFlow(LauncherIcon.PINK)
     val frostedQueueManager = MutableStateFlow(true)
     val frostedPlayerDetails = MutableStateFlow(true)
@@ -928,6 +950,10 @@ object AppSettings {
     val localLibraryTabOrder = MutableStateFlow<List<LocalLibraryTab>>(LocalLibraryTab.entries.toList())
     val localFolderHierarchy = MutableStateFlow(false)
     val fullScreenCollectionArtwork = MutableStateFlow(false)
+    /** On wide layouts, replaces the left page with synced lyrics beside the docked player. */
+    val tabletLyricsBesidePlayer = MutableStateFlow(false)
+    /** App-local YouTube Music albums and playlists saved for quick access. */
+    val savedYoutubeCollections = MutableStateFlow<List<SavedYoutubeCollection>>(emptyList())
     /** Hides collection page titles while keeping floating back/settings actions available. */
     val hideCollectionTopBar = MutableStateFlow(true)
     /** Hides floating back/settings controls only on album or playlist artwork pages. */
@@ -1245,6 +1271,12 @@ object AppSettings {
         miniPlayerSwipeChangesTrack.value = prefs.getBoolean(KEY_MINI_PLAYER_SWIPE_CHANGES_TRACK, false)
         miniPlayerSwipeUpExpands.value = prefs.getBoolean(KEY_MINI_PLAYER_SWIPE_UP_EXPANDS, true)
         playlistTrackMenuUsesArtworkColor.value = prefs.getBoolean(KEY_PLAYLIST_TRACK_MENU_ARTWORK_COLOR, true)
+        playerTitleFontSizeSp.value = prefs.getFloat(KEY_PLAYER_TITLE_FONT_SIZE_SP, 20f).coerceIn(12f, 36f)
+        playerArtistFontSizeSp.value = prefs.getFloat(KEY_PLAYER_ARTIST_FONT_SIZE_SP, 20f).coerceIn(12f, 36f)
+        showPlayerTopGrabber.value = prefs.getBoolean(KEY_SHOW_PLAYER_TOP_GRABBER, true)
+        cleartextHttpAllowed.value = prefs.getBoolean(KEY_CLEARTEXT_HTTP_ALLOWED, false)
+        whiteCollectionActionButtons.value = prefs.getBoolean(KEY_WHITE_COLLECTION_ACTION_BUTTONS, false)
+        settingsTopBarUsesMoreIcon.value = prefs.getBoolean(KEY_SETTINGS_TOP_BAR_MORE_ICON, false)
         launcherIcon.value = runCatching {
             LauncherIcon.valueOf(prefs.getString(KEY_LAUNCHER_ICON, LauncherIcon.PINK.name) ?: LauncherIcon.PINK.name)
         }.getOrDefault(LauncherIcon.PINK)
@@ -1480,6 +1512,8 @@ object AppSettings {
             webdavUrl.value, webdavUsername.value, webdavPassword.value, webdavAllowInsecureHttp.value,
         )
         fullScreenCollectionArtwork.value = prefs.getBoolean(KEY_FULL_SCREEN_COLLECTION_ARTWORK, false)
+        tabletLyricsBesidePlayer.value = prefs.getBoolean(KEY_TABLET_LYRICS_BESIDE_PLAYER, false)
+        savedYoutubeCollections.value = readSavedYoutubeCollections()
         hideCollectionTopBar.value = prefs.getBoolean(KEY_HIDE_COLLECTION_TOP_BAR, true)
         hideFloatingCollectionControls.value = prefs.getBoolean(KEY_HIDE_FLOATING_COLLECTION_CONTROLS, true)
         artistsOpenAlbums.value = prefs.getBoolean(KEY_ARTISTS_OPEN_ALBUMS, false)
@@ -1824,6 +1858,101 @@ object AppSettings {
     fun setPlaylistTrackMenuUsesArtworkColor(value: Boolean) {
         playlistTrackMenuUsesArtworkColor.value = value
         prefs.edit().putBoolean(KEY_PLAYLIST_TRACK_MENU_ARTWORK_COLOR, value).apply()
+    }
+
+    fun setPlayerTitleFontSizeSp(value: Float) {
+        val safe = value.coerceIn(12f, 36f)
+        playerTitleFontSizeSp.value = safe
+        prefs.edit().putFloat(KEY_PLAYER_TITLE_FONT_SIZE_SP, safe).apply()
+    }
+
+    fun setPlayerArtistFontSizeSp(value: Float) {
+        val safe = value.coerceIn(12f, 36f)
+        playerArtistFontSizeSp.value = safe
+        prefs.edit().putFloat(KEY_PLAYER_ARTIST_FONT_SIZE_SP, safe).apply()
+    }
+
+    fun setShowPlayerTopGrabber(value: Boolean) {
+        showPlayerTopGrabber.value = value
+        prefs.edit().putBoolean(KEY_SHOW_PLAYER_TOP_GRABBER, value).apply()
+    }
+
+    fun setCleartextHttpAllowed(value: Boolean) {
+        cleartextHttpAllowed.value = value
+        prefs.edit().putBoolean(KEY_CLEARTEXT_HTTP_ALLOWED, value).apply()
+        if (!value) com.music.bitchord.data.Http.cancelCleartextRequests()
+    }
+
+    fun setWhiteCollectionActionButtons(value: Boolean) {
+        whiteCollectionActionButtons.value = value
+        prefs.edit().putBoolean(KEY_WHITE_COLLECTION_ACTION_BUTTONS, value).apply()
+    }
+
+    fun setSettingsTopBarUsesMoreIcon(value: Boolean) {
+        settingsTopBarUsesMoreIcon.value = value
+        prefs.edit().putBoolean(KEY_SETTINGS_TOP_BAR_MORE_ICON, value).apply()
+    }
+
+    fun setTabletLyricsBesidePlayer(value: Boolean) {
+        tabletLyricsBesidePlayer.value = value
+        prefs.edit().putBoolean(KEY_TABLET_LYRICS_BESIDE_PLAYER, value).apply()
+    }
+
+    /** Adds or removes a local library shortcut and returns its resulting saved state. */
+    fun toggleSavedYoutubeCollection(collection: SavedYoutubeCollection): Boolean {
+        val current = savedYoutubeCollections.value
+        val exists = current.any { it.browseId == collection.browseId }
+        val updated = if (exists) current.filterNot { it.browseId == collection.browseId }
+        else (listOf(collection) + current).take(MAX_SAVED_YOUTUBE_COLLECTIONS)
+        savedYoutubeCollections.value = updated
+        persistSavedYoutubeCollections(updated)
+        return !exists
+    }
+
+    fun removeSavedYoutubeCollection(browseId: String) {
+        val updated = savedYoutubeCollections.value.filterNot { it.browseId == browseId }
+        if (updated.size == savedYoutubeCollections.value.size) return
+        savedYoutubeCollections.value = updated
+        persistSavedYoutubeCollections(updated)
+    }
+
+    private fun readSavedYoutubeCollections(): List<SavedYoutubeCollection> = runCatching {
+        val raw = prefs.getString(KEY_SAVED_YOUTUBE_COLLECTIONS, null).orEmpty()
+        val array = JSONArray(raw)
+        buildList {
+            for (index in 0 until array.length().coerceAtMost(MAX_SAVED_YOUTUBE_COLLECTIONS)) {
+                val item = array.optJSONObject(index) ?: continue
+                val browseId = item.optString("browseId").trim()
+                val title = item.optString("title").trim()
+                if (browseId.isBlank() || title.isBlank()) continue
+                add(
+                    SavedYoutubeCollection(
+                        browseId = browseId,
+                        title = title,
+                        subtitle = item.optString("subtitle"),
+                        thumbnailUrl = item.optString("thumbnailUrl").takeIf(String::isNotBlank),
+                        type = item.optString("type", "OTHER"),
+                    ),
+                )
+            }
+        }.distinctBy { it.browseId }
+    }.getOrDefault(emptyList())
+
+    private fun persistSavedYoutubeCollections(collections: List<SavedYoutubeCollection>) {
+        if (!this::prefs.isInitialized) return
+        val encoded = JSONArray().apply {
+            collections.take(MAX_SAVED_YOUTUBE_COLLECTIONS).forEach { collection ->
+                put(
+                    JSONObject()
+                        .put("browseId", collection.browseId.take(256))
+                        .put("title", collection.title.take(512))
+                        .put("subtitle", collection.subtitle.take(512))
+                        .put("thumbnailUrl", collection.thumbnailUrl?.take(2048) ?: JSONObject.NULL)
+                        .put("type", collection.type.take(32)),
+                )
+            }
+        }
+        prefs.edit().putString(KEY_SAVED_YOUTUBE_COLLECTIONS, encoded.toString()).apply()
     }
 
     fun setParametricEqEnabled(value: Boolean) {
@@ -3492,6 +3621,9 @@ object AppSettings {
         KEY_LAST_VERSION_CODE,
         KEY_LOCAL_MUSIC_FOLDER_PATH,
         KEY_CD_RIPPING_OUTPUT_TREE_URI,
+        // Network trust/cleartext consent is device-specific and should not
+        // silently enable unencrypted requests after restoring a backup.
+        KEY_CLEARTEXT_HTTP_ALLOWED,
     )
 
     private val OBSOLETE_ONLINE_KEYS = setOf(
@@ -3563,6 +3695,15 @@ object AppSettings {
     private const val KEY_MINI_PLAYER_SWIPE_CHANGES_TRACK = "mini_player_swipe_changes_track"
     private const val KEY_MINI_PLAYER_SWIPE_UP_EXPANDS = "mini_player_swipe_up_expands"
     private const val KEY_PLAYLIST_TRACK_MENU_ARTWORK_COLOR = "playlist_track_menu_artwork_color"
+    private const val KEY_PLAYER_TITLE_FONT_SIZE_SP = "player_title_font_size_sp"
+    private const val KEY_PLAYER_ARTIST_FONT_SIZE_SP = "player_artist_font_size_sp"
+    private const val KEY_SHOW_PLAYER_TOP_GRABBER = "show_player_top_grabber"
+    private const val KEY_CLEARTEXT_HTTP_ALLOWED = "cleartext_http_allowed"
+    private const val KEY_WHITE_COLLECTION_ACTION_BUTTONS = "white_collection_action_buttons"
+    private const val KEY_SETTINGS_TOP_BAR_MORE_ICON = "settings_top_bar_more_icon"
+    private const val KEY_TABLET_LYRICS_BESIDE_PLAYER = "tablet_lyrics_beside_player"
+    private const val KEY_SAVED_YOUTUBE_COLLECTIONS = "saved_youtube_music_collections"
+    private const val MAX_SAVED_YOUTUBE_COLLECTIONS = 500
     private const val KEY_PARAMETRIC_EQ_ENABLED = "parametric_eq_enabled"
     private const val KEY_TPDF_DITHER_ENABLED = "tpdf_dither_enabled"
     private const val KEY_PARAMETRIC_EQ_BANDS = "parametric_eq_bands"

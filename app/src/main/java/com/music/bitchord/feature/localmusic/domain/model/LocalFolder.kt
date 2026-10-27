@@ -15,4 +15,14 @@ data class LocalFolder(
     val parentPath: String? = null,
     val songCount: Int = 0,
     val isBlacklisted: Boolean = false,
-)
+) {
+    /** Prefer the indexed directory's actual final path segment over provider labels. */
+    val displayName: String
+        get() {
+            val pathName = path.replace('\\', '/').trimEnd('/').substringAfterLast('/')
+                .takeIf(String::isNotBlank)
+            return pathName
+                ?: name.trim().takeIf(String::isNotBlank)
+                ?: path.trim().ifBlank { "Folder" }
+        }
+}
