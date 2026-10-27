@@ -1474,7 +1474,7 @@
     <string name="settings_top_bar_more_icon">Use an overflow icon for Settings</string>
     <string name="settings_top_bar_more_icon_subtitle">Show a three-dot icon instead of the gear in the main top bar.</string>
     <string name="tablet_lyrics_beside_player">Show lyrics beside the tablet player</string>
-    <string name="tablet_lyrics_beside_player_subtitle">On wide screens, replace the left library page with synced lyrics beside the player. The player artwork does not respond to taps in this mode. Off keeps the existing split layout.</string>
+    <string name="tablet_lyrics_beside_player_subtitle">On wide screens, show the player on the left and synced lyrics on the right while the Songs tab is selected. Other tabs and Settings remain accessible and restore the normal page layout. Artwork taps are disabled in this view.</string>
     <string name="youtube_music_saved">YouTube Music</string>
     <string name="youtube_music_library_empty">Albums and playlists you save from YouTube Music will appear here.</string>
     <string name="remove_saved_youtube_collection">Remove from library</string>

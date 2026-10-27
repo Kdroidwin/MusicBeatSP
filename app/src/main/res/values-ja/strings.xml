@@ -1448,7 +1448,7 @@
     <string name="settings_top_bar_more_icon">設定に三点アイコンを使う</string>
     <string name="settings_top_bar_more_icon_subtitle">メイン画面上部の歯車を三点メニューのアイコンに変更します。</string>
     <string name="tablet_lyrics_beside_player">タブレットでプレイヤーの横に歌詞を表示</string>
-    <string name="tablet_lyrics_beside_player_subtitle">横幅の広い画面で、左側のライブラリ表示を同期歌詞に置き換えます。このモードではアートをタップしても反応しません。オフでは従来の分割表示を使います。</string>
+    <string name="tablet_lyrics_beside_player_subtitle">横幅の広い画面で曲タブを表示中、プレイヤーを左、同期歌詞を右に表示します。別のタブや設定を開くと通常の画面に戻り、そのまま操作できます。この表示中はアートのタップ操作が無効になります。</string>
     <string name="youtube_music_saved">YouTube Music</string>
     <string name="youtube_music_library_empty">YouTube Musicから保存したアルバムやプレイリストがここに表示されます。</string>
     <string name="remove_saved_youtube_collection">ライブラリから削除</string>

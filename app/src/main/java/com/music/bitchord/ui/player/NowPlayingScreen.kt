@@ -533,6 +533,12 @@ fun dockedPlayerWidth(windowWidth: Dp): Dp =
         // in windows narrow enough that there is no pane at all.
         .coerceAtMost(windowWidth - DOCKED_PAGE_MIN_WIDTH)
 
+/** Width for the synced-lyrics pane in the tablet player/lyrics workspace. */
+fun tabletLyricsPaneWidth(windowWidth: Dp): Dp =
+    (windowWidth * 0.44f)
+        .coerceIn(300.dp, 560.dp)
+        .coerceAtMost((windowWidth - DOCKED_PLAYER_MIN_WIDTH).coerceAtLeast(300.dp))
+
 /** Share of a lyric line's own length spent fading out, and its bounds. */
 private const val LYRIC_FADE_FRACTION = 0.28f
 private const val LYRIC_FADE_MIN_MS = 160f
@@ -3795,37 +3801,48 @@ fun TabletLyricsPane(
     positionMs: Long,
     isPlaying: Boolean,
     onSeek: (Long) -> Unit,
+    artworkUrl: String?,
     modifier: Modifier = Modifier,
 ) {
-    Column(
-        modifier = modifier
-            .fillMaxSize()
-            .background(MaterialTheme.colorScheme.background)
-            .padding(horizontal = 18.dp, vertical = 20.dp),
-    ) {
-        Text(
-            text = stringResource(R.string.lyrics_display),
-            style = MaterialTheme.typography.titleLarge,
-            color = MaterialTheme.colorScheme.onBackground,
+    val palette = rememberArtworkPalette(artworkUrl, dark = true)
+    Box(modifier.fillMaxSize()) {
+        ArtworkBackdrop(
+            palette = palette,
+            imageUrl = artworkUrl,
+            modifier = Modifier.fillMaxSize(),
+            washFraction = 1f,
         )
-        Spacer(Modifier.height(10.dp))
-        if (lines.isNullOrEmpty()) {
-            Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
-                Text(
-                    text = stringResource(R.string.no_lyrics_for_track),
-                    color = MaterialTheme.colorScheme.onSurfaceVariant,
-                    style = MaterialTheme.typography.titleMedium,
+        Column(
+            modifier = Modifier
+                .fillMaxSize()
+                .statusBarsPadding()
+                .navigationBarsPadding()
+                .padding(horizontal = 18.dp, vertical = 20.dp),
+        ) {
+            Text(
+                text = stringResource(R.string.lyrics_display),
+                style = MaterialTheme.typography.titleLarge,
+                color = palette.onBackground,
+            )
+            Spacer(Modifier.height(10.dp))
+            if (lines.isNullOrEmpty()) {
+                Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
+                    Text(
+                        text = stringResource(R.string.no_lyrics_for_track),
+                        color = palette.onBackgroundVariant,
+                        style = MaterialTheme.typography.titleMedium,
+                    )
+                }
+            } else {
+                LyricsPanel(
+                    lines = lines,
+                    trackKey = trackKey,
+                    positionMs = positionMs,
+                    isPlaying = isPlaying,
+                    onSeekToLine = onSeek,
+                    modifier = Modifier.weight(1f),
                 )
             }
-        } else {
-            LyricsPanel(
-                lines = lines,
-                trackKey = trackKey,
-                positionMs = positionMs,
-                isPlaying = isPlaying,
-                onSeekToLine = onSeek,
-                modifier = Modifier.weight(1f),
-            )
         }
     }
 }

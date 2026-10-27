@@ -252,6 +252,8 @@ import com.music.bitchord.ui.components.MiniPlayer
 import com.music.bitchord.ui.components.optimizedHazeEffect
 import com.music.bitchord.ui.components.TopFadeBlur
 import com.music.bitchord.ui.components.topBarContentPadding
+import com.music.bitchord.ui.components.TopBarContentHeight
+import com.music.bitchord.ui.components.TopBarContentGap
 import com.music.bitchord.ui.components.AppLanguageDialog
 import com.music.bitchord.ui.components.LyricsSourcesDialog
 import com.music.bitchord.ui.icons.BitChordIcons
@@ -267,6 +269,7 @@ import com.music.bitchord.ui.player.PlayerSheetMotion
 import com.music.bitchord.ui.player.ThinSlider
 import com.music.bitchord.ui.player.dockedPlayerAvailable
 import com.music.bitchord.ui.player.dockedPlayerWidth
+import com.music.bitchord.ui.player.tabletLyricsPaneWidth
 import com.music.bitchord.data.settings.SongSort
 import com.music.bitchord.feature.lyricseditor.ui.LyricsEditorScreen
 import com.music.bitchord.feature.localsongactions.ui.LocalSongActionsHelper
@@ -1887,6 +1890,22 @@ private fun BitChordApp(
         }
     }
 
+    // The tablet lyrics workspace is only active on the root Songs tab. This
+    // leaves the actual page tree intact whenever the user chooses another tab,
+    // opens Settings, or drills into a collection; those destinations must
+    // never be covered by a persistent lyrics pane.
+    val tabletLyricsWorkspaceActive = playerDocked &&
+        tabletLyricsBesidePlayer &&
+        playerSong != null &&
+        selectedTab == TAB_SONGS &&
+        detail == null &&
+        !showSettings &&
+        !showSources &&
+        !showWearOs &&
+        !replayOpen &&
+        !showLyricsSources &&
+        collectionBackHandlers["$TAB_KEY$selectedTab"] == null
+
     // The player's whole parameter list, in one place because there are two
     // places it can be mounted: the sheet a phone raises over the page, and
     // the pane a tablet keeps beside it. [docked] is the only difference
@@ -2133,7 +2152,7 @@ private fun BitChordApp(
             lyricsSource = lyricsSource,
             lyricsUnavailable = lyricsChecked && lyrics.isNullOrEmpty(),
             docked = docked,
-            artworkGesturesEnabled = !(docked && tabletLyricsBesidePlayer),
+            artworkGesturesEnabled = !(docked && tabletLyricsWorkspaceActive),
             openLyricsOnShow = requestedMediaPanel == MediaControlDestination.LYRICS,
             openQueueOnShow = requestedMediaPanel == MediaControlDestination.QUEUE,
             onExternalPanelRequestHandled = {
@@ -2184,22 +2203,22 @@ private fun BitChordApp(
         BackHandler(enabled = showListenBrainzLogin) { showListenBrainzLogin = false }
         BackHandler(enabled = showLastfmLogin) { showLastfmLogin = false }
 
-        // On a tablet the page and the player stand side by side rather than
-        // one over the other: everything a phone stacks in a single column —
-        // the feed, the frosted bars, the tab row — becomes the left half of
-        // a row, and the player is the right. Off a tablet the row has the
-        // one child it always had and changes nothing.
+        // On a tablet the page and player stand side by side. In the optional
+        // lyrics workspace, the player moves to the left and the artwork-backed
+        // lyrics pane takes the right; tab and Settings navigation remain over
+        // the player, and choosing another destination restores the page.
         Row(Modifier.fillMaxSize()) {
             Box(Modifier.weight(1f).fillMaxHeight()) {
-                if (playerDocked && tabletLyricsBesidePlayer && playerSong != null) {
-                    TabletLyricsPane(
-                        lines = lyrics,
-                        trackKey = playerSong.videoId,
-                        positionMs = player.position.positionMs,
-                        isPlaying = player.isPlaying,
-                        onSeek = { position -> controller?.seekTo(position) },
-                        modifier = Modifier.fillMaxSize(),
-                    )
+                if (tabletLyricsWorkspaceActive && playerSong != null) {
+                    Box(
+                        Modifier
+                            .fillMaxSize()
+                            // Keep the global top actions and tab bar clear of
+                            // the player's own transport controls.
+                            .padding(top = TopBarContentHeight + TopBarContentGap, bottom = 96.dp),
+                    ) {
+                        nowPlaying(playerSong, true)
+                    }
                 } else {
                 AnimatedContent(
                     targetState = when {
@@ -3038,11 +3057,25 @@ private fun BitChordApp(
             // put it away and nothing to put it away for — the pane is its
             // own space rather than something borrowed from the page.
             if (playerDocked) {
-                DockedPlayer(
-                    song = playerSong,
-                    width = dockedPlayerWidth(windowWidth),
-                    content = { current -> nowPlaying(current, true) },
-                )
+                if (tabletLyricsWorkspaceActive && playerSong != null) {
+                    TabletLyricsPane(
+                        lines = lyrics,
+                        trackKey = playerSong.videoId,
+                        positionMs = player.position.positionMs,
+                        isPlaying = player.isPlaying,
+                        onSeek = { position -> controller?.seekTo(position) },
+                        artworkUrl = playerSong.thumbnailUrl,
+                        modifier = Modifier
+                            .width(tabletLyricsPaneWidth(windowWidth))
+                            .fillMaxHeight(),
+                    )
+                } else {
+                    DockedPlayer(
+                        song = playerSong,
+                        width = dockedPlayerWidth(windowWidth),
+                        content = { current -> nowPlaying(current, true) },
+                    )
+                }
             }
         }
 
