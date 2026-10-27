@@ -1483,6 +1483,9 @@
     <string name="player_artist_font_size">Player artist size</string>
     <string name="player_artist_font_size_subtitle">Adjust the artist text size on the player screen.</string>
     <string name="player_font_size_value">%1$d sp</string>
+    <string name="player_play_pause_icon_size">Play/pause icon size</string>
+    <string name="player_play_pause_icon_size_subtitle">Adjust the central play and pause icon size on the player screen.</string>
+    <string name="player_icon_size_value">%1$d dp</string>
     <string name="show_player_top_grabber">Show player top handle</string>
     <string name="show_player_top_grabber_subtitle">Show the line used to drag the player closed.</string>
     <string name="allow_cleartext_http">Allow cleartext HTTP</string>

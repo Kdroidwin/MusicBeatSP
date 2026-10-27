@@ -541,6 +541,8 @@ object AppSettings {
     /** Optional typography overrides on the expanded player header, in scaled-independent units. */
     val playerTitleFontSizeSp = MutableStateFlow(20f)
     val playerArtistFontSizeSp = MutableStateFlow(20f)
+    /** Size of the central play/pause glyph, in dp; the legacy size is 62dp. */
+    val playerPlayPauseIconSizeDp = MutableStateFlow(62f)
     /** Shows the small drag handle at the top of the expanded player by default. */
     val showPlayerTopGrabber = MutableStateFlow(true)
     /** App-level second consent for cleartext connections to a configured local server. */
@@ -1273,6 +1275,7 @@ object AppSettings {
         playlistTrackMenuUsesArtworkColor.value = prefs.getBoolean(KEY_PLAYLIST_TRACK_MENU_ARTWORK_COLOR, true)
         playerTitleFontSizeSp.value = prefs.getFloat(KEY_PLAYER_TITLE_FONT_SIZE_SP, 20f).coerceIn(12f, 36f)
         playerArtistFontSizeSp.value = prefs.getFloat(KEY_PLAYER_ARTIST_FONT_SIZE_SP, 20f).coerceIn(12f, 36f)
+        playerPlayPauseIconSizeDp.value = prefs.getFloat(KEY_PLAYER_PLAY_PAUSE_ICON_SIZE_DP, 62f).coerceIn(40f, 78f)
         showPlayerTopGrabber.value = prefs.getBoolean(KEY_SHOW_PLAYER_TOP_GRABBER, true)
         cleartextHttpAllowed.value = prefs.getBoolean(KEY_CLEARTEXT_HTTP_ALLOWED, false)
         whiteCollectionActionButtons.value = prefs.getBoolean(KEY_WHITE_COLLECTION_ACTION_BUTTONS, false)
@@ -1870,6 +1873,12 @@ object AppSettings {
         val safe = value.coerceIn(12f, 36f)
         playerArtistFontSizeSp.value = safe
         prefs.edit().putFloat(KEY_PLAYER_ARTIST_FONT_SIZE_SP, safe).apply()
+    }
+
+    fun setPlayerPlayPauseIconSizeDp(value: Float) {
+        val safe = value.coerceIn(40f, 78f)
+        playerPlayPauseIconSizeDp.value = safe
+        prefs.edit().putFloat(KEY_PLAYER_PLAY_PAUSE_ICON_SIZE_DP, safe).apply()
     }
 
     fun setShowPlayerTopGrabber(value: Boolean) {
@@ -3697,6 +3706,7 @@ object AppSettings {
     private const val KEY_PLAYLIST_TRACK_MENU_ARTWORK_COLOR = "playlist_track_menu_artwork_color"
     private const val KEY_PLAYER_TITLE_FONT_SIZE_SP = "player_title_font_size_sp"
     private const val KEY_PLAYER_ARTIST_FONT_SIZE_SP = "player_artist_font_size_sp"
+    private const val KEY_PLAYER_PLAY_PAUSE_ICON_SIZE_DP = "player_play_pause_icon_size_dp"
     private const val KEY_SHOW_PLAYER_TOP_GRABBER = "show_player_top_grabber"
     private const val KEY_CLEARTEXT_HTTP_ALLOWED = "cleartext_http_allowed"
     private const val KEY_WHITE_COLLECTION_ACTION_BUTTONS = "white_collection_action_buttons"

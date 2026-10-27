@@ -1457,6 +1457,9 @@
     <string name="player_artist_font_size">プレイヤーのアーティスト名サイズ</string>
     <string name="player_artist_font_size_subtitle">プレイヤー画面に表示するアーティスト名の文字サイズを調整します。</string>
     <string name="player_font_size_value">%1$d sp</string>
+    <string name="player_play_pause_icon_size">再生・一時停止アイコンのサイズ</string>
+    <string name="player_play_pause_icon_size_subtitle">プレイヤー画面中央の再生・一時停止アイコンの大きさを調整します。</string>
+    <string name="player_icon_size_value">%1$d dp</string>
     <string name="show_player_top_grabber">プレイヤー上部のハンドルを表示</string>
     <string name="show_player_top_grabber_subtitle">プレイヤーを閉じるときに使う上部の線を表示します。</string>
     <string name="allow_cleartext_http">暗号化されていないHTTPを許可</string>

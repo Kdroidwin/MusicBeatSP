@@ -430,6 +430,7 @@ fun SettingsScreen(
     val playlistTrackMenuUsesArtworkColor by AppSettings.playlistTrackMenuUsesArtworkColor.collectAsStateWithLifecycle()
     val playerTitleFontSizeSp by AppSettings.playerTitleFontSizeSp.collectAsStateWithLifecycle()
     val playerArtistFontSizeSp by AppSettings.playerArtistFontSizeSp.collectAsStateWithLifecycle()
+    val playerPlayPauseIconSizeDp by AppSettings.playerPlayPauseIconSizeDp.collectAsStateWithLifecycle()
     val showPlayerTopGrabber by AppSettings.showPlayerTopGrabber.collectAsStateWithLifecycle()
     val cleartextHttpAllowed by AppSettings.cleartextHttpAllowed.collectAsStateWithLifecycle()
     val parametricEqEnabled by AppSettings.parametricEqEnabled.collectAsStateWithLifecycle()
@@ -974,6 +975,17 @@ fun SettingsScreen(
             sliderValueRange = 12f..36f,
             sliderSteps = 23,
             onSliderValueChange = AppSettings::setPlayerArtistFontSizeSp,
+            activate = {},
+        ),
+        SettingsSearchEntry(
+            title = stringResource(R.string.player_play_pause_icon_size),
+            subtitle = stringResource(R.string.player_play_pause_icon_size_subtitle),
+            keywords = listOf("player", "play", "pause", "icon", "size", "再生", "一時停止", "アイコン", "大きさ"),
+            valueLabel = stringResource(R.string.player_icon_size_value, playerPlayPauseIconSizeDp.roundToInt()),
+            sliderValue = playerPlayPauseIconSizeDp,
+            sliderValueRange = 40f..78f,
+            sliderSteps = 37,
+            onSliderValueChange = AppSettings::setPlayerPlayPauseIconSizeDp,
             activate = {},
         ),
         SettingsSearchEntry(
@@ -2716,6 +2728,20 @@ fun SettingsScreen(
                 onValueChange = AppSettings::setPlayerArtistFontSizeSp,
                 steps = 23,
                 valueRange = 12f..36f,
+                modifier = Modifier.padding(start = ROW_INSET, end = ROW_INSET, bottom = 14.dp),
+            )
+            RowDivider()
+            SettingsRow(
+                icon = Icons.Rounded.PlayArrow,
+                title = stringResource(R.string.player_play_pause_icon_size),
+                subtitle = stringResource(R.string.player_play_pause_icon_size_subtitle),
+                value = stringResource(R.string.player_icon_size_value, playerPlayPauseIconSizeDp.roundToInt()),
+            )
+            Slider(
+                value = playerPlayPauseIconSizeDp,
+                onValueChange = AppSettings::setPlayerPlayPauseIconSizeDp,
+                steps = 37,
+                valueRange = 40f..78f,
                 modifier = Modifier.padding(start = ROW_INSET, end = ROW_INSET, bottom = 14.dp),
             )
             RowDivider()

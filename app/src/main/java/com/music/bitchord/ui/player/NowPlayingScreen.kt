@@ -913,6 +913,7 @@ fun NowPlayingScreen(
     val syncedLyricsEnabled by AppSettings.syncedLyrics.collectAsStateWithLifecycle()
     val playerTitleFontSizeSp by AppSettings.playerTitleFontSizeSp.collectAsStateWithLifecycle()
     val playerArtistFontSizeSp by AppSettings.playerArtistFontSizeSp.collectAsStateWithLifecycle()
+    val playerPlayPauseIconSizeDp by AppSettings.playerPlayPauseIconSizeDp.collectAsStateWithLifecycle()
     val showPlayerTopGrabber by AppSettings.showPlayerTopGrabber.collectAsStateWithLifecycle()
     val hideLyricsStatusText by AppSettings.hideLyricsStatusText.collectAsStateWithLifecycle()
     val hideLyricsSavedMessage by AppSettings.hideLyricsSavedMessage.collectAsStateWithLifecycle()
@@ -3185,7 +3186,7 @@ fun NowPlayingScreen(
                     // here would shunt everything below it on every load.
                     Box(
                         Modifier
-                            .size(74.dp)
+                            .size((playerPlayPauseIconSizeDp + 12f).dp)
                             .then(
                                 if (walkmanControlsActive) {
                                     Modifier.border(1.dp, Color.White.copy(alpha = 0.72f), CircleShape)
@@ -3203,7 +3204,7 @@ fun NowPlayingScreen(
                     TransportGlyph(
                         icon = if (isPlaying) Icons.Rounded.Pause else Icons.Rounded.PlayArrow,
                         contentDescription = stringResource(if (isPlaying) R.string.pause else R.string.play),
-                        size = 62.dp,
+                        size = playerPlayPauseIconSizeDp.dp,
                         onClick = onPlayPause,
                         haptic = if (isPlaying) Haptic.Pause else Haptic.Resume,
                         outlined = walkmanControlsActive,
