@@ -60,6 +60,9 @@
     <string name="recent_search_remove">Hapus “%1$s” dari pencarian terbaru</string>
     <string name="storage_required_save">Akses penyimpanan diperlukan untuk menyimpan lagu</string>
     <string name="storage_required_read">Izin penyimpanan diperlukan untuk membaca file audio lokal</string>
+    <string name="music_audio_access_title">Akses musik dan audio</string>
+    <string name="music_audio_access_description">MusicBeat memerlukan izin untuk membaca file musik dan audio di perangkat Anda. Android akan menampilkan permintaan sistem; pilih Izinkan untuk memuat koleksi lokal.</string>
+    <string name="allow_music_audio">Izinkan akses musik dan audio</string>
     <string name="sharing_coming_soon">Fitur berbagi akan segera hadir</string>
     <string name="already_downloaded">Sudah diunduh</string>
     <plurals name="downloading_song_count">

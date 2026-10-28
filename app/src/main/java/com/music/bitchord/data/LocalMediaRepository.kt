@@ -5,8 +5,6 @@ import android.content.ContentUris
 import android.content.Context
 import android.content.Intent
 import android.content.pm.PackageManager
-import android.provider.DocumentsContract
-import android.provider.DocumentsContract.Document
 import android.media.MediaMetadataRetriever
 import android.net.Uri
 import android.os.Build
@@ -20,21 +18,15 @@ import com.music.bitchord.data.settings.AppSettings
 import com.music.bitchord.download.DownloadStore
 import com.music.bitchord.download.Downloads
 import com.music.bitchord.feature.localmusic.domain.model.LocalFolder
-import com.music.bitchord.feature.localmusic.data.LocalFolderRootResolver
 import kotlinx.coroutines.Dispatchers
-import kotlinx.coroutines.currentCoroutineContext
-import kotlinx.coroutines.ensureActive
 import kotlinx.coroutines.withContext
 import java.io.File
-import java.util.ArrayDeque
 import java.util.Locale
 
 object LocalMediaRepository {
 
     private const val TAG = "BitChord"
     private const val MIN_LOCAL_MUSIC_DURATION_MS = 30_000L
-    private const val MAX_SAF_TREE_ENTRIES = 50_000
-    private const val MAX_SAF_TREE_DEPTH = 64
 
     private val localMusicExtensions = setOf(
         "mp3", "m4a", "flac", "ogg", "opus", "aac", "webm",
@@ -105,13 +97,8 @@ object LocalMediaRepository {
         }
     }
 
-    /** Check whether the app has any supported read path for the local music library. */
+    /** Check whether the app has the audio or all-files permission for the local library. */
     fun hasStoragePermission(context: Context): Boolean {
-        val configuredTree = AppSettings.localMusicAccessTreeUri.value.isNotBlank()
-        if (configuredTree) return selectedMusicTreeUri(context) != null
-        // Clearing a tree grant is a revoke action. Do not expose a previously
-        // granted broad permission unless the user explicitly chooses that path.
-        if (AppSettings.localMusicScopeRequired.value) return false
         if (hasAllFilesPermission(context)) return true
         return if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
             ContextCompat.checkSelfPermission(
@@ -124,134 +111,6 @@ object LocalMediaRepository {
                 Manifest.permission.READ_EXTERNAL_STORAGE,
             ) == PackageManager.PERMISSION_GRANTED
         }
-    }
-
-    /**
-     * Returns the explicitly selected, persisted SAF tree grant only while Android still
-     * recognizes its read permission. A stale URI in preferences never grants access.
-     */
-    private fun selectedMusicTreeUri(context: Context): Uri? {
-        val uri = runCatching { Uri.parse(AppSettings.localMusicAccessTreeUri.value) }.getOrNull()
-            ?: return null
-        if (uri.scheme != "content" || !DocumentsContract.isTreeUri(uri)) return null
-        val hasReadGrant = runCatching {
-            context.contentResolver.persistedUriPermissions.any { it.uri == uri && it.isReadPermission }
-        }.getOrDefault(false)
-        return uri.takeIf { hasReadGrant }
-    }
-
-    private data class SafDirectory(
-        val documentId: String,
-        val folderPath: String,
-        val depth: Int,
-    )
-
-    /**
-     * Recursively indexes audio only below the SAF tree the user selected. Each provider
-     * query is isolated so an inaccessible child folder is skipped without ending the scan.
-     */
-    private suspend fun scanSelectedMusicTree(context: Context, treeUri: Uri): List<Song> {
-        val rootDocumentId = runCatching { DocumentsContract.getTreeDocumentId(treeUri) }.getOrNull()
-            ?: return emptyList()
-        val resolvedRoot = LocalFolderRootResolver.resolve(context, treeUri)
-        val rootLabel = rootDocumentId.substringAfter(':', rootDocumentId)
-            .substringAfterLast('/').ifBlank { "Music" }
-        val safeAuthority = treeUri.authority.orEmpty().replace(Regex("[^A-Za-z0-9_.-]"), "_")
-        val pseudoRoot = "/saf/$safeAuthority/${Integer.toHexString(rootDocumentId.hashCode())}/$rootLabel"
-        val rootPath = resolvedRoot ?: pseudoRoot
-        val directories = ArrayDeque<SafDirectory>().apply {
-            addLast(SafDirectory(rootDocumentId, rootPath, 0))
-        }
-        val visitedDocumentIds = HashSet<String>()
-        val songs = ArrayList<Song>()
-        val resolver = context.contentResolver
-        val projection = arrayOf(
-            Document.COLUMN_DOCUMENT_ID,
-            Document.COLUMN_DISPLAY_NAME,
-            Document.COLUMN_MIME_TYPE,
-            Document.COLUMN_LAST_MODIFIED,
-        )
-        val filterNonMusic = AppSettings.filterNonMusicAudio.value
-        var visitedEntries = 0
-
-        while (directories.isNotEmpty() && visitedEntries < MAX_SAF_TREE_ENTRIES) {
-            currentCoroutineContext().ensureActive()
-            val directory = directories.removeLast()
-            if (!visitedDocumentIds.add(directory.documentId)) continue
-            val childrenUri = runCatching {
-                DocumentsContract.buildChildDocumentsUriUsingTree(treeUri, directory.documentId)
-            }.getOrNull() ?: continue
-
-            runCatching {
-                resolver.query(childrenUri, projection, null, null, null)?.use { cursor ->
-                    val idColumn = cursor.getColumnIndex(Document.COLUMN_DOCUMENT_ID)
-                    val nameColumn = cursor.getColumnIndex(Document.COLUMN_DISPLAY_NAME)
-                    val mimeColumn = cursor.getColumnIndex(Document.COLUMN_MIME_TYPE)
-                    val modifiedColumn = cursor.getColumnIndex(Document.COLUMN_LAST_MODIFIED)
-                    if (idColumn < 0 || nameColumn < 0 || mimeColumn < 0) return@use
-
-                    while (cursor.moveToNext() && visitedEntries < MAX_SAF_TREE_ENTRIES) {
-                        currentCoroutineContext().ensureActive()
-                        visitedEntries++
-                        val childId = cursor.getString(idColumn)?.takeIf(String::isNotBlank) ?: continue
-                        val name = cursor.getString(nameColumn)?.trim()?.takeIf(String::isNotBlank) ?: continue
-                        val mimeType = cursor.getString(mimeColumn).orEmpty()
-                        if (mimeType == Document.MIME_TYPE_DIR) {
-                            if (directory.depth < MAX_SAF_TREE_DEPTH) {
-                                val folderPath = appendFolderPath(directory.folderPath, name)
-                                if (!AppSettings.isFolderBlacklisted(folderPath)) {
-                                    directories.addLast(SafDirectory(childId, folderPath, directory.depth + 1))
-                                }
-                            }
-                            continue
-                        }
-                        if (!isAudioFileName(name)) continue
-                        val fileUri = runCatching {
-                            DocumentsContract.buildDocumentUriUsingTree(treeUri, childId)
-                        }.getOrNull() ?: continue
-                        val modifiedMillis = modifiedColumn.takeIf { it >= 0 }
-                            ?.let(cursor::getLong)
-                            ?.takeIf { it > 0L }
-                        val modifiedSeconds = modifiedMillis?.div(1000L)
-                        val physicalFile = resolvedRoot?.let { root ->
-                            val relative = childId.takeIf { it.startsWith("$rootDocumentId/") }
-                                ?.removePrefix(rootDocumentId)
-                                ?.trimStart('/')
-                                ?.split('/')
-                                ?.takeIf { parts -> parts.isNotEmpty() && parts.none { it == "." || it == ".." } }
-                            relative?.dropLast(1)
-                                ?.takeIf { it.isNotEmpty() }
-                                ?.joinToString("/")
-                                ?.let { File(root, it).absolutePath }
-                        }
-                        if (AppSettings.isFolderBlacklisted(directory.folderPath)) continue
-                        val song = buildSongFromUri(
-                            context = context,
-                            uriStr = fileUri.toString(),
-                            fileName = name,
-                            localFolderPath = directory.folderPath,
-                            localDateModifiedSeconds = modifiedSeconds,
-                        )
-                        val durationMs = durationTextToMillis(song.durationText)
-                        if (filterNonMusic && !isEligibleLocalMusic(durationMs, name, physicalFile ?: directory.folderPath)) continue
-                        songs.add(song)
-                    }
-                }
-            }.onFailure { Log.w(TAG, "Skipping inaccessible SAF folder: ${it.message}") }
-        }
-        return songs.sortedWith(compareBy(String.CASE_INSENSITIVE_ORDER) { it.title })
-    }
-
-    private fun appendFolderPath(parent: String, childName: String): String {
-        val safeName = childName.replace('/', '_').replace('\\', '_').trim().ifBlank { "Folder" }
-        return if (parent.endsWith('/')) "$parent$safeName" else "$parent/$safeName"
-    }
-
-    private fun durationTextToMillis(text: String?): Long {
-        val parts = text?.split(':')?.mapNotNull(String::toLongOrNull) ?: return 0L
-        if (parts.isEmpty() || parts.size > 3) return 0L
-        val seconds = parts.fold(0L) { total, part -> total * 60L + part }
-        return seconds * 1000L
     }
 
     /**
@@ -396,10 +255,6 @@ object LocalMediaRepository {
      */
     suspend fun getLocalMusic(context: Context): List<Song> = withContext(Dispatchers.IO) {
         if (!hasStoragePermission(context)) return@withContext emptyList()
-        // A selected tree is an explicit privacy boundary, even if the app had a
-        // broader audio permission from an older install or a later user choice.
-        selectedMusicTreeUri(context)?.let { return@withContext scanSelectedMusicTree(context, it) }
-
         val songs = mutableListOf<Song>()
         // This scan runs over every audio file on the device, which includes
         // whatever this app has downloaded into Music/BitChord alongside
@@ -656,22 +511,6 @@ object LocalMediaRepository {
      */
     suspend fun getAllDiscoveredFolders(context: Context): List<LocalFolder> = withContext(Dispatchers.IO) {
         if (!hasStoragePermission(context)) return@withContext emptyList()
-        selectedMusicTreeUri(context)?.let { treeUri ->
-            val scopedSongs = scanSelectedMusicTree(context, treeUri)
-            return@withContext scopedSongs.mapNotNull { it.localFolderPath }
-                .groupingBy { it }
-                .eachCount()
-                .map { (path, count) ->
-                    LocalFolder(
-                        path = path,
-                        name = path.trimEnd('/').substringAfterLast('/').ifBlank { path },
-                        parentPath = path.substringBeforeLast('/').takeIf { it.isNotBlank() && it != path },
-                        songCount = count,
-                        isBlacklisted = AppSettings.isFolderBlacklisted(path),
-                    )
-                }
-                .sortedWith(compareBy({ it.isBlacklisted }, { it.name.lowercase(Locale.ROOT) }))
-        }
         val counts = mutableMapOf<String, Int>()
         val folderDisplayNames = mutableMapOf<String, String>()
         val projection = buildList {

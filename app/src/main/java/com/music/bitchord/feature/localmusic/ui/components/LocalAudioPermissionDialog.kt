@@ -5,7 +5,7 @@ import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.rounded.FolderSpecial
+import androidx.compose.material.icons.rounded.LibraryMusic
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Button
 import androidx.compose.material3.Icon
@@ -20,12 +20,11 @@ import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import com.music.bitchord.R
 
-/** First-run choice that defaults to a read-only SAF folder grant. */
+/** Explains the least-privileged local-library permission before Android's system prompt. */
 @Composable
-fun ScopedMusicAccessDialog(
-    onChooseFolder: () -> Unit,
+fun LocalAudioPermissionDialog(
+    onRequestPermission: () -> Unit,
     onDismissRequest: () -> Unit,
-    onUseAudioPermission: () -> Unit,
     modifier: Modifier = Modifier,
 ) {
     AlertDialog(
@@ -36,14 +35,14 @@ fun ScopedMusicAccessDialog(
         modifier = modifier,
         icon = {
             Icon(
-                imageVector = Icons.Rounded.FolderSpecial,
+                imageVector = Icons.Rounded.LibraryMusic,
                 contentDescription = null,
                 tint = MaterialTheme.colorScheme.primary,
             )
         },
         title = {
             Text(
-                text = stringResource(R.string.scoped_music_access_title),
+                text = stringResource(R.string.music_audio_access_title),
                 style = MaterialTheme.typography.titleLarge,
                 fontWeight = FontWeight.SemiBold,
                 textAlign = TextAlign.Center,
@@ -51,7 +50,7 @@ fun ScopedMusicAccessDialog(
         },
         text = {
             Text(
-                text = stringResource(R.string.scoped_music_access_description),
+                text = stringResource(R.string.music_audio_access_description),
                 style = MaterialTheme.typography.bodyMedium,
                 color = MaterialTheme.colorScheme.onSurfaceVariant,
                 textAlign = TextAlign.Center,
@@ -59,12 +58,12 @@ fun ScopedMusicAccessDialog(
         },
         confirmButton = {
             Button(
-                onClick = onChooseFolder,
+                onClick = onRequestPermission,
                 modifier = Modifier.fillMaxWidth(),
                 shape = RoundedCornerShape(16.dp),
             ) {
                 Text(
-                    text = stringResource(R.string.choose_music_folder),
+                    text = stringResource(R.string.allow_music_audio),
                     fontWeight = FontWeight.SemiBold,
                 )
             }
@@ -75,11 +74,8 @@ fun ScopedMusicAccessDialog(
                     .fillMaxWidth()
                     .padding(top = 4.dp),
             ) {
-                TextButton(onClick = onUseAudioPermission, modifier = Modifier.fillMaxWidth()) {
-                    Text(stringResource(R.string.continue_all_music_access))
-                }
                 TextButton(onClick = onDismissRequest, modifier = Modifier.fillMaxWidth()) {
-                    Text(stringResource(R.string.not_now))
+                    Text(stringResource(android.R.string.cancel))
                 }
             }
         },

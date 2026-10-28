@@ -63,6 +63,9 @@
     <string name="recent_search_remove">हाल की खोजों से “%1$s” हटाएं</string>
     <string name="storage_required_save">गाने सेव करने के लिए स्टोरेज एक्सेस ज़रूरी है</string>
     <string name="storage_required_read">लोकल ऑडियो फ़ाइलें पढ़ने के लिए स्टोरेज अनुमति ज़रूरी है</string>
+    <string name="music_audio_access_title">संगीत और ऑडियो की अनुमति</string>
+    <string name="music_audio_access_description">MusicBeat को आपके डिवाइस पर संगीत और ऑडियो फ़ाइलें पढ़ने की अनुमति चाहिए। Android सिस्टम अनुरोध दिखाएगा; स्थानीय लाइब्रेरी लोड करने के लिए अनुमति दें चुनें।</string>
+    <string name="allow_music_audio">संगीत और ऑडियो की अनुमति दें</string>
     <string name="sharing_coming_soon">शेयरिंग जल्द आ रही है</string>
     <string name="already_downloaded">पहले से डाउनलोड है</string>
     <plurals name="downloading_song_count">

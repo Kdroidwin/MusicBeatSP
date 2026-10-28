@@ -67,6 +67,9 @@
     <string name="recent_search_remove">Rimuovi “%1$s” dalle ricerche recenti</string>
     <string name="storage_required_save">È necessario l\'accesso allo spazio di archiviazione per salvare i brani</string>
     <string name="storage_required_read">È necessaria l\'autorizzazione di archiviazione per leggere i file audio locali</string>
+    <string name="music_audio_access_title">Accesso a musica e audio</string>
+    <string name="music_audio_access_description">MusicBeat ha bisogno dell’autorizzazione per leggere i file musicali e audio sul dispositivo. Android mostrerà una richiesta di sistema; scegli Consenti per caricare la raccolta locale.</string>
+    <string name="allow_music_audio">Consenti accesso a musica e audio</string>
     <string name="sharing_coming_soon">La condivisione arriverà presto</string>
     <string name="already_downloaded">Già scaricato</string>
     <plurals name="downloading_song_count">

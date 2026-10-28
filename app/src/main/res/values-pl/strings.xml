@@ -64,6 +64,9 @@
     <string name="recent_search_remove">Usuń “%1$s” z ostatnich wyszukiwań</string>
     <string name="storage_required_save">Wymagany dostęp do pamięci, aby zapisać piosenki</string>
     <string name="storage_required_read">Wymagane uprawnienia do odczytu plików audio na urządzeniu</string>
+    <string name="music_audio_access_title">Dostęp do muzyki i plików audio</string>
+    <string name="music_audio_access_description">MusicBeat potrzebuje uprawnienia do odczytu plików muzycznych i audio na urządzeniu. Android wyświetli systemowy monit; wybierz Zezwól, aby wczytać lokalną bibliotekę.</string>
+    <string name="allow_music_audio">Zezwól na dostęp do muzyki i audio</string>
     <string name="sharing_coming_soon">Udostępnianie już wkrótce</string>
     <string name="already_downloaded">Już pobrane</string>
     <plurals name="downloading_song_count">

@@ -235,18 +235,6 @@ private fun musicFolderRootSearchEntry(path: String, onPick: () -> Unit) = Setti
 )
 
 @Composable
-private fun localMusicAccessSearchEntry(isSelected: Boolean, onPick: () -> Unit) = SettingsSearchEntry(
-    title = stringResource(R.string.local_music_folder_access),
-    subtitle = stringResource(R.string.local_music_folder_access_search_subtitle),
-    keywords = listOf("folder", "SAF", "scope", "privacy", "music", "フォルダー", "範囲", "音楽", "プライバシー"),
-    valueLabel = stringResource(
-        if (isSelected) R.string.local_music_folder_access_search_selected
-        else R.string.local_music_folder_access_not_selected,
-    ),
-    activate = onPick,
-)
-
-@Composable
 private fun musicServerSearchEntry(onOpen: () -> Unit) = SettingsSearchEntry(
     title = stringResource(R.string.music_servers),
     subtitle = stringResource(R.string.music_servers_subtitle),
@@ -436,10 +424,6 @@ fun SettingsScreen(
 ) {
     val context = LocalContext.current
     val musicFolderRootPicker = rememberMusicFolderRootPicker(AppSettings::setLocalMusicFolderPath)
-    val localMusicAccessTreeUri by AppSettings.localMusicAccessTreeUri.collectAsStateWithLifecycle()
-    val localMusicAccessPicker = rememberLocalMusicAccessPicker(localMusicAccessTreeUri) {
-        AppSettings.setLocalMusicAccessTreeUri(it)
-    }
     val settingsScrollState = rememberScrollState()
     val popupOverlayPermissionLauncher = rememberLauncherForActivityResult(
         ActivityResultContracts.StartActivityForResult(),
@@ -1571,10 +1555,6 @@ fun SettingsScreen(
             cleartextHttpAllowed,
         ) { AppSettings.setCleartextHttpAllowed(!cleartextHttpAllowed) },
         musicFolderRootSearchEntry(localMusicFolderRoot) { musicFolderRootPicker.launch(null) },
-        localMusicAccessSearchEntry(localMusicAccessTreeUri.isNotBlank()) {
-            val initial = localMusicAccessTreeUri.takeIf(String::isNotBlank)?.let(Uri::parse)
-            localMusicAccessPicker.launch(initial)
-        },
         SettingsSearchEntry(
             stringResource(R.string.full_screen_collection_artwork),
             stringResource(R.string.full_screen_collection_artwork_subtitle),
@@ -4534,7 +4514,6 @@ fun SettingsScreen(
             localFolderHierarchy = localFolderHierarchy,
             includeRemoteSourceMediaInLibrary = includeRemoteSourceMediaInLibrary,
             localMusicFolderRoot = localMusicFolderRoot,
-            localMusicAccessTreeUri = localMusicAccessTreeUri,
             fullScreenCollectionArtwork = fullScreenCollectionArtwork,
             hideCollectionTopBar = hideCollectionTopBar,
             hideFloatingCollectionControls = hideFloatingCollectionControls,
@@ -4551,14 +4530,6 @@ fun SettingsScreen(
             onManageFolders = { showManageFoldersSheet = true },
             onChooseMusicFolder = { musicFolderRootPicker.launch(null) },
             onClearMusicFolder = { AppSettings.setLocalMusicFolderPath("") },
-            onChooseMusicAccess = {
-                val initial = localMusicAccessTreeUri.takeIf(String::isNotBlank)?.let(Uri::parse)
-                localMusicAccessPicker.launch(initial)
-            },
-            onClearMusicAccess = {
-                releaseLocalMusicAccessGrant(context, localMusicAccessTreeUri)
-                AppSettings.setLocalMusicAccessTreeUri("")
-            },
             onOpenAllFiles = {
                 runCatching {
                     allFilesSettingsLauncher.launch(LocalMediaRepository.createAllFilesAccessIntent(context))
@@ -5763,7 +5734,6 @@ private fun LocalMusicSettingsGroup(
     localFolderHierarchy: Boolean,
     includeRemoteSourceMediaInLibrary: Boolean,
     localMusicFolderRoot: String,
-    localMusicAccessTreeUri: String,
     fullScreenCollectionArtwork: Boolean,
     hideCollectionTopBar: Boolean,
     hideFloatingCollectionControls: Boolean,
@@ -5780,8 +5750,6 @@ private fun LocalMusicSettingsGroup(
     onManageFolders: () -> Unit,
     onChooseMusicFolder: () -> Unit,
     onClearMusicFolder: () -> Unit,
-    onChooseMusicAccess: () -> Unit,
-    onClearMusicAccess: () -> Unit,
     onOpenAllFiles: () -> Unit,
 ) {
     val context = LocalContext.current
@@ -5877,12 +5845,6 @@ SettingsGroup(header = stringResource(R.string.local_music)) {
             )
         },
         onClick = { AppSettings.setIncludeRemoteSourceMediaInLibrary(!includeRemoteSourceMediaInLibrary) },
-    )
-    RowDivider()
-    LocalMusicAccessSettingsRow(
-        treeUri = localMusicAccessTreeUri,
-        onChoose = onChooseMusicAccess,
-        onClear = onClearMusicAccess,
     )
     RowDivider()
     LocalMusicFolderRootSettingsRow(

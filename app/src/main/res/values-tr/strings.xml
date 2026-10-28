@@ -67,6 +67,9 @@
     <string name="recent_search_remove">“%1$s” öğesini son aramalardan kaldır</string>
     <string name="storage_required_save">Şarkıları kaydetmek için depolama erişimi gerekiyor</string>
     <string name="storage_required_read">Yerel ses dosyalarını okumak için depolama izni gerekiyor</string>
+    <string name="music_audio_access_title">Müzik ve ses erişimi</string>
+    <string name="music_audio_access_description">MusicBeat\'in cihazınızdaki müzik ve ses dosyalarını okuyabilmesi için izin gerekir. Android bir sistem isteği gösterecek; yerel kitaplığı yüklemek için İzin ver\'i seçin.</string>
+    <string name="allow_music_audio">Müzik ve ses erişimine izin ver</string>
     <string name="sharing_coming_soon">Paylaşım yakında geliyor</string>
     <string name="already_downloaded">Zaten indirildi</string>
     <plurals name="downloading_song_count">

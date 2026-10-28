@@ -1,10 +1,12 @@
 package com.music.bitchord.data.settings
 
 import android.content.Context
+import android.content.Intent
 import android.content.SharedPreferences
 import android.net.ConnectivityManager
 import android.net.Network
 import android.net.NetworkCapabilities
+import android.net.Uri
 import androidx.media3.common.Player
 import com.music.bitchord.BuildConfig
 import com.music.bitchord.auth.AuthStore
@@ -1014,14 +1016,8 @@ object AppSettings {
      */
     val detailSongSorts = MutableStateFlow<Map<String, SongSort>>(emptyMap())
 
-    /** Empty means every MediaStore folder; otherwise this is a persisted SAF tree URI. */
+    /** Optional root path selected for the folders tab. */
     val localMusicFolderUri = MutableStateFlow("")
-    /** Device-local, read-only SAF scope for the music library; never restored from backups. */
-    val localMusicAccessTreeUri = MutableStateFlow("")
-    /** Prevents clearing a scoped grant from silently falling back to an older broad permission. */
-    val localMusicScopeRequired = MutableStateFlow(true)
-    val localMusicAccessRevision = MutableStateFlow(0)
-
     /** Remote file-library connection details. Credentials are Keystore-backed. */
     val webdavUrl = MutableStateFlow("")
     val webdavUsername = MutableStateFlow("")
@@ -1153,8 +1149,44 @@ object AppSettings {
         prefs = appContext.getSharedPreferences("bitchord_settings", Context.MODE_PRIVATE)
         authStore = AuthStore(appContext)
         migratePlaintextCredentials()
+        migrateScopedMusicAccessBackToAudioPermission()
         readAll()
         watchConnection(context)
+    }
+
+    /** Removes the short-lived SAF-only library gate and releases its persisted grant. */
+    private fun migrateScopedMusicAccessBackToAudioPermission() {
+        val hadLegacyScope = prefs.contains(KEY_LOCAL_MUSIC_ACCESS_TREE_URI) ||
+            prefs.contains(KEY_LOCAL_MUSIC_SCOPE_REQUIRED)
+        if (!hadLegacyScope) return
+
+        val legacyUri = prefs.getString(KEY_LOCAL_MUSIC_ACCESS_TREE_URI, "").orEmpty()
+        if (legacyUri.isNotBlank()) {
+            runCatching { Uri.parse(legacyUri) }.getOrNull()?.let { uri ->
+                val hasPersistedReadGrant = runCatching {
+                    appContext.contentResolver.persistedUriPermissions.any {
+                        it.uri == uri && it.isReadPermission
+                    }
+                }.getOrDefault(false)
+                if (hasPersistedReadGrant) {
+                    runCatching {
+                        appContext.contentResolver.releasePersistableUriPermission(
+                            uri,
+                            Intent.FLAG_GRANT_READ_URI_PERMISSION,
+                        )
+                    }
+                }
+            }
+        }
+
+        // A folder choice previously dismissed the first-run prompt. Re-open it so
+        // users without audio permission are guided to Android's localized prompt.
+        val migrated = prefs.edit()
+            .remove(KEY_LOCAL_MUSIC_ACCESS_TREE_URI)
+            .remove(KEY_LOCAL_MUSIC_SCOPE_REQUIRED)
+            .putBoolean(KEY_ALL_FILES_PERMISSION_ASKED, false)
+            .commit()
+        if (!migrated) android.util.Log.w("BitChord", "Could not migrate legacy folder permission state")
     }
 
     /** Moves legacy account tokens into Keystore-backed storage, then removes the plaintext copies. */
@@ -1556,10 +1588,6 @@ object AppSettings {
         localArtistsViewType.value = readLibraryViewType(KEY_LOCAL_ARTISTS_VIEW_TYPE, LibraryViewType.GRID)
         localFolderHierarchy.value = prefs.getBoolean(KEY_LOCAL_FOLDER_HIERARCHY, false)
         localMusicFolderUri.value = prefs.getString(KEY_LOCAL_MUSIC_FOLDER_PATH, "").orEmpty()
-        localMusicAccessTreeUri.value = prefs.getString(KEY_LOCAL_MUSIC_ACCESS_TREE_URI, "").orEmpty()
-        // Missing key means a pre-2.8.3 install: require the new explicit folder
-        // grant once instead of silently continuing an older broad library scan.
-        localMusicScopeRequired.value = prefs.getBoolean(KEY_LOCAL_MUSIC_SCOPE_REQUIRED, true)
         webdavUrl.value = prefs.getString(KEY_WEBDAV_URL, "").orEmpty()
         webdavAllowInsecureHttp.value = prefs.getBoolean(KEY_WEBDAV_ALLOW_HTTP, false)
         webdavUsername.value = authStore.getProtectedValue(KEY_WEBDAV_USERNAME).orEmpty()
@@ -3400,21 +3428,6 @@ object AppSettings {
         val safePath = path.trim().take(4096)
         localMusicFolderUri.value = safePath
         prefs.edit().putString(KEY_LOCAL_MUSIC_FOLDER_PATH, safePath).apply()
-    }
-
-    /** Stores the device-local SAF read scope; its grant is managed by the platform, not backups. */
-    fun setLocalMusicAccessTreeUri(uri: String) {
-        val safeUri = uri.trim().take(4096)
-        localMusicAccessTreeUri.value = safeUri
-        if (safeUri.isNotBlank()) setLocalMusicScopeRequired(true)
-        localMusicAccessRevision.value += 1
-        prefs.edit().putString(KEY_LOCAL_MUSIC_ACCESS_TREE_URI, safeUri).apply()
-    }
-
-    fun setLocalMusicScopeRequired(required: Boolean) {
-        localMusicScopeRequired.value = required
-        localMusicAccessRevision.value += 1
-        prefs.edit().putBoolean(KEY_LOCAL_MUSIC_SCOPE_REQUIRED, required).apply()
     }
 
     fun setWebDavUrl(value: String) {

@@ -69,6 +69,9 @@
     <string name="recent_search_remove">Удалить «%1$s» из недавних запросов</string>
     <string name="storage_required_save">Для сохранения песен нужен доступ к хранилищу</string>
     <string name="storage_required_read">Для чтения локальных аудиофайлов нужно разрешение на доступ к хранилищу</string>
+    <string name="music_audio_access_title">Доступ к музыке и аудио</string>
+    <string name="music_audio_access_description">MusicBeat требуется разрешение на чтение музыкальных и аудиофайлов на устройстве. Android покажет системный запрос; выберите Разрешить, чтобы загрузить локальную библиотеку.</string>
+    <string name="allow_music_audio">Разрешить доступ к музыке и аудио</string>
     <string name="sharing_coming_soon">Функция «Поделиться» скоро появится</string>
     <string name="already_downloaded">Уже загружено</string>
     <plurals name="downloading_song_count">

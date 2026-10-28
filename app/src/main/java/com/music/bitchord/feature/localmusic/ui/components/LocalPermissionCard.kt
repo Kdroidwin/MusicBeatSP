@@ -1,22 +1,18 @@
 package com.music.bitchord.feature.localmusic.ui.components
 
 import androidx.compose.foundation.background
-import androidx.compose.foundation.border
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
-import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
-import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.rounded.FolderSpecial
-import androidx.compose.material.icons.rounded.Lock
+import androidx.compose.material.icons.rounded.LibraryMusic
 import androidx.compose.material3.Button
 import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.Icon
@@ -27,24 +23,17 @@ import androidx.compose.runtime.Composable
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
-import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.res.stringResource
 import com.music.bitchord.R
 import androidx.compose.ui.unit.dp
 
-import androidx.compose.material3.TextButton
-
-/**
- * Aesthetic permission card displayed when device audio or all files access is required.
- */
+/** Permission card shown when MusicBeat cannot read the local audio library. */
 @Composable
 fun LocalPermissionCard(
     onRequestPermission: () -> Unit,
     modifier: Modifier = Modifier,
-    onFallbackPermission: (() -> Unit)? = null,
-    buttonText: String? = null,
 ) {
     Surface(
         modifier = modifier
@@ -72,7 +61,7 @@ fun LocalPermissionCard(
                 contentAlignment = Alignment.Center,
             ) {
                 Icon(
-                    imageVector = Icons.Rounded.FolderSpecial,
+                    imageVector = Icons.Rounded.LibraryMusic,
                     contentDescription = null,
                     tint = MaterialTheme.colorScheme.onPrimaryContainer,
                     modifier = Modifier.size(32.dp),
@@ -82,7 +71,7 @@ fun LocalPermissionCard(
             Spacer(modifier = Modifier.height(16.dp))
 
             Text(
-                text = stringResource(R.string.scoped_music_access_title),
+                text = stringResource(R.string.music_audio_access_title),
                 style = MaterialTheme.typography.titleLarge,
                 fontWeight = FontWeight.Bold,
                 color = MaterialTheme.colorScheme.onSurface,
@@ -92,7 +81,7 @@ fun LocalPermissionCard(
             Spacer(modifier = Modifier.height(8.dp))
 
             Text(
-                text = stringResource(R.string.local_music_folder_access_fallback),
+                text = stringResource(R.string.music_audio_access_description),
                 style = MaterialTheme.typography.bodyMedium,
                 color = MaterialTheme.colorScheme.onSurfaceVariant,
                 textAlign = TextAlign.Center,
@@ -113,21 +102,10 @@ fun LocalPermissionCard(
                 ),
             ) {
                 Text(
-                    text = buttonText ?: stringResource(R.string.choose_music_folder),
+                    text = stringResource(R.string.allow_music_audio),
                     style = MaterialTheme.typography.labelLarge,
                     fontWeight = FontWeight.SemiBold,
                 )
-            }
-
-            if (onFallbackPermission != null) {
-                Spacer(modifier = Modifier.height(8.dp))
-                TextButton(onClick = onFallbackPermission) {
-                    Text(
-                        text = stringResource(R.string.continue_all_music_access),
-                        style = MaterialTheme.typography.labelMedium,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant,
-                    )
-                }
             }
         }
     }
