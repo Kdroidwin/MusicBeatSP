@@ -63,6 +63,9 @@
     <string name="music_audio_access_title">音乐和音频访问权限</string>
     <string name="music_audio_access_description">MusicBeat 需要权限才能读取设备上的音乐和音频文件。Android 会显示系统权限提示；选择允许即可加载本地音乐库。</string>
     <string name="allow_music_audio">允许访问音乐和音频</string>
+    <string name="all_files_access_warning_title">广泛访问设备文件</string>
+    <string name="all_files_access_warning_body">此可选权限可能允许访问音乐库以外的共享文件，并允许修改或删除这些文件。普通播放只需音乐和音频权限。只有在需要管理整个设备的文件时才授予广泛访问权限。</string>
+    <string name="all_files_access_action">打开所有文件访问设置</string>
     <string name="sharing_coming_soon">分享功能即将推出</string>
     <string name="already_downloaded">已下载</string>
     <plurals name="downloading_song_count">

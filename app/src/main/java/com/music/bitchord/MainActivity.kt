@@ -925,7 +925,7 @@ private fun BitChordApp(
     }
     val allFilesAsked by AppSettings.allFilesPermissionAsked.collectAsStateWithLifecycle()
     var showFirstLaunchPermissionDialog by rememberSaveable {
-        mutableStateOf(!allFilesAsked && !LocalMediaRepository.hasStoragePermission(context))
+        mutableStateOf(!allFilesAsked)
     }
 
     val localSongsState by viewModel.localSongs.collectAsStateWithLifecycle()
@@ -1024,9 +1024,6 @@ private fun BitChordApp(
                         viewModel.reloadLocalDetail("local:all")
                         viewModel.loadLocalMusic()
                     }
-                }
-                if (currentStorage) {
-                    showFirstLaunchPermissionDialog = false
                 }
             }
         }
@@ -3922,7 +3919,22 @@ private fun BitChordApp(
                 onRequestPermission = {
                     AppSettings.setAllFilesPermissionAsked(true)
                     showFirstLaunchPermissionDialog = false
-                    requestAudioPermission()
+                    if (LocalMediaRepository.hasStoragePermission(context)) {
+                        hasStoragePermission = true
+                        viewModel.reloadLocalDetail("local:all")
+                        viewModel.loadLocalMusic()
+                    } else {
+                        requestAudioPermission()
+                    }
+                },
+                onRequestAllFilesAccess = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.R) {
+                    {
+                        AppSettings.setAllFilesPermissionAsked(true)
+                        showFirstLaunchPermissionDialog = false
+                        requestAllFilesAccess()
+                    }
+                } else {
+                    null
                 },
                 onDismissRequest = {
                     AppSettings.setAllFilesPermissionAsked(true)

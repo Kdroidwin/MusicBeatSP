@@ -92,9 +92,35 @@ class TagEditorViewModel(app: Application) : AndroidViewModel(app) {
     fun save(song: Song) {
         viewModelScope.launch {
             _isSaving.value = true
-            val success = TagLibWriter.writeTags(getApplication(), song, _tags.value)
+            val current = _tags.value
+            val metadataChanged = current.hasDifferentMetadataThan(initialTags)
+            val success = TagLibWriter.writeTags(
+                context = getApplication(),
+                song = song,
+                data = current,
+                writeMetadata = metadataChanged,
+            )
             _isSaving.value = false
             _saveEvent.emit(success)
         }
     }
+
+    private fun SongTagData.hasDifferentMetadataThan(other: SongTagData): Boolean =
+        title != other.title ||
+            album != other.album ||
+            artist != other.artist ||
+            albumArtist != other.albumArtist ||
+            composer != other.composer ||
+            conductor != other.conductor ||
+            publisher != other.publisher ||
+            genre != other.genre ||
+            year != other.year ||
+            trackNumber != other.trackNumber ||
+            trackTotal != other.trackTotal ||
+            discNumber != other.discNumber ||
+            discTotal != other.discTotal ||
+            lyrics != other.lyrics ||
+            lyricist != other.lyricist ||
+            arranger != other.arranger ||
+            comment != other.comment
 }

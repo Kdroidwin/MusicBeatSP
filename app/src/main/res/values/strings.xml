@@ -116,6 +116,9 @@
     <string name="music_audio_access_title">Music and audio access</string>
     <string name="music_audio_access_description">MusicBeat needs permission to read music and audio files on your device. Android will show a system prompt; choose Allow to load your local library.</string>
     <string name="allow_music_audio">Allow music and audio</string>
+    <string name="all_files_access_warning_title">Broad access to device files</string>
+    <string name="all_files_access_warning_body">This optional permission can expose, modify, or delete shared files outside your music library. Music and audio access is enough for normal playback. Grant broad access only if you need full-device file operations.</string>
+    <string name="all_files_access_action">Open All Files Access settings</string>
     <string name="sharing_coming_soon">Sharing is coming soon</string>
     <string name="already_downloaded">Already downloaded</string>
     <plurals name="downloading_song_count">

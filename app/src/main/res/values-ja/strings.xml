@@ -104,6 +104,9 @@
     <string name="music_audio_access_title">音楽とオーディオへのアクセス</string>
     <string name="music_audio_access_description">端末内の音楽・オーディオファイルを読み込むために許可が必要です。次に表示されるAndroidのシステム画面で「許可」を選ぶと、ローカルライブラリを読み込みます。</string>
     <string name="allow_music_audio">音楽とオーディオを許可</string>
+    <string name="all_files_access_warning_title">端末内のファイル全体へのアクセス</string>
+    <string name="all_files_access_warning_body">注意：この任意の許可を与えると、音楽以外の共有ファイルにもアクセスでき、アプリが変更・削除できる場合があります。通常の音楽再生には「音楽とオーディオ」の許可で十分です。端末全体のファイル操作が必要な場合だけ許可してください。</string>
+    <string name="all_files_access_action">すべてのファイルへのアクセス設定を開く</string>
     <string name="sharing_coming_soon">共有機能は近日公開予定です</string>
     <string name="already_downloaded">ダウンロード済み</string>
     <plurals name="downloading_song_count">

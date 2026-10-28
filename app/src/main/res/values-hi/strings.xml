@@ -66,6 +66,9 @@
     <string name="music_audio_access_title">संगीत और ऑडियो की अनुमति</string>
     <string name="music_audio_access_description">MusicBeat को आपके डिवाइस पर संगीत और ऑडियो फ़ाइलें पढ़ने की अनुमति चाहिए। Android सिस्टम अनुरोध दिखाएगा; स्थानीय लाइब्रेरी लोड करने के लिए अनुमति दें चुनें।</string>
     <string name="allow_music_audio">संगीत और ऑडियो की अनुमति दें</string>
+    <string name="all_files_access_warning_title">डिवाइस की फ़ाइलों तक व्यापक पहुँच</string>
+    <string name="all_files_access_warning_body">यह वैकल्पिक अनुमति आपकी संगीत लाइब्रेरी से बाहर की साझा फ़ाइलों तक पहुँच दे सकती है और उन्हें बदलने या हटाने की अनुमति दे सकती है। सामान्य प्लेबैक के लिए संगीत और ऑडियो की अनुमति पर्याप्त है। व्यापक पहुँच केवल तभी दें जब आपको पूरे डिवाइस की फ़ाइलों पर काम करना हो।</string>
+    <string name="all_files_access_action">सभी फ़ाइलों की पहुँच सेटिंग खोलें</string>
     <string name="sharing_coming_soon">शेयरिंग जल्द आ रही है</string>
     <string name="already_downloaded">पहले से डाउनलोड है</string>
     <plurals name="downloading_song_count">

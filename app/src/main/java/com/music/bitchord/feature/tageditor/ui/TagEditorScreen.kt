@@ -82,7 +82,11 @@ fun TagEditorScreen(
         if (android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.R) {
             val uriStr = song.localUri ?: song.videoId
             val uri = if (uriStr.startsWith("content://")) android.net.Uri.parse(uriStr) else null
-            if (uri != null) {
+            val hasAllFilesAccess = android.os.Environment.isExternalStorageManager()
+            // createWriteRequest is specifically for MediaStore rows. Other
+            // content providers use their own URI grants and can reject this
+            // unrelated system request.
+            if (uri?.authority == android.provider.MediaStore.AUTHORITY && !hasAllFilesAccess) {
                 val hasPerm = context.checkUriPermission(
                     uri,
                     android.os.Process.myPid(),

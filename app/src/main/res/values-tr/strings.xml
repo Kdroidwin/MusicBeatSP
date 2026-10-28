@@ -70,6 +70,9 @@
     <string name="music_audio_access_title">Müzik ve ses erişimi</string>
     <string name="music_audio_access_description">MusicBeat\'in cihazınızdaki müzik ve ses dosyalarını okuyabilmesi için izin gerekir. Android bir sistem isteği gösterecek; yerel kitaplığı yüklemek için İzin ver\'i seçin.</string>
     <string name="allow_music_audio">Müzik ve ses erişimine izin ver</string>
+    <string name="all_files_access_warning_title">Cihaz dosyalarına geniş erişim</string>
+    <string name="all_files_access_warning_body">Bu isteğe bağlı izin, müzik kitaplığınız dışındaki paylaşılan dosyalara erişim sağlayabilir ve bunları değiştirmeye veya silmeye izin verebilir. Normal oynatma için müzik ve ses erişimi yeterlidir. Geniş erişimi yalnızca tüm cihazdaki dosyalarla işlem yapmanız gerekiyorsa verin.</string>
+    <string name="all_files_access_action">Tüm dosyalara erişim ayarlarını aç</string>
     <string name="sharing_coming_soon">Paylaşım yakında geliyor</string>
     <string name="already_downloaded">Zaten indirildi</string>
     <plurals name="downloading_song_count">

@@ -67,6 +67,9 @@
     <string name="music_audio_access_title">גישה למוזיקה ולאודיו</string>
     <string name="music_audio_access_description">MusicBeat צריכה הרשאה לקריאת קובצי מוזיקה ואודיו במכשיר. Android תציג בקשת מערכת; יש לבחור באפשרות אישור כדי לטעון את הספרייה המקומית.</string>
     <string name="allow_music_audio">אישור גישה למוזיקה ולאודיו</string>
+    <string name="all_files_access_warning_title">גישה רחבה לקובצי המכשיר</string>
+    <string name="all_files_access_warning_body">ההרשאה האופציונלית הזו עשויה לאפשר גישה לקבצים משותפים מחוץ לספריית המוזיקה, ולשנות או למחוק אותם. גישה למוזיקה ולאודיו מספיקה להפעלה רגילה. יש לאשר גישה רחבה רק אם נדרשת ניהול קבצים בכל המכשיר.</string>
+    <string name="all_files_access_action">פתיחת הגדרות גישה לכל הקבצים</string>
     <string name="sharing_coming_soon">שיתוף יגיע בקרוב</string>
     <string name="already_downloaded">כבר הורד</string>
     <plurals name="downloading_song_count">

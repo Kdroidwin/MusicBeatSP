@@ -67,6 +67,9 @@
     <string name="music_audio_access_title">Dostęp do muzyki i plików audio</string>
     <string name="music_audio_access_description">MusicBeat potrzebuje uprawnienia do odczytu plików muzycznych i audio na urządzeniu. Android wyświetli systemowy monit; wybierz Zezwól, aby wczytać lokalną bibliotekę.</string>
     <string name="allow_music_audio">Zezwól na dostęp do muzyki i audio</string>
+    <string name="all_files_access_warning_title">Szeroki dostęp do plików urządzenia</string>
+    <string name="all_files_access_warning_body">To opcjonalne uprawnienie może dać dostęp do udostępnionych plików poza biblioteką muzyczną oraz umożliwić ich zmianę lub usunięcie. Do zwykłego odtwarzania wystarczy dostęp do muzyki i audio. Szeroki dostęp przyznawaj tylko wtedy, gdy potrzebujesz operacji na plikach całego urządzenia.</string>
+    <string name="all_files_access_action">Otwórz ustawienia dostępu do wszystkich plików</string>
     <string name="sharing_coming_soon">Udostępnianie już wkrótce</string>
     <string name="already_downloaded">Już pobrane</string>
     <plurals name="downloading_song_count">
