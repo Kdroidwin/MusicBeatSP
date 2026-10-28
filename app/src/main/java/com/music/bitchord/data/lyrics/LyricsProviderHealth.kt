@@ -53,14 +53,16 @@ object LyricsProviderHealth {
     fun markUnavailable(providerId: String, error: Throwable) {
         // Do not cooldown on expected "not found" or user cancellations
         if (error is kotlinx.coroutines.CancellationException) return
-        val message = error.message ?: error.javaClass.simpleName
+        val message = error.message.orEmpty()
         if (message.contains("not found", ignoreCase = true) || message.contains("404")) {
             return
         }
 
         val key = providerId.lowercase().trim()
         val unavailableUntil = System.currentTimeMillis() + COOLDOWN_MS
-        val cleanReason = message.take(120)
+        // Exception messages from HTTP stacks may include request URLs, signed
+        // query parameters, or response snippets. Keep only the safe type name.
+        val cleanReason = error.javaClass.simpleName.take(120).ifBlank { "Provider error" }
         healthMap[key] = HealthEntry(unavailableUntil, cleanReason)
         LyricsLog.w("Health", "Provider $providerId marked unavailable for 10m: $cleanReason")
     }

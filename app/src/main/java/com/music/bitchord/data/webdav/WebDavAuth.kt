@@ -41,6 +41,10 @@ object WebDavAuth {
     /** A URL is in scope only when it stays on the configured origin and path. */
     fun isAllowedUrl(url: HttpUrl): Boolean {
         val root = configuredRoot ?: return false
+        // URL user-info can make a seemingly same-host href carry a second,
+        // server-controlled credential. Fragments are never part of a DAV
+        // request and can hide misleading path text in diagnostics/UI.
+        if (url.username.isNotEmpty() || url.password.isNotEmpty() || url.fragment != null) return false
         return sameOrigin(root, url) && withinRoot(root, url) &&
             (url.isHttps || (allowCleartext && url.scheme == "http"))
     }
@@ -65,8 +69,24 @@ object WebDavAuth {
         a.scheme == b.scheme && a.host.equals(b.host, ignoreCase = true) && a.port == b.port
 
     private fun withinRoot(root: HttpUrl, candidate: HttpUrl): Boolean {
-        val prefix = root.encodedPath.trimEnd('/')
-        val path = candidate.encodedPath
-        return prefix.isEmpty() || prefix == "/" || path == prefix || path.startsWith("$prefix/")
+        val prefix = safePathSegments(root) ?: return false
+        val path = safePathSegments(candidate) ?: return false
+        return path.size >= prefix.size && path.take(prefix.size) == prefix
+    }
+
+    /**
+     * Compare decoded path segments so a server-provided `%2F` or `%5C` cannot
+     * smuggle a separator through the configured-root prefix check. OkHttp
+     * canonicalizes dot segments, and rejecting any remaining traversal form
+     * keeps the auth scope independent of server-specific path decoding.
+     */
+    private fun safePathSegments(url: HttpUrl): List<String>? {
+        val segments = url.pathSegments.dropLastWhile(String::isEmpty)
+        if (segments.any { segment ->
+                segment.isEmpty() || segment == "." || segment == ".." ||
+                    '/' in segment || '\\' in segment || '\u0000' in segment
+            }
+        ) return null
+        return segments
     }
 }

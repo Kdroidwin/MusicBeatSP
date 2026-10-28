@@ -124,7 +124,7 @@ internal object QuickJsExecutor {
         synchronized(engineLock) { pools.containsKey(moduleId) }
 
     private val syncHttpClient by lazy {
-        Http.client.newBuilder()
+        Http.untrustedClient.newBuilder()
             .connectTimeout(20, TimeUnit.SECONDS)
             .readTimeout(20, TimeUnit.SECONDS)
             .callTimeout(30, TimeUnit.SECONDS)

@@ -130,7 +130,10 @@ internal object SpotifyToken {
         if (cookie.isBlank() || cookie.any { it == '\r' || it == '\n' || it == ';' }) return null
         val deferred = CompletableDeferred<HarvestedToken?>()
 
-        val cookieManager = CookieManager.getInstance().apply {
+        val cookieManager = CookieManager.getInstance()
+        val previousOpenSpotifyCookie = cookieManager.getCookie("https://open.spotify.com/").spotifyDcValue()
+        val previousAccountsSpotifyCookie = cookieManager.getCookie("https://accounts.spotify.com/").spotifyDcValue()
+        cookieManager.apply {
             setAcceptCookie(true)
             setCookie("https://open.spotify.com/", "sp_dc=$cookie; Domain=.spotify.com; Path=/; Secure")
             setCookie("https://accounts.spotify.com/", "sp_dc=$cookie; Domain=.spotify.com; Path=/; Secure")
@@ -210,7 +213,40 @@ internal object SpotifyToken {
                 webView?.stopLoading()
                 webView?.destroy()
             }
+            // The supplied session cookie is already stored in encrypted app
+            // preferences. Do not leave a second, persistent copy in WebView's
+            // shared cookie database after this one token harvest.
+            restoreSpotifyDcCookie(cookieManager, previousOpenSpotifyCookie, previousAccountsSpotifyCookie)
         }
+    }
+
+    private fun String?.spotifyDcValue(): String? = this
+        ?.split(';')
+        ?.asSequence()
+        ?.map(String::trim)
+        ?.firstOrNull { it.startsWith("sp_dc=") }
+        ?.substringAfter('=')
+        ?.takeIf { it.isNotBlank() && '\r' !in it && '\n' !in it && ';' !in it }
+
+    private fun restoreSpotifyDcCookie(
+        cookieManager: CookieManager,
+        previousOpenCookie: String?,
+        previousAccountsCookie: String?,
+    ) {
+        val expire = "sp_dc=; Domain=.spotify.com; Path=/; Max-Age=0; Secure"
+        cookieManager.setCookie("https://open.spotify.com/", expire)
+        cookieManager.setCookie("https://accounts.spotify.com/", expire)
+
+        if (previousOpenCookie != null && previousOpenCookie == previousAccountsCookie) {
+            cookieManager.setCookie(
+                "https://open.spotify.com/",
+                "sp_dc=$previousOpenCookie; Domain=.spotify.com; Path=/; Secure",
+            )
+        } else {
+            previousOpenCookie?.let { cookieManager.setCookie("https://open.spotify.com/", "sp_dc=$it; Path=/; Secure") }
+            previousAccountsCookie?.let { cookieManager.setCookie("https://accounts.spotify.com/", "sp_dc=$it; Path=/; Secure") }
+        }
+        cookieManager.flush()
     }
 
     private fun isAllowedSpotifyPage(uri: Uri): Boolean =

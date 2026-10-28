@@ -26,6 +26,7 @@ import kotlinx.serialization.json.jsonPrimitive
 import okhttp3.HttpUrl.Companion.toHttpUrl
 import okhttp3.Request
 import java.io.File
+import java.io.ByteArrayOutputStream
 import kotlinx.coroutines.Deferred
 import kotlinx.coroutines.async
 import kotlinx.coroutines.coroutineScope
@@ -34,6 +35,7 @@ import kotlinx.serialization.json.doubleOrNull
 object LocalLyricsManager {
 
     private const val TAG = "LocalLyricsManager"
+    private const val MAX_LOCAL_LYRICS_BYTES = 1024 * 1024
     private val json = Json { ignoreUnknownKeys = true }
     private val downloadedCache = mutableMapOf<String, String>()
 
@@ -178,9 +180,9 @@ object LocalLyricsManager {
             .url(url)
             .header("User-Agent", "BitChord (https://github.com/bitchord)")
             .build()
-        Http.client.newCall(request).execute().use { response ->
+        Http.lyricsClient.newCall(request).execute().use { response ->
             if (response.isSuccessful) {
-                val body = response.body?.string()
+                val body = Http.readBoundedUtf8(response.body, 2 * 1024 * 1024)
                 if (!body.isNullOrBlank()) {
                     val hits = json.parseToJsonElement(body) as? JsonArray
                     val firstHit = hits?.firstOrNull() as? JsonObject
@@ -355,9 +357,9 @@ object LocalLyricsManager {
                 .header("User-Agent", "BitChord (https://github.com/bitchord)")
                 .build()
 
-            Http.client.newCall(request).execute().use { response ->
+            Http.lyricsClient.newCall(request).execute().use { response ->
                 if (!response.isSuccessful) return emptyList()
-                val body = response.body?.string() ?: return emptyList()
+                val body = Http.readBoundedUtf8(response.body, 2 * 1024 * 1024) ?: return emptyList()
                 val hits = json.parseToJsonElement(body) as? JsonArray ?: return emptyList()
 
                 hits.mapNotNull { element ->
@@ -432,9 +434,22 @@ object LocalLyricsManager {
         val filePath = resolveFilePath(context, song) ?: return ""
         val audioFile = File(filePath)
         val lrcFile = File(audioFile.parentFile ?: return "", "${audioFile.nameWithoutExtension}.lrc")
-        return if (lrcFile.exists() && lrcFile.isFile) {
-            runCatching { lrcFile.readText() }.getOrDefault("")
-        } else ""
+        if (!lrcFile.isFile || lrcFile.length() !in 1..MAX_LOCAL_LYRICS_BYTES.toLong()) return ""
+        return runCatching {
+            lrcFile.inputStream().use { input ->
+                val output = ByteArrayOutputStream(minOf(lrcFile.length().toInt(), 8 * 1024))
+                val buffer = ByteArray(8 * 1024)
+                var total = 0
+                while (true) {
+                    val count = input.read(buffer)
+                    if (count < 0) break
+                    total += count
+                    if (total > MAX_LOCAL_LYRICS_BYTES) return ""
+                    output.write(buffer, 0, count)
+                }
+                output.toByteArray().toString(Charsets.UTF_8)
+            }
+        }.getOrDefault("")
     }
 
     private fun saveFileLyrics(context: Context, song: Song, lyricsText: String): Boolean {

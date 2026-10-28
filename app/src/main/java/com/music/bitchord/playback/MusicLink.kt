@@ -135,6 +135,12 @@ object MusicLink {
      * as through the browser.
      */
     fun parse(uri: Uri): LinkRequest? {
+        // MainActivity is exported for Android's link and file-manager flows.
+        // Only interpret real web links here; a custom scheme with a forged
+        // YouTube-looking host must not be treated as a playback command.
+        if (uri.toString().length > MAX_LINK_LENGTH ||
+            uri.scheme?.lowercase() !in setOf("http", "https")
+        ) return null
         val host = uri.host?.lowercase()?.removePrefix("www.") ?: return null
         val segments = uri.pathSegments.orEmpty()
         if (host == "youtu.be") {
@@ -155,9 +161,10 @@ object MusicLink {
             "shorts", "embed", "v" -> segments.getOrNull(1)?.let(::track)
             // `channel/UC…` is an artist; `browse/MPREb…` is a release. Both
             // are browse ids already, so neither needs rewriting.
-            "channel", "browse" -> segments.getOrNull(1)?.takeIf { it.isNotBlank() }
+            "channel", "browse" -> segments.getOrNull(1)?.takeIf(::isSafeRemoteId)
                 ?.let(LinkRequest::Page)
-            "search" -> uri.getQueryParameter("q")?.trim()?.takeIf { it.isNotEmpty() }
+            "search" -> uri.getQueryParameter("q")?.trim()
+                ?.takeIf { it.isNotEmpty() && it.length <= MAX_SEARCH_QUERY_LENGTH }
                 ?.let { LinkRequest.Search(it, play = false) }
             // A link to nothing in particular — music.youtube.com itself, an
             // account page. Opening the app on its own tab is the right answer,
@@ -175,7 +182,10 @@ object MusicLink {
     }
 
     private fun track(videoId: String): LinkRequest.Track? =
-        videoId.trim().takeIf { it.isNotEmpty() }?.let(LinkRequest::Track)
+        videoId.trim().takeIf(::isSafeRemoteId)?.let(LinkRequest::Track)
+
+    private fun isSafeRemoteId(value: String): Boolean =
+        value.length in 1..MAX_REMOTE_ID_LENGTH && value.all { it.isLetterOrDigit() || it == '_' || it == '-' }
 
     /**
      * A playlist id as the browse id its page is fetched under.
@@ -185,9 +195,14 @@ object MusicLink {
      * link out of YT Music actually has.
      */
     private fun playlist(listId: String): LinkRequest.Page? {
-        if (listId.isEmpty()) return null
-        return LinkRequest.Page(if (listId.startsWith("VL")) listId else "VL$listId")
+        if (!isSafeRemoteId(listId)) return null
+        val browseId = if (listId.startsWith("VL")) listId else "VL$listId"
+        return browseId.takeIf(::isSafeRemoteId)?.let(LinkRequest::Page)
     }
+
+    private const val MAX_LINK_LENGTH = 8_192
+    private const val MAX_REMOTE_ID_LENGTH = 256
+    private const val MAX_SEARCH_QUERY_LENGTH = 500
 
     private val AUDIO_EXTENSIONS = setOf(
         ".mp3", ".m4a", ".flac", ".ogg", ".opus", ".aac", ".webm",

@@ -13,4 +13,6 @@
     <exclude domain="sharedpref" path="music_server_credentials_encrypted.xml" />
     <!-- Downloaded executable extension code is reinstalled from its HTTPS registry. -->
     <exclude domain="file" path="lyrics_extensions/" />
+    <!-- WebView may persist Google/Spotify session cookies under app_webview. -->
+    <exclude domain="root" path="app_webview/" />
 </full-backup-content>

@@ -60,6 +60,8 @@ object EmbeddedLyrics {
      * past this is not a tag this app produced.
      */
     private const val MAX_TAG_BYTES = 8 * 1024 * 1024
+    private const val MAX_LYRIC_TEXT_BYTES = 1024 * 1024
+    private const val MAX_LYRIC_LINES = 10_000
 
     /**
      * The lyrics inside [uriString], or null when it has none worth showing.
@@ -67,11 +69,15 @@ object EmbeddedLyrics {
      * Touches the filesystem, so it runs on [Dispatchers.IO] regardless of
      * where it is called from.
      */
-    suspend fun forUri(context: Context, uriString: String): List<LyricLine>? =
+    suspend fun forUri(
+        context: Context,
+        uriString: String,
+        preferEmbeddedLyrics: Boolean = false,
+    ): List<LyricLine>? =
         withContext(Dispatchers.IO) {
             val uri = parseUri(uriString)
-            val raw = runCatching { read(context, uri) }
-                .onFailure { Log.d(TAG, "no embedded lyrics in $uriString: ${it.message}") }
+            val raw = runCatching { read(context, uri, preferEmbeddedLyrics) }
+                .onFailure { Log.d(TAG, "local lyrics could not be read") }
                 .getOrNull()
                 ?: return@withContext null
             parseLyrics(raw)
@@ -84,7 +90,8 @@ object EmbeddedLyrics {
      * and unsynced plain-text lyrics.
      */
     fun parseLyrics(raw: String): List<LyricLine> {
-        if (raw.isBlank()) return emptyList()
+        if (raw.isBlank() || raw.length > MAX_LYRIC_TEXT_BYTES || raw.toByteArray(Charsets.UTF_8).size > MAX_LYRIC_TEXT_BYTES) return emptyList()
+        if (raw.lineSequence().take(MAX_LYRIC_LINES + 1).count() > MAX_LYRIC_LINES) return emptyList()
         val synced = LrcParser.parseLrc(raw)
         if (synced.any { !it.isGap && it.text.isNotBlank() }) {
             return synced
@@ -129,15 +136,25 @@ object EmbeddedLyrics {
     }
 
     /** The raw LRC text for the file, preferring this app's word-timed field. */
-    private fun read(context: Context, uri: Uri): String? {
+    private fun read(context: Context, uri: Uri, preferEmbeddedLyrics: Boolean): String? {
         val path = if (uri.scheme == "file") {
             uri.path
         } else {
             resolveFilePath(context, uri)
         }
+
+        if (preferEmbeddedLyrics) {
+            readEmbeddedLyrics(context, uri, path)?.let { return it }
+            return sidecar(path)
+        }
+
         // 1. Companion / sidecar .lrc file
         sidecar(path)?.let { return it }
 
+        return readEmbeddedLyrics(context, uri, path)
+    }
+
+    private fun readEmbeddedLyrics(context: Context, uri: Uri, path: String?): String? {
         // 2. Direct binary container scan (fast for FLAC, MP4, WebM with BITCHORD_LYRICS word sync)
         val fromContainer = open(context, uri)?.use { fromBytes(it.readAtMost(MAX_TAG_BYTES)) }
         if (!fromContainer.isNullOrBlank()) {
@@ -162,7 +179,7 @@ object EmbeddedLyrics {
                 ?: props["LYRICS"]?.firstOrNull()?.takeIf { it.isNotBlank() }
                 ?: props["UNSYNCEDLYRICS"]?.firstOrNull()?.takeIf { it.isNotBlank() }
         }
-    }.onFailure { Log.d(TAG, "TagLib could not read $uri: ${it.message}") }.getOrNull()
+    }.onFailure { Log.d(TAG, "embedded lyrics metadata could not be read") }.getOrNull()
 
     private fun openFileDescriptor(context: Context, uri: Uri, path: String?): ParcelFileDescriptor? = runCatching {
         if (uri.scheme == "file" && uri.path != null) {
@@ -197,9 +214,9 @@ object EmbeddedLyrics {
         // 1. Offline package playlist with lyrics.lrc
         if (target.name.endsWith(".m3u8", ignoreCase = true)) {
             val file = File(target.parentFile ?: return null, "lyrics.lrc")
-            if (file.isFile && file.length() in 1..MAX_TAG_BYTES.toLong()) {
-                return runCatching { file.readText() }
-                    .onFailure { Log.d(TAG, "could not read package lrc $file: ${it.message}") }
+            if (file.isFile && file.length() in 1..MAX_LYRIC_TEXT_BYTES.toLong()) {
+                return runCatching { file.readBoundedText(MAX_LYRIC_TEXT_BYTES) }
+                    .onFailure { Log.d(TAG, "package lyrics file could not be read") }
                     .getOrNull()
                     ?.takeIf { it.isNotBlank() }
             }
@@ -209,9 +226,9 @@ object EmbeddedLyrics {
         val baseName = target.nameWithoutExtension
         val lrcFile = File(parent, "$baseName.lrc").takeIf { it.isFile }
             ?: File(parent, "$baseName.LRC").takeIf { it.isFile }
-        if (lrcFile != null && lrcFile.length() in 1..MAX_TAG_BYTES.toLong()) {
-            return runCatching { lrcFile.readText() }
-                .onFailure { Log.d(TAG, "could not read companion lrc $lrcFile: ${it.message}") }
+        if (lrcFile != null && lrcFile.length() in 1..MAX_LYRIC_TEXT_BYTES.toLong()) {
+            return runCatching { lrcFile.readBoundedText(MAX_LYRIC_TEXT_BYTES) }
+                .onFailure { Log.d(TAG, "companion lyrics file could not be read") }
                 .getOrNull()
                 ?.takeIf { it.isNotBlank() }
         }
@@ -456,6 +473,24 @@ object EmbeddedLyrics {
             total += read
         }
         return out.toByteArray()
+    }
+
+    /** Reads sidecars under the hard ceiling even if a file grows after its size check. */
+    private fun File.readBoundedText(max: Int): String? {
+        val bytes = inputStream().use { input ->
+            val out = ByteArrayOutputStream(minOf(max, 8 * 1024))
+            val buffer = ByteArray(8 * 1024)
+            var total = 0
+            while (true) {
+                val count = input.read(buffer)
+                if (count < 0) break
+                total += count
+                if (total > max) return null
+                out.write(buffer, 0, count)
+            }
+            out.toByteArray()
+        }
+        return bytes.toString(Charsets.UTF_8).takeIf(String::isNotBlank)
     }
 
     private fun ByteArray.startsWith(prefix: ByteArray): Boolean {

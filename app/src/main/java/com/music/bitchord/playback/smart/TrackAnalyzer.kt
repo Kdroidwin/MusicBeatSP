@@ -841,7 +841,9 @@ class TrackAnalyzer(private val context: Context, private val cache: AudioCache)
                     Log.d(TAG, "No YouTube match for Automix analysis of $trackId")
                 }
             } catch (error: Throwable) {
-                Log.d(TAG, "YouTube match failed for Automix analysis of $trackId: ${error.message}")
+                // Track IDs may contain local identifiers and transport errors
+                // may include request URLs or query credentials.
+                Log.d(TAG, "YouTube match failed for Automix analysis (${error.javaClass.simpleName})")
             } finally {
                 sourceResolutionAttempted.add(trackId)
                 sourceResolutions.remove(trackId)

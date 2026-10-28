@@ -55,7 +55,7 @@ object Genius {
     private val json by lazy { Json { ignoreUnknownKeys = true; isLenient = true } }
 
     private val httpClient by lazy {
-        Http.client.newBuilder()
+        Http.lyricsClient.newBuilder()
             .callTimeout(8, TimeUnit.SECONDS)
             .connectTimeout(4, TimeUnit.SECONDS)
             .build()
@@ -332,7 +332,7 @@ object Genius {
             .header("Accept-Language", "en-US,en;q=0.9")
             .build()
         httpClient.newCall(request).execute().use { response ->
-            if (response.isSuccessful) response.body?.string() else null
+            if (response.isSuccessful) Http.readBoundedUtf8(response.body, 2 * 1024 * 1024) else null
         }
     }.getOrNull()
 

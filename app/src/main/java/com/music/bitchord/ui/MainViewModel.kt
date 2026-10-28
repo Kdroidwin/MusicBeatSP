@@ -300,6 +300,7 @@ class MainViewModel(app: Application) : AndroidViewModel(app) {
         val sources: Set<LyricsSource>,
         val sourceOrder: List<String>,
         val prioritizeSyllableSync: Boolean,
+        val preferEmbeddedLocalLyrics: Boolean,
     )
 
     private var lyricsFor: LyricsLoadKey? = null
@@ -340,11 +341,13 @@ class MainViewModel(app: Application) : AndroidViewModel(app) {
         }
         val sourceOrder = AppSettings.lyricsSourceOrder.value
         val prioritizeSyllableSync = AppSettings.prioritizeSyllableSync.value
+        val preferEmbeddedLocalLyrics = AppSettings.preferEmbeddedLocalLyrics.value
         val key = LyricsLoadKey(
             videoId = videoId,
             sources = sources,
             sourceOrder = sourceOrder.map { it.id },
             prioritizeSyllableSync = prioritizeSyllableSync,
+            preferEmbeddedLocalLyrics = preferEmbeddedLocalLyrics,
         )
         if (!force && lyricsFor == key) return
         lyricsFor = key
@@ -363,11 +366,15 @@ class MainViewModel(app: Application) : AndroidViewModel(app) {
             }
             if (targetUri != null) {
                 val embedded = try {
-                    EmbeddedLyrics.forUri(getApplication(), targetUri)
+                    EmbeddedLyrics.forUri(
+                        getApplication(),
+                        targetUri,
+                        preferEmbeddedLyrics = preferEmbeddedLocalLyrics,
+                    )
                 } catch (cancelled: CancellationException) {
                     throw cancelled
-                } catch (error: Exception) {
-                    TrackLog.w("Lyrics", "embedded lyric read failed; trying configured sources", error)
+                } catch (_: Exception) {
+                    TrackLog.w("Lyrics", "local lyric read failed; trying configured sources")
                     null
                 }
                 embedded?.let {
@@ -1727,7 +1734,7 @@ class MainViewModel(app: Application) : AndroidViewModel(app) {
                         else -> {
                             val failure = result.exceptionOrNull()
                             if (failure is CancellationException) throw failure
-                            TrackLog.w(TAG, "${config.displayName}: direct search failed — ${failure?.message}")
+                            TrackLog.w(TAG, "Lyrics extension direct search failed")
                             configuredSourceSearchError(config.displayName, failure)
                         }
                     }

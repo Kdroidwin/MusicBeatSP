@@ -15,15 +15,16 @@ import java.util.concurrent.TimeUnit
  * are the better answer.
  */
 private const val LYRICS_TIMEOUT_SECONDS = 6L
+private const val MAX_LYRICS_RESPONSE_BYTES = 2 * 1024 * 1024
 
 internal const val LYRICS_AGENT = "BitChord (https://github.com/bitchord)"
 
 internal val lyricsJson = Json { ignoreUnknownKeys = true; isLenient = true }
 
 private val client by lazy {
-    // Derived from the shared client, so the connection pool and DNS stay
-    // common — only the deadline differs.
-    Http.client.newBuilder()
+    // Lyrics providers use a credential-free client: the player client adds
+    // WebDAV auth for media playback, and lyric endpoints must never inherit it.
+    Http.lyricsClient.newBuilder()
         .callTimeout(LYRICS_TIMEOUT_SECONDS, TimeUnit.SECONDS)
         .connectTimeout(3, TimeUnit.SECONDS)
         .build()
@@ -47,7 +48,7 @@ internal fun lyricsGet(url: String): String? = runCatching {
         .header("Accept", "application/json")
         .build()
     client.newCall(request).execute().use { response ->
-        if (response.isSuccessful) response.body?.string() else null
+        if (response.isSuccessful) Http.readBoundedUtf8(response.body, MAX_LYRICS_RESPONSE_BYTES) else null
     }
 }.getOrNull()
 
@@ -60,7 +61,7 @@ internal fun lyricsGetBearer(url: String, bearer: String): String? = runCatching
         .header("Authorization", "Bearer $bearer")
         .build()
     authenticatedClient.newCall(request).execute().use { response ->
-        if (response.isSuccessful) response.body?.string() else null
+        if (response.isSuccessful) Http.readBoundedUtf8(response.body, MAX_LYRICS_RESPONSE_BYTES) else null
     }
 }.getOrNull()
 
@@ -78,6 +79,6 @@ internal fun lyricsGetAuthorized(url: String, bearer: String): String? = runCatc
         .header("Referer", "https://music.apple.com/")
         .build()
     client.newCall(request).execute().use { response ->
-        if (response.isSuccessful) response.body?.string() else null
+        if (response.isSuccessful) Http.readBoundedUtf8(response.body, MAX_LYRICS_RESPONSE_BYTES) else null
     }
 }.getOrNull()

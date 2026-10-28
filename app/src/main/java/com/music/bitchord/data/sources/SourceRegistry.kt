@@ -214,7 +214,10 @@ object SourceRegistry {
             } catch (cancelled: kotlinx.coroutines.CancellationException) {
                 throw cancelled
             } catch (error: Exception) {
-                TrackLog.w(TAG, "Could not list ${source.displayName} library: ${error.message}")
+                // Server exceptions can contain the configured URL, including
+                // secret query values. Keep diagnostics useful without logging
+                // response text or endpoint details.
+                TrackLog.w(TAG, "Could not list ${source.displayName} library (${error.javaClass.simpleName})")
             }
         }
     }

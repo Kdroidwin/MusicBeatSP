@@ -84,7 +84,7 @@ object TrackLog {
 
     fun w(tag: String, message: String, error: Throwable, about: String? = working.get()) {
         if (BuildConfig.DEBUG) Log.w(tag, message, error)
-        record('W', "$message\n${error.stackTraceToString()}", about)
+        record('W', "$message (${error.javaClass.simpleName})", about)
     }
 
     fun e(tag: String, message: String, about: String? = working.get()) {
@@ -94,7 +94,7 @@ object TrackLog {
 
     fun e(tag: String, message: String, error: Throwable, about: String? = working.get()) {
         if (BuildConfig.DEBUG) Log.e(tag, message, error)
-        record('E', "$message\n${error.stackTraceToString()}", about)
+        record('E', "$message (${error.javaClass.simpleName})", about)
     }
 
     // ── Whose line is it ────────────────────────────────────────────────────

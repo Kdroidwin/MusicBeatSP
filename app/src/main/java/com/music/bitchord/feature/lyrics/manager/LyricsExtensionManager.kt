@@ -384,7 +384,7 @@ object LyricsExtensionManager {
     private fun requestText(url: String, maxBytes: Int): String? {
         if (!extensionsEnabled || !LyricsExtensionSecurity.isHttpsUrl(url)) return null
         val request = Request.Builder().url(url).cacheControl(okhttp3.CacheControl.FORCE_NETWORK).build()
-        val call = Http.client.newCall(request)
+        val call = Http.lyricsClient.newCall(request)
         activeSyncCalls.add(call)
         return try {
             if (!extensionsEnabled) {

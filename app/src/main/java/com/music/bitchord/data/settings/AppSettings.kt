@@ -676,6 +676,12 @@ object AppSettings {
     /** Blurs unfocused lyric lines, keeping the active line sharp. */
     val lyricsBlur = MutableStateFlow(true)
 
+    /** When enabled, lyrics embedded in the audio tags take precedence over sidecar/downloaded LRC. */
+    val preferEmbeddedLocalLyrics = MutableStateFlow(false)
+
+    /** Optional close control for the lyrics panel; hidden by default. */
+    val showLyricsCloseButton = MutableStateFlow(false)
+
     /** Hides generated playback/mood copy in the one-line lyrics strip. */
     val hideLyricsStatusText = MutableStateFlow(false)
 
@@ -1362,6 +1368,8 @@ object AppSettings {
             .coerceIn(0f, MAX_PLAYER_ARTWORK_BLUR_DP)
         persistentLocalArtwork.value = prefs.getBoolean(KEY_PERSISTENT_LOCAL_ARTWORK, false)
         lyricsBlur.value = prefs.getBoolean(KEY_LYRICS_BLUR, true)
+        preferEmbeddedLocalLyrics.value = prefs.getBoolean(KEY_PREFER_EMBEDDED_LOCAL_LYRICS, false)
+        showLyricsCloseButton.value = prefs.getBoolean(KEY_SHOW_LYRICS_CLOSE_BUTTON, false)
         hideLyricsStatusText.value = prefs.getBoolean(KEY_HIDE_LYRICS_STATUS_TEXT, false)
         hideLyricsSavedMessage.value = prefs.getBoolean(KEY_HIDE_LYRICS_SAVED_MESSAGE, false)
         hideLyricsUnavailableLabel.value = prefs.getBoolean(KEY_HIDE_LYRICS_UNAVAILABLE_LABEL, false)
@@ -2527,6 +2535,16 @@ object AppSettings {
     fun setLyricsBlur(value: Boolean) {
         lyricsBlur.value = value
         prefs.edit().putBoolean(KEY_LYRICS_BLUR, value).apply()
+    }
+
+    fun setPreferEmbeddedLocalLyrics(value: Boolean) {
+        preferEmbeddedLocalLyrics.value = value
+        prefs.edit().putBoolean(KEY_PREFER_EMBEDDED_LOCAL_LYRICS, value).apply()
+    }
+
+    fun setShowLyricsCloseButton(value: Boolean) {
+        showLyricsCloseButton.value = value
+        prefs.edit().putBoolean(KEY_SHOW_LYRICS_CLOSE_BUTTON, value).apply()
     }
 
     fun setHideLyricsStatusText(value: Boolean) {
@@ -3788,6 +3806,8 @@ object AppSettings {
     private const val KEY_ARTWORK_BACKDROP_BLUR_DP = "artwork_backdrop_blur_dp"
     private const val KEY_PERSISTENT_LOCAL_ARTWORK = "persistent_local_artwork"
     private const val KEY_LYRICS_BLUR = "lyrics_blur"
+    private const val KEY_PREFER_EMBEDDED_LOCAL_LYRICS = "prefer_embedded_local_lyrics"
+    private const val KEY_SHOW_LYRICS_CLOSE_BUTTON = "show_lyrics_close_button"
     private const val KEY_HIDE_LYRICS_STATUS_TEXT = "hide_lyrics_status_text"
     private const val KEY_HIDE_LYRICS_SAVED_MESSAGE = "hide_lyrics_saved_message"
     private const val KEY_HIDE_LYRICS_UNAVAILABLE_LABEL = "hide_lyrics_unavailable_label"

@@ -40,7 +40,7 @@ object Musixmatch {
     private val processGuid = UUID.randomUUID().toString()
 
     private val client by lazy {
-        Http.client.newBuilder()
+        Http.lyricsClient.newBuilder()
             .callTimeout(8, TimeUnit.SECONDS)
             .connectTimeout(4, TimeUnit.SECONDS)
             .build()
@@ -288,7 +288,7 @@ object Musixmatch {
             .apply { if (cookie != null) header("Cookie", cookie) }
             .build()
         client.newCall(request).execute().use { response ->
-            if (response.isSuccessful) response.body?.string() else null
+            if (response.isSuccessful) Http.readBoundedUtf8(response.body, 2 * 1024 * 1024) else null
         }
     }.getOrNull()
 

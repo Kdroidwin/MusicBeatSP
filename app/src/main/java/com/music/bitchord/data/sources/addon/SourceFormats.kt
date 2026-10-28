@@ -49,6 +49,7 @@ sealed interface DetectedFormat {
 object SourceFormats {
 
     private const val TAG = "BitChord"
+    private const val MAX_IDENTIFY_RESPONSE_BYTES = 1024 * 1024
 
     private val json = Json {
         isLenient = true
@@ -212,13 +213,14 @@ object SourceFormats {
             .header("Accept", "application/json")
             .header("User-Agent", "BitChord")
             .build()
-        Http.client.newCall(request).execute().use { response ->
+        Http.untrustedClient.newCall(request).execute().use { response ->
             if (!response.isSuccessful) {
                 if (response.code >= 500) throw AddonUnavailable("HTTP ${response.code}")
                 throw AddonException("HTTP ${response.code}")
             }
-            response.body?.string()?.takeIf { it.isNotBlank() }
-                ?: throw AddonException("Empty response")
+            Http.readBoundedUtf8(response.body, MAX_IDENTIFY_RESPONSE_BYTES)
+                ?.takeIf { it.isNotBlank() }
+                ?: throw AddonException("Empty or oversized response")
         }
     }.onFailure {
         TrackLog.d(TAG, "identify(${AddonClient.redact(url)}) failed (${it.javaClass.simpleName})")

@@ -1836,7 +1836,7 @@ class PlaybackService : MediaLibraryService() {
                     if (AppSettings.dontRepeatSuggestions.value) sessionSongHistory += resolved
                 }
                 .onFailure {
-                    TrackLog.w("BitChord", "notification autoplay failed: ${it.message}", about = current.videoId)
+                    TrackLog.w("BitChord", "notification autoplay failed")
                 }
         }
     }
@@ -1924,7 +1924,7 @@ class PlaybackService : MediaLibraryService() {
                 .onFailure {
                     LikeState.set(videoId, previous)
                     mediaSession?.setCustomLayout(notificationButtons())
-                    TrackLog.w("BitChord", "notification favorite failed: ${it.message}", about = videoId)
+                    TrackLog.w("BitChord", "notification favorite failed")
                 }
         }
     }
@@ -4934,9 +4934,8 @@ class PlaybackService : MediaLibraryService() {
                 AppSettings.lyricsSources,
                 AppSettings.lyricsSourceOrder,
                 AppSettings.prioritizeSyllableSync,
-            ) { synced, sources, order, prio ->
-                synced to sources
-            }.distinctUntilChanged().collect {
+                AppSettings.preferEmbeddedLocalLyrics,
+            ) { _, _, _, _, _ -> Unit }.collect {
                 loadLyricsForCurrentTrack()
             }
         }
@@ -5324,7 +5323,7 @@ class PlaybackService : MediaLibraryService() {
                 activityType = AppSettings.discordActivityType.value,
                 activityName = AppSettings.discordActivityName.value,
             ).onFailure {
-                TrackLog.d("BitChord", "Discord presence failed: ${it.message}", about = song.videoId)
+                TrackLog.d("BitChord", "Discord presence update failed")
             }
         }
     }
@@ -5514,7 +5513,11 @@ class PlaybackService : MediaLibraryService() {
             var lines: List<LyricLine>? = null
             try {
                 if (targetUri != null) {
-                    lines = EmbeddedLyrics.forUri(this@PlaybackService, targetUri)
+                    lines = EmbeddedLyrics.forUri(
+                        this@PlaybackService,
+                        targetUri,
+                        preferEmbeddedLyrics = AppSettings.preferEmbeddedLocalLyrics.value,
+                    )
                 }
                 if (lines == null) {
                     val found = LyricsRepository.lyrics(
@@ -5541,8 +5544,8 @@ class PlaybackService : MediaLibraryService() {
                 }
             } catch (cancelled: CancellationException) {
                 throw cancelled
-            } catch (error: Exception) {
-                TrackLog.w("Lyrics", "playback lyric lookup failed; playback service kept alive", error)
+            } catch (_: Exception) {
+                TrackLog.w("Lyrics", "playback lyric lookup failed; playback service kept alive")
                 lines = null
             }
             withContext(Dispatchers.Main) {
@@ -6343,7 +6346,7 @@ class PlaybackService : MediaLibraryService() {
             startIndex: Int,
             startPositionMs: Long,
         ): ListenableFuture<MediaSession.MediaItemsWithStartPosition> = scope.future(Dispatchers.IO) {
-            val resolved = resolveMediaItems(mediaItems)
+            val resolved = resolveMediaItems(mediaItems, controller.isTrusted)
             val validIndex = startIndex.coerceIn(0, (resolved.size - 1).coerceAtLeast(0))
             MediaSession.MediaItemsWithStartPosition(
                 ImmutableList.copyOf(resolved),
@@ -6357,23 +6360,33 @@ class PlaybackService : MediaLibraryService() {
             controller: MediaSession.ControllerInfo,
             mediaItems: List<MediaItem>,
         ): ListenableFuture<List<MediaItem>> = scope.future(Dispatchers.IO) {
-            resolveMediaItems(mediaItems)
+            resolveMediaItems(mediaItems, controller.isTrusted)
         }
 
-        private suspend fun resolveMediaItems(mediaItems: List<MediaItem>): List<MediaItem> {
+        private suspend fun resolveMediaItems(
+            mediaItems: List<MediaItem>,
+            trustedController: Boolean,
+        ): List<MediaItem> {
+            if (!trustedController && mediaItems.size > MAX_EXTERNAL_MEDIA_ITEMS) {
+                throw SecurityException("Too many media items")
+            }
             val resolved = mutableListOf<MediaItem>()
             for (item in mediaItems) {
                 val id = item.mediaId
                 val searchQuery = item.requestMetadata.searchQuery
                 when {
                     !searchQuery.isNullOrBlank() -> {
-                        val cached = searchResults[searchQuery]
+                        val query = searchQuery.trim()
+                        if (query.length > MAX_EXTERNAL_SEARCH_QUERY_LENGTH) {
+                            throw SecurityException("Search query is too long")
+                        }
+                        val cached = searchResults[query]
                         val songs = if (!cached.isNullOrEmpty()) {
                             cached
                         } else {
                             try {
                                 withTimeoutOrNull(3000L) {
-                                    YtMusicRepository.search(searchQuery, SearchFilter.SONGS).getOrNull()
+                                    YtMusicRepository.search(query, SearchFilter.SONGS).getOrNull()
                                         ?.mapNotNull { if (it is SearchResult.Track) it.song else null }
                                 } ?: emptyList()
                             } catch (_: Exception) {
@@ -6387,6 +6400,9 @@ class PlaybackService : MediaLibraryService() {
                     }
                     id.startsWith("playlist:") -> {
                         val playlistId = id.removePrefix("playlist:")
+                        if (!trustedController && !isSafeExternalMediaId(playlistId)) {
+                            throw SecurityException("Invalid playlist identifier")
+                        }
                         val songs = try {
                             withTimeoutOrNull(3000L) {
                                 YtMusicRepository.browseSongs("VL$playlistId").getOrNull()?.songs
@@ -6400,6 +6416,9 @@ class PlaybackService : MediaLibraryService() {
                     }
                     id.startsWith("browse:") -> {
                         val browseId = id.removePrefix("browse:")
+                        if (!trustedController && !isSafeExternalMediaId(browseId)) {
+                            throw SecurityException("Invalid browse identifier")
+                        }
                         val songs = try {
                             withTimeoutOrNull(3000L) {
                                 YtMusicRepository.browseSongs(browseId).getOrNull()?.songs
@@ -6454,11 +6473,39 @@ class PlaybackService : MediaLibraryService() {
                         resolved.add(songCache[id]!!.toMediaItem())
                     }
                     item.localConfiguration != null -> {
-                        resolved.add(item)
+                        if (!trustedController) {
+                            // Our own catalogue items can round-trip through a
+                            // controller after its cache entry was evicted.
+                            // Rebuild only the internal YouTube URI shape; do
+                            // not open arbitrary file/content/network URIs with
+                            // the service's privileges.
+                            val uri = item.localConfiguration!!.uri
+                            val videoId = uri.getQueryParameter("v")
+                            if (!uri.scheme.equals("bitchord", ignoreCase = true) ||
+                                !uri.host.equals("watch", ignoreCase = true) ||
+                                videoId != id || !isSafeExternalMediaId(videoId.orEmpty())
+                            ) {
+                                throw SecurityException("External media URI is not allowed")
+                            }
+                            val song = songCache[videoId] ?: Song(
+                                videoId = videoId,
+                                title = item.mediaMetadata.title?.toString() ?: "Track",
+                                artist = item.mediaMetadata.artist?.toString() ?: "Artist",
+                                thumbnailUrl = null,
+                            )
+                            resolved.add(song.toMediaItem())
+                        } else {
+                            resolved.add(item)
+                        }
                     }
                     item.requestMetadata.mediaUri != null -> {
                         val uri = item.requestMetadata.mediaUri!!
-                        val videoId = uri.getQueryParameter("v") ?: uri.lastPathSegment.orEmpty()
+                        val videoId = if (trustedController) {
+                            uri.getQueryParameter("v") ?: uri.lastPathSegment.orEmpty()
+                        } else {
+                            (MusicLink.parse(uri) as? LinkRequest.Track)?.videoId
+                                ?: throw SecurityException("External media URI is not allowed")
+                        }
                         if (videoId.isNotEmpty() && !videoId.startsWith("http")) {
                             val cached = songCache[videoId]
                             if (cached != null) {
@@ -6471,6 +6518,9 @@ class PlaybackService : MediaLibraryService() {
                         }
                     }
                     else -> {
+                        if (!trustedController && !isSafeExternalMediaId(id)) {
+                            throw SecurityException("Invalid external media identifier")
+                        }
                         val cached = songCache[id]
                         if (cached != null) {
                             resolved.add(cached.toMediaItem())
@@ -6481,8 +6531,12 @@ class PlaybackService : MediaLibraryService() {
                     }
                 }
             }
-            return if (resolved.isEmpty()) mediaItems else resolved
+            return if (trustedController && resolved.isEmpty()) mediaItems else resolved
         }
+
+        private fun isSafeExternalMediaId(value: String): Boolean =
+            value.length in 1..MAX_EXTERNAL_MEDIA_ID_LENGTH &&
+                value.all { it in 'A'..'Z' || it in 'a'..'z' || it in '0'..'9' || it == '_' || it == '-' }
     }
 
     private fun createFolderItem(
@@ -6595,6 +6649,9 @@ class PlaybackService : MediaLibraryService() {
             .build()
 
     private companion object {
+        private const val MAX_EXTERNAL_MEDIA_ITEMS = 1_000
+        private const val MAX_EXTERNAL_MEDIA_ID_LENGTH = 256
+        private const val MAX_EXTERNAL_SEARCH_QUERY_LENGTH = 500
         const val MEDIA_ROOT_ID = "root"
         const val MEDIA_RECENTS_ID = "recents"
         const val MEDIA_QUICK_PICKS_ID = "quick_picks"

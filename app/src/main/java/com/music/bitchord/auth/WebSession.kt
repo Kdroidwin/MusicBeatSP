@@ -72,7 +72,7 @@ object BrowserSession {
         // a reason for the next sign-in to be less convenient, not a reason for
         // signing out to crash.
         val manager = runCatching { CookieManager.getInstance() }.getOrElse {
-            Log.w("BitChord", "no cookie manager to clear: ${it.message}")
+            Log.w("BitChord", "no cookie manager to clear (${it.javaClass.simpleName})")
             return
         }
         var cleared = 0

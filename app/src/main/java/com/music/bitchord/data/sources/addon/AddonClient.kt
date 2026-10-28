@@ -282,7 +282,8 @@ class AddonClient(rawBaseUrl: String) {
             val wait = client.newCall(request).execute().use { response ->
                 when {
                     response.isSuccessful ->
-                        return@withContext response.body?.string()?.takeIf { it.isNotBlank() }
+                        return@withContext Http.readBoundedUtf8(response.body, MAX_RESPONSE_BODY_BYTES)
+                            ?.takeIf { it.isNotBlank() }
                             ?: throw AddonException("Empty response")
                     response.code == 404 -> throw AddonNotFound()
                     // A 5xx is a server having a bad minute and will be tried
@@ -459,6 +460,7 @@ class AddonClient(rawBaseUrl: String) {
         private const val MAX_RETRIES = 2
         private const val BACKOFF_BASE_MS = 500L
         private const val BACKOFF_CAP_MS = 8_000L
+        private const val MAX_RESPONSE_BODY_BYTES = 8 * 1024 * 1024
         private const val MAX_ERROR_BODY_BYTES = 4_096L
         private const val MAX_ERROR_HINT_CHARS = 120
         private val HTML_TAG = Regex("<[^>]{0,256}>")
@@ -489,16 +491,16 @@ class AddonClient(rawBaseUrl: String) {
         /**
          * The shared client, with a ceiling on the whole call.
          *
-         * Derived from [Http.client] rather than built beside it, so the
-         * connection pool, dispatcher and DNS stay shared with the rest of the
-         * app. What is added is [OkHttpClient.Builder.callTimeout]: the base
+         * Derived from [Http.untrustedClient] rather than built beside it, so
+         * the connection pool, dispatcher and DNS stay shared across addon
+         * requests. What is added is [OkHttpClient.Builder.callTimeout]: the base
          * client bounds each *read*, which a server dribbling a byte at a time
          * never trips, and an addon doing that would otherwise hold a
          * source-resolution slot indefinitely. The spec asks addons to answer
          * search in under five seconds and streams in under three.
          */
         private val client: OkHttpClient by lazy {
-            Http.client.newBuilder()
+            Http.untrustedClient.newBuilder()
                 .callTimeout(20, TimeUnit.SECONDS)
                 .build()
         }

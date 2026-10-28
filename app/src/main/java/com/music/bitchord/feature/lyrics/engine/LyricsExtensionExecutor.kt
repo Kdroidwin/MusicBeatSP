@@ -78,7 +78,7 @@ object LyricsExtensionExecutor {
     )
 
     private val httpClient by lazy {
-        Http.client.newBuilder()
+        Http.lyricsClient.newBuilder()
             .callTimeout(10, TimeUnit.SECONDS)
             .connectTimeout(5, TimeUnit.SECONDS)
             .readTimeout(10, TimeUnit.SECONDS)

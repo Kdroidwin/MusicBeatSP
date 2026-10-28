@@ -75,9 +75,9 @@ object LrcLib {
 
     private fun get(url: String): String? {
         val request = Request.Builder().url(url).header("User-Agent", AGENT).build()
-        Http.client.newCall(request).execute().use { response ->
+        Http.lyricsClient.newCall(request).execute().use { response ->
             if (!response.isSuccessful) return null
-            return response.body?.string()
+            return Http.readBoundedUtf8(response.body, 2 * 1024 * 1024)
         }
     }
 

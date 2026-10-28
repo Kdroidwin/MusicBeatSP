@@ -40,17 +40,16 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.window.Dialog
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.music.bitchord.R
+import com.music.bitchord.data.Http
 import com.music.bitchord.data.settings.AppSettings
 import com.music.bitchord.data.settings.ParametricEqConfig
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
+import okhttp3.Request
 import org.json.JSONArray
-import java.io.ByteArrayOutputStream
-import java.net.HttpURLConnection
-import java.net.URL
-import java.net.URLEncoder
 import java.nio.charset.StandardCharsets
+import java.util.concurrent.TimeUnit
 
 /**
  * AutoEQ profile picker adapted to MusicBeat's in-app parametric EQ.
@@ -230,20 +229,35 @@ private fun loadCatalog(context: Context): List<AutoEqProfile> {
 }
 
 private fun downloadProfileConfig(profile: AutoEqProfile): ParametricEqConfig {
-    val encodedName = URLEncoder.encode(profile.name, StandardCharsets.UTF_8.name()).replace("+", "%20")
-    val url = URL("https://raw.githubusercontent.com/jaakkopasanen/AutoEq/master/results/${profile.path}/${encodedName}%20GraphicEQ.txt")
-    val connection = (url.openConnection() as HttpURLConnection).apply {
-        connectTimeout = NETWORK_TIMEOUT_MS
-        readTimeout = NETWORK_TIMEOUT_MS
-        requestMethod = "GET"
-        setRequestProperty("Accept", "text/plain")
-        setRequestProperty("User-Agent", "MusicBeatSP-AutoEQ")
-    }
-    val body = try {
-        if (connection.responseCode !in 200..299) throw IllegalStateException("AutoEQ server returned an error")
-        connection.inputStream.use(::readCappedUtf8)
-    } finally {
-        connection.disconnect()
+    val pathSegments = profile.path.split('/')
+    require(pathSegments.isNotEmpty() && pathSegments.all { segment ->
+        segment.isNotBlank() && segment != "." && segment != ".." && segment.length <= MAX_PATH_SEGMENT_LENGTH
+    }) { "Invalid AutoEQ profile path" }
+    val url = okhttp3.HttpUrl.Builder()
+        .scheme("https")
+        .host("raw.githubusercontent.com")
+        .addPathSegment("jaakkopasanen")
+        .addPathSegment("AutoEq")
+        .addPathSegment("master")
+        .addPathSegment("results")
+        .apply { pathSegments.forEach(::addPathSegment) }
+        .addPathSegment("${profile.name} GraphicEQ.txt")
+        .build()
+    val request = Request.Builder()
+        .url(url)
+        .header("Accept", "text/plain")
+        .header("User-Agent", "MusicBeatSP-AutoEQ")
+        .get()
+        .build()
+    val body = Http.lyricsClient.newBuilder()
+        .callTimeout(NETWORK_TIMEOUT_MS.toLong(), TimeUnit.MILLISECONDS)
+        .build()
+        .newCall(request)
+        .execute()
+        .use { response ->
+            if (!response.isSuccessful) throw IllegalStateException("AutoEQ server returned an error")
+            Http.readBoundedUtf8(response.body, MAX_PROFILE_BYTES)
+                ?: throw IllegalStateException("AutoEQ server returned an empty response")
     }
     val line = body.lineSequence().firstOrNull { it.trim().startsWith("GraphicEQ:", ignoreCase = true) }
         ?: throw IllegalStateException("AutoEQ profile has no GraphicEQ data")
@@ -261,21 +275,8 @@ private fun downloadProfileConfig(profile: AutoEqProfile): ParametricEqConfig {
     return AutoEqGraphicEqConverter.convert(points, profile.name)
 }
 
-private fun readCappedUtf8(input: java.io.InputStream): String {
-    val output = ByteArrayOutputStream()
-    val buffer = ByteArray(8 * 1024)
-    var total = 0
-    while (true) {
-        val count = input.read(buffer)
-        if (count < 0) break
-        total += count
-        if (total > MAX_PROFILE_BYTES) throw IllegalStateException("AutoEQ profile is too large")
-        output.write(buffer, 0, count)
-    }
-    return output.toString(StandardCharsets.UTF_8.name())
-}
-
 private val WHITESPACE = Regex("\\s+")
 private const val NETWORK_TIMEOUT_MS = 12_000
 private const val MAX_PROFILE_BYTES = 256 * 1024
+private const val MAX_PATH_SEGMENT_LENGTH = 200
 private const val MAX_VISIBLE_PROFILES = 100

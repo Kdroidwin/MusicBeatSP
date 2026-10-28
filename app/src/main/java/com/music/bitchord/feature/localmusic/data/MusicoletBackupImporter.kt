@@ -7,6 +7,7 @@ import android.provider.OpenableColumns
 import com.music.bitchord.data.model.Song
 import com.music.bitchord.feature.localmusic.domain.model.LocalPlaylistSongMetadata
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.withContext
 import java.io.ByteArrayOutputStream
 import java.io.File
@@ -38,6 +39,9 @@ object MusicoletBackupImporter {
     private const val MAX_TOTAL_UNCOMPRESSED_BYTES = 128L * 1024L * 1024L
     private const val MAX_PLAYLIST_BYTES = 8 * 1024 * 1024
     private const val MAX_PLAYLIST_COUNT = 500
+    // A ZIP can contain millions of empty entries without reaching the
+    // uncompressed-byte limit. Bound entry processing as well as payload size.
+    private const val MAX_ARCHIVE_ENTRY_COUNT = 10_000
 
     suspend fun prepare(context: Context, backupUri: Uri, localSongs: List<Song>): PreparedMusicoletBackup =
         withContext(Dispatchers.IO) {
@@ -46,10 +50,14 @@ object MusicoletBackupImporter {
                 ?: throw MusicoletImportException(MusicoletImportFailure.CANNOT_OPEN)
             val archiveEntries = mutableListOf<Pair<String, ByteArray>>()
             var totalRead = 0L
+            var entryCount = 0
             try {
                 ZipInputStream(source).use { zip ->
                     while (true) {
                         val entry = zip.nextEntry ?: break
+                        if (++entryCount > MAX_ARCHIVE_ENTRY_COUNT) {
+                            throw MusicoletImportException(MusicoletImportFailure.INVALID_BACKUP)
+                        }
                         if (entry.isDirectory) {
                             zip.closeEntry()
                             continue
@@ -82,7 +90,9 @@ object MusicoletBackupImporter {
                 }
             } catch (error: MusicoletImportException) {
                 throw error
-            } catch (_: Throwable) {
+            } catch (cancelled: CancellationException) {
+                throw cancelled
+            } catch (_: Exception) {
                 throw MusicoletImportException(MusicoletImportFailure.INVALID_BACKUP)
             }
 
