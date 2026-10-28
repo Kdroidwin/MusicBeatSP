@@ -5,6 +5,7 @@ import androidx.compose.ui.graphics.SolidColor
 import androidx.compose.ui.graphics.StrokeCap
 import androidx.compose.ui.graphics.StrokeJoin
 import androidx.compose.ui.graphics.vector.ImageVector
+import androidx.compose.ui.graphics.vector.PathBuilder
 import androidx.compose.ui.graphics.vector.path
 import androidx.compose.ui.unit.dp
 
@@ -596,5 +597,106 @@ object BitChordIcons {
                 moveTo(9.5f, 17.5f); lineTo(19.5f, 17.5f)
             }
         }.build()
+    }
+
+    /** Reused from Auris: the compact lyrics glyph used in its player action row. */
+    val AurisLyrics: ImageVector by lazy {
+        ImageVector.Builder(
+            name = "auris_player_lyrics",
+            defaultWidth = 24.dp, defaultHeight = 24.dp,
+            viewportWidth = 24f, viewportHeight = 24f,
+        ).apply {
+            path(
+                stroke = stroke,
+                strokeLineWidth = 1.7f,
+                strokeLineCap = StrokeCap.Round,
+                strokeLineJoin = StrokeJoin.Round,
+            ) {
+                moveTo(7.2f, 4.4f)
+                lineTo(16.8f, 4.4f)
+                quadTo(20.6f, 4.4f, 20.6f, 8.2f)
+                lineTo(20.6f, 14.4f)
+                quadTo(20.6f, 18.2f, 16.8f, 18.2f)
+                lineTo(10.8f, 18.2f)
+                lineTo(6.9f, 21.6f)
+                lineTo(6.9f, 18.2f)
+                quadTo(3.4f, 18.2f, 3.4f, 14.4f)
+                lineTo(3.4f, 8.2f)
+                quadTo(3.4f, 4.4f, 7.2f, 4.4f)
+                close()
+            }
+            path(fill = stroke) {
+                quoteMark(7.6f)
+                quoteMark(12.4f)
+            }
+        }.build()
+    }
+
+    /** Reused from Auris: three compact rows for the player's queue action. */
+    val AurisQueue: ImageVector by lazy {
+        ImageVector.Builder(
+            name = "auris_player_queue",
+            defaultWidth = 24.dp, defaultHeight = 24.dp,
+            viewportWidth = 24f, viewportHeight = 24f,
+        ).apply {
+            path(
+                stroke = stroke,
+                strokeLineWidth = 1.7f,
+                strokeLineCap = StrokeCap.Round,
+            ) {
+                for (y in listOf(6.4f, 12f, 17.6f)) {
+                    moveTo(8.7f, y)
+                    lineTo(20.5f, y)
+                }
+            }
+            path(fill = stroke) {
+                for (y in listOf(6.4f, 12f, 17.6f)) circle(4.7f, y, 1f)
+            }
+        }.build()
+    }
+
+    /** Reused from Auris as the matching output-routing mark for Chromecast. */
+    val AurisOutput: ImageVector by lazy {
+        ImageVector.Builder(
+            name = "auris_player_output",
+            defaultWidth = 24.dp, defaultHeight = 24.dp,
+            viewportWidth = 24f, viewportHeight = 24f,
+        ).apply {
+            path(stroke = stroke, strokeLineWidth = 1.7f) {
+                circle(12f, 11.8f, 9.2f)
+                circle(12f, 11.8f, 5.8f)
+                circle(12f, 11.8f, 2.8f)
+            }
+            path(
+                fill = stroke,
+                stroke = stroke,
+                strokeLineWidth = 1.2f,
+                strokeLineJoin = StrokeJoin.Round,
+            ) {
+                moveTo(7f, 20.9f)
+                lineTo(17f, 20.9f)
+                lineTo(12f, 12.2f)
+                close()
+            }
+        }.build()
+    }
+
+    private fun PathBuilder.circle(cx: Float, cy: Float, radius: Float) {
+        moveTo(cx - radius, cy)
+        arcToRelative(radius, radius, 0f, isMoreThanHalf = true, isPositiveArc = true, radius * 2f, 0f)
+        arcToRelative(radius, radius, 0f, isMoreThanHalf = true, isPositiveArc = true, -radius * 2f, 0f)
+        close()
+    }
+
+    private fun PathBuilder.quoteMark(x: Float) {
+        moveTo(x + 0.5f, 9.0f)
+        curveTo(x + 2.2f, 9.0f, x + 2.6f, 10.0f, x + 2.6f, 10.9f)
+        curveTo(x + 2.6f, 12.3f, x + 1.7f, 13.4f, x + 0.5f, 14.2f)
+        lineTo(x - 0.2f, 13.4f)
+        curveTo(x + 0.8f, 12.7f, x + 1.2f, 12.0f, x + 1.2f, 11.3f)
+        lineTo(x + 0.5f, 11.3f)
+        curveTo(x - 0.3f, 11.3f, x - 0.3f, 10.5f, x - 0.3f, 10.1f)
+        curveTo(x - 0.3f, 9.4f, x + 0.1f, 9.0f, x + 0.5f, 9.0f)
+        close()
     }
 }

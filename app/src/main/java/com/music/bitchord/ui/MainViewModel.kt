@@ -287,6 +287,10 @@ class MainViewModel(app: Application) : AndroidViewModel(app) {
     private val _lyricsChecked = MutableStateFlow(false)
     val lyricsChecked: StateFlow<Boolean> = _lyricsChecked.asStateFlow()
 
+    /** Track identifier the current lyric result or in-flight lookup belongs to. */
+    private val _lyricsVideoId = MutableStateFlow<String?>(null)
+    val lyricsVideoId: StateFlow<String?> = _lyricsVideoId.asStateFlow()
+
     private var lyricsJob: Job? = null
 
     /**
@@ -334,7 +338,9 @@ class MainViewModel(app: Application) : AndroidViewModel(app) {
             albumName = album,
             localUri = localUri,
         )
-        val sources = if (AppSettings.syncedLyrics.value) {
+        _lyricsVideoId.value = videoId
+        val autoShowLyricsOnPlayback = AppSettings.autoShowLyricsOnPlayback.value
+        val sources = if (AppSettings.syncedLyrics.value || autoShowLyricsOnPlayback) {
             AppSettings.lyricsSources.value
         } else {
             emptySet()

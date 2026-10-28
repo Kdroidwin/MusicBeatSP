@@ -202,6 +202,7 @@ enum class PlayerControl {
     LYRICS,
     LIKE,
     QUEUE,
+    CHROMECAST,
     PLAYLIST,
     SEARCH,
 }
@@ -543,6 +544,8 @@ object AppSettings {
     val playerArtistFontSizeSp = MutableStateFlow(20f)
     /** Size of the central play/pause glyph, in dp; the legacy size is 62dp. */
     val playerPlayPauseIconSizeDp = MutableStateFlow(62f)
+    /** Extra spacing between the player transport buttons; zero keeps the existing even layout. */
+    val playerTransportButtonSpacingDp = MutableStateFlow(0f)
     /** Shows the small drag handle at the top of the expanded player by default. */
     val showPlayerTopGrabber = MutableStateFlow(true)
     /** App-level second consent for cleartext connections to a configured local server. */
@@ -780,6 +783,8 @@ object AppSettings {
     /** Presentation-only visibility for the four secondary player controls. */
     val visiblePlayerControls = MutableStateFlow(DEFAULT_PLAYER_CONTROLS)
     val playerControlOrder = MutableStateFlow<List<PlayerControl>>(PlayerControl.entries)
+    /** Uses the restrained Lyrics / Cast / Queue glyph treatment from Auris. */
+    val aurisPlayerActionStyle = MutableStateFlow(false)
 
     /** Uses the library glyph for the player shortcut that opens playlists. */
     val useLibraryIconForPlaylistControl = MutableStateFlow(false)
@@ -827,6 +832,9 @@ object AppSettings {
      * [NowPlayingScreen][com.music.bitchord.ui.player.NowPlayingScreen].
      */
     val fullBleedArtwork = MutableStateFlow(true)
+
+    /** Adds a modest extra crop to the existing full-bleed artwork presentation. */
+    val largerFullBleedArtwork = MutableStateFlow(false)
 
     /** Preserves non-square still-cover proportions when the full-bleed treatment is off. */
     val keepOriginalArtworkAspectRatio = MutableStateFlow(false)
@@ -910,6 +918,9 @@ object AppSettings {
 
     /** When enabled, automatically writes online lyrics into local music files when played. */
     val autoEmbedLyrics = MutableStateFlow(true)
+
+    /** Automatically opens the lyrics panel after lyrics for the current track have been found. */
+    val autoShowLyricsOnPlayback = MutableStateFlow(false)
 
     /** Configurable repository URL for remote lyrics extensions (like SpotiFLAC). */
     val lyricsExtensionRepoUrl = MutableStateFlow(DEFAULT_LYRICS_EXTENSION_REPO_URL)
@@ -1282,6 +1293,7 @@ object AppSettings {
         playerTitleFontSizeSp.value = prefs.getFloat(KEY_PLAYER_TITLE_FONT_SIZE_SP, 20f).coerceIn(12f, 36f)
         playerArtistFontSizeSp.value = prefs.getFloat(KEY_PLAYER_ARTIST_FONT_SIZE_SP, 20f).coerceIn(12f, 36f)
         playerPlayPauseIconSizeDp.value = prefs.getFloat(KEY_PLAYER_PLAY_PAUSE_ICON_SIZE_DP, 62f).coerceIn(40f, 78f)
+        playerTransportButtonSpacingDp.value = prefs.getFloat(KEY_PLAYER_TRANSPORT_BUTTON_SPACING_DP, 0f).coerceIn(0f, 24f)
         showPlayerTopGrabber.value = prefs.getBoolean(KEY_SHOW_PLAYER_TOP_GRABBER, true)
         cleartextHttpAllowed.value = prefs.getBoolean(KEY_CLEARTEXT_HTTP_ALLOWED, false)
         whiteCollectionActionButtons.value = prefs.getBoolean(KEY_WHITE_COLLECTION_ACTION_BUTTONS, false)
@@ -1420,6 +1432,7 @@ object AppSettings {
         pausePlaybackAtZeroVolume.value = prefs.getBoolean(KEY_PAUSE_PLAYBACK_AT_ZERO_VOLUME, false)
         visiblePlayerControls.value = readVisiblePlayerControls()
         playerControlOrder.value = readPlayerControlOrder()
+        aurisPlayerActionStyle.value = prefs.getBoolean(KEY_AURIS_PLAYER_ACTION_STYLE, false)
         useLibraryIconForPlaylistControl.value = prefs.getBoolean(KEY_LIBRARY_ICON_FOR_PLAYLIST_CONTROL, false)
         hidePlayerArtist.value = prefs.getBoolean(KEY_HIDE_PLAYER_ARTIST, false)
         hideUnknownPlayerArtist.value = prefs.getBoolean(KEY_HIDE_UNKNOWN_PLAYER_ARTIST, false)
@@ -1434,6 +1447,7 @@ object AppSettings {
         animatedCanvas.value = prefs.getBoolean(KEY_ANIMATED_CANVAS, true)
         canvasOverCellular.value = prefs.getBoolean(KEY_CANVAS_OVER_CELLULAR, false)
         fullBleedArtwork.value = prefs.getBoolean(KEY_FULL_BLEED_ARTWORK, true)
+        largerFullBleedArtwork.value = prefs.getBoolean(KEY_LARGER_FULL_BLEED_ARTWORK, false)
         keepOriginalArtworkAspectRatio.value = prefs.getBoolean(KEY_KEEP_ORIGINAL_ARTWORK_ASPECT_RATIO, false)
         keepCollectionArtworkAspectRatio.value = prefs.getBoolean(KEY_KEEP_COLLECTION_ARTWORK_ASPECT_RATIO, false)
         localizeLibraryCollectionCount.value = prefs.getBoolean(KEY_LOCALIZE_LIBRARY_COLLECTION_COUNT, true)
@@ -1469,6 +1483,7 @@ object AppSettings {
         prioritizeSyllableSync.value = prefs.getBoolean(KEY_PRIORITIZE_SYLLABLE_SYNC, false)
         showLyricsLogs.value = prefs.getBoolean(KEY_SHOW_LYRICS_LOGS, false)
         autoEmbedLyrics.value = prefs.getBoolean(KEY_AUTO_EMBED_LYRICS, true)
+        autoShowLyricsOnPlayback.value = prefs.getBoolean(KEY_AUTO_SHOW_LYRICS_ON_PLAYBACK, false)
         lyricsExtensionRepoUrl.value = prefs.getString(KEY_LYRICS_EXTENSION_REPO_URL, DEFAULT_LYRICS_EXTENSION_REPO_URL)
             .orEmpty().ifBlank { DEFAULT_LYRICS_EXTENSION_REPO_URL }
         lyricsExtensionsEnabled.value = prefs.getBoolean(KEY_LYRICS_EXTENSIONS_ENABLED, false)
@@ -1887,6 +1902,12 @@ object AppSettings {
         val safe = value.coerceIn(40f, 78f)
         playerPlayPauseIconSizeDp.value = safe
         prefs.edit().putFloat(KEY_PLAYER_PLAY_PAUSE_ICON_SIZE_DP, safe).apply()
+    }
+
+    fun setPlayerTransportButtonSpacingDp(value: Float) {
+        val safe = value.coerceIn(0f, 24f)
+        playerTransportButtonSpacingDp.value = safe
+        prefs.edit().putFloat(KEY_PLAYER_TRANSPORT_BUTTON_SPACING_DP, safe).apply()
     }
 
     fun setShowPlayerTopGrabber(value: Boolean) {
@@ -2804,6 +2825,11 @@ object AppSettings {
         prefs.edit().putStringSet(KEY_VISIBLE_PLAYER_CONTROLS, updated.mapTo(mutableSetOf()) { it.name }).apply()
     }
 
+    fun setAurisPlayerActionStyle(value: Boolean) {
+        aurisPlayerActionStyle.value = value
+        prefs.edit().putBoolean(KEY_AURIS_PLAYER_ACTION_STYLE, value).apply()
+    }
+
     private fun readVisiblePlayerControls(): Set<PlayerControl> =
         prefs.getStringSet(KEY_VISIBLE_PLAYER_CONTROLS, null)
             ?.mapNotNullTo(mutableSetOf()) { saved -> PlayerControl.entries.firstOrNull { it.name == saved } }
@@ -2888,6 +2914,11 @@ object AppSettings {
         prefs.edit().putBoolean(KEY_AUTO_EMBED_LYRICS, value).apply()
     }
 
+    fun setAutoShowLyricsOnPlayback(value: Boolean) {
+        autoShowLyricsOnPlayback.value = value
+        prefs.edit().putBoolean(KEY_AUTO_SHOW_LYRICS_ON_PLAYBACK, value).apply()
+    }
+
     fun setLyricsExtensionRepoUrl(value: String) {
         val normalized = value.trim()
         lyricsExtensionRepoUrl.value = normalized
@@ -2936,6 +2967,11 @@ object AppSettings {
     fun setFullBleedArtwork(value: Boolean) {
         fullBleedArtwork.value = value
         prefs.edit().putBoolean(KEY_FULL_BLEED_ARTWORK, value).apply()
+    }
+
+    fun setLargerFullBleedArtwork(value: Boolean) {
+        largerFullBleedArtwork.value = value
+        prefs.edit().putBoolean(KEY_LARGER_FULL_BLEED_ARTWORK, value).apply()
     }
 
     fun setKeepOriginalArtworkAspectRatio(value: Boolean) {
@@ -3725,6 +3761,7 @@ object AppSettings {
     private const val KEY_PLAYER_TITLE_FONT_SIZE_SP = "player_title_font_size_sp"
     private const val KEY_PLAYER_ARTIST_FONT_SIZE_SP = "player_artist_font_size_sp"
     private const val KEY_PLAYER_PLAY_PAUSE_ICON_SIZE_DP = "player_play_pause_icon_size_dp"
+    private const val KEY_PLAYER_TRANSPORT_BUTTON_SPACING_DP = "player_transport_button_spacing_dp"
     private const val KEY_SHOW_PLAYER_TOP_GRABBER = "show_player_top_grabber"
     private const val KEY_CLEARTEXT_HTTP_ALLOWED = "cleartext_http_allowed"
     private const val KEY_WHITE_COLLECTION_ACTION_BUTTONS = "white_collection_action_buttons"
@@ -3846,6 +3883,7 @@ object AppSettings {
     private const val KEY_PAUSE_PLAYBACK_AT_ZERO_VOLUME = "pause_playback_at_zero_volume"
     private const val KEY_VISIBLE_PLAYER_CONTROLS = "visible_player_controls"
     private const val KEY_PLAYER_CONTROL_ORDER = "player_control_order"
+    private const val KEY_AURIS_PLAYER_ACTION_STYLE = "auris_player_action_style"
     private const val KEY_LIBRARY_ICON_FOR_PLAYLIST_CONTROL = "library_icon_for_playlist_control"
     private const val KEY_HIDE_PLAYER_ARTIST = "hide_player_artist"
     private const val KEY_HIDE_UNKNOWN_PLAYER_ARTIST = "hide_unknown_player_artist"
@@ -3855,6 +3893,7 @@ object AppSettings {
     private const val KEY_ANIMATED_CANVAS = "animated_canvas"
     private const val KEY_CANVAS_OVER_CELLULAR = "canvas_over_cellular"
     private const val KEY_FULL_BLEED_ARTWORK = "full_bleed_artwork"
+    private const val KEY_LARGER_FULL_BLEED_ARTWORK = "larger_full_bleed_artwork"
     private const val KEY_KEEP_ORIGINAL_ARTWORK_ASPECT_RATIO = "keep_original_artwork_aspect_ratio"
     private const val KEY_KEEP_COLLECTION_ARTWORK_ASPECT_RATIO = "keep_collection_artwork_aspect_ratio"
     private const val KEY_LOCALIZE_LIBRARY_COLLECTION_COUNT = "localize_library_collection_count"
@@ -3876,6 +3915,7 @@ object AppSettings {
     private const val KEY_PRIORITIZE_SYLLABLE_SYNC = "prioritize_syllable_sync"
     private const val KEY_SHOW_LYRICS_LOGS = "show_lyrics_logs"
     private const val KEY_AUTO_EMBED_LYRICS = "auto_embed_lyrics"
+    private const val KEY_AUTO_SHOW_LYRICS_ON_PLAYBACK = "auto_show_lyrics_on_playback"
     const val DEFAULT_LYRICS_EXTENSION_REPO_URL =
         "https://raw.githubusercontent.com/SamuelAdmand/MusicBeat-Lyrics-Extensions/main/registry.json"
     private const val KEY_LYRICS_EXTENSION_REPO_URL = "lyrics_extension_repo_url"

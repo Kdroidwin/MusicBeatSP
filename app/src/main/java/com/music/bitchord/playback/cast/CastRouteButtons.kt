@@ -20,7 +20,9 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.unit.dp
+import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.viewinterop.AndroidView
+import androidx.core.content.ContextCompat
 import androidx.mediarouter.app.MediaRouteButton
 import com.google.android.gms.cast.framework.CastButtonFactory
 import com.google.android.gms.cast.framework.CastContext
@@ -61,12 +63,17 @@ fun CastActionItem(onUnavailable: () -> Unit) {
 }
 
 @Composable
-fun CastQuickActionButton(onUnavailable: () -> Unit, modifier: Modifier = Modifier) {
+fun CastQuickActionButton(
+    onUnavailable: () -> Unit,
+    modifier: Modifier = Modifier,
+    fallbackIcon: ImageVector = Icons.Rounded.Cast,
+    aurisStyle: Boolean = false,
+) {
     val context = LocalContext.current
     val castContext = remember(context) { runCatching { CastContext.getSharedInstance(context) }.getOrNull() }
     if (castContext == null) {
         IconButton(onClick = onUnavailable, modifier = modifier.size(48.dp)) {
-            Icon(Icons.Rounded.Cast, contentDescription = stringResource(R.string.chromecast), tint = MaterialTheme.colorScheme.onSurface)
+            Icon(fallbackIcon, contentDescription = stringResource(R.string.chromecast), tint = MaterialTheme.colorScheme.onSurface)
         }
     } else {
         AndroidView(
@@ -74,6 +81,9 @@ fun CastQuickActionButton(onUnavailable: () -> Unit, modifier: Modifier = Modifi
                 MediaRouteButton(viewContext).also {
                     it.contentDescription = viewContext.getString(R.string.chromecast)
                     CastButtonFactory.setUpMediaRouteButton(viewContext, it)
+                    if (aurisStyle) {
+                        ContextCompat.getDrawable(viewContext, R.drawable.ic_auris_player_output)?.let(it::setRemoteIndicatorDrawable)
+                    }
                 }
             },
             modifier = modifier.size(48.dp),

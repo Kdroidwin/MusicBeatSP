@@ -128,6 +128,8 @@ fun CanvasArtworkPlayer(
      * for as long as it is left lit underneath.
      */
     onCoverChanged: (Float) -> Unit = {},
+    /** Additional crop applied inside TextureView's own transform, avoiding a Compose layer over video. */
+    extraZoom: Float = 1f,
     /**
      * Share of the clip's height, measured up from its bottom edge, over which
      * it dissolves to nothing — 0 for a hard edge. See [setBottomFade] for why
@@ -368,7 +370,7 @@ fun CanvasArtworkPlayer(
             // Set on the view itself. A Compose alpha layer over a TextureView
             // is not reliably composited, and this is the same fade either way.
             view.alpha = alpha
-            view.centerCrop(bounds, clipAspect)
+            view.centerCrop(bounds, clipAspect, extraZoom)
             if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) {
                 view.setBottomFade(bottomFade, bounds)
             } else {
@@ -420,16 +422,17 @@ private const val FRAME_CAPTURE_PX = 128
  * transform: scale the axis that came up short until the clip covers the view
  * at its true aspect, and let the overflow fall outside the clip.
  */
-private fun TextureView.centerCrop(bounds: IntSize, clipAspect: Float) {
+private fun TextureView.centerCrop(bounds: IntSize, clipAspect: Float, extraZoom: Float) {
     if (bounds.width == 0 || bounds.height == 0 || clipAspect <= 0f) return
     val viewAspect = bounds.width.toFloat() / bounds.height
     val pivotX = bounds.width / 2f
     val pivotY = bounds.height / 2f
+    val zoom = if (extraZoom.isFinite()) extraZoom.coerceIn(1f, 1.5f) else 1f
     val matrix = Matrix().apply {
         if (clipAspect > viewAspect) {
-            setScale(clipAspect / viewAspect, 1f, pivotX, pivotY)
+            setScale((clipAspect / viewAspect) * zoom, zoom, pivotX, pivotY)
         } else {
-            setScale(1f, viewAspect / clipAspect, pivotX, pivotY)
+            setScale(zoom, (viewAspect / clipAspect) * zoom, pivotX, pivotY)
         }
     }
     setTransform(matrix)

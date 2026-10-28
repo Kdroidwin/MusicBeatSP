@@ -241,6 +241,93 @@ private fun musicServerSearchEntry(onOpen: () -> Unit) = SettingsSearchEntry(
     activate = onOpen,
 )
 
+@Composable
+private fun autoShowLyricsSearchEntry(enabled: Boolean) = SettingsSearchEntry(
+    title = stringResource(R.string.auto_show_lyrics_on_playback),
+    subtitle = stringResource(R.string.auto_show_lyrics_on_playback_subtitle),
+    keywords = listOf("lyrics", "歌詞", "automatic", "自動取得", "自動表示", "歌詞パネル"),
+    checked = enabled,
+    activate = { AppSettings.setAutoShowLyricsOnPlayback(!enabled) },
+)
+
+@Composable
+private fun playerTransportSpacingSearchEntry(spacingDp: Float) = SettingsSearchEntry(
+    title = stringResource(R.string.player_transport_button_spacing),
+    subtitle = stringResource(R.string.player_transport_button_spacing_subtitle),
+    keywords = listOf("player", "transport", "button", "spacing", "gap", "プレーヤー", "操作ボタン", "間隔", "余白"),
+    valueLabel = if (spacingDp <= 0f) {
+        stringResource(R.string.player_transport_spacing_auto)
+    } else {
+        stringResource(R.string.player_transport_spacing_value, spacingDp.roundToInt())
+    },
+    sliderValue = spacingDp,
+    sliderValueRange = 0f..24f,
+    sliderSteps = 23,
+    onSliderValueChange = AppSettings::setPlayerTransportButtonSpacingDp,
+    activate = {},
+)
+
+@Composable
+private fun largerFullBleedArtworkSearchEntry(enabled: Boolean, fullBleedEnabled: Boolean) = SettingsSearchEntry(
+    title = stringResource(R.string.larger_full_screen_cover_art),
+    subtitle = stringResource(R.string.larger_full_screen_cover_art_subtitle),
+    keywords = listOf("artwork", "cover", "zoom", "full screen", "アート", "カバー", "拡大", "全画面"),
+    checked = enabled,
+    enabled = fullBleedEnabled,
+    activate = { if (fullBleedEnabled) AppSettings.setLargerFullBleedArtwork(!enabled) },
+)
+
+@Composable
+private fun aurisPlayerActionStyleSearchEntry(enabled: Boolean) = SettingsSearchEntry(
+    title = stringResource(R.string.auris_player_action_style),
+    subtitle = stringResource(R.string.auris_player_action_style_subtitle),
+    keywords = listOf("player", "lyrics", "chromecast", "queue", "Auris", "プレイヤー", "歌詞", "キュー", "再生キュー", "アイコン"),
+    checked = enabled,
+    activate = { AppSettings.setAurisPlayerActionStyle(!enabled) },
+)
+
+@Composable
+private fun LargerFullBleedArtworkRow(checked: Boolean, fullBleedEnabled: Boolean) {
+    SettingsRow(
+        icon = Icons.Rounded.Fullscreen,
+        title = stringResource(R.string.larger_full_screen_cover_art),
+        subtitle = stringResource(R.string.larger_full_screen_cover_art_subtitle),
+        enabled = fullBleedEnabled,
+        trailing = {
+            Switch(
+                checked = checked,
+                enabled = fullBleedEnabled,
+                onCheckedChange = AppSettings::setLargerFullBleedArtwork,
+                colors = SwitchDefaults.colors(
+                    checkedTrackColor = MaterialTheme.colorScheme.primary,
+                    checkedBorderColor = MaterialTheme.colorScheme.primary,
+                ),
+            )
+        },
+        onClick = { if (fullBleedEnabled) AppSettings.setLargerFullBleedArtwork(!checked) },
+    )
+}
+
+@Composable
+private fun AurisPlayerActionStyleRow(checked: Boolean) {
+    SettingsRow(
+        icon = Icons.Rounded.Cast,
+        title = stringResource(R.string.auris_player_action_style),
+        subtitle = stringResource(R.string.auris_player_action_style_subtitle),
+        trailing = {
+            Switch(
+                checked = checked,
+                onCheckedChange = AppSettings::setAurisPlayerActionStyle,
+                colors = SwitchDefaults.colors(
+                    checkedTrackColor = MaterialTheme.colorScheme.primary,
+                    checkedBorderColor = MaterialTheme.colorScheme.primary,
+                ),
+            )
+        },
+        onClick = { AppSettings.setAurisPlayerActionStyle(!checked) },
+    )
+}
+
 /**
  * Grouped settings, in the shape phones have taught people to expect: inset
  * cards of rows, a leading glyph per row, the current value on the right, and a
@@ -406,18 +493,21 @@ fun SettingsScreen(
     val useLibraryIconForPlaylistControl by AppSettings.useLibraryIconForPlaylistControl.collectAsStateWithLifecycle()
     val visiblePlayerControls by AppSettings.visiblePlayerControls.collectAsStateWithLifecycle()
     val playerControlOrder by AppSettings.playerControlOrder.collectAsStateWithLifecycle()
+    val aurisPlayerActionStyle by AppSettings.aurisPlayerActionStyle.collectAsStateWithLifecycle()
     val hidePlayerArtist by AppSettings.hidePlayerArtist.collectAsStateWithLifecycle()
     val hideUnknownPlayerArtist by AppSettings.hideUnknownPlayerArtist.collectAsStateWithLifecycle()
     val centerPlayerTrackInfo by AppSettings.centerPlayerTrackInfo.collectAsStateWithLifecycle()
     val playerDetailsVerticalMenu by AppSettings.playerDetailsVerticalMenu.collectAsStateWithLifecycle()
     val preloadAlbumArtOnStartup by AppSettings.preloadAlbumArtOnStartup.collectAsStateWithLifecycle()
     val fullBleedArtwork by AppSettings.fullBleedArtwork.collectAsStateWithLifecycle()
+    val largerFullBleedArtwork by AppSettings.largerFullBleedArtwork.collectAsStateWithLifecycle()
     val keepOriginalArtworkAspectRatio by AppSettings.keepOriginalArtworkAspectRatio.collectAsStateWithLifecycle()
     val preserveArtworkShapeInCompactTransitions by AppSettings.preserveArtworkShapeInCompactTransitions.collectAsStateWithLifecycle()
     val keepArtworkFullSizeWhenPaused by AppSettings.keepArtworkFullSizeWhenPaused.collectAsStateWithLifecycle()
     val legacyMeshGradient by AppSettings.legacyMeshGradient.collectAsStateWithLifecycle()
     val syncedLyrics by AppSettings.syncedLyrics.collectAsStateWithLifecycle()
     val autoEmbedLyrics by AppSettings.autoEmbedLyrics.collectAsStateWithLifecycle()
+    val autoShowLyricsOnPlayback by AppSettings.autoShowLyricsOnPlayback.collectAsStateWithLifecycle()
     val lyricsExtensionsEnabled by AppSettings.lyricsExtensionsEnabled.collectAsStateWithLifecycle()
     val lyricsSources by AppSettings.lyricsSources.collectAsStateWithLifecycle()
     val lyricsSourceOrder by AppSettings.lyricsSourceOrder.collectAsStateWithLifecycle()
@@ -434,6 +524,7 @@ fun SettingsScreen(
     val playerTitleFontSizeSp by AppSettings.playerTitleFontSizeSp.collectAsStateWithLifecycle()
     val playerArtistFontSizeSp by AppSettings.playerArtistFontSizeSp.collectAsStateWithLifecycle()
     val playerPlayPauseIconSizeDp by AppSettings.playerPlayPauseIconSizeDp.collectAsStateWithLifecycle()
+    val playerTransportButtonSpacingDp by AppSettings.playerTransportButtonSpacingDp.collectAsStateWithLifecycle()
     val showPlayerTopGrabber by AppSettings.showPlayerTopGrabber.collectAsStateWithLifecycle()
     val cleartextHttpAllowed by AppSettings.cleartextHttpAllowed.collectAsStateWithLifecycle()
     val parametricEqEnabled by AppSettings.parametricEqEnabled.collectAsStateWithLifecycle()
@@ -871,12 +962,14 @@ fun SettingsScreen(
         SettingsSearchEntry(stringResource(R.string.hide_unknown_player_artist), stringResource(R.string.hide_unknown_player_artist_subtitle), listOf("artist", "unknown", "アーティスト", "unknown artist"), hideUnknownPlayerArtist) { AppSettings.setHideUnknownPlayerArtist(!hideUnknownPlayerArtist) },
         SettingsSearchEntry(stringResource(R.string.center_player_track_info), stringResource(R.string.center_player_track_info_subtitle), listOf("center", "中央", "曲情報"), centerPlayerTrackInfo) { AppSettings.setCenterPlayerTrackInfo(!centerPlayerTrackInfo) },
         SettingsSearchEntry(stringResource(R.string.player_playlist_library_icon), stringResource(R.string.player_playlist_library_icon_subtitle), listOf("playlist", "library", "プレイリスト", "ライブラリ", "icon"), useLibraryIconForPlaylistControl) { AppSettings.setUseLibraryIconForPlaylistControl(!useLibraryIconForPlaylistControl) },
+        aurisPlayerActionStyleSearchEntry(aurisPlayerActionStyle),
         SettingsSearchEntry(stringResource(R.string.prevent_play_at_zero_volume), stringResource(R.string.prevent_play_at_zero_volume_subtitle), listOf("volume", "音量", "zero", "0"), preventPlayAtZeroVolume) { AppSettings.setPreventPlayAtZeroVolume(!preventPlayAtZeroVolume) },
         SettingsSearchEntry(stringResource(R.string.pause_playback_at_zero_volume), stringResource(R.string.pause_playback_at_zero_volume_subtitle), listOf("volume", "音量", "zero", "0", "pause", "一時停止"), pausePlaybackAtZeroVolume) { AppSettings.setPausePlaybackAtZeroVolume(!pausePlaybackAtZeroVolume) },
         SettingsSearchEntry(stringResource(R.string.bit_perfect_playback), stringResource(R.string.bit_perfect_playback_subtitle), listOf("bitperfect", "bit-perfect", "bit perfect", "USB DAC", "PCM", "ビットパーフェクト", "音質"), bitPerfectPlayback) { AppSettings.setBitPerfectPlayback(!bitPerfectPlayback) },
         SettingsSearchEntry(stringResource(R.string.preload_album_art), stringResource(R.string.preload_album_art_subtitle), listOf("artwork", "album art", "preload", "先読み", "アルバムアート"), preloadAlbumArtOnStartup) { AppSettings.setPreloadAlbumArtOnStartup(!preloadAlbumArtOnStartup) },
         SettingsSearchEntry(stringResource(R.string.persistent_local_artwork), stringResource(R.string.persistent_local_artwork_subtitle), listOf("artwork", "album art", "storage", "画像", "ストレージ"), persistentLocalArtwork) { AppSettings.setPersistentLocalArtwork(!persistentLocalArtwork) },
         SettingsSearchEntry(stringResource(R.string.synced_lyrics), stringResource(R.string.synced_lyrics_subtitle), listOf("lyrics", "歌詞", "同期"), syncedLyrics) { AppSettings.setSyncedLyrics(!syncedLyrics) },
+        autoShowLyricsSearchEntry(autoShowLyricsOnPlayback),
         SettingsSearchEntry(stringResource(R.string.blur_unfocused_lyrics), stringResource(R.string.blur_unfocused_lyrics_subtitle), listOf("lyrics", "歌詞", "blur", "ぼかし"), lyricsBlur) { AppSettings.setLyricsBlur(!lyricsBlur) },
         SettingsSearchEntry(stringResource(R.string.auto_embed_lyrics), stringResource(R.string.auto_embed_lyrics_subtitle), listOf("lyrics", "歌詞", "embed", "埋め込み"), autoEmbedLyrics) { AppSettings.setAutoEmbedLyrics(!autoEmbedLyrics) },
         SettingsSearchEntry(
@@ -886,6 +979,7 @@ fun SettingsScreen(
             lyricsExtensionsEnabled,
         ) { AppSettings.setLyricsExtensionsEnabled(!lyricsExtensionsEnabled) },
         SettingsSearchEntry(stringResource(R.string.full_screen_cover_art), stringResource(R.string.full_screen_cover_art_subtitle), listOf("artwork", "cover", "full screen", "アート", "全画面"), fullBleedArtwork) { AppSettings.setFullBleedArtwork(!fullBleedArtwork) },
+        largerFullBleedArtworkSearchEntry(largerFullBleedArtwork, fullBleedArtwork),
         SettingsSearchEntry(stringResource(R.string.keep_original_artwork_aspect_ratio), stringResource(R.string.keep_original_artwork_aspect_ratio_subtitle), listOf("artwork", "cover", "aspect ratio", "crop", "縦長", "横長", "比率", "トリミング"), keepOriginalArtworkAspectRatio) { AppSettings.setKeepOriginalArtworkAspectRatio(!keepOriginalArtworkAspectRatio) },
         SettingsSearchEntry(stringResource(R.string.preserve_artwork_shape_in_compact_transitions), stringResource(R.string.preserve_artwork_shape_in_compact_transitions_subtitle), listOf("artwork", "cover", "aspect ratio", "mini player", "dock", "lyrics", "アート", "カバー", "縦横比", "ミニプレーヤー", "歌詞", "遷移"), preserveArtworkShapeInCompactTransitions) { AppSettings.setPreserveArtworkShapeInCompactTransitions(!preserveArtworkShapeInCompactTransitions) },
         SettingsSearchEntry(stringResource(R.string.keep_artwork_full_size_paused), stringResource(R.string.keep_artwork_full_size_paused_subtitle), listOf("artwork", "cover", "paused", "停止中", "アート"), keepArtworkFullSizeWhenPaused) { AppSettings.setKeepArtworkFullSizeWhenPaused(!keepArtworkFullSizeWhenPaused) },
@@ -993,6 +1087,7 @@ fun SettingsScreen(
             onSliderValueChange = AppSettings::setPlayerPlayPauseIconSizeDp,
             activate = {},
         ),
+        playerTransportSpacingSearchEntry(playerTransportButtonSpacingDp),
         SettingsSearchEntry(
             stringResource(R.string.show_player_top_grabber),
             stringResource(R.string.show_player_top_grabber_subtitle),
@@ -1249,6 +1344,7 @@ fun SettingsScreen(
             PlayerControl.LYRICS -> R.string.player_control_lyrics
             PlayerControl.LIKE -> R.string.player_control_like
             PlayerControl.QUEUE -> R.string.player_control_queue
+            PlayerControl.CHROMECAST -> R.string.player_control_chromecast
             PlayerControl.PLAYLIST -> R.string.player_control_playlist
             PlayerControl.SEARCH -> R.string.player_control_search
         })
@@ -2561,6 +2657,7 @@ fun SettingsScreen(
                     PlayerControl.LYRICS -> stringResource(R.string.player_control_lyrics)
                     PlayerControl.LIKE -> stringResource(R.string.player_control_like)
                     PlayerControl.QUEUE -> stringResource(R.string.player_control_queue)
+                    PlayerControl.CHROMECAST -> stringResource(R.string.player_control_chromecast)
                     PlayerControl.PLAYLIST -> stringResource(R.string.player_control_playlist)
                     PlayerControl.SEARCH -> stringResource(R.string.player_control_search)
                 }
@@ -2602,6 +2699,8 @@ fun SettingsScreen(
                     },
                 )
             }
+            RowDivider()
+            AurisPlayerActionStyleRow(aurisPlayerActionStyle)
             RowDivider()
             SettingsRow(
                 icon = Icons.Rounded.LibraryMusic,
@@ -2747,6 +2846,24 @@ fun SettingsScreen(
                 onValueChange = AppSettings::setPlayerPlayPauseIconSizeDp,
                 steps = 37,
                 valueRange = 40f..78f,
+                modifier = Modifier.padding(start = ROW_INSET, end = ROW_INSET, bottom = 14.dp),
+            )
+            RowDivider()
+            SettingsRow(
+                icon = Icons.Rounded.Tune,
+                title = stringResource(R.string.player_transport_button_spacing),
+                subtitle = stringResource(R.string.player_transport_button_spacing_subtitle),
+                value = if (playerTransportButtonSpacingDp <= 0f) {
+                    stringResource(R.string.player_transport_spacing_auto)
+                } else {
+                    stringResource(R.string.player_transport_spacing_value, playerTransportButtonSpacingDp.roundToInt())
+                },
+            )
+            Slider(
+                value = playerTransportButtonSpacingDp,
+                onValueChange = AppSettings::setPlayerTransportButtonSpacingDp,
+                steps = 23,
+                valueRange = 0f..24f,
                 modifier = Modifier.padding(start = ROW_INSET, end = ROW_INSET, bottom = 14.dp),
             )
             RowDivider()
@@ -3641,6 +3758,11 @@ fun SettingsScreen(
                     onClick = { AppSettings.setFullBleedArtwork(!fullBleedArtwork) },
                 )
                 RowDivider()
+                LargerFullBleedArtworkRow(
+                    checked = largerFullBleedArtwork,
+                    fullBleedEnabled = fullBleedArtwork,
+                )
+                RowDivider()
             }
             SettingsRow(
                 icon = Icons.Rounded.ViewStream,
@@ -3749,6 +3871,23 @@ fun SettingsScreen(
                     )
                 },
                 onClick = { AppSettings.setSyncedLyrics(!syncedLyrics) },
+            )
+            RowDivider()
+            SettingsRow(
+                icon = Icons.AutoMirrored.Rounded.Notes,
+                title = stringResource(R.string.auto_show_lyrics_on_playback),
+                subtitle = stringResource(R.string.auto_show_lyrics_on_playback_subtitle),
+                trailing = {
+                    Switch(
+                        checked = autoShowLyricsOnPlayback,
+                        onCheckedChange = AppSettings::setAutoShowLyricsOnPlayback,
+                        colors = SwitchDefaults.colors(
+                            checkedTrackColor = MaterialTheme.colorScheme.primary,
+                            checkedBorderColor = MaterialTheme.colorScheme.primary,
+                        ),
+                    )
+                },
+                onClick = { AppSettings.setAutoShowLyricsOnPlayback(!autoShowLyricsOnPlayback) },
             )
             RowDivider()
             SettingsRow(

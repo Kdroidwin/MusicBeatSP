@@ -814,6 +814,7 @@ private fun BitChordApp(
     val lyrics by viewModel.lyrics.collectAsStateWithLifecycle()
     val lyricsSource by viewModel.lyricsSource.collectAsStateWithLifecycle()
     val lyricsChecked by viewModel.lyricsChecked.collectAsStateWithLifecycle()
+    val lyricsVideoId by viewModel.lyricsVideoId.collectAsStateWithLifecycle()
     val savedYoutubeCollections by AppSettings.savedYoutubeCollections.collectAsStateWithLifecycle()
     val tabletLyricsBesidePlayer by AppSettings.tabletLyricsBesidePlayer.collectAsStateWithLifecycle()
     val settingsTopBarUsesMoreIcon by AppSettings.settingsTopBarUsesMoreIcon.collectAsStateWithLifecycle()
@@ -892,6 +893,7 @@ private fun BitChordApp(
     val lyricsSourceOrder by AppSettings.lyricsSourceOrder.collectAsStateWithLifecycle()
     val prioritizeSyllableSync by AppSettings.prioritizeSyllableSync.collectAsStateWithLifecycle()
     val preferEmbeddedLocalLyrics by AppSettings.preferEmbeddedLocalLyrics.collectAsStateWithLifecycle()
+    val autoShowLyricsOnPlayback by AppSettings.autoShowLyricsOnPlayback.collectAsStateWithLifecycle()
     LaunchedEffect(
         player.song?.videoId,
         player.durationMs,
@@ -900,6 +902,7 @@ private fun BitChordApp(
         lyricsSourceOrder,
         prioritizeSyllableSync,
         preferEmbeddedLocalLyrics,
+        autoShowLyricsOnPlayback,
     ) {
         player.song?.let {
             viewModel.loadLyrics(
@@ -2153,6 +2156,7 @@ private fun BitChordApp(
             lyrics = lyrics,
             lyricsSource = lyricsSource,
             lyricsUnavailable = lyricsChecked && lyrics.isNullOrEmpty(),
+            lyricsReadyForCurrentSong = lyricsChecked && lyricsVideoId == player.song?.videoId,
             docked = docked,
             artworkGesturesEnabled = !(docked && tabletLyricsWorkspaceActive),
             openLyricsOnShow = requestedMediaPanel == MediaControlDestination.LYRICS,

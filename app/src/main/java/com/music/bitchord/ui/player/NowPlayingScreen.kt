@@ -217,6 +217,8 @@ import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.text.withStyle
 import androidx.compose.ui.unit.Dp
+import androidx.compose.ui.unit.Density
+import androidx.compose.ui.unit.LayoutDirection
 import androidx.compose.ui.unit.Constraints
 import androidx.compose.ui.unit.IntOffset
 import androidx.compose.ui.unit.IntSize
@@ -295,6 +297,9 @@ import kotlin.math.roundToInt
  * large home-screen widget asks for the same copy — see [PLAYER_ART_PX].
  */
 private const val ART_PX = PLAYER_ART_PX
+
+/** Auris' wider full-bleed crop, gated by an explicit player setting. */
+private const val AURIS_LARGE_FULL_BLEED_ZOOM = 1.234f
 
 /**
  * How many further goes a cover that failed to load gets.
@@ -745,6 +750,8 @@ fun NowPlayingScreen(
     lyrics: List<LyricLine>?,
     lyricsSource: LyricsSource?,
     lyricsUnavailable: Boolean,
+    /** True only after a lyric result (or miss) has been resolved for [song]. */
+    lyricsReadyForCurrentSong: Boolean,
     /** The width of the window the player is in — see [fullBleedArtworkAvailable]. */
     windowWidth: Dp,
     /** Shared with player overlays so their glass samples the visible player artwork. */
@@ -797,6 +804,7 @@ fun NowPlayingScreen(
     val playerArtworkTransitionEnabled by AppSettings.playerArtworkTransition.collectAsStateWithLifecycle()
     val preserveArtworkShapeInCompactTransitions by AppSettings.preserveArtworkShapeInCompactTransitions.collectAsStateWithLifecycle()
     val fullBleedArt by AppSettings.fullBleedArtwork.collectAsStateWithLifecycle()
+    val largerFullBleedArtwork by AppSettings.largerFullBleedArtwork.collectAsStateWithLifecycle()
     val keepOriginalArtworkAspectRatio by AppSettings.keepOriginalArtworkAspectRatio.collectAsStateWithLifecycle()
     val preserveSleeveArtworkShape = keepOriginalArtworkAspectRatio && !fullBleedArt
     val preserveTransitionArtworkProportions =
@@ -920,6 +928,41 @@ fun NowPlayingScreen(
     val playerTitleFontSizeSp by AppSettings.playerTitleFontSizeSp.collectAsStateWithLifecycle()
     val playerArtistFontSizeSp by AppSettings.playerArtistFontSizeSp.collectAsStateWithLifecycle()
     val playerPlayPauseIconSizeDp by AppSettings.playerPlayPauseIconSizeDp.collectAsStateWithLifecycle()
+    val playerTransportButtonSpacingDp by AppSettings.playerTransportButtonSpacingDp.collectAsStateWithLifecycle()
+    val autoShowLyricsOnPlayback by AppSettings.autoShowLyricsOnPlayback.collectAsStateWithLifecycle()
+    val transportButtonArrangement = remember(playerTransportButtonSpacingDp) {
+        if (playerTransportButtonSpacingDp <= 0f) {
+            Arrangement.SpaceEvenly
+        } else {
+            object : Arrangement.Horizontal {
+                override fun Density.arrange(
+                    totalSize: Int,
+                    sizes: IntArray,
+                    layoutDirection: LayoutDirection,
+                    outPositions: IntArray,
+                ) {
+                    val gapCount = (sizes.size - 1).coerceAtLeast(0)
+                    val contentSize = sizes.sum()
+                    val requestedGap = playerTransportButtonSpacingDp.dp.roundToPx().coerceAtLeast(0)
+                    val availableGap = if (gapCount == 0) {
+                        0
+                    } else {
+                        (totalSize - contentSize).coerceAtLeast(0) / gapCount
+                    }
+                    val gap = minOf(requestedGap, availableGap)
+                    var cursor = ((totalSize - contentSize - gap * gapCount) / 2).coerceAtLeast(0)
+                    sizes.forEachIndexed { index, size ->
+                        outPositions[index] = if (layoutDirection == LayoutDirection.Ltr) {
+                            cursor
+                        } else {
+                            totalSize - cursor - size
+                        }
+                        cursor += size + gap
+                    }
+                }
+            }
+        }
+    }
     val showPlayerTopGrabber by AppSettings.showPlayerTopGrabber.collectAsStateWithLifecycle()
     val hideLyricsStatusText by AppSettings.hideLyricsStatusText.collectAsStateWithLifecycle()
     val showLyricsCloseButton by AppSettings.showLyricsCloseButton.collectAsStateWithLifecycle()
@@ -947,6 +990,7 @@ fun NowPlayingScreen(
     val offlineMode by AppSettings.offlineMode.collectAsStateWithLifecycle()
     val visiblePlayerControls by AppSettings.visiblePlayerControls.collectAsStateWithLifecycle()
     val playerControlOrder by AppSettings.playerControlOrder.collectAsStateWithLifecycle()
+    val aurisPlayerActionStyle by AppSettings.aurisPlayerActionStyle.collectAsStateWithLifecycle()
     val hidePlayerArtist by AppSettings.hidePlayerArtist.collectAsStateWithLifecycle()
     val hideUnknownPlayerArtist by AppSettings.hideUnknownPlayerArtist.collectAsStateWithLifecycle()
     val centerPlayerTrackInfo by AppSettings.centerPlayerTrackInfo.collectAsStateWithLifecycle()
@@ -1083,6 +1127,12 @@ fun NowPlayingScreen(
             else -> return@LaunchedEffect
         }
         onExternalPanelRequestHandled()
+    }
+    LaunchedEffect(song.videoId, lyricsReadyForCurrentSong, lyrics, autoShowLyricsOnPlayback) {
+        if (autoShowLyricsOnPlayback && lyricsReadyForCurrentSong && !lyrics.isNullOrEmpty()) {
+            lyricsOpen = true
+            queueOpen = false
+        }
     }
     val showLyricsLogsEnabled by AppSettings.showLyricsLogs.collectAsStateWithLifecycle()
     LaunchedEffect(song.videoId) {
@@ -1401,6 +1451,7 @@ fun NowPlayingScreen(
     // clip running the full screen. CanvasArtworkPlayer masks itself on every
     // API level now, and both layers answer to this.
     val heroMode = fullBleedArt && (docked || playerFillsWindow(windowWidth))
+    val useLargerHeroArtwork = heroMode && largerFullBleedArtwork
     // Whether there's a still image to blow out — a placeholder tile is a card
     // or it is nothing, and going full-bleed with one would just tint the top
     // third of the screen.
@@ -1661,6 +1712,7 @@ fun NowPlayingScreen(
                                 .align(Alignment.TopStart)
                                 .fillMaxWidth()
                                 .height(heroHeight)
+                                .clipToBounds()
                                 // Match the full-size image's bottom dissolve.
                                 // Without this mask the fast preview stayed
                                 // opaque underneath it and covered the blurred
@@ -1668,6 +1720,11 @@ fun NowPlayingScreen(
                                 .graphicsLayer {
                                     alpha = heroVisible
                                     compositingStrategy = CompositingStrategy.Offscreen
+                                    if (useLargerHeroArtwork) {
+                                        scaleX = AURIS_LARGE_FULL_BLEED_ZOOM
+                                        scaleY = AURIS_LARGE_FULL_BLEED_ZOOM
+                                        transformOrigin = TransformOrigin(0.5f, 0f)
+                                    }
                                 }
                                 .drawWithContent {
                                     drawContent()
@@ -1700,6 +1757,7 @@ fun NowPlayingScreen(
                         .align(Alignment.TopStart)
                         .fillMaxWidth()
                         .height(heroHeight)
+                        .clipToBounds()
                         // Haze must observe the drawable layer itself. A
                         // source on the surrounding layout only captured its
                         // mesh backdrop, leaving the cover sharp in the pill.
@@ -1710,6 +1768,11 @@ fun NowPlayingScreen(
                             // clip mounted to hand it to.
                             alpha = heroVisible *
                                 (1f - if (heroClip != null) canvasCover.floatValue else 0f)
+                            if (useLargerHeroArtwork) {
+                                scaleX = AURIS_LARGE_FULL_BLEED_ZOOM
+                                scaleY = AURIS_LARGE_FULL_BLEED_ZOOM
+                                transformOrigin = TransformOrigin(0.5f, 0f)
+                            }
                             // The mask below erases part of what this layer
                             // drew, which it can only do in a buffer of its own.
                             compositingStrategy = CompositingStrategy.Offscreen
@@ -1743,6 +1806,7 @@ fun NowPlayingScreen(
                         refreshFrameEveryMs = meshRefreshMs,
                         onCoverChanged = { canvasCover.floatValue = it },
                         bottomFade = HERO_FADE_FRACTION,
+                        extraZoom = if (useLargerHeroArtwork) AURIS_LARGE_FULL_BLEED_ZOOM else 1f,
                         modifier = Modifier
                             .align(Alignment.TopStart)
                             .fillMaxWidth()
@@ -3125,7 +3189,7 @@ fun NowPlayingScreen(
             // ---- Transport ----
             Row(
                 modifier = Modifier.fillMaxWidth(),
-                horizontalArrangement = Arrangement.SpaceEvenly,
+                horizontalArrangement = transportButtonArrangement,
                 verticalAlignment = Alignment.CenterVertically,
             ) {
                 val seekButtonsVisible = when (seekButtonMode) {
@@ -3374,7 +3438,7 @@ fun NowPlayingScreen(
                                 },
                             )
                             PlayerControl.LYRICS -> BottomGlyph(
-                                icon = Icons.AutoMirrored.Rounded.Notes,
+                                icon = if (aurisPlayerActionStyle) BitChordIcons.AurisLyrics else Icons.AutoMirrored.Rounded.Notes,
                                 contentDescription = stringResource(R.string.quick_action_lyrics),
                                 onClick = {
                                     lyricsOpen = !lyricsOpen
@@ -3392,7 +3456,7 @@ fun NowPlayingScreen(
                                 haptic = if (liked) Haptic.ToggleOff else Haptic.ToggleOn,
                             )
                             PlayerControl.QUEUE -> BottomGlyph(
-                                icon = Icons.AutoMirrored.Rounded.QueueMusic,
+                                icon = if (aurisPlayerActionStyle) BitChordIcons.AurisQueue else Icons.AutoMirrored.Rounded.QueueMusic,
                                 contentDescription = stringResource(R.string.up_next),
                                 onClick = {
                                     lyricsOpen = false
@@ -3401,6 +3465,23 @@ fun NowPlayingScreen(
                                 highlighted = queueOpen,
                                 haptic = if (queueOpen) Haptic.Tap else Haptic.Expand,
                             )
+                            PlayerControl.CHROMECAST -> Box(
+                                modifier = Modifier
+                                    .size(44.dp)
+                                    .clip(CircleShape)
+                                    .background(
+                                        if (aurisPlayerActionStyle) Color.White.copy(alpha = 0.06f)
+                                        else Color.Transparent,
+                                    ),
+                                contentAlignment = Alignment.Center,
+                            ) {
+                                CastQuickActionButton(
+                                    onUnavailable = { onQuickMenuAction(PlayerQuickAction.CHROMECAST) },
+                                    modifier = Modifier.size(44.dp),
+                                    fallbackIcon = if (aurisPlayerActionStyle) BitChordIcons.AurisOutput else Icons.Rounded.Cast,
+                                    aurisStyle = aurisPlayerActionStyle,
+                                )
+                            }
                             PlayerControl.PLAYLIST -> BottomGlyph(
                                 icon = if (useLibraryIconForPlaylistControl) {
                                     Icons.Rounded.LibraryMusic

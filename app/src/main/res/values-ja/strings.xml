@@ -348,6 +348,8 @@
     <string name="reduce_dynamic_blur">動的なぼかしを減らす</string>
     <string name="reduce_dynamic_blur_subtitle">アプリ全体ですりガラス効果を単色の塗りつぶしに置き換えます</string>
     <string name="full_screen_cover_art">全画面カバーアート</string>
+    <string name="larger_full_screen_cover_art">全画面カバーアートを拡大</string>
+    <string name="larger_full_screen_cover_art_subtitle">全画面カバーアートをさらに拡大して表示します。全画面カバーアートが有効な場合のみ使用できます。</string>
     <string name="keep_original_artwork_aspect_ratio">カバーアートの縦横比を維持</string>
     <string name="keep_original_artwork_aspect_ratio_subtitle">全画面カバーアートがオフのとき、縦長・横長の画像を正方形に切り抜かず表示します</string>
     <string name="keep_collection_artwork_aspect_ratio">アルバム・プレイリストのアート比率を維持</string>
@@ -861,6 +863,8 @@
     <string name="player_control_shuffle">シャッフルボタン</string>
     <string name="player_control_repeat">リピートボタン</string>
     <string name="player_control_lyrics">歌詞表示ボタン</string>
+    <string name="auris_player_action_style">Auris風の歌詞・Chromecast・キューボタン</string>
+    <string name="auris_player_action_style_subtitle">歌詞・Chromecast・次に再生の操作にAuris風のコンパクトなアイコンを使います。初期設定はオフです。</string>
     <string name="player_control_like">お気に入りボタン</string>
     <string name="player_control_playlist">プレイリストボタン</string>
     <string name="player_control_search">検索ボタン</string>
@@ -871,6 +875,7 @@
     <string name="pause_playback_at_zero_volume_subtitle">Androidの音楽音量が0になると現在の曲を一時停止します。音量を上げても自動再開しません。</string>
     <string name="prevent_play_at_zero_volume_subtitle">Androidの音楽音量がミュート中は再生操作を無視します</string>
     <string name="player_control_queue">次に再生ボタン</string>
+    <string name="player_control_chromecast">Chromecastボタン</string>
     <string name="player_control_visibility_subtitle">ボタンだけを隠します。再生状態には影響しません</string>
     <string name="main_navigation_tabs">メインナビゲーションのタブ</string>
     <string name="show_navigation_tab_subtitle">この画面を下部ナビゲーションに表示します</string>
@@ -1253,6 +1258,8 @@
     <string name="blur_unfocused_lyrics_subtitle">再生中の行に注目しやすくします</string>
     <string name="auto_embed_lyrics">歌詞を音声ファイルに自動保存</string>
     <string name="auto_embed_lyrics_subtitle">オンライン歌詞を再生時にローカル音楽ファイルへ書き込みます</string>
+    <string name="auto_show_lyrics_on_playback">歌詞を自動取得して表示</string>
+    <string name="auto_show_lyrics_on_playback_subtitle">有効な歌詞ソースから再生中の曲の歌詞を取得し、見つかったら歌詞パネルを開きます。初期設定はオフです。</string>
     <string name="lyrics_extensions_enabled">歌詞拡張機能を有効にする</string>
     <string name="lyrics_extensions_enabled_subtitle">組み込み・ダウンロードした歌詞スクリプトを実行します。ネットワーク通信を行う場合があるため、信頼できる拡張機能だけ有効にしてください。</string>
     <string name="all_files_access">すべてのファイルへのアクセス</string>
@@ -1460,6 +1467,10 @@
     <string name="player_play_pause_icon_size">再生・一時停止アイコンのサイズ</string>
     <string name="player_play_pause_icon_size_subtitle">プレイヤー画面中央の再生・一時停止アイコンの大きさを調整します。</string>
     <string name="player_icon_size_value">%1$d dp</string>
+    <string name="player_transport_button_spacing">プレイヤー操作ボタンの間隔</string>
+    <string name="player_transport_button_spacing_subtitle">前へ・再生・次へなどの操作ボタン間隔を調整します。「自動」では従来の配置を使います。</string>
+    <string name="player_transport_spacing_auto">自動</string>
+    <string name="player_transport_spacing_value">%1$d dp</string>
     <string name="show_player_top_grabber">プレイヤー上部のハンドルを表示</string>
     <string name="show_player_top_grabber_subtitle">プレイヤーを閉じるときに使う上部の線を表示します。</string>
     <string name="allow_cleartext_http">暗号化されていないHTTPを許可</string>

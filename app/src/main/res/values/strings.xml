@@ -387,6 +387,8 @@
     <string name="hide_nav_bar_labels">Hide navigation bar labels</string>
     <string name="hide_nav_bar_labels_subtitle">Show only icons in the bottom navigation bar</string>
     <string name="full_screen_cover_art">Full-screen cover art</string>
+    <string name="larger_full_screen_cover_art">Larger full-screen cover art</string>
+    <string name="larger_full_screen_cover_art_subtitle">Zoom in on full-screen artwork. Available only while full-screen cover art is enabled.</string>
     <string name="keep_original_artwork_aspect_ratio">Keep cover art proportions</string>
     <string name="keep_original_artwork_aspect_ratio_subtitle">When full-screen cover art is off, show portrait and landscape covers without cropping them square</string>
     <string name="keep_collection_artwork_aspect_ratio">Keep album and playlist cover proportions</string>
@@ -960,6 +962,8 @@
     <string name="player_control_shuffle">Shuffle button</string>
     <string name="player_control_repeat">Repeat button</string>
     <string name="player_control_lyrics">Lyrics button</string>
+    <string name="auris_player_action_style">Auris-style lyrics, Chromecast and queue buttons</string>
+    <string name="auris_player_action_style_subtitle">Use Auris’ compact artwork-player icons for Lyrics, Chromecast and Up next. Off by default.</string>
     <string name="player_control_like">Like button</string>
     <string name="player_control_playlist">Playlists button</string>
     <string name="player_control_search">Search button</string>
@@ -970,6 +974,7 @@
     <string name="pause_playback_at_zero_volume">Pause playback at zero volume</string>
     <string name="pause_playback_at_zero_volume_subtitle">Pause the current track when Android music volume reaches 0. Raising the volume does not resume playback.</string>
     <string name="player_control_queue">Up next button</string>
+    <string name="player_control_chromecast">Chromecast button</string>
     <string name="player_control_visibility_subtitle">Hide only the button; playback behavior stays active</string>
     <string name="main_navigation_tabs">Main navigation tabs</string>
     <string name="show_navigation_tab_subtitle">Show this destination in the bottom navigation</string>
@@ -1343,6 +1348,8 @@
     <string name="blur_unfocused_lyrics_subtitle">Keeps the spotlight on the current line</string>
     <string name="auto_embed_lyrics">Auto-embed lyrics into audio files</string>
     <string name="auto_embed_lyrics_subtitle">Automatically writes online lyrics into local music files when played</string>
+    <string name="auto_show_lyrics_on_playback">Automatically fetch and show lyrics</string>
+    <string name="auto_show_lyrics_on_playback_subtitle">Fetch lyrics from your enabled sources and open the lyrics panel when a match is found. Off by default.</string>
     <string name="lyrics_extensions_enabled">Enable lyrics extensions</string>
     <string name="lyrics_extensions_enabled_subtitle">Allows bundled and downloaded lyrics scripts to run. Extensions may access the network; enable only when you trust them.</string>
     <string name="all_files_access">All files access</string>
@@ -1486,6 +1493,10 @@
     <string name="player_play_pause_icon_size">Play/pause icon size</string>
     <string name="player_play_pause_icon_size_subtitle">Adjust the central play and pause icon size on the player screen.</string>
     <string name="player_icon_size_value">%1$d dp</string>
+    <string name="player_transport_button_spacing">Player transport button spacing</string>
+    <string name="player_transport_button_spacing_subtitle">Adjust the gaps between the previous, play, and next controls. Auto keeps the current layout.</string>
+    <string name="player_transport_spacing_auto">Auto</string>
+    <string name="player_transport_spacing_value">%1$d dp</string>
     <string name="show_player_top_grabber">Show player top handle</string>
     <string name="show_player_top_grabber_subtitle">Show the line used to drag the player closed.</string>
     <string name="allow_cleartext_http">Allow cleartext HTTP</string>
