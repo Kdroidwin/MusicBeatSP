@@ -16,13 +16,14 @@ data class LocalFolder(
     val songCount: Int = 0,
     val isBlacklisted: Boolean = false,
 ) {
-    /** Prefer the indexed directory's actual final path segment over provider labels. */
+    /** Keep the explicit indexed name as the visible label; use the path only as a fallback. */
     val displayName: String
         get() {
+            val indexedName = name.trim().takeIf(String::isNotBlank)
             val pathName = path.replace('\\', '/').trimEnd('/').substringAfterLast('/')
                 .takeIf(String::isNotBlank)
-            return pathName
-                ?: name.trim().takeIf(String::isNotBlank)
+            return indexedName
+                ?: pathName
                 ?: path.trim().ifBlank { "Folder" }
         }
 }

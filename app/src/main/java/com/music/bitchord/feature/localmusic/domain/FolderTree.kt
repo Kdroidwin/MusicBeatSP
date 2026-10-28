@@ -17,9 +17,9 @@ data class FolderNode(
     val coverSongs: List<Song>,
 ) {
     val displayName: String
-        get() = path.replace('\\', '/').trimEnd('/').substringAfterLast('/')
-            .takeIf(String::isNotBlank)
-            ?: name.trim().takeIf(String::isNotBlank)
+        get() = name.trim().takeIf(String::isNotBlank)
+            ?: path.replace('\\', '/').trimEnd('/').substringAfterLast('/')
+                .takeIf(String::isNotBlank)
             ?: path
 
     val isLeaf: Boolean get() = subfolders.isEmpty()

@@ -193,6 +193,7 @@ private fun FolderHeader(
             text = if (node.relativePath.isBlank()) rootName else node.relativePath.replace('/', '›'),
             style = MaterialTheme.typography.titleLarge,
             fontWeight = FontWeight.SemiBold,
+            color = MaterialTheme.colorScheme.onSurface,
             maxLines = 2,
             overflow = TextOverflow.Ellipsis,
         )
@@ -257,6 +258,7 @@ private fun FolderEntry(folder: FolderNode, onClick: () -> Unit) {
                     text = folder.displayName,
                     style = MaterialTheme.typography.titleMedium,
                     fontWeight = FontWeight.SemiBold,
+                    color = MaterialTheme.colorScheme.onSurface,
                     maxLines = 1,
                     overflow = TextOverflow.Ellipsis,
                 )

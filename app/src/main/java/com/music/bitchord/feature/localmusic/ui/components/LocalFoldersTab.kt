@@ -74,7 +74,8 @@ fun LocalFoldersTab(
 
     val listState = rememberLazyListState()
     val displayFolders = remember(folders, hierarchical) {
-        if (hierarchical) folders.sortedBy { it.path.replace('\\', '/').lowercase() } else folders
+        if (hierarchical) folders.sortedBy { it.path.replace('\\', '/').lowercase() }
+        else folders.sortedBy { it.displayName.lowercase() }
     }
     val scrollPadding = PaddingValues(
         start = 16.dp,
