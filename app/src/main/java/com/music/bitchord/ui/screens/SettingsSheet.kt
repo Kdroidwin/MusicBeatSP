@@ -180,6 +180,7 @@ import com.music.bitchord.data.settings.LauncherIcon
 import com.music.bitchord.data.settings.SeekButtonMode
 import com.music.bitchord.data.settings.TransportSideAction
 import com.music.bitchord.data.settings.MAX_PLAYER_ARTWORK_BLUR_DP
+import com.music.bitchord.data.settings.MAX_PLAYER_BUTTON_SPACING_DP
 import com.music.bitchord.data.settings.MainNavigationTab
 import com.music.bitchord.data.settings.PlayerControl
 import com.music.bitchord.data.settings.PlayerQuickAction
@@ -234,6 +235,18 @@ private fun musicFolderRootSearchEntry(path: String, onPick: () -> Unit) = Setti
 )
 
 @Composable
+private fun localMusicAccessSearchEntry(isSelected: Boolean, onPick: () -> Unit) = SettingsSearchEntry(
+    title = stringResource(R.string.local_music_folder_access),
+    subtitle = stringResource(R.string.local_music_folder_access_search_subtitle),
+    keywords = listOf("folder", "SAF", "scope", "privacy", "music", "フォルダー", "範囲", "音楽", "プライバシー"),
+    valueLabel = stringResource(
+        if (isSelected) R.string.local_music_folder_access_search_selected
+        else R.string.local_music_folder_access_not_selected,
+    ),
+    activate = onPick,
+)
+
+@Composable
 private fun musicServerSearchEntry(onOpen: () -> Unit) = SettingsSearchEntry(
     title = stringResource(R.string.music_servers),
     subtitle = stringResource(R.string.music_servers_subtitle),
@@ -261,8 +274,8 @@ private fun playerTransportSpacingSearchEntry(spacingDp: Float) = SettingsSearch
         stringResource(R.string.player_transport_spacing_value, spacingDp.roundToInt())
     },
     sliderValue = spacingDp,
-    sliderValueRange = 0f..24f,
-    sliderSteps = 23,
+    sliderValueRange = 0f..MAX_PLAYER_BUTTON_SPACING_DP,
+    sliderSteps = MAX_PLAYER_BUTTON_SPACING_DP.toInt() - 1,
     onSliderValueChange = AppSettings::setPlayerTransportButtonSpacingDp,
     activate = {},
 )
@@ -278,8 +291,8 @@ private fun playerActionSpacingSearchEntry(spacingDp: Float) = SettingsSearchEnt
         stringResource(R.string.player_transport_spacing_value, spacingDp.roundToInt())
     },
     sliderValue = spacingDp,
-    sliderValueRange = 0f..24f,
-    sliderSteps = 23,
+    sliderValueRange = 0f..MAX_PLAYER_BUTTON_SPACING_DP,
+    sliderSteps = MAX_PLAYER_BUTTON_SPACING_DP.toInt() - 1,
     onSliderValueChange = AppSettings::setPlayerActionButtonSpacingDp,
     activate = {},
 )
@@ -293,6 +306,36 @@ private fun largerFullBleedArtworkSearchEntry(enabled: Boolean, fullBleedEnabled
     enabled = fullBleedEnabled,
     activate = { if (fullBleedEnabled) AppSettings.setLargerFullBleedArtwork(!enabled) },
 )
+
+@Composable
+private fun fullBleedArtworkBottomBlurSearchEntry(strengthDp: Int) = SettingsSearchEntry(
+    title = stringResource(R.string.full_screen_artwork_bottom_blur_strength),
+    subtitle = stringResource(R.string.full_screen_artwork_bottom_blur_strength_subtitle),
+    keywords = listOf("artwork", "cover", "blur", "gradient", "full screen", "アート", "カバー", "ぼかし", "グラデーション", "全画面", "強さ"),
+    valueLabel = stringResource(R.string.artwork_blur_strength_value, strengthDp),
+    sliderValue = strengthDp.toFloat(),
+    sliderValueRange = 0f..64f,
+    sliderSteps = 63,
+    onSliderValueChange = { AppSettings.setFullBleedArtworkBottomBlurStrengthDp(it.roundToInt()) },
+    activate = {},
+)
+
+@Composable
+private fun FullBleedArtworkBottomBlurSettingsRow(strengthDp: Int) {
+    SettingsRow(
+        icon = Icons.Rounded.BlurOn,
+        title = stringResource(R.string.full_screen_artwork_bottom_blur_strength),
+        subtitle = stringResource(R.string.full_screen_artwork_bottom_blur_strength_subtitle),
+        value = stringResource(R.string.artwork_blur_strength_value, strengthDp),
+    )
+    Slider(
+        value = strengthDp.toFloat(),
+        onValueChange = { AppSettings.setFullBleedArtworkBottomBlurStrengthDp(it.roundToInt()) },
+        steps = 63,
+        valueRange = 0f..64f,
+        modifier = Modifier.padding(start = ROW_INSET, end = ROW_INSET, bottom = 14.dp),
+    )
+}
 
 @Composable
 private fun appleMusicLyricsButtonStyleSearchEntry(enabled: Boolean) = SettingsSearchEntry(
@@ -393,6 +436,10 @@ fun SettingsScreen(
 ) {
     val context = LocalContext.current
     val musicFolderRootPicker = rememberMusicFolderRootPicker(AppSettings::setLocalMusicFolderPath)
+    val localMusicAccessTreeUri by AppSettings.localMusicAccessTreeUri.collectAsStateWithLifecycle()
+    val localMusicAccessPicker = rememberLocalMusicAccessPicker(localMusicAccessTreeUri) {
+        AppSettings.setLocalMusicAccessTreeUri(it)
+    }
     val settingsScrollState = rememberScrollState()
     val popupOverlayPermissionLauncher = rememberLauncherForActivityResult(
         ActivityResultContracts.StartActivityForResult(),
@@ -543,6 +590,7 @@ fun SettingsScreen(
     val preloadAlbumArtOnStartup by AppSettings.preloadAlbumArtOnStartup.collectAsStateWithLifecycle()
     val fullBleedArtwork by AppSettings.fullBleedArtwork.collectAsStateWithLifecycle()
     val largerFullBleedArtwork by AppSettings.largerFullBleedArtwork.collectAsStateWithLifecycle()
+    val fullBleedArtworkBottomBlurStrengthDp by AppSettings.fullBleedArtworkBottomBlurStrengthDp.collectAsStateWithLifecycle()
     val keepOriginalArtworkAspectRatio by AppSettings.keepOriginalArtworkAspectRatio.collectAsStateWithLifecycle()
     val preserveArtworkShapeInCompactTransitions by AppSettings.preserveArtworkShapeInCompactTransitions.collectAsStateWithLifecycle()
     val keepArtworkFullSizeWhenPaused by AppSettings.keepArtworkFullSizeWhenPaused.collectAsStateWithLifecycle()
@@ -1026,6 +1074,7 @@ fun SettingsScreen(
         ) { AppSettings.setLyricsExtensionsEnabled(!lyricsExtensionsEnabled) },
         SettingsSearchEntry(stringResource(R.string.full_screen_cover_art), stringResource(R.string.full_screen_cover_art_subtitle), listOf("artwork", "cover", "full screen", "アート", "全画面"), fullBleedArtwork) { AppSettings.setFullBleedArtwork(!fullBleedArtwork) },
         largerFullBleedArtworkSearchEntry(largerFullBleedArtwork, fullBleedArtwork),
+        fullBleedArtworkBottomBlurSearchEntry(fullBleedArtworkBottomBlurStrengthDp),
         SettingsSearchEntry(stringResource(R.string.keep_original_artwork_aspect_ratio), stringResource(R.string.keep_original_artwork_aspect_ratio_subtitle), listOf("artwork", "cover", "aspect ratio", "crop", "縦長", "横長", "比率", "トリミング"), keepOriginalArtworkAspectRatio) { AppSettings.setKeepOriginalArtworkAspectRatio(!keepOriginalArtworkAspectRatio) },
         SettingsSearchEntry(stringResource(R.string.preserve_artwork_shape_in_compact_transitions), stringResource(R.string.preserve_artwork_shape_in_compact_transitions_subtitle), listOf("artwork", "cover", "aspect ratio", "mini player", "dock", "lyrics", "アート", "カバー", "縦横比", "ミニプレーヤー", "歌詞", "遷移"), preserveArtworkShapeInCompactTransitions) { AppSettings.setPreserveArtworkShapeInCompactTransitions(!preserveArtworkShapeInCompactTransitions) },
         SettingsSearchEntry(stringResource(R.string.keep_artwork_full_size_paused), stringResource(R.string.keep_artwork_full_size_paused_subtitle), listOf("artwork", "cover", "paused", "停止中", "アート"), keepArtworkFullSizeWhenPaused) { AppSettings.setKeepArtworkFullSizeWhenPaused(!keepArtworkFullSizeWhenPaused) },
@@ -1522,6 +1571,10 @@ fun SettingsScreen(
             cleartextHttpAllowed,
         ) { AppSettings.setCleartextHttpAllowed(!cleartextHttpAllowed) },
         musicFolderRootSearchEntry(localMusicFolderRoot) { musicFolderRootPicker.launch(null) },
+        localMusicAccessSearchEntry(localMusicAccessTreeUri.isNotBlank()) {
+            val initial = localMusicAccessTreeUri.takeIf(String::isNotBlank)?.let(Uri::parse)
+            localMusicAccessPicker.launch(initial)
+        },
         SettingsSearchEntry(
             stringResource(R.string.full_screen_collection_artwork),
             stringResource(R.string.full_screen_collection_artwork_subtitle),
@@ -2934,8 +2987,8 @@ fun SettingsScreen(
             Slider(
                 value = playerTransportButtonSpacingDp,
                 onValueChange = AppSettings::setPlayerTransportButtonSpacingDp,
-                steps = 23,
-                valueRange = 0f..24f,
+                steps = MAX_PLAYER_BUTTON_SPACING_DP.toInt() - 1,
+                valueRange = 0f..MAX_PLAYER_BUTTON_SPACING_DP,
                 modifier = Modifier.padding(start = ROW_INSET, end = ROW_INSET, bottom = 14.dp),
             )
             RowDivider()
@@ -2952,8 +3005,8 @@ fun SettingsScreen(
             Slider(
                 value = playerActionButtonSpacingDp,
                 onValueChange = AppSettings::setPlayerActionButtonSpacingDp,
-                steps = 23,
-                valueRange = 0f..24f,
+                steps = MAX_PLAYER_BUTTON_SPACING_DP.toInt() - 1,
+                valueRange = 0f..MAX_PLAYER_BUTTON_SPACING_DP,
                 modifier = Modifier.padding(start = ROW_INSET, end = ROW_INSET, bottom = 14.dp),
             )
             RowDivider()
@@ -3853,6 +3906,8 @@ fun SettingsScreen(
                     fullBleedEnabled = fullBleedArtwork,
                 )
                 RowDivider()
+                FullBleedArtworkBottomBlurSettingsRow(fullBleedArtworkBottomBlurStrengthDp)
+                RowDivider()
             }
             SettingsRow(
                 icon = Icons.Rounded.ViewStream,
@@ -4479,6 +4534,7 @@ fun SettingsScreen(
             localFolderHierarchy = localFolderHierarchy,
             includeRemoteSourceMediaInLibrary = includeRemoteSourceMediaInLibrary,
             localMusicFolderRoot = localMusicFolderRoot,
+            localMusicAccessTreeUri = localMusicAccessTreeUri,
             fullScreenCollectionArtwork = fullScreenCollectionArtwork,
             hideCollectionTopBar = hideCollectionTopBar,
             hideFloatingCollectionControls = hideFloatingCollectionControls,
@@ -4495,6 +4551,14 @@ fun SettingsScreen(
             onManageFolders = { showManageFoldersSheet = true },
             onChooseMusicFolder = { musicFolderRootPicker.launch(null) },
             onClearMusicFolder = { AppSettings.setLocalMusicFolderPath("") },
+            onChooseMusicAccess = {
+                val initial = localMusicAccessTreeUri.takeIf(String::isNotBlank)?.let(Uri::parse)
+                localMusicAccessPicker.launch(initial)
+            },
+            onClearMusicAccess = {
+                releaseLocalMusicAccessGrant(context, localMusicAccessTreeUri)
+                AppSettings.setLocalMusicAccessTreeUri("")
+            },
             onOpenAllFiles = {
                 runCatching {
                     allFilesSettingsLauncher.launch(LocalMediaRepository.createAllFilesAccessIntent(context))
@@ -5699,6 +5763,7 @@ private fun LocalMusicSettingsGroup(
     localFolderHierarchy: Boolean,
     includeRemoteSourceMediaInLibrary: Boolean,
     localMusicFolderRoot: String,
+    localMusicAccessTreeUri: String,
     fullScreenCollectionArtwork: Boolean,
     hideCollectionTopBar: Boolean,
     hideFloatingCollectionControls: Boolean,
@@ -5715,6 +5780,8 @@ private fun LocalMusicSettingsGroup(
     onManageFolders: () -> Unit,
     onChooseMusicFolder: () -> Unit,
     onClearMusicFolder: () -> Unit,
+    onChooseMusicAccess: () -> Unit,
+    onClearMusicAccess: () -> Unit,
     onOpenAllFiles: () -> Unit,
 ) {
     val context = LocalContext.current
@@ -5810,6 +5877,12 @@ SettingsGroup(header = stringResource(R.string.local_music)) {
             )
         },
         onClick = { AppSettings.setIncludeRemoteSourceMediaInLibrary(!includeRemoteSourceMediaInLibrary) },
+    )
+    RowDivider()
+    LocalMusicAccessSettingsRow(
+        treeUri = localMusicAccessTreeUri,
+        onChoose = onChooseMusicAccess,
+        onClear = onClearMusicAccess,
     )
     RowDivider()
     LocalMusicFolderRootSettingsRow(

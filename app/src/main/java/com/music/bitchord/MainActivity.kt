@@ -124,7 +124,7 @@ import androidx.compose.runtime.SideEffect
 import androidx.lifecycle.Lifecycle
 import androidx.lifecycle.LifecycleEventObserver
 import androidx.lifecycle.compose.LocalLifecycleOwner
-import com.music.bitchord.feature.localmusic.ui.components.AllFilesPermissionDialog
+import com.music.bitchord.feature.localmusic.ui.components.ScopedMusicAccessDialog
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.mutableStateMapOf
@@ -188,6 +188,8 @@ import com.music.bitchord.data.settings.MainNavigationTabs
 import com.music.bitchord.data.settings.PlayerQuickAction
 import com.music.bitchord.data.settings.ThemeMode
 import com.music.bitchord.ui.screens.SettingsScreen
+import com.music.bitchord.ui.screens.rememberLocalMusicAccessPicker
+import com.music.bitchord.ui.screens.releaseLocalMusicAccessGrant
 import com.music.bitchord.ui.screens.WearOsScreen
 import com.music.bitchord.ui.screens.SourcesScreen
 import com.music.bitchord.ui.screens.SourceEditorAlert
@@ -576,6 +578,8 @@ private fun BitChordApp(
     val radioAvailable = !offlineMode && !context.packageName.endsWith(".nointernet")
     val visibleLocalLibraryTabs by AppSettings.visibleLocalLibraryTabs.collectAsStateWithLifecycle()
     val localMusicFolderRoot by AppSettings.localMusicFolderUri.collectAsStateWithLifecycle()
+    val localMusicAccessTreeUri by AppSettings.localMusicAccessTreeUri.collectAsStateWithLifecycle()
+    val localMusicAccessRevision by AppSettings.localMusicAccessRevision.collectAsStateWithLifecycle()
     val mainNavigationTabOrder by AppSettings.mainNavigationTabOrder.collectAsStateWithLifecycle()
     val effectiveVisibleMainTabs = remember(visibleMainNavigationTabs, visibleLocalLibraryTabs, radioAvailable) {
         val tabs = if (com.music.bitchord.data.settings.LocalLibraryTab.ALBUM_ARTISTS in visibleLocalLibraryTabs) {
@@ -925,7 +929,7 @@ private fun BitChordApp(
     }
     val allFilesAsked by AppSettings.allFilesPermissionAsked.collectAsStateWithLifecycle()
     var showFirstLaunchPermissionDialog by rememberSaveable {
-        mutableStateOf(!allFilesAsked && !LocalMediaRepository.hasAllFilesPermission(context))
+        mutableStateOf(!allFilesAsked && !LocalMediaRepository.hasStoragePermission(context))
     }
 
     val localSongsState by viewModel.localSongs.collectAsStateWithLifecycle()
@@ -1004,9 +1008,13 @@ private fun BitChordApp(
         }
     }
 
-    LaunchedEffect(Unit) {
-        if (LocalMediaRepository.hasStoragePermission(context)) {
-            hasStoragePermission = true
+    LaunchedEffect(localMusicAccessTreeUri, localMusicAccessRevision) {
+        val currentStorage = LocalMediaRepository.hasStoragePermission(context)
+        hasStoragePermission = currentStorage
+        if (currentStorage) {
+            viewModel.reloadLocalDetail("local:all")
+            viewModel.loadLocalMusic()
+        } else {
             viewModel.loadLocalMusic()
         }
     }
@@ -1025,7 +1033,7 @@ private fun BitChordApp(
                         viewModel.loadLocalMusic()
                     }
                 }
-                if (currentAllFiles) {
+                if (currentStorage) {
                     showFirstLaunchPermissionDialog = false
                 }
             }
@@ -1605,6 +1613,17 @@ private fun BitChordApp(
                 .show()
         }
     }
+    val localMusicAccessPicker = rememberLocalMusicAccessPicker(localMusicAccessTreeUri) { treeUri ->
+        AppSettings.setLocalMusicAccessTreeUri(treeUri)
+        AppSettings.setAllFilesPermissionAsked(true)
+        hasStoragePermission = LocalMediaRepository.hasStoragePermission(context)
+        showFirstLaunchPermissionDialog = false
+    }
+    val launchLocalMusicAccessPicker: () -> Unit = {
+        val initialTree = localMusicAccessTreeUri.takeIf(String::isNotBlank)?.let(Uri::parse)
+        localMusicAccessPicker.launch(initialTree)
+    }
+
     val allFilesLauncher = rememberLauncherForActivityResult(
         ActivityResultContracts.StartActivityForResult(),
     ) {
@@ -1619,11 +1638,13 @@ private fun BitChordApp(
     val mediaPermissionLauncher = rememberLauncherForActivityResult(
         ActivityResultContracts.RequestPermission(),
     ) { granted ->
-        hasStoragePermission = granted
         if (granted) {
-            viewModel.reloadLocalDetail("local:all")
-            viewModel.loadLocalMusic()
-        } else {
+            releaseLocalMusicAccessGrant(context, localMusicAccessTreeUri)
+            AppSettings.setLocalMusicAccessTreeUri("")
+            AppSettings.setLocalMusicScopeRequired(false)
+        }
+        hasStoragePermission = LocalMediaRepository.hasStoragePermission(context)
+        if (!granted) {
             Toast.makeText(context, context.getString(R.string.storage_required_read), Toast.LENGTH_SHORT).show()
         }
     }
@@ -1647,13 +1668,7 @@ private fun BitChordApp(
             requestAudioPermission()
         }
     }
-    val requestDefaultPermission: () -> Unit = {
-        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.R) {
-            requestAllFilesAccess()
-        } else {
-            requestAudioPermission()
-        }
-    }
+    val requestDefaultPermission: () -> Unit = launchLocalMusicAccessPicker
     // Shared by the Library tab itself and by a shelf's "Show all" page, so a
     // card opens the same way from either.
     val onLibraryItemClick: (ShelfItem) -> Unit = { item ->
@@ -2504,7 +2519,7 @@ private fun BitChordApp(
                             Box(modifier = Modifier.fillMaxSize().padding(listPadding), contentAlignment = Alignment.Center) {
                                 LocalPermissionCard(
                                     onRequestPermission = requestDefaultPermission,
-                                    onFallbackPermission = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.R) requestAudioPermission else null,
+                                    onFallbackPermission = requestAudioPermission,
                                 )
                             }
                         } else {
@@ -2551,7 +2566,7 @@ private fun BitChordApp(
                             Box(modifier = Modifier.fillMaxSize().padding(listPadding), contentAlignment = Alignment.Center) {
                                 LocalPermissionCard(
                                     onRequestPermission = requestDefaultPermission,
-                                    onFallbackPermission = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.R) requestAudioPermission else null,
+                                    onFallbackPermission = requestAudioPermission,
                                 )
                             }
                         } else {
@@ -2600,7 +2615,7 @@ private fun BitChordApp(
                             Box(modifier = Modifier.fillMaxSize().padding(listPadding), contentAlignment = Alignment.Center) {
                                 LocalPermissionCard(
                                     onRequestPermission = requestDefaultPermission,
-                                    onFallbackPermission = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.R) requestAudioPermission else null,
+                                    onFallbackPermission = requestAudioPermission,
                                 )
                             }
                         } else {
@@ -2649,7 +2664,7 @@ private fun BitChordApp(
                             Box(modifier = Modifier.fillMaxSize().padding(listPadding), contentAlignment = Alignment.Center) {
                                 LocalPermissionCard(
                                     onRequestPermission = requestDefaultPermission,
-                                    onFallbackPermission = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.R) requestAudioPermission else null,
+                                    onFallbackPermission = requestAudioPermission,
                                 )
                             }
                         } else {
@@ -2696,7 +2711,7 @@ private fun BitChordApp(
                             Box(modifier = Modifier.fillMaxSize().padding(listPadding), contentAlignment = Alignment.Center) {
                                 LocalPermissionCard(
                                     onRequestPermission = requestDefaultPermission,
-                                    onFallbackPermission = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.R) requestAudioPermission else null,
+                                    onFallbackPermission = requestAudioPermission,
                                 )
                             }
                         } else {
@@ -2739,7 +2754,7 @@ private fun BitChordApp(
                                 Box(modifier = Modifier.fillMaxSize().padding(listPadding), contentAlignment = Alignment.Center) {
                                     LocalPermissionCard(
                                         onRequestPermission = requestDefaultPermission,
-                                        onFallbackPermission = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.R) requestAudioPermission else null,
+                                        onFallbackPermission = requestAudioPermission,
                                     )
                                 }
                             } else {
@@ -2790,7 +2805,7 @@ private fun BitChordApp(
                             Box(modifier = Modifier.fillMaxSize().padding(listPadding), contentAlignment = Alignment.Center) {
                                 LocalPermissionCard(
                                     onRequestPermission = requestDefaultPermission,
-                                    onFallbackPermission = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.R) requestAudioPermission else null,
+                                    onFallbackPermission = requestAudioPermission,
                                 )
                             }
                         } else {
@@ -2806,7 +2821,7 @@ private fun BitChordApp(
                                     play(songs, songs.indices.random())
                                 },
                                 contentPadding = listPadding,
-                                customRootPath = localMusicFolderRoot.ifBlank { null },
+                                customRootPath = if (localMusicAccessTreeUri.isNotBlank()) null else localMusicFolderRoot.ifBlank { null },
                                 onArtworkPaletteChanged = onLocalArtworkPaletteChanged,
                                 onNavigationChanged = onCollectionNavigationChanged,
                             )
@@ -3931,23 +3946,21 @@ private fun BitChordApp(
         }
 
         if (showFirstLaunchPermissionDialog) {
-            AllFilesPermissionDialog(
-                onGrantAllFiles = {
+            ScopedMusicAccessDialog(
+                onChooseFolder = {
                     AppSettings.setAllFilesPermissionAsked(true)
                     showFirstLaunchPermissionDialog = false
-                    requestAllFilesAccess()
+                    launchLocalMusicAccessPicker()
                 },
                 onDismissRequest = {
                     AppSettings.setAllFilesPermissionAsked(true)
                     showFirstLaunchPermissionDialog = false
                 },
-                onBasicAudioFallback = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.R) {
-                    {
-                        AppSettings.setAllFilesPermissionAsked(true)
-                        showFirstLaunchPermissionDialog = false
-                        requestAudioPermission()
-                    }
-                } else null,
+                onUseAudioPermission = {
+                    AppSettings.setAllFilesPermissionAsked(true)
+                    showFirstLaunchPermissionDialog = false
+                    requestAudioPermission()
+                },
             )
         }
 

@@ -30,6 +30,8 @@ import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
+import androidx.compose.ui.res.stringResource
+import com.music.bitchord.R
 import androidx.compose.ui.unit.dp
 
 import androidx.compose.material3.TextButton
@@ -42,7 +44,7 @@ fun LocalPermissionCard(
     onRequestPermission: () -> Unit,
     modifier: Modifier = Modifier,
     onFallbackPermission: (() -> Unit)? = null,
-    buttonText: String = "Grant All Files Access",
+    buttonText: String? = null,
 ) {
     Surface(
         modifier = modifier
@@ -80,7 +82,7 @@ fun LocalPermissionCard(
             Spacer(modifier = Modifier.height(16.dp))
 
             Text(
-                text = "All Files Access Needed",
+                text = stringResource(R.string.scoped_music_access_title),
                 style = MaterialTheme.typography.titleLarge,
                 fontWeight = FontWeight.Bold,
                 color = MaterialTheme.colorScheme.onSurface,
@@ -90,7 +92,7 @@ fun LocalPermissionCard(
             Spacer(modifier = Modifier.height(8.dp))
 
             Text(
-                text = "To scan and play your high-res audio tracks, albums, and folder collections, as well as edit tags and lyrics directly, BitChord needs All Files Access.",
+                text = stringResource(R.string.local_music_folder_access_fallback),
                 style = MaterialTheme.typography.bodyMedium,
                 color = MaterialTheme.colorScheme.onSurfaceVariant,
                 textAlign = TextAlign.Center,
@@ -111,7 +113,7 @@ fun LocalPermissionCard(
                 ),
             ) {
                 Text(
-                    text = buttonText,
+                    text = buttonText ?: stringResource(R.string.choose_music_folder),
                     style = MaterialTheme.typography.labelLarge,
                     fontWeight = FontWeight.SemiBold,
                 )
@@ -121,7 +123,7 @@ fun LocalPermissionCard(
                 Spacer(modifier = Modifier.height(8.dp))
                 TextButton(onClick = onFallbackPermission) {
                     Text(
-                        text = "Grant Basic Audio Permission",
+                        text = stringResource(R.string.continue_all_music_access),
                         style = MaterialTheme.typography.labelMedium,
                         color = MaterialTheme.colorScheme.onSurfaceVariant,
                     )

@@ -136,6 +136,7 @@ import androidx.compose.material3.rememberModalBottomSheetState
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.MutableState
 import androidx.compose.runtime.SideEffect
 import androidx.compose.runtime.MutableFloatState
 import androidx.compose.runtime.MutableLongState
@@ -328,6 +329,117 @@ private class CenteredPlayerButtonArrangement(private val gapDp: Float) : Arrang
 private fun playerButtonArrangement(gapDp: Float): Arrangement.Horizontal =
     if (gapDp <= 0f) Arrangement.SpaceEvenly else CenteredPlayerButtonArrangement(gapDp)
 
+private fun Modifier.expandPlayerControlsForSpacing(spacingDp: Float): Modifier =
+    if (spacingDp > 64f) bleedHorizontally(PLAYER_GUTTER) else this
+
+private data class PlayerSeekProgressState(
+    val effectiveDurationMs: Long,
+    val shownFraction: Float,
+    val pendingSeek: MutableState<Float?>,
+)
+
+/** Keeps seek-duration and pending-seek state out of the large player composable. */
+@Composable
+private fun rememberPlayerSeekProgress(
+    song: Song,
+    positionMs: Long,
+    durationMs: Long,
+    scrubbing: Boolean,
+    scrubValue: Float,
+): PlayerSeekProgressState {
+    val pendingSeek = remember { mutableStateOf<Float?>(null) }
+    val effectiveDurationMs = if (durationMs > 0L) durationMs else song.durationMillis()
+    val fraction = if (effectiveDurationMs > 0L) {
+        positionMs.toFloat() / effectiveDurationMs
+    } else {
+        0f
+    }
+    val shown = when {
+        scrubbing -> scrubValue
+        pendingSeek.value != null -> pendingSeek.value!!
+        else -> fraction.coerceIn(0f, 1f)
+    }
+
+    LaunchedEffect(positionMs, effectiveDurationMs, pendingSeek.value) {
+        val target = pendingSeek.value ?: return@LaunchedEffect
+        if (effectiveDurationMs > 0L &&
+            abs(positionMs - (target * effectiveDurationMs).toLong()) < SEEK_SETTLE_TOLERANCE_MS
+        ) {
+            pendingSeek.value = null
+        }
+    }
+    LaunchedEffect(pendingSeek.value) {
+        if (pendingSeek.value == null) return@LaunchedEffect
+        delay(SEEK_SETTLE_TIMEOUT_MS)
+        pendingSeek.value = null
+    }
+    LaunchedEffect(song.videoId) { pendingSeek.value = null }
+
+    return PlayerSeekProgressState(effectiveDurationMs, shown, pendingSeek)
+}
+
+/** Draws a cached, blurred copy along the lower edge of both full-bleed artwork modes. */
+@Composable
+private fun HeroArtworkBottomBlur(
+    model: ImageRequest,
+    alpha: Float,
+    zoom: Float,
+    modifier: Modifier = Modifier,
+) {
+    val strengthDp by AppSettings.fullBleedArtworkBottomBlurStrengthDp.collectAsStateWithLifecycle()
+    if (strengthDp <= 0) return
+
+    val intensity = (strengthDp / 42f).coerceIn(0f, 1f)
+    val maskZoom = zoom.takeIf { it.isFinite() && it >= 1f } ?: 1f
+    AsyncImage(
+        model = model,
+        contentDescription = null,
+        contentScale = ContentScale.Crop,
+        modifier = modifier
+            .clipToBounds()
+            .graphicsLayer {
+                this.alpha = alpha * intensity
+                scaleX = zoom
+                scaleY = zoom
+                transformOrigin = TransformOrigin(0.5f, 0f)
+                compositingStrategy = CompositingStrategy.Offscreen
+            }
+            .drawWithContent {
+                drawContent()
+                drawRect(
+                    brush = Brush.verticalGradient(
+                        colorStops = arrayOf(
+                            (0.58f / maskZoom) to Color.Transparent,
+                            (0.72f / maskZoom) to Color.Black.copy(alpha = 0.48f * intensity),
+                            (0.88f / maskZoom) to Color.Black.copy(alpha = 0.82f * intensity),
+                            (1f / maskZoom) to Color.Transparent,
+                        ),
+                    ),
+                    blendMode = BlendMode.DstIn,
+                )
+            }
+            .blur(strengthDp.dp, BlurredEdgeTreatment.Rectangle),
+    )
+}
+
+/** Align the bottom dissolve to screen coordinates even when the art is zoomed. */
+private fun Modifier.heroArtworkBottomFade(fadeFraction: Float, zoom: Float): Modifier =
+    drawWithContent {
+        drawContent()
+        if (size.height <= 0f) return@drawWithContent
+        val safeZoom = zoom.takeIf { it.isFinite() && it >= 1f } ?: 1f
+        val localStartFraction = (1f - fadeFraction.coerceIn(0f, 1f)) / safeZoom
+        val localEndFraction = 1f / safeZoom
+        drawRect(
+            brush = Brush.verticalGradient(
+                colors = listOf(Color.Black, Color.Transparent),
+                startY = size.height * localStartFraction,
+                endY = size.height * localEndFraction,
+            ),
+            blendMode = BlendMode.DstIn,
+        )
+    }
+
 /**
  * How many further goes a cover that failed to load gets.
  *
@@ -414,7 +526,6 @@ private val ART_BOX_TOP_PAD = 8.dp
  * that was cut off rather than one that ran out.
  */
 private const val HERO_FADE_FRACTION = 0.42f
-private const val LARGE_HERO_FADE_FRACTION = 0.27f
 
 /**
  * How often the backdrop re-reads the colours of a playing Canvas clip.
@@ -1305,46 +1416,16 @@ fun NowPlayingScreen(
         label = "swipeOffset",
     )
 
-    // After releasing the scrubber the player needs to buffer before it
-    // reports the new position. Keep showing where the user dropped it so the
-    // handle doesn't snap back and then jump forward once loading finishes.
-    var pendingSeek by remember { mutableStateOf<Float?>(null) }
-
-    val effectiveDurationMs = if (durationMs > 0) durationMs else song.durationMillis()
-    val fraction = if (effectiveDurationMs > 0) positionMs.toFloat() / effectiveDurationMs else 0f
-    val shown = when {
-        scrubbing -> scrubValue
-        pendingSeek != null -> pendingSeek!!
-        else -> fraction.coerceIn(0f, 1f)
-    }
-
-    // Released as soon as the player's own position agrees with where the handle
-    // was dropped — and unconditionally a few seconds later whether it agrees or
-    // not.
-    //
-    // The agreement test alone is not enough, because it is the only thing that
-    // ever cleared the override: if the position never passes close to the
-    // target — a clamped or rejected seek, a rendition swapped underneath, a
-    // progress sample that steps straight over the window — nothing releases it
-    // and the handle sits frozen at the drop point for the rest of the track.
-    // Audio and lyrics follow the real position perfectly throughout, so the
-    // failure looks like a stuck seek bar on a track that is playing fine.
-    //
-    // Tolerance is absolute rather than a share of the duration: two percent is
-    // a quarter-second on a jingle and twelve seconds on a long mix, and it is
-    // the wall-clock gap that decides whether the handle appears to jump.
-    LaunchedEffect(positionMs, effectiveDurationMs, pendingSeek) {
-        val target = pendingSeek ?: return@LaunchedEffect
-        if (effectiveDurationMs > 0 && abs(positionMs - (target * effectiveDurationMs).toLong()) < SEEK_SETTLE_TOLERANCE_MS) {
-            pendingSeek = null
-        }
-    }
-    LaunchedEffect(pendingSeek) {
-        if (pendingSeek == null) return@LaunchedEffect
-        delay(SEEK_SETTLE_TIMEOUT_MS)
-        pendingSeek = null
-    }
-    LaunchedEffect(song.videoId) { pendingSeek = null }
+    val seekProgress = rememberPlayerSeekProgress(
+        song = song,
+        positionMs = positionMs,
+        durationMs = durationMs,
+        scrubbing = scrubbing,
+        scrubValue = scrubValue,
+    )
+    val effectiveDurationMs = seekProgress.effectiveDurationMs
+    val shown = seekProgress.shownFraction
+    var pendingSeek by seekProgress.pendingSeek
 
     // Signature Apple Music touch: the sleeve shrinks back while paused.
     val artScale by animateFloatAsState(
@@ -1456,7 +1537,8 @@ fun NowPlayingScreen(
     // API level now, and both layers answer to this.
     val heroMode = fullBleedArt && (docked || playerFillsWindow(windowWidth))
     val useLargerHeroArtwork = heroMode && largerFullBleedArtwork
-    val heroFadeFraction = if (useLargerHeroArtwork) LARGE_HERO_FADE_FRACTION else HERO_FADE_FRACTION
+    val heroFadeFraction = HERO_FADE_FRACTION
+    val heroArtworkZoom = if (useLargerHeroArtwork) AURIS_LARGE_FULL_BLEED_ZOOM else 1f
     // Whether there's a still image to blow out — a placeholder tile is a card
     // or it is nothing, and going full-bleed with one would just tint the top
     // third of the screen.
@@ -1731,17 +1813,7 @@ fun NowPlayingScreen(
                                         transformOrigin = TransformOrigin(0.5f, 0f)
                                     }
                                 }
-                                .drawWithContent {
-                                    drawContent()
-                                    drawRect(
-                                        brush = Brush.verticalGradient(
-                                            colors = listOf(Color.Black, Color.Transparent),
-                                            startY = size.height * (1f - heroFadeFraction),
-                                            endY = size.height,
-                                        ),
-                                        blendMode = BlendMode.DstIn,
-                                    )
-                                },
+                                .heroArtworkBottomFade(heroFadeFraction, heroArtworkZoom),
                         )
                     }
                 }
@@ -1782,55 +1854,18 @@ fun NowPlayingScreen(
                             // drew, which it can only do in a buffer of its own.
                             compositingStrategy = CompositingStrategy.Offscreen
                         }
-                        .drawWithContent {
-                            drawContent()
-                            drawRect(
-                                brush = Brush.verticalGradient(
-                                    colors = listOf(Color.Black, Color.Transparent),
-                                    startY = size.height * (1f - heroFadeFraction),
-                                    endY = size.height,
-                                ),
-                                blendMode = BlendMode.DstIn,
-                            )
-                        },
+                        .heroArtworkBottomFade(heroFadeFraction, heroArtworkZoom),
                 )
-                if (useLargerHeroArtwork) {
-                    AsyncImage(
-                        // The softer lower edge reuses the same decoded image;
-                        // it adds no separate artwork lookup or cache entry.
-                        model = artRequest,
-                        contentDescription = null,
-                        contentScale = ContentScale.Crop,
-                        modifier = Modifier
-                            .align(Alignment.TopStart)
-                            .fillMaxWidth()
-                            .height(heroHeight)
-                            .clipToBounds()
-                            .graphicsLayer {
-                                alpha = heroVisible *
-                                    (1f - if (heroClip != null) canvasCover.floatValue else 0f)
-                                scaleX = AURIS_LARGE_FULL_BLEED_ZOOM
-                                scaleY = AURIS_LARGE_FULL_BLEED_ZOOM
-                                transformOrigin = TransformOrigin(0.5f, 0f)
-                                compositingStrategy = CompositingStrategy.Offscreen
-                            }
-                            .drawWithContent {
-                                drawContent()
-                                drawRect(
-                                    brush = Brush.verticalGradient(
-                                        colorStops = arrayOf(
-                                            0.63f to Color.Transparent,
-                                            0.77f to Color.Black.copy(alpha = 0.58f),
-                                            0.90f to Color.Black.copy(alpha = 0.82f),
-                                            1f to Color.Transparent,
-                                        ),
-                                    ),
-                                    blendMode = BlendMode.DstIn,
-                                )
-                            }
-                            .blur(42.dp, BlurredEdgeTreatment.Rectangle),
-                    )
-                }
+                HeroArtworkBottomBlur(
+                    model = artRequest,
+                    alpha = heroVisible *
+                        (1f - if (heroClip != null) canvasCover.floatValue else 0f),
+                    zoom = heroArtworkZoom,
+                    modifier = Modifier
+                        .align(Alignment.TopStart)
+                        .fillMaxWidth()
+                        .height(heroHeight),
+                )
             }
 
             // Motion artwork over it, in the same frame.
@@ -3231,7 +3266,9 @@ fun NowPlayingScreen(
 
             // ---- Transport ----
             Row(
-                modifier = Modifier.fillMaxWidth(),
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .expandPlayerControlsForSpacing(playerTransportButtonSpacingDp),
                 horizontalArrangement = transportButtonArrangement,
                 verticalAlignment = Alignment.CenterVertically,
             ) {
@@ -3439,22 +3476,19 @@ fun NowPlayingScreen(
             // readable without opening anything.
             if (visiblePlayerControls.isNotEmpty()) {
                 Row(
-                    modifier = Modifier.fillMaxWidth(),
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .expandPlayerControlsForSpacing(playerActionButtonSpacingDp),
                     horizontalArrangement = playerActionButtonArrangement,
                     verticalAlignment = Alignment.CenterVertically,
                 ) {
                     playerControlOrder.forEach { control ->
                         if (control !in visiblePlayerControls) return@forEach
                         when (control) {
-                            PlayerControl.SHUFFLE -> if (!walkmanControlsActive) BottomGlyph(
-                                icon = BitChordIcons.Shuffle,
-                                contentDescription = stringResource(
-                                    if (shuffleEnabled) R.string.shuffle_on else R.string.shuffle_off,
-                                ),
-                                onClick = onToggleShuffle,
-                                highlighted = shuffleEnabled,
-                                haptic = if (shuffleEnabled) Haptic.ToggleOff else Haptic.ToggleOn,
-                                tapWindowMs = SHUFFLE_TAP_WINDOW_MS,
+                            PlayerControl.SHUFFLE -> PlayerShuffleControl(
+                                visible = !walkmanControlsActive,
+                                shuffleEnabled = shuffleEnabled,
+                                onToggleShuffle = onToggleShuffle,
                             )
                             PlayerControl.REPEAT -> if (!walkmanControlsActive) BottomGlyph(
                                 icon = if (repeatMode == Player.REPEAT_MODE_ONE) null else BitChordIcons.Repeat,
@@ -5188,6 +5222,27 @@ private fun TransportSideActionGlyph(
                 TransportSideAction.SEARCH -> onOpenSearch()
             }
         },
+    )
+}
+
+/** Keeps shuffle label/state branching out of the already-large player composition method. */
+@Composable
+private fun PlayerShuffleControl(
+    visible: Boolean,
+    shuffleEnabled: Boolean,
+    onToggleShuffle: () -> Unit,
+) {
+    if (!visible) return
+
+    BottomGlyph(
+        icon = BitChordIcons.Shuffle,
+        contentDescription = stringResource(
+            if (shuffleEnabled) R.string.shuffle_on else R.string.shuffle_off,
+        ),
+        onClick = onToggleShuffle,
+        highlighted = shuffleEnabled,
+        haptic = if (shuffleEnabled) Haptic.ToggleOff else Haptic.ToggleOn,
+        tapWindowMs = SHUFFLE_TAP_WINDOW_MS,
     )
 }
 

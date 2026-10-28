@@ -23,6 +23,9 @@ import java.util.UUID
 /** Maximum blur radius for the player-only artwork backdrop, in dp. */
 const val MAX_PLAYER_ARTWORK_BLUR_DP = 128f
 
+/** Maximum manually requested gap between player controls, in dp. */
+const val MAX_PLAYER_BUTTON_SPACING_DP = 160f
+
 /**
  * Stream bitrate ceiling on the YouTube fallback path — MEDIUM, HIGH and
  * LOSSLESS all mean "whatever the best available Opus format is" there; what
@@ -544,10 +547,12 @@ object AppSettings {
     val playerArtistFontSizeSp = MutableStateFlow(20f)
     /** Size of the central play/pause glyph, in dp; the legacy size is 62dp. */
     val playerPlayPauseIconSizeDp = MutableStateFlow(62f)
-    /** Extra spacing between the player transport buttons; zero keeps the existing even layout. */
+    /** Extra spacing between player transport buttons, up to the available row width. */
     val playerTransportButtonSpacingDp = MutableStateFlow(0f)
     /** Extra spacing between the player action buttons below the volume row. */
     val playerActionButtonSpacingDp = MutableStateFlow(0f)
+    /** Strength of the artwork-matched lower blur in the full-screen player. */
+    val fullBleedArtworkBottomBlurStrengthDp = MutableStateFlow(42)
     /** Hides only the word label on the play button in playlist detail pages. */
     val hidePlaylistPlayButtonLabel = MutableStateFlow(false)
     /** Shows the small drag handle at the top of the expanded player by default. */
@@ -1011,6 +1016,11 @@ object AppSettings {
 
     /** Empty means every MediaStore folder; otherwise this is a persisted SAF tree URI. */
     val localMusicFolderUri = MutableStateFlow("")
+    /** Device-local, read-only SAF scope for the music library; never restored from backups. */
+    val localMusicAccessTreeUri = MutableStateFlow("")
+    /** Prevents clearing a scoped grant from silently falling back to an older broad permission. */
+    val localMusicScopeRequired = MutableStateFlow(true)
+    val localMusicAccessRevision = MutableStateFlow(0)
 
     /** Remote file-library connection details. Credentials are Keystore-backed. */
     val webdavUrl = MutableStateFlow("")
@@ -1299,8 +1309,10 @@ object AppSettings {
         playerTitleFontSizeSp.value = prefs.getFloat(KEY_PLAYER_TITLE_FONT_SIZE_SP, 20f).coerceIn(12f, 36f)
         playerArtistFontSizeSp.value = prefs.getFloat(KEY_PLAYER_ARTIST_FONT_SIZE_SP, 20f).coerceIn(12f, 36f)
         playerPlayPauseIconSizeDp.value = prefs.getFloat(KEY_PLAYER_PLAY_PAUSE_ICON_SIZE_DP, 62f).coerceIn(40f, 78f)
-        playerTransportButtonSpacingDp.value = prefs.getFloat(KEY_PLAYER_TRANSPORT_BUTTON_SPACING_DP, 0f).coerceIn(0f, 24f)
-        playerActionButtonSpacingDp.value = prefs.getFloat(KEY_PLAYER_ACTION_BUTTON_SPACING_DP, 0f).coerceIn(0f, 24f)
+        playerTransportButtonSpacingDp.value = prefs.getFloat(KEY_PLAYER_TRANSPORT_BUTTON_SPACING_DP, 0f).coerceIn(0f, MAX_PLAYER_BUTTON_SPACING_DP)
+        playerActionButtonSpacingDp.value = prefs.getFloat(KEY_PLAYER_ACTION_BUTTON_SPACING_DP, 0f).coerceIn(0f, MAX_PLAYER_BUTTON_SPACING_DP)
+        fullBleedArtworkBottomBlurStrengthDp.value =
+            prefs.getInt(KEY_FULL_BLEED_ARTWORK_BOTTOM_BLUR_STRENGTH_DP, 42).coerceIn(0, 64)
         hidePlaylistPlayButtonLabel.value = prefs.getBoolean(KEY_HIDE_PLAYLIST_PLAY_BUTTON_LABEL, false)
         showPlayerTopGrabber.value = prefs.getBoolean(KEY_SHOW_PLAYER_TOP_GRABBER, true)
         cleartextHttpAllowed.value = prefs.getBoolean(KEY_CLEARTEXT_HTTP_ALLOWED, false)
@@ -1544,6 +1556,10 @@ object AppSettings {
         localArtistsViewType.value = readLibraryViewType(KEY_LOCAL_ARTISTS_VIEW_TYPE, LibraryViewType.GRID)
         localFolderHierarchy.value = prefs.getBoolean(KEY_LOCAL_FOLDER_HIERARCHY, false)
         localMusicFolderUri.value = prefs.getString(KEY_LOCAL_MUSIC_FOLDER_PATH, "").orEmpty()
+        localMusicAccessTreeUri.value = prefs.getString(KEY_LOCAL_MUSIC_ACCESS_TREE_URI, "").orEmpty()
+        // Missing key means a pre-2.8.3 install: require the new explicit folder
+        // grant once instead of silently continuing an older broad library scan.
+        localMusicScopeRequired.value = prefs.getBoolean(KEY_LOCAL_MUSIC_SCOPE_REQUIRED, true)
         webdavUrl.value = prefs.getString(KEY_WEBDAV_URL, "").orEmpty()
         webdavAllowInsecureHttp.value = prefs.getBoolean(KEY_WEBDAV_ALLOW_HTTP, false)
         webdavUsername.value = authStore.getProtectedValue(KEY_WEBDAV_USERNAME).orEmpty()
@@ -1927,13 +1943,13 @@ object AppSettings {
     }
 
     fun setPlayerTransportButtonSpacingDp(value: Float) {
-        val safe = value.coerceIn(0f, 24f)
+        val safe = value.coerceIn(0f, MAX_PLAYER_BUTTON_SPACING_DP)
         playerTransportButtonSpacingDp.value = safe
         prefs.edit().putFloat(KEY_PLAYER_TRANSPORT_BUTTON_SPACING_DP, safe).apply()
     }
 
     fun setPlayerActionButtonSpacingDp(value: Float) {
-        val safe = value.coerceIn(0f, 24f)
+        val safe = value.coerceIn(0f, MAX_PLAYER_BUTTON_SPACING_DP)
         playerActionButtonSpacingDp.value = safe
         prefs.edit().putFloat(KEY_PLAYER_ACTION_BUTTON_SPACING_DP, safe).apply()
     }
@@ -3017,6 +3033,12 @@ object AppSettings {
         prefs.edit().putBoolean(KEY_LARGER_FULL_BLEED_ARTWORK, value).apply()
     }
 
+    fun setFullBleedArtworkBottomBlurStrengthDp(value: Int) {
+        val safe = value.coerceIn(0, 64)
+        fullBleedArtworkBottomBlurStrengthDp.value = safe
+        prefs.edit().putInt(KEY_FULL_BLEED_ARTWORK_BOTTOM_BLUR_STRENGTH_DP, safe).apply()
+    }
+
     fun setKeepOriginalArtworkAspectRatio(value: Boolean) {
         keepOriginalArtworkAspectRatio.value = value
         prefs.edit().putBoolean(KEY_KEEP_ORIGINAL_ARTWORK_ASPECT_RATIO, value).apply()
@@ -3380,6 +3402,21 @@ object AppSettings {
         prefs.edit().putString(KEY_LOCAL_MUSIC_FOLDER_PATH, safePath).apply()
     }
 
+    /** Stores the device-local SAF read scope; its grant is managed by the platform, not backups. */
+    fun setLocalMusicAccessTreeUri(uri: String) {
+        val safeUri = uri.trim().take(4096)
+        localMusicAccessTreeUri.value = safeUri
+        if (safeUri.isNotBlank()) setLocalMusicScopeRequired(true)
+        localMusicAccessRevision.value += 1
+        prefs.edit().putString(KEY_LOCAL_MUSIC_ACCESS_TREE_URI, safeUri).apply()
+    }
+
+    fun setLocalMusicScopeRequired(required: Boolean) {
+        localMusicScopeRequired.value = required
+        localMusicAccessRevision.value += 1
+        prefs.edit().putBoolean(KEY_LOCAL_MUSIC_SCOPE_REQUIRED, required).apply()
+    }
+
     fun setWebDavUrl(value: String) {
         val normalized = value.trim().trimEnd('/')
         webdavUrl.value = normalized
@@ -3726,6 +3763,9 @@ object AppSettings {
         "downloaded_collections",
         KEY_LAST_VERSION_CODE,
         KEY_LOCAL_MUSIC_FOLDER_PATH,
+        KEY_LOCAL_MUSIC_ACCESS_TREE_URI,
+        KEY_LOCAL_MUSIC_SCOPE_REQUIRED,
+        KEY_ALL_FILES_PERMISSION_ASKED,
         KEY_CD_RIPPING_OUTPUT_TREE_URI,
         // Network trust/cleartext consent is device-specific and should not
         // silently enable unencrypted requests after restoring a backup.
@@ -3942,6 +3982,7 @@ object AppSettings {
     private const val KEY_CANVAS_OVER_CELLULAR = "canvas_over_cellular"
     private const val KEY_FULL_BLEED_ARTWORK = "full_bleed_artwork"
     private const val KEY_LARGER_FULL_BLEED_ARTWORK = "larger_full_bleed_artwork"
+    private const val KEY_FULL_BLEED_ARTWORK_BOTTOM_BLUR_STRENGTH_DP = "full_bleed_artwork_bottom_blur_strength_dp"
     private const val KEY_KEEP_ORIGINAL_ARTWORK_ASPECT_RATIO = "keep_original_artwork_aspect_ratio"
     private const val KEY_KEEP_COLLECTION_ARTWORK_ASPECT_RATIO = "keep_collection_artwork_aspect_ratio"
     private const val KEY_LOCALIZE_LIBRARY_COLLECTION_COUNT = "localize_library_collection_count"
@@ -3982,6 +4023,8 @@ object AppSettings {
     private const val KEY_LOCAL_FOLDER_HIERARCHY = "local_folder_hierarchy"
     private const val KEY_INCLUDE_REMOTE_SOURCE_MEDIA_IN_LIBRARY = "include_remote_source_media_in_library"
     private const val KEY_LOCAL_MUSIC_FOLDER_PATH = "local_music_folder_path"
+    private const val KEY_LOCAL_MUSIC_ACCESS_TREE_URI = "local_music_access_tree_uri"
+    private const val KEY_LOCAL_MUSIC_SCOPE_REQUIRED = "local_music_scope_required"
     private const val KEY_WEBDAV_URL = "webdav_url"
     private const val KEY_WEBDAV_USERNAME = "webdav_username"
     private const val KEY_WEBDAV_PASSWORD = "webdav_password"
