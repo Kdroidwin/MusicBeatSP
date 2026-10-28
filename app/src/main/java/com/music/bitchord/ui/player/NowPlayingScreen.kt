@@ -3227,22 +3227,14 @@ fun NowPlayingScreen(
                         onOpenSearch = onOpenSearch,
                     )
                 }
-                if (walkmanControlsActive && PlayerControl.SHUFFLE in visiblePlayerControls &&
-                    transportLeftAction != TransportSideAction.SHUFFLE &&
-                    transportRightAction != TransportSideAction.SHUFFLE
-                ) {
-                    BottomGlyph(
-                        icon = BitChordIcons.Shuffle,
-                        contentDescription = stringResource(
-                            if (shuffleEnabled) R.string.shuffle_on else R.string.shuffle_off,
-                        ),
-                        onClick = onToggleShuffle,
-                        highlighted = shuffleEnabled,
-                        haptic = if (shuffleEnabled) Haptic.ToggleOff else Haptic.ToggleOn,
-                        tapWindowMs = SHUFFLE_TAP_WINDOW_MS,
-                        outlined = true,
-                    )
-                }
+                WalkmanShuffleGlyph(
+                    active = walkmanControlsActive,
+                    enabledBySettings = PlayerControl.SHUFFLE in visiblePlayerControls,
+                    leftAction = transportLeftAction,
+                    rightAction = transportRightAction,
+                    shuffleEnabled = shuffleEnabled,
+                    onToggleShuffle = onToggleShuffle,
+                )
                 TransportGlyph(
                     icon = Icons.Rounded.FastRewind,
                     contentDescription = stringResource(R.string.widget_previous),
@@ -5153,6 +5145,35 @@ private fun TransportSideActionGlyph(
                 TransportSideAction.SEARCH -> onOpenSearch()
             }
         },
+    )
+}
+
+/** Keeps the optional Walkman shuffle control out of the already-large player composition method. */
+@Composable
+private fun WalkmanShuffleGlyph(
+    active: Boolean,
+    enabledBySettings: Boolean,
+    leftAction: TransportSideAction,
+    rightAction: TransportSideAction,
+    shuffleEnabled: Boolean,
+    onToggleShuffle: () -> Unit,
+) {
+    if (!active || !enabledBySettings || leftAction == TransportSideAction.SHUFFLE ||
+        rightAction == TransportSideAction.SHUFFLE
+    ) {
+        return
+    }
+
+    BottomGlyph(
+        icon = BitChordIcons.Shuffle,
+        contentDescription = stringResource(
+            if (shuffleEnabled) R.string.shuffle_on else R.string.shuffle_off,
+        ),
+        onClick = onToggleShuffle,
+        highlighted = shuffleEnabled,
+        haptic = if (shuffleEnabled) Haptic.ToggleOff else Haptic.ToggleOn,
+        tapWindowMs = SHUFFLE_TAP_WINDOW_MS,
+        outlined = true,
     )
 }
 
