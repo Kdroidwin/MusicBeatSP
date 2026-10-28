@@ -863,8 +863,10 @@
     <string name="player_control_shuffle">シャッフルボタン</string>
     <string name="player_control_repeat">リピートボタン</string>
     <string name="player_control_lyrics">歌詞表示ボタン</string>
-    <string name="auris_player_action_style">Auris風の歌詞・Chromecast・キューボタン</string>
-    <string name="auris_player_action_style_subtitle">歌詞・Chromecast・次に再生の操作にAuris風のコンパクトなアイコンを使います。初期設定はオフです。</string>
+    <string name="apple_music_lyrics_button_style">Apple Music風の歌詞ボタン</string>
+    <string name="apple_music_chromecast_button_style">Apple Music風のChromecastボタン</string>
+    <string name="apple_music_queue_button_style">Apple Music風のキューボタン</string>
+    <string name="apple_music_button_style_subtitle">このボタンだけにApple Musicを参考にしたアイコンを使います。初期設定はオフです。</string>
     <string name="player_control_like">お気に入りボタン</string>
     <string name="player_control_playlist">プレイリストボタン</string>
     <string name="player_control_search">検索ボタン</string>
@@ -1469,6 +1471,10 @@
     <string name="player_icon_size_value">%1$d dp</string>
     <string name="player_transport_button_spacing">プレイヤー操作ボタンの間隔</string>
     <string name="player_transport_button_spacing_subtitle">前へ・再生・次へなどの操作ボタン間隔を調整します。「自動」では従来の配置を使います。</string>
+    <string name="player_action_button_spacing">プレイヤー下部ボタンの間隔</string>
+    <string name="player_action_button_spacing_subtitle">音量バーより下にある歌詞・お気に入り・キューなどのボタン間隔を調整します。</string>
+    <string name="hide_playlist_play_button_label">プレイリストの「再生」ラベルを隠す</string>
+    <string name="hide_playlist_play_button_label_subtitle">プレイリスト詳細画面の再生ボタンをアイコンだけにします。初期設定は表示です。</string>
     <string name="player_transport_spacing_auto">自動</string>
     <string name="player_transport_spacing_value">%1$d dp</string>
     <string name="show_player_top_grabber">プレイヤー上部のハンドルを表示</string>

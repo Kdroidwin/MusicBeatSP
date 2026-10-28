@@ -268,6 +268,23 @@ private fun playerTransportSpacingSearchEntry(spacingDp: Float) = SettingsSearch
 )
 
 @Composable
+private fun playerActionSpacingSearchEntry(spacingDp: Float) = SettingsSearchEntry(
+    title = stringResource(R.string.player_action_button_spacing),
+    subtitle = stringResource(R.string.player_action_button_spacing_subtitle),
+    keywords = listOf("player", "action", "button", "spacing", "gap", "プレーヤー", "下部", "操作ボタン", "間隔", "余白"),
+    valueLabel = if (spacingDp <= 0f) {
+        stringResource(R.string.player_transport_spacing_auto)
+    } else {
+        stringResource(R.string.player_transport_spacing_value, spacingDp.roundToInt())
+    },
+    sliderValue = spacingDp,
+    sliderValueRange = 0f..24f,
+    sliderSteps = 23,
+    onSliderValueChange = AppSettings::setPlayerActionButtonSpacingDp,
+    activate = {},
+)
+
+@Composable
 private fun largerFullBleedArtworkSearchEntry(enabled: Boolean, fullBleedEnabled: Boolean) = SettingsSearchEntry(
     title = stringResource(R.string.larger_full_screen_cover_art),
     subtitle = stringResource(R.string.larger_full_screen_cover_art_subtitle),
@@ -278,12 +295,30 @@ private fun largerFullBleedArtworkSearchEntry(enabled: Boolean, fullBleedEnabled
 )
 
 @Composable
-private fun aurisPlayerActionStyleSearchEntry(enabled: Boolean) = SettingsSearchEntry(
-    title = stringResource(R.string.auris_player_action_style),
-    subtitle = stringResource(R.string.auris_player_action_style_subtitle),
-    keywords = listOf("player", "lyrics", "chromecast", "queue", "Auris", "プレイヤー", "歌詞", "キュー", "再生キュー", "アイコン"),
+private fun appleMusicLyricsButtonStyleSearchEntry(enabled: Boolean) = SettingsSearchEntry(
+    title = stringResource(R.string.apple_music_lyrics_button_style),
+    subtitle = stringResource(R.string.apple_music_button_style_subtitle),
+    keywords = listOf("player", "lyrics", "Apple Music", "button", "style", "プレーヤー", "歌詞", "Apple Music風", "アイコン"),
     checked = enabled,
-    activate = { AppSettings.setAurisPlayerActionStyle(!enabled) },
+    activate = { AppSettings.setAppleMusicLyricsButtonStyle(!enabled) },
+)
+
+@Composable
+private fun appleMusicChromecastButtonStyleSearchEntry(enabled: Boolean) = SettingsSearchEntry(
+    title = stringResource(R.string.apple_music_chromecast_button_style),
+    subtitle = stringResource(R.string.apple_music_button_style_subtitle),
+    keywords = listOf("player", "chromecast", "cast", "Apple Music", "button", "style", "プレーヤー", "キャスト", "Apple Music風", "アイコン"),
+    checked = enabled,
+    activate = { AppSettings.setAppleMusicChromecastButtonStyle(!enabled) },
+)
+
+@Composable
+private fun appleMusicQueueButtonStyleSearchEntry(enabled: Boolean) = SettingsSearchEntry(
+    title = stringResource(R.string.apple_music_queue_button_style),
+    subtitle = stringResource(R.string.apple_music_button_style_subtitle),
+    keywords = listOf("player", "queue", "up next", "Apple Music", "button", "style", "プレーヤー", "キュー", "再生キュー", "Apple Music風", "アイコン"),
+    checked = enabled,
+    activate = { AppSettings.setAppleMusicQueueButtonStyle(!enabled) },
 )
 
 @Composable
@@ -309,22 +344,27 @@ private fun LargerFullBleedArtworkRow(checked: Boolean, fullBleedEnabled: Boolea
 }
 
 @Composable
-private fun AurisPlayerActionStyleRow(checked: Boolean) {
+private fun PlayerActionButtonStyleRow(
+    icon: ImageVector,
+    titleRes: Int,
+    checked: Boolean,
+    onCheckedChange: (Boolean) -> Unit,
+) {
     SettingsRow(
-        icon = Icons.Rounded.Cast,
-        title = stringResource(R.string.auris_player_action_style),
-        subtitle = stringResource(R.string.auris_player_action_style_subtitle),
+        icon = icon,
+        title = stringResource(titleRes),
+        subtitle = stringResource(R.string.apple_music_button_style_subtitle),
         trailing = {
             Switch(
                 checked = checked,
-                onCheckedChange = AppSettings::setAurisPlayerActionStyle,
+                onCheckedChange = onCheckedChange,
                 colors = SwitchDefaults.colors(
                     checkedTrackColor = MaterialTheme.colorScheme.primary,
                     checkedBorderColor = MaterialTheme.colorScheme.primary,
                 ),
             )
         },
-        onClick = { AppSettings.setAurisPlayerActionStyle(!checked) },
+        onClick = { onCheckedChange(!checked) },
     )
 }
 
@@ -493,7 +533,9 @@ fun SettingsScreen(
     val useLibraryIconForPlaylistControl by AppSettings.useLibraryIconForPlaylistControl.collectAsStateWithLifecycle()
     val visiblePlayerControls by AppSettings.visiblePlayerControls.collectAsStateWithLifecycle()
     val playerControlOrder by AppSettings.playerControlOrder.collectAsStateWithLifecycle()
-    val aurisPlayerActionStyle by AppSettings.aurisPlayerActionStyle.collectAsStateWithLifecycle()
+    val appleMusicLyricsButtonStyle by AppSettings.appleMusicLyricsButtonStyle.collectAsStateWithLifecycle()
+    val appleMusicChromecastButtonStyle by AppSettings.appleMusicChromecastButtonStyle.collectAsStateWithLifecycle()
+    val appleMusicQueueButtonStyle by AppSettings.appleMusicQueueButtonStyle.collectAsStateWithLifecycle()
     val hidePlayerArtist by AppSettings.hidePlayerArtist.collectAsStateWithLifecycle()
     val hideUnknownPlayerArtist by AppSettings.hideUnknownPlayerArtist.collectAsStateWithLifecycle()
     val centerPlayerTrackInfo by AppSettings.centerPlayerTrackInfo.collectAsStateWithLifecycle()
@@ -525,6 +567,7 @@ fun SettingsScreen(
     val playerArtistFontSizeSp by AppSettings.playerArtistFontSizeSp.collectAsStateWithLifecycle()
     val playerPlayPauseIconSizeDp by AppSettings.playerPlayPauseIconSizeDp.collectAsStateWithLifecycle()
     val playerTransportButtonSpacingDp by AppSettings.playerTransportButtonSpacingDp.collectAsStateWithLifecycle()
+    val playerActionButtonSpacingDp by AppSettings.playerActionButtonSpacingDp.collectAsStateWithLifecycle()
     val showPlayerTopGrabber by AppSettings.showPlayerTopGrabber.collectAsStateWithLifecycle()
     val cleartextHttpAllowed by AppSettings.cleartextHttpAllowed.collectAsStateWithLifecycle()
     val parametricEqEnabled by AppSettings.parametricEqEnabled.collectAsStateWithLifecycle()
@@ -570,6 +613,7 @@ fun SettingsScreen(
     val dontRepeatSuggestions by AppSettings.dontRepeatSuggestions.collectAsStateWithLifecycle()
     val filterNonMusicAudio by AppSettings.filterNonMusicAudio.collectAsStateWithLifecycle()
     val showPlaylistSongArtwork by AppSettings.showPlaylistSongArtwork.collectAsStateWithLifecycle()
+    val hidePlaylistPlayButtonLabel by AppSettings.hidePlaylistPlayButtonLabel.collectAsStateWithLifecycle()
     val showCollectionSongArtwork by AppSettings.showCollectionSongArtwork.collectAsStateWithLifecycle()
     val keepCollectionArtworkAspectRatio by AppSettings.keepCollectionArtworkAspectRatio.collectAsStateWithLifecycle()
     val localizeLibraryCollectionCount by AppSettings.localizeLibraryCollectionCount.collectAsStateWithLifecycle()
@@ -962,7 +1006,9 @@ fun SettingsScreen(
         SettingsSearchEntry(stringResource(R.string.hide_unknown_player_artist), stringResource(R.string.hide_unknown_player_artist_subtitle), listOf("artist", "unknown", "アーティスト", "unknown artist"), hideUnknownPlayerArtist) { AppSettings.setHideUnknownPlayerArtist(!hideUnknownPlayerArtist) },
         SettingsSearchEntry(stringResource(R.string.center_player_track_info), stringResource(R.string.center_player_track_info_subtitle), listOf("center", "中央", "曲情報"), centerPlayerTrackInfo) { AppSettings.setCenterPlayerTrackInfo(!centerPlayerTrackInfo) },
         SettingsSearchEntry(stringResource(R.string.player_playlist_library_icon), stringResource(R.string.player_playlist_library_icon_subtitle), listOf("playlist", "library", "プレイリスト", "ライブラリ", "icon"), useLibraryIconForPlaylistControl) { AppSettings.setUseLibraryIconForPlaylistControl(!useLibraryIconForPlaylistControl) },
-        aurisPlayerActionStyleSearchEntry(aurisPlayerActionStyle),
+        appleMusicLyricsButtonStyleSearchEntry(appleMusicLyricsButtonStyle),
+        appleMusicChromecastButtonStyleSearchEntry(appleMusicChromecastButtonStyle),
+        appleMusicQueueButtonStyleSearchEntry(appleMusicQueueButtonStyle),
         SettingsSearchEntry(stringResource(R.string.prevent_play_at_zero_volume), stringResource(R.string.prevent_play_at_zero_volume_subtitle), listOf("volume", "音量", "zero", "0"), preventPlayAtZeroVolume) { AppSettings.setPreventPlayAtZeroVolume(!preventPlayAtZeroVolume) },
         SettingsSearchEntry(stringResource(R.string.pause_playback_at_zero_volume), stringResource(R.string.pause_playback_at_zero_volume_subtitle), listOf("volume", "音量", "zero", "0", "pause", "一時停止"), pausePlaybackAtZeroVolume) { AppSettings.setPausePlaybackAtZeroVolume(!pausePlaybackAtZeroVolume) },
         SettingsSearchEntry(stringResource(R.string.bit_perfect_playback), stringResource(R.string.bit_perfect_playback_subtitle), listOf("bitperfect", "bit-perfect", "bit perfect", "USB DAC", "PCM", "ビットパーフェクト", "音質"), bitPerfectPlayback) { AppSettings.setBitPerfectPlayback(!bitPerfectPlayback) },
@@ -1088,6 +1134,7 @@ fun SettingsScreen(
             activate = {},
         ),
         playerTransportSpacingSearchEntry(playerTransportButtonSpacingDp),
+        playerActionSpacingSearchEntry(playerActionButtonSpacingDp),
         SettingsSearchEntry(
             stringResource(R.string.show_player_top_grabber),
             stringResource(R.string.show_player_top_grabber_subtitle),
@@ -1096,6 +1143,12 @@ fun SettingsScreen(
         ) { AppSettings.setShowPlayerTopGrabber(!showPlayerTopGrabber) },
         SettingsSearchEntry(stringResource(R.string.filter_non_music_audio), stringResource(R.string.filter_non_music_audio_subtitle), listOf("filter", "audio", "music", "音楽", "フィルター"), filterNonMusicAudio) { AppSettings.setFilterNonMusicAudio(!filterNonMusicAudio) },
         SettingsSearchEntry(stringResource(R.string.playlist_song_artwork), stringResource(R.string.playlist_song_artwork_subtitle), listOf("playlist", "artwork", "プレイリスト", "アルバムアート"), showPlaylistSongArtwork) { AppSettings.setShowPlaylistSongArtwork(!showPlaylistSongArtwork) },
+        SettingsSearchEntry(
+            stringResource(R.string.hide_playlist_play_button_label),
+            stringResource(R.string.hide_playlist_play_button_label_subtitle),
+            listOf("playlist", "play", "button", "label", "text", "プレイリスト", "再生", "ボタン", "文字", "ラベル"),
+            hidePlaylistPlayButtonLabel,
+        ) { AppSettings.setHidePlaylistPlayButtonLabel(!hidePlaylistPlayButtonLabel) },
         SettingsSearchEntry(
             stringResource(R.string.collection_song_artwork),
             stringResource(R.string.collection_song_artwork_subtitle),
@@ -2700,7 +2753,26 @@ fun SettingsScreen(
                 )
             }
             RowDivider()
-            AurisPlayerActionStyleRow(aurisPlayerActionStyle)
+            PlayerActionButtonStyleRow(
+                icon = Icons.AutoMirrored.Rounded.Notes,
+                titleRes = R.string.apple_music_lyrics_button_style,
+                checked = appleMusicLyricsButtonStyle,
+                onCheckedChange = AppSettings::setAppleMusicLyricsButtonStyle,
+            )
+            RowDivider()
+            PlayerActionButtonStyleRow(
+                icon = Icons.Rounded.Cast,
+                titleRes = R.string.apple_music_chromecast_button_style,
+                checked = appleMusicChromecastButtonStyle,
+                onCheckedChange = AppSettings::setAppleMusicChromecastButtonStyle,
+            )
+            RowDivider()
+            PlayerActionButtonStyleRow(
+                icon = Icons.AutoMirrored.Rounded.QueueMusic,
+                titleRes = R.string.apple_music_queue_button_style,
+                checked = appleMusicQueueButtonStyle,
+                onCheckedChange = AppSettings::setAppleMusicQueueButtonStyle,
+            )
             RowDivider()
             SettingsRow(
                 icon = Icons.Rounded.LibraryMusic,
@@ -2862,6 +2934,24 @@ fun SettingsScreen(
             Slider(
                 value = playerTransportButtonSpacingDp,
                 onValueChange = AppSettings::setPlayerTransportButtonSpacingDp,
+                steps = 23,
+                valueRange = 0f..24f,
+                modifier = Modifier.padding(start = ROW_INSET, end = ROW_INSET, bottom = 14.dp),
+            )
+            RowDivider()
+            SettingsRow(
+                icon = Icons.Rounded.Tune,
+                title = stringResource(R.string.player_action_button_spacing),
+                subtitle = stringResource(R.string.player_action_button_spacing_subtitle),
+                value = if (playerActionButtonSpacingDp <= 0f) {
+                    stringResource(R.string.player_transport_spacing_auto)
+                } else {
+                    stringResource(R.string.player_transport_spacing_value, playerActionButtonSpacingDp.roundToInt())
+                },
+            )
+            Slider(
+                value = playerActionButtonSpacingDp,
+                onValueChange = AppSettings::setPlayerActionButtonSpacingDp,
                 steps = 23,
                 valueRange = 0f..24f,
                 modifier = Modifier.padding(start = ROW_INSET, end = ROW_INSET, bottom = 14.dp),
@@ -4436,6 +4526,19 @@ fun SettingsScreen(
         }
 
         SettingsGroup(header = stringResource(R.string.playlist_tools)) {
+            SettingsRow(
+                icon = Icons.Rounded.PlayArrow,
+                title = stringResource(R.string.hide_playlist_play_button_label),
+                subtitle = stringResource(R.string.hide_playlist_play_button_label_subtitle),
+                trailing = {
+                    Switch(
+                        checked = hidePlaylistPlayButtonLabel,
+                        onCheckedChange = AppSettings::setHidePlaylistPlayButtonLabel,
+                    )
+                },
+                onClick = { AppSettings.setHidePlaylistPlayButtonLabel(!hidePlaylistPlayButtonLabel) },
+            )
+            RowDivider()
             SettingsRow(
                 icon = Icons.Rounded.FileUpload,
                 title = stringResource(R.string.import_m3u_playlist),

@@ -776,6 +776,7 @@ fun LocalMusicScreen(
                             artworkUrl = drillDownArt,
                             songs = drillDownSongs,
                             isArtist = drillDownIsArtist,
+                            isPlaylist = drillDownPlaylistId != null,
                             showCollectionArtworkInList = showCollectionSongArtwork &&
                                 drillDownPlaylistId == null && (drillDownIsArtist || drillDownFullScreenArtwork),
                             preserveArtworkAspectRatioInCollections =

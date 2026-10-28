@@ -301,6 +301,33 @@ private const val ART_PX = PLAYER_ART_PX
 /** Auris' wider full-bleed crop, gated by an explicit player setting. */
 private const val AURIS_LARGE_FULL_BLEED_ZOOM = 1.234f
 
+private class CenteredPlayerButtonArrangement(private val gapDp: Float) : Arrangement.Horizontal {
+    override fun Density.arrange(
+        totalSize: Int,
+        sizes: IntArray,
+        layoutDirection: LayoutDirection,
+        outPositions: IntArray,
+    ) {
+        val gapCount = (sizes.size - 1).coerceAtLeast(0)
+        val contentSize = sizes.sum()
+        val requestedGap = gapDp.dp.roundToPx().coerceAtLeast(0)
+        val availableGap = if (gapCount == 0) 0 else (totalSize - contentSize).coerceAtLeast(0) / gapCount
+        val gap = minOf(requestedGap, availableGap)
+        var cursor = ((totalSize - contentSize - gap * gapCount) / 2).coerceAtLeast(0)
+        sizes.forEachIndexed { index, size ->
+            outPositions[index] = if (layoutDirection == LayoutDirection.Ltr) {
+                cursor
+            } else {
+                totalSize - cursor - size
+            }
+            cursor += size + gap
+        }
+    }
+}
+
+private fun playerButtonArrangement(gapDp: Float): Arrangement.Horizontal =
+    if (gapDp <= 0f) Arrangement.SpaceEvenly else CenteredPlayerButtonArrangement(gapDp)
+
 /**
  * How many further goes a cover that failed to load gets.
  *
@@ -387,6 +414,7 @@ private val ART_BOX_TOP_PAD = 8.dp
  * that was cut off rather than one that ran out.
  */
 private const val HERO_FADE_FRACTION = 0.42f
+private const val LARGE_HERO_FADE_FRACTION = 0.27f
 
 /**
  * How often the backdrop re-reads the colours of a playing Canvas clip.
@@ -929,39 +957,13 @@ fun NowPlayingScreen(
     val playerArtistFontSizeSp by AppSettings.playerArtistFontSizeSp.collectAsStateWithLifecycle()
     val playerPlayPauseIconSizeDp by AppSettings.playerPlayPauseIconSizeDp.collectAsStateWithLifecycle()
     val playerTransportButtonSpacingDp by AppSettings.playerTransportButtonSpacingDp.collectAsStateWithLifecycle()
+    val playerActionButtonSpacingDp by AppSettings.playerActionButtonSpacingDp.collectAsStateWithLifecycle()
     val autoShowLyricsOnPlayback by AppSettings.autoShowLyricsOnPlayback.collectAsStateWithLifecycle()
     val transportButtonArrangement = remember(playerTransportButtonSpacingDp) {
-        if (playerTransportButtonSpacingDp <= 0f) {
-            Arrangement.SpaceEvenly
-        } else {
-            object : Arrangement.Horizontal {
-                override fun Density.arrange(
-                    totalSize: Int,
-                    sizes: IntArray,
-                    layoutDirection: LayoutDirection,
-                    outPositions: IntArray,
-                ) {
-                    val gapCount = (sizes.size - 1).coerceAtLeast(0)
-                    val contentSize = sizes.sum()
-                    val requestedGap = playerTransportButtonSpacingDp.dp.roundToPx().coerceAtLeast(0)
-                    val availableGap = if (gapCount == 0) {
-                        0
-                    } else {
-                        (totalSize - contentSize).coerceAtLeast(0) / gapCount
-                    }
-                    val gap = minOf(requestedGap, availableGap)
-                    var cursor = ((totalSize - contentSize - gap * gapCount) / 2).coerceAtLeast(0)
-                    sizes.forEachIndexed { index, size ->
-                        outPositions[index] = if (layoutDirection == LayoutDirection.Ltr) {
-                            cursor
-                        } else {
-                            totalSize - cursor - size
-                        }
-                        cursor += size + gap
-                    }
-                }
-            }
-        }
+        playerButtonArrangement(playerTransportButtonSpacingDp)
+    }
+    val playerActionButtonArrangement = remember(playerActionButtonSpacingDp) {
+        playerButtonArrangement(playerActionButtonSpacingDp)
     }
     val showPlayerTopGrabber by AppSettings.showPlayerTopGrabber.collectAsStateWithLifecycle()
     val hideLyricsStatusText by AppSettings.hideLyricsStatusText.collectAsStateWithLifecycle()
@@ -990,7 +992,9 @@ fun NowPlayingScreen(
     val offlineMode by AppSettings.offlineMode.collectAsStateWithLifecycle()
     val visiblePlayerControls by AppSettings.visiblePlayerControls.collectAsStateWithLifecycle()
     val playerControlOrder by AppSettings.playerControlOrder.collectAsStateWithLifecycle()
-    val aurisPlayerActionStyle by AppSettings.aurisPlayerActionStyle.collectAsStateWithLifecycle()
+    val appleMusicLyricsButtonStyle by AppSettings.appleMusicLyricsButtonStyle.collectAsStateWithLifecycle()
+    val appleMusicChromecastButtonStyle by AppSettings.appleMusicChromecastButtonStyle.collectAsStateWithLifecycle()
+    val appleMusicQueueButtonStyle by AppSettings.appleMusicQueueButtonStyle.collectAsStateWithLifecycle()
     val hidePlayerArtist by AppSettings.hidePlayerArtist.collectAsStateWithLifecycle()
     val hideUnknownPlayerArtist by AppSettings.hideUnknownPlayerArtist.collectAsStateWithLifecycle()
     val centerPlayerTrackInfo by AppSettings.centerPlayerTrackInfo.collectAsStateWithLifecycle()
@@ -1452,6 +1456,7 @@ fun NowPlayingScreen(
     // API level now, and both layers answer to this.
     val heroMode = fullBleedArt && (docked || playerFillsWindow(windowWidth))
     val useLargerHeroArtwork = heroMode && largerFullBleedArtwork
+    val heroFadeFraction = if (useLargerHeroArtwork) LARGE_HERO_FADE_FRACTION else HERO_FADE_FRACTION
     // Whether there's a still image to blow out — a placeholder tile is a card
     // or it is nothing, and going full-bleed with one would just tint the top
     // third of the screen.
@@ -1731,7 +1736,7 @@ fun NowPlayingScreen(
                                     drawRect(
                                         brush = Brush.verticalGradient(
                                             colors = listOf(Color.Black, Color.Transparent),
-                                            startY = size.height * (1f - HERO_FADE_FRACTION),
+                                            startY = size.height * (1f - heroFadeFraction),
                                             endY = size.height,
                                         ),
                                         blendMode = BlendMode.DstIn,
@@ -1782,13 +1787,50 @@ fun NowPlayingScreen(
                             drawRect(
                                 brush = Brush.verticalGradient(
                                     colors = listOf(Color.Black, Color.Transparent),
-                                    startY = size.height * (1f - HERO_FADE_FRACTION),
+                                    startY = size.height * (1f - heroFadeFraction),
                                     endY = size.height,
                                 ),
                                 blendMode = BlendMode.DstIn,
                             )
                         },
                 )
+                if (useLargerHeroArtwork) {
+                    AsyncImage(
+                        // The softer lower edge reuses the same decoded image;
+                        // it adds no separate artwork lookup or cache entry.
+                        model = artRequest,
+                        contentDescription = null,
+                        contentScale = ContentScale.Crop,
+                        modifier = Modifier
+                            .align(Alignment.TopStart)
+                            .fillMaxWidth()
+                            .height(heroHeight)
+                            .clipToBounds()
+                            .graphicsLayer {
+                                alpha = heroVisible *
+                                    (1f - if (heroClip != null) canvasCover.floatValue else 0f)
+                                scaleX = AURIS_LARGE_FULL_BLEED_ZOOM
+                                scaleY = AURIS_LARGE_FULL_BLEED_ZOOM
+                                transformOrigin = TransformOrigin(0.5f, 0f)
+                                compositingStrategy = CompositingStrategy.Offscreen
+                            }
+                            .drawWithContent {
+                                drawContent()
+                                drawRect(
+                                    brush = Brush.verticalGradient(
+                                        colorStops = arrayOf(
+                                            0.63f to Color.Transparent,
+                                            0.77f to Color.Black.copy(alpha = 0.58f),
+                                            0.90f to Color.Black.copy(alpha = 0.82f),
+                                            1f to Color.Transparent,
+                                        ),
+                                    ),
+                                    blendMode = BlendMode.DstIn,
+                                )
+                            }
+                            .blur(42.dp, BlurredEdgeTreatment.Rectangle),
+                    )
+                }
             }
 
             // Motion artwork over it, in the same frame.
@@ -1805,7 +1847,7 @@ fun NowPlayingScreen(
                         onFrameCaptured = { canvasFrame = it },
                         refreshFrameEveryMs = meshRefreshMs,
                         onCoverChanged = { canvasCover.floatValue = it },
-                        bottomFade = HERO_FADE_FRACTION,
+                        bottomFade = heroFadeFraction,
                         extraZoom = if (useLargerHeroArtwork) AURIS_LARGE_FULL_BLEED_ZOOM else 1f,
                         modifier = Modifier
                             .align(Alignment.TopStart)
@@ -2210,7 +2252,8 @@ fun NowPlayingScreen(
                 // screen's top and this box's own top is fixed padding, so it
                 // can simply be added back up rather than measured.
                 val bannerBottom = statusBarTop + topStrip + ART_BOX_TOP_PAD +
-                    targetGroupTop + targetArtHeight + ART_TITLE_GAP / 2
+                    targetGroupTop + targetArtHeight + ART_TITLE_GAP / 2 +
+                    if (useLargerHeroArtwork) HEADER_HEIGHT + ART_TITLE_GAP / 2 else 0.dp
                 // Held where it was while the lyrics are up.
                 //
                 // [groupTop] centres the block in this box's *real* height, and
@@ -3397,7 +3440,7 @@ fun NowPlayingScreen(
             if (visiblePlayerControls.isNotEmpty()) {
                 Row(
                     modifier = Modifier.fillMaxWidth(),
-                    horizontalArrangement = Arrangement.SpaceEvenly,
+                    horizontalArrangement = playerActionButtonArrangement,
                     verticalAlignment = Alignment.CenterVertically,
                 ) {
                     playerControlOrder.forEach { control ->
@@ -3430,7 +3473,7 @@ fun NowPlayingScreen(
                                 },
                             )
                             PlayerControl.LYRICS -> BottomGlyph(
-                                icon = if (aurisPlayerActionStyle) BitChordIcons.AurisLyrics else Icons.AutoMirrored.Rounded.Notes,
+                                icon = if (appleMusicLyricsButtonStyle) BitChordIcons.AurisLyrics else Icons.AutoMirrored.Rounded.Notes,
                                 contentDescription = stringResource(R.string.quick_action_lyrics),
                                 onClick = {
                                     lyricsOpen = !lyricsOpen
@@ -3448,7 +3491,7 @@ fun NowPlayingScreen(
                                 haptic = if (liked) Haptic.ToggleOff else Haptic.ToggleOn,
                             )
                             PlayerControl.QUEUE -> BottomGlyph(
-                                icon = if (aurisPlayerActionStyle) BitChordIcons.AurisQueue else Icons.AutoMirrored.Rounded.QueueMusic,
+                                icon = if (appleMusicQueueButtonStyle) BitChordIcons.AurisQueue else Icons.AutoMirrored.Rounded.QueueMusic,
                                 contentDescription = stringResource(R.string.up_next),
                                 onClick = {
                                     lyricsOpen = false
@@ -3462,7 +3505,7 @@ fun NowPlayingScreen(
                                     .size(44.dp)
                                     .clip(CircleShape)
                                     .background(
-                                        if (aurisPlayerActionStyle) Color.White.copy(alpha = 0.06f)
+                                        if (appleMusicChromecastButtonStyle) Color.White.copy(alpha = 0.06f)
                                         else Color.Transparent,
                                     ),
                                 contentAlignment = Alignment.Center,
@@ -3470,8 +3513,8 @@ fun NowPlayingScreen(
                                 CastQuickActionButton(
                                     onUnavailable = { onQuickMenuAction(PlayerQuickAction.CHROMECAST) },
                                     modifier = Modifier.size(44.dp),
-                                    fallbackIcon = if (aurisPlayerActionStyle) BitChordIcons.AurisOutput else Icons.Rounded.Cast,
-                                    aurisStyle = aurisPlayerActionStyle,
+                                    fallbackIcon = if (appleMusicChromecastButtonStyle) BitChordIcons.AurisOutput else Icons.Rounded.Cast,
+                                    appleMusicStyle = appleMusicChromecastButtonStyle,
                                 )
                             }
                             PlayerControl.PLAYLIST -> BottomGlyph(

@@ -345,6 +345,7 @@ private fun FullScreenCollectionHeader(
 @Composable
 fun DrillDownActionRow(
     songs: List<Song>,
+    isPlaylist: Boolean = false,
     viewType: LibraryViewType? = null,
     onViewTypeToggle: (() -> Unit)? = null,
     onSongClick: (List<Song>, Int) -> Unit,
@@ -357,6 +358,8 @@ fun DrillDownActionRow(
     modifier: Modifier = Modifier,
 ) {
     val whiteActionButtons by AppSettings.whiteCollectionActionButtons.collectAsStateWithLifecycle()
+    val hidePlaylistPlayButtonLabel by AppSettings.hidePlaylistPlayButtonLabel.collectAsStateWithLifecycle()
+    val showPlayLabel = !isPlaylist || !hidePlaylistPlayButtonLabel
     val buttonBackground = if (whiteActionButtons) Color.White else MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.7f)
     val buttonBorder = if (whiteActionButtons) Color.Transparent else MaterialTheme.colorScheme.onSurface.copy(alpha = 0.08f)
     val buttonContentColor = if (whiteActionButtons) Color.Black else MaterialTheme.colorScheme.onSurface
@@ -391,22 +394,24 @@ fun DrillDownActionRow(
                 .background(buttonBackground)
                 .border(0.5.dp, buttonBorder, CircleShape)
                 .clickable { if (songs.isNotEmpty()) onSongClick(songs, 0) }
-                .padding(horizontal = 32.dp),
+                .padding(horizontal = if (showPlayLabel) 32.dp else 16.dp),
             verticalAlignment = Alignment.CenterVertically,
             horizontalArrangement = Arrangement.Center,
         ) {
             Icon(
                 BitChordIcons.Play,
-                contentDescription = null,
+                contentDescription = if (showPlayLabel) null else stringResource(R.string.play),
                 tint = buttonContentColor,
                 modifier = Modifier.size(18.dp),
             )
-            Spacer(Modifier.width(6.dp))
-            Text(
-                text = stringResource(R.string.play),
-                style = MaterialTheme.typography.titleMedium,
-                color = buttonContentColor,
-            )
+            if (showPlayLabel) Spacer(Modifier.width(6.dp))
+            if (showPlayLabel) {
+                Text(
+                    text = stringResource(R.string.play),
+                    style = MaterialTheme.typography.titleMedium,
+                    color = buttonContentColor,
+                )
+            }
         }
         if (onViewTypeToggle != null && viewType != null) {
             Box(
@@ -529,9 +534,10 @@ fun SongGridCard(
                 tint = MaterialTheme.colorScheme.onSurfaceVariant,
                 modifier = Modifier.size(36.dp),
             )
-            if (song.thumbnailUrl != null) {
+            val artworkUrl = song.artworkAt(CARD_ART_PX)
+            if (artworkUrl != null) {
                 AsyncImage(
-                    model = song.thumbnailUrl.artworkAt(CARD_ART_PX),
+                    model = artworkUrl,
                     contentDescription = null,
                     contentScale = if (preserveArtworkAspectRatio) ContentScale.Fit else ContentScale.Crop,
                     modifier = Modifier.fillMaxSize(),
@@ -690,6 +696,7 @@ fun DrillDownSongList(
                 if (!selectionMode) item(span = { GridItemSpan(maxLineSpan) }) {
                     DrillDownActionRow(
                         songs = songs,
+                        isPlaylist = isPlaylist,
                         viewType = viewType,
                         onViewTypeToggle = onViewTypeToggle,
                         onSongClick = onSongClick,
@@ -810,6 +817,7 @@ fun DrillDownSongList(
                 if (!selectionMode) item {
                     DrillDownActionRow(
                         songs = songs,
+                        isPlaylist = isPlaylist,
                         viewType = viewType,
                         onViewTypeToggle = onViewTypeToggle,
                         onSongClick = onSongClick,

@@ -67,7 +67,7 @@ fun CastQuickActionButton(
     onUnavailable: () -> Unit,
     modifier: Modifier = Modifier,
     fallbackIcon: ImageVector = Icons.Rounded.Cast,
-    aurisStyle: Boolean = false,
+    appleMusicStyle: Boolean = false,
 ) {
     val context = LocalContext.current
     val castContext = remember(context) { runCatching { CastContext.getSharedInstance(context) }.getOrNull() }
@@ -81,7 +81,7 @@ fun CastQuickActionButton(
                 MediaRouteButton(viewContext).also {
                     it.contentDescription = viewContext.getString(R.string.chromecast)
                     CastButtonFactory.setUpMediaRouteButton(viewContext, it)
-                    if (aurisStyle) {
+                    if (appleMusicStyle) {
                         ContextCompat.getDrawable(viewContext, R.drawable.ic_auris_player_output)?.let(it::setRemoteIndicatorDrawable)
                     }
                 }

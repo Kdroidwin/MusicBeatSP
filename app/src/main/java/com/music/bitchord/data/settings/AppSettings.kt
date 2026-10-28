@@ -546,6 +546,10 @@ object AppSettings {
     val playerPlayPauseIconSizeDp = MutableStateFlow(62f)
     /** Extra spacing between the player transport buttons; zero keeps the existing even layout. */
     val playerTransportButtonSpacingDp = MutableStateFlow(0f)
+    /** Extra spacing between the player action buttons below the volume row. */
+    val playerActionButtonSpacingDp = MutableStateFlow(0f)
+    /** Hides only the word label on the play button in playlist detail pages. */
+    val hidePlaylistPlayButtonLabel = MutableStateFlow(false)
     /** Shows the small drag handle at the top of the expanded player by default. */
     val showPlayerTopGrabber = MutableStateFlow(true)
     /** App-level second consent for cleartext connections to a configured local server. */
@@ -783,8 +787,10 @@ object AppSettings {
     /** Presentation-only visibility for the four secondary player controls. */
     val visiblePlayerControls = MutableStateFlow(DEFAULT_PLAYER_CONTROLS)
     val playerControlOrder = MutableStateFlow<List<PlayerControl>>(PlayerControl.entries)
-    /** Uses the restrained Lyrics / Cast / Queue glyph treatment from Auris. */
-    val aurisPlayerActionStyle = MutableStateFlow(false)
+    /** Independent Apple Music-inspired glyph styles for the three player actions. */
+    val appleMusicLyricsButtonStyle = MutableStateFlow(false)
+    val appleMusicChromecastButtonStyle = MutableStateFlow(false)
+    val appleMusicQueueButtonStyle = MutableStateFlow(false)
 
     /** Uses the library glyph for the player shortcut that opens playlists. */
     val useLibraryIconForPlaylistControl = MutableStateFlow(false)
@@ -1294,6 +1300,8 @@ object AppSettings {
         playerArtistFontSizeSp.value = prefs.getFloat(KEY_PLAYER_ARTIST_FONT_SIZE_SP, 20f).coerceIn(12f, 36f)
         playerPlayPauseIconSizeDp.value = prefs.getFloat(KEY_PLAYER_PLAY_PAUSE_ICON_SIZE_DP, 62f).coerceIn(40f, 78f)
         playerTransportButtonSpacingDp.value = prefs.getFloat(KEY_PLAYER_TRANSPORT_BUTTON_SPACING_DP, 0f).coerceIn(0f, 24f)
+        playerActionButtonSpacingDp.value = prefs.getFloat(KEY_PLAYER_ACTION_BUTTON_SPACING_DP, 0f).coerceIn(0f, 24f)
+        hidePlaylistPlayButtonLabel.value = prefs.getBoolean(KEY_HIDE_PLAYLIST_PLAY_BUTTON_LABEL, false)
         showPlayerTopGrabber.value = prefs.getBoolean(KEY_SHOW_PLAYER_TOP_GRABBER, true)
         cleartextHttpAllowed.value = prefs.getBoolean(KEY_CLEARTEXT_HTTP_ALLOWED, false)
         whiteCollectionActionButtons.value = prefs.getBoolean(KEY_WHITE_COLLECTION_ACTION_BUTTONS, false)
@@ -1432,7 +1440,21 @@ object AppSettings {
         pausePlaybackAtZeroVolume.value = prefs.getBoolean(KEY_PAUSE_PLAYBACK_AT_ZERO_VOLUME, false)
         visiblePlayerControls.value = readVisiblePlayerControls()
         playerControlOrder.value = readPlayerControlOrder()
-        aurisPlayerActionStyle.value = prefs.getBoolean(KEY_AURIS_PLAYER_ACTION_STYLE, false)
+        val legacyActionStyle = prefs.getBoolean(KEY_AURIS_PLAYER_ACTION_STYLE, false)
+        val hasIndependentActionStyles = prefs.contains(KEY_APPLE_MUSIC_LYRICS_BUTTON_STYLE) ||
+            prefs.contains(KEY_APPLE_MUSIC_CHROMECAST_BUTTON_STYLE) ||
+            prefs.contains(KEY_APPLE_MUSIC_QUEUE_BUTTON_STYLE)
+        val legacyStyleDefault = legacyActionStyle && !hasIndependentActionStyles
+        if (!hasIndependentActionStyles) {
+            prefs.edit()
+                .putBoolean(KEY_APPLE_MUSIC_LYRICS_BUTTON_STYLE, legacyStyleDefault)
+                .putBoolean(KEY_APPLE_MUSIC_CHROMECAST_BUTTON_STYLE, legacyStyleDefault)
+                .putBoolean(KEY_APPLE_MUSIC_QUEUE_BUTTON_STYLE, legacyStyleDefault)
+                .apply()
+        }
+        appleMusicLyricsButtonStyle.value = prefs.getBoolean(KEY_APPLE_MUSIC_LYRICS_BUTTON_STYLE, legacyStyleDefault)
+        appleMusicChromecastButtonStyle.value = prefs.getBoolean(KEY_APPLE_MUSIC_CHROMECAST_BUTTON_STYLE, legacyStyleDefault)
+        appleMusicQueueButtonStyle.value = prefs.getBoolean(KEY_APPLE_MUSIC_QUEUE_BUTTON_STYLE, legacyStyleDefault)
         useLibraryIconForPlaylistControl.value = prefs.getBoolean(KEY_LIBRARY_ICON_FOR_PLAYLIST_CONTROL, false)
         hidePlayerArtist.value = prefs.getBoolean(KEY_HIDE_PLAYER_ARTIST, false)
         hideUnknownPlayerArtist.value = prefs.getBoolean(KEY_HIDE_UNKNOWN_PLAYER_ARTIST, false)
@@ -1908,6 +1930,17 @@ object AppSettings {
         val safe = value.coerceIn(0f, 24f)
         playerTransportButtonSpacingDp.value = safe
         prefs.edit().putFloat(KEY_PLAYER_TRANSPORT_BUTTON_SPACING_DP, safe).apply()
+    }
+
+    fun setPlayerActionButtonSpacingDp(value: Float) {
+        val safe = value.coerceIn(0f, 24f)
+        playerActionButtonSpacingDp.value = safe
+        prefs.edit().putFloat(KEY_PLAYER_ACTION_BUTTON_SPACING_DP, safe).apply()
+    }
+
+    fun setHidePlaylistPlayButtonLabel(value: Boolean) {
+        hidePlaylistPlayButtonLabel.value = value
+        prefs.edit().putBoolean(KEY_HIDE_PLAYLIST_PLAY_BUTTON_LABEL, value).apply()
     }
 
     fun setShowPlayerTopGrabber(value: Boolean) {
@@ -2825,9 +2858,19 @@ object AppSettings {
         prefs.edit().putStringSet(KEY_VISIBLE_PLAYER_CONTROLS, updated.mapTo(mutableSetOf()) { it.name }).apply()
     }
 
-    fun setAurisPlayerActionStyle(value: Boolean) {
-        aurisPlayerActionStyle.value = value
-        prefs.edit().putBoolean(KEY_AURIS_PLAYER_ACTION_STYLE, value).apply()
+    fun setAppleMusicLyricsButtonStyle(value: Boolean) {
+        appleMusicLyricsButtonStyle.value = value
+        prefs.edit().putBoolean(KEY_APPLE_MUSIC_LYRICS_BUTTON_STYLE, value).apply()
+    }
+
+    fun setAppleMusicChromecastButtonStyle(value: Boolean) {
+        appleMusicChromecastButtonStyle.value = value
+        prefs.edit().putBoolean(KEY_APPLE_MUSIC_CHROMECAST_BUTTON_STYLE, value).apply()
+    }
+
+    fun setAppleMusicQueueButtonStyle(value: Boolean) {
+        appleMusicQueueButtonStyle.value = value
+        prefs.edit().putBoolean(KEY_APPLE_MUSIC_QUEUE_BUTTON_STYLE, value).apply()
     }
 
     private fun readVisiblePlayerControls(): Set<PlayerControl> =
@@ -3762,6 +3805,8 @@ object AppSettings {
     private const val KEY_PLAYER_ARTIST_FONT_SIZE_SP = "player_artist_font_size_sp"
     private const val KEY_PLAYER_PLAY_PAUSE_ICON_SIZE_DP = "player_play_pause_icon_size_dp"
     private const val KEY_PLAYER_TRANSPORT_BUTTON_SPACING_DP = "player_transport_button_spacing_dp"
+    private const val KEY_PLAYER_ACTION_BUTTON_SPACING_DP = "player_action_button_spacing_dp"
+    private const val KEY_HIDE_PLAYLIST_PLAY_BUTTON_LABEL = "hide_playlist_play_button_label"
     private const val KEY_SHOW_PLAYER_TOP_GRABBER = "show_player_top_grabber"
     private const val KEY_CLEARTEXT_HTTP_ALLOWED = "cleartext_http_allowed"
     private const val KEY_WHITE_COLLECTION_ACTION_BUTTONS = "white_collection_action_buttons"
@@ -3884,6 +3929,9 @@ object AppSettings {
     private const val KEY_VISIBLE_PLAYER_CONTROLS = "visible_player_controls"
     private const val KEY_PLAYER_CONTROL_ORDER = "player_control_order"
     private const val KEY_AURIS_PLAYER_ACTION_STYLE = "auris_player_action_style"
+    private const val KEY_APPLE_MUSIC_LYRICS_BUTTON_STYLE = "apple_music_lyrics_button_style"
+    private const val KEY_APPLE_MUSIC_CHROMECAST_BUTTON_STYLE = "apple_music_chromecast_button_style"
+    private const val KEY_APPLE_MUSIC_QUEUE_BUTTON_STYLE = "apple_music_queue_button_style"
     private const val KEY_LIBRARY_ICON_FOR_PLAYLIST_CONTROL = "library_icon_for_playlist_control"
     private const val KEY_HIDE_PLAYER_ARTIST = "hide_player_artist"
     private const val KEY_HIDE_UNKNOWN_PLAYER_ARTIST = "hide_unknown_player_artist"

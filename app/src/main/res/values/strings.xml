@@ -962,8 +962,10 @@
     <string name="player_control_shuffle">Shuffle button</string>
     <string name="player_control_repeat">Repeat button</string>
     <string name="player_control_lyrics">Lyrics button</string>
-    <string name="auris_player_action_style">Auris-style lyrics, Chromecast and queue buttons</string>
-    <string name="auris_player_action_style_subtitle">Use Auris’ compact artwork-player icons for Lyrics, Chromecast and Up next. Off by default.</string>
+    <string name="apple_music_lyrics_button_style">Apple Music-style lyrics button</string>
+    <string name="apple_music_chromecast_button_style">Apple Music-style Chromecast button</string>
+    <string name="apple_music_queue_button_style">Apple Music-style queue button</string>
+    <string name="apple_music_button_style_subtitle">Use the Apple Music-inspired icon style for this button only. Off by default.</string>
     <string name="player_control_like">Like button</string>
     <string name="player_control_playlist">Playlists button</string>
     <string name="player_control_search">Search button</string>
@@ -1495,6 +1497,10 @@
     <string name="player_icon_size_value">%1$d dp</string>
     <string name="player_transport_button_spacing">Player transport button spacing</string>
     <string name="player_transport_button_spacing_subtitle">Adjust the gaps between the previous, play, and next controls. Auto keeps the current layout.</string>
+    <string name="player_action_button_spacing">Player lower action button spacing</string>
+    <string name="player_action_button_spacing_subtitle">Adjust the gaps between the lyrics, favorite, queue, and other buttons below the volume control.</string>
+    <string name="hide_playlist_play_button_label">Hide the Play label in playlists</string>
+    <string name="hide_playlist_play_button_label_subtitle">Show only the play icon on playlist detail pages. Off by default.</string>
     <string name="player_transport_spacing_auto">Auto</string>
     <string name="player_transport_spacing_value">%1$d dp</string>
     <string name="show_player_top_grabber">Show player top handle</string>
