@@ -19,7 +19,9 @@ import com.music.bitchord.data.lyrics.LyricLine
 import com.music.bitchord.data.lyrics.LyricsRepository
 import com.music.bitchord.data.lyrics.LyricsSource
 import com.music.bitchord.data.lyrics.toLrc
+import com.music.bitchord.data.lyrics.withBackgroundVocals
 import com.music.bitchord.feature.lyricseditor.data.LocalLyricsManager
+import com.music.bitchord.feature.lyricseditor.domain.model.LyricsEditorSource
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.CancellationException
 import com.music.bitchord.data.settings.AppSettings
@@ -390,6 +392,35 @@ class MainViewModel(app: Application) : AndroidViewModel(app) {
                     _lyricsSource.value = null
                     _lyricsChecked.value = true
                     return@launch
+                }
+            }
+
+            // The editor's Downloaded cache is separate from embedded tags and
+            // companion files. Check every local editor source before asking a
+            // provider so auto-display never performs a needless network lookup
+            // when lyrics are already available for this exact track.
+            val existingLyricsSong = song ?: lastSong
+            if (existingLyricsSong != null) {
+                val localSources = if (preferEmbeddedLocalLyrics) {
+                    listOf(LyricsEditorSource.Embedded, LyricsEditorSource.Downloaded, LyricsEditorSource.File)
+                } else {
+                    listOf(LyricsEditorSource.Downloaded, LyricsEditorSource.File, LyricsEditorSource.Embedded)
+                }
+                for (source in localSources) {
+                    val raw = try {
+                        LocalLyricsManager.readLyrics(getApplication(), existingLyricsSong, source)
+                    } catch (cancelled: CancellationException) {
+                        throw cancelled
+                    } catch (_: Exception) {
+                        ""
+                    }
+                    val existing = EmbeddedLyrics.parseLyrics(raw)
+                    if (existing.any { !it.isGap && it.text.isNotBlank() }) {
+                        _lyrics.value = existing.withBackgroundVocals()
+                        _lyricsSource.value = null
+                        _lyricsChecked.value = true
+                        return@launch
+                    }
                 }
             }
 
