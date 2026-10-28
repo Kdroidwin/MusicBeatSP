@@ -162,7 +162,10 @@ object SourceRegistry {
             .getOrElse { return emptyList() }
         return elements.mapNotNull { element ->
             runCatching { json.decodeFromJsonElement(SourceConfig.serializer(), element) }
-                .onFailure { TrackLog.w(TAG, "dropping unreadable stored source: ${it.message}") }
+                // Source URLs may contain bearer tokens in their path. A
+                // serialization exception can include the offending value,
+                // so log only its type rather than its message.
+                .onFailure { TrackLog.w(TAG, "dropping unreadable stored source (${it::class.simpleName})") }
                 .getOrNull()
         }
     }

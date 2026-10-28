@@ -50,24 +50,24 @@ jobs:
             echo 'Last.fm build values must be single-line.' >&2
             exit 1
           fi
-          printf 'LASTFM_API_KEY=%s\nLASTFM_SECRET=%s\n' "$LASTFM_API_KEY" "$LASTFM_SECRET" > local.properties
-          if [[ -n "$KEYSTORE_BASE64" ]]; then
-            : "${STORE_PASSWORD:?Missing release keystore password}"
-            : "${KEY_ALIAS:?Missing release key alias}"
-            : "${KEY_PASSWORD:?Missing release key password}"
-            if [[ "$STORE_PASSWORD" == *$'\n'* || "$STORE_PASSWORD" == *$'\r'* || "$KEY_ALIAS" == *$'\n'* || "$KEY_ALIAS" == *$'\r'* || "$KEY_PASSWORD" == *$'\n'* || "$KEY_PASSWORD" == *$'\r'* ]]; then
-              echo 'Release signing values must be single-line.' >&2
-              exit 1
-            fi
-            printf '%s' "$KEYSTORE_BASE64" | base64 --decode > musicbeat-release.jks
-            chmod 600 musicbeat-release.jks
-            {
-              printf 'storeFile=musicbeat-release.jks\n'
-              printf 'storePassword=%s\n' "$STORE_PASSWORD"
-              printf 'keyAlias=%s\n' "$KEY_ALIAS"
-              printf 'keyPassword=%s\n' "$KEY_PASSWORD"
-            } > keystore.properties
+          : "${KEYSTORE_BASE64:?Missing release keystore secret}"
+          : "${STORE_PASSWORD:?Missing release keystore password}"
+          : "${KEY_ALIAS:?Missing release key alias}"
+          : "${KEY_PASSWORD:?Missing release key password}"
+          if [[ "$STORE_PASSWORD" == *$'\n'* || "$STORE_PASSWORD" == *$'\r'* || "$KEY_ALIAS" == *$'\n'* || "$KEY_ALIAS" == *$'\r'* || "$KEY_PASSWORD" == *$'\n'* || "$KEY_PASSWORD" == *$'\r'* ]]; then
+            echo 'Release signing values must be single-line.' >&2
+            exit 1
           fi
+          printf 'LASTFM_API_KEY=%s\nLASTFM_SECRET=%s\n' "$LASTFM_API_KEY" "$LASTFM_SECRET" > local.properties
+          printf '%s' "$KEYSTORE_BASE64" | base64 --decode > musicbeat-release.jks
+          test -s musicbeat-release.jks
+          chmod 600 musicbeat-release.jks
+          {
+            printf 'storeFile=musicbeat-release.jks\n'
+            printf 'storePassword=%s\n' "$STORE_PASSWORD"
+            printf 'keyAlias=%s\n' "$KEY_ALIAS"
+            printf 'keyPassword=%s\n' "$KEY_PASSWORD"
+          } > keystore.properties
 
       - name: Grant execute permission for gradlew
         run: chmod +x gradlew
