@@ -1464,4 +1464,13 @@
     <string name="show_player_top_grabber_subtitle">プレイヤーを閉じるときに使う上部の線を表示します。</string>
     <string name="allow_cleartext_http">暗号化されていないHTTPを許可</string>
     <string name="allow_cleartext_http_subtitle">初期設定はオフです。HTTPの利用にはサーバーごとの許可も必要です。認証情報と音源は暗号化されません。</string>
+    <string name="lyrics_editor_source_embedded">埋め込み</string>
+    <string name="lyrics_editor_source_downloaded">ダウンロード済み</string>
+    <string name="lyrics_editor_source_file">ファイル</string>
+    <string name="lyrics_download_title">歌詞をダウンロード</string>
+    <string name="lyrics_download_subtitle">同期歌詞（LRC）や通常の歌詞をオンラインで検索します</string>
+    <string name="show_lyrics_close_button">歌詞画面に×ボタンを表示</string>
+    <string name="show_lyrics_close_button_subtitle">歌詞画面に×ボタンを表示します。非表示の場合はAndroidの戻る操作で閉じられます。</string>
+    <string name="prefer_embedded_local_lyrics">埋め込み歌詞を優先</string>
+    <string name="prefer_embedded_local_lyrics_subtitle">オンにすると、音源タグ内の歌詞をダウンロード済み・同名LRCファイルより先に読み込みます。</string>
 </resources>

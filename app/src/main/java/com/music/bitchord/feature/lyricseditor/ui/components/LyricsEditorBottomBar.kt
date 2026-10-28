@@ -46,6 +46,8 @@ import androidx.compose.ui.draw.shadow
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import androidx.compose.ui.res.stringResource
+import com.music.bitchord.R
 
 @Composable
 fun LyricsEditorBottomBar(
@@ -112,7 +114,7 @@ fun LyricsEditorBottomBar(
                 ) {
                     Icon(
                         imageVector = Icons.Rounded.Download,
-                        contentDescription = "Download lyrics",
+                        contentDescription = stringResource(R.string.lyrics_download_title),
                         modifier = Modifier.size(22.dp),
                     )
                 }

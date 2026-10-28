@@ -53,6 +53,7 @@ import androidx.compose.material.icons.rounded.Circle
 import androidx.compose.material.icons.rounded.ChevronRight
 import androidx.compose.material.icons.rounded.FolderSpecial
 import androidx.compose.material.icons.rounded.Cloud
+import androidx.compose.material.icons.rounded.Close
 import androidx.compose.material.icons.rounded.DeleteSweep
 import androidx.compose.material.icons.rounded.Edit
 import androidx.compose.material.icons.rounded.Dns
@@ -378,6 +379,8 @@ fun SettingsScreen(
     val lyricsTextAlignment by AppSettings.lyricsTextAlignment.collectAsStateWithLifecycle()
     val showLyricsFurigana by AppSettings.showLyricsFurigana.collectAsStateWithLifecycle()
     val autoFitOneLineLyrics by AppSettings.autoFitOneLineLyrics.collectAsStateWithLifecycle()
+    val preferEmbeddedLocalLyrics by AppSettings.preferEmbeddedLocalLyrics.collectAsStateWithLifecycle()
+    val showLyricsCloseButton by AppSettings.showLyricsCloseButton.collectAsStateWithLifecycle()
     val hideLyricsStatusText by AppSettings.hideLyricsStatusText.collectAsStateWithLifecycle()
     val hideLyricsSavedMessage by AppSettings.hideLyricsSavedMessage.collectAsStateWithLifecycle()
     val hideLyricsUnavailableLabel by AppSettings.hideLyricsUnavailableLabel.collectAsStateWithLifecycle()
@@ -527,6 +530,8 @@ fun SettingsScreen(
     fun buildSettingsSearchEntries(): List<SettingsSearchEntry> {
         return listOf(
         SettingsSearchEntry(stringResource(R.string.hide_lyrics_status_text), stringResource(R.string.hide_lyrics_status_text_subtitle), listOf("lyrics", "歌詞", "状態", "status"), hideLyricsStatusText) { AppSettings.setHideLyricsStatusText(!hideLyricsStatusText) },
+        SettingsSearchEntry(stringResource(R.string.show_lyrics_close_button), stringResource(R.string.show_lyrics_close_button_subtitle), listOf("lyrics", "歌詞", "close", "閉じる", "×"), showLyricsCloseButton) { AppSettings.setShowLyricsCloseButton(!showLyricsCloseButton) },
+        SettingsSearchEntry(stringResource(R.string.prefer_embedded_local_lyrics), stringResource(R.string.prefer_embedded_local_lyrics_subtitle), listOf("lyrics", "歌詞", "embedded", "埋め込み", "downloaded", "優先順位", "lrc"), preferEmbeddedLocalLyrics) { AppSettings.setPreferEmbeddedLocalLyrics(!preferEmbeddedLocalLyrics) },
         SettingsSearchEntry(stringResource(R.string.hide_lyrics_saved_message), stringResource(R.string.hide_lyrics_saved_message_subtitle), listOf("lyrics", "歌詞", "保存済み", "downloaded"), hideLyricsSavedMessage) { AppSettings.setHideLyricsSavedMessage(!hideLyricsSavedMessage) },
         SettingsSearchEntry(stringResource(R.string.hide_lyrics_unavailable_label), stringResource(R.string.hide_lyrics_unavailable_label_subtitle), listOf("lyrics", "歌詞", "ありません", "unavailable"), hideLyricsUnavailableLabel) { AppSettings.setHideLyricsUnavailableLabel(!hideLyricsUnavailableLabel) },
         SettingsSearchEntry(stringResource(R.string.hide_lyrics_gap_note), stringResource(R.string.hide_lyrics_gap_note_subtitle), listOf("lyrics", "歌詞", "音符", "gap", "instrumental"), hideLyricsGapNote) { AppSettings.setHideLyricsGapNote(!hideLyricsGapNote) },
@@ -3812,6 +3817,40 @@ fun SettingsScreen(
                     )
                 },
                 onClick = { AppSettings.setHidePlayerHeaderDuringLyrics(!hidePlayerHeaderDuringLyrics) },
+            )
+            RowDivider()
+            SettingsRow(
+                icon = Icons.Rounded.Close,
+                title = stringResource(R.string.show_lyrics_close_button),
+                subtitle = stringResource(R.string.show_lyrics_close_button_subtitle),
+                trailing = {
+                    Switch(
+                        checked = showLyricsCloseButton,
+                        onCheckedChange = AppSettings::setShowLyricsCloseButton,
+                        colors = SwitchDefaults.colors(
+                            checkedTrackColor = MaterialTheme.colorScheme.primary,
+                            checkedBorderColor = MaterialTheme.colorScheme.primary,
+                        ),
+                    )
+                },
+                onClick = { AppSettings.setShowLyricsCloseButton(!showLyricsCloseButton) },
+            )
+            RowDivider()
+            SettingsRow(
+                icon = Icons.AutoMirrored.Rounded.Notes,
+                title = stringResource(R.string.prefer_embedded_local_lyrics),
+                subtitle = stringResource(R.string.prefer_embedded_local_lyrics_subtitle),
+                trailing = {
+                    Switch(
+                        checked = preferEmbeddedLocalLyrics,
+                        onCheckedChange = AppSettings::setPreferEmbeddedLocalLyrics,
+                        colors = SwitchDefaults.colors(
+                            checkedTrackColor = MaterialTheme.colorScheme.primary,
+                            checkedBorderColor = MaterialTheme.colorScheme.primary,
+                        ),
+                    )
+                },
+                onClick = { AppSettings.setPreferEmbeddedLocalLyrics(!preferEmbeddedLocalLyrics) },
             )
             // Nothing to choose between while the feature is off, and the
             // sources are third-party services being reached on the user's

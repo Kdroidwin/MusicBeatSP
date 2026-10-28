@@ -58,12 +58,14 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.platform.LocalFocusManager
+import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.input.ImeAction
 import androidx.compose.ui.text.input.KeyboardCapitalization
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
+import com.music.bitchord.R
 import com.music.bitchord.data.lyrics.LyricsSource
 import com.music.bitchord.data.settings.AppSettings
 import com.music.bitchord.feature.lyrics.manager.LyricsExtensionManager
@@ -143,14 +145,14 @@ fun LyricsDownloadSheet(
 
                 Column(modifier = Modifier.weight(1f)) {
                     Text(
-                        text = "Download lyrics",
+                        text = stringResource(R.string.lyrics_download_title),
                         style = MaterialTheme.typography.titleLarge.copy(
                             fontWeight = FontWeight.Bold,
                             letterSpacing = (-0.3).sp,
                         ),
                     )
                     Text(
-                        text = "Search online providers for synced LRC and plain lyrics",
+                        text = stringResource(R.string.lyrics_download_subtitle),
                         style = MaterialTheme.typography.bodySmall,
                         color = MaterialTheme.colorScheme.onSurfaceVariant,
                     )

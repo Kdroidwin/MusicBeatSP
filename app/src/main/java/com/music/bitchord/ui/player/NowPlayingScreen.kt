@@ -922,6 +922,7 @@ fun NowPlayingScreen(
     val playerPlayPauseIconSizeDp by AppSettings.playerPlayPauseIconSizeDp.collectAsStateWithLifecycle()
     val showPlayerTopGrabber by AppSettings.showPlayerTopGrabber.collectAsStateWithLifecycle()
     val hideLyricsStatusText by AppSettings.hideLyricsStatusText.collectAsStateWithLifecycle()
+    val showLyricsCloseButton by AppSettings.showLyricsCloseButton.collectAsStateWithLifecycle()
     val hideLyricsSavedMessage by AppSettings.hideLyricsSavedMessage.collectAsStateWithLifecycle()
     val hideLyricsUnavailableLabel by AppSettings.hideLyricsUnavailableLabel.collectAsStateWithLifecycle()
     val showLyricsPreviousControl by AppSettings.showLyricsPreviousControl.collectAsStateWithLifecycle()
@@ -2712,7 +2713,7 @@ fun NowPlayingScreen(
                                 modifier = Modifier.fillMaxSize(),
                             )
                         }
-                        Row(
+                        if (showLyricsLogsEnabled || showLyricsCloseButton) Row(
                             modifier = Modifier
                                 .align(Alignment.TopEnd)
                                 .padding(top = lyricsTopPadding + 4.dp, end = 8.dp),
@@ -2738,22 +2739,24 @@ fun NowPlayingScreen(
                                     )
                                 }
                             }
-                            IconButton(
-                                onClick = {
-                                    lyricsLogsOpen = false
-                                    lyricsOpen = false
-                                },
-                                modifier = Modifier
-                                    .size(40.dp)
-                                    .clip(CircleShape)
-                                    .background(Color.Black.copy(alpha = 0.35f)),
-                            ) {
-                                Icon(
-                                    imageVector = Icons.Rounded.Close,
-                                    contentDescription = stringResource(R.string.close_lyrics),
-                                    tint = Color.White,
-                                    modifier = Modifier.size(21.dp),
-                                )
+                            if (showLyricsCloseButton) {
+                                IconButton(
+                                    onClick = {
+                                        lyricsLogsOpen = false
+                                        lyricsOpen = false
+                                    },
+                                    modifier = Modifier
+                                        .size(40.dp)
+                                        .clip(CircleShape)
+                                        .background(Color.Black.copy(alpha = 0.35f)),
+                                ) {
+                                    Icon(
+                                        imageVector = Icons.Rounded.Close,
+                                        contentDescription = stringResource(R.string.close_lyrics),
+                                        tint = Color.White,
+                                        modifier = Modifier.size(21.dp),
+                                    )
+                                }
                             }
                         }
                     }
@@ -2978,12 +2981,12 @@ fun NowPlayingScreen(
                 Box(
                     modifier = Modifier
                         .fillMaxWidth()
-                        .height(IntrinsicSize.Min),
+                        .height(48.dp),
                 ) {
                     Row(
                         modifier = Modifier
                             .fillMaxWidth()
-                            .height(IntrinsicSize.Min),
+                            .fillMaxHeight(),
                         verticalAlignment = Alignment.CenterVertically,
                     ) {
                         // Logs icon — only shown when the debug-log setting is on
@@ -3042,28 +3045,30 @@ fun NowPlayingScreen(
                             // position is independent of both the X and the log icon.
                             Spacer(Modifier.weight(1f))
                         }
-                        Spacer(Modifier.width(8.dp))
-                        Box(
-                            modifier = Modifier
-                                .size(48.dp)
-                                .clip(CircleShape)
-                                .background(Color.White.copy(alpha = 0.10f))
-                                .clickable(
-                                    interactionSource = remember { MutableInteractionSource() },
-                                    indication = null,
-                                ) {
-                                    haptics.play(Haptic.Tap)
-                                    lyricsLogsOpen = false
-                                    lyricsOpen = false
-                                },
-                            contentAlignment = Alignment.Center,
-                        ) {
-                            Icon(
-                                imageVector = Icons.Rounded.Close,
-                                contentDescription = stringResource(R.string.close_lyrics),
-                                tint = Color.White.copy(alpha = 0.7f),
-                                modifier = Modifier.size(22.dp),
-                            )
+                        if (showLyricsCloseButton) {
+                            Spacer(Modifier.width(8.dp))
+                            Box(
+                                modifier = Modifier
+                                    .size(48.dp)
+                                    .clip(CircleShape)
+                                    .background(Color.White.copy(alpha = 0.10f))
+                                    .clickable(
+                                        interactionSource = remember { MutableInteractionSource() },
+                                        indication = null,
+                                    ) {
+                                        haptics.play(Haptic.Tap)
+                                        lyricsLogsOpen = false
+                                        lyricsOpen = false
+                                    },
+                                contentAlignment = Alignment.Center,
+                            ) {
+                                Icon(
+                                    imageVector = Icons.Rounded.Close,
+                                    contentDescription = stringResource(R.string.close_lyrics),
+                                    tint = Color.White.copy(alpha = 0.7f),
+                                    modifier = Modifier.size(22.dp),
+                                )
+                            }
                         }
                     }
                     if (!headerLabelVisible) {
@@ -3073,7 +3078,7 @@ fun NowPlayingScreen(
                             } else {
                                 Modifier
                                     .align(Alignment.CenterEnd)
-                                    .padding(end = 56.dp)
+                                    .padding(end = if (showLyricsCloseButton) 56.dp else 0.dp)
                             },
                             verticalAlignment = Alignment.CenterVertically,
                         ) {

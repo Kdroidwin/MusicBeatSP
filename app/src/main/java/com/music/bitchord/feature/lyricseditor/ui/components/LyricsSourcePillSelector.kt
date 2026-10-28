@@ -34,6 +34,8 @@ import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import androidx.compose.ui.res.stringResource
+import com.music.bitchord.R
 import com.music.bitchord.feature.lyricseditor.domain.model.LyricsEditorSource
 
 @Composable
@@ -123,7 +125,13 @@ fun LyricsSourcePillSelector(
                                 modifier = Modifier.size(16.dp),
                             )
                             Text(
-                                text = source.displayName,
+                                text = stringResource(
+                                    when (source) {
+                                        LyricsEditorSource.Embedded -> R.string.lyrics_editor_source_embedded
+                                        LyricsEditorSource.Downloaded -> R.string.lyrics_editor_source_downloaded
+                                        LyricsEditorSource.File -> R.string.lyrics_editor_source_file
+                                    },
+                                ),
                                 style = MaterialTheme.typography.labelMedium.copy(
                                     fontWeight = if (isSelected) FontWeight.Bold else FontWeight.Medium,
                                     fontSize = 12.5.sp,

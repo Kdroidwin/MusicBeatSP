@@ -1490,4 +1490,13 @@
     <string name="show_player_top_grabber_subtitle">Show the line used to drag the player closed.</string>
     <string name="allow_cleartext_http">Allow cleartext HTTP</string>
     <string name="allow_cleartext_http_subtitle">Off by default. HTTP also requires the server-specific HTTP option. Credentials and media are unencrypted.</string>
+    <string name="lyrics_editor_source_embedded">Embedded</string>
+    <string name="lyrics_editor_source_downloaded">Downloaded</string>
+    <string name="lyrics_editor_source_file">File</string>
+    <string name="lyrics_download_title">Download lyrics</string>
+    <string name="lyrics_download_subtitle">Search online providers for synced LRC and plain lyrics</string>
+    <string name="show_lyrics_close_button">Show close button on lyrics</string>
+    <string name="show_lyrics_close_button_subtitle">Show an × button in the lyrics panel. When hidden, use Android Back to close lyrics.</string>
+    <string name="prefer_embedded_local_lyrics">Prefer embedded lyrics</string>
+    <string name="prefer_embedded_local_lyrics_subtitle">When on, lyrics in audio tags are checked before downloaded or companion LRC files.</string>
 </resources>
