@@ -823,6 +823,8 @@ object AppSettings {
     val useLibraryIconForPlaylistControl = MutableStateFlow(false)
     val hidePlayerArtist = MutableStateFlow(false)
     val hideUnknownPlayerArtist = MutableStateFlow(false)
+    /** Hides only the literal unknown-artist tag in playlist track lists. */
+    val hideUnknownPlaylistArtist = MutableStateFlow(false)
     val centerPlayerTrackInfo = MutableStateFlow(false)
     val playerDetailsVerticalMenu = MutableStateFlow(false)
     val preloadAlbumArtOnStartup = MutableStateFlow(false)
@@ -1526,6 +1528,7 @@ object AppSettings {
         useLibraryIconForPlaylistControl.value = prefs.getBoolean(KEY_LIBRARY_ICON_FOR_PLAYLIST_CONTROL, false)
         hidePlayerArtist.value = prefs.getBoolean(KEY_HIDE_PLAYER_ARTIST, false)
         hideUnknownPlayerArtist.value = prefs.getBoolean(KEY_HIDE_UNKNOWN_PLAYER_ARTIST, false)
+        hideUnknownPlaylistArtist.value = prefs.getBoolean(KEY_HIDE_UNKNOWN_PLAYLIST_ARTIST, false)
         centerPlayerTrackInfo.value = prefs.getBoolean(KEY_CENTER_PLAYER_TRACK_INFO, false)
         playerDetailsVerticalMenu.value = prefs.getBoolean(KEY_PLAYER_DETAILS_VERTICAL_MENU, false)
         preloadAlbumArtOnStartup.value = prefs.getBoolean(KEY_PRELOAD_ALBUM_ART_ON_STARTUP, false)
@@ -2918,6 +2921,11 @@ object AppSettings {
         prefs.edit().putBoolean(KEY_HIDE_UNKNOWN_PLAYER_ARTIST, value).apply()
     }
 
+    fun setHideUnknownPlaylistArtist(value: Boolean) {
+        hideUnknownPlaylistArtist.value = value
+        prefs.edit().putBoolean(KEY_HIDE_UNKNOWN_PLAYLIST_ARTIST, value).apply()
+    }
+
     fun setCenterPlayerTrackInfo(value: Boolean) {
         centerPlayerTrackInfo.value = value
         prefs.edit().putBoolean(KEY_CENTER_PLAYER_TRACK_INFO, value).apply()
@@ -4064,6 +4072,7 @@ object AppSettings {
     private const val KEY_LIBRARY_ICON_FOR_PLAYLIST_CONTROL = "library_icon_for_playlist_control"
     private const val KEY_HIDE_PLAYER_ARTIST = "hide_player_artist"
     private const val KEY_HIDE_UNKNOWN_PLAYER_ARTIST = "hide_unknown_player_artist"
+    private const val KEY_HIDE_UNKNOWN_PLAYLIST_ARTIST = "hide_unknown_playlist_artist"
     private const val KEY_CENTER_PLAYER_TRACK_INFO = "center_player_track_info"
     private const val KEY_PLAYER_DETAILS_VERTICAL_MENU = "player_details_vertical_menu"
     private const val KEY_PRELOAD_ALBUM_ART_ON_STARTUP = "preload_album_art_on_startup"

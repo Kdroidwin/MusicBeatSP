@@ -1058,6 +1058,8 @@
     <string name="hide_player_artist_subtitle">曲名は残して、アーティスト名だけを隠します</string>
     <string name="hide_unknown_player_artist">不明なアーティストを隠す</string>
     <string name="hide_unknown_player_artist_subtitle">アーティスト名がUnknown Artistの場合、自動的に行を隠します</string>
+    <string name="hide_unknown_playlist_artist">プレイリストで不明なアーティストを隠す</string>
+    <string name="hide_unknown_playlist_artist_subtitle">曲のアーティストタグが &lt;unknown&gt; の場合、プレイリスト内のアーティスト行を隠します</string>
     <string name="center_player_track_info">プレーヤーの楽曲情報を中央揃え</string>
     <string name="center_player_track_info_subtitle">アートの下にある曲名とアーティスト名を中央に揃えます</string>
     <string name="player_control_order_subtitle">プレーヤーボタンの順序と表示を変更します</string>

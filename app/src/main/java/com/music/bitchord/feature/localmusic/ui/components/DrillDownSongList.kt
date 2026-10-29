@@ -505,6 +505,7 @@ fun DrillDownActionRow(
 fun SongGridCard(
     song: Song,
     preserveArtworkAspectRatio: Boolean = false,
+    hideUnknownArtistLine: Boolean = false,
     selected: Boolean = false,
     isCurrent: Boolean = false,
     onClick: () -> Unit,
@@ -558,13 +559,15 @@ fun SongGridCard(
             style = MaterialTheme.typography.titleMedium,
             color = MaterialTheme.colorScheme.onBackground,
         )
-        Text(
-            text = song.artist.ifBlank { stringResource(R.string.unknown_artist) },
-            style = MaterialTheme.typography.bodySmall,
-            color = MaterialTheme.colorScheme.onSurfaceVariant,
-            maxLines = 1,
-            overflow = TextOverflow.Ellipsis,
-        )
+        if (!(hideUnknownArtistLine && song.artist.trim().equals("<unknown>", ignoreCase = true))) {
+            Text(
+                text = song.artist.ifBlank { stringResource(R.string.unknown_artist) },
+                style = MaterialTheme.typography.bodySmall,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                maxLines = 1,
+                overflow = TextOverflow.Ellipsis,
+            )
+        }
     }
 }
 
@@ -604,6 +607,7 @@ fun DrillDownSongList(
     onArtworkPaletteChanged: ((ArtworkPalette?) -> Unit)? = null,
     modifier: Modifier = Modifier,
 ) {
+    val hideUnknownPlaylistArtist by AppSettings.hideUnknownPlaylistArtist.collectAsStateWithLifecycle()
     val selectionArtworkUrl = remember(artworkUrl, songs) {
         artworkUrl
             ?.takeIf { it.isNotBlank() && it != "favorites" }
@@ -722,6 +726,8 @@ fun DrillDownSongList(
                 itemsIndexed(songs) { index, song ->
                     SongGridCard(
                         song = song,
+                        hideUnknownArtistLine = isPlaylist && hideUnknownPlaylistArtist &&
+                            song.artist.trim().equals("<unknown>", ignoreCase = true),
                         selected = (song.localUri ?: song.videoId) in selectedIds,
                         isCurrent = song.isSameTrackAs(currentSong),
                         onClick = {
@@ -940,6 +946,8 @@ fun DrillDownSongList(
                             subtitleColor = rowSubtitleColor,
                             downloadedTint = rowAccent,
                             selected = (song.localUri ?: song.videoId) in selectedIds,
+                            hideUnknownArtistLine = isPlaylist && hideUnknownPlaylistArtist &&
+                                song.artist.trim().equals("<unknown>", ignoreCase = true),
                             isCurrent = song.isSameTrackAs(currentSong),
                             isPlaying = song.isSameTrackAs(currentSong) && isPlaying,
                             activeTint = rowAccent,

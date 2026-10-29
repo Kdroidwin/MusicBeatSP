@@ -2475,6 +2475,7 @@ private fun BitChordApp(
                             artworkUrl = page.thumbnailUrl,
                             songs = pageSongs,
                             isArtist = page.type == BrowseType.ARTIST,
+                            isPlaylist = page.type == BrowseType.PLAYLIST,
                             isSavedToLibrary = savedYoutubeCollections.any { it.browseId == page.browseId },
                             onToggleLibrary = if (
                                 !page.browseId.startsWith("local:") &&

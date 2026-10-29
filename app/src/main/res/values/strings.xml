@@ -1155,6 +1155,8 @@
     <string name="hide_player_artist_subtitle">Keep the track title and hide only the artist line</string>
     <string name="hide_unknown_player_artist">Hide unknown artist</string>
     <string name="hide_unknown_player_artist_subtitle">Automatically hide the artist line when its name is Unknown Artist</string>
+    <string name="hide_unknown_playlist_artist">Hide unknown artist in playlists</string>
+    <string name="hide_unknown_playlist_artist_subtitle">Hide the artist line in playlist track lists when the tag is &lt;unknown&gt;</string>
     <string name="center_player_track_info">Center player track information</string>
     <string name="center_player_track_info_subtitle">Center the title and artist below the artwork</string>
     <string name="player_control_order_subtitle">Change order and visibility of this player button</string>

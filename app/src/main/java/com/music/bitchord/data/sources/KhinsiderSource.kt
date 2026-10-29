@@ -134,7 +134,9 @@ class KhinsiderSource(
                 // capture); keep them playable even when lossless is preferred.
                 StreamRequest.Lossless -> flac ?: mp3
                 StreamRequest.Best -> mp3 ?: flac
-                is StreamRequest.Capped -> mp3
+                // The source does not transcode. Prefer MP3 on a capped request,
+                // but do not make a FLAC-only track unplayable when no MP3 exists.
+                is StreamRequest.Capped -> mp3 ?: flac
             } ?: return@withContext null
 
             SourceStream(
@@ -270,7 +272,10 @@ class KhinsiderSource(
     private fun isAlbumPage(url: HttpUrl): Boolean = url.pathSegments.size == 3
 
     private fun isTrackPage(url: HttpUrl): Boolean =
-        url.pathSegments.size >= 4 && url.encodedPath.endsWith(".mp3", ignoreCase = true)
+        url.pathSegments.size >= 4 && (
+            url.encodedPath.endsWith(".mp3", ignoreCase = true) ||
+                url.encodedPath.endsWith(".flac", ignoreCase = true)
+            )
 
     private fun albumPageFor(track: HttpUrl): HttpUrl? {
         if (!isTrackPage(track)) return null

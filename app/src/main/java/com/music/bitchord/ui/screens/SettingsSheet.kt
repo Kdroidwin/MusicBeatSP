@@ -571,6 +571,7 @@ fun SettingsScreen(
     val appleMusicQueueButtonStyle by AppSettings.appleMusicQueueButtonStyle.collectAsStateWithLifecycle()
     val hidePlayerArtist by AppSettings.hidePlayerArtist.collectAsStateWithLifecycle()
     val hideUnknownPlayerArtist by AppSettings.hideUnknownPlayerArtist.collectAsStateWithLifecycle()
+    val hideUnknownPlaylistArtist by AppSettings.hideUnknownPlaylistArtist.collectAsStateWithLifecycle()
     val centerPlayerTrackInfo by AppSettings.centerPlayerTrackInfo.collectAsStateWithLifecycle()
     val playerDetailsVerticalMenu by AppSettings.playerDetailsVerticalMenu.collectAsStateWithLifecycle()
     val preloadAlbumArtOnStartup by AppSettings.preloadAlbumArtOnStartup.collectAsStateWithLifecycle()
@@ -1038,6 +1039,7 @@ fun SettingsScreen(
         SettingsSearchEntry(stringResource(R.string.reverb), stringResource(R.string.reverb_subtitle), listOf("reverb", "room", "残響", "リバーブ"), reverbEnabled) { AppSettings.setReverbEnabled(!reverbEnabled) },
         SettingsSearchEntry(stringResource(R.string.favorite_icon_star), stringResource(R.string.favorite_icon_star_subtitle), listOf("favorite", "star", "お気に入り", "星", "ハート"), favoriteUsesStar) { AppSettings.setFavoriteUsesStar(!favoriteUsesStar) },
         SettingsSearchEntry(stringResource(R.string.hide_unknown_player_artist), stringResource(R.string.hide_unknown_player_artist_subtitle), listOf("artist", "unknown", "アーティスト", "unknown artist"), hideUnknownPlayerArtist) { AppSettings.setHideUnknownPlayerArtist(!hideUnknownPlayerArtist) },
+        SettingsSearchEntry(stringResource(R.string.hide_unknown_playlist_artist), stringResource(R.string.hide_unknown_playlist_artist_subtitle), listOf("playlist", "artist", "unknown", "プレイリスト", "アーティスト", "不明"), hideUnknownPlaylistArtist) { AppSettings.setHideUnknownPlaylistArtist(!hideUnknownPlaylistArtist) },
         SettingsSearchEntry(stringResource(R.string.center_player_track_info), stringResource(R.string.center_player_track_info_subtitle), listOf("center", "中央", "曲情報"), centerPlayerTrackInfo) { AppSettings.setCenterPlayerTrackInfo(!centerPlayerTrackInfo) },
         SettingsSearchEntry(stringResource(R.string.player_playlist_library_icon), stringResource(R.string.player_playlist_library_icon_subtitle), listOf("playlist", "library", "プレイリスト", "ライブラリ", "icon"), useLibraryIconForPlaylistControl) { AppSettings.setUseLibraryIconForPlaylistControl(!useLibraryIconForPlaylistControl) },
         appleMusicLyricsButtonStyleSearchEntry(appleMusicLyricsButtonStyle),
@@ -2898,6 +2900,19 @@ fun SettingsScreen(
                     )
                 },
                 onClick = { AppSettings.setHideUnknownPlayerArtist(!hideUnknownPlayerArtist) },
+            )
+            RowDivider()
+            SettingsRow(
+                icon = Icons.Rounded.Person,
+                title = stringResource(R.string.hide_unknown_playlist_artist),
+                subtitle = stringResource(R.string.hide_unknown_playlist_artist_subtitle),
+                trailing = {
+                    Switch(
+                        checked = hideUnknownPlaylistArtist,
+                        onCheckedChange = AppSettings::setHideUnknownPlaylistArtist,
+                    )
+                },
+                onClick = { AppSettings.setHideUnknownPlaylistArtist(!hideUnknownPlaylistArtist) },
             )
             RowDivider()
             SettingsRow(

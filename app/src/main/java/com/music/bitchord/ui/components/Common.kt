@@ -300,6 +300,8 @@ fun SongRow(
     selected: Boolean = false,
     /** Keeps collection art square by default; opt into fitting its source proportions where needed. */
     artworkContentScale: ContentScale = ContentScale.Crop,
+    /** Hides only the artist line when the track's tag is literally `<unknown>`. */
+    hideUnknownArtistLine: Boolean = false,
     dropdownMenu: (@Composable () -> Unit)? = null,
 ) {
     val haptics = rememberHaptics()
@@ -337,6 +339,7 @@ fun SongRow(
             activeTint = activeTint,
             selected = selected,
             artworkContentScale = artworkContentScale,
+            hideUnknownArtistLine = hideUnknownArtistLine,
             dropdownMenu = dropdownMenu,
         )
         return
@@ -385,6 +388,7 @@ fun SongRow(
             activeTint = activeTint,
             selected = selected,
             artworkContentScale = artworkContentScale,
+            hideUnknownArtistLine = hideUnknownArtistLine,
             dropdownMenu = dropdownMenu,
         )
     }
@@ -453,6 +457,7 @@ private fun SongRowContent(
     activeTint: Color = MaterialTheme.colorScheme.primary,
     selected: Boolean = false,
     artworkContentScale: ContentScale = ContentScale.Crop,
+    hideUnknownArtistLine: Boolean = false,
     dropdownMenu: (@Composable () -> Unit)? = null,
 ) {
     val titleColor by animateColorAsState(
@@ -509,17 +514,20 @@ private fun SongRowContent(
                 style = MaterialTheme.typography.titleMedium,
                 color = titleColor,
             )
-            Spacer(Modifier.height(2.dp))
-            Text(
-                text = listOfNotNull(
-                    song.artist.takeIf { it.isNotBlank() },
-                    song.downloadFormat,
-                ).joinToString(" · "),
-                style = MaterialTheme.typography.bodyMedium,
-                color = subtitleColor,
-                maxLines = 1,
-                overflow = TextOverflow.Ellipsis,
-            )
+            val visibleArtist = song.artist.takeIf {
+                it.isNotBlank() && !(hideUnknownArtistLine && it.trim().equals("<unknown>", ignoreCase = true))
+            }
+            val subtitle = listOfNotNull(visibleArtist, song.downloadFormat).joinToString(" · ")
+            if (subtitle.isNotBlank() || !hideUnknownArtistLine) {
+                Spacer(Modifier.height(2.dp))
+                Text(
+                    text = subtitle,
+                    style = MaterialTheme.typography.bodyMedium,
+                    color = subtitleColor,
+                    maxLines = 1,
+                    overflow = TextOverflow.Ellipsis,
+                )
+            }
         }
         if (downloadedTint != null) {
             DownloadedBadge(song.videoId, downloadedTint)
