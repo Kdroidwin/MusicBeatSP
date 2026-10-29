@@ -894,20 +894,54 @@ class MainViewModel(app: Application) : AndroidViewModel(app) {
         song: Song,
         onComplete: ((Result<Unit>) -> Unit)? = null,
     ) {
-        if (!requireSignIn()) return
-        viewModelScope.launch {
-            val result = YtMusicRepository.addToPlaylist(playlist.playlistId, listOf(song.videoId))
-            result.fold(
-                onSuccess = { added ->
-                    libraryStale = true
-                    // The playlist's page may be open behind the picker — it is
-                    // reachable from a row's own menu on it — so the track goes
-                    // into it for the same reason [addSuggestedSong] does.
-                    appendToOpenPlaylist(playlist.browseId, song, added[song.videoId])
-                },
-                onFailure = {},
-            )
+        addSongsToPlaylist(playlist, listOf(song)) { result ->
             onComplete?.invoke(result.map { Unit })
+        }
+    }
+
+    /** Adds a whole album or playlist to one of the signed-in account's playlists. */
+    fun addSongsToPlaylist(
+        playlist: UserPlaylist,
+        songs: List<Song>,
+        onComplete: ((Result<Int>) -> Unit)? = null,
+    ) {
+        if (!requireSignIn()) return
+        val uniqueSongs = songs.distinctBy(Song::videoId)
+        if (uniqueSongs.isEmpty()) {
+            onComplete?.invoke(Result.failure(IllegalArgumentException("No tracks to add")))
+            return
+        }
+        viewModelScope.launch {
+            var addedCount = 0
+            var failure: Throwable? = null
+            // Keep edit requests bounded. A large playlist can span many pages,
+            // and sending every row in one request risks the service rejecting
+            // the whole batch; already completed chunks remain valid if a later
+            // request is refused.
+            for (chunk in uniqueSongs.chunked(50)) {
+                val result = YtMusicRepository.addToPlaylist(
+                    playlist.playlistId,
+                    chunk.map(Song::videoId),
+                )
+                result.fold(
+                    onSuccess = { added ->
+                        addedCount += chunk.size
+                        libraryStale = true
+                        chunk.forEach { song ->
+                            appendToOpenPlaylist(playlist.browseId, song, added[song.videoId])
+                        }
+                    },
+                    onFailure = { failure = it },
+                )
+                if (failure != null) break
+            }
+            if (failure == null) {
+                onComplete?.invoke(Result.success(addedCount))
+            } else {
+                onComplete?.invoke(Result.failure(
+                    IllegalStateException("Added $addedCount of ${uniqueSongs.size} tracks", failure),
+                ))
+            }
         }
     }
 
@@ -916,14 +950,20 @@ class MainViewModel(app: Application) : AndroidViewModel(app) {
      * track's menu — one request, so it can't half-succeed into an empty
      * playlist the user has to add to again.
      */
-    fun createPlaylist(title: String, privacy: PlaylistPrivacy, song: Song? = null) {
+    fun createPlaylist(
+        title: String,
+        privacy: PlaylistPrivacy,
+        song: Song? = null,
+        songs: List<Song> = emptyList(),
+    ) {
         if (!requireSignIn()) return
         val name = title.trim().ifBlank { text(R.string.new_playlist) }
+        val seedSongs = (listOfNotNull(song) + songs).distinctBy(Song::videoId)
         viewModelScope.launch {
             YtMusicRepository.createPlaylist(
                 title = name,
                 privacy = privacy,
-                videoIds = listOfNotNull(song?.videoId),
+                videoIds = seedSongs.map(Song::videoId),
             ).fold(
                 onSuccess = { playlistId ->
                     // Nothing to look up for a playlist this account has just
@@ -939,8 +979,8 @@ class MainViewModel(app: Application) : AndroidViewModel(app) {
                         // surfaces that draw it leave a blank one out, so an
                         // unseeded playlist gets a card of just its name rather
                         // than a guess at what the feed will call it.
-                        subtitle = if (song != null) "1 song" else "",
-                        thumbnailUrl = song?.thumbnailUrl,
+                        subtitle = if (seedSongs.size == 1) "1 song" else if (seedSongs.isNotEmpty()) "${seedSongs.size} songs" else "",
+                        thumbnailUrl = seedSongs.firstOrNull()?.thumbnailUrl,
                     )
                     // Drawn from what was just sent rather than waited for: the
                     // library feed does not have this playlist yet, and the

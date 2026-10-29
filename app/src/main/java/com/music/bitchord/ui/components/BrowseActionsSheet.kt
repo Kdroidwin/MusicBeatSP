@@ -15,10 +15,13 @@ import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.rounded.PlaylistPlay
 import androidx.compose.material.icons.automirrored.rounded.QueueMusic
+import androidx.compose.material.icons.rounded.Bookmark
+import androidx.compose.material.icons.rounded.BookmarkAdd
 import androidx.compose.material.icons.rounded.Delete
 import androidx.compose.material.icons.rounded.DeleteForever
 import androidx.compose.material.icons.rounded.Edit
 import androidx.compose.material.icons.rounded.PlayArrow
+import androidx.compose.material.icons.rounded.PlaylistAdd
 import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
@@ -137,6 +140,9 @@ fun BrowseActionsSheet(
     /** Null where the sheet was opened from the page it would navigate to. */
     onOpen: (() -> Unit)? = null,
     onDownloadAll: (() -> Unit)? = null,
+    onAddToPlaylist: (() -> Unit)? = null,
+    isSavedToLibrary: Boolean = false,
+    onToggleLibrary: (() -> Unit)? = null,
     /**
      * Set whenever [target] is a playlist, regardless of who owns it — pinning
      * doesn't touch the account, only what sits at the top of this device's
@@ -206,6 +212,27 @@ fun BrowseActionsSheet(
             foreground = palette.onBackground,
             onClick = onAddToQueue,
         )
+        onAddToPlaylist?.let { add ->
+            ActionRow(
+                Icons.Rounded.PlaylistAdd,
+                stringResource(R.string.add_to_playlist),
+                accent = palette.accent,
+                foreground = palette.onBackground,
+                onClick = add,
+            )
+        }
+        onToggleLibrary?.let { toggle ->
+            ActionRow(
+                icon = if (isSavedToLibrary) Icons.Rounded.Bookmark else Icons.Rounded.BookmarkAdd,
+                label = stringResource(
+                    if (isSavedToLibrary) R.string.remove_saved_youtube_collection
+                    else R.string.add_youtube_collection_to_library,
+                ),
+                accent = palette.accent,
+                foreground = palette.onBackground,
+                onClick = toggle,
+            )
+        }
         onDownloadAll?.let { download ->
             // Saying which of the three it is, rather than offering the same row
             // whatever the state — this is where a release is asked for now that
@@ -216,6 +243,7 @@ fun BrowseActionsSheet(
             val active by Downloads.active.collectAsStateWithLifecycle()
             val requested by Downloads.requested.collectAsStateWithLifecycle()
             val saved by Downloads.saved.collectAsStateWithLifecycle()
+            val downloadedCollections by Downloads.collections.collectAsStateWithLifecycle()
             // Only the tracks *this release* asked for — two releases can share
             // a track, and reading the whole queue would show this release
             // waiting on a download some other one started. Failed entries stay
@@ -230,7 +258,10 @@ fun BrowseActionsSheet(
             // as downloaded once every one of its tracks is in the saved set,
             // not from any record of the release itself. Empty for a card whose
             // page was never opened, which is not an answer either way.
-            val ids = remember(target.songs) { target.songs.mapTo(HashSet()) { it.videoId } }
+            val ids = remember(target.songs, target.browseId, downloadedCollections) {
+                val recordedIds = target.browseId?.let { downloadedCollections[it]?.videoIds }.orEmpty()
+                (recordedIds + target.songs.map { it.videoId }).toSet()
+            }
             val downloaded = !waiting && ids.isNotEmpty() && ids.all { it in saved }
             ActionRow(
                 icon = when {

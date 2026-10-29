@@ -5,6 +5,7 @@ import android.content.Intent
 import android.content.SharedPreferences
 import android.net.Uri
 import com.music.bitchord.data.DebugLog as Log
+import com.music.bitchord.data.innertube.StreamResolver
 import androidx.core.content.ContextCompat
 import com.music.bitchord.data.model.Song
 import com.music.bitchord.data.settings.AppSettings
@@ -976,7 +977,34 @@ object Downloads {
                 },
             )
         }
-        error("No download source available for '${track.title}'")
+
+        // A null from the ranked-source search means no configured source
+        // offered a better copy; it is the normal path for a YouTube Music
+        // track on a fresh install. Resolve YouTube's own downloadable stream
+        // with the dedicated download quality ladder rather than treating that
+        // null as a terminal error.
+        if (!AppSettings.youtubeMusicNetworkAllowed) {
+            error("YouTube Music is disabled or offline mode is enabled")
+        }
+        val youtube = StreamResolver.resolveForDownload(
+            videoId = track.videoId,
+            maxKbps = quality.maxKbps,
+            requireM4a = AppSettings.exportDownloads.value,
+        )
+        return Route(
+            extension = youtube.downloadExtension,
+            mimeType = youtube.downloadMimeType,
+            describe = "YouTube ${youtube.kbps} kbps ${youtube.codec.orEmpty()}",
+            taggable = true,
+            write = { sink, onProgress ->
+                Downloader.fetchYouTube(
+                    url = youtube.url,
+                    headers = StreamResolver.mediaHeadersFor(youtube.url),
+                    sink = sink,
+                    onProgress = onProgress,
+                )
+            },
+        )
     }
 
     /**

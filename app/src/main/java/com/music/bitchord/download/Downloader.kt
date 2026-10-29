@@ -45,6 +45,7 @@ object Downloader {
     private const val CHUNK_BYTES = 2L * 1024 * 1024
 
     private const val BUFFER_BYTES = 64 * 1024
+    private const val MAX_YOUTUBE_DOWNLOAD_BYTES = 1_073_741_824L
 
 
 
@@ -115,6 +116,83 @@ object Downloader {
             Log.d(TAG, "fetched ${written}B directly")
             written
         }
+    }
+
+    /**
+     * Fetch a YouTube media URL using bounded byte ranges. A single long GET is
+     * deliberately not used here: googlevideo rate-limits progressive responses
+     * to playback speed, while range requests are served at line rate.
+     */
+    suspend fun fetchYouTube(
+        url: String,
+        headers: Map<String, String>,
+        sink: OutputStream,
+        onProgress: (written: Long, total: Long) -> Unit,
+    ): Long = withContext(Dispatchers.IO) {
+        val parsed = url.toHttpUrlOrNull() ?: error("Download failed: invalid stream URL")
+        require(parsed.isHttps && (parsed.host == "googlevideo.com" || parsed.host.endsWith(".googlevideo.com"))) {
+            "Download failed: unexpected media host"
+        }
+
+        val declaredTotal = parsed.queryParameter("clen")?.toLongOrNull()
+            ?.takeIf { it > 0L }
+            ?.also { require(it <= MAX_YOUTUBE_DOWNLOAD_BYTES) { "Download is too large" } }
+        var total = declaredTotal
+        var written = 0L
+        var start = 0L
+        val contentRangePattern = Regex("bytes (\\d+)-(\\d+)/(\\d+)", RegexOption.IGNORE_CASE)
+        val buffer = ByteArray(BUFFER_BYTES)
+
+        while (total == null || start < total) {
+            coroutineContext.ensureActive()
+            val requestedEnd = minOf(start + CHUNK_BYTES - 1, (total ?: Long.MAX_VALUE) - 1)
+            val request = Request.Builder()
+                .url(url)
+                .header("Range", "bytes=$start-$requestedEnd")
+                .header("Accept-Encoding", "identity")
+                .apply { headers.forEach { (name, value) -> header(name, value) } }
+                .build()
+
+            Http.client.newCall(request).execute().use { response ->
+                // Accepting 200 here would append the entire file at every
+                // iteration when a server ignored Range, silently corrupting it.
+                if (response.code != 206) error("Download failed (HTTP ${response.code})")
+                val contentRange = response.header("Content-Range")
+                    ?: error("Download failed: missing range information")
+                val match = contentRangePattern.matchEntire(contentRange.trim())
+                    ?: error("Download failed: invalid range information")
+                val rangeStart = match.groupValues[1].toLong()
+                val rangeEnd = match.groupValues[2].toLong()
+                val rangeTotal = match.groupValues[3].toLong()
+                if (rangeStart != start || rangeEnd < rangeStart || rangeEnd > requestedEnd || rangeTotal <= rangeEnd) {
+                    error("Download failed: unexpected range response")
+                }
+                if (total != null && rangeTotal != total) error("Download failed: stream length changed")
+                if (rangeTotal > MAX_YOUTUBE_DOWNLOAD_BYTES) error("Download is too large")
+                total = rangeTotal
+
+                val expected = rangeEnd - rangeStart + 1
+                val body = response.body ?: error("Download failed: empty response")
+                val source = body.byteStream()
+                var chunkWritten = 0L
+                while (chunkWritten < expected) {
+                    coroutineContext.ensureActive()
+                    val read = source.read(buffer, 0, minOf(buffer.size.toLong(), expected - chunkWritten).toInt())
+                    if (read < 0) error("Download stopped at ${written + chunkWritten}B of $rangeTotal")
+                    if (read == 0) continue
+                    sink.write(buffer, 0, read)
+                    chunkWritten += read
+                    onProgress(written + chunkWritten, rangeTotal)
+                }
+                written += chunkWritten
+                start = rangeEnd + 1
+            }
+        }
+
+        sink.flush()
+        if (written == 0L || written != total) error("Download failed: incomplete media stream")
+        Log.d(TAG, "fetched $written bytes from YouTube in ranges")
+        written
     }
 
     /**

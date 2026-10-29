@@ -69,6 +69,7 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.rounded.ArrowUpward
 import androidx.compose.material.icons.rounded.Check
 import androidx.compose.material.icons.rounded.Close
+import androidx.compose.material.icons.rounded.Fullscreen
 import androidx.compose.material.icons.rounded.History
 import androidx.compose.material.icons.rounded.Person
 import androidx.compose.material.icons.rounded.Radio
@@ -605,7 +606,12 @@ private fun BitChordApp(
     // page does about the player is really about which of the two it is: no mini
     // player standing in for one that is already there, no sheet to raise, and
     // the bottom inset the mini player was holding handed back to the page.
-    val playerDocked = dockedPlayerAvailable(windowWidth)
+    // Wide windows keep a live player beside the page by default. A listener
+    // can temporarily raise that same player over the whole app, then return to
+    // the split layout by dismissing it; the setting and the playback surface
+    // do not need a second implementation for tablets.
+    var expandedDockedPlayer by rememberSaveable { mutableStateOf(false) }
+    val playerDocked = dockedPlayerAvailable(windowWidth) && !expandedDockedPlayer
     /**
      * Whether the player's *sheet* is up.
      *
@@ -615,6 +621,9 @@ private fun BitChordApp(
      * question this used to answer on its own: is the player covering the page?
      */
     var showNowPlaying by remember { mutableStateOf(false) }
+    LaunchedEffect(showNowPlaying) {
+        if (!showNowPlaying) expandedDockedPlayer = false
+    }
     LaunchedEffect(showNowPlaying, playerDocked) {
         onPlayerSurfaceVisibilityChanged(showNowPlaying && !playerDocked)
     }
@@ -648,6 +657,11 @@ private fun BitChordApp(
         },
     )
     fun openNowPlaying() {
+        if (dockedPlayerAvailable(windowWidth)) {
+            expandedDockedPlayer = true
+            showNowPlaying = true
+            return
+        }
         if (playerDocked) return
         if (playerArtworkTransitionEnabled) playerSheetMotion.open() else showNowPlaying = true
     }
@@ -736,9 +750,13 @@ private fun BitChordApp(
     // Separate from [songActions] so the menu can close behind it — the picker
     // is the next step, not a second sheet stacked on the first.
     var playlistTarget by remember { mutableStateOf<Song?>(null) }
+    // A collection action needs every page's tracks before the picker opens;
+    // keep its label with the list so the picker can identify what will be added.
+    var playlistCollectionTarget by remember { mutableStateOf<Pair<String, List<Song>>?>(null) }
     // App-local playlists accept remote catalogue IDs without requiring a
     // Google account or writing anything to the user's YouTube account.
     var localPlaylistSongTarget by remember { mutableStateOf<Song?>(null) }
+    var localPlaylistCollectionTarget by remember { mutableStateOf<List<Song>?>(null) }
     // The picker opened from the Library tab, where there is no track and
     // creating the playlist is the whole errand.
     var creatingPlaylist by remember { mutableStateOf(false) }
@@ -1902,11 +1920,18 @@ private fun BitChordApp(
         !showLyricsSources &&
         collectionBackHandlers["$TAB_KEY$selectedTab"] == null
 
+    // Expanding the player on a wide device uses the available width for the
+    // player and its synced lyrics, matching the tablet reference layout. The
+    // two panes reuse the existing player and lyrics components and state.
+    val tabletLyricsFullscreen = expandedDockedPlayer &&
+        dockedPlayerAvailable(windowWidth) &&
+        playerSong != null
+
     // The player's whole parameter list, in one place because there are two
     // places it can be mounted: the sheet a phone raises over the page, and
     // the pane a tablet keeps beside it. [docked] is the only difference
     // between the two, and only ever one of them is in the tree.
-    val nowPlaying: @Composable (Song, Boolean) -> Unit = { song, docked ->
+    val nowPlaying: @Composable (Song, Boolean, Dp) -> Unit = { song, docked, playerWidth ->
         val displayedSong = activeRadioSeed
             ?.takeIf { (videoId, _) -> song.radioName == null && videoId == song.videoId }
             ?.let { (_, name) -> song.copy(radioName = name) }
@@ -1914,7 +1939,7 @@ private fun BitChordApp(
         NowPlayingScreen(
             song = displayedSong,
             playerHaze = playerHazeState,
-            windowWidth = windowWidth,
+            windowWidth = playerWidth,
             isPlaying = player.isPlaying,
             isLoading = player.isLoading,
             positionMs = player.position.positionMs,
@@ -2199,6 +2224,10 @@ private fun BitChordApp(
         }
         BackHandler(enabled = showListenBrainzLogin) { showListenBrainzLogin = false }
         BackHandler(enabled = showLastfmLogin) { showLastfmLogin = false }
+        BackHandler(enabled = tabletLyricsFullscreen) {
+            expandedDockedPlayer = false
+            showNowPlaying = false
+        }
 
         // On a tablet the page and player stand side by side. In the optional
         // lyrics workspace, the player moves to the left and the artwork-backed
@@ -2214,7 +2243,7 @@ private fun BitChordApp(
                             // the player's own transport controls.
                             .padding(top = TopBarContentHeight + TopBarContentGap, bottom = 96.dp),
                     ) {
-                        nowPlaying(playerSong, true)
+                        nowPlaying(playerSong, true, windowWidth)
                     }
                 } else {
                 AnimatedContent(
@@ -3063,7 +3092,8 @@ private fun BitChordApp(
                     DockedPlayer(
                         song = playerSong,
                         width = dockedPlayerWidth(windowWidth),
-                        content = { current -> nowPlaying(current, true) },
+                        onExpand = ::openNowPlaying,
+                        content = { current -> nowPlaying(current, true, dockedPlayerWidth(windowWidth)) },
                     )
                 }
             }
@@ -3071,15 +3101,15 @@ private fun BitChordApp(
 
         // ---- Now Playing ----
         // Only raised where it isn't already open beside the page.
-        LaunchedEffect(showNowPlaying, playerArtworkTransitionEnabled) {
+        LaunchedEffect(showNowPlaying, playerArtworkTransitionEnabled, tabletLyricsFullscreen) {
             if (
-                showNowPlaying && !playerArtworkTransitionEnabled &&
+                showNowPlaying && !tabletLyricsFullscreen && !playerArtworkTransitionEnabled &&
                 normalNowPlayingSheetState.currentValue != SheetValue.Expanded
             ) {
                 normalNowPlayingSheetState.show()
             }
         }
-        val playerRaised = !playerDocked && showNowPlaying && playerSong != null
+        val playerRaised = !playerDocked && !tabletLyricsFullscreen && showNowPlaying && playerSong != null
         if (playerRaised && playerArtworkTransitionEnabled) {
             val sheetDensity = LocalDensity.current
             val confirmSheetValue: (SheetValue) -> Boolean = { target ->
@@ -3152,7 +3182,7 @@ private fun BitChordApp(
                         .onSizeChanged { playerSheetMotion.onMeasured(it.height.toFloat()) },
                 ) {
                     CompositionLocalProvider(LocalPlayerDock provides playerDock) {
-                        nowPlaying(playerSong, false)
+                        nowPlaying(playerSong, false, windowWidth)
                     }
                 }
             }
@@ -3166,7 +3196,63 @@ private fun BitChordApp(
                 dragHandle = null,
                 contentWindowInsets = { WindowInsets(0, 0, 0, 0) },
             ) {
-                nowPlaying(playerSong, false)
+                nowPlaying(playerSong, false, windowWidth)
+            }
+        }
+
+        // A wide player fills the window as a two-pane workspace: existing
+        // transport/artwork UI on the left and the existing synced lyrics view
+        // on the right. Drawing this above the library chrome makes it a true
+        // expanded player while retaining Android Back and the close control
+        // as reliable ways back to the regular tablet layout.
+        if (tabletLyricsFullscreen) {
+            val currentSong = playerSong
+            if (currentSong != null) {
+                Row(
+                    modifier = Modifier
+                        .fillMaxSize()
+                        .background(MaterialTheme.colorScheme.background),
+                ) {
+                    Box(
+                        modifier = Modifier
+                            .weight(0.55f)
+                            .fillMaxHeight(),
+                    ) {
+                        BoxWithConstraints(Modifier.fillMaxSize()) {
+                            nowPlaying(currentSong, false, maxWidth)
+                        }
+                    }
+                    TabletLyricsPane(
+                        lines = lyrics,
+                        trackKey = currentSong.videoId,
+                        positionMs = player.position.positionMs,
+                        isPlaying = player.isPlaying,
+                        onSeek = { position -> controller?.seekTo(position) },
+                        artworkUrl = currentSong.thumbnailUrl,
+                        modifier = Modifier
+                            .weight(0.45f)
+                            .fillMaxHeight(),
+                    )
+                }
+                IconButton(
+                    onClick = {
+                        expandedDockedPlayer = false
+                        showNowPlaying = false
+                    },
+                    modifier = Modifier
+                        .align(Alignment.TopEnd)
+                        .statusBarsPadding()
+                        .padding(top = 6.dp, end = 10.dp)
+                        .size(42.dp)
+                        .clip(CircleShape)
+                        .background(Color.Black.copy(alpha = 0.30f)),
+                ) {
+                    Icon(
+                        imageVector = Icons.Rounded.Close,
+                        contentDescription = stringResource(R.string.close),
+                        tint = Color.White,
+                    )
+                }
             }
         }
 
@@ -3485,8 +3571,8 @@ private fun BitChordApp(
         // One sheet for both, because they are one decision: the list of
         // playlists with a way to make another. `creatingPlaylist` opens it
         // straight onto the form, which is what the Library tile means.
-        LaunchedEffect(playlistTarget != null) {
-            if (playlistTarget != null) viewModel.loadPlaylists()
+        LaunchedEffect(playlistTarget != null || playlistCollectionTarget != null) {
+            if (playlistTarget != null || playlistCollectionTarget != null) viewModel.loadPlaylists()
         }
         localPlaylistSongTarget?.let { targetSong ->
             LocalAddToPlaylistSheet(
@@ -3494,10 +3580,18 @@ private fun BitChordApp(
                 onDismissRequest = { localPlaylistSongTarget = null },
             )
         }
-        if (playlistTarget != null || creatingPlaylist) {
+        localPlaylistCollectionTarget?.let { songs ->
+            LocalAddToPlaylistSheet(
+                songs = songs,
+                onDismissRequest = { localPlaylistCollectionTarget = null },
+            )
+        }
+        if (playlistTarget != null || playlistCollectionTarget != null || creatingPlaylist) {
             val target = playlistTarget
+            val collection = playlistCollectionTarget
             val dismiss = {
                 playlistTarget = null
+                playlistCollectionTarget = null
                 creatingPlaylist = false
             }
             ModalBottomSheet(
@@ -3508,7 +3602,9 @@ private fun BitChordApp(
                     playlists = playlists,
                     loading = playlistsLoading,
                     song = target,
-                    startCreating = target == null,
+                    songs = collection?.second.orEmpty(),
+                    collectionTitle = collection?.first,
+                    startCreating = target == null && collection == null,
                     onPick = { playlist ->
                         target?.let { targetSong ->
                             viewModel.addToPlaylist(playlist, targetSong) { result ->
@@ -3520,10 +3616,28 @@ private fun BitChordApp(
                                 Toast.makeText(context, message, Toast.LENGTH_SHORT).show()
                             }
                         }
+                        collection?.let { (_, songs) ->
+                            viewModel.addSongsToPlaylist(playlist, songs) { result ->
+                                val message = result.fold(
+                                    onSuccess = { count ->
+                                        context.getString(R.string.youtube_playlist_collection_added, count, playlist.title)
+                                    },
+                                    onFailure = {
+                                        context.getString(R.string.youtube_playlist_collection_add_failed)
+                                    },
+                                )
+                                Toast.makeText(context, message, Toast.LENGTH_LONG).show()
+                            }
+                        }
                         dismiss()
                     },
                     onCreate = { title, privacy ->
-                        viewModel.createPlaylist(title, privacy, target)
+                        viewModel.createPlaylist(
+                            title = title,
+                            privacy = privacy,
+                            song = target,
+                            songs = collection?.second.orEmpty(),
+                        )
                         dismiss()
                     },
                 )
@@ -3569,6 +3683,12 @@ private fun BitChordApp(
             val remote = target.browseId?.startsWith("local:") == false
             val pinnedPlaylists by AppSettings.pinnedPlaylists.collectAsStateWithLifecycle()
             val pinnableId = target.browseId?.takeIf { target.type == BrowseType.PLAYLIST }
+            val savableCollectionId = target.browseId?.takeIf {
+                remote && target.type in setOf(BrowseType.ALBUM, BrowseType.PLAYLIST)
+            }
+            val savedToLibrary = savableCollectionId?.let { id ->
+                savedYoutubeCollections.any { it.browseId == id }
+            } == true
             ModalBottomSheet(
                 onDismissRequest = { browseActions = null },
                 containerColor = Color.Transparent,
@@ -3578,6 +3698,42 @@ private fun BitChordApp(
                     target = target.copy(playlist = playlist),
                     onPlayNext = act(playSongsNext),
                     onAddToQueue = act(addSongsToQueue),
+                    onAddToPlaylist = savableCollectionId?.let {
+                        act { songs ->
+                            if (songs.isEmpty()) {
+                                Toast.makeText(context, R.string.no_tracks_here, Toast.LENGTH_SHORT).show()
+                            } else if (signedIn) {
+                                playlistCollectionTarget = target.title to songs
+                                viewModel.loadPlaylists()
+                            } else {
+                                // The local playlist store accepts catalogue IDs;
+                                // signing in to YouTube is not required to keep a
+                                // collection in this app's own playlists.
+                                localPlaylistCollectionTarget = songs
+                            }
+                        }
+                    },
+                    isSavedToLibrary = savedToLibrary,
+                    onToggleLibrary = savableCollectionId?.let { id ->
+                        {
+                            val added = AppSettings.toggleSavedYoutubeCollection(
+                                SavedYoutubeCollection(
+                                    browseId = id,
+                                    title = target.title,
+                                    subtitle = target.subtitle,
+                                    thumbnailUrl = target.thumbnailUrl,
+                                    type = target.type.name,
+                                ),
+                            )
+                            Toast.makeText(
+                                context,
+                                if (added) R.string.youtube_collection_added_to_library
+                                else R.string.remove_saved_youtube_collection,
+                                Toast.LENGTH_SHORT,
+                            ).show()
+                            browseActions = null
+                        }
+                    },
                     onPlay = act { songs -> play(songs, 0) }.takeIf { target.fromCard },
                     onShuffle = act { songs ->
                         // As on a release page: shuffle goes on before the queue
@@ -4105,6 +4261,7 @@ private fun formatDurationText(ms: Long): String {
 private fun DockedPlayer(
     song: Song?,
     width: Dp,
+    onExpand: () -> Unit,
     content: @Composable (Song) -> Unit,
 ) {
     Box(
@@ -4115,6 +4272,22 @@ private fun DockedPlayer(
     ) {
         if (song != null) {
             content(song)
+            IconButton(
+                onClick = onExpand,
+                modifier = Modifier
+                    .align(Alignment.TopEnd)
+                    .statusBarsPadding()
+                    .padding(top = 6.dp, end = 6.dp)
+                    .size(42.dp)
+                    .clip(CircleShape)
+                    .background(Color.Black.copy(alpha = 0.28f)),
+            ) {
+                Icon(
+                    imageVector = Icons.Rounded.Fullscreen,
+                    contentDescription = stringResource(R.string.expand_player),
+                    tint = Color.White,
+                )
+            }
         } else {
             Column(
                 modifier = Modifier
