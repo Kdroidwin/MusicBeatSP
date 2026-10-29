@@ -175,6 +175,9 @@ import com.music.bitchord.data.NerdStats
 import com.music.bitchord.data.scrobbling.LastFM
 import com.music.bitchord.data.settings.AppSettings
 import com.music.bitchord.data.settings.PlayerArtworkMode
+import com.music.bitchord.data.settings.PlayerColorMode
+import com.music.bitchord.data.settings.PlayerColorTarget
+import com.music.bitchord.data.settings.PlayerElementColor
 import com.music.bitchord.data.settings.AutomixPerformanceMode
 import com.music.bitchord.data.settings.LocalLibraryTab
 import com.music.bitchord.data.settings.LauncherIcon
@@ -326,11 +329,69 @@ private fun fullBleedArtworkBottomBlurSearchEntry(strengthDp: Int) = SettingsSea
     keywords = listOf("artwork", "cover", "blur", "gradient", "full screen", "アート", "カバー", "ぼかし", "グラデーション", "全画面", "強さ"),
     valueLabel = stringResource(R.string.artwork_blur_strength_value, strengthDp),
     sliderValue = strengthDp.toFloat(),
-    sliderValueRange = 0f..64f,
-    sliderSteps = 63,
+    sliderValueRange = 0f..96f,
+    sliderSteps = 95,
     onSliderValueChange = { AppSettings.setFullBleedArtworkBottomBlurStrengthDp(it.roundToInt()) },
     activate = {},
 )
+
+@Composable
+private fun PlayerColorTarget.localizedLabel(): String = stringResource(
+    when (this) {
+        PlayerColorTarget.TITLE -> R.string.player_color_title
+        PlayerColorTarget.ARTIST -> R.string.player_color_artist
+        PlayerColorTarget.QUICK_ACTIONS -> R.string.player_color_quick_actions
+        PlayerColorTarget.BOTTOM_CONTROLS -> R.string.player_color_bottom_controls
+        PlayerColorTarget.TRANSPORT -> R.string.player_color_transport
+        PlayerColorTarget.PLAY_PAUSE -> R.string.player_color_play_pause
+    },
+)
+
+@Composable
+private fun PlayerColorMode.localizedLabel(): String = stringResource(
+    when (this) {
+        PlayerColorMode.CURRENT -> R.string.player_color_mode_current
+        PlayerColorMode.ARTWORK -> R.string.player_color_mode_artwork
+        PlayerColorMode.CUSTOM -> R.string.player_color_mode_custom
+    },
+)
+
+@Composable
+private fun playerColorSettingValue(setting: PlayerElementColor): String = when (setting.mode) {
+    PlayerColorMode.CURRENT, PlayerColorMode.ARTWORK -> setting.mode.localizedLabel()
+    PlayerColorMode.CUSTOM -> setting.customHex
+}
+
+@Composable
+private fun playerColorSearchEntry(
+    target: PlayerColorTarget,
+    setting: PlayerElementColor,
+    onOpen: () -> Unit,
+) = SettingsSearchEntry(
+    title = target.localizedLabel(),
+    subtitle = stringResource(R.string.player_element_color_subtitle),
+    keywords = listOf(
+        "player", "color", "colour", "tint", "artwork", "hex", "カラーコード", "色", "プレイヤー",
+        target.localizedLabel(),
+    ),
+    valueLabel = playerColorSettingValue(setting),
+    activate = onOpen,
+)
+
+@Composable
+private fun PlayerElementColorSettingsRow(
+    target: PlayerColorTarget,
+    setting: PlayerElementColor,
+    onClick: () -> Unit,
+) {
+    SettingsRow(
+        icon = Icons.Rounded.Tune,
+        title = target.localizedLabel(),
+        subtitle = stringResource(R.string.player_element_color_subtitle),
+        value = playerColorSettingValue(setting),
+        onClick = onClick,
+    )
+}
 
 @Composable
 private fun FullBleedArtworkBottomBlurSettingsRow(strengthDp: Int) {
@@ -343,8 +404,8 @@ private fun FullBleedArtworkBottomBlurSettingsRow(strengthDp: Int) {
     Slider(
         value = strengthDp.toFloat(),
         onValueChange = { AppSettings.setFullBleedArtworkBottomBlurStrengthDp(it.roundToInt()) },
-        steps = 63,
-        valueRange = 0f..64f,
+        steps = 95,
+        valueRange = 0f..96f,
         modifier = Modifier.padding(start = ROW_INSET, end = ROW_INSET, bottom = 14.dp),
     )
 }
@@ -577,6 +638,7 @@ fun SettingsScreen(
     val preloadAlbumArtOnStartup by AppSettings.preloadAlbumArtOnStartup.collectAsStateWithLifecycle()
     val playerArtworkMode by AppSettings.playerArtworkMode.collectAsStateWithLifecycle()
     val fullBleedArtworkBottomBlurStrengthDp by AppSettings.fullBleedArtworkBottomBlurStrengthDp.collectAsStateWithLifecycle()
+    val playerElementColors by AppSettings.playerElementColors.collectAsStateWithLifecycle()
     val preserveArtworkShapeInCompactTransitions by AppSettings.preserveArtworkShapeInCompactTransitions.collectAsStateWithLifecycle()
     val keepArtworkFullSizeWhenPaused by AppSettings.keepArtworkFullSizeWhenPaused.collectAsStateWithLifecycle()
     val legacyMeshGradient by AppSettings.legacyMeshGradient.collectAsStateWithLifecycle()
@@ -665,6 +727,8 @@ fun SettingsScreen(
     var showThemePicker by rememberSaveable { mutableStateOf(false) }
     var showMediaControlActionPicker by rememberSaveable { mutableStateOf(false) }
     var showPlayerArtworkModePicker by rememberSaveable { mutableStateOf(false) }
+    var playerColorDialogTarget by rememberSaveable { mutableStateOf("") }
+    var playerColorHexDraft by rememberSaveable { mutableStateOf("#FFFFFF") }
     var showPerformanceWarning by remember { mutableStateOf(false) }
     var showEqualizerSheet by remember { mutableStateOf(false) }
     var showAutomixPerformanceSheet by rememberSaveable { mutableStateOf(false) }
@@ -1062,6 +1126,17 @@ fun SettingsScreen(
         ) { AppSettings.setLyricsExtensionsEnabled(!lyricsExtensionsEnabled) },
         *PlayerArtworkMode.entries.map { playerArtworkModeSearchEntry(it, playerArtworkMode) }.toTypedArray(),
         fullBleedArtworkBottomBlurSearchEntry(fullBleedArtworkBottomBlurStrengthDp),
+        *PlayerColorTarget.entries.map { target ->
+            val setting = playerElementColors[target] ?: PlayerElementColor()
+            playerColorSearchEntry(
+                target = target,
+                setting = setting,
+                onOpen = {
+                    playerColorHexDraft = setting.customHex
+                    playerColorDialogTarget = target.name
+                },
+            )
+        }.toTypedArray(),
         SettingsSearchEntry(stringResource(R.string.preserve_artwork_shape_in_compact_transitions), stringResource(R.string.preserve_artwork_shape_in_compact_transitions_subtitle), listOf("artwork", "cover", "aspect ratio", "mini player", "dock", "lyrics", "アート", "カバー", "縦横比", "ミニプレーヤー", "歌詞", "遷移"), preserveArtworkShapeInCompactTransitions) { AppSettings.setPreserveArtworkShapeInCompactTransitions(!preserveArtworkShapeInCompactTransitions) },
         SettingsSearchEntry(stringResource(R.string.keep_artwork_full_size_paused), stringResource(R.string.keep_artwork_full_size_paused_subtitle), listOf("artwork", "cover", "paused", "停止中", "アート"), keepArtworkFullSizeWhenPaused) { AppSettings.setKeepArtworkFullSizeWhenPaused(!keepArtworkFullSizeWhenPaused) },
         SettingsSearchEntry(stringResource(R.string.reduce_animation), stringResource(R.string.reduce_animation_subtitle), listOf("animation", "reduce", "アニメーション"), reduceAnimation) { AppSettings.setReduceAnimation(!reduceAnimation) },
@@ -2955,6 +3030,18 @@ fun SettingsScreen(
                 valueRange = 12f..36f,
                 modifier = Modifier.padding(start = ROW_INSET, end = ROW_INSET, bottom = 14.dp),
             )
+            PlayerColorTarget.entries.forEach { target ->
+                RowDivider()
+                val setting = playerElementColors[target] ?: PlayerElementColor()
+                PlayerElementColorSettingsRow(
+                    target = target,
+                    setting = setting,
+                    onClick = {
+                        playerColorHexDraft = setting.customHex
+                        playerColorDialogTarget = target.name
+                    },
+                )
+            }
             RowDivider()
             SettingsRow(
                 icon = Icons.Rounded.PlayArrow,
@@ -5000,6 +5087,71 @@ fun SettingsScreen(
                 },
                 confirmButton = {
                     TextButton(onClick = { showPlayerArtworkModePicker = false }) {
+                        Text(stringResource(R.string.done))
+                    }
+                },
+            )
+        }
+
+        PlayerColorTarget.entries.firstOrNull { it.name == playerColorDialogTarget }?.let { target ->
+            val setting = playerElementColors[target] ?: PlayerElementColor()
+            AlertDialog(
+                onDismissRequest = { playerColorDialogTarget = "" },
+                title = {
+                    Text(stringResource(R.string.player_element_color_dialog_title, target.localizedLabel()))
+                },
+                text = {
+                    Column(
+                        modifier = Modifier
+                            .heightIn(max = 420.dp)
+                            .verticalScroll(rememberScrollState()),
+                    ) {
+                        PlayerColorMode.entries.forEach { mode ->
+                            Row(
+                                modifier = Modifier
+                                    .fillMaxWidth()
+                                    .clickable {
+                                        AppSettings.setPlayerElementColor(target, setting.copy(mode = mode))
+                                    }
+                                    .padding(vertical = 6.dp),
+                                verticalAlignment = Alignment.CenterVertically,
+                            ) {
+                                RadioButton(
+                                    selected = setting.mode == mode,
+                                    onClick = {
+                                        AppSettings.setPlayerElementColor(target, setting.copy(mode = mode))
+                                    },
+                                )
+                                Text(mode.localizedLabel(), modifier = Modifier.padding(start = 8.dp))
+                            }
+                        }
+                        if (setting.mode == PlayerColorMode.CUSTOM) {
+                            OutlinedTextField(
+                                value = playerColorHexDraft,
+                                onValueChange = { playerColorHexDraft = it.take(9) },
+                                label = { Text(stringResource(R.string.player_color_hex_label)) },
+                                supportingText = { Text(stringResource(R.string.player_color_hex_help)) },
+                                isError = !playerColorHexDraft.matches(Regex("^#(?:[0-9a-fA-F]{6}|[0-9a-fA-F]{8})$")),
+                                singleLine = true,
+                                modifier = Modifier.fillMaxWidth(),
+                            )
+                        }
+                    }
+                },
+                confirmButton = {
+                    TextButton(
+                        enabled = setting.mode != PlayerColorMode.CUSTOM ||
+                            playerColorHexDraft.matches(Regex("^#(?:[0-9a-fA-F]{6}|[0-9a-fA-F]{8})$")),
+                        onClick = {
+                            val next = if (setting.mode == PlayerColorMode.CUSTOM) {
+                                setting.copy(customHex = playerColorHexDraft)
+                            } else {
+                                setting
+                            }
+                            AppSettings.setPlayerElementColor(target, next)
+                            playerColorDialogTarget = ""
+                        },
+                    ) {
                         Text(stringResource(R.string.done))
                     }
                 },

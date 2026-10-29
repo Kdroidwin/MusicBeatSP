@@ -268,6 +268,9 @@ import com.music.bitchord.data.settings.PlayerControl
 import com.music.bitchord.data.settings.PlayerQuickAction
 import com.music.bitchord.data.settings.AudioQuality
 import com.music.bitchord.data.settings.PlayerArtworkMode
+import com.music.bitchord.data.settings.PlayerColorMode
+import com.music.bitchord.data.settings.PlayerColorTarget
+import com.music.bitchord.data.settings.PlayerElementColor
 import com.music.bitchord.data.model.LikeStatus
 import com.music.bitchord.data.model.PLAYER_ART_PX
 import com.music.bitchord.data.model.ROW_ART_PX
@@ -396,6 +399,19 @@ private fun aurisHeroArtworkScale(width: Float, height: Float, zoom: Float): Flo
         .takeIf { it.isFinite() }
         ?.coerceIn(1f, 1.5f)
         ?: 1f
+}
+
+private fun resolvePlayerElementColor(
+    target: PlayerColorTarget,
+    current: Color,
+    artwork: Color,
+    settings: Map<PlayerColorTarget, PlayerElementColor>,
+): Color = when (settings[target]?.mode ?: PlayerColorMode.CURRENT) {
+    PlayerColorMode.CURRENT -> current
+    PlayerColorMode.ARTWORK -> artwork
+    PlayerColorMode.CUSTOM -> runCatching {
+        Color(android.graphics.Color.parseColor(settings[target]?.customHex ?: "#FFFFFF"))
+    }.getOrDefault(current)
 }
 
 /** Restored artwork-derived blur used by the standard and enlarged full-screen modes. */
@@ -951,6 +967,13 @@ fun NowPlayingScreen(
     val haptics = rememberHaptics()
     val artUrl = song.artworkAt(ART_PX)
     val artworkPalette = rememberArtworkPalette(artUrl, dark = true, artPx = ART_PX)
+    val playerElementColors by AppSettings.playerElementColors.collectAsStateWithLifecycle()
+    val playerTitleTint = resolvePlayerElementColor(PlayerColorTarget.TITLE, Color.White, artworkPalette.accent, playerElementColors)
+    val playerArtistTint = resolvePlayerElementColor(PlayerColorTarget.ARTIST, Color.White.copy(alpha = 0.55f), artworkPalette.accent, playerElementColors)
+    val playerQuickTint = resolvePlayerElementColor(PlayerColorTarget.QUICK_ACTIONS, Color.White, artworkPalette.accent, playerElementColors)
+    val playerBottomTint = resolvePlayerElementColor(PlayerColorTarget.BOTTOM_CONTROLS, Color.White, artworkPalette.accent, playerElementColors)
+    val playerTransportTint = resolvePlayerElementColor(PlayerColorTarget.TRANSPORT, Color.White, artworkPalette.accent, playerElementColors)
+    val playerPlayPauseTint = resolvePlayerElementColor(PlayerColorTarget.PLAY_PAUSE, Color.White, artworkPalette.accent, playerElementColors)
     // Ask MediaStore for its already-indexed thumbnail while the full-size
     // embedded cover is being read and decoded. The player keeps the sharp
     // request below and swaps it in as soon as it is ready.
@@ -1963,18 +1986,16 @@ fun NowPlayingScreen(
                             },
                         ),
                 )
-                if (!aurisHeroMode) {
-                    HeroArtworkBottomBlur(
-                        model = artRequest,
-                        alpha = heroVisible *
-                            (1f - if (heroClip != null) canvasCover.floatValue else 0f),
-                        zoom = heroArtworkZoom,
-                        modifier = Modifier
-                            .align(Alignment.TopStart)
-                            .fillMaxWidth()
-                            .height(heroHeight),
-                    )
-                }
+                HeroArtworkBottomBlur(
+                    model = artRequest,
+                    alpha = heroVisible *
+                        (1f - if (heroClip != null) canvasCover.floatValue else 0f),
+                    zoom = heroArtworkZoom,
+                    modifier = Modifier
+                        .align(Alignment.TopStart)
+                        .fillMaxWidth()
+                        .height(heroHeight),
+                )
             }
 
             // Motion artwork over it, in the same frame.
@@ -2804,10 +2825,10 @@ fun NowPlayingScreen(
                             style = MaterialTheme.typography.titleLarge.copy(
                                 fontSize = titleSize,
                             ),
-                            color = Color.White,
+                            color = playerTitleTint,
                             enabled = scrolls,
                             leading = if (song.isExplicit == true) {
-                                { ExplicitBadge(color = Color.White) }
+                                { ExplicitBadge(color = playerTitleTint) }
                             } else {
                                 null
                             },
@@ -2823,7 +2844,7 @@ fun NowPlayingScreen(
                                     fontWeight = FontWeight.W500,
                                     fontSize = artistSize,
                                 ),
-                                color = Color.White.copy(alpha = 0.55f),
+                                color = playerArtistTint,
                                 enabled = scrolls,
                                 // A title that's also scrolling gets to go first —
                                 // starting together reads as clutter, so the artist
@@ -2892,6 +2913,7 @@ fun NowPlayingScreen(
                                     label = if (action == PlayerQuickAction.REPEAT && repeatMode == Player.REPEAT_MODE_ONE) "1" else null,
                                     contentDescription = title,
                                     showDisc = !hidePlayerQuickActionCircles,
+                                    tint = playerQuickTint,
                                     active = when (action) {
                                         PlayerQuickAction.LYRICS -> lyricsOpen
                                         PlayerQuickAction.QUEUE -> queueOpen
@@ -2947,6 +2969,7 @@ fun NowPlayingScreen(
                         },
                         contentDescription = stringResource(R.string.more),
                         showDisc = !hidePlayerQuickActionCircles,
+                        tint = playerQuickTint,
                         onClick = onOpenMenu,
                     )
                     }
@@ -3355,6 +3378,7 @@ fun NowPlayingScreen(
                                     size = lyricsTransportControlSize.dp,
                                     enabled = hasPrevious || positionMs > BACK_RESTARTS_AFTER_MS,
                                     onClick = onPrevious,
+                                tint = playerTransportTint,
                                 )
                             }
                             if (showLyricsPlayPauseControl) {
@@ -3364,6 +3388,7 @@ fun NowPlayingScreen(
                                     size = lyricsTransportControlSize.dp,
                                     enabled = !isLoading,
                                     onClick = onPlayPause,
+                                    tint = playerPlayPauseTint,
                                 )
                             }
                             if (showLyricsNextControl) {
@@ -3373,6 +3398,7 @@ fun NowPlayingScreen(
                                     size = lyricsTransportControlSize.dp,
                                     enabled = hasNext,
                                     onClick = onNext,
+                                    tint = playerTransportTint,
                                 )
                             }
                         }
@@ -3407,6 +3433,7 @@ fun NowPlayingScreen(
                         contentDescription = stringResource(R.string.seek_back_seconds, seekIntervalSeconds),
                         label = stringResource(R.string.seek_seconds_short, seekIntervalSeconds),
                         showLabel = !hideSeekButtonLabels,
+                        tint = playerTransportTint,
                         onClick = {
                             onSeek((positionMs - seekIntervalSeconds * 1000L).coerceAtLeast(0L))
                         },
@@ -3429,6 +3456,7 @@ fun NowPlayingScreen(
                         onOpenQueue = { queueOpen = true; lyricsOpen = false },
                         onOpenPlaylists = onOpenPlaylists,
                         onOpenSearch = onOpenSearch,
+                        tint = playerTransportTint,
                     )
                 }
                 WalkmanShuffleGlyph(
@@ -3438,12 +3466,14 @@ fun NowPlayingScreen(
                     rightAction = transportRightAction,
                     shuffleEnabled = shuffleEnabled,
                     onToggleShuffle = onToggleShuffle,
+                    tint = playerTransportTint,
                 )
                 TransportGlyph(
                     icon = Icons.Rounded.FastRewind,
                     contentDescription = stringResource(R.string.widget_previous),
                     size = 46.dp,
                     onClick = onPrevious,
+                    tint = playerTransportTint,
                     // Lit whenever back has something to do — either a track to
                     // step to, or enough elapsed for it to restart this one.
                     enabled = hasPrevious || positionMs > BACK_RESTARTS_AFTER_MS,
@@ -3470,7 +3500,7 @@ fun NowPlayingScreen(
                         contentAlignment = Alignment.Center,
                     ) {
                         CircularProgressIndicator(
-                            color = Color.White,
+                            color = playerPlayPauseTint,
                             strokeWidth = 3.dp,
                             modifier = Modifier.size(38.dp),
                         )
@@ -3481,6 +3511,7 @@ fun NowPlayingScreen(
                         contentDescription = stringResource(if (isPlaying) R.string.pause else R.string.play),
                         size = playerPlayPauseIconSizeDp.dp,
                         onClick = onPlayPause,
+                        tint = playerPlayPauseTint,
                         haptic = if (isPlaying) Haptic.Pause else Haptic.Resume,
                         outlined = walkmanControlsActive,
                         cornerRadiusPercent = playerPlayPauseCornerRadiusPercent,
@@ -3491,6 +3522,7 @@ fun NowPlayingScreen(
                     contentDescription = stringResource(R.string.widget_next),
                     size = 46.dp,
                     onClick = onNext,
+                    tint = playerTransportTint,
                     enabled = hasNext,
                     haptic = Haptic.SkipNext,
                     outlined = walkmanControlsActive,
@@ -3515,6 +3547,7 @@ fun NowPlayingScreen(
                             else -> Haptic.Select
                         },
                         outlined = true,
+                        tint = playerTransportTint,
                     )
                 }
                 if (transportRightAction == TransportSideAction.NONE && seekButtonsVisible) {
@@ -3523,6 +3556,7 @@ fun NowPlayingScreen(
                         contentDescription = stringResource(R.string.seek_forward_seconds, seekIntervalSeconds),
                         label = stringResource(R.string.seek_seconds_short, seekIntervalSeconds),
                         showLabel = !hideSeekButtonLabels,
+                        tint = playerTransportTint,
                         onClick = {
                             val end = effectiveDurationMs.takeIf { it > 0L } ?: Long.MAX_VALUE
                             onSeek((positionMs + seekIntervalSeconds * 1000L).coerceAtMost(end))
@@ -3546,6 +3580,7 @@ fun NowPlayingScreen(
                         onOpenQueue = { queueOpen = true; lyricsOpen = false },
                         onOpenPlaylists = onOpenPlaylists,
                         onOpenSearch = onOpenSearch,
+                        tint = playerTransportTint,
                     )
                 }
             }
@@ -3618,6 +3653,7 @@ fun NowPlayingScreen(
                                 visible = !walkmanControlsActive,
                                 shuffleEnabled = shuffleEnabled,
                                 onToggleShuffle = onToggleShuffle,
+                                tint = playerBottomTint,
                             )
                             PlayerControl.REPEAT -> if (!walkmanControlsActive) BottomGlyph(
                                 icon = if (repeatMode == Player.REPEAT_MODE_ONE) null else BitChordIcons.Repeat,
@@ -3634,6 +3670,7 @@ fun NowPlayingScreen(
                                     Player.REPEAT_MODE_ONE -> Haptic.ToggleOff
                                     else -> Haptic.Select
                                 },
+                                tint = playerBottomTint,
                             )
                             PlayerControl.LYRICS -> BottomGlyph(
                                 icon = if (appleMusicLyricsButtonStyle) BitChordIcons.AurisLyrics else Icons.AutoMirrored.Rounded.Notes,
@@ -3644,6 +3681,7 @@ fun NowPlayingScreen(
                                 },
                                 highlighted = lyricsOpen,
                                 haptic = if (lyricsOpen) Haptic.Tap else Haptic.Select,
+                                tint = playerBottomTint,
                             )
                             PlayerControl.LIKE -> if (PlayerQuickAction.FAVORITE !in playerQuickActions) BottomGlyph(
                                 icon = likeIcon,
@@ -3652,6 +3690,7 @@ fun NowPlayingScreen(
                                 highlighted = liked,
                                 enabled = likeAvailable,
                                 haptic = if (liked) Haptic.ToggleOff else Haptic.ToggleOn,
+                                tint = playerBottomTint,
                             )
                             PlayerControl.QUEUE -> BottomGlyph(
                                 icon = if (appleMusicQueueButtonStyle) BitChordIcons.AurisQueue else Icons.AutoMirrored.Rounded.QueueMusic,
@@ -3662,6 +3701,7 @@ fun NowPlayingScreen(
                                 },
                                 highlighted = queueOpen,
                                 haptic = if (queueOpen) Haptic.Tap else Haptic.Expand,
+                                tint = playerBottomTint,
                             )
                             PlayerControl.CHROMECAST -> Box(
                                 modifier = Modifier
@@ -3689,12 +3729,14 @@ fun NowPlayingScreen(
                                 contentDescription = stringResource(R.string.playlists),
                                 onClick = onOpenPlaylists,
                                 haptic = Haptic.Select,
+                                tint = playerBottomTint,
                             )
                             PlayerControl.SEARCH -> BottomGlyph(
                                 icon = BitChordIcons.Search,
                                 contentDescription = stringResource(R.string.search),
                                 onClick = onOpenSearch,
                                 haptic = Haptic.Select,
+                                tint = playerBottomTint,
                             )
                         }
                     }
@@ -5136,6 +5178,7 @@ private fun CircleGlyph(
     active: Boolean = false,
     enabled: Boolean = true,
     haptic: Haptic = Haptic.Tap,
+    tint: Color = Color.White,
 ) {
     val haptics = rememberHaptics()
     val discAlpha by animateFloatAsState(
@@ -5161,7 +5204,7 @@ private fun CircleGlyph(
         contentAlignment = Alignment.Center,
     ) {
         if (label != null) {
-            Text(label, color = Color.White, fontSize = 15.sp, fontWeight = FontWeight.Bold)
+            Text(label, color = tint, fontSize = 15.sp, fontWeight = FontWeight.Bold)
         } else {
             Crossfade(
                 targetState = icon,
@@ -5171,7 +5214,7 @@ private fun CircleGlyph(
                 Icon(
                     imageVector = glyph,
                     contentDescription = contentDescription,
-                    tint = Color.White,
+                    tint = tint,
                     modifier = Modifier.size(19.dp),
                 )
             }
@@ -5194,6 +5237,7 @@ private fun TransportGlyph(
     haptic: Haptic = Haptic.Tap,
     outlined: Boolean = false,
     cornerRadiusPercent: Int? = null,
+    tint: Color = Color.White,
 ) {
     val haptics = rememberHaptics()
     // Faded rather than hidden: the row keeps its shape at the ends of a queue.
@@ -5221,7 +5265,7 @@ private fun TransportGlyph(
         if (icon == Icons.Rounded.PlayArrow && cornerRadiusPercent != null) {
             RoundedPlayTriangle(
                 size = size,
-                color = Color.White.copy(alpha = alpha),
+                color = tint.copy(alpha = tint.alpha * alpha),
                 cornerRoundnessPercent = cornerRadiusPercent,
                 contentDescription = contentDescription,
             )
@@ -5229,7 +5273,7 @@ private fun TransportGlyph(
             Icon(
                 imageVector = icon,
                 contentDescription = contentDescription,
-                tint = Color.White.copy(alpha = alpha),
+                tint = tint.copy(alpha = tint.alpha * alpha),
                 modifier = Modifier.size(size),
             )
         }
@@ -5292,6 +5336,7 @@ private fun SeekTransportGlyph(
     label: String,
     showLabel: Boolean,
     onClick: () -> Unit,
+    tint: Color = Color.White,
 ) {
     val haptics = rememberHaptics()
     Column(
@@ -5312,13 +5357,13 @@ private fun SeekTransportGlyph(
         Icon(
             imageVector = icon,
             contentDescription = contentDescription,
-            tint = Color.White,
+            tint = tint,
             modifier = Modifier.size(21.dp),
         )
         if (showLabel) {
             Text(
                 text = label,
-                color = Color.White.copy(alpha = 0.86f),
+                color = tint.copy(alpha = tint.alpha * 0.86f),
                 style = MaterialTheme.typography.labelSmall,
                 maxLines = 1,
             )
@@ -5344,6 +5389,7 @@ private fun TransportSideActionGlyph(
     onOpenQueue: () -> Unit,
     onOpenPlaylists: () -> Unit,
     onOpenSearch: () -> Unit,
+    tint: Color = Color.White,
 ) {
     val icon = when (action) {
         TransportSideAction.NONE -> return
@@ -5397,6 +5443,7 @@ private fun TransportSideActionGlyph(
         highlighted = highlighted,
         enabled = enabled,
         haptic = haptic,
+        tint = tint,
         onClick = {
             when (action) {
                 TransportSideAction.NONE -> Unit
@@ -5418,6 +5465,7 @@ private fun PlayerShuffleControl(
     visible: Boolean,
     shuffleEnabled: Boolean,
     onToggleShuffle: () -> Unit,
+    tint: Color = Color.White,
 ) {
     if (!visible) return
 
@@ -5430,6 +5478,7 @@ private fun PlayerShuffleControl(
         highlighted = shuffleEnabled,
         haptic = if (shuffleEnabled) Haptic.ToggleOff else Haptic.ToggleOn,
         tapWindowMs = SHUFFLE_TAP_WINDOW_MS,
+        tint = tint,
     )
 }
 
@@ -5442,6 +5491,7 @@ private fun WalkmanShuffleGlyph(
     rightAction: TransportSideAction,
     shuffleEnabled: Boolean,
     onToggleShuffle: () -> Unit,
+    tint: Color = Color.White,
 ) {
     if (!active || !enabledBySettings || leftAction == TransportSideAction.SHUFFLE ||
         rightAction == TransportSideAction.SHUFFLE
@@ -5459,6 +5509,7 @@ private fun WalkmanShuffleGlyph(
         haptic = if (shuffleEnabled) Haptic.ToggleOff else Haptic.ToggleOn,
         tapWindowMs = SHUFFLE_TAP_WINDOW_MS,
         outlined = true,
+        tint = tint,
     )
 }
 
@@ -5472,6 +5523,7 @@ private fun BottomGlyph(
     haptic: Haptic = Haptic.Tap,
     label: String? = null,
     outlined: Boolean = false,
+    tint: Color = Color.White,
     /**
      * Shortest gap between taps that both reach [onClick]. A tap inside the
      * window of the last one is dropped whole — haptic included, so a swallowed
@@ -5512,8 +5564,8 @@ private fun BottomGlyph(
             .semantics { this.contentDescription = contentDescription },
         contentAlignment = Alignment.Center,
     ) {
-        val tint = Color.White.copy(
-            alpha = when {
+        val glyphTint = tint.copy(
+            alpha = tint.alpha * when {
                 !enabled -> 0.30f
                 highlighted -> 1f
                 else -> 0.75f
@@ -5523,13 +5575,13 @@ private fun BottomGlyph(
             Icon(
                 imageVector = icon,
                 contentDescription = null,
-                tint = tint,
+                tint = glyphTint,
                 modifier = Modifier.size(26.dp),
             )
         } else if (label != null) {
             Text(
                 text = label,
-                color = tint,
+                color = glyphTint,
                 fontSize = 19.sp,
                 fontWeight = FontWeight.Bold,
             )

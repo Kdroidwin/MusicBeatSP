@@ -101,6 +101,18 @@ enum class PlayerArtworkMode(val persistedValue: Int) {
     }
 }
 
+enum class PlayerColorTarget(val key: String) {
+    TITLE("title"), ARTIST("artist"), QUICK_ACTIONS("quick_actions"),
+    BOTTOM_CONTROLS("bottom_controls"), TRANSPORT("transport"), PLAY_PAUSE("play_pause"),
+}
+
+enum class PlayerColorMode { CURRENT, ARTWORK, CUSTOM }
+
+data class PlayerElementColor(
+    val mode: PlayerColorMode = PlayerColorMode.CURRENT,
+    val customHex: String = "#FFFFFF",
+)
+
 /**
  * PCM format requested from Media3's AudioTrack sink.
  *
@@ -575,6 +587,10 @@ object AppSettings {
     val playerActionButtonSpacingDp = MutableStateFlow(0f)
     /** Strength of the artwork-matched lower blur in the full-screen player. */
     val fullBleedArtworkBottomBlurStrengthDp = MutableStateFlow(42)
+    /** Independent color choices for the player text and control groups. */
+    val playerElementColors = MutableStateFlow(
+        PlayerColorTarget.entries.associateWith { PlayerElementColor() },
+    )
     /** Hides only the word label on the play button in playlist detail pages. */
     val hidePlaylistPlayButtonLabel = MutableStateFlow(false)
     /** Shows the small drag handle at the top of the expanded player by default. */
@@ -1370,7 +1386,17 @@ object AppSettings {
         playerTransportButtonSpacingDp.value = prefs.getFloat(KEY_PLAYER_TRANSPORT_BUTTON_SPACING_DP, 0f).coerceIn(0f, MAX_PLAYER_BUTTON_SPACING_DP)
         playerActionButtonSpacingDp.value = prefs.getFloat(KEY_PLAYER_ACTION_BUTTON_SPACING_DP, 0f).coerceIn(0f, MAX_PLAYER_BUTTON_SPACING_DP)
         fullBleedArtworkBottomBlurStrengthDp.value =
-            prefs.getInt(KEY_FULL_BLEED_ARTWORK_BOTTOM_BLUR_STRENGTH_DP, 42).coerceIn(0, 64)
+            prefs.getInt(KEY_FULL_BLEED_ARTWORK_BOTTOM_BLUR_STRENGTH_DP, 42).coerceIn(0, 96)
+        playerElementColors.value = PlayerColorTarget.entries.associateWith { target ->
+            val mode = runCatching {
+                PlayerColorMode.valueOf(prefs.getString(playerColorModeKey(target), PlayerColorMode.CURRENT.name)!!)
+            }.getOrDefault(PlayerColorMode.CURRENT)
+            val hex = prefs.getString(playerColorHexKey(target), "#FFFFFF")
+                ?.take(9)
+                ?.takeIf { it.matches(Regex("^#(?:[0-9a-fA-F]{6}|[0-9a-fA-F]{8})$")) }
+                ?: "#FFFFFF"
+            PlayerElementColor(mode, hex)
+        }
         hidePlaylistPlayButtonLabel.value = prefs.getBoolean(KEY_HIDE_PLAYLIST_PLAY_BUTTON_LABEL, false)
         showPlayerTopGrabber.value = prefs.getBoolean(KEY_SHOW_PLAYER_TOP_GRABBER, true)
         cleartextHttpAllowed.value = prefs.getBoolean(KEY_CLEARTEXT_HTTP_ALLOWED, false)
@@ -3123,10 +3149,25 @@ object AppSettings {
     }
 
     fun setFullBleedArtworkBottomBlurStrengthDp(value: Int) {
-        val safe = value.coerceIn(0, 64)
+        val safe = value.coerceIn(0, 96)
         fullBleedArtworkBottomBlurStrengthDp.value = safe
         prefs.edit().putInt(KEY_FULL_BLEED_ARTWORK_BOTTOM_BLUR_STRENGTH_DP, safe).apply()
     }
+
+    fun setPlayerElementColor(target: PlayerColorTarget, color: PlayerElementColor) {
+        val safeHex = color.customHex.take(9)
+            .takeIf { it.matches(Regex("^#(?:[0-9a-fA-F]{6}|[0-9a-fA-F]{8})$")) }
+            ?: "#FFFFFF"
+        val safe = color.copy(customHex = safeHex)
+        playerElementColors.value = playerElementColors.value + (target to safe)
+        prefs.edit()
+            .putString(playerColorModeKey(target), safe.mode.name)
+            .putString(playerColorHexKey(target), safe.customHex)
+            .apply()
+    }
+
+    private fun playerColorModeKey(target: PlayerColorTarget) = "player_color_${target.key}_mode"
+    private fun playerColorHexKey(target: PlayerColorTarget) = "player_color_${target.key}_hex"
 
     fun setKeepOriginalArtworkAspectRatio(value: Boolean) {
         val next = if (value) {
