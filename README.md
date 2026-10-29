@@ -191,6 +191,7 @@ The Linux edition is a dedicated offline fork of BitChord's Compose Desktop app,
 - **[BitChord](https://github.com/kushagrasinghx/BitChord)** — Created by [Kushagra Singh](https://github.com/kushagrasinghx). MusicBeatSP retains and builds on the project's UI and playback foundation.
 - **[MusicBeat](https://github.com/SamuelAdmand/MusicBeat)** — Developed by [SamuelAdmand](https://github.com/SamuelAdmand). Forked from BitChord, MusicBeat builds on its UI and playback foundation while adding local music library features and enhanced audio support.
 - **[Tinque](https://github.com/nanbeimerco/Tinque)** — Developed by [nanbeimerco](https://github.com/nanbeimerco). Forked from MusicBeatSP, Tinque builds on its foundation with independent left/right parametric EQ, channel swapping, folder browsing, and updated animations.
+- **[Auris](https://github.com/OreoMuncher45/Auris)** — Developed by [OreoMuncher45](https://github.com/OreoMuncher45). A community fork of BitChord, Auris is a lossless-first Android music player for local music and YouTube Music, with a redesigned interface, offline downloads, lyrics, and optional lossless audio add-ons. 
 - **[Booming Music](https://github.com/mardous/BoomingMusic)** — Reference for the fast-scroller design and tag-editor workflow.
 - **[TagLib](https://github.com/kyant0/taglib)** — Audio metadata parsing and writing.
 - **[Haze](https://github.com/chrisbanes/haze)** — Compose backdrop blur effects.
