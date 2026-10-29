@@ -42,6 +42,7 @@ import androidx.compose.animation.core.snap
 import androidx.compose.animation.core.tween
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
+import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.gestures.awaitEachGesture
 import androidx.compose.foundation.gestures.awaitFirstDown
@@ -172,6 +173,7 @@ import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.CompositingStrategy
 import androidx.compose.ui.graphics.Shadow
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.Path
 import androidx.compose.ui.graphics.TransformOrigin
 import androidx.compose.ui.graphics.painter.Painter
 import androidx.compose.ui.graphics.drawscope.ContentDrawScope
@@ -3335,14 +3337,12 @@ fun NowPlayingScreen(
                     Box(
                         Modifier
                             .size((playerPlayPauseIconSizeDp + 12f).dp)
-                            .background(Color.White.copy(alpha = 0.08f), RoundedCornerShape(percent = playerPlayPauseCornerRadiusPercent))
-                            .clip(RoundedCornerShape(percent = playerPlayPauseCornerRadiusPercent))
                             .then(
                                 if (walkmanControlsActive) {
                                     Modifier.border(
                                         1.dp,
                                         Color.White.copy(alpha = 0.72f),
-                                        RoundedCornerShape(percent = playerPlayPauseCornerRadiusPercent),
+                                        CircleShape,
                                     )
                                 } else Modifier,
                             ),
@@ -5080,17 +5080,11 @@ private fun TransportGlyph(
         targetValue = if (enabled) 1f else 0.3f,
         label = "transportAlpha",
     )
-    val shape = cornerRadiusPercent?.let { RoundedCornerShape(percent = it.coerceIn(0, 100)) } ?: CircleShape
     Box(
         modifier = Modifier
             .size(size + 12.dp)
             .then(
-                if (cornerRadiusPercent != null) Modifier.background(Color.White.copy(alpha = 0.08f), shape)
-                else Modifier,
-            )
-            .clip(shape)
-            .then(
-                if (outlined) Modifier.border(1.dp, Color.White.copy(alpha = 0.72f), shape)
+                if (outlined) Modifier.border(1.dp, Color.White.copy(alpha = 0.72f), CircleShape)
                 else Modifier,
             )
             .clickable(
@@ -5103,12 +5097,70 @@ private fun TransportGlyph(
             },
         contentAlignment = Alignment.Center,
     ) {
-        Icon(
-            imageVector = icon,
-            contentDescription = contentDescription,
-            tint = Color.White.copy(alpha = alpha),
-            modifier = Modifier.size(size),
+        if (icon == Icons.Rounded.PlayArrow && cornerRadiusPercent != null) {
+            RoundedPlayTriangle(
+                size = size,
+                color = Color.White.copy(alpha = alpha),
+                cornerRoundnessPercent = cornerRadiusPercent,
+                contentDescription = contentDescription,
+            )
+        } else {
+            Icon(
+                imageVector = icon,
+                contentDescription = contentDescription,
+                tint = Color.White.copy(alpha = alpha),
+                modifier = Modifier.size(size),
+            )
+        }
+    }
+}
+
+/** Draw the play glyph itself with independently rounded triangle vertices. */
+@Composable
+private fun RoundedPlayTriangle(
+    size: androidx.compose.ui.unit.Dp,
+    color: Color,
+    cornerRoundnessPercent: Int,
+    contentDescription: String,
+) {
+    Canvas(
+        modifier = Modifier
+            .size(size)
+            .semantics(mergeDescendants = true) {
+                this.contentDescription = contentDescription
+            },
+    ) {
+        // Match the proportions of the Material PlayArrow glyph (24 x 24).
+        val vertices = listOf(
+            Offset(this.size.width * (8f / 24f), this.size.height * (5f / 24f)),
+            Offset(this.size.width * (8f / 24f), this.size.height * (19f / 24f)),
+            Offset(this.size.width * (19f / 24f), this.size.height * (12f / 24f)),
         )
+        val radius = this.size.minDimension * 0.12f * cornerRoundnessPercent.coerceIn(0, 100) / 100f
+        fun pointOnEdge(origin: Offset, toward: Offset): Offset {
+            val delta = toward - origin
+            val length = kotlin.math.sqrt(delta.x * delta.x + delta.y * delta.y)
+            return if (length == 0f) origin else origin + delta * (radius / length)
+        }
+
+        val roundedCorners = vertices.indices.map { index ->
+            val vertex = vertices[index]
+            val previous = vertices[(index + vertices.lastIndex) % vertices.size]
+            val next = vertices[(index + 1) % vertices.size]
+            pointOnEdge(vertex, previous) to pointOnEdge(vertex, next)
+        }
+        val path = Path().apply {
+            val start = roundedCorners.last().second
+            moveTo(start.x, start.y)
+            vertices.indices.forEach { index ->
+                val (entry, exit) = roundedCorners[index]
+                val vertex = vertices[index]
+                lineTo(entry.x, entry.y)
+                quadraticTo(vertex.x, vertex.y, exit.x, exit.y)
+            }
+            close()
+        }
+        drawPath(path, color)
     }
 }
 

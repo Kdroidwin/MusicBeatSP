@@ -1511,8 +1511,8 @@
     <string name="player_play_pause_icon_size">Play/pause icon size</string>
     <string name="player_play_pause_icon_size_subtitle">Adjust the central play and pause icon size on the player screen.</string>
     <string name="player_icon_size_value">%1$d dp</string>
-    <string name="player_play_pause_corner_roundness">Play button corner roundness</string>
-    <string name="player_play_pause_corner_roundness_subtitle">Adjust the central play/pause button from square corners to a fully rounded circle.</string>
+    <string name="player_play_pause_corner_roundness">Play icon corner roundness</string>
+    <string name="player_play_pause_corner_roundness_subtitle">Adjust the three corners of the triangular play icon. This does not add a background shape.</string>
     <string name="player_corner_roundness_value">%1$d%%</string>
     <string name="player_transport_button_spacing">Player transport button spacing</string>
     <string name="player_transport_button_spacing_subtitle">Adjust the gaps between the previous, play, and next controls. Auto keeps the current layout.</string>

@@ -1485,8 +1485,8 @@
     <string name="player_play_pause_icon_size">再生・一時停止アイコンのサイズ</string>
     <string name="player_play_pause_icon_size_subtitle">プレイヤー画面中央の再生・一時停止アイコンの大きさを調整します。</string>
     <string name="player_icon_size_value">%1$d dp</string>
-    <string name="player_play_pause_corner_roundness">再生ボタンの角の丸み</string>
-    <string name="player_play_pause_corner_roundness_subtitle">中央の再生・一時停止ボタンを、四角から円形まで調整します。</string>
+    <string name="player_play_pause_corner_roundness">再生アイコンの角の丸み</string>
+    <string name="player_play_pause_corner_roundness_subtitle">▷の3つの角の丸みを調整します。背景の図形は追加されません。</string>
     <string name="player_corner_roundness_value">%1$d%%</string>
     <string name="player_transport_button_spacing">プレイヤー操作ボタンの間隔</string>
     <string name="player_transport_button_spacing_subtitle">前へ・再生・次へなどの操作ボタン間隔を調整します。「自動」では従来の配置を使います。</string>
