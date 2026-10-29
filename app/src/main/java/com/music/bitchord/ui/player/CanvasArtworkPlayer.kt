@@ -136,6 +136,8 @@ fun CanvasArtworkPlayer(
      * this is a parameter here rather than a mask the caller could draw.
      */
     bottomFade: Float = 0f,
+    /** Match the eased Auris still-art fade when this is part of its hero stage. */
+    bottomFadeEased: Boolean = false,
 ) {
     val context = LocalContext.current
 
@@ -372,9 +374,10 @@ fun CanvasArtworkPlayer(
             view.alpha = alpha
             view.centerCrop(bounds, clipAspect, extraZoom)
             if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) {
-                view.setBottomFade(bottomFade, bounds)
+                view.setBottomFade(bottomFade, bounds, bottomFadeEased)
             } else {
                 frame.fadeFraction = bottomFade
+                frame.easedFade = bottomFadeEased
             }
         },
         modifier = modifier.onSizeChanged { bounds = it },
@@ -451,21 +454,13 @@ private fun TextureView.centerCrop(bounds: IntSize, clipAspect: Float, extraZoom
  * the older way, with a saveLayer and a Porter-Duff mask.
  */
 @RequiresApi(Build.VERSION_CODES.S)
-private fun TextureView.setBottomFade(fraction: Float, bounds: IntSize) {
+private fun TextureView.setBottomFade(fraction: Float, bounds: IntSize, eased: Boolean) {
     val height = bounds.height
     if (fraction <= 0.001f || height == 0) {
         setRenderEffect(null)
         return
     }
-    val gradient = LinearGradient(
-        0f,
-        height * (1f - fraction.coerceAtMost(1f)),
-        0f,
-        height.toFloat(),
-        android.graphics.Color.BLACK,
-        android.graphics.Color.TRANSPARENT,
-        Shader.TileMode.CLAMP,
-    )
+    val gradient = bottomFadeGradient(height, fraction, eased)
     // createOffsetEffect(0, 0) is the identity effect over the node's own
     // content, which is the only way to name "what this view drew" as the
     // destination of a blend.
@@ -506,6 +501,14 @@ private class FadingBottomFrame(context: Context) : FrameLayout(context) {
             invalidate()
         }
 
+    var easedFade: Boolean = false
+        set(value) {
+            if (value == field) return
+            field = value
+            gradient = null
+            invalidate()
+        }
+
     private val maskPaint = Paint().apply {
         xfermode = PorterDuffXfermode(PorterDuff.Mode.DST_IN)
     }
@@ -523,14 +526,10 @@ private class FadingBottomFrame(context: Context) : FrameLayout(context) {
             super.dispatchDraw(canvas)
             return
         }
-        val shader = gradient?.takeIf { gradientHeight == height } ?: LinearGradient(
-            0f,
-            height * (1f - fade),
-            0f,
-            height.toFloat(),
-            android.graphics.Color.BLACK,
-            android.graphics.Color.TRANSPARENT,
-            Shader.TileMode.CLAMP,
+        val shader = gradient?.takeIf { gradientHeight == height } ?: bottomFadeGradient(
+            height,
+            fade,
+            easedFade,
         ).also {
             gradient = it
             gradientHeight = height
@@ -541,6 +540,42 @@ private class FadingBottomFrame(context: Context) : FrameLayout(context) {
         canvas.drawRect(0f, 0f, width.toFloat(), height.toFloat(), maskPaint)
         canvas.restoreToCount(layer)
     }
+}
+
+/** Linear for existing callers; Auris' full-bleed stage uses its smoothstep fade. */
+private fun bottomFadeGradient(height: Int, fraction: Float, eased: Boolean): LinearGradient {
+    val startY = height * (1f - fraction.coerceIn(0f, 1f))
+    if (!eased) {
+        return LinearGradient(
+            0f,
+            startY,
+            0f,
+            height.toFloat(),
+            android.graphics.Color.BLACK,
+            android.graphics.Color.TRANSPARENT,
+            Shader.TileMode.CLAMP,
+        )
+    }
+
+    val steps = 16
+    val colors = IntArray(steps + 1)
+    val positions = FloatArray(steps + 1)
+    for (index in 0..steps) {
+        val t = index / steps.toFloat()
+        val smooth = t * t * (3f - 2f * t)
+        val alpha = ((1f - smooth) * 255f).roundToInt().coerceIn(0, 255)
+        colors[index] = alpha shl 24 // black with the eased opacity
+        positions[index] = t
+    }
+    return LinearGradient(
+        0f,
+        startY,
+        0f,
+        height.toFloat(),
+        colors,
+        positions,
+        Shader.TileMode.CLAMP,
+    )
 }
 
 /**
