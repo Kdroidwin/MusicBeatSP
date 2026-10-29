@@ -136,6 +136,7 @@ import androidx.compose.material3.Switch
 import androidx.compose.material3.Text
 import androidx.compose.material3.rememberModalBottomSheetState
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.MutableState
@@ -269,9 +270,8 @@ import com.music.bitchord.data.settings.PlayerControl
 import com.music.bitchord.data.settings.PlayerQuickAction
 import com.music.bitchord.data.settings.AudioQuality
 import com.music.bitchord.data.settings.PlayerArtworkMode
-import com.music.bitchord.data.settings.PlayerColorMode
-import com.music.bitchord.data.settings.PlayerColorTarget
-import com.music.bitchord.data.settings.PlayerElementColor
+import com.music.bitchord.data.settings.PlayerInkGroup
+import com.music.bitchord.data.settings.PLAYER_INK_AUTOMATIC
 import com.music.bitchord.data.model.LikeStatus
 import com.music.bitchord.data.model.PLAYER_ART_PX
 import com.music.bitchord.data.model.ROW_ART_PX
@@ -400,19 +400,6 @@ private fun aurisHeroArtworkScale(width: Float, height: Float, zoom: Float): Flo
         .takeIf { it.isFinite() }
         ?.coerceIn(1f, 1.5f)
         ?: 1f
-}
-
-private fun resolvePlayerElementColor(
-    target: PlayerColorTarget,
-    current: Color,
-    artwork: Color,
-    settings: Map<PlayerColorTarget, PlayerElementColor>,
-): Color = when (settings[target]?.mode ?: PlayerColorMode.CURRENT) {
-    PlayerColorMode.CURRENT -> current
-    PlayerColorMode.ARTWORK -> artwork
-    PlayerColorMode.CUSTOM -> runCatching {
-        Color(android.graphics.Color.parseColor(settings[target]?.customHex ?: "#FFFFFF"))
-    }.getOrDefault(current)
 }
 
 /** Restored artwork-derived blur used by the standard and enlarged full-screen modes. */
@@ -968,7 +955,40 @@ fun NowPlayingScreen(
     val haptics = rememberHaptics()
     val artUrl = song.artworkAt(ART_PX)
     val artworkPalette = rememberArtworkPalette(artUrl, dark = true, artPx = ART_PX)
-    val playerElementColors by AppSettings.playerElementColors.collectAsStateWithLifecycle()
+    val playerInkOverrides by AppSettings.playerInkColors.collectAsStateWithLifecycle()
+    val automaticPlayerInk = if ((artworkPalette.controlBandLuminance ?: 0f) >= 0.55f) {
+        Color(0xFF0B0B0C)
+    } else {
+        Color.White
+    }
+    val buttonControlInk by animateColorAsState(
+        targetValue = resolvePlayerInk(
+            playerInkOverrides[PlayerInkGroup.BUTTONS] ?: PLAYER_INK_AUTOMATIC,
+            automaticPlayerInk,
+        ),
+        label = "playerButtonInk",
+    )
+    val seekVolumeInk by animateColorAsState(
+        targetValue = resolvePlayerInk(
+            playerInkOverrides[PlayerInkGroup.SEEK_VOLUME] ?: PLAYER_INK_AUTOMATIC,
+            automaticPlayerInk,
+        ),
+        label = "playerSeekVolumeInk",
+    )
+    val songArtistInk by animateColorAsState(
+        targetValue = resolvePlayerInk(
+            playerInkOverrides[PlayerInkGroup.SONG_ARTIST] ?: PLAYER_INK_AUTOMATIC,
+            automaticPlayerInk,
+        ),
+        label = "playerSongArtistInk",
+    )
+    val lyricInk by animateColorAsState(
+        targetValue = resolvePlayerInk(
+            playerInkOverrides[PlayerInkGroup.LYRICS] ?: PLAYER_INK_AUTOMATIC,
+            automaticPlayerInk,
+        ),
+        label = "playerLyricInk",
+    )
     // Ask MediaStore for its already-indexed thumbnail while the full-size
     // embedded cover is being read and decoded. The player keeps the sharp
     // request below and swaps it in as soon as it is ready.
@@ -1800,6 +1820,12 @@ fun NowPlayingScreen(
     var dismissBandSpace by remember { mutableStateOf<LayoutCoordinates?>(null) }
 
     Box(modifier = modifier.fillMaxSize().then(dockHost)) {
+        CompositionLocalProvider(
+            LocalPlayerButtonControlInk provides buttonControlInk,
+            LocalPlayerSeekVolumeInk provides seekVolumeInk,
+            LocalPlayerSongArtistInk provides songArtistInk,
+            LocalPlayerLyricInk provides lyricInk,
+        ) {
         // Anchored to the sleeve's bottom edge, so the screen carries on in the
         // colours the artwork ended in rather than in a quantiser's idea of what
         // the artwork was about. Position ticks recompose this screen twice a
@@ -2770,7 +2796,7 @@ fun NowPlayingScreen(
                     Icon(
                         imageVector = if (showNext) Icons.Rounded.FastForward else Icons.Rounded.FastRewind,
                         contentDescription = null,
-                        tint = Color.White.copy(
+                        tint = LocalPlayerButtonControlInk.current.copy(
                             alpha = swipeHintProgress * if (enabled) 0.85f else 0.3f,
                         ),
                         modifier = Modifier
@@ -2820,10 +2846,10 @@ fun NowPlayingScreen(
                             style = MaterialTheme.typography.titleLarge.copy(
                                 fontSize = titleSize,
                             ),
-                            color = resolvePlayerElementColor(PlayerColorTarget.TITLE, Color.White, artworkPalette.accent, playerElementColors),
+                            color = LocalPlayerSongArtistInk.current,
                             enabled = scrolls,
                             leading = if (song.isExplicit == true) {
-                                { ExplicitBadge(color = resolvePlayerElementColor(PlayerColorTarget.TITLE, Color.White, artworkPalette.accent, playerElementColors)) }
+                                { ExplicitBadge(color = LocalPlayerSongArtistInk.current) }
                             } else {
                                 null
                             },
@@ -2839,7 +2865,7 @@ fun NowPlayingScreen(
                                     fontWeight = FontWeight.W500,
                                     fontSize = artistSize,
                                 ),
-                                color = resolvePlayerElementColor(PlayerColorTarget.ARTIST, Color.White.copy(alpha = 0.55f), artworkPalette.accent, playerElementColors),
+                                color = LocalPlayerSongArtistInk.current.copy(alpha = 0.55f),
                                 enabled = scrolls,
                                 // A title that's also scrolling gets to go first —
                                 // starting together reads as clutter, so the artist
@@ -2908,7 +2934,6 @@ fun NowPlayingScreen(
                                     label = if (action == PlayerQuickAction.REPEAT && repeatMode == Player.REPEAT_MODE_ONE) "1" else null,
                                     contentDescription = title,
                                     showDisc = !hidePlayerQuickActionCircles,
-                                    tint = resolvePlayerElementColor(PlayerColorTarget.QUICK_ACTIONS, Color.White, artworkPalette.accent, playerElementColors),
                                     active = when (action) {
                                         PlayerQuickAction.LYRICS -> lyricsOpen
                                         PlayerQuickAction.QUEUE -> queueOpen
@@ -2964,7 +2989,6 @@ fun NowPlayingScreen(
                         },
                         contentDescription = stringResource(R.string.more),
                         showDisc = !hidePlayerQuickActionCircles,
-                        tint = resolvePlayerElementColor(PlayerColorTarget.QUICK_ACTIONS, Color.White, artworkPalette.accent, playerElementColors),
                         onClick = onOpenMenu,
                     )
                     }
@@ -3187,6 +3211,8 @@ fun NowPlayingScreen(
                     },
                     idleHeight = playerSeekBarThicknessDp.dp,
                     activeHeight = (playerSeekBarThicknessDp + 4).dp,
+                    activeColor = LocalPlayerSeekVolumeInk.current.copy(alpha = 0.92f),
+                    inactiveColor = LocalPlayerSeekVolumeInk.current.copy(alpha = 0.26f),
                 )
             }
             val wifiQuality by AppSettings.audioQualityWifi.collectAsStateWithLifecycle()
@@ -3223,7 +3249,7 @@ fun NowPlayingScreen(
                         Text(
                             text = formatTime((shown * effectiveDurationMs).toLong()),
                             style = MaterialTheme.typography.labelMedium,
-                            color = Color.White.copy(alpha = 0.55f),
+                            color = LocalPlayerSeekVolumeInk.current.copy(alpha = 0.55f),
                         )
                         Text(
                             text = if (showTrackDurationInsteadOfRemaining) {
@@ -3232,7 +3258,7 @@ fun NowPlayingScreen(
                                 "-" + formatTime(effectiveDurationMs - (shown * effectiveDurationMs).toLong())
                             },
                             style = MaterialTheme.typography.labelMedium,
-                            color = Color.White.copy(alpha = 0.55f),
+                            color = LocalPlayerSeekVolumeInk.current.copy(alpha = 0.55f),
                         )
                     }
                     // Pinned to the box's own center rather than squeezed into the
@@ -3368,8 +3394,6 @@ fun NowPlayingScreen(
                         hasPrevious = hasPrevious,
                         hasNext = hasNext,
                         positionMs = positionMs,
-                        artworkAccent = artworkPalette.accent,
-                        playerElementColors = playerElementColors,
                         onPrevious = onPrevious,
                         onPlayPause = onPlayPause,
                         onNext = onNext,
@@ -3404,7 +3428,6 @@ fun NowPlayingScreen(
                         contentDescription = stringResource(R.string.seek_back_seconds, seekIntervalSeconds),
                         label = stringResource(R.string.seek_seconds_short, seekIntervalSeconds),
                         showLabel = !hideSeekButtonLabels,
-                        tint = resolvePlayerElementColor(PlayerColorTarget.TRANSPORT, Color.White, artworkPalette.accent, playerElementColors),
                         onClick = {
                             onSeek((positionMs - seekIntervalSeconds * 1000L).coerceAtLeast(0L))
                         },
@@ -3427,7 +3450,6 @@ fun NowPlayingScreen(
                         onOpenQueue = { queueOpen = true; lyricsOpen = false },
                         onOpenPlaylists = onOpenPlaylists,
                         onOpenSearch = onOpenSearch,
-                        tint = resolvePlayerElementColor(PlayerColorTarget.TRANSPORT, Color.White, artworkPalette.accent, playerElementColors),
                     )
                 }
                 WalkmanShuffleGlyph(
@@ -3437,14 +3459,12 @@ fun NowPlayingScreen(
                     rightAction = transportRightAction,
                     shuffleEnabled = shuffleEnabled,
                     onToggleShuffle = onToggleShuffle,
-                    tint = resolvePlayerElementColor(PlayerColorTarget.TRANSPORT, Color.White, artworkPalette.accent, playerElementColors),
                 )
                 TransportGlyph(
                     icon = Icons.Rounded.FastRewind,
                     contentDescription = stringResource(R.string.widget_previous),
                     size = 46.dp,
                     onClick = onPrevious,
-                    tint = resolvePlayerElementColor(PlayerColorTarget.TRANSPORT, Color.White, artworkPalette.accent, playerElementColors),
                     // Lit whenever back has something to do — either a track to
                     // step to, or enough elapsed for it to restart this one.
                     enabled = hasPrevious || positionMs > BACK_RESTARTS_AFTER_MS,
@@ -3463,7 +3483,7 @@ fun NowPlayingScreen(
                                 if (walkmanControlsActive) {
                                     Modifier.border(
                                         1.dp,
-                                        Color.White.copy(alpha = 0.72f),
+                                        LocalPlayerButtonControlInk.current.copy(alpha = 0.72f),
                                         CircleShape,
                                     )
                                 } else Modifier,
@@ -3471,7 +3491,7 @@ fun NowPlayingScreen(
                         contentAlignment = Alignment.Center,
                     ) {
                         CircularProgressIndicator(
-                            color = resolvePlayerElementColor(PlayerColorTarget.PLAY_PAUSE, Color.White, artworkPalette.accent, playerElementColors),
+                            color = LocalPlayerButtonControlInk.current,
                             strokeWidth = 3.dp,
                             modifier = Modifier.size(38.dp),
                         )
@@ -3482,7 +3502,6 @@ fun NowPlayingScreen(
                         contentDescription = stringResource(if (isPlaying) R.string.pause else R.string.play),
                         size = playerPlayPauseIconSizeDp.dp,
                         onClick = onPlayPause,
-                        tint = resolvePlayerElementColor(PlayerColorTarget.PLAY_PAUSE, Color.White, artworkPalette.accent, playerElementColors),
                         haptic = if (isPlaying) Haptic.Pause else Haptic.Resume,
                         outlined = walkmanControlsActive,
                         cornerRadiusPercent = playerPlayPauseCornerRadiusPercent,
@@ -3493,7 +3512,6 @@ fun NowPlayingScreen(
                     contentDescription = stringResource(R.string.widget_next),
                     size = 46.dp,
                     onClick = onNext,
-                    tint = resolvePlayerElementColor(PlayerColorTarget.TRANSPORT, Color.White, artworkPalette.accent, playerElementColors),
                     enabled = hasNext,
                     haptic = Haptic.SkipNext,
                     outlined = walkmanControlsActive,
@@ -3518,7 +3536,6 @@ fun NowPlayingScreen(
                             else -> Haptic.Select
                         },
                         outlined = true,
-                        tint = resolvePlayerElementColor(PlayerColorTarget.TRANSPORT, Color.White, artworkPalette.accent, playerElementColors),
                     )
                 }
                 if (transportRightAction == TransportSideAction.NONE && seekButtonsVisible) {
@@ -3527,7 +3544,6 @@ fun NowPlayingScreen(
                         contentDescription = stringResource(R.string.seek_forward_seconds, seekIntervalSeconds),
                         label = stringResource(R.string.seek_seconds_short, seekIntervalSeconds),
                         showLabel = !hideSeekButtonLabels,
-                        tint = resolvePlayerElementColor(PlayerColorTarget.TRANSPORT, Color.White, artworkPalette.accent, playerElementColors),
                         onClick = {
                             val end = effectiveDurationMs.takeIf { it > 0L } ?: Long.MAX_VALUE
                             onSeek((positionMs + seekIntervalSeconds * 1000L).coerceAtMost(end))
@@ -3551,7 +3567,6 @@ fun NowPlayingScreen(
                         onOpenQueue = { queueOpen = true; lyricsOpen = false },
                         onOpenPlaylists = onOpenPlaylists,
                         onOpenSearch = onOpenSearch,
-                        tint = resolvePlayerElementColor(PlayerColorTarget.TRANSPORT, Color.White, artworkPalette.accent, playerElementColors),
                     )
                 }
             }
@@ -3573,7 +3588,7 @@ fun NowPlayingScreen(
                     Icon(
                         Icons.AutoMirrored.Rounded.VolumeDown,
                         contentDescription = null,
-                        tint = Color.White.copy(alpha = 0.5f),
+                        tint = LocalPlayerSeekVolumeInk.current.copy(alpha = 0.5f),
                         modifier = Modifier.size(20.dp),
                     )
                     Spacer(Modifier.width(10.dp))
@@ -3592,13 +3607,15 @@ fun NowPlayingScreen(
                         onValueChangeFinished = { volumeDragging = false },
                         idleHeight = playerVolumeBarThicknessDp.dp,
                         activeHeight = (playerVolumeBarThicknessDp + 4).dp,
+                        activeColor = LocalPlayerSeekVolumeInk.current.copy(alpha = 0.92f),
+                        inactiveColor = LocalPlayerSeekVolumeInk.current.copy(alpha = 0.26f),
                         modifier = Modifier.weight(1f),
                     )
                     Spacer(Modifier.width(10.dp))
                     Icon(
                         Icons.AutoMirrored.Rounded.VolumeUp,
                         contentDescription = null,
-                        tint = Color.White.copy(alpha = 0.5f),
+                        tint = LocalPlayerSeekVolumeInk.current.copy(alpha = 0.5f),
                         modifier = Modifier.size(20.dp),
                     )
                 }
@@ -3624,7 +3641,6 @@ fun NowPlayingScreen(
                                 visible = !walkmanControlsActive,
                                 shuffleEnabled = shuffleEnabled,
                                 onToggleShuffle = onToggleShuffle,
-                                tint = resolvePlayerElementColor(PlayerColorTarget.BOTTOM_CONTROLS, Color.White, artworkPalette.accent, playerElementColors),
                             )
                             PlayerControl.REPEAT -> if (!walkmanControlsActive) BottomGlyph(
                                 icon = if (repeatMode == Player.REPEAT_MODE_ONE) null else BitChordIcons.Repeat,
@@ -3641,7 +3657,6 @@ fun NowPlayingScreen(
                                     Player.REPEAT_MODE_ONE -> Haptic.ToggleOff
                                     else -> Haptic.Select
                                 },
-                                tint = resolvePlayerElementColor(PlayerColorTarget.BOTTOM_CONTROLS, Color.White, artworkPalette.accent, playerElementColors),
                             )
                             PlayerControl.LYRICS -> BottomGlyph(
                                 icon = if (appleMusicLyricsButtonStyle) BitChordIcons.AurisLyrics else Icons.AutoMirrored.Rounded.Notes,
@@ -3652,7 +3667,6 @@ fun NowPlayingScreen(
                                 },
                                 highlighted = lyricsOpen,
                                 haptic = if (lyricsOpen) Haptic.Tap else Haptic.Select,
-                                tint = resolvePlayerElementColor(PlayerColorTarget.BOTTOM_CONTROLS, Color.White, artworkPalette.accent, playerElementColors),
                             )
                             PlayerControl.LIKE -> if (PlayerQuickAction.FAVORITE !in playerQuickActions) BottomGlyph(
                                 icon = likeIcon,
@@ -3661,7 +3675,6 @@ fun NowPlayingScreen(
                                 highlighted = liked,
                                 enabled = likeAvailable,
                                 haptic = if (liked) Haptic.ToggleOff else Haptic.ToggleOn,
-                                tint = resolvePlayerElementColor(PlayerColorTarget.BOTTOM_CONTROLS, Color.White, artworkPalette.accent, playerElementColors),
                             )
                             PlayerControl.QUEUE -> BottomGlyph(
                                 icon = if (appleMusicQueueButtonStyle) BitChordIcons.AurisQueue else Icons.AutoMirrored.Rounded.QueueMusic,
@@ -3672,7 +3685,6 @@ fun NowPlayingScreen(
                                 },
                                 highlighted = queueOpen,
                                 haptic = if (queueOpen) Haptic.Tap else Haptic.Expand,
-                                tint = resolvePlayerElementColor(PlayerColorTarget.BOTTOM_CONTROLS, Color.White, artworkPalette.accent, playerElementColors),
                             )
                             PlayerControl.CHROMECAST -> Box(
                                 modifier = Modifier
@@ -3700,14 +3712,12 @@ fun NowPlayingScreen(
                                 contentDescription = stringResource(R.string.playlists),
                                 onClick = onOpenPlaylists,
                                 haptic = Haptic.Select,
-                                tint = resolvePlayerElementColor(PlayerColorTarget.BOTTOM_CONTROLS, Color.White, artworkPalette.accent, playerElementColors),
                             )
                             PlayerControl.SEARCH -> BottomGlyph(
                                 icon = BitChordIcons.Search,
                                 contentDescription = stringResource(R.string.search),
                                 onClick = onOpenSearch,
                                 haptic = Haptic.Select,
-                                tint = resolvePlayerElementColor(PlayerColorTarget.BOTTOM_CONTROLS, Color.White, artworkPalette.accent, playerElementColors),
                             )
                         }
                     }
@@ -3718,6 +3728,7 @@ fun NowPlayingScreen(
             }
             }
             }
+        }
         }
     }
 }
@@ -3866,9 +3877,10 @@ private fun SweptLyricLine(
     var layout by remember(line) { mutableStateOf<TextLayoutResult?>(null) }
     val autoFit by AppSettings.autoFitOneLineLyrics.collectAsStateWithLifecycle()
     val showFurigana by AppSettings.showLyricsFurigana.collectAsStateWithLifecycle()
+    val lyricInk = LocalPlayerLyricInk.current
     val textMeasurer = rememberTextMeasurer()
-    val richText = remember(line.text, style, showFurigana) {
-        makeLyricRichText(line.text, style, Color.White, showFurigana)
+    val richText = remember(line.text, style, showFurigana, lyricInk) {
+        makeLyricRichText(line.text, style, lyricInk, showFurigana)
     }
 
     // Carried by every copy: identical insets keep them laying out identically,
@@ -3911,7 +3923,7 @@ private fun SweptLyricLine(
             text = richText.annotated,
             inlineContent = richText.inlineContent,
             style = fittedStyle,
-            color = Color.White.copy(alpha = dimAlpha),
+            color = lyricInk.copy(alpha = dimAlpha),
             maxLines = displayedMaxLines,
             overflow = displayedOverflow,
             onTextLayout = { layout = it },
@@ -3922,7 +3934,7 @@ private fun SweptLyricLine(
                 text = richText.annotated,
                 inlineContent = richText.inlineContent,
                 style = fittedStyle,
-                color = Color.White,
+                color = lyricInk,
                 maxLines = displayedMaxLines,
                 overflow = displayedOverflow,
                 modifier = Modifier
@@ -3957,7 +3969,7 @@ private fun SweptLyricLine(
             text = richText.annotated,
             inlineContent = richText.inlineContent,
             style = fittedStyle,
-            color = Color.White,
+            color = lyricInk,
             maxLines = displayedMaxLines,
             overflow = displayedOverflow,
             modifier = room.fillMaxWidth().then(sweep),
@@ -4239,7 +4251,7 @@ private fun LyricsPanel(
                 Text(
                     text = stringResource(R.string.no_lyrics_for_track),
                     style = MaterialTheme.typography.titleMedium,
-                    color = Color.White.copy(alpha = 0.6f),
+                    color = LocalPlayerLyricInk.current.copy(alpha = 0.6f),
                 )
             }
         }
@@ -4273,7 +4285,7 @@ private fun LyricsPanel(
                     Box(
                         modifier = Modifier
                             .clip(RoundedCornerShape(6.dp))
-                            .background(Color.White.copy(alpha = 0.14f))
+                            .background(LocalPlayerLyricInk.current.copy(alpha = 0.14f))
                             .padding(horizontal = 11.dp, vertical = 4.dp),
                     ) {
                         Text(
@@ -4283,7 +4295,7 @@ private fun LyricsPanel(
                                 fontWeight = FontWeight.Bold,
                                 fontSize = 11.5.sp,
                             ),
-                            color = Color.White.copy(alpha = 0.9f),
+                            color = LocalPlayerLyricInk.current.copy(alpha = 0.9f),
                         )
                     }
                 }
@@ -4338,7 +4350,7 @@ private fun LyricsPanel(
                         Icon(
                             imageVector = BitChordIcons.MusicNote,
                             contentDescription = stringResource(R.string.instrumental),
-                            tint = Color.White.copy(alpha = lineAlpha),
+                            tint = LocalPlayerLyricInk.current.copy(alpha = lineAlpha),
                             modifier = Modifier.fillMaxSize(),
                         )
                     }
@@ -4501,7 +4513,7 @@ private fun PanelVoice(
         LyricTextDisplay(
             text = line.text,
             style = style,
-            color = Color.White,
+            color = LocalPlayerLyricInk.current,
             textAlign = textAlign,
             modifier = modifier.padding(room).fillMaxWidth(),
         )
@@ -4860,7 +4872,7 @@ private fun CurrentLyricLine(
             Icon(
                 imageVector = BitChordIcons.MusicNote,
                 contentDescription = null,
-                tint = Color.White.copy(alpha = 0.85f),
+                tint = LocalPlayerLyricInk.current.copy(alpha = 0.85f),
                 modifier = Modifier.size(16.dp),
             )
             Spacer(Modifier.width(8.dp))
@@ -4870,7 +4882,7 @@ private fun CurrentLyricLine(
                     fontSize = 13.5.sp,
                     fontWeight = FontWeight.Medium,
                 ),
-                color = Color.White.copy(alpha = 0.85f),
+                color = LocalPlayerLyricInk.current.copy(alpha = 0.85f),
                 maxLines = 1,
                 overflow = TextOverflow.Ellipsis,
             )
@@ -4934,7 +4946,7 @@ private fun CurrentLyricLine(
             Icon(
                 imageVector = BitChordIcons.MusicNote,
                 contentDescription = null,
-                tint = Color.White,
+                tint = LocalPlayerLyricInk.current,
                 modifier = Modifier.size(16.dp),
             )
             Spacer(Modifier.width(6.dp))
@@ -4975,7 +4987,7 @@ private fun CurrentLyricLine(
                 LyricTextDisplay(
                     text = lineText,
                     style = MaterialTheme.typography.titleMedium,
-                    color = if (itemInstrumental) Color.White.copy(alpha = 0.5f) else Color.White,
+                    color = if (itemInstrumental) LocalPlayerLyricInk.current.copy(alpha = 0.5f) else LocalPlayerLyricInk.current,
                     maxLines = 1,
                     overflow = TextOverflow.Ellipsis,
                 )
@@ -4986,7 +4998,7 @@ private fun CurrentLyricLine(
         Icon(
             imageVector = BitChordIcons.ChevronRight,
             contentDescription = null,
-            tint = Color.White.copy(alpha = 0.5f),
+            tint = LocalPlayerLyricInk.current.copy(alpha = 0.5f),
             modifier = Modifier.size(14.dp),
         )
     }
@@ -5012,7 +5024,7 @@ private fun LyricsUnavailableLine(trackKey: Any, modifier: Modifier = Modifier) 
     Text(
         text = stringResource(R.string.lyrics_not_available),
         style = MaterialTheme.typography.titleMedium,
-        color = Color.White,
+        color = LocalPlayerLyricInk.current,
         maxLines = 1,
         overflow = TextOverflow.Ellipsis,
         modifier = modifier
@@ -5031,7 +5043,7 @@ private fun LyricsLoadingLine(trackKey: Any, modifier: Modifier = Modifier) {
     Text(
         text = text,
         style = MaterialTheme.typography.titleMedium,
-        color = Color.White.copy(alpha = 0.55f),
+        color = LocalPlayerLyricInk.current.copy(alpha = 0.55f),
         maxLines = 1,
         overflow = TextOverflow.Ellipsis,
         modifier = modifier.padding(vertical = 4.dp),
@@ -5149,8 +5161,8 @@ private fun CircleGlyph(
     active: Boolean = false,
     enabled: Boolean = true,
     haptic: Haptic = Haptic.Tap,
-    tint: Color = Color.White,
 ) {
+    val ink = LocalPlayerButtonControlInk.current
     val haptics = rememberHaptics()
     val discAlpha by animateFloatAsState(
         targetValue = if (active) 0.34f else 0.18f,
@@ -5161,7 +5173,7 @@ private fun CircleGlyph(
             .size(34.dp)
             .clip(CircleShape)
             .then(
-                if (showDisc) Modifier.background(Color.White.copy(alpha = discAlpha)) else Modifier,
+                if (showDisc) Modifier.background(ink.copy(alpha = discAlpha)) else Modifier,
             )
             .semantics { this.contentDescription = contentDescription }
             .clickable(
@@ -5175,7 +5187,7 @@ private fun CircleGlyph(
         contentAlignment = Alignment.Center,
     ) {
         if (label != null) {
-            Text(label, color = tint, fontSize = 15.sp, fontWeight = FontWeight.Bold)
+            Text(label, color = ink, fontSize = 15.sp, fontWeight = FontWeight.Bold)
         } else {
             Crossfade(
                 targetState = icon,
@@ -5185,7 +5197,7 @@ private fun CircleGlyph(
                 Icon(
                     imageVector = glyph,
                     contentDescription = contentDescription,
-                    tint = tint,
+                    tint = ink,
                     modifier = Modifier.size(19.dp),
                 )
             }
@@ -5208,8 +5220,8 @@ private fun TransportGlyph(
     haptic: Haptic = Haptic.Tap,
     outlined: Boolean = false,
     cornerRadiusPercent: Int? = null,
-    tint: Color = Color.White,
 ) {
+    val ink = LocalPlayerButtonControlInk.current
     val haptics = rememberHaptics()
     // Faded rather than hidden: the row keeps its shape at the ends of a queue.
     val alpha by animateFloatAsState(
@@ -5220,7 +5232,7 @@ private fun TransportGlyph(
         modifier = Modifier
             .size(size + 12.dp)
             .then(
-                if (outlined) Modifier.border(1.dp, Color.White.copy(alpha = 0.72f), CircleShape)
+                if (outlined) Modifier.border(1.dp, ink.copy(alpha = 0.72f), CircleShape)
                 else Modifier,
             )
             .clickable(
@@ -5236,7 +5248,7 @@ private fun TransportGlyph(
         if (icon == Icons.Rounded.PlayArrow && cornerRadiusPercent != null) {
             RoundedPlayTriangle(
                 size = size,
-                color = tint.copy(alpha = tint.alpha * alpha),
+                color = ink.copy(alpha = alpha),
                 cornerRoundnessPercent = cornerRadiusPercent,
                 contentDescription = contentDescription,
             )
@@ -5244,14 +5256,14 @@ private fun TransportGlyph(
             Icon(
                 imageVector = icon,
                 contentDescription = contentDescription,
-                tint = tint.copy(alpha = tint.alpha * alpha),
+                tint = ink.copy(alpha = alpha),
                 modifier = Modifier.size(size),
             )
         }
     }
 }
 
-/** Keeps the lyric-overlay transport out of the screen's large Compose method. */
+/** Keeps the lyrics transport out of NowPlayingScreen's generated DEX method. */
 @Composable
 private fun BoxScope.LyricsTransportControls(
     visible: Boolean,
@@ -5266,8 +5278,6 @@ private fun BoxScope.LyricsTransportControls(
     hasPrevious: Boolean,
     hasNext: Boolean,
     positionMs: Long,
-    artworkAccent: Color,
-    playerElementColors: Map<PlayerColorTarget, PlayerElementColor>,
     onPrevious: () -> Unit,
     onPlayPause: () -> Unit,
     onNext: () -> Unit,
@@ -5280,18 +5290,6 @@ private fun BoxScope.LyricsTransportControls(
             .align(Alignment.CenterEnd)
             .padding(end = if (closeButtonVisible) 56.dp else 0.dp)
     }
-    val transportTint = resolvePlayerElementColor(
-        PlayerColorTarget.TRANSPORT,
-        Color.White,
-        artworkAccent,
-        playerElementColors,
-    )
-    val playPauseTint = resolvePlayerElementColor(
-        PlayerColorTarget.PLAY_PAUSE,
-        Color.White,
-        artworkAccent,
-        playerElementColors,
-    )
     Row(
         modifier = rowModifier,
         verticalAlignment = Alignment.CenterVertically,
@@ -5303,7 +5301,6 @@ private fun BoxScope.LyricsTransportControls(
                 size = controlSize,
                 enabled = hasPrevious || positionMs > BACK_RESTARTS_AFTER_MS,
                 onClick = onPrevious,
-                tint = transportTint,
             )
         }
         if (showPlayPause) {
@@ -5313,7 +5310,6 @@ private fun BoxScope.LyricsTransportControls(
                 size = controlSize,
                 enabled = !isLoading,
                 onClick = onPlayPause,
-                tint = playPauseTint,
             )
         }
         if (showNext) {
@@ -5323,7 +5319,6 @@ private fun BoxScope.LyricsTransportControls(
                 size = controlSize,
                 enabled = hasNext,
                 onClick = onNext,
-                tint = transportTint,
             )
         }
     }
@@ -5385,8 +5380,8 @@ private fun SeekTransportGlyph(
     label: String,
     showLabel: Boolean,
     onClick: () -> Unit,
-    tint: Color = Color.White,
 ) {
+    val ink = LocalPlayerButtonControlInk.current
     val haptics = rememberHaptics()
     Column(
         modifier = Modifier
@@ -5406,13 +5401,13 @@ private fun SeekTransportGlyph(
         Icon(
             imageVector = icon,
             contentDescription = contentDescription,
-            tint = tint,
+            tint = ink,
             modifier = Modifier.size(21.dp),
         )
         if (showLabel) {
             Text(
                 text = label,
-                color = tint.copy(alpha = tint.alpha * 0.86f),
+                color = ink.copy(alpha = 0.86f),
                 style = MaterialTheme.typography.labelSmall,
                 maxLines = 1,
             )
@@ -5438,7 +5433,6 @@ private fun TransportSideActionGlyph(
     onOpenQueue: () -> Unit,
     onOpenPlaylists: () -> Unit,
     onOpenSearch: () -> Unit,
-    tint: Color = Color.White,
 ) {
     val icon = when (action) {
         TransportSideAction.NONE -> return
@@ -5492,7 +5486,6 @@ private fun TransportSideActionGlyph(
         highlighted = highlighted,
         enabled = enabled,
         haptic = haptic,
-        tint = tint,
         onClick = {
             when (action) {
                 TransportSideAction.NONE -> Unit
@@ -5514,7 +5507,6 @@ private fun PlayerShuffleControl(
     visible: Boolean,
     shuffleEnabled: Boolean,
     onToggleShuffle: () -> Unit,
-    tint: Color = Color.White,
 ) {
     if (!visible) return
 
@@ -5527,7 +5519,6 @@ private fun PlayerShuffleControl(
         highlighted = shuffleEnabled,
         haptic = if (shuffleEnabled) Haptic.ToggleOff else Haptic.ToggleOn,
         tapWindowMs = SHUFFLE_TAP_WINDOW_MS,
-        tint = tint,
     )
 }
 
@@ -5540,7 +5531,6 @@ private fun WalkmanShuffleGlyph(
     rightAction: TransportSideAction,
     shuffleEnabled: Boolean,
     onToggleShuffle: () -> Unit,
-    tint: Color = Color.White,
 ) {
     if (!active || !enabledBySettings || leftAction == TransportSideAction.SHUFFLE ||
         rightAction == TransportSideAction.SHUFFLE
@@ -5558,7 +5548,6 @@ private fun WalkmanShuffleGlyph(
         haptic = if (shuffleEnabled) Haptic.ToggleOff else Haptic.ToggleOn,
         tapWindowMs = SHUFFLE_TAP_WINDOW_MS,
         outlined = true,
-        tint = tint,
     )
 }
 
@@ -5572,7 +5561,6 @@ private fun BottomGlyph(
     haptic: Haptic = Haptic.Tap,
     label: String? = null,
     outlined: Boolean = false,
-    tint: Color = Color.White,
     /**
      * Shortest gap between taps that both reach [onClick]. A tap inside the
      * window of the last one is dropped whole — haptic included, so a swallowed
@@ -5582,6 +5570,7 @@ private fun BottomGlyph(
      */
     tapWindowMs: Long = 0L,
 ) {
+    val ink = LocalPlayerButtonControlInk.current
     val haptics = rememberHaptics()
     // Read only from the click handler, never during composition, so writing it
     // costs no recomposition. Starts a full window in the past so the first tap
@@ -5592,10 +5581,10 @@ private fun BottomGlyph(
             .size(44.dp)
             .clip(CircleShape)
             .background(
-                if (highlighted && enabled) Color.White.copy(alpha = 0.20f) else Color.Transparent,
+                if (highlighted && enabled) ink.copy(alpha = 0.20f) else Color.Transparent,
             )
             .then(
-                if (outlined) Modifier.border(1.dp, Color.White.copy(alpha = 0.72f), CircleShape)
+                if (outlined) Modifier.border(1.dp, ink.copy(alpha = 0.72f), CircleShape)
                 else Modifier,
             )
             .clickable(
@@ -5613,8 +5602,8 @@ private fun BottomGlyph(
             .semantics { this.contentDescription = contentDescription },
         contentAlignment = Alignment.Center,
     ) {
-        val glyphTint = tint.copy(
-            alpha = tint.alpha * when {
+        val tint = ink.copy(
+            alpha = when {
                 !enabled -> 0.30f
                 highlighted -> 1f
                 else -> 0.75f
@@ -5624,13 +5613,13 @@ private fun BottomGlyph(
             Icon(
                 imageVector = icon,
                 contentDescription = null,
-                tint = glyphTint,
+                tint = tint,
                 modifier = Modifier.size(26.dp),
             )
         } else if (label != null) {
             Text(
                 text = label,
-                color = glyphTint,
+                color = tint,
                 fontSize = 19.sp,
                 fontWeight = FontWeight.Bold,
             )

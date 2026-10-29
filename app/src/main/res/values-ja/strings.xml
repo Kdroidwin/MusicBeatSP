@@ -368,19 +368,6 @@
     <string name="full_screen_artwork_bottom_blur_strength">全画面アート下部のぼかし強度</string>
     <string name="full_screen_artwork_bottom_blur_strength_subtitle">通常の全画面、拡大全画面、Auris風全画面アートの下部にかかるグラデーションぼかしを調整します。</string>
     <string name="artwork_blur_strength_value">%1$d dp</string>
-    <string name="player_color_title">プレイヤーの曲名の色</string>
-    <string name="player_color_artist">プレイヤーのアーティスト名の色</string>
-    <string name="player_color_quick_actions">クイック操作ボタンの色</string>
-    <string name="player_color_bottom_controls">下部操作ボタンの色</string>
-    <string name="player_color_transport">前／次の曲ボタンの色</string>
-    <string name="player_color_play_pause">再生／一時停止ボタンの色</string>
-    <string name="player_element_color_subtitle">現在の色、再生中のアルバムアートから取得した色、またはカラーコードを選びます。</string>
-    <string name="player_element_color_dialog_title">%1$s</string>
-    <string name="player_color_mode_current">現在の色を使う</string>
-    <string name="player_color_mode_artwork">アルバムアートに合わせる</string>
-    <string name="player_color_mode_custom">カラーコードを指定</string>
-    <string name="player_color_hex_label">カラーコード</string>
-    <string name="player_color_hex_help">#RRGGBB または #AARRGGBB を入力</string>
     <string name="keep_original_artwork_aspect_ratio">カバーアートの縦横比を維持</string>
     <string name="keep_original_artwork_aspect_ratio_subtitle">全画面カバーアートがオフのとき、縦長・横長の画像を正方形に切り抜かず表示します</string>
     <string name="keep_collection_artwork_aspect_ratio">アルバム・プレイリストのアート比率を維持</string>
@@ -1531,4 +1518,16 @@
     <string name="show_lyrics_close_button_subtitle">歌詞画面に×ボタンを表示します。非表示の場合はAndroidの戻る操作で閉じられます。</string>
     <string name="prefer_embedded_local_lyrics">埋め込み歌詞を優先</string>
     <string name="prefer_embedded_local_lyrics_subtitle">オンにすると、音源タグ内の歌詞をダウンロード済み・同名LRCファイルより先に読み込みます。</string>
+    <string name="navigation_bar_force_white">ナビゲーション操作アイコンを白に固定</string>
+    <string name="navigation_bar_force_white_subtitle">Androidの戻る・ホーム・履歴ボタンとジェスチャーハンドルを白くします。ナビゲーションバーの背景色は変わりません。</string>
+    <string name="player_ink_customization">プレイヤーの色設定</string>
+    <string name="player_ink_customization_subtitle">アートワークに合わせた自動色、または #RRGGBB 形式の色を指定できます。変更はすぐ反映され、設定バックアップにも含まれます。</string>
+    <string name="player_ink_button_controls">ボタンアイコンと操作部</string>
+    <string name="player_ink_seek_volume">シークバーと音量バー</string>
+    <string name="player_ink_song_artist">曲名とアーティスト名</string>
+    <string name="player_ink_lyrics">歌詞の一行表示</string>
+    <string name="player_ink_automatic">自動（アートワークに合わせる）</string>
+    <string name="player_ink_custom">色を指定</string>
+    <string name="player_ink_hex_hint">カラーコード（#RRGGBB）</string>
+    <string name="player_ink_hex_invalid">#RRGGBB 形式で入力してください</string>
 </resources>

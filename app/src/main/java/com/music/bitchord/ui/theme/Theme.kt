@@ -8,6 +8,8 @@ import androidx.compose.material3.lightColorScheme
 import androidx.compose.material3.Typography
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.SideEffect
+import androidx.compose.runtime.getValue
+import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.lerp
 import androidx.compose.ui.graphics.luminance
@@ -21,6 +23,7 @@ import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.sp
 import com.music.bitchord.R
+import com.music.bitchord.data.settings.AppSettings
 
 // Apple Music's signature red. No longer the primary accent, but kept for the
 // spots (Replay's rank badge) that want that specific red regardless of theme.
@@ -202,13 +205,15 @@ fun BitChordTheme(
  */
 @Composable
 fun SystemBarIcons(dark: Boolean) {
+    val forceWhiteNavigationBar by AppSettings.forceWhiteNavigationBar.collectAsStateWithLifecycle()
     val view = LocalView.current
     if (view.isInEditMode) return
     val window = findWindow(view) ?: return
     SideEffect {
         WindowCompat.getInsetsController(window, window.decorView).apply {
             isAppearanceLightStatusBars = dark
-            isAppearanceLightNavigationBars = dark
+            // false asks Android for light navigation glyphs / gesture handle.
+            isAppearanceLightNavigationBars = if (forceWhiteNavigationBar) false else dark
         }
     }
 }

@@ -65,6 +65,8 @@ data class ArtworkPalette(
     val onBackground: Color,
     val onBackgroundVariant: Color,
     val divider: Color,
+    /** Mean relative luminance of the lower artwork band used by player controls. */
+    val controlBandLuminance: Float? = null,
 )
 
 /**
@@ -148,6 +150,7 @@ fun rememberArtworkPalette(
             target.onBackgroundVariant, spec, label = "tintOnVariant",
         ).value,
         divider = animateColorAsState(target.divider, spec, label = "tintDivider").value,
+        controlBandLuminance = target.controlBandLuminance,
     )
 }
 
@@ -175,7 +178,12 @@ private const val TINT_FADE_MS = 260
  * The raw artwork colours: what the page is mostly made of, its brightest
  * note, and what its bottom edge averages out to.
  */
-private data class Seed(val dominant: Color, val vibrant: Color?, val edge: Color)
+private data class Seed(
+    val dominant: Color,
+    val vibrant: Color?,
+    val edge: Color,
+    val controlBandLuminance: Float,
+)
 
 private fun seedOf(bitmap: Bitmap): Seed? {
     fun swatches(builder: Palette.Builder) =
@@ -209,7 +217,12 @@ private fun seedOf(bitmap: Bitmap): Seed? {
         ?: Color(dominant.rgb).takeIf { color ->
             FloatArray(3).also { hsl -> ColorUtils.colorToHSL(color.toArgb(), hsl) }[1] >= MIN_ACCENT_SATURATION
         }
-    return Seed(Color(dominant.rgb), vibrant, bitmap.bottomEdgeColor())
+    return Seed(
+        dominant = Color(dominant.rgb),
+        vibrant = vibrant,
+        edge = bitmap.bottomEdgeColor(),
+        controlBandLuminance = bitmap.controlBandRelativeLuminance(),
+    )
 }
 
 private const val SWATCH_COUNT = 24
@@ -248,6 +261,16 @@ private fun Bitmap.bottomEdgeColor(): Color {
 /** How much of the artwork's height the edge colour is read from. */
 private const val EDGE_BAND = 0.18f
 
+/** Matches Auris' player ink sampling: controls sit over the lower half of the sleeve. */
+private fun Bitmap.controlBandRelativeLuminance(): Float {
+    if (width <= 0 || height <= 0) return 0f
+    val start = (height * 0.5f).toInt().coerceIn(0, height - 1)
+    val bandHeight = height - start
+    val pixels = IntArray(width * bandHeight)
+    getPixels(pixels, 0, width, 0, start, width, bandHeight)
+    return pixels.asSequence().map(ColorUtils::calculateLuminance).average().toFloat()
+}
+
 private fun Seed.toPalette(dark: Boolean): ArtworkPalette = if (dark) {
     val accent = vibrant ?: Color(0xFFE0E0E0)
     ArtworkPalette(
@@ -275,6 +298,7 @@ private fun Seed.toPalette(dark: Boolean): ArtworkPalette = if (dark) {
         // names were sinking into the wash on mid-toned sleeves.
         onBackgroundVariant = Color.White.copy(alpha = 0.80f),
         divider = Color.White.copy(alpha = 0.12f),
+        controlBandLuminance = controlBandLuminance,
     )
 } else {
     val accent = vibrant ?: Color(0xFF424242)
@@ -292,6 +316,7 @@ private fun Seed.toPalette(dark: Boolean): ArtworkPalette = if (dark) {
         onBackground = Color.Black,
         onBackgroundVariant = Color.Black.copy(alpha = 0.70f),
         divider = Color.Black.copy(alpha = 0.10f),
+        controlBandLuminance = controlBandLuminance,
     )
 }
 

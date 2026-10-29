@@ -101,17 +101,15 @@ enum class PlayerArtworkMode(val persistedValue: Int) {
     }
 }
 
-enum class PlayerColorTarget(val key: String) {
-    TITLE("title"), ARTIST("artist"), QUICK_ACTIONS("quick_actions"),
-    BOTTOM_CONTROLS("bottom_controls"), TRANSPORT("transport"), PLAY_PAUSE("play_pause"),
+/** Independently customisable ink groups painted over the expanded player. */
+enum class PlayerInkGroup(val preferenceSuffix: String) {
+    BUTTONS("buttons"),
+    SEEK_VOLUME("seek_volume"),
+    SONG_ARTIST("song_artist"),
+    LYRICS("lyrics"),
 }
 
-enum class PlayerColorMode { CURRENT, ARTWORK, CUSTOM }
-
-data class PlayerElementColor(
-    val mode: PlayerColorMode = PlayerColorMode.CURRENT,
-    val customHex: String = "#FFFFFF",
-)
+const val PLAYER_INK_AUTOMATIC = "AUTO"
 
 /**
  * PCM format requested from Media3's AudioTrack sink.
@@ -564,6 +562,10 @@ object AppSettings {
     val miniPlayerArtworkColor = MutableStateFlow(false)
     /** Lets the main navigation surface use the mini-player's artwork tint. */
     val navigationBarMatchesMiniPlayerColor = MutableStateFlow(false)
+    /** Forces Android's navigation controls / gesture handle to use light ink. */
+    val forceWhiteNavigationBar = MutableStateFlow(false)
+    /** AUTO means artwork-adaptive ink; otherwise a validated #RRGGBB value. */
+    val playerInkColors = MutableStateFlow(PlayerInkGroup.entries.associateWith { PLAYER_INK_AUTOMATIC })
     /** Shows the mini-player outline while its surface is tinted from artwork. */
     val miniPlayerArtworkOutline = MutableStateFlow(false)
     /** Shows a previous-track control in expanded mini-player surfaces. */
@@ -587,10 +589,6 @@ object AppSettings {
     val playerActionButtonSpacingDp = MutableStateFlow(0f)
     /** Strength of the artwork-matched lower blur in the full-screen player. */
     val fullBleedArtworkBottomBlurStrengthDp = MutableStateFlow(42)
-    /** Independent color choices for the player text and control groups. */
-    val playerElementColors = MutableStateFlow(
-        PlayerColorTarget.entries.associateWith { PlayerElementColor() },
-    )
     /** Hides only the word label on the play button in playlist detail pages. */
     val hidePlaylistPlayButtonLabel = MutableStateFlow(false)
     /** Shows the small drag handle at the top of the expanded player by default. */
@@ -1283,6 +1281,7 @@ object AppSettings {
     }
 
     private fun readAll() {
+        clearRemovedPlayerColorPreferences()
         migrateSingleQuality()
         audioQualityWifi.value = readQuality(KEY_QUALITY_WIFI)
         audioQualityCellular.value = readQuality(KEY_QUALITY_CELLULAR)
@@ -1374,6 +1373,23 @@ object AppSettings {
         matchButtonAccentToArtwork.value = prefs.getBoolean(KEY_MATCH_BUTTON_ACCENT_TO_ARTWORK, false)
         miniPlayerArtworkColor.value = prefs.getBoolean(KEY_MINI_PLAYER_ARTWORK_COLOR, false)
         navigationBarMatchesMiniPlayerColor.value = prefs.getBoolean(KEY_NAVIGATION_BAR_MATCHES_MINI_PLAYER_COLOR, false)
+        forceWhiteNavigationBar.value = runCatching {
+            prefs.getBoolean(KEY_FORCE_WHITE_NAVIGATION_BAR, false)
+        }.getOrDefault(false)
+        val loadedInkColors = PlayerInkGroup.entries.associateWith { group ->
+            val key = playerInkPreferenceKey(group)
+            val stored = runCatching { prefs.getString(key, PLAYER_INK_AUTOMATIC) }.getOrNull()
+            if (stored == null) {
+                if (prefs.contains(key)) prefs.edit().remove(key).apply()
+                PLAYER_INK_AUTOMATIC
+            } else if (stored == PLAYER_INK_AUTOMATIC || stored.matches(PLAYER_INK_COLOR_REGEX)) {
+                stored.uppercase(Locale.ROOT)
+            } else {
+                prefs.edit().remove(key).apply()
+                PLAYER_INK_AUTOMATIC
+            }
+        }
+        playerInkColors.value = loadedInkColors
         miniPlayerArtworkOutline.value = prefs.getBoolean(KEY_MINI_PLAYER_ARTWORK_OUTLINE, false)
         miniPlayerPreviousButton.value = prefs.getBoolean(KEY_MINI_PLAYER_PREVIOUS_BUTTON, true)
         miniPlayerSwipeChangesTrack.value = prefs.getBoolean(KEY_MINI_PLAYER_SWIPE_CHANGES_TRACK, false)
@@ -1387,16 +1403,6 @@ object AppSettings {
         playerActionButtonSpacingDp.value = prefs.getFloat(KEY_PLAYER_ACTION_BUTTON_SPACING_DP, 0f).coerceIn(0f, MAX_PLAYER_BUTTON_SPACING_DP)
         fullBleedArtworkBottomBlurStrengthDp.value =
             prefs.getInt(KEY_FULL_BLEED_ARTWORK_BOTTOM_BLUR_STRENGTH_DP, 42).coerceIn(0, 96)
-        playerElementColors.value = PlayerColorTarget.entries.associateWith { target ->
-            val mode = runCatching {
-                PlayerColorMode.valueOf(prefs.getString(playerColorModeKey(target), PlayerColorMode.CURRENT.name)!!)
-            }.getOrDefault(PlayerColorMode.CURRENT)
-            val hex = prefs.getString(playerColorHexKey(target), "#FFFFFF")
-                ?.take(9)
-                ?.takeIf { it.matches(Regex("^#(?:[0-9a-fA-F]{6}|[0-9a-fA-F]{8})$")) }
-                ?: "#FFFFFF"
-            PlayerElementColor(mode, hex)
-        }
         hidePlaylistPlayButtonLabel.value = prefs.getBoolean(KEY_HIDE_PLAYLIST_PLAY_BUTTON_LABEL, false)
         showPlayerTopGrabber.value = prefs.getBoolean(KEY_SHOW_PLAYER_TOP_GRABBER, true)
         cleartextHttpAllowed.value = prefs.getBoolean(KEY_CLEARTEXT_HTTP_ALLOWED, false)
@@ -1990,6 +1996,27 @@ object AppSettings {
         navigationBarMatchesMiniPlayerColor.value = value
         prefs.edit().putBoolean(KEY_NAVIGATION_BAR_MATCHES_MINI_PLAYER_COLOR, value).apply()
     }
+
+    fun setForceWhiteNavigationBar(value: Boolean) {
+        forceWhiteNavigationBar.value = value
+        prefs.edit().putBoolean(KEY_FORCE_WHITE_NAVIGATION_BAR, value).apply()
+    }
+
+    /** Persists one safe color override, or AUTO to follow the artwork. */
+    fun setPlayerInkColor(group: PlayerInkGroup, value: String): Boolean {
+        val normalized = value.trim().uppercase(Locale.ROOT)
+        if (normalized != PLAYER_INK_AUTOMATIC && !normalized.matches(PLAYER_INK_COLOR_REGEX)) {
+            return false
+        }
+        playerInkColors.value = playerInkColors.value + (group to normalized)
+        val key = playerInkPreferenceKey(group)
+        prefs.edit().apply {
+            if (normalized == PLAYER_INK_AUTOMATIC) remove(key) else putString(key, normalized)
+        }.apply()
+        return true
+    }
+
+    private fun playerInkPreferenceKey(group: PlayerInkGroup) = "player_ink_${group.preferenceSuffix}"
 
     fun setMiniPlayerArtworkOutline(value: Boolean) {
         miniPlayerArtworkOutline.value = value
@@ -3154,20 +3181,13 @@ object AppSettings {
         prefs.edit().putInt(KEY_FULL_BLEED_ARTWORK_BOTTOM_BLUR_STRENGTH_DP, safe).apply()
     }
 
-    fun setPlayerElementColor(target: PlayerColorTarget, color: PlayerElementColor) {
-        val safeHex = color.customHex.take(9)
-            .takeIf { it.matches(Regex("^#(?:[0-9a-fA-F]{6}|[0-9a-fA-F]{8})$")) }
-            ?: "#FFFFFF"
-        val safe = color.copy(customHex = safeHex)
-        playerElementColors.value = playerElementColors.value + (target to safe)
-        prefs.edit()
-            .putString(playerColorModeKey(target), safe.mode.name)
-            .putString(playerColorHexKey(target), safe.customHex)
-            .apply()
+    private fun clearRemovedPlayerColorPreferences() {
+        val staleKeys = prefs.all.keys.filter { it.startsWith(LEGACY_PLAYER_COLOR_PREFERENCE_PREFIX) }
+        if (staleKeys.isEmpty()) return
+        val editor = prefs.edit()
+        staleKeys.forEach { editor.remove(it) }
+        editor.apply()
     }
-
-    private fun playerColorModeKey(target: PlayerColorTarget) = "player_color_${target.key}_mode"
-    private fun playerColorHexKey(target: PlayerColorTarget) = "player_color_${target.key}_hex"
 
     fun setKeepOriginalArtworkAspectRatio(value: Boolean) {
         val next = if (value) {
@@ -3973,6 +3993,7 @@ object AppSettings {
     private const val KEY_MATCH_BUTTON_ACCENT_TO_ARTWORK = "match_button_accent_to_artwork"
     private const val KEY_MINI_PLAYER_ARTWORK_COLOR = "mini_player_artwork_color"
     private const val KEY_NAVIGATION_BAR_MATCHES_MINI_PLAYER_COLOR = "navigation_bar_matches_mini_player_color"
+    private const val KEY_FORCE_WHITE_NAVIGATION_BAR = "force_white_navigation_bar"
     private const val KEY_MINI_PLAYER_ARTWORK_OUTLINE = "mini_player_artwork_outline"
     private const val KEY_MINI_PLAYER_PREVIOUS_BUTTON = "mini_player_previous_button"
     private const val KEY_MINI_PLAYER_SWIPE_CHANGES_TRACK = "mini_player_swipe_changes_track"
@@ -4123,6 +4144,8 @@ object AppSettings {
     private const val KEY_PLAYER_ARTWORK_MODE = "player_artwork_mode"
     private const val KEY_LARGER_FULL_BLEED_ARTWORK = "larger_full_bleed_artwork"
     private const val KEY_FULL_BLEED_ARTWORK_BOTTOM_BLUR_STRENGTH_DP = "full_bleed_artwork_bottom_blur_strength_dp"
+    private const val LEGACY_PLAYER_COLOR_PREFERENCE_PREFIX = "player_color_"
+    private val PLAYER_INK_COLOR_REGEX = Regex("#[0-9A-F]{6}")
     private const val KEY_KEEP_ORIGINAL_ARTWORK_ASPECT_RATIO = "keep_original_artwork_aspect_ratio"
     private const val KEY_KEEP_COLLECTION_ARTWORK_ASPECT_RATIO = "keep_collection_artwork_aspect_ratio"
     private const val KEY_LOCALIZE_LIBRARY_COLLECTION_COUNT = "localize_library_collection_count"

@@ -175,9 +175,8 @@ import com.music.bitchord.data.NerdStats
 import com.music.bitchord.data.scrobbling.LastFM
 import com.music.bitchord.data.settings.AppSettings
 import com.music.bitchord.data.settings.PlayerArtworkMode
-import com.music.bitchord.data.settings.PlayerColorMode
-import com.music.bitchord.data.settings.PlayerColorTarget
-import com.music.bitchord.data.settings.PlayerElementColor
+import com.music.bitchord.data.settings.PlayerInkGroup
+import com.music.bitchord.data.settings.PLAYER_INK_AUTOMATIC
 import com.music.bitchord.data.settings.AutomixPerformanceMode
 import com.music.bitchord.data.settings.LocalLibraryTab
 import com.music.bitchord.data.settings.LauncherIcon
@@ -226,6 +225,33 @@ private data class SettingsSearchEntry(
     val onSliderValueChange: ((Float) -> Unit)? = null,
     val enabled: Boolean = true,
     val activate: () -> Unit,
+)
+
+private fun PlayerInkGroup.titleResource(): Int = when (this) {
+    PlayerInkGroup.BUTTONS -> R.string.player_ink_button_controls
+    PlayerInkGroup.SEEK_VOLUME -> R.string.player_ink_seek_volume
+    PlayerInkGroup.SONG_ARTIST -> R.string.player_ink_song_artist
+    PlayerInkGroup.LYRICS -> R.string.player_ink_lyrics
+}
+
+@Composable
+private fun playerInkValueLabel(value: String): String =
+    if (value == PLAYER_INK_AUTOMATIC) stringResource(R.string.player_ink_automatic) else value
+
+@Composable
+private fun playerInkSearchEntry(
+    group: PlayerInkGroup,
+    value: String,
+    onSelect: () -> Unit,
+) = SettingsSearchEntry(
+    title = stringResource(group.titleResource()),
+    subtitle = stringResource(R.string.player_ink_customization_subtitle),
+    keywords = listOf(
+        "player", "color", "colour", "customization", "buttons", "controls", "seek bar", "volume bar", "song", "artist", "lyrics",
+        "プレイヤー", "色", "カラー", "カスタマイズ", "ボタン", "操作", "シークバー", "音量バー", "曲名", "アーティスト", "歌詞",
+    ),
+    valueLabel = playerInkValueLabel(value),
+    activate = onSelect,
 )
 
 @Composable
@@ -334,64 +360,6 @@ private fun fullBleedArtworkBottomBlurSearchEntry(strengthDp: Int) = SettingsSea
     onSliderValueChange = { AppSettings.setFullBleedArtworkBottomBlurStrengthDp(it.roundToInt()) },
     activate = {},
 )
-
-@Composable
-private fun PlayerColorTarget.localizedLabel(): String = stringResource(
-    when (this) {
-        PlayerColorTarget.TITLE -> R.string.player_color_title
-        PlayerColorTarget.ARTIST -> R.string.player_color_artist
-        PlayerColorTarget.QUICK_ACTIONS -> R.string.player_color_quick_actions
-        PlayerColorTarget.BOTTOM_CONTROLS -> R.string.player_color_bottom_controls
-        PlayerColorTarget.TRANSPORT -> R.string.player_color_transport
-        PlayerColorTarget.PLAY_PAUSE -> R.string.player_color_play_pause
-    },
-)
-
-@Composable
-private fun PlayerColorMode.localizedLabel(): String = stringResource(
-    when (this) {
-        PlayerColorMode.CURRENT -> R.string.player_color_mode_current
-        PlayerColorMode.ARTWORK -> R.string.player_color_mode_artwork
-        PlayerColorMode.CUSTOM -> R.string.player_color_mode_custom
-    },
-)
-
-@Composable
-private fun playerColorSettingValue(setting: PlayerElementColor): String = when (setting.mode) {
-    PlayerColorMode.CURRENT, PlayerColorMode.ARTWORK -> setting.mode.localizedLabel()
-    PlayerColorMode.CUSTOM -> setting.customHex
-}
-
-@Composable
-private fun playerColorSearchEntry(
-    target: PlayerColorTarget,
-    setting: PlayerElementColor,
-    onOpen: () -> Unit,
-) = SettingsSearchEntry(
-    title = target.localizedLabel(),
-    subtitle = stringResource(R.string.player_element_color_subtitle),
-    keywords = listOf(
-        "player", "color", "colour", "tint", "artwork", "hex", "カラーコード", "色", "プレイヤー",
-        target.localizedLabel(),
-    ),
-    valueLabel = playerColorSettingValue(setting),
-    activate = onOpen,
-)
-
-@Composable
-private fun PlayerElementColorSettingsRow(
-    target: PlayerColorTarget,
-    setting: PlayerElementColor,
-    onClick: () -> Unit,
-) {
-    SettingsRow(
-        icon = Icons.Rounded.Tune,
-        title = target.localizedLabel(),
-        subtitle = stringResource(R.string.player_element_color_subtitle),
-        value = playerColorSettingValue(setting),
-        onClick = onClick,
-    )
-}
 
 @Composable
 private fun FullBleedArtworkBottomBlurSettingsRow(strengthDp: Int) {
@@ -541,6 +509,8 @@ fun SettingsScreen(
     val settingsTopBarUsesMoreIcon by AppSettings.settingsTopBarUsesMoreIcon.collectAsStateWithLifecycle()
     val hideNavBarLabels by AppSettings.hideNavigationBarLabels.collectAsStateWithLifecycle()
     val navigationBarMatchesMiniPlayerColor by AppSettings.navigationBarMatchesMiniPlayerColor.collectAsStateWithLifecycle()
+    val forceWhiteNavigationBar by AppSettings.forceWhiteNavigationBar.collectAsStateWithLifecycle()
+    val playerInkColors by AppSettings.playerInkColors.collectAsStateWithLifecycle()
     val includeRemoteSourceMediaInLibrary by AppSettings.includeRemoteSourceMediaInLibrary.collectAsStateWithLifecycle()
     val visibleMainTabs by AppSettings.visibleMainNavigationTabs.collectAsStateWithLifecycle()
     val mainTabOrder by AppSettings.mainNavigationTabOrder.collectAsStateWithLifecycle()
@@ -638,7 +608,6 @@ fun SettingsScreen(
     val preloadAlbumArtOnStartup by AppSettings.preloadAlbumArtOnStartup.collectAsStateWithLifecycle()
     val playerArtworkMode by AppSettings.playerArtworkMode.collectAsStateWithLifecycle()
     val fullBleedArtworkBottomBlurStrengthDp by AppSettings.fullBleedArtworkBottomBlurStrengthDp.collectAsStateWithLifecycle()
-    val playerElementColors by AppSettings.playerElementColors.collectAsStateWithLifecycle()
     val preserveArtworkShapeInCompactTransitions by AppSettings.preserveArtworkShapeInCompactTransitions.collectAsStateWithLifecycle()
     val keepArtworkFullSizeWhenPaused by AppSettings.keepArtworkFullSizeWhenPaused.collectAsStateWithLifecycle()
     val legacyMeshGradient by AppSettings.legacyMeshGradient.collectAsStateWithLifecycle()
@@ -727,12 +696,19 @@ fun SettingsScreen(
     var showThemePicker by rememberSaveable { mutableStateOf(false) }
     var showMediaControlActionPicker by rememberSaveable { mutableStateOf(false) }
     var showPlayerArtworkModePicker by rememberSaveable { mutableStateOf(false) }
-    var playerColorDialogTarget by rememberSaveable { mutableStateOf("") }
-    var playerColorHexDraft by rememberSaveable { mutableStateOf("#FFFFFF") }
+    var playerInkDialogGroupKey by rememberSaveable { mutableStateOf<String?>(null) }
+    var playerInkAutomaticSelected by rememberSaveable { mutableStateOf(true) }
+    var playerInkHexDraft by rememberSaveable { mutableStateOf("#FFFFFF") }
     var showPerformanceWarning by remember { mutableStateOf(false) }
     var showEqualizerSheet by remember { mutableStateOf(false) }
     var showAutomixPerformanceSheet by rememberSaveable { mutableStateOf(false) }
     var showCdRippingSheet by rememberSaveable { mutableStateOf(false) }
+    fun openPlayerInkPicker(group: PlayerInkGroup) {
+        val saved = playerInkColors[group] ?: PLAYER_INK_AUTOMATIC
+        playerInkAutomaticSelected = saved == PLAYER_INK_AUTOMATIC
+        playerInkHexDraft = if (saved == PLAYER_INK_AUTOMATIC) "#FFFFFF" else saved
+        playerInkDialogGroupKey = group.name
+    }
     val themeImagePicker = rememberLauncherForActivityResult(ActivityResultContracts.OpenDocument()) { selected ->
         if (selected == null) return@rememberLauncherForActivityResult
         val retained = runCatching {
@@ -1126,17 +1102,6 @@ fun SettingsScreen(
         ) { AppSettings.setLyricsExtensionsEnabled(!lyricsExtensionsEnabled) },
         *PlayerArtworkMode.entries.map { playerArtworkModeSearchEntry(it, playerArtworkMode) }.toTypedArray(),
         fullBleedArtworkBottomBlurSearchEntry(fullBleedArtworkBottomBlurStrengthDp),
-        *PlayerColorTarget.entries.map { target ->
-            val setting = playerElementColors[target] ?: PlayerElementColor()
-            playerColorSearchEntry(
-                target = target,
-                setting = setting,
-                onOpen = {
-                    playerColorHexDraft = setting.customHex
-                    playerColorDialogTarget = target.name
-                },
-            )
-        }.toTypedArray(),
         SettingsSearchEntry(stringResource(R.string.preserve_artwork_shape_in_compact_transitions), stringResource(R.string.preserve_artwork_shape_in_compact_transitions_subtitle), listOf("artwork", "cover", "aspect ratio", "mini player", "dock", "lyrics", "アート", "カバー", "縦横比", "ミニプレーヤー", "歌詞", "遷移"), preserveArtworkShapeInCompactTransitions) { AppSettings.setPreserveArtworkShapeInCompactTransitions(!preserveArtworkShapeInCompactTransitions) },
         SettingsSearchEntry(stringResource(R.string.keep_artwork_full_size_paused), stringResource(R.string.keep_artwork_full_size_paused_subtitle), listOf("artwork", "cover", "paused", "停止中", "アート"), keepArtworkFullSizeWhenPaused) { AppSettings.setKeepArtworkFullSizeWhenPaused(!keepArtworkFullSizeWhenPaused) },
         SettingsSearchEntry(stringResource(R.string.reduce_animation), stringResource(R.string.reduce_animation_subtitle), listOf("animation", "reduce", "アニメーション"), reduceAnimation) { AppSettings.setReduceAnimation(!reduceAnimation) },
@@ -1689,7 +1654,19 @@ fun SettingsScreen(
         ) { AppSettings.setOnlineAlbumArtistArtwork(!onlineAlbumArtistArtwork) },
     )
     }
-    val settingsSearchEntries = buildSettingsSearchEntries()
+    val playerInkSearchEntries = PlayerInkGroup.entries.map { group ->
+        playerInkSearchEntry(
+            group = group,
+            value = playerInkColors[group] ?: PLAYER_INK_AUTOMATIC,
+            onSelect = { openPlayerInkPicker(group) },
+        )
+    }
+    val settingsSearchEntries = buildSettingsSearchEntries() + playerInkSearchEntries + SettingsSearchEntry(
+        stringResource(R.string.navigation_bar_force_white),
+        stringResource(R.string.navigation_bar_force_white_subtitle),
+        listOf("navigation bar", "system bar", "gesture handle", "back", "home", "white", "ナビゲーションバー", "戻る", "ホーム", "ジェスチャーバー", "白"),
+        forceWhiteNavigationBar,
+    ) { AppSettings.setForceWhiteNavigationBar(!forceWhiteNavigationBar) }
 
 
     LaunchedEffect(selectedPerformanceRefreshRate, performanceRefreshRate) {
@@ -3030,18 +3007,6 @@ fun SettingsScreen(
                 valueRange = 12f..36f,
                 modifier = Modifier.padding(start = ROW_INSET, end = ROW_INSET, bottom = 14.dp),
             )
-            PlayerColorTarget.entries.forEach { target ->
-                RowDivider()
-                val setting = playerElementColors[target] ?: PlayerElementColor()
-                PlayerElementColorSettingsRow(
-                    target = target,
-                    setting = setting,
-                    onClick = {
-                        playerColorHexDraft = setting.customHex
-                        playerColorDialogTarget = target.name
-                    },
-                )
-            }
             RowDivider()
             SettingsRow(
                 icon = Icons.Rounded.PlayArrow,
@@ -3278,6 +3243,19 @@ fun SettingsScreen(
                         )
                     },
                     onClick = { AppSettings.setPlayerDetailsActionVisible(action, !visible) },
+                )
+            }
+        }
+
+        SettingsGroup(header = stringResource(R.string.player_ink_customization)) {
+            PlayerInkGroup.entries.forEachIndexed { index, group ->
+                if (index > 0) RowDivider()
+                SettingsRow(
+                    icon = Icons.Rounded.Tune,
+                    title = stringResource(group.titleResource()),
+                    subtitle = stringResource(R.string.player_ink_customization_subtitle),
+                    value = playerInkValueLabel(playerInkColors[group] ?: PLAYER_INK_AUTOMATIC),
+                    onClick = { openPlayerInkPicker(group) },
                 )
             }
         }
@@ -3757,6 +3735,19 @@ fun SettingsScreen(
                     Switch(checked = showNavigationBar, onCheckedChange = AppSettings::setShowNavigationBar)
                 },
                 onClick = { AppSettings.setShowNavigationBar(!showNavigationBar) },
+            )
+            RowDivider()
+            SettingsRow(
+                icon = Icons.Rounded.Tune,
+                title = stringResource(R.string.navigation_bar_force_white),
+                subtitle = stringResource(R.string.navigation_bar_force_white_subtitle),
+                trailing = {
+                    Switch(
+                        checked = forceWhiteNavigationBar,
+                        onCheckedChange = AppSettings::setForceWhiteNavigationBar,
+                    )
+                },
+                onClick = { AppSettings.setForceWhiteNavigationBar(!forceWhiteNavigationBar) },
             )
             RowDivider()
             SettingsRow(
@@ -5093,66 +5084,95 @@ fun SettingsScreen(
             )
         }
 
-        PlayerColorTarget.entries.firstOrNull { it.name == playerColorDialogTarget }?.let { target ->
-            val setting = playerElementColors[target] ?: PlayerElementColor()
+        val playerInkDialogGroup = remember(playerInkDialogGroupKey) {
+            playerInkDialogGroupKey?.let { key ->
+                PlayerInkGroup.entries.firstOrNull { it.name == key }
+            }
+        }
+        if (playerInkDialogGroup != null) {
+            val normalizedHex = playerInkHexDraft.trim().uppercase(Locale.ROOT)
+            val validHex = normalizedHex.matches(Regex("#[0-9A-F]{6}"))
+            val previewColor = remember(playerInkHexDraft) {
+                runCatching { Color(android.graphics.Color.parseColor(playerInkHexDraft)) }
+                    .getOrDefault(Color.Gray)
+            }
             AlertDialog(
-                onDismissRequest = { playerColorDialogTarget = "" },
-                title = {
-                    Text(stringResource(R.string.player_element_color_dialog_title, target.localizedLabel()))
-                },
+                onDismissRequest = { playerInkDialogGroupKey = null },
+                title = { Text(stringResource(playerInkDialogGroup.titleResource())) },
                 text = {
-                    Column(
-                        modifier = Modifier
-                            .heightIn(max = 420.dp)
-                            .verticalScroll(rememberScrollState()),
-                    ) {
-                        PlayerColorMode.entries.forEach { mode ->
-                            Row(
-                                modifier = Modifier
-                                    .fillMaxWidth()
-                                    .clickable {
-                                        AppSettings.setPlayerElementColor(target, setting.copy(mode = mode))
-                                    }
-                                    .padding(vertical = 6.dp),
-                                verticalAlignment = Alignment.CenterVertically,
-                            ) {
-                                RadioButton(
-                                    selected = setting.mode == mode,
-                                    onClick = {
-                                        AppSettings.setPlayerElementColor(target, setting.copy(mode = mode))
-                                    },
-                                )
-                                Text(mode.localizedLabel(), modifier = Modifier.padding(start = 8.dp))
-                            }
-                        }
-                        if (setting.mode == PlayerColorMode.CUSTOM) {
-                            OutlinedTextField(
-                                value = playerColorHexDraft,
-                                onValueChange = { playerColorHexDraft = it.take(9) },
-                                label = { Text(stringResource(R.string.player_color_hex_label)) },
-                                supportingText = { Text(stringResource(R.string.player_color_hex_help)) },
-                                isError = !playerColorHexDraft.matches(Regex("^#(?:[0-9a-fA-F]{6}|[0-9a-fA-F]{8})$")),
-                                singleLine = true,
-                                modifier = Modifier.fillMaxWidth(),
+                    Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                        Text(
+                            stringResource(R.string.player_ink_customization_subtitle),
+                            color = MaterialTheme.colorScheme.onSurfaceVariant,
+                            style = MaterialTheme.typography.bodyMedium,
+                        )
+                        Row(
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .clickable { playerInkAutomaticSelected = true }
+                                .padding(vertical = 4.dp),
+                            verticalAlignment = Alignment.CenterVertically,
+                        ) {
+                            RadioButton(
+                                selected = playerInkAutomaticSelected,
+                                onClick = { playerInkAutomaticSelected = true },
                             )
+                            Text(stringResource(R.string.player_ink_automatic), modifier = Modifier.padding(start = 8.dp))
+                        }
+                        Row(
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .clickable { playerInkAutomaticSelected = false }
+                                .padding(vertical = 4.dp),
+                            verticalAlignment = Alignment.CenterVertically,
+                        ) {
+                            RadioButton(
+                                selected = !playerInkAutomaticSelected,
+                                onClick = { playerInkAutomaticSelected = false },
+                            )
+                            Text(stringResource(R.string.player_ink_custom), modifier = Modifier.padding(start = 8.dp))
+                        }
+                        if (!playerInkAutomaticSelected) {
+                            Row(verticalAlignment = Alignment.CenterVertically) {
+                                OutlinedTextField(
+                                    value = playerInkHexDraft,
+                                    onValueChange = { playerInkHexDraft = it.take(16) },
+                                    modifier = Modifier.weight(1f),
+                                    singleLine = true,
+                                    label = { Text(stringResource(R.string.player_ink_hex_hint)) },
+                                    isError = playerInkHexDraft.isNotBlank() && !validHex,
+                                    supportingText = if (playerInkHexDraft.isNotBlank() && !validHex) {
+                                        { Text(stringResource(R.string.player_ink_hex_invalid)) }
+                                    } else null,
+                                )
+                                Spacer(Modifier.width(12.dp))
+                                Box(
+                                    Modifier
+                                        .size(28.dp)
+                                        .clip(CircleShape)
+                                        .background(previewColor),
+                                )
+                            }
                         }
                     }
                 },
                 confirmButton = {
                     TextButton(
-                        enabled = setting.mode != PlayerColorMode.CUSTOM ||
-                            playerColorHexDraft.matches(Regex("^#(?:[0-9a-fA-F]{6}|[0-9a-fA-F]{8})$")),
+                        enabled = playerInkAutomaticSelected || validHex,
                         onClick = {
-                            val next = if (setting.mode == PlayerColorMode.CUSTOM) {
-                                setting.copy(customHex = playerColorHexDraft)
-                            } else {
-                                setting
-                            }
-                            AppSettings.setPlayerElementColor(target, next)
-                            playerColorDialogTarget = ""
+                            AppSettings.setPlayerInkColor(
+                                playerInkDialogGroup,
+                                if (playerInkAutomaticSelected) PLAYER_INK_AUTOMATIC else normalizedHex,
+                            )
+                            playerInkDialogGroupKey = null
                         },
                     ) {
                         Text(stringResource(R.string.done))
+                    }
+                },
+                dismissButton = {
+                    TextButton(onClick = { playerInkDialogGroupKey = null }) {
+                        Text(stringResource(R.string.cancel))
                     }
                 },
             )
