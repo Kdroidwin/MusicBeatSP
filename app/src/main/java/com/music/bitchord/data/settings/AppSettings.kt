@@ -110,6 +110,7 @@ enum class PlayerInkGroup(val preferenceSuffix: String) {
 }
 
 const val PLAYER_INK_AUTOMATIC = "AUTO"
+const val PLAYER_INK_DEFAULT_COLOR = "#FFFFFF"
 
 /**
  * PCM format requested from Media3's AudioTrack sink.
@@ -564,8 +565,8 @@ object AppSettings {
     val navigationBarMatchesMiniPlayerColor = MutableStateFlow(false)
     /** Forces Android's navigation controls / gesture handle to use light ink. */
     val forceWhiteNavigationBar = MutableStateFlow(false)
-    /** AUTO means artwork-adaptive ink; otherwise a validated #RRGGBB value. */
-    val playerInkColors = MutableStateFlow(PlayerInkGroup.entries.associateWith { PLAYER_INK_AUTOMATIC })
+    /** Artwork colour or a validated #RRGGBB override; each group defaults to white. */
+    val playerInkColors = MutableStateFlow(PlayerInkGroup.entries.associateWith { PLAYER_INK_DEFAULT_COLOR })
     /** Shows the mini-player outline while its surface is tinted from artwork. */
     val miniPlayerArtworkOutline = MutableStateFlow(false)
     /** Shows a previous-track control in expanded mini-player surfaces. */
@@ -1378,15 +1379,15 @@ object AppSettings {
         }.getOrDefault(false)
         val loadedInkColors = PlayerInkGroup.entries.associateWith { group ->
             val key = playerInkPreferenceKey(group)
-            val stored = runCatching { prefs.getString(key, PLAYER_INK_AUTOMATIC) }.getOrNull()
+            val stored = runCatching { prefs.getString(key, PLAYER_INK_DEFAULT_COLOR) }.getOrNull()
             if (stored == null) {
                 if (prefs.contains(key)) prefs.edit().remove(key).apply()
-                PLAYER_INK_AUTOMATIC
+                PLAYER_INK_DEFAULT_COLOR
             } else if (stored == PLAYER_INK_AUTOMATIC || stored.matches(PLAYER_INK_COLOR_REGEX)) {
                 stored.uppercase(Locale.ROOT)
             } else {
                 prefs.edit().remove(key).apply()
-                PLAYER_INK_AUTOMATIC
+                PLAYER_INK_DEFAULT_COLOR
             }
         }
         playerInkColors.value = loadedInkColors
@@ -2010,9 +2011,7 @@ object AppSettings {
         }
         playerInkColors.value = playerInkColors.value + (group to normalized)
         val key = playerInkPreferenceKey(group)
-        prefs.edit().apply {
-            if (normalized == PLAYER_INK_AUTOMATIC) remove(key) else putString(key, normalized)
-        }.apply()
+        prefs.edit().putString(key, normalized).apply()
         return true
     }
 

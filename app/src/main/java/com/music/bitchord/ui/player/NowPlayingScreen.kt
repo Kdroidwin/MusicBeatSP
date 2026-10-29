@@ -271,7 +271,7 @@ import com.music.bitchord.data.settings.PlayerQuickAction
 import com.music.bitchord.data.settings.AudioQuality
 import com.music.bitchord.data.settings.PlayerArtworkMode
 import com.music.bitchord.data.settings.PlayerInkGroup
-import com.music.bitchord.data.settings.PLAYER_INK_AUTOMATIC
+import com.music.bitchord.data.settings.PLAYER_INK_DEFAULT_COLOR
 import com.music.bitchord.data.model.LikeStatus
 import com.music.bitchord.data.model.PLAYER_ART_PX
 import com.music.bitchord.data.model.ROW_ART_PX
@@ -956,35 +956,33 @@ fun NowPlayingScreen(
     val artUrl = song.artworkAt(ART_PX)
     val artworkPalette = rememberArtworkPalette(artUrl, dark = true, artPx = ART_PX)
     val playerInkOverrides by AppSettings.playerInkColors.collectAsStateWithLifecycle()
-    val automaticPlayerInk = if ((artworkPalette.controlBandLuminance ?: 0f) >= 0.55f) {
-        Color(0xFF0B0B0C)
-    } else {
-        Color.White
-    }
+    // Match the sampled artwork hue; contrast-only white/black switching is
+    // not the artwork-colour option users selected.
+    val automaticPlayerInk = artworkPalette.accent
     val buttonControlInk by animateColorAsState(
         targetValue = resolvePlayerInk(
-            playerInkOverrides[PlayerInkGroup.BUTTONS] ?: PLAYER_INK_AUTOMATIC,
+            playerInkOverrides[PlayerInkGroup.BUTTONS] ?: PLAYER_INK_DEFAULT_COLOR,
             automaticPlayerInk,
         ),
         label = "playerButtonInk",
     )
     val seekVolumeInk by animateColorAsState(
         targetValue = resolvePlayerInk(
-            playerInkOverrides[PlayerInkGroup.SEEK_VOLUME] ?: PLAYER_INK_AUTOMATIC,
+            playerInkOverrides[PlayerInkGroup.SEEK_VOLUME] ?: PLAYER_INK_DEFAULT_COLOR,
             automaticPlayerInk,
         ),
         label = "playerSeekVolumeInk",
     )
     val songArtistInk by animateColorAsState(
         targetValue = resolvePlayerInk(
-            playerInkOverrides[PlayerInkGroup.SONG_ARTIST] ?: PLAYER_INK_AUTOMATIC,
+            playerInkOverrides[PlayerInkGroup.SONG_ARTIST] ?: PLAYER_INK_DEFAULT_COLOR,
             automaticPlayerInk,
         ),
         label = "playerSongArtistInk",
     )
     val lyricInk by animateColorAsState(
         targetValue = resolvePlayerInk(
-            playerInkOverrides[PlayerInkGroup.LYRICS] ?: PLAYER_INK_AUTOMATIC,
+            playerInkOverrides[PlayerInkGroup.LYRICS] ?: PLAYER_INK_DEFAULT_COLOR,
             automaticPlayerInk,
         ),
         label = "playerLyricInk",

@@ -177,6 +177,7 @@ import com.music.bitchord.data.settings.AppSettings
 import com.music.bitchord.data.settings.PlayerArtworkMode
 import com.music.bitchord.data.settings.PlayerInkGroup
 import com.music.bitchord.data.settings.PLAYER_INK_AUTOMATIC
+import com.music.bitchord.data.settings.PLAYER_INK_DEFAULT_COLOR
 import com.music.bitchord.data.settings.AutomixPerformanceMode
 import com.music.bitchord.data.settings.LocalLibraryTab
 import com.music.bitchord.data.settings.LauncherIcon
@@ -704,9 +705,9 @@ fun SettingsScreen(
     var showAutomixPerformanceSheet by rememberSaveable { mutableStateOf(false) }
     var showCdRippingSheet by rememberSaveable { mutableStateOf(false) }
     fun openPlayerInkPicker(group: PlayerInkGroup) {
-        val saved = playerInkColors[group] ?: PLAYER_INK_AUTOMATIC
+        val saved = playerInkColors[group] ?: PLAYER_INK_DEFAULT_COLOR
         playerInkAutomaticSelected = saved == PLAYER_INK_AUTOMATIC
-        playerInkHexDraft = if (saved == PLAYER_INK_AUTOMATIC) "#FFFFFF" else saved
+        playerInkHexDraft = if (saved == PLAYER_INK_AUTOMATIC) PLAYER_INK_DEFAULT_COLOR else saved
         playerInkDialogGroupKey = group.name
     }
     val themeImagePicker = rememberLauncherForActivityResult(ActivityResultContracts.OpenDocument()) { selected ->
@@ -1657,7 +1658,7 @@ fun SettingsScreen(
     val playerInkSearchEntries = PlayerInkGroup.entries.map { group ->
         playerInkSearchEntry(
             group = group,
-            value = playerInkColors[group] ?: PLAYER_INK_AUTOMATIC,
+            value = playerInkColors[group] ?: PLAYER_INK_DEFAULT_COLOR,
             onSelect = { openPlayerInkPicker(group) },
         )
     }
@@ -3254,7 +3255,7 @@ fun SettingsScreen(
                     icon = Icons.Rounded.Tune,
                     title = stringResource(group.titleResource()),
                     subtitle = stringResource(R.string.player_ink_customization_subtitle),
-                    value = playerInkValueLabel(playerInkColors[group] ?: PLAYER_INK_AUTOMATIC),
+                    value = playerInkValueLabel(playerInkColors[group] ?: PLAYER_INK_DEFAULT_COLOR),
                     onClick = { openPlayerInkPicker(group) },
                 )
             }

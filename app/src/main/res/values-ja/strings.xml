@@ -1521,12 +1521,12 @@
     <string name="navigation_bar_force_white">ナビゲーション操作アイコンを白に固定</string>
     <string name="navigation_bar_force_white_subtitle">Androidの戻る・ホーム・履歴ボタンとジェスチャーハンドルを白くします。ナビゲーションバーの背景色は変わりません。</string>
     <string name="player_ink_customization">プレイヤーの色設定</string>
-    <string name="player_ink_customization_subtitle">アートワークに合わせた自動色、または #RRGGBB 形式の色を指定できます。変更はすぐ反映され、設定バックアップにも含まれます。</string>
+    <string name="player_ink_customization_subtitle">初期値は #FFFFFF です。再生中のアルバムアートから抽出した色、または #RRGGBB 形式の色を指定できます。変更はすぐ反映され、設定バックアップにも含まれます。</string>
     <string name="player_ink_button_controls">ボタンアイコンと操作部</string>
     <string name="player_ink_seek_volume">シークバーと音量バー</string>
     <string name="player_ink_song_artist">曲名とアーティスト名</string>
     <string name="player_ink_lyrics">歌詞の一行表示</string>
-    <string name="player_ink_automatic">自動（アートワークに合わせる）</string>
+    <string name="player_ink_automatic">アルバムアートの色に合わせる</string>
     <string name="player_ink_custom">色を指定</string>
     <string name="player_ink_hex_hint">カラーコード（#RRGGBB）</string>
     <string name="player_ink_hex_invalid">#RRGGBB 形式で入力してください</string>

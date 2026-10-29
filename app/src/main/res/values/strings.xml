@@ -1547,12 +1547,12 @@
     <string name="navigation_bar_force_white">Force white navigation controls</string>
     <string name="navigation_bar_force_white_subtitle">Keep Android back, home, overview and gesture-handle icons white. The navigation bar background is unchanged.</string>
     <string name="player_ink_customization">Player color customization</string>
-    <string name="player_ink_customization_subtitle">Use artwork-adaptive ink or enter a custom #RRGGBB color. Changes apply immediately and are included in settings backups.</string>
+    <string name="player_ink_customization_subtitle">The default is #FFFFFF. Choose a colour sampled from the current album artwork or enter a custom #RRGGBB colour. Changes apply immediately and are included in settings backups.</string>
     <string name="player_ink_button_controls">Button icons and controls</string>
     <string name="player_ink_seek_volume">Seek bar and volume bar</string>
     <string name="player_ink_song_artist">Song and artist</string>
     <string name="player_ink_lyrics">Lyric Line</string>
-    <string name="player_ink_automatic">Automatic (adapt to artwork)</string>
+    <string name="player_ink_automatic">Match album artwork colour</string>
     <string name="player_ink_custom">Custom color</string>
     <string name="player_ink_hex_hint">Color code (#RRGGBB)</string>
     <string name="player_ink_hex_invalid">Enter a color in #RRGGBB format</string>
