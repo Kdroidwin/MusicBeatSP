@@ -100,6 +100,7 @@ The standard Android package is `io.pockets.musicbestsp`. Because this differs f
 - Reorder tracks in a playlist by dragging, select tracks in bulk, and adapt selection action contrast to the current surface.
 - Choose a custom image for a playlist cover, and use list or grid layouts with optional small album artwork in list view.
 - Browse listening history and most-played tracks. Search settings by name and include settings, playlist data, and saved queue snapshots in app backup and restore.
+- Rip CDs
 
 ### Lyrics and artwork
 
