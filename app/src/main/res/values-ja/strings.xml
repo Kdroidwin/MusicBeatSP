@@ -354,6 +354,13 @@
     <string name="reduce_dynamic_blur">動的なぼかしを減らす</string>
     <string name="reduce_dynamic_blur_subtitle">アプリ全体ですりガラス効果を単色の塗りつぶしに置き換えます</string>
     <string name="full_screen_cover_art">全画面カバーアート</string>
+    <string name="player_artwork_mode">プレイヤーのアルバムアート表示</string>
+    <string name="player_artwork_mode_subtitle">全画面、Auris風、通常表示から選択します。</string>
+    <string name="artwork_mode_full_screen">全画面</string>
+    <string name="artwork_mode_full_screen_larger">全画面より拡大</string>
+    <string name="artwork_mode_auris_full_screen">Auris風全画面</string>
+    <string name="artwork_mode_standard_square">全画面にしない（正方形に切り抜き）</string>
+    <string name="artwork_mode_standard_original_aspect">全画面にしない（縦横比を維持）</string>
     <string name="auris_full_screen_cover_art">Auris風全画面アルバムアート</string>
     <string name="auris_full_screen_cover_art_subtitle">Aurisの全画面アート表示を使用します。既存の全画面カバーアート設定と同じ機能です。</string>
     <string name="larger_full_screen_cover_art">全画面カバーアートを拡大</string>

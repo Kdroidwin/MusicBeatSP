@@ -393,6 +393,13 @@
     <string name="hide_nav_bar_labels">Hide navigation bar labels</string>
     <string name="hide_nav_bar_labels_subtitle">Show only icons in the bottom navigation bar</string>
     <string name="full_screen_cover_art">Full-screen cover art</string>
+    <string name="player_artwork_mode">Player artwork style</string>
+    <string name="player_artwork_mode_subtitle">Choose full-screen, Auris-style, or standard sleeve artwork.</string>
+    <string name="artwork_mode_full_screen">Full-screen</string>
+    <string name="artwork_mode_full_screen_larger">Larger full-screen</string>
+    <string name="artwork_mode_auris_full_screen">Auris-style full-screen</string>
+    <string name="artwork_mode_standard_square">Standard (square crop)</string>
+    <string name="artwork_mode_standard_original_aspect">Standard (preserve aspect ratio)</string>
     <string name="auris_full_screen_cover_art">Auris-style full-screen album artwork</string>
     <string name="auris_full_screen_cover_art_subtitle">Use the full-bleed album-art player layout from Auris. This reuses the existing full-screen artwork setting.</string>
     <string name="larger_full_screen_cover_art">Larger full-screen cover art</string>

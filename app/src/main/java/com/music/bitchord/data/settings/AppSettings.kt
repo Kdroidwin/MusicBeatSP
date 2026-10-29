@@ -83,6 +83,24 @@ enum class AudioQuality(
     }
 }
 
+/** Presentation modes for the player's album artwork. Persisted as a small stable integer. */
+enum class PlayerArtworkMode(val persistedValue: Int) {
+    FULL_SCREEN(0),
+    FULL_SCREEN_LARGER(1),
+    AURIS_FULL_SCREEN(2),
+    STANDARD_SQUARE(3),
+    STANDARD_ORIGINAL_ASPECT(4),
+    ;
+
+    val usesFullScreenArtwork: Boolean
+        get() = this == FULL_SCREEN || this == FULL_SCREEN_LARGER || this == AURIS_FULL_SCREEN
+
+    companion object {
+        fun fromPersistedValue(value: Int): PlayerArtworkMode? =
+            entries.firstOrNull { it.persistedValue == value }
+    }
+}
+
 /**
  * PCM format requested from Media3's AudioTrack sink.
  *
@@ -848,6 +866,9 @@ object AppSettings {
      */
     val fullBleedArtwork = MutableStateFlow(true)
 
+    /** The selected artwork presentation; the older booleans remain for migration compatibility. */
+    val playerArtworkMode = MutableStateFlow(PlayerArtworkMode.FULL_SCREEN)
+
     /** Adds a modest extra crop to the existing full-bleed artwork presentation. */
     val largerFullBleedArtwork = MutableStateFlow(false)
 
@@ -1515,9 +1536,20 @@ object AppSettings {
         if (highPerformanceMode.value) reduceAnimation.value = false
         animatedCanvas.value = prefs.getBoolean(KEY_ANIMATED_CANVAS, true)
         canvasOverCellular.value = prefs.getBoolean(KEY_CANVAS_OVER_CELLULAR, false)
-        fullBleedArtwork.value = prefs.getBoolean(KEY_FULL_BLEED_ARTWORK, true)
-        largerFullBleedArtwork.value = prefs.getBoolean(KEY_LARGER_FULL_BLEED_ARTWORK, false)
-        keepOriginalArtworkAspectRatio.value = prefs.getBoolean(KEY_KEEP_ORIGINAL_ARTWORK_ASPECT_RATIO, false)
+        val legacyFullBleedArtwork = prefs.getBoolean(KEY_FULL_BLEED_ARTWORK, true)
+        val legacyLargerArtwork = prefs.getBoolean(KEY_LARGER_FULL_BLEED_ARTWORK, false)
+        val legacyOriginalAspect = prefs.getBoolean(KEY_KEEP_ORIGINAL_ARTWORK_ASPECT_RATIO, false)
+        val storedArtworkMode = runCatching { prefs.getInt(KEY_PLAYER_ARTWORK_MODE, -1) }.getOrDefault(-1)
+        val artworkMode = PlayerArtworkMode.fromPersistedValue(storedArtworkMode) ?: when {
+            legacyFullBleedArtwork && legacyLargerArtwork -> PlayerArtworkMode.FULL_SCREEN_LARGER
+            legacyFullBleedArtwork -> PlayerArtworkMode.FULL_SCREEN
+            legacyOriginalAspect -> PlayerArtworkMode.STANDARD_ORIGINAL_ASPECT
+            else -> PlayerArtworkMode.STANDARD_SQUARE
+        }
+        playerArtworkMode.value = artworkMode
+        fullBleedArtwork.value = artworkMode.usesFullScreenArtwork
+        largerFullBleedArtwork.value = artworkMode == PlayerArtworkMode.FULL_SCREEN_LARGER
+        keepOriginalArtworkAspectRatio.value = artworkMode == PlayerArtworkMode.STANDARD_ORIGINAL_ASPECT
         keepCollectionArtworkAspectRatio.value = prefs.getBoolean(KEY_KEEP_COLLECTION_ARTWORK_ASPECT_RATIO, false)
         localizeLibraryCollectionCount.value = prefs.getBoolean(KEY_LOCALIZE_LIBRARY_COLLECTION_COUNT, true)
         preserveArtworkShapeInCompactTransitions.value =
@@ -3061,13 +3093,25 @@ object AppSettings {
     }
 
     fun setFullBleedArtwork(value: Boolean) {
-        fullBleedArtwork.value = value
-        prefs.edit().putBoolean(KEY_FULL_BLEED_ARTWORK, value).apply()
+        val next = if (value) {
+            PlayerArtworkMode.FULL_SCREEN
+        } else if (keepOriginalArtworkAspectRatio.value) {
+            PlayerArtworkMode.STANDARD_ORIGINAL_ASPECT
+        } else {
+            PlayerArtworkMode.STANDARD_SQUARE
+        }
+        setPlayerArtworkMode(next)
     }
 
     fun setLargerFullBleedArtwork(value: Boolean) {
-        largerFullBleedArtwork.value = value
-        prefs.edit().putBoolean(KEY_LARGER_FULL_BLEED_ARTWORK, value).apply()
+        val next = if (value) {
+            PlayerArtworkMode.FULL_SCREEN_LARGER
+        } else if (playerArtworkMode.value == PlayerArtworkMode.FULL_SCREEN_LARGER) {
+            PlayerArtworkMode.FULL_SCREEN
+        } else {
+            playerArtworkMode.value
+        }
+        setPlayerArtworkMode(next)
     }
 
     fun setFullBleedArtworkBottomBlurStrengthDp(value: Int) {
@@ -3077,8 +3121,30 @@ object AppSettings {
     }
 
     fun setKeepOriginalArtworkAspectRatio(value: Boolean) {
-        keepOriginalArtworkAspectRatio.value = value
-        prefs.edit().putBoolean(KEY_KEEP_ORIGINAL_ARTWORK_ASPECT_RATIO, value).apply()
+        val next = if (value) {
+            PlayerArtworkMode.STANDARD_ORIGINAL_ASPECT
+        } else if (playerArtworkMode.value == PlayerArtworkMode.STANDARD_ORIGINAL_ASPECT) {
+            PlayerArtworkMode.STANDARD_SQUARE
+        } else {
+            playerArtworkMode.value
+        }
+        setPlayerArtworkMode(next)
+    }
+
+    fun setPlayerArtworkMode(value: PlayerArtworkMode) {
+        playerArtworkMode.value = value
+        val fullScreen = value.usesFullScreenArtwork
+        val larger = value == PlayerArtworkMode.FULL_SCREEN_LARGER
+        val preserveAspect = value == PlayerArtworkMode.STANDARD_ORIGINAL_ASPECT
+        fullBleedArtwork.value = fullScreen
+        largerFullBleedArtwork.value = larger
+        keepOriginalArtworkAspectRatio.value = preserveAspect
+        prefs.edit()
+            .putInt(KEY_PLAYER_ARTWORK_MODE, value.persistedValue)
+            .putBoolean(KEY_FULL_BLEED_ARTWORK, fullScreen)
+            .putBoolean(KEY_LARGER_FULL_BLEED_ARTWORK, larger)
+            .putBoolean(KEY_KEEP_ORIGINAL_ARTWORK_ASPECT_RATIO, preserveAspect)
+            .apply()
     }
 
     fun setKeepCollectionArtworkAspectRatio(value: Boolean) {
@@ -4004,6 +4070,7 @@ object AppSettings {
     private const val KEY_ANIMATED_CANVAS = "animated_canvas"
     private const val KEY_CANVAS_OVER_CELLULAR = "canvas_over_cellular"
     private const val KEY_FULL_BLEED_ARTWORK = "full_bleed_artwork"
+    private const val KEY_PLAYER_ARTWORK_MODE = "player_artwork_mode"
     private const val KEY_LARGER_FULL_BLEED_ARTWORK = "larger_full_bleed_artwork"
     private const val KEY_FULL_BLEED_ARTWORK_BOTTOM_BLUR_STRENGTH_DP = "full_bleed_artwork_bottom_blur_strength_dp"
     private const val KEY_KEEP_ORIGINAL_ARTWORK_ASPECT_RATIO = "keep_original_artwork_aspect_ratio"

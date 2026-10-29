@@ -267,6 +267,7 @@ import com.music.bitchord.data.settings.TransportSideAction
 import com.music.bitchord.data.settings.PlayerControl
 import com.music.bitchord.data.settings.PlayerQuickAction
 import com.music.bitchord.data.settings.AudioQuality
+import com.music.bitchord.data.settings.PlayerArtworkMode
 import com.music.bitchord.data.model.LikeStatus
 import com.music.bitchord.data.model.PLAYER_ART_PX
 import com.music.bitchord.data.model.ROW_ART_PX
@@ -307,6 +308,8 @@ private const val AURIS_FULL_BLEED_ZOOM = 1.234f
 private const val LARGER_AURIS_FULL_BLEED_ZOOM = 1.36f
 /** The subtle downward drift used by Auris' expanded artwork. */
 private const val AURIS_FULL_BLEED_DRIFT = 0.016f
+/** The established dissolve used by the standard full-screen artwork mode. */
+private const val HERO_FADE_FRACTION = 0.42f
 
 private class CenteredPlayerButtonArrangement(private val gapDp: Float) : Arrangement.Horizontal {
     override fun Density.arrange(
@@ -394,6 +397,68 @@ private fun aurisHeroArtworkScale(width: Float, height: Float, zoom: Float): Flo
         ?.coerceIn(1f, 1.5f)
         ?: 1f
 }
+
+/** Restored artwork-derived blur used by the standard and enlarged full-screen modes. */
+@Composable
+private fun HeroArtworkBottomBlur(
+    model: ImageRequest,
+    alpha: Float,
+    zoom: Float,
+    modifier: Modifier = Modifier,
+) {
+    val strengthDp by AppSettings.fullBleedArtworkBottomBlurStrengthDp.collectAsStateWithLifecycle()
+    if (strengthDp <= 0) return
+
+    val intensity = (strengthDp / 42f).coerceIn(0f, 1f)
+    val maskZoom = zoom.takeIf { it.isFinite() && it >= 1f } ?: 1f
+    AsyncImage(
+        model = model,
+        contentDescription = null,
+        contentScale = ContentScale.Crop,
+        modifier = modifier
+            .clipToBounds()
+            .graphicsLayer {
+                this.alpha = alpha * intensity
+                scaleX = zoom
+                scaleY = zoom
+                transformOrigin = TransformOrigin(0.5f, 0f)
+                compositingStrategy = CompositingStrategy.Offscreen
+            }
+            .drawWithContent {
+                drawContent()
+                drawRect(
+                    brush = Brush.verticalGradient(
+                        colorStops = arrayOf(
+                            (0.58f / maskZoom) to Color.Transparent,
+                            (0.72f / maskZoom) to Color.Black.copy(alpha = 0.48f * intensity),
+                            (0.88f / maskZoom) to Color.Black.copy(alpha = 0.82f * intensity),
+                            (1f / maskZoom) to Color.Transparent,
+                        ),
+                    ),
+                    blendMode = BlendMode.DstIn,
+                )
+            }
+            .blur(strengthDp.dp, BlurredEdgeTreatment.Rectangle),
+    )
+}
+
+/** Restored linear fade used by the standard and enlarged full-screen modes. */
+private fun Modifier.heroArtworkBottomFade(fadeFraction: Float, zoom: Float): Modifier =
+    drawWithContent {
+        drawContent()
+        if (size.height <= 0f) return@drawWithContent
+        val safeZoom = zoom.takeIf { it.isFinite() && it >= 1f } ?: 1f
+        val localStartFraction = (1f - fadeFraction.coerceIn(0f, 1f)) / safeZoom
+        val localEndFraction = 1f / safeZoom
+        drawRect(
+            brush = Brush.verticalGradient(
+                colors = listOf(Color.Black, Color.Transparent),
+                startY = size.height * localStartFraction,
+                endY = size.height * localEndFraction,
+            ),
+            blendMode = BlendMode.DstIn,
+        )
+    }
 
 /** Fade from the title row through the expanded stage, as in Auris. */
 private fun Modifier.aurisHeroArtworkBottomFade(zoom: Float): Modifier =
@@ -912,10 +977,11 @@ fun NowPlayingScreen(
 
     val playerArtworkTransitionEnabled by AppSettings.playerArtworkTransition.collectAsStateWithLifecycle()
     val preserveArtworkShapeInCompactTransitions by AppSettings.preserveArtworkShapeInCompactTransitions.collectAsStateWithLifecycle()
-    val fullBleedArt by AppSettings.fullBleedArtwork.collectAsStateWithLifecycle()
-    val largerFullBleedArtwork by AppSettings.largerFullBleedArtwork.collectAsStateWithLifecycle()
-    val keepOriginalArtworkAspectRatio by AppSettings.keepOriginalArtworkAspectRatio.collectAsStateWithLifecycle()
-    val preserveSleeveArtworkShape = keepOriginalArtworkAspectRatio && !fullBleedArt
+    val playerArtworkMode by AppSettings.playerArtworkMode.collectAsStateWithLifecycle()
+    val fullBleedArt = playerArtworkMode.usesFullScreenArtwork
+    val largerFullBleedArtwork = playerArtworkMode == PlayerArtworkMode.FULL_SCREEN_LARGER
+    val aurisFullBleedArtwork = playerArtworkMode == PlayerArtworkMode.AURIS_FULL_SCREEN
+    val preserveSleeveArtworkShape = playerArtworkMode == PlayerArtworkMode.STANDARD_ORIGINAL_ASPECT
     val preserveTransitionArtworkProportions =
         preserveArtworkShapeInCompactTransitions && preserveSleeveArtworkShape
     val dock = if (playerArtworkTransitionEnabled) LocalPlayerDock.current?.takeUnless { docked } else null
@@ -1508,11 +1574,12 @@ fun NowPlayingScreen(
     // clip running the full screen. CanvasArtworkPlayer masks itself on every
     // API level now, and both layers answer to this.
     val heroMode = fullBleedArt && (docked || playerFillsWindow(windowWidth))
+    val aurisHeroMode = heroMode && aurisFullBleedArtwork
     val useLargerHeroArtwork = heroMode && largerFullBleedArtwork
-    val heroArtworkZoom = if (useLargerHeroArtwork) {
-        LARGER_AURIS_FULL_BLEED_ZOOM
-    } else {
-        AURIS_FULL_BLEED_ZOOM
+    val heroArtworkZoom = when {
+        aurisHeroMode -> AURIS_FULL_BLEED_ZOOM
+        useLargerHeroArtwork -> LARGER_AURIS_FULL_BLEED_ZOOM
+        else -> 1f
     }
     // Whether there's a still image to blow out — a placeholder tile is a card
     // or it is nothing, and going full-bleed with one would just tint the top
@@ -1663,15 +1730,17 @@ fun NowPlayingScreen(
     // is nothing to show that early either.
     var heroHeight by remember { mutableStateOf(0.dp) }
     val statusBarTop = WindowInsets.statusBars.asPaddingValues().calculateTopPadding()
-    val heroFadeFraction = with(density) {
-        val heightPx = heroHeight.toPx()
-        if (heightPx <= 0f) {
-            0f
-        } else {
-            val fadeStart = heightPx / heroArtworkZoom + ART_TITLE_GAP.toPx() / 2f
-            ((heightPx - fadeStart) / heightPx).coerceIn(0f, 1f)
+    val heroFadeFraction = if (aurisHeroMode) {
+        with(density) {
+            val heightPx = heroHeight.toPx()
+            if (heightPx <= 0f) {
+                0f
+            } else {
+                val fadeStart = heightPx / heroArtworkZoom + ART_TITLE_GAP.toPx() / 2f
+                ((heightPx - fadeStart) / heightPx).coerceIn(0f, 1f)
+            }
         }
-    }
+    } else HERO_FADE_FRACTION
     // What sits between the status bar and the artwork: the drag strip in a
     // sheet, plain padding in a pane. Read in three places — the strip itself,
     // the scrim drawn over it and the banner's own height — which all have to
@@ -1724,7 +1793,7 @@ fun NowPlayingScreen(
         // the anchor for a blurred layer, and moving it would re-blur the whole
         // screen on every frame of the drag. Above it the mesh holds one colour,
         // so a seam left behind a collapsed sleeve shows nothing at all.
-        val activeBackdropBlur = if (heroMode) {
+        val activeBackdropBlur = if (aurisHeroMode) {
             fullBleedArtworkBottomBlurStrengthDp.dp
         } else {
             artworkBackdropBlurDp.dp
@@ -1753,7 +1822,7 @@ fun NowPlayingScreen(
         // Auris grades the area beneath its artwork stage as well as dissolving
         // the cover into the artwork-derived backdrop. This keeps the transport
         // visually grounded without adding a hard dark strip at the stage edge.
-        if (heroMode && heroHeight > 0.dp && heroVisible > 0.001f) {
+        if (aurisHeroMode && heroHeight > 0.dp && heroVisible > 0.001f) {
             Box(
                 modifier = Modifier
                     .matchParentSize()
@@ -1824,14 +1893,24 @@ fun NowPlayingScreen(
                                 // backdrop along the hero's lower edge.
                                 .graphicsLayer {
                                     alpha = heroVisible
-                                    val cropScale = aurisHeroArtworkScale(size.width, size.height, heroArtworkZoom)
+                                    val cropScale = if (aurisHeroMode) {
+                                        aurisHeroArtworkScale(size.width, size.height, heroArtworkZoom)
+                                    } else {
+                                        heroArtworkZoom
+                                    }
                                     scaleX = cropScale
                                     scaleY = cropScale
                                     transformOrigin = TransformOrigin(0.5f, 0f)
-                                    translationY = size.width * AURIS_FULL_BLEED_DRIFT
+                                    if (aurisHeroMode) translationY = size.width * AURIS_FULL_BLEED_DRIFT
                                     compositingStrategy = CompositingStrategy.Offscreen
                                 }
-                                .aurisHeroArtworkBottomFade(heroArtworkZoom),
+                                .then(
+                                    if (aurisHeroMode) {
+                                        Modifier.aurisHeroArtworkBottomFade(heroArtworkZoom)
+                                    } else {
+                                        Modifier.heroArtworkBottomFade(heroFadeFraction, heroArtworkZoom)
+                                    },
+                                ),
                         )
                     }
                 }
@@ -1863,17 +1942,39 @@ fun NowPlayingScreen(
                             // clip mounted to hand it to.
                             alpha = heroVisible *
                                 (1f - if (heroClip != null) canvasCover.floatValue else 0f)
-                            val cropScale = aurisHeroArtworkScale(size.width, size.height, heroArtworkZoom)
+                            val cropScale = if (aurisHeroMode) {
+                                aurisHeroArtworkScale(size.width, size.height, heroArtworkZoom)
+                            } else {
+                                heroArtworkZoom
+                            }
                             scaleX = cropScale
                             scaleY = cropScale
                             transformOrigin = TransformOrigin(0.5f, 0f)
-                            translationY = size.width * AURIS_FULL_BLEED_DRIFT
+                            if (aurisHeroMode) translationY = size.width * AURIS_FULL_BLEED_DRIFT
                             // The mask below erases part of what this layer
                             // drew, which it can only do in a buffer of its own.
                             compositingStrategy = CompositingStrategy.Offscreen
                         }
-                        .aurisHeroArtworkBottomFade(heroArtworkZoom),
+                        .then(
+                            if (aurisHeroMode) {
+                                Modifier.aurisHeroArtworkBottomFade(heroArtworkZoom)
+                            } else {
+                                Modifier.heroArtworkBottomFade(heroFadeFraction, heroArtworkZoom)
+                            },
+                        ),
                 )
+                if (!aurisHeroMode) {
+                    HeroArtworkBottomBlur(
+                        model = artRequest,
+                        alpha = heroVisible *
+                            (1f - if (heroClip != null) canvasCover.floatValue else 0f),
+                        zoom = heroArtworkZoom,
+                        modifier = Modifier
+                            .align(Alignment.TopStart)
+                            .fillMaxWidth()
+                            .height(heroHeight),
+                    )
+                }
             }
 
             // Motion artwork over it, in the same frame.
@@ -1891,11 +1992,15 @@ fun NowPlayingScreen(
                         refreshFrameEveryMs = meshRefreshMs,
                         onCoverChanged = { canvasCover.floatValue = it },
                         bottomFade = heroFadeFraction,
-                        bottomFadeEased = true,
+                        bottomFadeEased = aurisHeroMode,
                         extraZoom = with(density) {
                             val artworkWidthPx = dockFrame.host?.size?.width?.toFloat()
                                 ?: windowWidth.toPx()
-                            aurisHeroArtworkScale(artworkWidthPx, heroHeight.toPx(), heroArtworkZoom)
+                            if (aurisHeroMode) {
+                                aurisHeroArtworkScale(artworkWidthPx, heroHeight.toPx(), heroArtworkZoom)
+                            } else {
+                                heroArtworkZoom
+                            }
                         },
                         modifier = Modifier
                             .align(Alignment.TopStart)
@@ -2301,8 +2406,13 @@ fun NowPlayingScreen(
                 // can simply be added back up rather than measured.
                 // Match Auris: extend the artwork stage by its crop factor, so
                 // the dissolve starts at the title and runs past the artist row.
-                val bannerBottom = (statusBarTop + topStrip + ART_BOX_TOP_PAD +
-                    targetGroupTop + targetArtHeight + ART_TITLE_GAP / 2) * heroArtworkZoom
+                val baseBannerBottom = statusBarTop + topStrip + ART_BOX_TOP_PAD +
+                    targetGroupTop + targetArtHeight + ART_TITLE_GAP / 2
+                val bannerBottom = when {
+                    aurisHeroMode -> baseBannerBottom * heroArtworkZoom
+                    useLargerHeroArtwork -> baseBannerBottom + HEADER_HEIGHT + ART_TITLE_GAP / 2
+                    else -> baseBannerBottom
+                }
                 // Held where it was while the lyrics are up.
                 //
                 // [groupTop] centres the block in this box's *real* height, and

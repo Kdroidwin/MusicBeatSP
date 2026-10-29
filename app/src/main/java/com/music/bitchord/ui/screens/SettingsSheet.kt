@@ -174,6 +174,7 @@ import com.music.bitchord.data.LocalMediaRepository
 import com.music.bitchord.data.NerdStats
 import com.music.bitchord.data.scrobbling.LastFM
 import com.music.bitchord.data.settings.AppSettings
+import com.music.bitchord.data.settings.PlayerArtworkMode
 import com.music.bitchord.data.settings.AutomixPerformanceMode
 import com.music.bitchord.data.settings.LocalLibraryTab
 import com.music.bitchord.data.settings.LauncherIcon
@@ -204,7 +205,6 @@ import com.music.bitchord.feature.localmusic.data.MusicoletBackupImporter
 import com.music.bitchord.feature.localmusic.data.MusicoletImportException
 import com.music.bitchord.feature.localmusic.data.MusicoletImportFailure
 import com.music.bitchord.feature.localmusic.data.PreparedMusicoletBackup
-import com.music.bitchord.ui.player.fullBleedArtworkAvailable
 import com.music.bitchord.ui.screens.WearOsSettingsRow
 import com.music.bitchord.wear.WatchInstaller
 import kotlinx.coroutines.launch
@@ -299,14 +299,25 @@ private fun playerPlayPauseCornerRoundnessSearchEntry(roundnessPercent: Int) = S
 )
 
 @Composable
-private fun largerFullBleedArtworkSearchEntry(enabled: Boolean, fullBleedEnabled: Boolean) = SettingsSearchEntry(
-    title = stringResource(R.string.larger_full_screen_cover_art),
-    subtitle = stringResource(R.string.larger_full_screen_cover_art_subtitle),
-    keywords = listOf("artwork", "cover", "zoom", "full screen", "アート", "カバー", "拡大", "全画面"),
-    checked = enabled,
-    enabled = fullBleedEnabled,
-    activate = { if (fullBleedEnabled) AppSettings.setLargerFullBleedArtwork(!enabled) },
+private fun PlayerArtworkMode.localizedLabel(): String = stringResource(
+    when (this) {
+        PlayerArtworkMode.FULL_SCREEN -> R.string.artwork_mode_full_screen
+        PlayerArtworkMode.FULL_SCREEN_LARGER -> R.string.artwork_mode_full_screen_larger
+        PlayerArtworkMode.AURIS_FULL_SCREEN -> R.string.artwork_mode_auris_full_screen
+        PlayerArtworkMode.STANDARD_SQUARE -> R.string.artwork_mode_standard_square
+        PlayerArtworkMode.STANDARD_ORIGINAL_ASPECT -> R.string.artwork_mode_standard_original_aspect
+    },
 )
+
+@Composable
+private fun playerArtworkModeSearchEntry(mode: PlayerArtworkMode, selectedMode: PlayerArtworkMode) =
+    SettingsSearchEntry(
+        title = mode.localizedLabel(),
+        subtitle = stringResource(R.string.player_artwork_mode_subtitle),
+        keywords = listOf("player", "artwork", "cover", "full screen", "Auris", "square", "aspect ratio", "プレイヤー", "アルバムアート", "全画面", "正方形", "縦横比"),
+        checked = selectedMode == mode,
+        activate = { AppSettings.setPlayerArtworkMode(mode) },
+    )
 
 @Composable
 private fun fullBleedArtworkBottomBlurSearchEntry(strengthDp: Int) = SettingsSearchEntry(
@@ -364,28 +375,6 @@ private fun appleMusicQueueButtonStyleSearchEntry(enabled: Boolean) = SettingsSe
     checked = enabled,
     activate = { AppSettings.setAppleMusicQueueButtonStyle(!enabled) },
 )
-
-@Composable
-private fun LargerFullBleedArtworkRow(checked: Boolean, fullBleedEnabled: Boolean) {
-    SettingsRow(
-        icon = Icons.Rounded.Fullscreen,
-        title = stringResource(R.string.larger_full_screen_cover_art),
-        subtitle = stringResource(R.string.larger_full_screen_cover_art_subtitle),
-        enabled = fullBleedEnabled,
-        trailing = {
-            Switch(
-                checked = checked,
-                enabled = fullBleedEnabled,
-                onCheckedChange = AppSettings::setLargerFullBleedArtwork,
-                colors = SwitchDefaults.colors(
-                    checkedTrackColor = MaterialTheme.colorScheme.primary,
-                    checkedBorderColor = MaterialTheme.colorScheme.primary,
-                ),
-            )
-        },
-        onClick = { if (fullBleedEnabled) AppSettings.setLargerFullBleedArtwork(!checked) },
-    )
-}
 
 @Composable
 private fun PlayerActionButtonStyleRow(
@@ -585,10 +574,8 @@ fun SettingsScreen(
     val centerPlayerTrackInfo by AppSettings.centerPlayerTrackInfo.collectAsStateWithLifecycle()
     val playerDetailsVerticalMenu by AppSettings.playerDetailsVerticalMenu.collectAsStateWithLifecycle()
     val preloadAlbumArtOnStartup by AppSettings.preloadAlbumArtOnStartup.collectAsStateWithLifecycle()
-    val fullBleedArtwork by AppSettings.fullBleedArtwork.collectAsStateWithLifecycle()
-    val largerFullBleedArtwork by AppSettings.largerFullBleedArtwork.collectAsStateWithLifecycle()
+    val playerArtworkMode by AppSettings.playerArtworkMode.collectAsStateWithLifecycle()
     val fullBleedArtworkBottomBlurStrengthDp by AppSettings.fullBleedArtworkBottomBlurStrengthDp.collectAsStateWithLifecycle()
-    val keepOriginalArtworkAspectRatio by AppSettings.keepOriginalArtworkAspectRatio.collectAsStateWithLifecycle()
     val preserveArtworkShapeInCompactTransitions by AppSettings.preserveArtworkShapeInCompactTransitions.collectAsStateWithLifecycle()
     val keepArtworkFullSizeWhenPaused by AppSettings.keepArtworkFullSizeWhenPaused.collectAsStateWithLifecycle()
     val legacyMeshGradient by AppSettings.legacyMeshGradient.collectAsStateWithLifecycle()
@@ -676,6 +663,7 @@ fun SettingsScreen(
     var showLauncherIconPicker by rememberSaveable { mutableStateOf(false) }
     var showThemePicker by rememberSaveable { mutableStateOf(false) }
     var showMediaControlActionPicker by rememberSaveable { mutableStateOf(false) }
+    var showPlayerArtworkModePicker by rememberSaveable { mutableStateOf(false) }
     var showPerformanceWarning by remember { mutableStateOf(false) }
     var showEqualizerSheet by remember { mutableStateOf(false) }
     var showAutomixPerformanceSheet by rememberSaveable { mutableStateOf(false) }
@@ -1070,10 +1058,8 @@ fun SettingsScreen(
             listOf("lyrics", "歌詞", "extension", "extensions", "script", "拡張", "スクリプト", "安全", "privacy", "supply chain"),
             lyricsExtensionsEnabled,
         ) { AppSettings.setLyricsExtensionsEnabled(!lyricsExtensionsEnabled) },
-        SettingsSearchEntry(stringResource(R.string.auris_full_screen_cover_art), stringResource(R.string.auris_full_screen_cover_art_subtitle), listOf("Auris", "artwork", "cover", "full screen", "アート", "全画面", "Auris風"), fullBleedArtwork) { AppSettings.setFullBleedArtwork(!fullBleedArtwork) },
-        largerFullBleedArtworkSearchEntry(largerFullBleedArtwork, fullBleedArtwork),
+        *PlayerArtworkMode.entries.map { playerArtworkModeSearchEntry(it, playerArtworkMode) }.toTypedArray(),
         fullBleedArtworkBottomBlurSearchEntry(fullBleedArtworkBottomBlurStrengthDp),
-        SettingsSearchEntry(stringResource(R.string.keep_original_artwork_aspect_ratio), stringResource(R.string.keep_original_artwork_aspect_ratio_subtitle), listOf("artwork", "cover", "aspect ratio", "crop", "縦長", "横長", "比率", "トリミング"), keepOriginalArtworkAspectRatio) { AppSettings.setKeepOriginalArtworkAspectRatio(!keepOriginalArtworkAspectRatio) },
         SettingsSearchEntry(stringResource(R.string.preserve_artwork_shape_in_compact_transitions), stringResource(R.string.preserve_artwork_shape_in_compact_transitions_subtitle), listOf("artwork", "cover", "aspect ratio", "mini player", "dock", "lyrics", "アート", "カバー", "縦横比", "ミニプレーヤー", "歌詞", "遷移"), preserveArtworkShapeInCompactTransitions) { AppSettings.setPreserveArtworkShapeInCompactTransitions(!preserveArtworkShapeInCompactTransitions) },
         SettingsSearchEntry(stringResource(R.string.keep_artwork_full_size_paused), stringResource(R.string.keep_artwork_full_size_paused_subtitle), listOf("artwork", "cover", "paused", "停止中", "アート"), keepArtworkFullSizeWhenPaused) { AppSettings.setKeepArtworkFullSizeWhenPaused(!keepArtworkFullSizeWhenPaused) },
         SettingsSearchEntry(stringResource(R.string.reduce_animation), stringResource(R.string.reduce_animation_subtitle), listOf("animation", "reduce", "アニメーション"), reduceAnimation) { AppSettings.setReduceAnimation(!reduceAnimation) },
@@ -3888,55 +3874,31 @@ fun SettingsScreen(
                 onClick = { AppSettings.setHideNavigationBarLabels(!hideNavBarLabels) },
             )
             RowDivider()
-            // Left out where the player won't honour it: a window too wide for
-            // the player to fill and too narrow to stand a page beside it keeps
-            // the sleeve either way. A docked pane is a phone's width, so it does
-            // honour it — see [fullBleedArtworkAvailable].
-            if (fullBleedArtworkAvailable(windowWidth)) {
-                SettingsRow(
-                    icon = Icons.Rounded.Fullscreen,
-                    title = stringResource(R.string.auris_full_screen_cover_art),
-                    subtitle = stringResource(R.string.auris_full_screen_cover_art_subtitle),
-                    trailing = {
-                        Switch(
-                            checked = fullBleedArtwork,
-                            onCheckedChange = AppSettings::setFullBleedArtwork,
-                            colors = SwitchDefaults.colors(
-                                checkedTrackColor = MaterialTheme.colorScheme.primary,
-                                checkedBorderColor = MaterialTheme.colorScheme.primary,
-                            ),
+            SettingsRow(
+                icon = Icons.Rounded.Fullscreen,
+                title = stringResource(R.string.player_artwork_mode),
+                subtitle = stringResource(R.string.player_artwork_mode_subtitle),
+                trailing = {
+                    Row(verticalAlignment = Alignment.CenterVertically) {
+                        Text(
+                            playerArtworkMode.localizedLabel(),
+                            style = MaterialTheme.typography.bodyMedium,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant,
                         )
-                    },
-                    onClick = { AppSettings.setFullBleedArtwork(!fullBleedArtwork) },
-                )
-                RowDivider()
-                LargerFullBleedArtworkRow(
-                    checked = largerFullBleedArtwork,
-                    fullBleedEnabled = fullBleedArtwork,
-                )
-                RowDivider()
+                        Icon(
+                            imageVector = Icons.Rounded.ChevronRight,
+                            contentDescription = null,
+                            tint = MaterialTheme.colorScheme.onSurfaceVariant,
+                        )
+                    }
+                },
+                onClick = { showPlayerArtworkModePicker = true },
+            )
+            RowDivider()
+            if (playerArtworkMode.usesFullScreenArtwork) {
                 FullBleedArtworkBottomBlurSettingsRow(fullBleedArtworkBottomBlurStrengthDp)
                 RowDivider()
             }
-            SettingsRow(
-                icon = Icons.Rounded.ViewStream,
-                title = stringResource(R.string.keep_original_artwork_aspect_ratio),
-                subtitle = stringResource(R.string.keep_original_artwork_aspect_ratio_subtitle),
-                trailing = {
-                    Switch(
-                        checked = keepOriginalArtworkAspectRatio,
-                        onCheckedChange = AppSettings::setKeepOriginalArtworkAspectRatio,
-                        colors = SwitchDefaults.colors(
-                            checkedTrackColor = MaterialTheme.colorScheme.primary,
-                            checkedBorderColor = MaterialTheme.colorScheme.primary,
-                        ),
-                    )
-                },
-                onClick = {
-                    AppSettings.setKeepOriginalArtworkAspectRatio(!keepOriginalArtworkAspectRatio)
-                },
-            )
-            RowDivider()
             SettingsRow(
                 icon = Icons.Rounded.Headphones,
                 title = stringResource(R.string.walkman_player_style),
@@ -4982,6 +4944,47 @@ fun SettingsScreen(
                 },
                 confirmButton = {
                     TextButton(onClick = { showThemePicker = false }) {
+                        Text(stringResource(R.string.done))
+                    }
+                },
+            )
+        }
+
+        if (showPlayerArtworkModePicker) {
+            AlertDialog(
+                onDismissRequest = { showPlayerArtworkModePicker = false },
+                title = { Text(stringResource(R.string.player_artwork_mode)) },
+                text = {
+                    Column(
+                        modifier = Modifier
+                            .heightIn(max = 420.dp)
+                            .verticalScroll(rememberScrollState()),
+                    ) {
+                        PlayerArtworkMode.entries.forEach { mode ->
+                            Row(
+                                modifier = Modifier
+                                    .fillMaxWidth()
+                                    .clickable {
+                                        AppSettings.setPlayerArtworkMode(mode)
+                                        showPlayerArtworkModePicker = false
+                                    }
+                                    .padding(vertical = 6.dp),
+                                verticalAlignment = Alignment.CenterVertically,
+                            ) {
+                                RadioButton(
+                                    selected = playerArtworkMode == mode,
+                                    onClick = {
+                                        AppSettings.setPlayerArtworkMode(mode)
+                                        showPlayerArtworkModePicker = false
+                                    },
+                                )
+                                Text(mode.localizedLabel(), modifier = Modifier.padding(start = 8.dp))
+                            }
+                        }
+                    }
+                },
+                confirmButton = {
+                    TextButton(onClick = { showPlayerArtworkModePicker = false }) {
                         Text(stringResource(R.string.done))
                     }
                 },
