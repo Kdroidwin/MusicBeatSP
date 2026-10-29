@@ -54,6 +54,7 @@ import androidx.compose.foundation.interaction.DragInteraction
 import androidx.compose.foundation.interaction.MutableInteractionSource
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.BoxScope
 import androidx.compose.foundation.layout.BoxWithConstraints
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
@@ -968,12 +969,6 @@ fun NowPlayingScreen(
     val artUrl = song.artworkAt(ART_PX)
     val artworkPalette = rememberArtworkPalette(artUrl, dark = true, artPx = ART_PX)
     val playerElementColors by AppSettings.playerElementColors.collectAsStateWithLifecycle()
-    val playerTitleTint = resolvePlayerElementColor(PlayerColorTarget.TITLE, Color.White, artworkPalette.accent, playerElementColors)
-    val playerArtistTint = resolvePlayerElementColor(PlayerColorTarget.ARTIST, Color.White.copy(alpha = 0.55f), artworkPalette.accent, playerElementColors)
-    val playerQuickTint = resolvePlayerElementColor(PlayerColorTarget.QUICK_ACTIONS, Color.White, artworkPalette.accent, playerElementColors)
-    val playerBottomTint = resolvePlayerElementColor(PlayerColorTarget.BOTTOM_CONTROLS, Color.White, artworkPalette.accent, playerElementColors)
-    val playerTransportTint = resolvePlayerElementColor(PlayerColorTarget.TRANSPORT, Color.White, artworkPalette.accent, playerElementColors)
-    val playerPlayPauseTint = resolvePlayerElementColor(PlayerColorTarget.PLAY_PAUSE, Color.White, artworkPalette.accent, playerElementColors)
     // Ask MediaStore for its already-indexed thumbnail while the full-size
     // embedded cover is being read and decoded. The player keeps the sharp
     // request below and swaps it in as soon as it is ready.
@@ -2825,10 +2820,10 @@ fun NowPlayingScreen(
                             style = MaterialTheme.typography.titleLarge.copy(
                                 fontSize = titleSize,
                             ),
-                            color = playerTitleTint,
+                            color = resolvePlayerElementColor(PlayerColorTarget.TITLE, Color.White, artworkPalette.accent, playerElementColors),
                             enabled = scrolls,
                             leading = if (song.isExplicit == true) {
-                                { ExplicitBadge(color = playerTitleTint) }
+                                { ExplicitBadge(color = resolvePlayerElementColor(PlayerColorTarget.TITLE, Color.White, artworkPalette.accent, playerElementColors)) }
                             } else {
                                 null
                             },
@@ -2844,7 +2839,7 @@ fun NowPlayingScreen(
                                     fontWeight = FontWeight.W500,
                                     fontSize = artistSize,
                                 ),
-                                color = playerArtistTint,
+                                color = resolvePlayerElementColor(PlayerColorTarget.ARTIST, Color.White.copy(alpha = 0.55f), artworkPalette.accent, playerElementColors),
                                 enabled = scrolls,
                                 // A title that's also scrolling gets to go first —
                                 // starting together reads as clutter, so the artist
@@ -2913,7 +2908,7 @@ fun NowPlayingScreen(
                                     label = if (action == PlayerQuickAction.REPEAT && repeatMode == Player.REPEAT_MODE_ONE) "1" else null,
                                     contentDescription = title,
                                     showDisc = !hidePlayerQuickActionCircles,
-                                    tint = playerQuickTint,
+                                    tint = resolvePlayerElementColor(PlayerColorTarget.QUICK_ACTIONS, Color.White, artworkPalette.accent, playerElementColors),
                                     active = when (action) {
                                         PlayerQuickAction.LYRICS -> lyricsOpen
                                         PlayerQuickAction.QUEUE -> queueOpen
@@ -2969,7 +2964,7 @@ fun NowPlayingScreen(
                         },
                         contentDescription = stringResource(R.string.more),
                         showDisc = !hidePlayerQuickActionCircles,
-                        tint = playerQuickTint,
+                        tint = resolvePlayerElementColor(PlayerColorTarget.QUICK_ACTIONS, Color.White, artworkPalette.accent, playerElementColors),
                         onClick = onOpenMenu,
                     )
                     }
@@ -3360,49 +3355,25 @@ fun NowPlayingScreen(
                             }
                         }
                     }
-                    if (!headerLabelVisible) {
-                        Row(
-                            modifier = if (lyricsTransportControlsCentered) {
-                                Modifier.align(Alignment.Center)
-                            } else {
-                                Modifier
-                                    .align(Alignment.CenterEnd)
-                                    .padding(end = if (showLyricsCloseButton) 56.dp else 0.dp)
-                            },
-                            verticalAlignment = Alignment.CenterVertically,
-                        ) {
-                            if (showLyricsPreviousControl) {
-                                TransportGlyph(
-                                    icon = Icons.Rounded.FastRewind,
-                                    contentDescription = stringResource(R.string.widget_previous),
-                                    size = lyricsTransportControlSize.dp,
-                                    enabled = hasPrevious || positionMs > BACK_RESTARTS_AFTER_MS,
-                                    onClick = onPrevious,
-                                tint = playerTransportTint,
-                                )
-                            }
-                            if (showLyricsPlayPauseControl) {
-                                TransportGlyph(
-                                    icon = if (isPlaying) Icons.Rounded.Pause else Icons.Rounded.PlayArrow,
-                                    contentDescription = stringResource(if (isPlaying) R.string.pause else R.string.play),
-                                    size = lyricsTransportControlSize.dp,
-                                    enabled = !isLoading,
-                                    onClick = onPlayPause,
-                                    tint = playerPlayPauseTint,
-                                )
-                            }
-                            if (showLyricsNextControl) {
-                                TransportGlyph(
-                                    icon = Icons.Rounded.FastForward,
-                                    contentDescription = stringResource(R.string.widget_next),
-                                    size = lyricsTransportControlSize.dp,
-                                    enabled = hasNext,
-                                    onClick = onNext,
-                                    tint = playerTransportTint,
-                                )
-                            }
-                        }
-                    }
+                    LyricsTransportControls(
+                        visible = !headerLabelVisible,
+                        centered = lyricsTransportControlsCentered,
+                        closeButtonVisible = showLyricsCloseButton,
+                        showPrevious = showLyricsPreviousControl,
+                        showPlayPause = showLyricsPlayPauseControl,
+                        showNext = showLyricsNextControl,
+                        controlSize = lyricsTransportControlSize.dp,
+                        isPlaying = isPlaying,
+                        isLoading = isLoading,
+                        hasPrevious = hasPrevious,
+                        hasNext = hasNext,
+                        positionMs = positionMs,
+                        artworkAccent = artworkPalette.accent,
+                        playerElementColors = playerElementColors,
+                        onPrevious = onPrevious,
+                        onPlayPause = onPlayPause,
+                        onNext = onNext,
+                    )
                 }
                 Spacer(Modifier.height(20.dp))
             } else {
@@ -3433,7 +3404,7 @@ fun NowPlayingScreen(
                         contentDescription = stringResource(R.string.seek_back_seconds, seekIntervalSeconds),
                         label = stringResource(R.string.seek_seconds_short, seekIntervalSeconds),
                         showLabel = !hideSeekButtonLabels,
-                        tint = playerTransportTint,
+                        tint = resolvePlayerElementColor(PlayerColorTarget.TRANSPORT, Color.White, artworkPalette.accent, playerElementColors),
                         onClick = {
                             onSeek((positionMs - seekIntervalSeconds * 1000L).coerceAtLeast(0L))
                         },
@@ -3456,7 +3427,7 @@ fun NowPlayingScreen(
                         onOpenQueue = { queueOpen = true; lyricsOpen = false },
                         onOpenPlaylists = onOpenPlaylists,
                         onOpenSearch = onOpenSearch,
-                        tint = playerTransportTint,
+                        tint = resolvePlayerElementColor(PlayerColorTarget.TRANSPORT, Color.White, artworkPalette.accent, playerElementColors),
                     )
                 }
                 WalkmanShuffleGlyph(
@@ -3466,14 +3437,14 @@ fun NowPlayingScreen(
                     rightAction = transportRightAction,
                     shuffleEnabled = shuffleEnabled,
                     onToggleShuffle = onToggleShuffle,
-                    tint = playerTransportTint,
+                    tint = resolvePlayerElementColor(PlayerColorTarget.TRANSPORT, Color.White, artworkPalette.accent, playerElementColors),
                 )
                 TransportGlyph(
                     icon = Icons.Rounded.FastRewind,
                     contentDescription = stringResource(R.string.widget_previous),
                     size = 46.dp,
                     onClick = onPrevious,
-                    tint = playerTransportTint,
+                    tint = resolvePlayerElementColor(PlayerColorTarget.TRANSPORT, Color.White, artworkPalette.accent, playerElementColors),
                     // Lit whenever back has something to do — either a track to
                     // step to, or enough elapsed for it to restart this one.
                     enabled = hasPrevious || positionMs > BACK_RESTARTS_AFTER_MS,
@@ -3500,7 +3471,7 @@ fun NowPlayingScreen(
                         contentAlignment = Alignment.Center,
                     ) {
                         CircularProgressIndicator(
-                            color = playerPlayPauseTint,
+                            color = resolvePlayerElementColor(PlayerColorTarget.PLAY_PAUSE, Color.White, artworkPalette.accent, playerElementColors),
                             strokeWidth = 3.dp,
                             modifier = Modifier.size(38.dp),
                         )
@@ -3511,7 +3482,7 @@ fun NowPlayingScreen(
                         contentDescription = stringResource(if (isPlaying) R.string.pause else R.string.play),
                         size = playerPlayPauseIconSizeDp.dp,
                         onClick = onPlayPause,
-                        tint = playerPlayPauseTint,
+                        tint = resolvePlayerElementColor(PlayerColorTarget.PLAY_PAUSE, Color.White, artworkPalette.accent, playerElementColors),
                         haptic = if (isPlaying) Haptic.Pause else Haptic.Resume,
                         outlined = walkmanControlsActive,
                         cornerRadiusPercent = playerPlayPauseCornerRadiusPercent,
@@ -3522,7 +3493,7 @@ fun NowPlayingScreen(
                     contentDescription = stringResource(R.string.widget_next),
                     size = 46.dp,
                     onClick = onNext,
-                    tint = playerTransportTint,
+                    tint = resolvePlayerElementColor(PlayerColorTarget.TRANSPORT, Color.White, artworkPalette.accent, playerElementColors),
                     enabled = hasNext,
                     haptic = Haptic.SkipNext,
                     outlined = walkmanControlsActive,
@@ -3547,7 +3518,7 @@ fun NowPlayingScreen(
                             else -> Haptic.Select
                         },
                         outlined = true,
-                        tint = playerTransportTint,
+                        tint = resolvePlayerElementColor(PlayerColorTarget.TRANSPORT, Color.White, artworkPalette.accent, playerElementColors),
                     )
                 }
                 if (transportRightAction == TransportSideAction.NONE && seekButtonsVisible) {
@@ -3556,7 +3527,7 @@ fun NowPlayingScreen(
                         contentDescription = stringResource(R.string.seek_forward_seconds, seekIntervalSeconds),
                         label = stringResource(R.string.seek_seconds_short, seekIntervalSeconds),
                         showLabel = !hideSeekButtonLabels,
-                        tint = playerTransportTint,
+                        tint = resolvePlayerElementColor(PlayerColorTarget.TRANSPORT, Color.White, artworkPalette.accent, playerElementColors),
                         onClick = {
                             val end = effectiveDurationMs.takeIf { it > 0L } ?: Long.MAX_VALUE
                             onSeek((positionMs + seekIntervalSeconds * 1000L).coerceAtMost(end))
@@ -3580,7 +3551,7 @@ fun NowPlayingScreen(
                         onOpenQueue = { queueOpen = true; lyricsOpen = false },
                         onOpenPlaylists = onOpenPlaylists,
                         onOpenSearch = onOpenSearch,
-                        tint = playerTransportTint,
+                        tint = resolvePlayerElementColor(PlayerColorTarget.TRANSPORT, Color.White, artworkPalette.accent, playerElementColors),
                     )
                 }
             }
@@ -3653,7 +3624,7 @@ fun NowPlayingScreen(
                                 visible = !walkmanControlsActive,
                                 shuffleEnabled = shuffleEnabled,
                                 onToggleShuffle = onToggleShuffle,
-                                tint = playerBottomTint,
+                                tint = resolvePlayerElementColor(PlayerColorTarget.BOTTOM_CONTROLS, Color.White, artworkPalette.accent, playerElementColors),
                             )
                             PlayerControl.REPEAT -> if (!walkmanControlsActive) BottomGlyph(
                                 icon = if (repeatMode == Player.REPEAT_MODE_ONE) null else BitChordIcons.Repeat,
@@ -3670,7 +3641,7 @@ fun NowPlayingScreen(
                                     Player.REPEAT_MODE_ONE -> Haptic.ToggleOff
                                     else -> Haptic.Select
                                 },
-                                tint = playerBottomTint,
+                                tint = resolvePlayerElementColor(PlayerColorTarget.BOTTOM_CONTROLS, Color.White, artworkPalette.accent, playerElementColors),
                             )
                             PlayerControl.LYRICS -> BottomGlyph(
                                 icon = if (appleMusicLyricsButtonStyle) BitChordIcons.AurisLyrics else Icons.AutoMirrored.Rounded.Notes,
@@ -3681,7 +3652,7 @@ fun NowPlayingScreen(
                                 },
                                 highlighted = lyricsOpen,
                                 haptic = if (lyricsOpen) Haptic.Tap else Haptic.Select,
-                                tint = playerBottomTint,
+                                tint = resolvePlayerElementColor(PlayerColorTarget.BOTTOM_CONTROLS, Color.White, artworkPalette.accent, playerElementColors),
                             )
                             PlayerControl.LIKE -> if (PlayerQuickAction.FAVORITE !in playerQuickActions) BottomGlyph(
                                 icon = likeIcon,
@@ -3690,7 +3661,7 @@ fun NowPlayingScreen(
                                 highlighted = liked,
                                 enabled = likeAvailable,
                                 haptic = if (liked) Haptic.ToggleOff else Haptic.ToggleOn,
-                                tint = playerBottomTint,
+                                tint = resolvePlayerElementColor(PlayerColorTarget.BOTTOM_CONTROLS, Color.White, artworkPalette.accent, playerElementColors),
                             )
                             PlayerControl.QUEUE -> BottomGlyph(
                                 icon = if (appleMusicQueueButtonStyle) BitChordIcons.AurisQueue else Icons.AutoMirrored.Rounded.QueueMusic,
@@ -3701,7 +3672,7 @@ fun NowPlayingScreen(
                                 },
                                 highlighted = queueOpen,
                                 haptic = if (queueOpen) Haptic.Tap else Haptic.Expand,
-                                tint = playerBottomTint,
+                                tint = resolvePlayerElementColor(PlayerColorTarget.BOTTOM_CONTROLS, Color.White, artworkPalette.accent, playerElementColors),
                             )
                             PlayerControl.CHROMECAST -> Box(
                                 modifier = Modifier
@@ -3729,14 +3700,14 @@ fun NowPlayingScreen(
                                 contentDescription = stringResource(R.string.playlists),
                                 onClick = onOpenPlaylists,
                                 haptic = Haptic.Select,
-                                tint = playerBottomTint,
+                                tint = resolvePlayerElementColor(PlayerColorTarget.BOTTOM_CONTROLS, Color.White, artworkPalette.accent, playerElementColors),
                             )
                             PlayerControl.SEARCH -> BottomGlyph(
                                 icon = BitChordIcons.Search,
                                 contentDescription = stringResource(R.string.search),
                                 onClick = onOpenSearch,
                                 haptic = Haptic.Select,
-                                tint = playerBottomTint,
+                                tint = resolvePlayerElementColor(PlayerColorTarget.BOTTOM_CONTROLS, Color.White, artworkPalette.accent, playerElementColors),
                             )
                         }
                     }
@@ -5275,6 +5246,84 @@ private fun TransportGlyph(
                 contentDescription = contentDescription,
                 tint = tint.copy(alpha = tint.alpha * alpha),
                 modifier = Modifier.size(size),
+            )
+        }
+    }
+}
+
+/** Keeps the lyric-overlay transport out of the screen's large Compose method. */
+@Composable
+private fun BoxScope.LyricsTransportControls(
+    visible: Boolean,
+    centered: Boolean,
+    closeButtonVisible: Boolean,
+    showPrevious: Boolean,
+    showPlayPause: Boolean,
+    showNext: Boolean,
+    controlSize: Dp,
+    isPlaying: Boolean,
+    isLoading: Boolean,
+    hasPrevious: Boolean,
+    hasNext: Boolean,
+    positionMs: Long,
+    artworkAccent: Color,
+    playerElementColors: Map<PlayerColorTarget, PlayerElementColor>,
+    onPrevious: () -> Unit,
+    onPlayPause: () -> Unit,
+    onNext: () -> Unit,
+) {
+    if (!visible) return
+    val rowModifier = if (centered) {
+        Modifier.align(Alignment.Center)
+    } else {
+        Modifier
+            .align(Alignment.CenterEnd)
+            .padding(end = if (closeButtonVisible) 56.dp else 0.dp)
+    }
+    val transportTint = resolvePlayerElementColor(
+        PlayerColorTarget.TRANSPORT,
+        Color.White,
+        artworkAccent,
+        playerElementColors,
+    )
+    val playPauseTint = resolvePlayerElementColor(
+        PlayerColorTarget.PLAY_PAUSE,
+        Color.White,
+        artworkAccent,
+        playerElementColors,
+    )
+    Row(
+        modifier = rowModifier,
+        verticalAlignment = Alignment.CenterVertically,
+    ) {
+        if (showPrevious) {
+            TransportGlyph(
+                icon = Icons.Rounded.FastRewind,
+                contentDescription = stringResource(R.string.widget_previous),
+                size = controlSize,
+                enabled = hasPrevious || positionMs > BACK_RESTARTS_AFTER_MS,
+                onClick = onPrevious,
+                tint = transportTint,
+            )
+        }
+        if (showPlayPause) {
+            TransportGlyph(
+                icon = if (isPlaying) Icons.Rounded.Pause else Icons.Rounded.PlayArrow,
+                contentDescription = stringResource(if (isPlaying) R.string.pause else R.string.play),
+                size = controlSize,
+                enabled = !isLoading,
+                onClick = onPlayPause,
+                tint = playPauseTint,
+            )
+        }
+        if (showNext) {
+            TransportGlyph(
+                icon = Icons.Rounded.FastForward,
+                contentDescription = stringResource(R.string.widget_next),
+                size = controlSize,
+                enabled = hasNext,
+                onClick = onNext,
+                tint = transportTint,
             )
         }
     }
