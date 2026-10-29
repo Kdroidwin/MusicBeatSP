@@ -354,6 +354,8 @@
     <string name="reduce_dynamic_blur">動的なぼかしを減らす</string>
     <string name="reduce_dynamic_blur_subtitle">アプリ全体ですりガラス効果を単色の塗りつぶしに置き換えます</string>
     <string name="full_screen_cover_art">全画面カバーアート</string>
+    <string name="auris_full_screen_cover_art">Auris風全画面アルバムアート</string>
+    <string name="auris_full_screen_cover_art_subtitle">Aurisの全画面アート表示を使用します。既存の全画面カバーアート設定と同じ機能です。</string>
     <string name="larger_full_screen_cover_art">全画面カバーアートを拡大</string>
     <string name="larger_full_screen_cover_art_subtitle">全画面カバーアートをさらに拡大して表示します。全画面カバーアートが有効な場合のみ使用できます。</string>
     <string name="full_screen_artwork_bottom_blur_strength">全画面アート下部のぼかし強度</string>
@@ -1470,6 +1472,11 @@
     <string name="youtube_music_saved">YouTube Music</string>
     <string name="youtube_music_library_empty">YouTube Musicから保存したアルバムやプレイリストがここに表示されます。</string>
     <string name="remove_saved_youtube_collection">ライブラリから削除</string>
+    <string name="add_youtube_collection_to_library">ライブラリに追加</string>
+    <string name="youtube_collection_added_to_library">ライブラリに追加しました</string>
+    <string name="youtube_playlist_collection_added">%2$s に %1$d 曲を追加しました</string>
+    <string name="youtube_playlist_collection_add_failed">一部の曲を追加できなかった可能性があります。プレイリストを確認して、もう一度お試しください。</string>
+    <string name="expand_player">プレイヤーを全画面表示</string>
     <string name="player_title_font_size">プレイヤーの曲名サイズ</string>
     <string name="player_title_font_size_subtitle">プレイヤー画面に表示する曲名の文字サイズを調整します。</string>
     <string name="player_artist_font_size">プレイヤーのアーティスト名サイズ</string>
@@ -1478,6 +1485,9 @@
     <string name="player_play_pause_icon_size">再生・一時停止アイコンのサイズ</string>
     <string name="player_play_pause_icon_size_subtitle">プレイヤー画面中央の再生・一時停止アイコンの大きさを調整します。</string>
     <string name="player_icon_size_value">%1$d dp</string>
+    <string name="player_play_pause_corner_roundness">再生ボタンの角の丸み</string>
+    <string name="player_play_pause_corner_roundness_subtitle">中央の再生・一時停止ボタンを、四角から円形まで調整します。</string>
+    <string name="player_corner_roundness_value">%1$d%%</string>
     <string name="player_transport_button_spacing">プレイヤー操作ボタンの間隔</string>
     <string name="player_transport_button_spacing_subtitle">前へ・再生・次へなどの操作ボタン間隔を調整します。「自動」では従来の配置を使います。</string>
     <string name="player_action_button_spacing">プレイヤー下部ボタンの間隔</string>

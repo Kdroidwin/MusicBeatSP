@@ -637,6 +637,7 @@ private fun SourceRow(
                 SourceKind.CUSTOM_MODULE -> Icons.Rounded.Extension
                 SourceKind.MODULE -> Icons.Rounded.Extension
                 SourceKind.JELLYFIN, SourceKind.NAVIDROME -> Icons.Rounded.Cloud
+                SourceKind.KHINSIDER -> Icons.Rounded.PlayCircle
                 SourceKind.YOUTUBE -> Icons.Rounded.PlayCircle
             },
             contentDescription = null,

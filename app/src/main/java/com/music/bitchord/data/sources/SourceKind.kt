@@ -147,10 +147,20 @@ enum class SourceKind(
         rank = 0,
     ),
 
+    /** Public soundtrack catalogue; only links explicitly published by its pages are opened. */
+    KHINSIDER(
+        label = "Khinsider",
+        detail = "Search public soundtrack listings and play the MP3 or FLAC links published on each track page.",
+        labels = listOf("Soundtracks", "MP3", "FLAC"),
+        needsServer = false,
+        canServeLossless = true,
+        rank = 2,
+    ),
+
 
     /**
      * The source the app was built on, listed here so it always has a fixed
-     * place: second, behind the module source. It cannot be removed — see
+     * place after the public lossless catalogue. It cannot be removed — see
      * [SourceRegistry]. Nothing else in the app can supply a home feed, a
      * radio station or a related-tracks queue.
      */

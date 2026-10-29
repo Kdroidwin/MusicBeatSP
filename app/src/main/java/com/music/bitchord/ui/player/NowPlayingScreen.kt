@@ -1067,6 +1067,7 @@ fun NowPlayingScreen(
     val playerTitleFontSizeSp by AppSettings.playerTitleFontSizeSp.collectAsStateWithLifecycle()
     val playerArtistFontSizeSp by AppSettings.playerArtistFontSizeSp.collectAsStateWithLifecycle()
     val playerPlayPauseIconSizeDp by AppSettings.playerPlayPauseIconSizeDp.collectAsStateWithLifecycle()
+    val playerPlayPauseCornerRadiusPercent by AppSettings.playerPlayPauseCornerRadiusPercent.collectAsStateWithLifecycle()
     val playerTransportButtonSpacingDp by AppSettings.playerTransportButtonSpacingDp.collectAsStateWithLifecycle()
     val playerActionButtonSpacingDp by AppSettings.playerActionButtonSpacingDp.collectAsStateWithLifecycle()
     val autoShowLyricsOnPlayback by AppSettings.autoShowLyricsOnPlayback.collectAsStateWithLifecycle()
@@ -3334,9 +3335,15 @@ fun NowPlayingScreen(
                     Box(
                         Modifier
                             .size((playerPlayPauseIconSizeDp + 12f).dp)
+                            .background(Color.White.copy(alpha = 0.08f), RoundedCornerShape(percent = playerPlayPauseCornerRadiusPercent))
+                            .clip(RoundedCornerShape(percent = playerPlayPauseCornerRadiusPercent))
                             .then(
                                 if (walkmanControlsActive) {
-                                    Modifier.border(1.dp, Color.White.copy(alpha = 0.72f), CircleShape)
+                                    Modifier.border(
+                                        1.dp,
+                                        Color.White.copy(alpha = 0.72f),
+                                        RoundedCornerShape(percent = playerPlayPauseCornerRadiusPercent),
+                                    )
                                 } else Modifier,
                             ),
                         contentAlignment = Alignment.Center,
@@ -3355,6 +3362,7 @@ fun NowPlayingScreen(
                         onClick = onPlayPause,
                         haptic = if (isPlaying) Haptic.Pause else Haptic.Resume,
                         outlined = walkmanControlsActive,
+                        cornerRadiusPercent = playerPlayPauseCornerRadiusPercent,
                     )
                 }
                 TransportGlyph(
@@ -5064,6 +5072,7 @@ private fun TransportGlyph(
     enabled: Boolean = true,
     haptic: Haptic = Haptic.Tap,
     outlined: Boolean = false,
+    cornerRadiusPercent: Int? = null,
 ) {
     val haptics = rememberHaptics()
     // Faded rather than hidden: the row keeps its shape at the ends of a queue.
@@ -5071,12 +5080,17 @@ private fun TransportGlyph(
         targetValue = if (enabled) 1f else 0.3f,
         label = "transportAlpha",
     )
+    val shape = cornerRadiusPercent?.let { RoundedCornerShape(percent = it.coerceIn(0, 100)) } ?: CircleShape
     Box(
         modifier = Modifier
             .size(size + 12.dp)
-            .clip(CircleShape)
             .then(
-                if (outlined) Modifier.border(1.dp, Color.White.copy(alpha = 0.72f), CircleShape)
+                if (cornerRadiusPercent != null) Modifier.background(Color.White.copy(alpha = 0.08f), shape)
+                else Modifier,
+            )
+            .clip(shape)
+            .then(
+                if (outlined) Modifier.border(1.dp, Color.White.copy(alpha = 0.72f), shape)
                 else Modifier,
             )
             .clickable(

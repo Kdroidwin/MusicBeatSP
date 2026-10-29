@@ -286,6 +286,19 @@ private fun playerActionSpacingSearchEntry(spacingDp: Float) = SettingsSearchEnt
 )
 
 @Composable
+private fun playerPlayPauseCornerRoundnessSearchEntry(roundnessPercent: Int) = SettingsSearchEntry(
+    title = stringResource(R.string.player_play_pause_corner_roundness),
+    subtitle = stringResource(R.string.player_play_pause_corner_roundness_subtitle),
+    keywords = listOf("player", "play", "pause", "button", "corner", "roundness", "shape", "角", "丸み", "丸角", "再生ボタン"),
+    valueLabel = stringResource(R.string.player_corner_roundness_value, roundnessPercent),
+    sliderValue = roundnessPercent.toFloat(),
+    sliderValueRange = 0f..100f,
+    sliderSteps = 99,
+    onSliderValueChange = { AppSettings.setPlayerPlayPauseCornerRadiusPercent(it.roundToInt()) },
+    activate = {},
+)
+
+@Composable
 private fun largerFullBleedArtworkSearchEntry(enabled: Boolean, fullBleedEnabled: Boolean) = SettingsSearchEntry(
     title = stringResource(R.string.larger_full_screen_cover_art),
     subtitle = stringResource(R.string.larger_full_screen_cover_art_subtitle),
@@ -598,6 +611,7 @@ fun SettingsScreen(
     val playerTitleFontSizeSp by AppSettings.playerTitleFontSizeSp.collectAsStateWithLifecycle()
     val playerArtistFontSizeSp by AppSettings.playerArtistFontSizeSp.collectAsStateWithLifecycle()
     val playerPlayPauseIconSizeDp by AppSettings.playerPlayPauseIconSizeDp.collectAsStateWithLifecycle()
+    val playerPlayPauseCornerRadiusPercent by AppSettings.playerPlayPauseCornerRadiusPercent.collectAsStateWithLifecycle()
     val playerTransportButtonSpacingDp by AppSettings.playerTransportButtonSpacingDp.collectAsStateWithLifecycle()
     val playerActionButtonSpacingDp by AppSettings.playerActionButtonSpacingDp.collectAsStateWithLifecycle()
     val showPlayerTopGrabber by AppSettings.showPlayerTopGrabber.collectAsStateWithLifecycle()
@@ -1056,7 +1070,7 @@ fun SettingsScreen(
             listOf("lyrics", "歌詞", "extension", "extensions", "script", "拡張", "スクリプト", "安全", "privacy", "supply chain"),
             lyricsExtensionsEnabled,
         ) { AppSettings.setLyricsExtensionsEnabled(!lyricsExtensionsEnabled) },
-        SettingsSearchEntry(stringResource(R.string.full_screen_cover_art), stringResource(R.string.full_screen_cover_art_subtitle), listOf("artwork", "cover", "full screen", "アート", "全画面"), fullBleedArtwork) { AppSettings.setFullBleedArtwork(!fullBleedArtwork) },
+        SettingsSearchEntry(stringResource(R.string.auris_full_screen_cover_art), stringResource(R.string.auris_full_screen_cover_art_subtitle), listOf("Auris", "artwork", "cover", "full screen", "アート", "全画面", "Auris風"), fullBleedArtwork) { AppSettings.setFullBleedArtwork(!fullBleedArtwork) },
         largerFullBleedArtworkSearchEntry(largerFullBleedArtwork, fullBleedArtwork),
         fullBleedArtworkBottomBlurSearchEntry(fullBleedArtworkBottomBlurStrengthDp),
         SettingsSearchEntry(stringResource(R.string.keep_original_artwork_aspect_ratio), stringResource(R.string.keep_original_artwork_aspect_ratio_subtitle), listOf("artwork", "cover", "aspect ratio", "crop", "縦長", "横長", "比率", "トリミング"), keepOriginalArtworkAspectRatio) { AppSettings.setKeepOriginalArtworkAspectRatio(!keepOriginalArtworkAspectRatio) },
@@ -1166,6 +1180,7 @@ fun SettingsScreen(
             onSliderValueChange = AppSettings::setPlayerPlayPauseIconSizeDp,
             activate = {},
         ),
+        playerPlayPauseCornerRoundnessSearchEntry(playerPlayPauseCornerRadiusPercent),
         playerTransportSpacingSearchEntry(playerTransportButtonSpacingDp),
         playerActionSpacingSearchEntry(playerActionButtonSpacingDp),
         SettingsSearchEntry(
@@ -2955,6 +2970,20 @@ fun SettingsScreen(
             )
             RowDivider()
             SettingsRow(
+                icon = Icons.Rounded.PlayArrow,
+                title = stringResource(R.string.player_play_pause_corner_roundness),
+                subtitle = stringResource(R.string.player_play_pause_corner_roundness_subtitle),
+                value = stringResource(R.string.player_corner_roundness_value, playerPlayPauseCornerRadiusPercent),
+            )
+            Slider(
+                value = playerPlayPauseCornerRadiusPercent.toFloat(),
+                onValueChange = { AppSettings.setPlayerPlayPauseCornerRadiusPercent(it.roundToInt()) },
+                steps = 99,
+                valueRange = 0f..100f,
+                modifier = Modifier.padding(start = ROW_INSET, end = ROW_INSET, bottom = 14.dp),
+            )
+            RowDivider()
+            SettingsRow(
                 icon = Icons.Rounded.Tune,
                 title = stringResource(R.string.player_transport_button_spacing),
                 subtitle = stringResource(R.string.player_transport_button_spacing_subtitle),
@@ -3866,8 +3895,8 @@ fun SettingsScreen(
             if (fullBleedArtworkAvailable(windowWidth)) {
                 SettingsRow(
                     icon = Icons.Rounded.Fullscreen,
-                    title = stringResource(R.string.full_screen_cover_art),
-                    subtitle = stringResource(R.string.full_screen_cover_art_subtitle),
+                    title = stringResource(R.string.auris_full_screen_cover_art),
+                    subtitle = stringResource(R.string.auris_full_screen_cover_art_subtitle),
                     trailing = {
                         Switch(
                             checked = fullBleedArtwork,

@@ -393,6 +393,8 @@
     <string name="hide_nav_bar_labels">Hide navigation bar labels</string>
     <string name="hide_nav_bar_labels_subtitle">Show only icons in the bottom navigation bar</string>
     <string name="full_screen_cover_art">Full-screen cover art</string>
+    <string name="auris_full_screen_cover_art">Auris-style full-screen album artwork</string>
+    <string name="auris_full_screen_cover_art_subtitle">Use the full-bleed album-art player layout from Auris. This reuses the existing full-screen artwork setting.</string>
     <string name="larger_full_screen_cover_art">Larger full-screen cover art</string>
     <string name="larger_full_screen_cover_art_subtitle">Zoom in on full-screen artwork. Available only while full-screen cover art is enabled.</string>
     <string name="full_screen_artwork_bottom_blur_strength">Full-screen artwork bottom blur</string>
@@ -1496,6 +1498,11 @@
     <string name="youtube_music_saved">YouTube Music</string>
     <string name="youtube_music_library_empty">Albums and playlists you save from YouTube Music will appear here.</string>
     <string name="remove_saved_youtube_collection">Remove from library</string>
+    <string name="add_youtube_collection_to_library">Add to library</string>
+    <string name="youtube_collection_added_to_library">Added to library</string>
+    <string name="youtube_playlist_collection_added">Added %1$d tracks to %2$s</string>
+    <string name="youtube_playlist_collection_add_failed">Some tracks may not have been added. Check the playlist and try again.</string>
+    <string name="expand_player">Expand player</string>
     <string name="player_title_font_size">Player title size</string>
     <string name="player_title_font_size_subtitle">Adjust the track title text size on the player screen.</string>
     <string name="player_artist_font_size">Player artist size</string>
@@ -1504,6 +1511,9 @@
     <string name="player_play_pause_icon_size">Play/pause icon size</string>
     <string name="player_play_pause_icon_size_subtitle">Adjust the central play and pause icon size on the player screen.</string>
     <string name="player_icon_size_value">%1$d dp</string>
+    <string name="player_play_pause_corner_roundness">Play button corner roundness</string>
+    <string name="player_play_pause_corner_roundness_subtitle">Adjust the central play/pause button from square corners to a fully rounded circle.</string>
+    <string name="player_corner_roundness_value">%1$d%%</string>
     <string name="player_transport_button_spacing">Player transport button spacing</string>
     <string name="player_transport_button_spacing_subtitle">Adjust the gaps between the previous, play, and next controls. Auto keeps the current layout.</string>
     <string name="player_action_button_spacing">Player lower action button spacing</string>

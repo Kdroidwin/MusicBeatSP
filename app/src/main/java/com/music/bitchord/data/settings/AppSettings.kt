@@ -549,6 +549,8 @@ object AppSettings {
     val playerArtistFontSizeSp = MutableStateFlow(20f)
     /** Size of the central play/pause glyph, in dp; the legacy size is 62dp. */
     val playerPlayPauseIconSizeDp = MutableStateFlow(62f)
+    /** Corner rounding of the central play/pause button; 100 keeps the original circle. */
+    val playerPlayPauseCornerRadiusPercent = MutableStateFlow(100)
     /** Extra spacing between player transport buttons, up to the available row width. */
     val playerTransportButtonSpacingDp = MutableStateFlow(0f)
     /** Extra spacing between the player action buttons below the volume row. */
@@ -1341,6 +1343,7 @@ object AppSettings {
         playerTitleFontSizeSp.value = prefs.getFloat(KEY_PLAYER_TITLE_FONT_SIZE_SP, 20f).coerceIn(12f, 36f)
         playerArtistFontSizeSp.value = prefs.getFloat(KEY_PLAYER_ARTIST_FONT_SIZE_SP, 20f).coerceIn(12f, 36f)
         playerPlayPauseIconSizeDp.value = prefs.getFloat(KEY_PLAYER_PLAY_PAUSE_ICON_SIZE_DP, 62f).coerceIn(40f, 78f)
+        playerPlayPauseCornerRadiusPercent.value = prefs.getInt(KEY_PLAYER_PLAY_PAUSE_CORNER_RADIUS_PERCENT, 100).coerceIn(0, 100)
         playerTransportButtonSpacingDp.value = prefs.getFloat(KEY_PLAYER_TRANSPORT_BUTTON_SPACING_DP, 0f).coerceIn(0f, MAX_PLAYER_BUTTON_SPACING_DP)
         playerActionButtonSpacingDp.value = prefs.getFloat(KEY_PLAYER_ACTION_BUTTON_SPACING_DP, 0f).coerceIn(0f, MAX_PLAYER_BUTTON_SPACING_DP)
         fullBleedArtworkBottomBlurStrengthDp.value =
@@ -1968,6 +1971,12 @@ object AppSettings {
         val safe = value.coerceIn(40f, 78f)
         playerPlayPauseIconSizeDp.value = safe
         prefs.edit().putFloat(KEY_PLAYER_PLAY_PAUSE_ICON_SIZE_DP, safe).apply()
+    }
+
+    fun setPlayerPlayPauseCornerRadiusPercent(value: Int) {
+        val safe = value.coerceIn(0, 100)
+        playerPlayPauseCornerRadiusPercent.value = safe
+        prefs.edit().putInt(KEY_PLAYER_PLAY_PAUSE_CORNER_RADIUS_PERCENT, safe).apply()
     }
 
     fun setPlayerTransportButtonSpacingDp(value: Float) {
@@ -3857,6 +3866,7 @@ object AppSettings {
     private const val KEY_PLAYER_TITLE_FONT_SIZE_SP = "player_title_font_size_sp"
     private const val KEY_PLAYER_ARTIST_FONT_SIZE_SP = "player_artist_font_size_sp"
     private const val KEY_PLAYER_PLAY_PAUSE_ICON_SIZE_DP = "player_play_pause_icon_size_dp"
+    private const val KEY_PLAYER_PLAY_PAUSE_CORNER_RADIUS_PERCENT = "player_play_pause_corner_radius_percent"
     private const val KEY_PLAYER_TRANSPORT_BUTTON_SPACING_DP = "player_transport_button_spacing_dp"
     private const val KEY_PLAYER_ACTION_BUTTON_SPACING_DP = "player_action_button_spacing_dp"
     private const val KEY_HIDE_PLAYLIST_PLAY_BUTTON_LABEL = "hide_playlist_play_button_label"

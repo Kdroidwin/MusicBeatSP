@@ -122,7 +122,7 @@ object SourceRegistry {
         // adds a new built-in kind picks it up for existing installs too.
         val seeded = stored + BUILT_IN_KINDS
             .filter { kind -> stored.none { it.kind == kind } }
-            .map { SourceConfig(kind = it, enabled = true) }
+            .map { SourceConfig(kind = it, enabled = it != SourceKind.KHINSIDER) }
 
         // The built-in module index is gone. It was never the user's to
         // configure — it arrived from a build secret, was named on their behalf
@@ -564,6 +564,7 @@ object SourceRegistry {
         SourceKind.NAVIDROME -> NavidromeMusicSource(config) {
             credentials ?: RemoteServerCredentialsStore.read(config.id)
         }
+        SourceKind.KHINSIDER -> KhinsiderSource(config)
         SourceKind.YOUTUBE -> YouTubeSource(config)
     }
 
@@ -613,7 +614,7 @@ object SourceRegistry {
             .build()
             .toString()
 
-    private val BUILT_IN_KINDS = listOf(SourceKind.YOUTUBE)
+    private val BUILT_IN_KINDS = listOf(SourceKind.KHINSIDER, SourceKind.YOUTUBE)
 
     private const val KEY_SOURCES = "sources"
     private const val PREFIX = "src:"
