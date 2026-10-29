@@ -25,9 +25,11 @@ The standard Android package is `io.pockets.musicbestsp`. Because this differs f
 
 <p align="center">
   <img src="https://github.com/user-attachments/assets/eb91f149-c953-4822-8657-65c0e2f7cffb" width="180" alt="スクリーンショット 1">
-  <img src="https://github.com/user-attachments/assets/fdff22a9-5dfa-4959-a016-1b59c32a088f" width="180" alt="スクリーンショット 2">
+  <img src="https://github.com/user-attachments/assets/b42ddc60-1b04-4a4c-aefe-f71c054f7d96" width="180" alt="スクリーンショット 2">
   <img src="https://github.com/user-attachments/assets/4efcc926-dcba-4c3f-b715-df88d307d97c" width="180" alt="スクリーンショット 3">
-  <img src="https://github.com/user-attachments/assets/900c3159-619c-49d6-a2fc-e10c3ebd447c" width="180" alt="スクリーンショット 4">
+  <img src="https://github.com/user-attachments/assets/09efc84f-04dc-4e32-8340-32baeae1986d" width="180" alt="スクリーンショット 4">
+  <img src="https://github.com/user-attachments/assets/cc14a50e-4b7a-4f8b-ab16-f4de9a063572" width="180" alt="スクリーンショット 5">
+    <img src="https://github.com/user-attachments/assets/5b704239-5753-483b-ab56-91d31e802b50" width="180" alt="スクリーンショット 6">
 </p>
 
 </div>
