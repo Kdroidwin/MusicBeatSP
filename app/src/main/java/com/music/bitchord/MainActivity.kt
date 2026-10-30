@@ -1,5 +1,6 @@
 package com.music.bitchord
 
+import android.app.Activity
 import android.Manifest
 import android.content.Intent
 import android.content.pm.ActivityInfo
@@ -7,6 +8,8 @@ import android.content.pm.PackageManager
 import android.net.Uri
 import android.os.Build
 import android.os.Bundle
+import android.os.Process
+import android.provider.MediaStore
 import android.view.View
 import android.view.WindowManager
 import android.widget.Toast
@@ -15,6 +18,7 @@ import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.compose.setContent
 import androidx.activity.enableEdgeToEdge
 import androidx.activity.result.contract.ActivityResultContracts
+import androidx.activity.result.IntentSenderRequest
 import androidx.appcompat.app.AppCompatActivity
 import androidx.media3.session.MediaController
 import androidx.core.content.ContextCompat
@@ -30,6 +34,7 @@ import androidx.compose.animation.fadeOut
 import androidx.compose.animation.togetherWith
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.gestures.detectVerticalDragGestures
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.BoxWithConstraints
@@ -71,6 +76,7 @@ import androidx.compose.material.icons.rounded.Check
 import androidx.compose.material.icons.rounded.Close
 import androidx.compose.material.icons.rounded.Fullscreen
 import androidx.compose.material.icons.rounded.History
+import androidx.compose.material.icons.rounded.Edit
 import androidx.compose.material.icons.rounded.Person
 import androidx.compose.material.icons.rounded.Radio
 import androidx.compose.material.icons.rounded.Settings
@@ -86,6 +92,7 @@ import androidx.compose.material3.LinearProgressIndicator
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.ModalBottomSheet
 import androidx.compose.material3.ModalBottomSheetProperties
+import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.SheetState
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
@@ -142,6 +149,8 @@ import androidx.compose.ui.draw.clip
 import androidx.compose.ui.draw.alpha
 import androidx.compose.ui.draw.drawBehind
 import androidx.compose.ui.draw.rotate
+import androidx.compose.ui.input.pointer.pointerInput
+import androidx.compose.ui.zIndex
 import androidx.compose.ui.focus.FocusRequester
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.geometry.Rect
@@ -157,6 +166,7 @@ import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.platform.LocalView
 import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.res.stringResource
+import androidx.compose.ui.res.pluralStringResource
 import androidx.compose.ui.text.AnnotatedString
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.Density
@@ -253,8 +263,6 @@ import com.music.bitchord.ui.components.MiniPlayer
 import com.music.bitchord.ui.components.optimizedHazeEffect
 import com.music.bitchord.ui.components.TopFadeBlur
 import com.music.bitchord.ui.components.topBarContentPadding
-import com.music.bitchord.ui.components.TopBarContentHeight
-import com.music.bitchord.ui.components.TopBarContentGap
 import com.music.bitchord.ui.components.AppLanguageDialog
 import com.music.bitchord.ui.components.LyricsSourcesDialog
 import com.music.bitchord.ui.icons.BitChordIcons
@@ -264,13 +272,14 @@ import com.music.bitchord.data.innertube.InnertubeParser
 import com.music.bitchord.playback.SingleSongPlaybackManager
 import com.music.bitchord.ui.player.NowPlayingScreen
 import com.music.bitchord.ui.player.TabletLyricsPane
+import com.music.bitchord.ui.player.TabletPlayerBackdrop
+import com.music.bitchord.ui.player.LocalSharedPlayerBackdrop
 import com.music.bitchord.ui.player.LocalPlayerDock
 import com.music.bitchord.ui.player.PlayerDock
 import com.music.bitchord.ui.player.PlayerSheetMotion
 import com.music.bitchord.ui.player.ThinSlider
 import com.music.bitchord.ui.player.dockedPlayerAvailable
 import com.music.bitchord.ui.player.dockedPlayerWidth
-import com.music.bitchord.ui.player.tabletLyricsPaneWidth
 import com.music.bitchord.data.settings.SongSort
 import com.music.bitchord.feature.lyricseditor.ui.LyricsEditorScreen
 import com.music.bitchord.feature.localsongactions.ui.LocalSongActionsHelper
@@ -286,6 +295,7 @@ import androidx.compose.ui.window.DialogProperties
 import androidx.compose.ui.window.DialogWindowProvider
 import com.music.bitchord.feature.localmusic.ui.components.DrillDownSongList
 import com.music.bitchord.feature.localmusic.data.LocalPlaylistStore
+import com.music.bitchord.feature.tageditor.data.TagLibWriter
 import com.music.bitchord.widget.QuickPlayTileState
 import com.music.bitchord.ui.screens.LocalMusicScreen
 import com.music.bitchord.ui.replay.ReplayScreen
@@ -533,6 +543,12 @@ class MainActivity : AppCompatActivity() {
     }
 }
 
+private data class PendingLocalArtistRename(
+    val previousName: String,
+    val newName: String,
+    val songs: List<Song>,
+)
+
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 private fun BitChordApp(
@@ -601,17 +617,17 @@ private fun BitChordApp(
             viewModel.clearDetail()
         }
     }
-    // Whether there is room to keep the player open beside the page rather than
-    // raising it over one. Read all over what follows, because most of what the
-    // page does about the player is really about which of the two it is: no mini
-    // player standing in for one that is already there, no sheet to raise, and
-    // the bottom inset the mini player was holding handed back to the page.
-    // Wide windows keep a live player beside the page by default. A listener
-    // can temporarily raise that same player over the whole app, then return to
-    // the split layout by dismissing it; the setting and the playback surface
-    // do not need a second implementation for tablets.
+    val tabletFullscreenPlayer by AppSettings.tabletFullscreenPlayer.collectAsStateWithLifecycle()
+    // Foldables in their open posture are often below the wide-pane docking
+    // threshold, but still have room for the full player plus synced lyrics.
+    val widePlayerLayout = windowWidth >= 600.dp
+    // On wide screens, the player can either stay beside the page or use the
+    // phone-style mini-player/full-screen flow. The latter keeps navigation
+    // available and opens the existing player over the entire window.
     var expandedDockedPlayer by rememberSaveable { mutableStateOf(false) }
-    val playerDocked = dockedPlayerAvailable(windowWidth) && !expandedDockedPlayer
+    val playerDocked = dockedPlayerAvailable(windowWidth) &&
+        !tabletFullscreenPlayer &&
+        !expandedDockedPlayer
     /**
      * Whether the player's *sheet* is up.
      *
@@ -657,8 +673,8 @@ private fun BitChordApp(
         },
     )
     fun openNowPlaying() {
-        if (dockedPlayerAvailable(windowWidth)) {
-            expandedDockedPlayer = true
+        if (widePlayerLayout) {
+            expandedDockedPlayer = dockedPlayerAvailable(windowWidth)
             showNowPlaying = true
             return
         }
@@ -667,7 +683,7 @@ private fun BitChordApp(
     }
     fun dismissNowPlaying() {
         if (!showNowPlaying) return
-        if (playerArtworkTransitionEnabled) {
+        if (playerArtworkTransitionEnabled && !widePlayerLayout) {
             playerSheetMotion.close()
             return
         }
@@ -805,6 +821,21 @@ private fun BitChordApp(
 
     val detailStack by viewModel.detailStack.collectAsStateWithLifecycle()
     val detail = detailStack.lastOrNull()
+    val isLocalArtistDetail = detail?.browseId?.startsWith("local:artist:") == true
+    var localArtistSelectionMode by rememberSaveable { mutableStateOf(false) }
+    var selectedLocalArtistSongIds by rememberSaveable { mutableStateOf(emptySet<String>()) }
+    var showLocalArtistRenameDialog by remember { mutableStateOf(false) }
+    var localArtistRenameValue by remember { mutableStateOf("") }
+    var localArtistRenameTargets by remember { mutableStateOf<List<Song>>(emptyList()) }
+    var pendingLocalArtistRename by remember { mutableStateOf<PendingLocalArtistRename?>(null) }
+    LaunchedEffect(detail?.browseId) {
+        if (!isLocalArtistDetail) {
+            localArtistSelectionMode = false
+            selectedLocalArtistSongIds = emptySet()
+            showLocalArtistRenameDialog = false
+            localArtistRenameTargets = emptyList()
+        }
+    }
     // Local Music has no artwork to wash the bar in, so it renders with a
     // plain status bar rather than the artwork-driven blur other detail
     // pages (album/artist/playlist) get. Downloads is the same page, and the
@@ -834,7 +865,6 @@ private fun BitChordApp(
     val lyricsChecked by viewModel.lyricsChecked.collectAsStateWithLifecycle()
     val lyricsVideoId by viewModel.lyricsVideoId.collectAsStateWithLifecycle()
     val savedYoutubeCollections by AppSettings.savedYoutubeCollections.collectAsStateWithLifecycle()
-    val tabletLyricsBesidePlayer by AppSettings.tabletLyricsBesidePlayer.collectAsStateWithLifecycle()
     val settingsTopBarUsesMoreIcon by AppSettings.settingsTopBarUsesMoreIcon.collectAsStateWithLifecycle()
     val searchHistory by viewModel.searchHistory.collectAsStateWithLifecycle()
 
@@ -1120,6 +1150,103 @@ private fun BitChordApp(
     }
 
     val scope = rememberCoroutineScope()
+
+    suspend fun writeLocalArtistRename(pending: PendingLocalArtistRename) {
+        val updatedTracks = withContext(Dispatchers.IO) {
+            buildList {
+                pending.songs.distinctBy { it.localUri ?: it.localPath ?: it.videoId }.forEach { song ->
+                    try {
+                        val current = TagLibWriter.readTags(context, song)
+                        val updated = current.copy(artist = pending.newName)
+                        if (TagLibWriter.writeTags(context, song, updated)) {
+                            add(song to updated)
+                        }
+                    } catch (cancelled: CancellationException) {
+                        throw cancelled
+                    } catch (_: Exception) {
+                        // Keep processing the remaining selected tracks.
+                    }
+                }
+            }
+        }
+        val updatedSongs = updatedTracks.map { (song, tags) ->
+            song.copy(
+                title = tags.title.trim().ifBlank { song.title },
+                artist = tags.artist.trim().ifBlank { "Unknown Artist" },
+                albumName = tags.album.trim().takeIf(String::isNotBlank),
+                albumArtist = tags.albumArtist.trim().takeIf(String::isNotBlank),
+            )
+        }
+        updatedTracks.zip(updatedSongs).forEach { (tagged, updatedSong) ->
+            val tags = tagged.second
+            LocalPlaylistStore.updateEditedSongMetadata(
+                song = updatedSong,
+                title = tags.title,
+                artist = tags.artist,
+                albumName = tags.album,
+                albumArtist = tags.albumArtist,
+            )
+            viewModel.updateLocalSongMetadata(updatedSong)
+        }
+        if (updatedSongs.isNotEmpty()) {
+            viewModel.renameLocalArtistPage(pending.previousName, pending.newName)
+            viewModel.loadLocalMusic(isPullToRefresh = true)
+        }
+        Toast.makeText(
+            context,
+            context.getString(R.string.bulk_tag_saved, updatedSongs.size, pending.songs.size),
+            Toast.LENGTH_LONG,
+        ).show()
+        selectedLocalArtistSongIds = emptySet()
+        localArtistSelectionMode = false
+        localArtistRenameTargets = emptyList()
+    }
+
+    val localArtistTagWritePermission = rememberLauncherForActivityResult(
+        ActivityResultContracts.StartIntentSenderForResult(),
+    ) { result ->
+        val pending = pendingLocalArtistRename
+        pendingLocalArtistRename = null
+        if (result.resultCode == Activity.RESULT_OK && pending != null) {
+            scope.launch { writeLocalArtistRename(pending) }
+        } else if (pending != null) {
+            Toast.makeText(context, R.string.bulk_tag_permission_denied, Toast.LENGTH_LONG).show()
+        }
+    }
+
+    fun saveLocalArtistRename(targets: List<Song>, newName: String) {
+        val cleanName = newName.trim()
+        val previousName = detail?.title?.trim().orEmpty()
+        if (!isLocalArtistDetail || cleanName.isBlank() || previousName.isBlank() || targets.isEmpty()) return
+        val pending = PendingLocalArtistRename(previousName, cleanName, targets)
+        val mediaStoreUris = targets.mapNotNull { song ->
+            (song.localUri ?: song.videoId)
+                .takeIf { it.startsWith("content://") }
+                ?.let { runCatching { Uri.parse(it) }.getOrNull() }
+                ?.takeIf { it.authority == MediaStore.AUTHORITY }
+        }.distinct()
+        val needsApproval = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.R) {
+            mediaStoreUris.filter { uri ->
+                context.checkUriPermission(
+                    uri,
+                    Process.myPid(),
+                    Process.myUid(),
+                    Intent.FLAG_GRANT_WRITE_URI_PERMISSION,
+                ) != PackageManager.PERMISSION_GRANTED
+            }
+        } else emptyList()
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.R && needsApproval.isNotEmpty()) {
+            val request = runCatching {
+                MediaStore.createWriteRequest(context.contentResolver, needsApproval)
+            }.getOrNull()
+            if (request != null) {
+                pendingLocalArtistRename = pending
+                localArtistTagWritePermission.launch(IntentSenderRequest.Builder(request.intentSender).build())
+                return
+            }
+        }
+        scope.launch { writeLocalArtistRename(pending) }
+    }
 
     val play: (List<Song>, Int) -> Unit = { songs, index ->
         playJob?.cancel()
@@ -1904,33 +2031,15 @@ private fun BitChordApp(
         }
     }
 
-    // The tablet lyrics workspace is only active on the root Songs tab. This
-    // leaves the actual page tree intact whenever the user chooses another tab,
-    // opens Settings, or drills into a collection; those destinations must
-    // never be covered by a persistent lyrics pane.
-    val tabletLyricsWorkspaceActive = playerDocked &&
-        tabletLyricsBesidePlayer &&
-        playerSong != null &&
-        selectedTab == TAB_SONGS &&
-        detail == null &&
-        !showSettings &&
-        !showSources &&
-        !showWearOs &&
-        !replayOpen &&
-        !showLyricsSources &&
-        collectionBackHandlers["$TAB_KEY$selectedTab"] == null
-
-    // Expanding the player on a wide device uses the available width for the
-    // player and its synced lyrics, matching the tablet reference layout. The
-    // two panes reuse the existing player and lyrics components and state.
-    val tabletLyricsFullscreen = expandedDockedPlayer &&
-        dockedPlayerAvailable(windowWidth) &&
+    // A wide-window player is raised as one full-screen player surface.
+    // Lyrics are opened by the existing player control inside that surface;
+    // they never replace the library with a second pane.
+    val tabletPlayerFullscreen = showNowPlaying &&
+        widePlayerLayout &&
         playerSong != null
 
-    // The player's whole parameter list, in one place because there are two
-    // places it can be mounted: the sheet a phone raises over the page, and
-    // the pane a tablet keeps beside it. [docked] is the only difference
-    // between the two, and only ever one of them is in the tree.
+    // The player's whole parameter list, in one place for both the docked
+    // preview and the full-window player sheet.
     val nowPlaying: @Composable (Song, Boolean, Dp) -> Unit = { song, docked, playerWidth ->
         val displayedSong = activeRadioSeed
             ?.takeIf { (videoId, _) -> song.radioName == null && videoId == song.videoId }
@@ -2174,7 +2283,7 @@ private fun BitChordApp(
             lyricsUnavailable = lyricsChecked && lyrics.isNullOrEmpty(),
             lyricsReadyForCurrentSong = lyricsChecked && lyricsVideoId == player.song?.videoId,
             docked = docked,
-            artworkGesturesEnabled = !(docked && tabletLyricsWorkspaceActive),
+            artworkGesturesEnabled = true,
             openLyricsOnShow = requestedMediaPanel == MediaControlDestination.LYRICS,
             openQueueOnShow = requestedMediaPanel == MediaControlDestination.QUEUE,
             onExternalPanelRequestHandled = {
@@ -2224,28 +2333,12 @@ private fun BitChordApp(
         }
         BackHandler(enabled = showListenBrainzLogin) { showListenBrainzLogin = false }
         BackHandler(enabled = showLastfmLogin) { showLastfmLogin = false }
-        BackHandler(enabled = tabletLyricsFullscreen) {
-            expandedDockedPlayer = false
-            showNowPlaying = false
-        }
+        BackHandler(enabled = tabletPlayerFullscreen) { dismissNowPlaying() }
 
-        // On a tablet the page and player stand side by side. In the optional
-        // lyrics workspace, the player moves to the left and the artwork-backed
-        // lyrics pane takes the right; tab and Settings navigation remain over
-        // the player, and choosing another destination restores the page.
+        // Keep the library content at its normal full width. The player is
+        // shown above it as a full-window sheet when opened on a tablet.
         Row(Modifier.fillMaxSize()) {
             Box(Modifier.weight(1f).fillMaxHeight()) {
-                if (tabletLyricsWorkspaceActive && playerSong != null) {
-                    Box(
-                        Modifier
-                            .fillMaxSize()
-                            // Keep the global top actions and tab bar clear of
-                            // the player's own transport controls.
-                            .padding(top = TopBarContentHeight + TopBarContentGap, bottom = 96.dp),
-                    ) {
-                        nowPlaying(playerSong, true, windowWidth)
-                    }
-                } else {
                 AnimatedContent(
                     targetState = when {
                         showSources -> "sources"
@@ -2455,6 +2548,7 @@ private fun BitChordApp(
                                 )
                             },
                             onSongTagsOrLyricsSaved = { viewModel.reloadLyrics(it) },
+                            onSongMetadataUpdated = viewModel::updateLocalSongMetadata,
                             contentPadding = listPadding,
                             showTabRow = true,
                             onArtworkPaletteChanged = onLocalArtworkPaletteChanged,
@@ -2470,12 +2564,93 @@ private fun BitChordApp(
                         }
                         val pageSongs = (page.songs as? com.music.bitchord.data.model.UiState.Success)
                             ?.data.orEmpty()
+                        val isEditableLocalArtist = page.browseId.startsWith("local:artist:")
+                        val localArtistSongKeys = remember(pageSongs) {
+                            pageSongs.mapTo(linkedSetOf()) { it.localUri ?: it.videoId }
+                        }
+                        val toggleLocalArtistSelection: (Song) -> Unit = { song ->
+                            val id = song.localUri ?: song.videoId
+                            selectedLocalArtistSongIds = if (id in selectedLocalArtistSongIds) {
+                                selectedLocalArtistSongIds - id
+                            } else {
+                                selectedLocalArtistSongIds + id
+                            }
+                        }
                         DrillDownSongList(
                             label = page.title,
                             artworkUrl = page.thumbnailUrl,
                             songs = pageSongs,
                             isArtist = page.type == BrowseType.ARTIST,
                             isPlaylist = page.type == BrowseType.PLAYLIST,
+                            selectedIds = selectedLocalArtistSongIds,
+                            selectionMode = isEditableLocalArtist && localArtistSelectionMode,
+                            onSelectionToggle = if (isEditableLocalArtist) toggleLocalArtistSelection else null,
+                            selectionToolbar = if (isEditableLocalArtist && localArtistSelectionMode) {
+                                { contentColor ->
+                                    Row(
+                                        modifier = Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 4.dp),
+                                        verticalAlignment = Alignment.CenterVertically,
+                                        horizontalArrangement = Arrangement.spacedBy(4.dp),
+                                    ) {
+                                        Text(
+                                            text = pluralStringResource(
+                                                R.plurals.song_count_plural,
+                                                selectedLocalArtistSongIds.size,
+                                                selectedLocalArtistSongIds.size,
+                                            ),
+                                            color = contentColor,
+                                            modifier = Modifier.weight(1f),
+                                            maxLines = 1,
+                                        )
+                                        TextButton(
+                                            onClick = {
+                                                selectedLocalArtistSongIds = if (
+                                                    localArtistSongKeys.isNotEmpty() &&
+                                                    selectedLocalArtistSongIds.containsAll(localArtistSongKeys)
+                                                ) emptySet() else localArtistSongKeys
+                                            },
+                                        ) {
+                                            Text(
+                                                stringResource(
+                                                    if (
+                                                        localArtistSongKeys.isNotEmpty() &&
+                                                        selectedLocalArtistSongIds.containsAll(localArtistSongKeys)
+                                                    ) R.string.deselect_all else R.string.select_all,
+                                                ),
+                                                color = contentColor,
+                                            )
+                                        }
+                                        IconButton(
+                                            enabled = selectedLocalArtistSongIds.isNotEmpty(),
+                                            onClick = {
+                                                localArtistRenameTargets = pageSongs.filter {
+                                                    (it.localUri ?: it.videoId) in selectedLocalArtistSongIds
+                                                }
+                                                localArtistRenameValue = page.title
+                                                showLocalArtistRenameDialog = true
+                                            },
+                                        ) {
+                                            Icon(
+                                                imageVector = Icons.Rounded.Edit,
+                                                contentDescription = stringResource(R.string.bulk_tag_edit),
+                                                tint = contentColor,
+                                            )
+                                        }
+                                        IconButton(
+                                            onClick = {
+                                                localArtistSelectionMode = false
+                                                selectedLocalArtistSongIds = emptySet()
+                                            },
+                                        ) {
+                                            Icon(
+                                                imageVector = Icons.Rounded.Close,
+                                                contentDescription = stringResource(R.string.cancel),
+                                                tint = contentColor,
+                                            )
+                                        }
+                                    }
+                                }
+                            } else null,
                             isSavedToLibrary = savedYoutubeCollections.any { it.browseId == page.browseId },
                             onToggleLibrary = if (
                                 !page.browseId.startsWith("local:") &&
@@ -2497,8 +2672,21 @@ private fun BitChordApp(
                                 page.type in setOf(BrowseType.ALBUM, BrowseType.ARTIST),
                             currentSong = player.song,
                             isPlaying = player.isPlaying,
-                            onSongClick = play,
-                            onSongLongPress = { openSongMenu(withAlbum(it)) },
+                            onSongClick = { songs, index ->
+                                if (isEditableLocalArtist && localArtistSelectionMode) {
+                                    songs.getOrNull(index)?.let(toggleLocalArtistSelection)
+                                } else {
+                                    play(songs, index)
+                                }
+                            },
+                            onSongLongPress = { song ->
+                                if (isEditableLocalArtist) {
+                                    localArtistSelectionMode = true
+                                    toggleLocalArtistSelection(song)
+                                } else {
+                                    openSongMenu(withAlbum(song))
+                                }
+                            },
                             onSongMore = { openSongMenu(withAlbum(it)) },
                             onSongSwipe = onSongSwipe,
                             onShuffle = { songs ->
@@ -2520,6 +2708,52 @@ private fun BitChordApp(
                             onBack = { viewModel.closeDetail() },
                             contentPadding = listPadding,
                         )
+                        if (isEditableLocalArtist && showLocalArtistRenameDialog) {
+                            AlertDialog(
+                                onDismissRequest = {
+                                    showLocalArtistRenameDialog = false
+                                    localArtistRenameTargets = emptyList()
+                                },
+                                title = { Text(stringResource(R.string.bulk_tag_edit)) },
+                                text = {
+                                    Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                                        Text(
+                                            pluralStringResource(
+                                                R.plurals.song_count_plural,
+                                                localArtistRenameTargets.size,
+                                                localArtistRenameTargets.size,
+                                            ),
+                                            color = MaterialTheme.colorScheme.onSurfaceVariant,
+                                        )
+                                        OutlinedTextField(
+                                            value = localArtistRenameValue,
+                                            onValueChange = { localArtistRenameValue = it },
+                                            label = { Text(stringResource(R.string.bulk_tag_artist)) },
+                                            singleLine = true,
+                                        )
+                                    }
+                                },
+                                confirmButton = {
+                                    TextButton(
+                                        enabled = localArtistRenameValue.isNotBlank() && localArtistRenameTargets.isNotEmpty(),
+                                        onClick = {
+                                            val targets = localArtistRenameTargets
+                                            val newName = localArtistRenameValue
+                                            showLocalArtistRenameDialog = false
+                                            saveLocalArtistRename(targets, newName)
+                                        },
+                                    ) { Text(stringResource(R.string.save)) }
+                                },
+                                dismissButton = {
+                                    TextButton(
+                                        onClick = {
+                                            showLocalArtistRenameDialog = false
+                                            localArtistRenameTargets = emptyList()
+                                        },
+                                    ) { Text(stringResource(R.string.cancel)) }
+                                },
+                            )
+                        }
                     } else when (key.removePrefix(TAB_KEY).toIntOrNull() ?: selectedTab) {
                         TAB_SONGS -> if (!hasStoragePermission && catalogSongs.isEmpty()) {
                             Box(modifier = Modifier.fillMaxSize().padding(listPadding), contentAlignment = Alignment.Center) {
@@ -2564,6 +2798,7 @@ private fun BitChordApp(
                                 onAddToQueue = addToQueue,
                                 onDeleteSong = { viewModel.loadLocalMusic() },
                                 onSongTagsOrLyricsSaved = { viewModel.reloadLyrics(it) },
+                                onSongMetadataUpdated = viewModel::updateLocalSongMetadata,
                                 onCollectionNavigationChanged = onCollectionNavigationChanged,
                             )
                         }
@@ -2612,6 +2847,7 @@ private fun BitChordApp(
                                 onAddToQueue = addToQueue,
                                 onDeleteSong = { viewModel.loadLocalMusic() },
                                 onSongTagsOrLyricsSaved = { viewModel.reloadLyrics(it) },
+                                onSongMetadataUpdated = viewModel::updateLocalSongMetadata,
                                 onCollectionNavigationChanged = onCollectionNavigationChanged,
                             )
                         }
@@ -2660,6 +2896,7 @@ private fun BitChordApp(
                                 onAddToQueue = addToQueue,
                                 onDeleteSong = { viewModel.loadLocalMusic() },
                                 onSongTagsOrLyricsSaved = { viewModel.reloadLyrics(it) },
+                                onSongMetadataUpdated = viewModel::updateLocalSongMetadata,
                                 onCollectionNavigationChanged = onCollectionNavigationChanged,
                             )
                         }
@@ -2706,6 +2943,7 @@ private fun BitChordApp(
                                 onAddToQueue = addToQueue,
                                 onDeleteSong = { viewModel.loadLocalMusic() },
                                 onSongTagsOrLyricsSaved = { viewModel.reloadLyrics(it) },
+                                onSongMetadataUpdated = viewModel::updateLocalSongMetadata,
                                 onCollectionNavigationChanged = onCollectionNavigationChanged,
                             )
                         }
@@ -2732,6 +2970,7 @@ private fun BitChordApp(
                                 onAddToQueue = addToQueue,
                                 onDeleteSong = { viewModel.loadLocalMusic() },
                                 onSongTagsOrLyricsSaved = { viewModel.reloadLyrics(it) },
+                                onSongMetadataUpdated = viewModel::updateLocalSongMetadata,
                                 onLocalMusicChanged = { viewModel.loadLocalMusic() },
                                 initialFilterRequest = libraryFilterRequest,
                                 onInitialFilterApplied = { libraryFilterRequest = null },
@@ -2833,7 +3072,6 @@ private fun BitChordApp(
                         )
                         else -> Box(modifier = Modifier.fillMaxSize())
                     }
-                }
                 }
 
                 // Every top bar is a fade rather than a pane — see [TopFadeBlur].
@@ -3073,45 +3311,33 @@ private fun BitChordApp(
                 }
             }
 
-            // The player, open for as long as the app is. There is no way to
-            // put it away and nothing to put it away for — the pane is its
-            // own space rather than something borrowed from the page.
+            // Keep the optional side player for users who prefer it. Tablet
+            // full-screen mode uses the same mini-player and sheet as phones.
             if (playerDocked) {
-                if (tabletLyricsWorkspaceActive && playerSong != null) {
-                    TabletLyricsPane(
-                        lines = lyrics,
-                        trackKey = playerSong.videoId,
-                        positionMs = player.position.positionMs,
-                        isPlaying = player.isPlaying,
-                        onSeek = { position -> controller?.seekTo(position) },
-                        artworkUrl = playerSong.thumbnailUrl,
-                        modifier = Modifier
-                            .width(tabletLyricsPaneWidth(windowWidth))
-                            .fillMaxHeight(),
-                    )
-                } else {
-                    DockedPlayer(
-                        song = playerSong,
-                        width = dockedPlayerWidth(windowWidth),
-                        onExpand = ::openNowPlaying,
-                        content = { current -> nowPlaying(current, true, dockedPlayerWidth(windowWidth)) },
-                    )
-                }
+                DockedPlayer(
+                    song = playerSong,
+                    width = dockedPlayerWidth(windowWidth),
+                    onExpand = ::openNowPlaying,
+                    content = { current -> nowPlaying(current, true, dockedPlayerWidth(windowWidth)) },
+                )
             }
         }
 
         // ---- Now Playing ----
-        // Only raised where it isn't already open beside the page.
-        LaunchedEffect(showNowPlaying, playerArtworkTransitionEnabled, tabletLyricsFullscreen) {
+        // Tablets use the full-window sheet. Keep the custom artwork transition
+        // for phone-sized windows, where its dock geometry matches the layout.
+        val useArtworkTransitionSheet = playerArtworkTransitionEnabled &&
+            !widePlayerLayout
+        LaunchedEffect(showNowPlaying, useArtworkTransitionSheet) {
             if (
-                showNowPlaying && !tabletLyricsFullscreen && !playerArtworkTransitionEnabled &&
+                showNowPlaying && !useArtworkTransitionSheet &&
                 normalNowPlayingSheetState.currentValue != SheetValue.Expanded
             ) {
                 normalNowPlayingSheetState.show()
             }
         }
-        val playerRaised = !playerDocked && !tabletLyricsFullscreen && showNowPlaying && playerSong != null
-        if (playerRaised && playerArtworkTransitionEnabled) {
+        val playerRaised = !playerDocked && showNowPlaying && playerSong != null
+        if (playerRaised && useArtworkTransitionSheet) {
             val sheetDensity = LocalDensity.current
             val confirmSheetValue: (SheetValue) -> Boolean = { target ->
                 if (target == SheetValue.Hidden) {
@@ -3197,62 +3423,63 @@ private fun BitChordApp(
                 dragHandle = null,
                 contentWindowInsets = { WindowInsets(0, 0, 0, 0) },
             ) {
-                nowPlaying(playerSong, false, windowWidth)
-            }
-        }
-
-        // A wide player fills the window as a two-pane workspace: existing
-        // transport/artwork UI on the left and the existing synced lyrics view
-        // on the right. Drawing this above the library chrome makes it a true
-        // expanded player while retaining Android Back and the close control
-        // as reliable ways back to the regular tablet layout.
-        if (tabletLyricsFullscreen) {
-            val currentSong = playerSong
-            if (currentSong != null) {
-                Row(
-                    modifier = Modifier
-                        .fillMaxSize()
-                        .background(MaterialTheme.colorScheme.background),
-                ) {
-                    Box(
-                        modifier = Modifier
-                            .weight(0.55f)
-                            .fillMaxHeight(),
-                    ) {
-                        BoxWithConstraints(Modifier.fillMaxSize()) {
-                            nowPlaying(currentSong, false, maxWidth)
+                Box(Modifier.fillMaxSize()) {
+                    if (tabletPlayerFullscreen) {
+                        TabletPlayerBackdrop(
+                            song = playerSong,
+                            modifier = Modifier.matchParentSize(),
+                        )
+                        CompositionLocalProvider(LocalSharedPlayerBackdrop provides true) {
+                            Row(Modifier.fillMaxSize()) {
+                                BoxWithConstraints(
+                                    modifier = Modifier.weight(0.56f).fillMaxHeight(),
+                                ) {
+                                    nowPlaying(playerSong, false, maxWidth)
+                                }
+                                TabletLyricsPane(
+                                    lines = lyrics,
+                                    trackKey = playerSong.videoId,
+                                    positionMs = player.position.positionMs,
+                                    isPlaying = player.isPlaying,
+                                    onSeek = { target -> controller?.seekTo(target) },
+                                    artworkUrl = playerSong.thumbnailUrl,
+                                    modifier = Modifier.weight(0.44f).fillMaxHeight(),
+                                )
+                            }
                         }
+                    } else {
+                        nowPlaying(playerSong, false, windowWidth)
                     }
-                    TabletLyricsPane(
-                        lines = lyrics,
-                        trackKey = currentSong.videoId,
-                        positionMs = player.position.positionMs,
-                        isPlaying = player.isPlaying,
-                        onSeek = { position -> controller?.seekTo(position) },
-                        artworkUrl = currentSong.thumbnailUrl,
-                        modifier = Modifier
-                            .weight(0.45f)
-                            .fillMaxHeight(),
-                    )
-                }
-                IconButton(
-                    onClick = {
-                        expandedDockedPlayer = false
-                        showNowPlaying = false
-                    },
-                    modifier = Modifier
-                        .align(Alignment.TopEnd)
-                        .statusBarsPadding()
-                        .padding(top = 6.dp, end = 10.dp)
-                        .size(42.dp)
-                        .clip(CircleShape)
-                        .background(Color.Black.copy(alpha = 0.30f)),
-                ) {
-                    Icon(
-                        imageVector = Icons.Rounded.Close,
-                        contentDescription = stringResource(R.string.close),
-                        tint = Color.White,
-                    )
+                    if (tabletPlayerFullscreen) {
+                        val dismissThresholdPx = with(LocalDensity.current) { 76.dp.toPx() }
+                        Box(
+                            Modifier
+                                .align(Alignment.TopCenter)
+                                .statusBarsPadding()
+                                .padding(top = 4.dp)
+                                .size(width = 140.dp, height = 56.dp)
+                                .zIndex(2f)
+                                .pointerInput(tabletPlayerFullscreen, dismissThresholdPx) {
+                                    var downwardDistance = 0f
+                                    detectVerticalDragGestures(
+                                        onDragEnd = {
+                                            if (downwardDistance >= dismissThresholdPx) {
+                                                dismissNowPlaying()
+                                            }
+                                            downwardDistance = 0f
+                                        },
+                                        onDragCancel = { downwardDistance = 0f },
+                                        onVerticalDrag = { change, dragAmount ->
+                                            if (dragAmount > 0f || downwardDistance > 0f) {
+                                                downwardDistance =
+                                                    (downwardDistance + dragAmount).coerceAtLeast(0f)
+                                                change.consume()
+                                            }
+                                        },
+                                    )
+                                },
+                        )
+                    }
                 }
             }
         }
@@ -3347,15 +3574,22 @@ private fun BitChordApp(
                         onTagsSaved = { updatedTags ->
                             showTagEditor = false
                             songActions = null
+                            val updatedSong = song.copy(
+                                title = updatedTags.title.trim().ifBlank { song.title },
+                                artist = updatedTags.artist.trim().ifBlank { "Unknown Artist" },
+                                albumName = updatedTags.album.trim().takeIf(String::isNotBlank),
+                                albumArtist = updatedTags.albumArtist.trim().takeIf(String::isNotBlank),
+                            )
                             LocalPlaylistStore.updateEditedSongMetadata(
-                                song = song,
+                                song = updatedSong,
                                 title = updatedTags.title,
                                 artist = updatedTags.artist,
                                 albumName = updatedTags.album,
                                 albumArtist = updatedTags.albumArtist,
                             )
+                            viewModel.updateLocalSongMetadata(updatedSong)
                             viewModel.loadLocalMusic()
-                            viewModel.reloadLyrics(song)
+                            viewModel.reloadLyrics(updatedSong)
                         },
                     )
                 }

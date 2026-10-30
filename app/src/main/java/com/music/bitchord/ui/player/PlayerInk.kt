@@ -9,6 +9,8 @@ internal val LocalPlayerButtonControlInk = staticCompositionLocalOf { Color.Whit
 internal val LocalPlayerSeekVolumeInk = staticCompositionLocalOf { Color.White }
 internal val LocalPlayerSongArtistInk = staticCompositionLocalOf { Color.White }
 internal val LocalPlayerLyricInk = staticCompositionLocalOf { Color.White }
+/** The tablet split player paints one shared artwork backdrop behind both panes. */
+internal val LocalSharedPlayerBackdrop = staticCompositionLocalOf { false }
 
 /** Use Auris-style artwork-adaptive ink unless a validated user color is saved. */
 internal fun resolvePlayerInk(value: String, automatic: Color): Color {

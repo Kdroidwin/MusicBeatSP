@@ -14,6 +14,7 @@ import com.music.bitchord.data.LocalMediaRepository
 import com.music.bitchord.data.TrackLog
 import com.music.bitchord.data.LikeState
 import com.music.bitchord.data.YtMusicRepository
+import com.music.bitchord.feature.localmusic.data.LocalFavoritesStore
 import com.music.bitchord.data.lyrics.EmbeddedLyrics
 import com.music.bitchord.data.lyrics.LyricLine
 import com.music.bitchord.data.lyrics.LyricsRepository
@@ -187,6 +188,7 @@ class MainViewModel(app: Application) : AndroidViewModel(app) {
 
     private val _localSongs = MutableStateFlow<UiState<List<Song>>>(UiState.Loading)
     val localSongs: StateFlow<UiState<List<Song>>> = _localSongs.asStateFlow()
+    private val localSongMetadataOverrides = mutableMapOf<String, Song>()
 
     private val _localArtworkPreload = MutableStateFlow(LocalArtworkPreloadState())
     val localArtworkPreload: StateFlow<LocalArtworkPreloadState> = _localArtworkPreload.asStateFlow()
@@ -600,6 +602,7 @@ class MainViewModel(app: Application) : AndroidViewModel(app) {
                 onSuccess = {
                     // Liked Music is now out of date either way.
                     libraryStale = true
+                    if (status == LikeStatus.LIKE) LocalFavoritesStore.removeFavorite(videoId)
                     if (status != LikeStatus.LIKE) dropFromLikedLists(videoId)
                     // Clearing the heart means forgetting the song, not
                     // demoting it — see [forgetFromLibrary].
@@ -608,6 +611,11 @@ class MainViewModel(app: Application) : AndroidViewModel(app) {
                     if (unliked) forgetFromLibrary(videoId)
                 },
                 onFailure = {
+                    // Keep the heart useful even when YouTube rejects a
+                    // rating write (offline mode, expired session, or a
+                    // transient Innertube refusal). This is an app-local
+                    // favorite fallback; the account rating remains unchanged.
+                    if (status == LikeStatus.LIKE) LocalFavoritesStore.addFavorite(videoId)
                     LikeState.set(videoId, previous)
                 },
             )
@@ -671,10 +679,12 @@ class MainViewModel(app: Application) : AndroidViewModel(app) {
     }
 
     /** The heart: liked becomes neutral, anything else becomes liked. */
-    fun toggleLike(videoId: String) = setLike(
-        videoId,
-        if (likeStatusOf(videoId) == LikeStatus.LIKE) LikeStatus.INDIFFERENT else LikeStatus.LIKE,
-    )
+    fun toggleLike(videoId: String) {
+        val isLiked = likeStatusOf(videoId) == LikeStatus.LIKE || LocalFavoritesStore.isFavorite(videoId)
+        val target = if (isLiked) LikeStatus.INDIFFERENT else LikeStatus.LIKE
+        if (target != LikeStatus.LIKE) LocalFavoritesStore.removeFavorite(videoId)
+        setLike(videoId, target)
+    }
 
     /** As [toggleLike], for the thumb-down. */
     fun toggleDislike(videoId: String) = setLike(
@@ -2572,13 +2582,70 @@ class MainViewModel(app: Application) : AndroidViewModel(app) {
                     if (songs.isEmpty()) {
                         _localSongs.value = UiState.Error(text(R.string.no_local_audio_found))
                     } else {
-                        _localSongs.value = UiState.Success(songs)
+                        _localSongs.value = UiState.Success(songs.map(::applyLocalSongMetadataOverride))
                     }
                 }
             } finally {
                 _isRefreshingLocalMusic.value = false
             }
         }
+    }
+
+    /** Apply a saved tag edit to every live library consumer immediately. */
+    fun updateLocalSongMetadata(updatedSong: Song) {
+        val keys = localSongMetadataKeys(updatedSong)
+        if (keys.isEmpty()) return
+        keys.forEach { localSongMetadataOverrides[it] = updatedSong }
+        val current = _localSongs.value as? UiState.Success ?: return
+        val refreshed = current.data.map { song ->
+            if (localSongMetadataKeys(song).any(keys::contains)) updatedSong.copy(
+                videoId = song.videoId,
+                localUri = song.localUri,
+                localPath = song.localPath,
+            ) else song
+        }
+        if (refreshed != current.data) _localSongs.value = UiState.Success(refreshed)
+    }
+
+    /** Refreshes a local artist detail after a bulk artist-tag edit. */
+    fun renameLocalArtistPage(previousName: String, newName: String) {
+        val oldBrowseId = "local:artist:$previousName"
+        val newBrowseId = "local:artist:$newName"
+        val allSongs = (_localSongs.value as? UiState.Success)?.data.orEmpty()
+        val refreshedSongs = allSongs.filter {
+            com.music.bitchord.feature.artistimage.util.ArtistSplitter.matchesArtist(it.artist, newName)
+        }
+        _detailStack.value = _detailStack.value.map { page ->
+            if (page.browseId != oldBrowseId) page else page.copy(
+                browseId = newBrowseId,
+                title = newName,
+                songs = if (refreshedSongs.isNotEmpty()) UiState.Success(refreshedSongs) else UiState.Success(emptyList()),
+            )
+        }
+    }
+
+    private fun applyLocalSongMetadataOverride(song: Song): Song {
+        val keys = localSongMetadataKeys(song)
+        val override = keys.firstNotNullOfOrNull(localSongMetadataOverrides::get) ?: return song
+        if (
+            song.title == override.title && song.artist == override.artist &&
+            song.albumName == override.albumName && song.albumArtist == override.albumArtist
+        ) {
+            keys.forEach(localSongMetadataOverrides::remove)
+            return song
+        }
+        return song.copy(
+            title = override.title,
+            artist = override.artist,
+            albumName = override.albumName,
+            albumArtist = override.albumArtist,
+        )
+    }
+
+    private fun localSongMetadataKeys(song: Song): List<String> = buildList {
+        song.localUri?.takeIf(String::isNotBlank)?.let { add("uri:$it") }
+        song.localPath?.takeIf(String::isNotBlank)?.let { add("path:${it.replace('\\', '/')}") }
+        if (isEmpty() && song.videoId.isNotBlank()) add("video:${song.videoId}")
     }
 
     /**
@@ -2822,7 +2889,8 @@ class MainViewModel(app: Application) : AndroidViewModel(app) {
         browseId.startsWith(Downloads.PLAYLIST_PREFIX) -> BrowseType.PLAYLIST
         browseId.startsWith("local:album:") -> BrowseType.ALBUM
         browseId.startsWith("local:artist:") -> BrowseType.ARTIST
-        browseId.startsWith("UC") -> BrowseType.ARTIST
+        browseId.startsWith("MPSP") -> BrowseType.PODCAST
+        browseId.startsWith("UC") -> if (fallback == BrowseType.PROFILE) BrowseType.PROFILE else BrowseType.ARTIST
         browseId.startsWith("MPREb") -> BrowseType.ALBUM
         browseId.startsWith("VL") || browseId.startsWith("PL") -> BrowseType.PLAYLIST
         else -> fallback

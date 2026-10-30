@@ -1,7 +1,8 @@
 package com.music.bitchord.feature.localmusic.ui
 
 import androidx.activity.compose.BackHandler
-import androidx.compose.foundation.clickable
+import androidx.compose.foundation.combinedClickable
+import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -18,17 +19,23 @@ import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.lazy.itemsIndexed
 import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.rounded.ChevronRight
 import androidx.compose.material.icons.rounded.Folder
 import androidx.compose.material.icons.rounded.FolderOff
+import androidx.compose.material.icons.rounded.Close
+import androidx.compose.material.icons.rounded.CheckCircle
 import androidx.compose.material.icons.rounded.PlayArrow
+import androidx.compose.material.icons.rounded.PlaylistAdd
 import androidx.compose.material.icons.rounded.Shuffle
 import androidx.compose.material3.FilledTonalButton
 import androidx.compose.material3.Icon
+import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
+import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.LaunchedEffect
@@ -62,6 +69,7 @@ import com.music.bitchord.data.model.artworkAt
 import com.music.bitchord.data.settings.AppSettings
 import com.music.bitchord.feature.localmusic.domain.FolderNode
 import com.music.bitchord.feature.localmusic.domain.FolderTreeBuilder
+import com.music.bitchord.feature.localsongactions.ui.components.LocalAddToPlaylistSheet
 import com.music.bitchord.ui.components.SongRow
 
 private val FolderPathStackSaver = listSaver<SnapshotStateList<String>, String>(
@@ -94,10 +102,37 @@ fun FolderBrowserScreen(
     val currentNode by remember(tree, stackSnapshot) {
         mutableStateOf(stackSnapshot.lastOrNull()?.let(tree::findByPath) ?: tree)
     }
+    var selectedSongIds by remember { mutableStateOf<Set<String>>(emptySet()) }
+    var selectedFolderPaths by remember { mutableStateOf<Set<String>>(emptySet()) }
+    var addToPlaylistSongs by remember { mutableStateOf<List<Song>?>(null) }
+    val selectingSongs = selectedSongIds.isNotEmpty() || selectedFolderPaths.isNotEmpty()
+    val selectedSongs = remember(tree, currentNode.directSongs, selectedSongIds, selectedFolderPaths) {
+        val folderTracks = selectedFolderPaths
+            .asSequence()
+            .mapNotNull(tree::findByPath)
+            .flatMap { it.allSongs.asSequence() }
+        (currentNode.directSongs.filter { (it.localUri ?: it.videoId) in selectedSongIds } + folderTracks)
+            .distinctBy { it.localUri ?: it.localPath ?: it.videoId }
+    }
+    fun toggleSongSelection(song: Song) {
+        val key = song.localUri ?: song.videoId
+        selectedSongIds = if (key in selectedSongIds) selectedSongIds - key else selectedSongIds + key
+    }
+    fun toggleFolderSelection(folder: FolderNode) {
+        selectedFolderPaths = if (folder.path in selectedFolderPaths) {
+            selectedFolderPaths - folder.path
+        } else {
+            selectedFolderPaths + folder.path
+        }
+    }
     LaunchedEffect(tree, stackSnapshot) {
         if (stackSnapshot.isNotEmpty() && tree.findByPath(stackSnapshot.last()) == null) {
             pathStack.clear()
         }
+    }
+    LaunchedEffect(currentNode.path) {
+        selectedSongIds = emptySet()
+        selectedFolderPaths = emptySet()
     }
 
     val canGoBack = pathStack.isNotEmpty()
@@ -116,6 +151,10 @@ fun FolderBrowserScreen(
         onDispose { latestNavigationCallback.value?.invoke(false, null) }
     }
     BackHandler(enabled = canGoBack, onBack = popBack)
+    BackHandler(enabled = selectingSongs) {
+        selectedSongIds = emptySet()
+        selectedFolderPaths = emptySet()
+    }
     SideEffect { onArtworkPaletteChanged?.invoke(null) }
 
     val scrollState = rememberLazyListState()
@@ -130,6 +169,52 @@ fun FolderBrowserScreen(
         ),
         verticalArrangement = Arrangement.spacedBy(8.dp),
     ) {
+        if (selectingSongs) {
+            item(key = "folder-selection-toolbar:${currentNode.path}") {
+                Row(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .clip(RoundedCornerShape(11.dp))
+                        .background(MaterialTheme.colorScheme.surfaceVariant)
+                        .padding(start = 14.dp, end = 4.dp, top = 2.dp, bottom = 2.dp),
+                    verticalAlignment = Alignment.CenterVertically,
+                ) {
+                    Text(
+                        text = if (selectedFolderPaths.isNotEmpty()) {
+                            stringResource(
+                                R.string.folder_selection_summary,
+                                selectedFolderPaths.size,
+                                selectedSongs.size,
+                            )
+                        } else {
+                            "${selectedSongs.size} ${stringResource(R.string.selected)}"
+                        },
+                        style = MaterialTheme.typography.titleSmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                        modifier = Modifier.weight(1f),
+                        maxLines = 1,
+                    )
+                    TextButton(
+                        enabled = selectedSongs.isNotEmpty(),
+                        onClick = {
+                            addToPlaylistSongs = selectedSongs
+                            selectedSongIds = emptySet()
+                            selectedFolderPaths = emptySet()
+                        },
+                    ) {
+                        Icon(Icons.Rounded.PlaylistAdd, contentDescription = null, modifier = Modifier.size(18.dp))
+                        Spacer(Modifier.width(4.dp))
+                        Text(stringResource(R.string.add_to_playlist))
+                    }
+                    IconButton(onClick = {
+                        selectedSongIds = emptySet()
+                        selectedFolderPaths = emptySet()
+                    }) {
+                        Icon(Icons.Rounded.Close, contentDescription = stringResource(R.string.cancel))
+                    }
+                }
+            }
+        }
         item(key = "folder-header:${currentNode.path}") {
             FolderHeader(
                 node = currentNode,
@@ -162,7 +247,14 @@ fun FolderBrowserScreen(
         }
 
         items(currentNode.subfolders, key = { "folder:${it.path}" }) { folder ->
-            FolderEntry(folder = folder, onClick = { pathStack.add(folder.path) })
+            FolderEntry(
+                folder = folder,
+                selected = folder.path in selectedFolderPaths,
+                onClick = {
+                    if (selectingSongs) toggleFolderSelection(folder) else pathStack.add(folder.path)
+                },
+                onLongPress = { toggleFolderSelection(folder) },
+            )
         }
 
         itemsIndexed(currentNode.directSongs, key = { _, song -> song.localPath ?: song.localUri ?: song.videoId }) { index, song ->
@@ -170,11 +262,25 @@ fun FolderBrowserScreen(
                 song = song,
                 isCurrent = currentSong?.isSameFolderTrack(song) == true,
                 isPlaying = isPlaying && currentSong?.isSameFolderTrack(song) == true,
-                onClick = { onSongClick(currentNode.directSongs, index) },
-                onLongPress = { onSongLongPress(song) },
-                onSwipeToQueue = { onSongSwipe(song) },
+                onClick = {
+                    if (selectingSongs) toggleSongSelection(song)
+                    else onSongClick(currentNode.directSongs, index)
+                },
+                onLongPress = { toggleSongSelection(song) },
+                // Long press selects tracks on this screen; the explicit
+                // overflow menu keeps its existing single-track actions.
+                onMore = { onSongLongPress(song) },
+                selected = (song.localUri ?: song.videoId) in selectedSongIds,
+                onSwipeToQueue = if (selectingSongs) null else { { onSongSwipe(song) } },
             )
         }
+    }
+
+    addToPlaylistSongs?.let { selected ->
+        LocalAddToPlaylistSheet(
+            songs = selected,
+            onDismissRequest = { addToPlaylistSongs = null },
+        )
     }
 }
 
@@ -224,14 +330,23 @@ private fun FolderHeader(
 }
 
 @Composable
-private fun FolderEntry(folder: FolderNode, onClick: () -> Unit) {
+private fun FolderEntry(
+    folder: FolderNode,
+    selected: Boolean,
+    onClick: () -> Unit,
+    onLongPress: () -> Unit,
+) {
     val trackCount = pluralStringResource(R.plurals.track_count_plural, folder.totalSongCount, folder.totalSongCount)
     val subfolderCount = if (folder.subfolders.isNotEmpty()) {
         stringResource(R.string.folder_subfolder_count, folder.subfolders.size)
     } else null
     Surface(
-        modifier = Modifier.fillMaxWidth().clip(RoundedCornerShape(16.dp)).clickable(onClick = onClick),
-        color = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.4f),
+        modifier = Modifier
+            .fillMaxWidth()
+            .clip(RoundedCornerShape(16.dp))
+            .combinedClickable(onClick = onClick, onLongClick = onLongPress),
+        color = if (selected) MaterialTheme.colorScheme.secondaryContainer
+        else MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.4f),
         shape = RoundedCornerShape(16.dp),
     ) {
         Row(
@@ -249,6 +364,18 @@ private fun FolderEntry(folder: FolderNode, onClick: () -> Unit) {
                         contentDescription = null,
                         contentScale = ContentScale.Crop,
                         modifier = Modifier.fillMaxSize().clip(RoundedCornerShape(12.dp)),
+                    )
+                }
+                if (selected) {
+                    Icon(
+                        imageVector = Icons.Rounded.CheckCircle,
+                        contentDescription = stringResource(R.string.selected),
+                        tint = MaterialTheme.colorScheme.primary,
+                        modifier = Modifier
+                            .align(Alignment.TopEnd)
+                            .padding(3.dp)
+                            .size(20.dp)
+                            .background(MaterialTheme.colorScheme.surface, CircleShape),
                     )
                 }
             }

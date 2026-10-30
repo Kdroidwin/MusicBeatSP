@@ -1142,6 +1142,10 @@
     <string name="selection_change_artwork">アルバムアートを変更</string>
     <string name="selection_share">共有</string>
     <string name="bulk_tag_edit">選択した曲のタグを編集</string>
+    <string name="bulk_artist_edit_title">選択した曲のアーティスト名を変更</string>
+    <string name="bulk_artist_edit_hint">選択した%1$d曲すべてに同じアーティスト名を設定します。</string>
+    <string name="deselect_all">すべて解除</string>
+    <string name="folder_selection_summary">%1$dフォルダ・%2$d曲</string>
     <string name="bulk_tag_hint">空欄の項目は各曲の現在の値を維持します。</string>
     <string name="bulk_tag_saved">%2$d曲中%1$d曲のタグを更新しました</string>
     <string name="bulk_artwork_saved">%2$d曲中%1$d曲のアルバムアートを更新しました</string>
@@ -1390,6 +1394,13 @@
     <string name="redesigned_saved_queue_manager_subtitle">保存済みキューを、保存・読み込み・置き換え・削除できるシンプルな一覧で表示します。初期設定はオンです。</string>
     <string name="collection_song_artwork">アルバムなどの曲一覧にアートを表示</string>
     <string name="collection_song_artwork_subtitle">アルバム、アーティスト、アルバムアーティスト内で、曲番号の代わりに各曲のアルバムアートを表示します。初期設定はオンです。</string>
+    <string name="play_history_song_artwork">再生履歴にアルバムアートを表示</string>
+    <string name="play_history_song_artwork_subtitle">「最近再生した曲」と「よく再生する曲」で、曲番号の代わりにアルバムアートを表示します。初期設定はオンです。</string>
+    <string name="library_categories">ライブラリ項目</string>
+    <string name="library_categories_subtitle">ライブラリの「お気に入り」「プレイリスト」「YouTube Music」「再生履歴」の順序と表示を変更します。</string>
+    <string name="library_category_order_subtitle">矢印で順番を変更し、スイッチで表示・非表示を切り替えます。</string>
+    <string name="show_library_category">ライブラリに「%1$s」を表示</string>
+    <string name="show_library_category_subtitle">ライブラリの「%1$s」フィルターを表示または非表示にします。</string>
     <string name="playback_tuning_thin_sliders">速度とピッチをプレーヤー風のバーで調整</string>
     <string name="playback_tuning_thin_sliders_subtitle">プレーヤーのシークバーや音量バーと同じ細いバーと操作感を使います。初期設定はオンです。</string>
     <string name="queue_name_placeholder">キュー名</string>
@@ -1476,8 +1487,8 @@
     <string name="white_collection_action_buttons_subtitle">アルバムやプレイリストのアート下にあるボタンを白背景・黒アイコンにします。オフでは現在の暗い配色を使います。</string>
     <string name="settings_top_bar_more_icon">設定に三点アイコンを使う</string>
     <string name="settings_top_bar_more_icon_subtitle">メイン画面上部の歯車を三点メニューのアイコンに変更します。</string>
-    <string name="tablet_lyrics_beside_player">タブレットでプレイヤーの横に歌詞を表示</string>
-    <string name="tablet_lyrics_beside_player_subtitle">横幅の広い画面で曲タブを表示中、プレイヤーを左、同期歌詞を右に表示します。別のタブや設定を開くと通常の画面に戻り、そのまま操作できます。この表示中はアートのタップ操作が無効になります。</string>
+    <string name="tablet_lyrics_beside_player">タブレットでプレイヤーを全画面表示</string>
+    <string name="tablet_lyrics_beside_player_subtitle">横長画面ではプレイヤーを下部バーから全画面に広げ、左に再生操作、右に同期歌詞を表示します。上端を下へスワイプすると戻ります。</string>
     <string name="youtube_music_saved">YouTube Music</string>
     <string name="youtube_music_library_empty">YouTube Musicから保存したアルバムやプレイリストがここに表示されます。</string>
     <string name="remove_saved_youtube_collection">ライブラリから削除</string>

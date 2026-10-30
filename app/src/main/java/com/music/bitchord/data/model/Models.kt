@@ -372,7 +372,7 @@ const val NOTIFICATION_ART_PX = 544
  */
 const val PLAYER_ART_PX = 1200
 
-enum class BrowseType { ALBUM, ARTIST, PLAYLIST, OTHER }
+enum class BrowseType { ALBUM, ARTIST, PLAYLIST, PODCAST, PROFILE, OTHER }
 
 /** A non-track search result: album, artist or playlist. */
 data class BrowseItem(

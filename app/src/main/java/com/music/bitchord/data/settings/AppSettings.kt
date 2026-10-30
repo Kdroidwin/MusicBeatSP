@@ -154,6 +154,9 @@ enum class TransportSideAction {
 /** Destinations within the device-local music library. */
 enum class LocalLibraryTab { SONGS, ALBUMS, ARTISTS, FOLDERS, PLAYLISTS, ALBUM_ARTISTS }
 
+/** Filter destinations shown in the Library header, independent of the always-visible All destination. */
+enum class LibraryCategory { FAVORITES, PLAYLISTS, YOUTUBE_MUSIC, MOST_PLAYED, RECENTLY_PLAYED }
+
 /**
  * What to keep when a track is saved to the device.
  *
@@ -1023,7 +1026,7 @@ object AppSettings {
     val localFolderHierarchy = MutableStateFlow(false)
     val fullScreenCollectionArtwork = MutableStateFlow(false)
     /** On wide layouts, replaces the left page with synced lyrics beside the docked player. */
-    val tabletLyricsBesidePlayer = MutableStateFlow(false)
+    val tabletFullscreenPlayer = MutableStateFlow(false)
     /** App-local YouTube Music albums and playlists saved for quick access. */
     val savedYoutubeCollections = MutableStateFlow<List<SavedYoutubeCollection>>(emptyList())
     /** Hides collection page titles while keeping floating back/settings actions available. */
@@ -1041,10 +1044,14 @@ object AppSettings {
     val downloadedMusicViewType = MutableStateFlow(LibraryViewType.LIST)
     val libraryPlaylistsViewType = MutableStateFlow(LibraryViewType.GRID)
     val librarySongsViewType = MutableStateFlow(LibraryViewType.LIST)
+    val visibleLibraryCategories = MutableStateFlow(LibraryCategory.entries.toSet())
+    val libraryCategoryOrder = MutableStateFlow(LibraryCategory.entries.toList())
     /** Show each track's cover in a playlist detail list instead of its number. */
     val showPlaylistSongArtwork = MutableStateFlow(false)
     /** Show track covers in album, artist, and album-artist detail lists instead of ordinal numbers. */
     val showCollectionSongArtwork = MutableStateFlow(true)
+    /** Show cover thumbnails instead of ordinal numbers in recent/most-played lists. */
+    val showPlayHistorySongArtwork = MutableStateFlow(true)
     val localDrillDownSongsViewType = MutableStateFlow(LibraryViewType.LIST)
     val downloadedDrillDownSongsViewType = MutableStateFlow(LibraryViewType.LIST)
     val librarySort = MutableStateFlow(LibrarySort.DEFAULT)
@@ -1462,6 +1469,8 @@ object AppSettings {
         mainNavigationTabsPopup.value = prefs.getBoolean(KEY_MAIN_NAVIGATION_TABS_POPUP, false)
         visibleLocalLibraryTabs.value = readVisibleLocalLibraryTabs()
         localLibraryTabOrder.value = readLocalLibraryTabOrder()
+        visibleLibraryCategories.value = readVisibleLibraryCategories()
+        libraryCategoryOrder.value = readLibraryCategoryOrder()
         visibleMainNavigationTabs.value = readVisibleMainNavigationTabs()
         mainNavigationTabOrder.value = readMainNavigationTabOrder()
         startupTab.value = readStartupTab()
@@ -1675,7 +1684,7 @@ object AppSettings {
             webdavUrl.value, webdavUsername.value, webdavPassword.value, webdavAllowInsecureHttp.value,
         )
         fullScreenCollectionArtwork.value = prefs.getBoolean(KEY_FULL_SCREEN_COLLECTION_ARTWORK, false)
-        tabletLyricsBesidePlayer.value = prefs.getBoolean(KEY_TABLET_LYRICS_BESIDE_PLAYER, false)
+        tabletFullscreenPlayer.value = prefs.getBoolean(KEY_TABLET_LYRICS_BESIDE_PLAYER, false)
         savedYoutubeCollections.value = readSavedYoutubeCollections()
         hideCollectionTopBar.value = prefs.getBoolean(KEY_HIDE_COLLECTION_TOP_BAR, true)
         hideFloatingCollectionControls.value = prefs.getBoolean(KEY_HIDE_FLOATING_COLLECTION_CONTROLS, true)
@@ -1690,6 +1699,7 @@ object AppSettings {
         librarySongsViewType.value = readLibraryViewType(KEY_LIBRARY_SONGS_VIEW_TYPE, LibraryViewType.LIST)
         showPlaylistSongArtwork.value = prefs.getBoolean(KEY_SHOW_PLAYLIST_SONG_ARTWORK, false)
         showCollectionSongArtwork.value = prefs.getBoolean(KEY_SHOW_COLLECTION_SONG_ARTWORK, true)
+        showPlayHistorySongArtwork.value = prefs.getBoolean(KEY_SHOW_PLAY_HISTORY_SONG_ARTWORK, true)
         localDrillDownSongsViewType.value = readLibraryViewType(KEY_LOCAL_DRILLDOWN_SONGS_VIEW_TYPE, LibraryViewType.LIST)
         downloadedDrillDownSongsViewType.value = readLibraryViewType(KEY_DOWNLOADED_DRILLDOWN_SONGS_VIEW_TYPE, LibraryViewType.LIST)
         librarySort.value = prefs.getString(KEY_LIBRARY_SORT, null)
@@ -2104,8 +2114,8 @@ object AppSettings {
         prefs.edit().putBoolean(KEY_SETTINGS_TOP_BAR_MORE_ICON, value).apply()
     }
 
-    fun setTabletLyricsBesidePlayer(value: Boolean) {
-        tabletLyricsBesidePlayer.value = value
+    fun setTabletFullscreenPlayer(value: Boolean) {
+        tabletFullscreenPlayer.value = value
         prefs.edit().putBoolean(KEY_TABLET_LYRICS_BESIDE_PLAYER, value).apply()
     }
 
@@ -2123,6 +2133,18 @@ object AppSettings {
     fun removeSavedYoutubeCollection(browseId: String) {
         val updated = savedYoutubeCollections.value.filterNot { it.browseId == browseId }
         if (updated.size == savedYoutubeCollections.value.size) return
+        savedYoutubeCollections.value = updated
+        persistSavedYoutubeCollections(updated)
+    }
+
+    fun renameSavedYoutubeCollection(browseId: String, newTitle: String) {
+        val title = newTitle.trim().take(512)
+        if (title.isBlank()) return
+        val current = savedYoutubeCollections.value
+        val updated = current.map { collection ->
+            if (collection.browseId == browseId) collection.copy(title = title) else collection
+        }
+        if (updated == current) return
         savedYoutubeCollections.value = updated
         persistSavedYoutubeCollections(updated)
     }
@@ -2562,6 +2584,40 @@ object AppSettings {
             ?.mapNotNull { name -> LocalLibraryTab.entries.firstOrNull { it.name == name } }
             .orEmpty()
         return (stored + LocalLibraryTab.entries.filterNot { it in stored }).distinct()
+    }
+
+    private fun readVisibleLibraryCategories(): Set<LibraryCategory> {
+        val stored = prefs.getStringSet(KEY_VISIBLE_LIBRARY_CATEGORIES, null)
+            ?.mapNotNull { name -> LibraryCategory.entries.firstOrNull { it.name == name } }
+            ?.toSet()
+        return stored ?: LibraryCategory.entries.toSet()
+    }
+
+    private fun readLibraryCategoryOrder(): List<LibraryCategory> {
+        val stored = prefs.getString(KEY_LIBRARY_CATEGORY_ORDER, null)
+            ?.split(',')
+            ?.mapNotNull { name -> LibraryCategory.entries.firstOrNull { it.name == name } }
+            .orEmpty()
+        return (stored + LibraryCategory.entries.filterNot { it in stored }).distinct()
+    }
+
+    fun setLibraryCategoryVisible(category: LibraryCategory, visible: Boolean) {
+        val current = visibleLibraryCategories.value
+        val updated = if (visible) current + category else current - category
+        if (updated == current) return
+        visibleLibraryCategories.value = updated
+        prefs.edit().putStringSet(KEY_VISIBLE_LIBRARY_CATEGORIES, updated.map { it.name }.toSet()).apply()
+    }
+
+    fun moveLibraryCategory(category: LibraryCategory, offset: Int) {
+        val current = libraryCategoryOrder.value
+        val from = current.indexOf(category)
+        if (from < 0 || offset !in -1..1) return
+        val to = (from + offset).coerceIn(0, current.lastIndex)
+        if (from == to) return
+        val updated = current.toMutableList().apply { add(to, removeAt(from)) }
+        libraryCategoryOrder.value = updated
+        prefs.edit().putString(KEY_LIBRARY_CATEGORY_ORDER, updated.joinToString(",") { it.name }).apply()
     }
 
     fun setShowStatusBar(value: Boolean) {
@@ -3736,6 +3792,11 @@ object AppSettings {
         prefs.edit().putBoolean(KEY_SHOW_COLLECTION_SONG_ARTWORK, value).apply()
     }
 
+    fun setShowPlayHistorySongArtwork(value: Boolean) {
+        showPlayHistorySongArtwork.value = value
+        prefs.edit().putBoolean(KEY_SHOW_PLAY_HISTORY_SONG_ARTWORK, value).apply()
+    }
+
     fun setLocalDrillDownSongsViewType(value: LibraryViewType) {
         localDrillDownSongsViewType.value = value
         prefs.edit().putString(KEY_LOCAL_DRILLDOWN_SONGS_VIEW_TYPE, value.name).apply()
@@ -4216,6 +4277,9 @@ object AppSettings {
     private const val KEY_LIBRARY_SONGS_VIEW_TYPE = "library_songs_view_type"
     private const val KEY_SHOW_PLAYLIST_SONG_ARTWORK = "show_playlist_song_artwork"
     private const val KEY_SHOW_COLLECTION_SONG_ARTWORK = "show_collection_song_artwork"
+    private const val KEY_SHOW_PLAY_HISTORY_SONG_ARTWORK = "show_play_history_song_artwork"
+    private const val KEY_VISIBLE_LIBRARY_CATEGORIES = "visible_library_categories"
+    private const val KEY_LIBRARY_CATEGORY_ORDER = "library_category_order"
     private const val KEY_LOCAL_DRILLDOWN_SONGS_VIEW_TYPE = "local_drilldown_songs_view_type"
     private const val KEY_DOWNLOADED_DRILLDOWN_SONGS_VIEW_TYPE = "downloaded_drilldown_songs_view_type"
     private const val KEY_BLACKLISTED_FOLDERS = "blacklisted_folders"

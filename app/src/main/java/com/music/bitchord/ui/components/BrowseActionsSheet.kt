@@ -395,7 +395,7 @@ private fun BrowseType.localizedNoun(): String = when (this) {
     BrowseType.ALBUM -> stringResource(R.string.album)
     BrowseType.PLAYLIST -> stringResource(R.string.playlist)
     BrowseType.ARTIST -> stringResource(R.string.artist)
-    BrowseType.OTHER -> ""
+    BrowseType.PODCAST, BrowseType.PROFILE, BrowseType.OTHER -> ""
 }
 
 @Composable
@@ -403,5 +403,5 @@ private fun BrowseType.localizedOpenLabel(): String = when (this) {
     BrowseType.ALBUM -> stringResource(R.string.open_album)
     BrowseType.ARTIST -> stringResource(R.string.open_artist)
     BrowseType.PLAYLIST -> stringResource(R.string.open_playlist)
-    BrowseType.OTHER -> stringResource(R.string.open)
+    BrowseType.PODCAST, BrowseType.PROFILE, BrowseType.OTHER -> stringResource(R.string.open)
 }

@@ -847,7 +847,7 @@ fun DrillDownSongList(
                     }
                 }
                 itemsIndexed(displayedSongs, key = { _, song -> song.localUri ?: song.videoId }) { index, song ->
-                    val trackNumber = if ((isPlaylist && showArtworkInList) || showCollectionArtworkInList) {
+                    val trackNumber = if (showArtworkInList || showCollectionArtworkInList) {
                         null
                     } else index + 1
                     if (reorderEnabled && isPlaylist) {

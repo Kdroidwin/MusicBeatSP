@@ -13,6 +13,7 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.unit.dp
 import com.music.bitchord.feature.localmusic.domain.model.LocalPlaylist
 import com.music.bitchord.data.model.Song
+import com.music.bitchord.data.settings.LibraryCategory
 
 /**
  * Grid layout presentation of the Library featuring Favorites and Playlists.
@@ -34,6 +35,7 @@ fun LibraryGridContent(
     onCreatePlaylist: () -> Unit,
     librarySongs: List<Song> = emptyList(),
     favoriteUsesStar: Boolean = false,
+    visibleCategories: Set<LibraryCategory> = LibraryCategory.entries.toSet(),
     contentPadding: PaddingValues,
     modifier: Modifier = Modifier,
     state: LazyGridState = rememberLazyGridState(),
@@ -51,8 +53,10 @@ fun LibraryGridContent(
         horizontalArrangement = Arrangement.spacedBy(12.dp),
         verticalArrangement = Arrangement.spacedBy(12.dp),
     ) {
-        val showFavorites = filter == LibraryFilter.ALL || filter == LibraryFilter.FAVORITES
-        val showPlaylists = filter == LibraryFilter.ALL || filter == LibraryFilter.PLAYLISTS
+        val showFavorites = LibraryCategory.FAVORITES in visibleCategories &&
+            (filter == LibraryFilter.ALL || filter == LibraryFilter.FAVORITES)
+        val showPlaylists = LibraryCategory.PLAYLISTS in visibleCategories &&
+            (filter == LibraryFilter.ALL || filter == LibraryFilter.PLAYLISTS)
 
         if (showFavorites) {
             item(key = "library_favorites") {

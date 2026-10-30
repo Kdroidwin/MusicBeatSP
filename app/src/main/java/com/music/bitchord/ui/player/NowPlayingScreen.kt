@@ -246,7 +246,6 @@ import com.music.bitchord.ui.theme.SystemBarIcons
 import com.music.bitchord.ui.theme.SystemBarVisibility
 import com.music.bitchord.ui.rememberIsForeground
 import com.music.bitchord.ui.theme.rememberArtworkPalette
-import com.music.bitchord.ui.components.ArtworkBackdrop
 import com.music.bitchord.ui.components.thumbnailBorder
 import com.music.bitchord.ui.components.optimizedHazeEffect
 import com.music.bitchord.ui.haptics.Haptic
@@ -954,6 +953,7 @@ fun NowPlayingScreen(
     val density = LocalDensity.current
     val haptics = rememberHaptics()
     val artUrl = song.artworkAt(ART_PX)
+    val sharedPlayerBackdrop = LocalSharedPlayerBackdrop.current
     val artworkPalette = rememberArtworkPalette(artUrl, dark = true, artPx = ART_PX)
     val playerInkOverrides by AppSettings.playerInkColors.collectAsStateWithLifecycle()
     // Match the sampled artwork hue; contrast-only white/black switching is
@@ -1203,11 +1203,11 @@ fun NowPlayingScreen(
         "不明なアーティスト",
     )
     val showPlayerArtist = !hidePlayerArtist && !(hideUnknownPlayerArtist && isUnknownArtist)
-    val liked = if (localUri != null || !signedIn) {
-        (localUri ?: song.videoId) in favoriteIds || song.videoId in favoriteIds
-    } else {
-        likeStatus == LikeStatus.LIKE
-    }
+    // Account likes are preferred, while app-local favorites remain visible
+    // when a YouTube Music rating write cannot be completed.
+    val liked = (localUri ?: song.videoId) in favoriteIds ||
+        song.videoId in favoriteIds ||
+        (signedIn && likeStatus == LikeStatus.LIKE)
     // When signed out, keep remote favorites device-local instead of disabling
     // the control. Signed-in users continue to use YouTube's account rating.
     val likeAvailable = true
@@ -1840,7 +1840,7 @@ fun NowPlayingScreen(
         } else {
             artworkBackdropBlurDp.dp
         }
-        if (legacyMesh) {
+        if (!sharedPlayerBackdrop && legacyMesh) {
             // v1.5's backdrop, restored verbatim: no seam, because the blobs
             // are not anchored to anything on screen — they fill the player and
             // the artwork simply sits on top of them. Keyed on the track, so
@@ -1853,7 +1853,7 @@ fun NowPlayingScreen(
                 trackKey = song.videoId,
                 blurRadius = activeBackdropBlur,
             )
-        } else {
+        } else if (!sharedPlayerBackdrop) {
             ArtworkMeshBackdrop(
                 mesh = artMesh,
                 seam = if (heroMode) heroHeight else 0.dp,
@@ -1864,7 +1864,7 @@ fun NowPlayingScreen(
         // Auris grades the area beneath its artwork stage as well as dissolving
         // the cover into the artwork-derived backdrop. This keeps the transport
         // visually grounded without adding a hard dark strip at the stage edge.
-        if (aurisHeroMode && heroHeight > 0.dp && heroVisible > 0.001f) {
+        if (!sharedPlayerBackdrop && aurisHeroMode && heroHeight > 0.dp && heroVisible > 0.001f) {
             Box(
                 modifier = Modifier
                     .matchParentSize()
@@ -3903,7 +3903,13 @@ private fun SweptLyricLine(
             position >= line.endMs -> drawContent()
             // Not started: nothing lit, the dim copy is the whole of it.
             position <= line.timeMs -> Unit
-            else -> layout?.let { sweepTo(it, richText.renderedOffset(line.revealedChars(position))) }
+            else -> layout?.let {
+                // Word timings can come from remote karaoke sources with
+                // offsets that are not safe to use directly as Compose text
+                // offsets (notably after a one-line layout clips the visual
+                // line). Keep the sweep inside the measured UTF-16 range.
+                sweepTo(it, richText.renderedOffset(line.revealedChars(position)))
+            }
         }
     }
 
@@ -3995,7 +4001,10 @@ private fun ContentDrawScope.glowAt(
     intensity: Float,
 ) {
     val length = layout.layoutInput.text.length
-    if (length == 0 || revealedChars <= 0f || intensity <= 0f) return
+    if (
+        length == 0 || layout.lineCount <= 0 || !revealedChars.isFinite() ||
+        !intensity.isFinite() || revealedChars <= 0f || intensity <= 0f
+    ) return
 
     val edge = revealedChars.coerceIn(0f, length.toFloat())
     val visualLine = layout.getLineForOffset(edge.toInt().coerceIn(0, length - 1))
@@ -4005,7 +4014,7 @@ private fun ContentDrawScope.glowAt(
     val right = horizontalAt(layout, edge.coerceIn(lineStart.toFloat(), lineEnd.toFloat()), lineStart, lineEnd)
     val trail = GLOW_TRAIL.toPx() * (GLOW_TRAIL_FLOOR + (1f - GLOW_TRAIL_FLOOR) * intensity)
     val left = (right - trail).coerceAtLeast(layout.getLineLeft(visualLine))
-    if (right <= left) return
+    if (!left.isFinite() || !right.isFinite() || right <= left) return
 
     // The band, cut out of the line. This is only the vertical and trailing
     // bounds; how it fades across is the mask below.
@@ -4046,13 +4055,19 @@ private fun horizontalAt(
     lineStart: Int,
     lineEnd: Int,
 ): Float {
-    val index = chars.toInt().coerceIn(lineStart, lineEnd)
+    if (!chars.isFinite()) return 0f
+    val textLength = layout.layoutInput.text.length
+    val safeStart = lineStart.coerceIn(0, textLength)
+    val safeEnd = lineEnd.coerceIn(safeStart, textLength)
+    val boundedChars = chars.coerceIn(safeStart.toFloat(), safeEnd.toFloat())
+    val index = boundedChars.toInt().coerceIn(safeStart, safeEnd)
     val here = layout.getHorizontalPosition(index, usePrimaryDirection = true)
     val next = layout.getHorizontalPosition(
-        (index + 1).coerceAtMost(lineEnd),
+        (index + 1).coerceAtMost(safeEnd),
         usePrimaryDirection = true,
     )
-    return here + (next - here) * (chars - index)
+    val position = here + (next - here) * (boundedChars - index)
+    return position.takeIf(Float::isFinite) ?: here.takeIf(Float::isFinite) ?: 0f
 }
 
 /**
@@ -4065,27 +4080,46 @@ private fun horizontalAt(
  * time.
  */
 private fun ContentDrawScope.sweepTo(layout: TextLayoutResult, revealedChars: Float) {
-    if (revealedChars <= 0f) return
-    if (revealedChars >= layout.layoutInput.text.length) {
+    val textLength = layout.layoutInput.text.length
+    if (textLength == 0 || layout.lineCount <= 0 || !revealedChars.isFinite()) return
+    val safeReveal = revealedChars.coerceIn(0f, textLength.toFloat())
+    if (safeReveal <= 0f) return
+    if (safeReveal >= textLength) {
         drawContent()
         return
     }
     for (visualLine in 0 until layout.lineCount) {
-        val start = layout.getLineStart(visualLine)
+        val start = layout.getLineStart(visualLine).coerceIn(0, textLength)
         // Lines beyond the boundary have nothing lit on them, and neither has
         // anything after them.
-        if (revealedChars <= start) return
-        val end = layout.getLineEnd(visualLine, visibleEnd = true)
-        val right = if (revealedChars >= end) {
+        if (safeReveal <= start) return
+        val end = layout.getLineEnd(visualLine, visibleEnd = true).coerceIn(start, textLength)
+        if (end <= start) continue
+        val right = if (safeReveal >= end) {
             layout.getLineRight(visualLine)
         } else {
-            horizontalAt(layout, revealedChars, start, end)
+            horizontalAt(layout, safeReveal, start, end)
         }
+        val left = layout.getLineLeft(visualLine)
+        val top = layout.getLineTop(visualLine)
+        val bottom = layout.getLineBottom(visualLine)
+        // Compose's clipRect requires ordered finite bounds. A malformed or
+        // clipped remote lyric layout should degrade to an un-swept line rather
+        // than take down playback from the render thread.
+        if (!left.isFinite() || !right.isFinite() || !top.isFinite() || !bottom.isFinite() || bottom <= top) {
+            drawContent()
+            return
+        }
+        val clippedLeft = left.coerceIn(0f, size.width)
+        val clippedRight = right.coerceIn(0f, size.width)
+        val clippedTop = top.coerceIn(0f, size.height)
+        val clippedBottom = bottom.coerceIn(0f, size.height)
+        if (clippedRight <= clippedLeft || clippedBottom <= clippedTop) continue
         clipRect(
-            left = layout.getLineLeft(visualLine),
-            top = layout.getLineTop(visualLine),
-            right = right,
-            bottom = layout.getLineBottom(visualLine),
+            left = clippedLeft,
+            top = clippedTop,
+            right = clippedRight,
+            bottom = clippedBottom,
         ) {
             this@sweepTo.drawContent()
         }
@@ -4113,12 +4147,6 @@ fun TabletLyricsPane(
 ) {
     val palette = rememberArtworkPalette(artworkUrl, dark = true)
     Box(modifier.fillMaxSize()) {
-        ArtworkBackdrop(
-            palette = palette,
-            imageUrl = artworkUrl,
-            modifier = Modifier.fillMaxSize(),
-            washFraction = 1f,
-        )
         Column(
             modifier = Modifier
                 .fillMaxSize()
@@ -4126,12 +4154,6 @@ fun TabletLyricsPane(
                 .navigationBarsPadding()
                 .padding(horizontal = 18.dp, vertical = 20.dp),
         ) {
-            Text(
-                text = stringResource(R.string.lyrics_display),
-                style = MaterialTheme.typography.titleLarge,
-                color = palette.onBackground,
-            )
-            Spacer(Modifier.height(10.dp))
             if (lines.isNullOrEmpty()) {
                 Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
                     Text(
@@ -4150,6 +4172,36 @@ fun TabletLyricsPane(
                     modifier = Modifier.weight(1f),
                 )
             }
+        }
+    }
+}
+
+/** A single continuous player backdrop shared by the tablet player and lyrics panes. */
+@Composable
+fun TabletPlayerBackdrop(
+    song: Song,
+    modifier: Modifier = Modifier,
+) {
+    val artUrl = song.artworkAt(ART_PX)
+    val localPreviewArtUrl = remember(song, artUrl) {
+        artUrl?.takeIf { LocalAudioArtworkFetcher.isLocalAudioUri(Uri.parse(it)) }
+            ?.let { song.artworkAt(480) }
+    }
+    val backdropArtworkUrl = localPreviewArtUrl ?: artUrl
+    val legacyMesh by AppSettings.legacyMeshGradient.collectAsStateWithLifecycle()
+    val blurRadius by AppSettings.artworkBackdropBlurDp.collectAsStateWithLifecycle()
+    Box(modifier.fillMaxSize()) {
+        if (legacyMesh) {
+            MeshGradientBackground(
+                palette = rememberArtworkColors(backdropArtworkUrl),
+                trackKey = song.videoId,
+                blurRadius = blurRadius.dp,
+            )
+        } else {
+            ArtworkMeshBackdrop(
+                mesh = rememberArtworkMesh(backdropArtworkUrl, artPx = ART_PX),
+                blurRadius = blurRadius.dp,
+            )
         }
     }
 }
@@ -4673,18 +4725,20 @@ private data class RubySourceRange(
 )
 
 private fun LyricRichText.renderedOffset(sourceOffset: Float): Float {
-    if (rubyRanges.isEmpty()) return sourceOffset
+    if (!sourceOffset.isFinite()) return 0f
+    if (rubyRanges.isEmpty()) return sourceOffset.coerceIn(0f, annotated.length.toFloat())
     var removedCharacters = 0
     rubyRanges.forEach { range ->
         if (sourceOffset < range.sourceStart) return@forEach
         if (sourceOffset < range.sourceEndExclusive) {
             val baseEnd = range.sourceStart + range.baseLength
-            return if (sourceOffset < baseEnd) range.renderedStart.toFloat()
+            val rendered = if (sourceOffset < baseEnd) range.renderedStart.toFloat()
             else (range.renderedStart + 1).toFloat()
+            return rendered.coerceIn(0f, annotated.length.toFloat())
         }
         removedCharacters += (range.sourceEndExclusive - range.sourceStart - 1)
     }
-    return (sourceOffset - removedCharacters).coerceAtLeast(0f)
+    return (sourceOffset - removedCharacters).coerceIn(0f, annotated.length.toFloat())
 }
 
 /** Expands the app's `漢字((かんじ))` convention into an inline ruby layout. */

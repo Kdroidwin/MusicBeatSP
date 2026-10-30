@@ -1,6 +1,15 @@
 package com.music.bitchord.ui.screens
 
+import android.app.Activity
+import android.content.Intent
+import android.net.Uri
+import android.os.Build
+import android.os.Process
+import android.provider.MediaStore
 import androidx.activity.compose.BackHandler
+import androidx.activity.compose.rememberLauncherForActivityResult
+import androidx.activity.result.IntentSenderRequest
+import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.animation.AnimatedContent
 import androidx.compose.animation.fadeIn
 import androidx.compose.animation.fadeOut
@@ -24,6 +33,7 @@ import androidx.compose.foundation.layout.aspectRatio
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
@@ -49,6 +59,7 @@ import androidx.compose.material.icons.rounded.Check
 import androidx.compose.material.icons.rounded.CheckCircle
 import androidx.compose.material.icons.rounded.Close
 import androidx.compose.material.icons.rounded.Delete
+import androidx.compose.material.icons.rounded.Edit
 import androidx.compose.material.icons.rounded.GraphicEq
 import androidx.compose.material.icons.rounded.LibraryMusic
 import androidx.compose.material.icons.rounded.MoreHoriz
@@ -67,6 +78,7 @@ import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.ModalBottomSheet
+import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.rememberModalBottomSheetState
 import androidx.compose.material3.ScrollableTabRow
 import androidx.compose.material3.Tab
@@ -95,6 +107,8 @@ import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.withContext
 import com.music.bitchord.data.LocalMediaRepository
 import com.music.bitchord.data.model.durationMillis
 import com.music.bitchord.data.model.artworkAt
@@ -162,6 +176,7 @@ import com.music.bitchord.feature.localsongactions.ui.components.LocalSongDetail
 import com.music.bitchord.feature.localsongactions.ui.components.LocalSongDropdownMenu
 import com.music.bitchord.feature.lyricseditor.ui.LyricsEditorScreen
 import com.music.bitchord.feature.tageditor.ui.TagEditorScreen
+import com.music.bitchord.feature.tageditor.data.TagLibWriter
 import androidx.compose.ui.window.Dialog
 import androidx.compose.ui.window.DialogProperties
 import com.music.bitchord.ui.haptics.Haptic
@@ -258,6 +273,7 @@ fun LocalMusicScreen(
     onAddToQueue: ((Song) -> Unit)? = null,
     onDeleteSong: ((Song) -> Unit)? = null,
     onSongTagsOrLyricsSaved: ((Song) -> Unit)? = null,
+    onSongMetadataUpdated: ((Song) -> Unit)? = null,
     isRefreshing: Boolean = false,
     onRefresh: (() -> Unit)? = null,
     initialDrillDownLabel: String? = null,
@@ -275,6 +291,10 @@ fun LocalMusicScreen(
     var deleteSong by remember { mutableStateOf<Song?>(null) }
     var addToPlaylistSongs by remember { mutableStateOf<List<Song>?>(null) }
     var showRemoveFromPlaylistDialog by remember { mutableStateOf(false) }
+    var showBulkArtistEdit by remember { mutableStateOf(false) }
+    var bulkArtistName by remember { mutableStateOf("") }
+    var pendingBulkArtistSongs by remember { mutableStateOf<List<Song>?>(null) }
+    val bulkArtistEditScope = rememberCoroutineScope()
 
     // Which top-level tab is selected.
     var selectedTab by rememberSaveable { mutableIntStateOf(initialTab) }
@@ -386,20 +406,124 @@ fun LocalMusicScreen(
         }
     }
 
-    // When non-null, we are showing a drill-down list for that artist or album.
-    var drillDownLabel by remember { mutableStateOf<String?>(null) }
-    var drillDownPlaylistId by remember { mutableStateOf<String?>(null) }
     var drillDownSongs by remember { mutableStateOf<List<Song>>(emptyList()) }
+    var drillDownLabel by remember { mutableStateOf<String?>(null) }
+    var drillDownIsArtist by remember { mutableStateOf(false) }
+    var parentArtistAlbums by remember { mutableStateOf<List<AlbumEntry>?>(null) }
+    var parentArtistLabel by remember { mutableStateOf<String?>(null) }
+
+    suspend fun writeBulkArtistTags(targets: List<Song>) {
+        val updatedTracks = withContext(Dispatchers.IO) {
+            buildList {
+                targets.distinctBy(::songSelectionKey).forEach { song ->
+                    runCatching {
+                        val current = TagLibWriter.readTags(context, song)
+                        val updated = current.copy(artist = bulkArtistName.trim())
+                        if (TagLibWriter.writeTags(context, song, updated)) add(song to updated)
+                    }
+                }
+            }
+        }
+        val refreshedTracks = updatedTracks.map { (song, tags) ->
+            song.copy(
+                title = tags.title.trim().ifBlank { song.title },
+                artist = tags.artist.trim().ifBlank { "Unknown Artist" },
+                albumName = tags.album.trim().takeIf(String::isNotBlank),
+                albumArtist = tags.albumArtist.trim().takeIf(String::isNotBlank),
+            ) to tags
+        }
+        refreshedTracks.forEach { (updatedSong, tags) ->
+            LocalPlaylistStore.updateEditedSongMetadata(
+                song = updatedSong,
+                title = tags.title,
+                artist = tags.artist,
+                albumName = tags.album,
+                albumArtist = tags.albumArtist,
+            )
+            onSongMetadataUpdated?.invoke(updatedSong)
+            onSongTagsOrLyricsSaved?.invoke(updatedSong)
+        }
+        if (refreshedTracks.isNotEmpty()) {
+            val updatedByKey = refreshedTracks.associate { (updatedSong, _) ->
+                songSelectionKey(updatedSong) to updatedSong
+            }
+            val updatedKeys = updatedByKey.keys
+            val currentArtistKeys = drillDownSongs.mapTo(mutableSetOf(), ::songSelectionKey)
+            if (
+                drillDownIsArtist && currentArtistKeys.isNotEmpty() &&
+                currentArtistKeys.all { it in updatedKeys }
+            ) {
+                drillDownLabel = bulkArtistName.trim()
+            }
+            val parentArtistKeys = parentArtistAlbums.orEmpty()
+                .flatMap(AlbumEntry::songs)
+                .mapTo(mutableSetOf(), ::songSelectionKey)
+            if (parentArtistKeys.isNotEmpty() && parentArtistKeys.all { it in updatedKeys }) {
+                parentArtistLabel = bulkArtistName.trim()
+            }
+            drillDownSongs = drillDownSongs.map { song -> updatedByKey[songSelectionKey(song)] ?: song }
+            onDeleteSong?.invoke(refreshedTracks.first().first)
+        }
+        Toast.makeText(
+            context,
+            context.getString(R.string.bulk_tag_saved, updatedTracks.size, targets.size),
+            Toast.LENGTH_LONG,
+        ).show()
+        showBulkArtistEdit = false
+        bulkArtistName = ""
+        selectedSongIds = emptySet()
+        selectedAlbumKeys = emptySet()
+    }
+
+    val bulkArtistWritePermission = rememberLauncherForActivityResult(
+        ActivityResultContracts.StartIntentSenderForResult(),
+    ) { result ->
+        val targets = pendingBulkArtistSongs.orEmpty()
+        pendingBulkArtistSongs = null
+        if (result.resultCode == Activity.RESULT_OK && targets.isNotEmpty()) {
+            bulkArtistEditScope.launch { writeBulkArtistTags(targets) }
+        } else if (targets.isNotEmpty()) {
+            Toast.makeText(context, R.string.bulk_tag_permission_denied, Toast.LENGTH_LONG).show()
+        }
+    }
+
+    fun saveBulkArtistTags(targets: List<Song>) {
+        val mediaUris = targets.mapNotNull { song ->
+            (song.localUri ?: song.videoId)
+                .takeIf { it.startsWith("content://") }
+                ?.let { runCatching { Uri.parse(it) }.getOrNull() }
+                ?.takeIf { it.authority == MediaStore.AUTHORITY }
+        }.distinct()
+        val needsApproval = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.R) {
+            mediaUris.filter { uri ->
+                context.checkUriPermission(
+                    uri,
+                    Process.myPid(),
+                    Process.myUid(),
+                    Intent.FLAG_GRANT_WRITE_URI_PERMISSION,
+                ) != android.content.pm.PackageManager.PERMISSION_GRANTED
+            }
+        } else emptyList()
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.R && needsApproval.isNotEmpty()) {
+            val request = runCatching { MediaStore.createWriteRequest(context.contentResolver, needsApproval) }.getOrNull()
+            if (request != null) {
+                pendingBulkArtistSongs = targets
+                bulkArtistWritePermission.launch(IntentSenderRequest.Builder(request.intentSender).build())
+                return
+            }
+        }
+        bulkArtistEditScope.launch { writeBulkArtistTags(targets) }
+    }
+
+    // When non-null, we are showing a drill-down list for that artist or album.
+    var drillDownPlaylistId by remember { mutableStateOf<String?>(null) }
     // The release's own cover, for the drill-down header. Only a downloaded
     // album or playlist has one worth showing — a tag-derived grouping's
     // "artwork" is just whichever of its rows happened to be first.
     var drillDownArt by remember { mutableStateOf<String?>(null) }
-    var drillDownIsArtist by remember { mutableStateOf(false) }
     var drillDownShowsAlbums by remember { mutableStateOf(false) }
     var drillDownFullScreenArtwork by remember { mutableStateOf(false) }
     var drillDownAlbumEntries by remember { mutableStateOf<List<AlbumEntry>?>(null) }
-    var parentArtistAlbums by remember { mutableStateOf<List<AlbumEntry>?>(null) }
-    var parentArtistLabel by remember { mutableStateOf<String?>(null) }
 
     // A drill-down playlist initially resolves its IDs against the current
     // library snapshot. Tag edits refresh `songs`, so resolve the same stored
@@ -414,6 +538,49 @@ fun LocalMusicScreen(
             drillDownArt = playlist.customCoverUrl
                 ?: playlist.coverUrl
                 ?: refreshedSongs.firstNotNullOfOrNull { it.thumbnailUrl }
+        }
+    }
+
+    // Keep an open artist page (and its album grouping) aligned with edited
+    // MediaStore rows. Playlist pages are resolved by the effect above, but
+    // artist details used to retain the old Song objects until they were
+    // closed and reopened.
+    LaunchedEffect(
+        songs,
+        drillDownLabel,
+        drillDownIsArtist,
+        drillDownShowsAlbums,
+        drillDownFullScreenArtwork,
+        drillDownPlaylistId,
+        parentArtistLabel,
+        parentArtistAlbums != null,
+    ) {
+        val detailLabel = drillDownLabel
+        if (drillDownIsArtist && !detailLabel.isNullOrBlank()) {
+            val refreshedArtistSongs = songs.filter { ArtistSplitter.matchesArtist(it.artist, detailLabel) }
+            if (refreshedArtistSongs != drillDownSongs) drillDownSongs = refreshedArtistSongs
+            if (drillDownShowsAlbums) {
+                drillDownAlbumEntries = albumEntries(refreshedArtistSongs, emptyList())
+            }
+        } else if (
+            drillDownFullScreenArtwork && !drillDownShowsAlbums &&
+            drillDownPlaylistId == null && !detailLabel.isNullOrBlank()
+        ) {
+            val artistScope = parentArtistLabel.takeIf { parentArtistAlbums != null }
+            val refreshedAlbumSongs = songs
+                .filter {
+                    it.albumName?.equals(detailLabel, ignoreCase = true) == true &&
+                        (artistScope.isNullOrBlank() || ArtistSplitter.matchesArtist(it.artist, artistScope))
+                }
+                .sortedByAlbumTrackOrder()
+            if ((refreshedAlbumSongs.isNotEmpty() || !artistScope.isNullOrBlank()) && refreshedAlbumSongs != drillDownSongs) {
+                drillDownSongs = refreshedAlbumSongs
+            }
+        }
+        val parentLabel = parentArtistLabel
+        if (parentArtistAlbums != null && !parentLabel.isNullOrBlank()) {
+            val refreshedParentSongs = songs.filter { ArtistSplitter.matchesArtist(it.artist, parentLabel) }
+            parentArtistAlbums = albumEntries(refreshedParentSongs, emptyList())
         }
     }
 
@@ -605,12 +772,28 @@ fun LocalMusicScreen(
                 count = selectedSongIds.size,
                 allSelected = selectableSongs.isNotEmpty() && selectedSongIds.containsAll(selectableSongs.map(::songSelectionKey)),
                 showDelete = isDownloads || (inDrillDown && drillDownPlaylistId != null),
+                onEditArtist = if (
+                    inDrillDown && !drillDownShowsAlbums &&
+                    (drillDownIsArtist || parentArtistAlbums != null)
+                ) {
+                    {
+                        bulkArtistName = ""
+                        showBulkArtistEdit = true
+                    }
+                } else null,
                 onAddToPlaylist = {
                     addToPlaylistSongs = selectableSongs.filter { songSelectionKey(it) in selectedSongIds }
                     selectedSongIds = emptySet()
                     selectedAlbumKeys = emptySet()
                 },
-                onSelectAll = { selectedSongIds = selectedSongIds + selectableSongs.map(::songSelectionKey) },
+                onSelectAll = {
+                    val selectableIds = selectableSongs.map(::songSelectionKey).toSet()
+                    selectedSongIds = if (selectableIds.all { it in selectedSongIds }) {
+                        selectedSongIds - selectableIds
+                    } else {
+                        selectedSongIds + selectableIds
+                    }
+                },
                 onDelete = {
                     if (drillDownPlaylistId != null) {
                         showRemoveFromPlaylistDialog = true
@@ -1052,6 +1235,41 @@ fun LocalMusicScreen(
         )
     }
 
+    if (showBulkArtistEdit) {
+        val selectedArtistSongs = (if (inDrillDown) drillDownSongs else sortedSongs)
+            .filter { songSelectionKey(it) in selectedSongIds }
+        AlertDialog(
+            onDismissRequest = { showBulkArtistEdit = false },
+            title = { Text(stringResource(R.string.bulk_artist_edit_title)) },
+            text = {
+                Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                    Text(
+                        text = stringResource(R.string.bulk_artist_edit_hint, selectedArtistSongs.size),
+                        style = MaterialTheme.typography.bodyMedium,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    )
+                    OutlinedTextField(
+                        value = bulkArtistName,
+                        onValueChange = { bulkArtistName = it },
+                        label = { Text(stringResource(R.string.bulk_tag_artist)) },
+                        singleLine = true,
+                    )
+                }
+            },
+            confirmButton = {
+                TextButton(
+                    enabled = bulkArtistName.isNotBlank() && selectedArtistSongs.isNotEmpty(),
+                    onClick = { saveBulkArtistTags(selectedArtistSongs) },
+                ) { Text(stringResource(R.string.save)) }
+            },
+            dismissButton = {
+                TextButton(onClick = { showBulkArtistEdit = false }) {
+                    Text(stringResource(R.string.cancel))
+                }
+            },
+        )
+    }
+
     if (playlistToRename != null) {
         CreatePlaylistDialog(
             initialName = playlistToRename!!.name,
@@ -1141,16 +1359,23 @@ fun LocalMusicScreen(
                 song = song,
                 onNavigateBack = { tagEditorSong = null },
                 onTagsSaved = { updatedTags ->
+                    val updatedSong = song.copy(
+                        title = updatedTags.title.trim().ifBlank { song.title },
+                        artist = updatedTags.artist.trim().ifBlank { "Unknown Artist" },
+                        albumName = updatedTags.album.trim().takeIf(String::isNotBlank),
+                        albumArtist = updatedTags.albumArtist.trim().takeIf(String::isNotBlank),
+                    )
                     LocalPlaylistStore.updateEditedSongMetadata(
-                        song = song,
+                        song = updatedSong,
                         title = updatedTags.title,
                         artist = updatedTags.artist,
                         albumName = updatedTags.album,
                         albumArtist = updatedTags.albumArtist,
                     )
+                    onSongMetadataUpdated?.invoke(updatedSong)
                     tagEditorSong = null
-                    onDeleteSong?.invoke(song)
-                    onSongTagsOrLyricsSaved?.invoke(song)
+                    onDeleteSong?.invoke(updatedSong)
+                    onSongTagsOrLyricsSaved?.invoke(updatedSong)
                 },
             )
         }
@@ -2114,12 +2339,13 @@ private fun LocalMusicSort.localizedLabel(): String = when (this) {
     LocalMusicSort.DURATION_DESC -> "Duration"
 }
 
-/** The Downloads-only replacement for the usual search and sort controls. */
+/** Shared action bar for selected tracks and download selections. */
 @Composable
 private fun DownloadSelectionBar(
     count: Int,
     allSelected: Boolean,
     showDelete: Boolean,
+    onEditArtist: (() -> Unit)? = null,
     onAddToPlaylist: () -> Unit,
     onSelectAll: () -> Unit,
     onDelete: () -> Unit,
@@ -2131,23 +2357,36 @@ private fun DownloadSelectionBar(
             .fillMaxWidth()
             .height(44.dp)
             .background(MaterialTheme.colorScheme.surfaceVariant, RoundedCornerShape(11.dp))
+            .horizontalScroll(rememberScrollState())
             .padding(horizontal = 4.dp),
         verticalAlignment = Alignment.CenterVertically,
     ) {
-        IconButton(onClick = onSelectAll, enabled = !allSelected) {
+        TextButton(onClick = onSelectAll) {
             Icon(
-                Icons.Rounded.Check,
-                contentDescription = stringResource(R.string.select_all),
+                if (allSelected) Icons.Rounded.CheckCircle else Icons.Rounded.Check,
+                contentDescription = null,
                 tint = MaterialTheme.colorScheme.primary,
-                modifier = Modifier.size(20.dp),
+                modifier = Modifier.size(18.dp),
             )
+            Spacer(Modifier.width(3.dp))
+            Text(stringResource(if (allSelected) R.string.deselect_all else R.string.select_all))
         }
         Text(
             text = "$count ${stringResource(R.string.selected)}",
             style = MaterialTheme.typography.titleSmall,
             color = MaterialTheme.colorScheme.onSurfaceVariant,
-            modifier = Modifier.weight(1f),
+            maxLines = 1,
         )
+        if (onEditArtist != null) {
+            IconButton(onClick = onEditArtist, enabled = count > 0) {
+                Icon(
+                    Icons.Rounded.Edit,
+                    contentDescription = stringResource(R.string.selection_edit_tags),
+                    tint = MaterialTheme.colorScheme.primary,
+                    modifier = Modifier.size(20.dp),
+                )
+            }
+        }
         TextButton(onClick = onAddToPlaylist, enabled = count > 0) {
             Icon(Icons.Rounded.PlaylistAdd, contentDescription = null, modifier = Modifier.size(18.dp))
             Spacer(Modifier.width(4.dp))

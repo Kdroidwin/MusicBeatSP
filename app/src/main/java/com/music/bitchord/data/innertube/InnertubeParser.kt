@@ -103,6 +103,28 @@ object InnertubeParser {
                     }
                 }
             }
+            // Some search surfaces (notably ordinary YouTube videos and
+            // channel profiles surfaced alongside Music results) use the
+            // standard YouTube renderers instead of musicResponsive rows.
+            listOf("videoRenderer", "gridVideoRenderer", "playlistVideoRenderer", "compactVideoRenderer")
+                .flatMap { collectRenderers(response, it) }
+                .forEach { renderer ->
+                    val song = parseYoutubeVideo(renderer) ?: return@forEach
+                    val matchesFilter = if (includeVideos) {
+                        song.isVideo
+                    } else {
+                        !song.isVideo || includeVideosInAll
+                    }
+                    if (matchesFilter && seen.add("v:${song.videoId}")) {
+                        add(SearchResult.Track(song))
+                    }
+                }
+            listOf("channelRenderer", "gridChannelRenderer")
+                .flatMap { collectRenderers(response, it) }
+                .forEach { renderer ->
+                    val item = parseChannelProfile(renderer) ?: return@forEach
+                    if (seen.add("b:${item.browseId}")) add(SearchResult.Browse(item))
+                }
         }
         return SearchPage(parsed, continuationToken(response))
     }
@@ -161,25 +183,59 @@ object InnertubeParser {
 
         val subtitle = columns.getOrNull(1)
             .o("musicResponsiveListItemFlexColumnRenderer").o("text").runs()
-        // A playlist/album billed as a video chart/compilation — "N videos"
-        // in the subtitle, or "video" right in the title, e.g. "Daily Top
-        // Music Videos" — would have every row dropped by
-        // parseResponsiveListItem anyway, so skip the dead-end card rather
-        // than link to an empty page.
-        if (VIDEO_WORD.containsMatchIn(title) || VIDEO_WORD.containsMatchIn(subtitle)) return null
-
         return BrowseItem(
             browseId = browseId,
             title = title,
             subtitle = subtitle,
             thumbnailUrl = renderer.o("thumbnail").o("musicThumbnailRenderer")
                 .o("thumbnail").a("thumbnails").best(),
-            type = when {
-                "ALBUM" in pageType -> BrowseType.ALBUM
-                "ARTIST" in pageType -> BrowseType.ARTIST
-                "PLAYLIST" in pageType -> BrowseType.PLAYLIST
-                else -> BrowseType.OTHER
-            },
+            type = classifyBrowseType(browseId, pageType, title, subtitle),
+        )
+    }
+
+    /** Keep channel profiles and podcast shows from being routed to artist pages. */
+    private fun classifyBrowseType(
+        browseId: String,
+        pageType: String,
+        title: String,
+        subtitle: String,
+    ): BrowseType {
+        val normalizedPageType = pageType.uppercase(Locale.ROOT)
+        return when {
+            "PODCAST" in normalizedPageType || browseId.startsWith("MPSP") ||
+                subtitle.contains("podcast", ignoreCase = true) -> BrowseType.PODCAST
+            "PROFILE" in normalizedPageType || "USER_CHANNEL" in normalizedPageType -> BrowseType.PROFILE
+            "ARTIST" in normalizedPageType ||
+                subtitle.split('•').any { it.trim().equals("artist", ignoreCase = true) } -> BrowseType.ARTIST
+            "ALBUM" in normalizedPageType || browseId.startsWith("MPREb") -> BrowseType.ALBUM
+            "PLAYLIST" in normalizedPageType || browseId.startsWith("VL") || browseId.startsWith("PL") -> BrowseType.PLAYLIST
+            "CHANNEL" in normalizedPageType || browseId.startsWith("UC") ||
+                subtitle.contains(Regex("(^|\\s)@[^\\s]+")) || title.startsWith('@') -> BrowseType.PROFILE
+            else -> BrowseType.OTHER
+        }
+    }
+
+    private fun parseChannelProfile(renderer: JsonObject): BrowseItem? {
+        val endpoint = renderer.o("navigationEndpoint").o("browseEndpoint")
+        val browseId = endpoint?.s("browseId")
+            ?: renderer.s("channelId")?.takeIf { it.startsWith("UC") }
+            ?: return null
+        val titleElement = renderer["title"]
+        val title = titleElement.runs().ifBlank { titleElement.s("simpleText").orEmpty() }
+            .trim()
+            .takeIf(String::isNotBlank)
+            ?: return null
+        val canonicalPath = endpoint.s("canonicalBaseUrl").orEmpty()
+        val handle = canonicalPath.substringAfterLast('/').takeIf { it.startsWith('@') }
+        val count = renderer.o("subscriberCountText").runs()
+            .ifBlank { renderer.o("videoCountText").runs() }
+        val subtitle = listOfNotNull(handle, count.takeIf(String::isNotBlank)).joinToString(" • ")
+        return BrowseItem(
+            browseId = browseId,
+            title = title,
+            subtitle = subtitle,
+            thumbnailUrl = renderer.o("thumbnail").a("thumbnails").best(),
+            type = BrowseType.PROFILE,
         )
     }
 
@@ -443,6 +499,15 @@ object InnertubeParser {
                         parseResponsiveListItem(renderer as? JsonObject, pageCredit)
                             ?.let { out[it.videoId] = it }
                     }
+                    // Ordinary YouTube channel and podcast pages can expose
+                    // their playable entries as video renderers rather than
+                    // YouTube Music rows. Keep the music renderer when both
+                    // representations describe the same video.
+                    listOf("videoRenderer", "gridVideoRenderer", "playlistVideoRenderer", "compactVideoRenderer")
+                        .forEach { key ->
+                            (node[key] as? JsonObject)?.let(::parseYoutubeVideo)
+                                ?.let { song -> if (song.videoId !in out) out[song.videoId] = song }
+                        }
                     node.values.forEach(::walk)
                 }
                 is JsonArray -> node.forEach(::walk)
@@ -451,6 +516,34 @@ object InnertubeParser {
         }
         walk(root)
         return out.values.toList()
+    }
+
+    private fun parseYoutubeVideo(renderer: JsonObject): Song? {
+        val videoId = renderer.s("videoId")?.takeIf(String::isNotBlank) ?: return null
+        val titleElement = renderer["title"]
+        val title = titleElement.runs().ifBlank { titleElement.s("simpleText").orEmpty() }
+            .trim()
+            .takeIf(String::isNotBlank)
+            ?: return null
+        val artist = listOf("ownerText", "shortBylineText", "longBylineText")
+            .asSequence()
+            .map { renderer[it].runs() }
+            .firstOrNull(String::isNotBlank)
+            ?: "Unknown artist"
+        val thumbnailUrl = renderer.o("thumbnail").a("thumbnails").best()
+            ?: renderer.o("thumbnailRenderer").o("musicThumbnailRenderer")
+                .o("thumbnail").a("thumbnails").best()
+        val durationElement = renderer["lengthText"]
+        val duration = durationElement.s("simpleText")
+            ?: durationElement.runs().takeIf(String::isNotBlank)
+        return Song(
+            videoId = videoId,
+            title = title,
+            artist = artist,
+            thumbnailUrl = thumbnailUrl,
+            durationText = duration,
+            isVideo = true,
+        )
     }
 
     /** A playlist page's own tracks, the ones YouTube suggests adding, and the token for the rest. */
@@ -689,20 +782,13 @@ object InnertubeParser {
         val title = renderer.o("title").runs()
         if (title.isBlank()) return null
         val subtitle = renderer.o("subtitle").runs()
-        if (VIDEO_WORD.containsMatchIn(title) || VIDEO_WORD.containsMatchIn(subtitle)) return null
-
         return BrowseItem(
             browseId = browseId,
             title = title,
             subtitle = subtitle,
             thumbnailUrl = renderer.o("thumbnail").o("musicThumbnailRenderer")
                 .o("thumbnail").a("thumbnails").best(),
-            type = when {
-                "ALBUM" in pageType -> BrowseType.ALBUM
-                "ARTIST" in pageType -> BrowseType.ARTIST
-                "PLAYLIST" in pageType -> BrowseType.PLAYLIST
-                else -> BrowseType.OTHER
-            },
+            type = classifyBrowseType(browseId, pageType, title, subtitle),
         )
     }
 

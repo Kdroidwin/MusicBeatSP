@@ -29,6 +29,7 @@ import androidx.compose.ui.res.pluralStringResource
 import com.music.bitchord.R
 import com.music.bitchord.feature.localmusic.domain.model.LocalPlaylist
 import com.music.bitchord.data.model.Song
+import com.music.bitchord.data.settings.LibraryCategory
 import com.music.bitchord.feature.localmusic.ui.components.LocalPlaylistItem
 
 /**
@@ -52,12 +53,15 @@ fun LibraryListContent(
     librarySongs: List<Song> = emptyList(),
     favoriteUsesStar: Boolean = false,
     localizeCollectionCount: Boolean = true,
+    visibleCategories: Set<LibraryCategory> = LibraryCategory.entries.toSet(),
     contentPadding: PaddingValues,
     modifier: Modifier = Modifier,
     state: LazyListState = rememberLazyListState(),
 ) {
-    val showFavorites = filter == LibraryFilter.ALL || filter == LibraryFilter.FAVORITES
-    val showPlaylists = filter == LibraryFilter.ALL || filter == LibraryFilter.PLAYLISTS
+    val showFavorites = LibraryCategory.FAVORITES in visibleCategories &&
+        (filter == LibraryFilter.ALL || filter == LibraryFilter.FAVORITES)
+    val showPlaylists = LibraryCategory.PLAYLISTS in visibleCategories &&
+        (filter == LibraryFilter.ALL || filter == LibraryFilter.PLAYLISTS)
 
     LazyColumn(
         state = state,

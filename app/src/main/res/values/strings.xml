@@ -1239,6 +1239,10 @@
     <string name="selection_change_artwork">Change album artwork</string>
     <string name="selection_share">Share</string>
     <string name="bulk_tag_edit">Edit tags for selected songs</string>
+    <string name="bulk_artist_edit_title">Set artist for selected songs</string>
+    <string name="bulk_artist_edit_hint">Set one artist name for all %1$d selected tracks.</string>
+    <string name="deselect_all">Deselect all</string>
+    <string name="folder_selection_summary">%1$d folders · %2$d tracks</string>
     <string name="bulk_tag_hint">Leave a field blank to keep each song’s current value.</string>
     <string name="bulk_tag_saved">Updated tags for %1$d of %2$d songs</string>
     <string name="bulk_artwork_saved">Updated album artwork for %1$d of %2$d songs</string>
@@ -1475,6 +1479,13 @@
     <string name="redesigned_saved_queue_manager_subtitle">Use a compact list layout for saving, loading, replacing, and deleting saved queues. On by default.</string>
     <string name="collection_song_artwork">Show album art in artist and album song lists</string>
     <string name="collection_song_artwork_subtitle">Show each track’s album cover instead of its number in album, artist, and album-artist lists. On by default.</string>
+    <string name="play_history_song_artwork">Show album art in play history</string>
+    <string name="play_history_song_artwork_subtitle">Show each track’s album cover instead of its number in Recently played and Most played. On by default.</string>
+    <string name="library_categories">Library categories</string>
+    <string name="library_categories_subtitle">Reorder or hide Favorites, Playlists, YouTube Music, and play history in the Library.</string>
+    <string name="library_category_order_subtitle">Use the arrows to change its position and the switch to show or hide it.</string>
+    <string name="show_library_category">Show %1$s in Library</string>
+    <string name="show_library_category_subtitle">Show or hide the %1$s Library filter.</string>
     <string name="playback_tuning_thin_sliders">Use player-style speed and pitch bars</string>
     <string name="playback_tuning_thin_sliders_subtitle">Use the same slim track and touch behavior as the player’s seek and volume bars. On by default.</string>
     <string name="queue_name_placeholder">Queue name</string>
@@ -1502,8 +1513,8 @@
     <string name="white_collection_action_buttons_subtitle">Use white backgrounds with black icons below album and playlist artwork. Off keeps the current dark style.</string>
     <string name="settings_top_bar_more_icon">Use an overflow icon for Settings</string>
     <string name="settings_top_bar_more_icon_subtitle">Show a three-dot icon instead of the gear in the main top bar.</string>
-    <string name="tablet_lyrics_beside_player">Show lyrics beside the tablet player</string>
-    <string name="tablet_lyrics_beside_player_subtitle">On wide screens, show the player on the left and synced lyrics on the right while the Songs tab is selected. Other tabs and Settings remain accessible and restore the normal page layout. Artwork taps are disabled in this view.</string>
+    <string name="tablet_lyrics_beside_player">Tablet full-screen player</string>
+    <string name="tablet_lyrics_beside_player_subtitle">On wide screens, expand the bottom player across the full window, with playback controls on the left and synced lyrics on the right. Swipe down from the top handle to return.</string>
     <string name="youtube_music_saved">YouTube Music</string>
     <string name="youtube_music_library_empty">Albums and playlists you save from YouTube Music will appear here.</string>
     <string name="remove_saved_youtube_collection">Remove from library</string>

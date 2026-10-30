@@ -89,6 +89,7 @@ import com.music.bitchord.data.model.CARD_ART_PX
 import com.music.bitchord.data.model.sortedByAlbumTrackOrder
 import com.music.bitchord.data.settings.AppSettings
 import com.music.bitchord.data.settings.LibraryViewType
+import com.music.bitchord.data.settings.LibraryCategory
 import com.music.bitchord.data.settings.SavedYoutubeCollection
 import com.music.bitchord.ui.theme.ArtworkPalette
 import com.music.bitchord.ui.theme.rememberArtworkPalette
@@ -218,6 +219,7 @@ fun LibraryScreen(
     onAddToQueue: ((Song) -> Unit)? = null,
     onDeleteSong: ((Song) -> Unit)? = null,
     onSongTagsOrLyricsSaved: ((Song) -> Unit)? = null,
+    onSongMetadataUpdated: ((Song) -> Unit)? = null,
     onLocalMusicChanged: (() -> Unit)? = null,
     songDropdownMenu: (@Composable (Song) -> Unit)? = null,
     initialFilterRequest: LibraryFilter? = null,
@@ -236,6 +238,9 @@ fun LibraryScreen(
     val localizeCollectionCount by AppSettings.localizeLibraryCollectionCount.collectAsStateWithLifecycle()
     val showPlaylistSongArtwork by AppSettings.showPlaylistSongArtwork.collectAsStateWithLifecycle()
     val showCollectionSongArtwork by AppSettings.showCollectionSongArtwork.collectAsStateWithLifecycle()
+    val showPlayHistorySongArtwork by AppSettings.showPlayHistorySongArtwork.collectAsStateWithLifecycle()
+    val visibleLibraryCategories by AppSettings.visibleLibraryCategories.collectAsStateWithLifecycle()
+    val libraryCategoryOrder by AppSettings.libraryCategoryOrder.collectAsStateWithLifecycle()
     val fullScreenCollectionArtwork by AppSettings.fullScreenCollectionArtwork.collectAsStateWithLifecycle()
     val keepCollectionArtworkAspectRatio by AppSettings.keepCollectionArtworkAspectRatio.collectAsStateWithLifecycle()
     val playlistTrackMenuUsesArtworkColor by AppSettings.playlistTrackMenuUsesArtworkColor.collectAsStateWithLifecycle()
@@ -313,6 +318,17 @@ fun LibraryScreen(
     }
 
     var selectedFilter by rememberSaveable { mutableStateOf(LibraryFilter.ALL) }
+    LaunchedEffect(selectedFilter, visibleLibraryCategories) {
+        val category = when (selectedFilter) {
+            LibraryFilter.FAVORITES -> LibraryCategory.FAVORITES
+            LibraryFilter.PLAYLISTS -> LibraryCategory.PLAYLISTS
+            LibraryFilter.YOUTUBE_MUSIC -> LibraryCategory.YOUTUBE_MUSIC
+            LibraryFilter.MOST_PLAYED -> LibraryCategory.MOST_PLAYED
+            LibraryFilter.RECENTLY_PLAYED -> LibraryCategory.RECENTLY_PLAYED
+            LibraryFilter.ALL -> null
+        }
+        if (category != null && category !in visibleLibraryCategories) selectedFilter = LibraryFilter.ALL
+    }
     val selectLibraryFilter: (LibraryFilter) -> Unit = { filter ->
         if (filter == LibraryFilter.RECENTLY_PLAYED || filter == LibraryFilter.MOST_PLAYED) {
             // The library can stay composed while another tab is visible, so
@@ -326,6 +342,7 @@ fun LibraryScreen(
     val collectionGridState = rememberLazyGridState()
     var showCreateDialog by remember { mutableStateOf(false) }
     var playlistToRename by remember { mutableStateOf<LocalPlaylist?>(null) }
+    var youtubeCollectionToRename by remember { mutableStateOf<SavedYoutubeCollection?>(null) }
 
     // Drill down navigation inside Library (e.g. for Favorites or specific Playlist)
     var drillDownLabel by remember { mutableStateOf<String?>(null) }
@@ -370,14 +387,21 @@ fun LibraryScreen(
             }
         }
         updatedTracks.forEach { (song, updatedTags) ->
+            val updatedSong = song.copy(
+                title = updatedTags.title.trim().ifBlank { song.title },
+                artist = updatedTags.artist.trim().ifBlank { "Unknown Artist" },
+                albumName = updatedTags.album.trim().takeIf(String::isNotBlank),
+                albumArtist = updatedTags.albumArtist.trim().takeIf(String::isNotBlank),
+            )
             LocalPlaylistStore.updateEditedSongMetadata(
-                song = song,
+                song = updatedSong,
                 title = updatedTags.title,
                 artist = updatedTags.artist,
                 albumName = updatedTags.album,
                 albumArtist = updatedTags.albumArtist,
             )
-            onSongTagsOrLyricsSaved?.invoke(song)
+            onSongMetadataUpdated?.invoke(updatedSong)
+            onSongTagsOrLyricsSaved?.invoke(updatedSong)
         }
         if (updatedTracks.isNotEmpty()) onLocalMusicChanged?.invoke()
         Toast.makeText(
@@ -881,6 +905,8 @@ fun LibraryScreen(
                             AppSettings.setLibraryPlaylistsViewType(next)
                         },
                         onCreatePlaylist = { showCreateDialog = true },
+                        visibleCategories = visibleLibraryCategories,
+                        categoryOrder = libraryCategoryOrder,
                     )
                     if (savedYoutubeCollections.isEmpty()) {
                         Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
@@ -947,6 +973,13 @@ fun LibraryScreen(
                                                 overflow = androidx.compose.ui.text.style.TextOverflow.Ellipsis,
                                             )
                                         }
+                                        IconButton(onClick = { youtubeCollectionToRename = collection }) {
+                                            Icon(
+                                                imageVector = Icons.Rounded.Edit,
+                                                contentDescription = stringResource(R.string.rename_playlist),
+                                                tint = MaterialTheme.colorScheme.onSurfaceVariant,
+                                            )
+                                        }
                                         IconButton(onClick = { AppSettings.removeSavedYoutubeCollection(collection.browseId) }) {
                                             Icon(
                                                 imageVector = androidx.compose.material.icons.Icons.Rounded.Close,
@@ -977,6 +1010,8 @@ fun LibraryScreen(
                             AppSettings.setLibraryPlaylistsViewType(next)
                         },
                         onCreatePlaylist = { showCreateDialog = true },
+                        visibleCategories = visibleLibraryCategories,
+                        categoryOrder = libraryCategoryOrder,
                     )
                     if (historySongs.isEmpty()) {
                         Box(modifier = Modifier.fillMaxSize(), contentAlignment = androidx.compose.ui.Alignment.Center) {
@@ -1003,7 +1038,7 @@ fun LibraryScreen(
                             onSongMore = onSongLongPress,
                             onSongSwipe = onSongSwipe,
                             onShuffle = onShuffle,
-                            showArtworkInList = showPlaylistSongArtwork,
+                            showArtworkInList = showPlayHistorySongArtwork,
                             onBack = { selectedFilter = LibraryFilter.ALL },
                             contentPadding = PaddingValues(bottom = contentPadding.calculateBottomPadding()),
                             songDropdownMenu = songDropdownMenu,
@@ -1026,6 +1061,8 @@ fun LibraryScreen(
                             AppSettings.setLibraryPlaylistsViewType(next)
                         },
                         onCreatePlaylist = { showCreateDialog = true },
+                        visibleCategories = visibleLibraryCategories,
+                        categoryOrder = libraryCategoryOrder,
                     )
 
                     val onFavoritesClick = {
@@ -1075,6 +1112,7 @@ fun LibraryScreen(
                             onCreatePlaylist = { showCreateDialog = true },
                             librarySongs = songs,
                             favoriteUsesStar = favoriteUsesStar,
+                            visibleCategories = visibleLibraryCategories,
                             contentPadding = PaddingValues(
                                 top = 0.dp,
                                 bottom = contentPadding.calculateBottomPadding(),
@@ -1099,6 +1137,7 @@ fun LibraryScreen(
                             librarySongs = songs,
                             favoriteUsesStar = favoriteUsesStar,
                             localizeCollectionCount = localizeCollectionCount,
+                            visibleCategories = visibleLibraryCategories,
                             contentPadding = PaddingValues(
                                 top = 0.dp,
                                 bottom = contentPadding.calculateBottomPadding(),
@@ -1109,8 +1148,10 @@ fun LibraryScreen(
                 }
             }
         }
-        val showFavoriteCollection = selectedFilter == LibraryFilter.ALL || selectedFilter == LibraryFilter.FAVORITES
-        val showPlaylistCollections = selectedFilter == LibraryFilter.ALL || selectedFilter == LibraryFilter.PLAYLISTS
+        val showFavoriteCollection = LibraryCategory.FAVORITES in visibleLibraryCategories &&
+            (selectedFilter == LibraryFilter.ALL || selectedFilter == LibraryFilter.FAVORITES)
+        val showPlaylistCollections = LibraryCategory.PLAYLISTS in visibleLibraryCategories &&
+            (selectedFilter == LibraryFilter.ALL || selectedFilter == LibraryFilter.PLAYLISTS)
         val favoriteLabel = stringResource(R.string.favorites)
         val createPlaylistLabel = stringResource(R.string.new_playlist)
         val listCollectionLabels = buildList {
@@ -1175,6 +1216,19 @@ fun LibraryScreen(
                 playlistToRename = null
             },
             onDismiss = { playlistToRename = null },
+        )
+    }
+
+    youtubeCollectionToRename?.let { target ->
+        CreatePlaylistDialog(
+            initialName = target.title,
+            title = stringResource(R.string.rename_playlist),
+            confirmText = stringResource(R.string.save),
+            onConfirm = { newName ->
+                AppSettings.renameSavedYoutubeCollection(target.browseId, newName)
+                youtubeCollectionToRename = null
+            },
+            onDismiss = { youtubeCollectionToRename = null },
         )
     }
 

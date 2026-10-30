@@ -180,6 +180,7 @@ import com.music.bitchord.data.settings.PLAYER_INK_AUTOMATIC
 import com.music.bitchord.data.settings.PLAYER_INK_DEFAULT_COLOR
 import com.music.bitchord.data.settings.AutomixPerformanceMode
 import com.music.bitchord.data.settings.LocalLibraryTab
+import com.music.bitchord.data.settings.LibraryCategory
 import com.music.bitchord.data.settings.LauncherIcon
 import com.music.bitchord.data.settings.SeekButtonMode
 import com.music.bitchord.data.settings.TransportSideAction
@@ -227,6 +228,41 @@ private data class SettingsSearchEntry(
     val enabled: Boolean = true,
     val activate: () -> Unit,
 )
+
+@Composable
+private fun libraryCategorySettingsSearchEntries(
+    visibleCategories: Set<LibraryCategory>,
+    showPlayHistorySongArtwork: Boolean,
+): List<SettingsSearchEntry> {
+    val historyArtwork = SettingsSearchEntry(
+        title = stringResource(R.string.play_history_song_artwork),
+        subtitle = stringResource(R.string.play_history_song_artwork_subtitle),
+        keywords = listOf(
+            "library", "recently played", "most played", "history", "artwork",
+            "アルバムアート", "最近再生", "よく再生", "再生履歴",
+        ),
+        checked = showPlayHistorySongArtwork,
+    ) { AppSettings.setShowPlayHistorySongArtwork(!showPlayHistorySongArtwork) }
+    val categoryVisibility = LibraryCategory.entries.map { category ->
+        val title = stringResource(when (category) {
+            LibraryCategory.FAVORITES -> R.string.favorites
+            LibraryCategory.PLAYLISTS -> R.string.playlists
+            LibraryCategory.YOUTUBE_MUSIC -> R.string.youtube_music_saved
+            LibraryCategory.MOST_PLAYED -> R.string.most_played
+            LibraryCategory.RECENTLY_PLAYED -> R.string.recently_played
+        })
+        SettingsSearchEntry(
+            title = stringResource(R.string.show_library_category, title),
+            subtitle = stringResource(R.string.show_library_category_subtitle, title),
+            keywords = listOf(
+                "library", "collection", "filter", "tab", "show", "hide",
+                "ライブラリ", "コレクション", "表示", "非表示", title,
+            ),
+            checked = category in visibleCategories,
+        ) { AppSettings.setLibraryCategoryVisible(category, category !in visibleCategories) }
+    }
+    return listOf(historyArtwork) + categoryVisibility
+}
 
 private fun PlayerInkGroup.titleResource(): Int = when (this) {
     PlayerInkGroup.BUTTONS -> R.string.player_ink_button_controls
@@ -517,11 +553,13 @@ fun SettingsScreen(
     val mainTabOrder by AppSettings.mainNavigationTabOrder.collectAsStateWithLifecycle()
     val localTabs by AppSettings.visibleLocalLibraryTabs.collectAsStateWithLifecycle()
     val localTabOrder by AppSettings.localLibraryTabOrder.collectAsStateWithLifecycle()
+    val libraryCategories by AppSettings.visibleLibraryCategories.collectAsStateWithLifecycle()
+    val libraryCategoryOrder by AppSettings.libraryCategoryOrder.collectAsStateWithLifecycle()
     val localFolderHierarchy by AppSettings.localFolderHierarchy.collectAsStateWithLifecycle()
     val localMusicFolderRoot by AppSettings.localMusicFolderUri.collectAsStateWithLifecycle()
     val fullScreenCollectionArtwork by AppSettings.fullScreenCollectionArtwork.collectAsStateWithLifecycle()
     val whiteCollectionActionButtons by AppSettings.whiteCollectionActionButtons.collectAsStateWithLifecycle()
-    val tabletLyricsBesidePlayer by AppSettings.tabletLyricsBesidePlayer.collectAsStateWithLifecycle()
+    val tabletFullscreenPlayer by AppSettings.tabletFullscreenPlayer.collectAsStateWithLifecycle()
     val hideCollectionTopBar by AppSettings.hideCollectionTopBar.collectAsStateWithLifecycle()
     val hideFloatingCollectionControls by AppSettings.hideFloatingCollectionControls.collectAsStateWithLifecycle()
     val frostedQueueManager by AppSettings.frostedQueueManager.collectAsStateWithLifecycle()
@@ -681,6 +719,7 @@ fun SettingsScreen(
     val showPlaylistSongArtwork by AppSettings.showPlaylistSongArtwork.collectAsStateWithLifecycle()
     val hidePlaylistPlayButtonLabel by AppSettings.hidePlaylistPlayButtonLabel.collectAsStateWithLifecycle()
     val showCollectionSongArtwork by AppSettings.showCollectionSongArtwork.collectAsStateWithLifecycle()
+    val showPlayHistorySongArtwork by AppSettings.showPlayHistorySongArtwork.collectAsStateWithLifecycle()
     val keepCollectionArtworkAspectRatio by AppSettings.keepCollectionArtworkAspectRatio.collectAsStateWithLifecycle()
     val localizeLibraryCollectionCount by AppSettings.localizeLibraryCollectionCount.collectAsStateWithLifecycle()
     val highPerformanceMode by AppSettings.highPerformanceMode.collectAsStateWithLifecycle()
@@ -1234,7 +1273,7 @@ fun SettingsScreen(
         ) { AppSettings.setShowCollectionSongArtwork(!showCollectionSongArtwork) },
         SettingsSearchEntry(stringResource(R.string.keep_collection_artwork_aspect_ratio), stringResource(R.string.keep_collection_artwork_aspect_ratio_subtitle), listOf("playlist", "album", "artwork", "aspect ratio", "cover", "プレイリスト", "アルバム", "アート", "縦横比"), keepCollectionArtworkAspectRatio) { AppSettings.setKeepCollectionArtworkAspectRatio(!keepCollectionArtworkAspectRatio) },
         SettingsSearchEntry(stringResource(R.string.localize_library_collection_count), stringResource(R.string.localize_library_collection_count_subtitle), listOf("library", "collections", "count", "language", "ライブラリ", "コレクション", "件数", "日本語"), localizeLibraryCollectionCount) { AppSettings.setLocalizeLibraryCollectionCount(!localizeLibraryCollectionCount) },
-    ) + listOf(
+    ) + libraryCategorySettingsSearchEntries(libraryCategories, showPlayHistorySongArtwork) + listOf(
         SettingsSearchEntry(
             stringResource(R.string.artwork_tap_opens_lyrics),
             stringResource(R.string.artwork_tap_opens_lyrics_subtitle),
@@ -1614,9 +1653,9 @@ fun SettingsScreen(
         SettingsSearchEntry(
             stringResource(R.string.tablet_lyrics_beside_player),
             stringResource(R.string.tablet_lyrics_beside_player_subtitle),
-            listOf("tablet", "lyrics", "split", "player", "タブレット", "歌詞", "分割", "左右"),
-            tabletLyricsBesidePlayer,
-        ) { AppSettings.setTabletLyricsBesidePlayer(!tabletLyricsBesidePlayer) },
+            listOf("tablet", "fullscreen", "full screen", "player", "wide screen", "タブレット", "全画面", "プレイヤー", "横長"),
+            tabletFullscreenPlayer,
+        ) { AppSettings.setTabletFullscreenPlayer(!tabletFullscreenPlayer) },
         SettingsSearchEntry(
             stringResource(R.string.hide_collection_top_bar),
             stringResource(R.string.hide_collection_top_bar_subtitle),
@@ -2791,6 +2830,19 @@ fun SettingsScreen(
         }
 
         SettingsGroup(header = stringResource(R.string.player_controls)) {
+            SettingsRow(
+                icon = Icons.Rounded.Fullscreen,
+                title = stringResource(R.string.tablet_lyrics_beside_player),
+                subtitle = stringResource(R.string.tablet_lyrics_beside_player_subtitle),
+                trailing = {
+                    Switch(
+                        checked = tabletFullscreenPlayer,
+                        onCheckedChange = AppSettings::setTabletFullscreenPlayer,
+                    )
+                },
+                onClick = { AppSettings.setTabletFullscreenPlayer(!tabletFullscreenPlayer) },
+            )
+            RowDivider()
             playerControlOrder.forEachIndexed { index, control ->
                 if (index > 0) RowDivider()
                 val title = when (control) {
@@ -3310,19 +3362,6 @@ fun SettingsScreen(
                 subtitle = stringResource(R.string.lyrics_auto_fit_subtitle),
                 trailing = { Switch(checked = autoFitOneLineLyrics, onCheckedChange = AppSettings::setAutoFitOneLineLyrics) },
                 onClick = { AppSettings.setAutoFitOneLineLyrics(!autoFitOneLineLyrics) },
-            )
-            RowDivider()
-            SettingsRow(
-                icon = Icons.AutoMirrored.Rounded.Notes,
-                title = stringResource(R.string.tablet_lyrics_beside_player),
-                subtitle = stringResource(R.string.tablet_lyrics_beside_player_subtitle),
-                trailing = {
-                    Switch(
-                        checked = tabletLyricsBesidePlayer,
-                        onCheckedChange = AppSettings::setTabletLyricsBesidePlayer,
-                    )
-                },
-                onClick = { AppSettings.setTabletLyricsBesidePlayer(!tabletLyricsBesidePlayer) },
             )
         }
 
@@ -4594,6 +4633,8 @@ fun SettingsScreen(
         }
 
         LocalMusicSettingsGroup(
+            libraryCategories = libraryCategories,
+            libraryCategoryOrder = libraryCategoryOrder,
             localTabs = localTabs,
             localTabOrder = localTabOrder,
             localFolderHierarchy = localFolderHierarchy,
@@ -4608,6 +4649,7 @@ fun SettingsScreen(
             filterNonMusicAudio = filterNonMusicAudio,
             showPlaylistSongArtwork = showPlaylistSongArtwork,
             showCollectionSongArtwork = showCollectionSongArtwork,
+            showPlayHistorySongArtwork = showPlayHistorySongArtwork,
             keepCollectionArtworkAspectRatio = keepCollectionArtworkAspectRatio,
             localizeLibraryCollectionCount = localizeLibraryCollectionCount,
             whiteCollectionActionButtons = whiteCollectionActionButtons,
@@ -5949,6 +5991,8 @@ private fun AutomixPerformanceSheet(
 
 @Composable
 private fun LocalMusicSettingsGroup(
+    libraryCategories: Set<LibraryCategory>,
+    libraryCategoryOrder: List<LibraryCategory>,
     localTabs: Set<LocalLibraryTab>,
     localTabOrder: List<LocalLibraryTab>,
     localFolderHierarchy: Boolean,
@@ -5963,6 +6007,7 @@ private fun LocalMusicSettingsGroup(
     filterNonMusicAudio: Boolean,
     showPlaylistSongArtwork: Boolean,
     showCollectionSongArtwork: Boolean,
+    showPlayHistorySongArtwork: Boolean,
     keepCollectionArtworkAspectRatio: Boolean,
     localizeLibraryCollectionCount: Boolean,
     whiteCollectionActionButtons: Boolean,
@@ -5974,6 +6019,63 @@ private fun LocalMusicSettingsGroup(
 ) {
     val context = LocalContext.current
 SettingsGroup(header = stringResource(R.string.local_music)) {
+    SettingsRow(
+        icon = Icons.Rounded.Tune,
+        title = stringResource(R.string.library_categories),
+        subtitle = stringResource(R.string.library_categories_subtitle),
+    )
+    libraryCategoryOrder.forEachIndexed { index, category ->
+        if (index > 0) RowDivider()
+        val titleRes = when (category) {
+            LibraryCategory.FAVORITES -> R.string.favorites
+            LibraryCategory.PLAYLISTS -> R.string.playlists
+            LibraryCategory.YOUTUBE_MUSIC -> R.string.youtube_music_saved
+            LibraryCategory.MOST_PLAYED -> R.string.most_played
+            LibraryCategory.RECENTLY_PLAYED -> R.string.recently_played
+        }
+        val visible = category in libraryCategories
+        SettingsRow(
+            icon = when (category) {
+                LibraryCategory.FAVORITES -> BitChordIcons.Heart
+                LibraryCategory.PLAYLISTS -> Icons.AutoMirrored.Rounded.QueueMusic
+                LibraryCategory.YOUTUBE_MUSIC -> Icons.Rounded.SmartDisplay
+                LibraryCategory.MOST_PLAYED -> Icons.Rounded.BarChart
+                LibraryCategory.RECENTLY_PLAYED -> Icons.Rounded.History
+            },
+            title = stringResource(titleRes),
+            subtitle = stringResource(R.string.library_category_order_subtitle),
+            trailing = {
+                Row(verticalAlignment = Alignment.CenterVertically) {
+                    IconButton(enabled = index > 0, onClick = { AppSettings.moveLibraryCategory(category, -1) }) {
+                        Icon(Icons.Rounded.ArrowUpward, stringResource(R.string.move_up), tint = if (index > 0) MaterialTheme.colorScheme.onSurfaceVariant else MaterialTheme.colorScheme.outlineVariant)
+                    }
+                    IconButton(enabled = index < libraryCategoryOrder.lastIndex, onClick = { AppSettings.moveLibraryCategory(category, 1) }) {
+                        Icon(Icons.Rounded.ArrowDownward, stringResource(R.string.move_down), tint = if (index < libraryCategoryOrder.lastIndex) MaterialTheme.colorScheme.onSurfaceVariant else MaterialTheme.colorScheme.outlineVariant)
+                    }
+                    Switch(
+                        checked = visible,
+                        onCheckedChange = { AppSettings.setLibraryCategoryVisible(category, it) },
+                        colors = SwitchDefaults.colors(checkedTrackColor = MaterialTheme.colorScheme.primary, checkedBorderColor = MaterialTheme.colorScheme.primary),
+                    )
+                }
+            },
+        )
+    }
+    RowDivider()
+    SettingsRow(
+        icon = Icons.Rounded.Album,
+        title = stringResource(R.string.play_history_song_artwork),
+        subtitle = stringResource(R.string.play_history_song_artwork_subtitle),
+        trailing = {
+            Switch(
+                checked = showPlayHistorySongArtwork,
+                onCheckedChange = AppSettings::setShowPlayHistorySongArtwork,
+                colors = SwitchDefaults.colors(checkedTrackColor = MaterialTheme.colorScheme.primary, checkedBorderColor = MaterialTheme.colorScheme.primary),
+            )
+        },
+        onClick = { AppSettings.setShowPlayHistorySongArtwork(!showPlayHistorySongArtwork) },
+    )
+    RowDivider()
     SettingsRow(
         icon = Icons.Rounded.Folder,
         title = stringResource(R.string.music_folders),

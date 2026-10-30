@@ -32,6 +32,7 @@ import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.unit.dp
 import com.music.bitchord.R
 import com.music.bitchord.data.settings.LibraryViewType
+import com.music.bitchord.data.settings.LibraryCategory
 import com.music.bitchord.ui.haptics.Haptic
 import com.music.bitchord.ui.haptics.rememberHaptics
 import com.music.bitchord.ui.icons.BitChordIcons
@@ -45,6 +46,14 @@ enum class LibraryFilter {
     MOST_PLAYED,
 }
 
+private fun LibraryCategory.toLibraryFilter(): LibraryFilter = when (this) {
+    LibraryCategory.FAVORITES -> LibraryFilter.FAVORITES
+    LibraryCategory.PLAYLISTS -> LibraryFilter.PLAYLISTS
+    LibraryCategory.YOUTUBE_MUSIC -> LibraryFilter.YOUTUBE_MUSIC
+    LibraryCategory.MOST_PLAYED -> LibraryFilter.MOST_PLAYED
+    LibraryCategory.RECENTLY_PLAYED -> LibraryFilter.RECENTLY_PLAYED
+}
+
 /**
  * Control bar for Library screen offering category filter chips and view controls.
  */
@@ -55,6 +64,8 @@ fun LibraryHeaderBar(
     viewType: LibraryViewType,
     onToggleViewType: () -> Unit,
     onCreatePlaylist: () -> Unit,
+    visibleCategories: Set<LibraryCategory> = LibraryCategory.entries.toSet(),
+    categoryOrder: List<LibraryCategory> = LibraryCategory.entries.toList(),
     modifier: Modifier = Modifier,
 ) {
     val haptics = rememberHaptics()
@@ -87,75 +98,29 @@ fun LibraryHeaderBar(
                 ),
             )
 
-            FilterChip(
-                selected = selectedFilter == LibraryFilter.FAVORITES,
-                onClick = {
-                    haptics.play(Haptic.Select)
-                    onFilterSelect(LibraryFilter.FAVORITES)
-                },
-                label = { Text(stringResource(R.string.favorites)) },
-                shape = RoundedCornerShape(12.dp),
-                colors = FilterChipDefaults.filterChipColors(
-                    selectedContainerColor = MaterialTheme.colorScheme.primaryContainer,
-                    selectedLabelColor = MaterialTheme.colorScheme.onPrimaryContainer,
-                ),
-            )
-
-            FilterChip(
-                selected = selectedFilter == LibraryFilter.PLAYLISTS,
-                onClick = {
-                    haptics.play(Haptic.Select)
-                    onFilterSelect(LibraryFilter.PLAYLISTS)
-                },
-                label = { Text(stringResource(R.string.playlists)) },
-                shape = RoundedCornerShape(12.dp),
-                colors = FilterChipDefaults.filterChipColors(
-                    selectedContainerColor = MaterialTheme.colorScheme.primaryContainer,
-                    selectedLabelColor = MaterialTheme.colorScheme.onPrimaryContainer,
-                ),
-            )
-
-            FilterChip(
-                selected = selectedFilter == LibraryFilter.YOUTUBE_MUSIC,
-                onClick = {
-                    haptics.play(Haptic.Select)
-                    onFilterSelect(LibraryFilter.YOUTUBE_MUSIC)
-                },
-                label = { Text(stringResource(R.string.youtube_music_saved)) },
-                shape = RoundedCornerShape(12.dp),
-                colors = FilterChipDefaults.filterChipColors(
-                    selectedContainerColor = MaterialTheme.colorScheme.primaryContainer,
-                    selectedLabelColor = MaterialTheme.colorScheme.onPrimaryContainer,
-                ),
-            )
-
-            FilterChip(
-                selected = selectedFilter == LibraryFilter.RECENTLY_PLAYED,
-                onClick = {
-                    haptics.play(Haptic.Select)
-                    onFilterSelect(LibraryFilter.RECENTLY_PLAYED)
-                },
-                label = { Text(stringResource(R.string.recently_played)) },
-                shape = RoundedCornerShape(12.dp),
-                colors = FilterChipDefaults.filterChipColors(
-                    selectedContainerColor = MaterialTheme.colorScheme.primaryContainer,
-                    selectedLabelColor = MaterialTheme.colorScheme.onPrimaryContainer,
-                ),
-            )
-
-            FilterChip(
-                selected = selectedFilter == LibraryFilter.MOST_PLAYED,
-                onClick = {
-                    haptics.play(Haptic.Select)
-                    onFilterSelect(LibraryFilter.MOST_PLAYED)
-                },
-                label = { Text(stringResource(R.string.most_played)) },
-                shape = RoundedCornerShape(12.dp),
-                colors = FilterChipDefaults.filterChipColors(
-                    selectedContainerColor = MaterialTheme.colorScheme.primaryContainer,
-                    selectedLabelColor = MaterialTheme.colorScheme.onPrimaryContainer,
-                ),
-            )
+            categoryOrder.filter { it in visibleCategories }.forEach { category ->
+                val filter = category.toLibraryFilter()
+                val label = when (category) {
+                    LibraryCategory.FAVORITES -> stringResource(R.string.favorites)
+                    LibraryCategory.PLAYLISTS -> stringResource(R.string.playlists)
+                    LibraryCategory.YOUTUBE_MUSIC -> stringResource(R.string.youtube_music_saved)
+                    LibraryCategory.MOST_PLAYED -> stringResource(R.string.most_played)
+                    LibraryCategory.RECENTLY_PLAYED -> stringResource(R.string.recently_played)
+                }
+                FilterChip(
+                    selected = selectedFilter == filter,
+                    onClick = {
+                        haptics.play(Haptic.Select)
+                        onFilterSelect(filter)
+                    },
+                    label = { Text(label) },
+                    shape = RoundedCornerShape(12.dp),
+                    colors = FilterChipDefaults.filterChipColors(
+                        selectedContainerColor = MaterialTheme.colorScheme.primaryContainer,
+                        selectedLabelColor = MaterialTheme.colorScheme.onPrimaryContainer,
+                    ),
+                )
+            }
         }
 
         Spacer(modifier = Modifier.width(8.dp))
