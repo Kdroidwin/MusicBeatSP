@@ -359,6 +359,7 @@ class MainActivity : AppCompatActivity() {
             val showStatusBar by AppSettings.showStatusBar.collectAsStateWithLifecycle()
             val showPlayerStatusBar by AppSettings.showPlayerStatusBar.collectAsStateWithLifecycle()
             val showNavigationBar by AppSettings.showNavigationBar.collectAsStateWithLifecycle()
+            val forceWhiteNavigationBar by AppSettings.forceWhiteNavigationBar.collectAsStateWithLifecycle()
             val musicOnlyDeviceMode by AppSettings.musicOnlyDeviceMode.collectAsStateWithLifecycle()
             val screenOrientation by AppSettings.screenOrientationMode.collectAsStateWithLifecycle()
             val iosOverscrollFactory = rememberIosOverscrollFactory()
@@ -390,7 +391,7 @@ class MainActivity : AppCompatActivity() {
             DisposableEffect(composeView) {
                 onDispose { composeView.keepScreenOn = false }
             }
-            LaunchedEffect(showStatusBar, showPlayerStatusBar, showNavigationBar) {
+            LaunchedEffect(showStatusBar, showPlayerStatusBar, showNavigationBar, forceWhiteNavigationBar) {
                 applySystemBarPreferences()
             }
             LaunchedEffect(screenOrientation) {
@@ -465,6 +466,7 @@ class MainActivity : AppCompatActivity() {
                         BitChordApp(
                             darkTheme = darkTheme,
                             windowWidth = maxWidth,
+                            windowHeight = maxHeight,
                             appBackdrop = appBackdrop,
                             controller = controller,
                             player = player,
@@ -504,6 +506,9 @@ class MainActivity : AppCompatActivity() {
         else bars.hide(WindowInsetsCompat.Type.statusBars())
         if (AppSettings.showNavigationBar.value) bars.show(WindowInsetsCompat.Type.navigationBars())
         else bars.hide(WindowInsetsCompat.Type.navigationBars())
+        if (AppSettings.forceWhiteNavigationBar.value) {
+            bars.isAppearanceLightNavigationBars = false
+        }
     }
 
     /**
@@ -555,6 +560,8 @@ private fun BitChordApp(
     darkTheme: Boolean,
     /** The width of the window this is laid out in — see the call site. */
     windowWidth: Dp,
+    /** The measured height of the same app window, including freeform bounds. */
+    windowHeight: Dp,
     appBackdrop: LayerBackdrop,
     controller: MediaController?,
     player: PlayerState,
@@ -2047,6 +2054,10 @@ private fun BitChordApp(
             ?: song
         NowPlayingScreen(
             song = displayedSong,
+            tabletFullscreenPlayer = tabletPlayerFullscreen,
+            tabletLandscapeBannerHeight = if (
+                tabletPlayerFullscreen && windowWidth >= windowHeight * 1.45f
+            ) windowHeight * 0.9f else 0.dp,
             playerHaze = playerHazeState,
             windowWidth = playerWidth,
             isPlaying = player.isPlaying,

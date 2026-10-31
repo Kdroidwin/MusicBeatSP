@@ -931,6 +931,10 @@ fun NowPlayingScreen(
     lyricsReadyForCurrentSong: Boolean,
     /** The width of the window the player is in — see [fullBleedArtworkAvailable]. */
     windowWidth: Dp,
+    /** True only when the wide-screen player owns a full-screen tablet sheet. */
+    tabletFullscreenPlayer: Boolean = false,
+    /** Measured lower edge for cover art on a landscape full-screen tablet. */
+    tabletLandscapeBannerHeight: Dp = 0.dp,
     /** Shared with player overlays so their glass samples the visible player artwork. */
     playerHaze: HazeState,
     /**
@@ -1609,7 +1613,14 @@ fun NowPlayingScreen(
     // ignored [fullBleedArt] entirely, so turning the setting off still left a
     // clip running the full screen. CanvasArtworkPlayer masks itself on every
     // API level now, and both layers answer to this.
-    val heroMode = fullBleedArt && (docked || playerFillsWindow(windowWidth))
+    // The tablet player column is capped at PLAYER_MAX_WIDTH, even when its
+    // parent is wider. Testing the whole landscape pane made cover mode turn
+    // off on 16:9 tablets while it continued to work on square foldables.
+    val heroMode = fullBleedArt && (
+        docked ||
+            playerFillsWindow(windowWidth) ||
+            tabletFullscreenPlayer
+        )
     val aurisHeroMode = heroMode && aurisFullBleedArtwork
     val useLargerHeroArtwork = heroMode && largerFullBleedArtwork
     val heroArtworkZoom = when {
@@ -2448,11 +2459,17 @@ fun NowPlayingScreen(
                 // the dissolve starts at the title and runs past the artist row.
                 val baseBannerBottom = statusBarTop + topStrip + ART_BOX_TOP_PAD +
                     targetGroupTop + targetArtHeight + ART_TITLE_GAP / 2
-                val bannerBottom = when {
+                val standardBannerBottom = when {
                     aurisHeroMode -> baseBannerBottom * heroArtworkZoom
                     useLargerHeroArtwork -> baseBannerBottom + HEADER_HEIGHT + ART_TITLE_GAP / 2
                     else -> baseBannerBottom
                 }
+                // In landscape, the normal banner was sized to the short
+                // square-art slot left after controls. Filling a wide banner
+                // with a square cover then cropped away roughly half of it.
+                // Extend the artwork lower on full-screen tablet sheets;
+                // controls remain layered above it.
+                val bannerBottom = maxOf(standardBannerBottom, tabletLandscapeBannerHeight)
                 // Held where it was while the lyrics are up.
                 //
                 // [groupTop] centres the block in this box's *real* height, and

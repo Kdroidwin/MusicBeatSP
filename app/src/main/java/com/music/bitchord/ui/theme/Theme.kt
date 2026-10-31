@@ -221,6 +221,7 @@ fun SystemBarIcons(dark: Boolean) {
 /** Applies visibility preferences to a modal surface's own window as well as its host. */
 @Composable
 fun SystemBarVisibility(showStatusBar: Boolean, showNavigationBar: Boolean) {
+    val forceWhiteNavigationBar by AppSettings.forceWhiteNavigationBar.collectAsStateWithLifecycle()
     val view = LocalView.current
     if (view.isInEditMode) return
     val window = findWindow(view) ?: return
@@ -231,6 +232,9 @@ fun SystemBarVisibility(showStatusBar: Boolean, showNavigationBar: Boolean) {
             else hide(WindowInsetsCompat.Type.statusBars())
             if (showNavigationBar) show(WindowInsetsCompat.Type.navigationBars())
             else hide(WindowInsetsCompat.Type.navigationBars())
+            // A modal sheet can restore automatic contrast when it changes bar
+            // visibility. Apply the explicit white-glyph preference last.
+            if (forceWhiteNavigationBar) isAppearanceLightNavigationBars = false
         }
     }
 }
