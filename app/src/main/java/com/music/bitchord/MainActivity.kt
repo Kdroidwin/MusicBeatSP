@@ -600,6 +600,8 @@ private fun BitChordApp(
     val radioAvailable = !offlineMode && !context.packageName.endsWith(".nointernet")
     val visibleLocalLibraryTabs by AppSettings.visibleLocalLibraryTabs.collectAsStateWithLifecycle()
     val localMusicFolderRoot by AppSettings.localMusicFolderUri.collectAsStateWithLifecycle()
+    val rememberLastOpenedFolder by AppSettings.rememberLastOpenedFolder.collectAsStateWithLifecycle()
+    val lastOpenedFolderPath by AppSettings.lastOpenedFolderPath.collectAsStateWithLifecycle()
     val mainNavigationTabOrder by AppSettings.mainNavigationTabOrder.collectAsStateWithLifecycle()
     val effectiveVisibleMainTabs = remember(visibleMainNavigationTabs, visibleLocalLibraryTabs, radioAvailable) {
         val tabs = if (com.music.bitchord.data.settings.LocalLibraryTab.ALBUM_ARTISTS in visibleLocalLibraryTabs) {
@@ -3071,6 +3073,9 @@ private fun BitChordApp(
                                 },
                                 contentPadding = listPadding,
                                 customRootPath = localMusicFolderRoot.ifBlank { null },
+                                rememberLastOpenedFolder = rememberLastOpenedFolder,
+                                lastOpenedFolderPath = lastOpenedFolderPath,
+                                onLastOpenedFolderPathChange = AppSettings::setLastOpenedFolderPath,
                                 onArtworkPaletteChanged = onLocalArtworkPaletteChanged,
                                 onNavigationChanged = onCollectionNavigationChanged,
                             )

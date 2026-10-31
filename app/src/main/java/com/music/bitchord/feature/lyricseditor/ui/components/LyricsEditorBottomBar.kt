@@ -98,7 +98,7 @@ fun LyricsEditorBottomBar(
                 ) {
                     Icon(
                         imageVector = Icons.Rounded.Search,
-                        contentDescription = "Search online lyrics",
+                        contentDescription = stringResource(R.string.lyrics_editor_search_online),
                         modifier = Modifier.size(22.dp),
                     )
                 }
@@ -144,7 +144,7 @@ fun LyricsEditorBottomBar(
                     )
                     Spacer(modifier = Modifier.width(8.dp))
                     Text(
-                        text = "Save",
+                        text = stringResource(R.string.lyrics_editor_save),
                         style = MaterialTheme.typography.labelLarge.copy(
                             fontWeight = FontWeight.Bold,
                             fontSize = 14.sp,
@@ -163,7 +163,7 @@ fun LyricsEditorBottomBar(
                 ) {
                     Icon(
                         imageVector = Icons.Rounded.ContentPaste,
-                        contentDescription = "Paste from clipboard",
+                        contentDescription = stringResource(R.string.lyrics_editor_paste),
                         modifier = Modifier.size(22.dp),
                     )
                 }
@@ -180,7 +180,7 @@ fun LyricsEditorBottomBar(
                     ) {
                         Icon(
                             imageVector = Icons.Rounded.MoreVert,
-                            contentDescription = "More actions",
+                            contentDescription = stringResource(R.string.lyrics_editor_more_actions),
                             modifier = Modifier.size(22.dp),
                         )
                     }
@@ -194,7 +194,7 @@ fun LyricsEditorBottomBar(
                     ) {
                         if (onInsertTimestampClick != null) {
                             DropdownMenuItem(
-                                text = { Text("Insert timestamp [00:00.00]") },
+                                text = { Text(stringResource(R.string.lyrics_editor_insert_timestamp)) },
                                 leadingIcon = {
                                     Icon(
                                         imageVector = Icons.Rounded.Add,
@@ -210,7 +210,7 @@ fun LyricsEditorBottomBar(
                         }
 
                         DropdownMenuItem(
-                            text = { Text("Select all") },
+                            text = { Text(stringResource(R.string.lyrics_editor_select_all)) },
                             leadingIcon = {
                                 Icon(
                                     imageVector = Icons.Rounded.SelectAll,
@@ -226,7 +226,7 @@ fun LyricsEditorBottomBar(
 
                         if (onClearAllClick != null) {
                             DropdownMenuItem(
-                                text = { Text("Clear all") },
+                                text = { Text(stringResource(R.string.lyrics_editor_clear_all)) },
                                 leadingIcon = {
                                     Icon(
                                         imageVector = Icons.Rounded.ClearAll,
@@ -242,7 +242,7 @@ fun LyricsEditorBottomBar(
                         }
 
                         DropdownMenuItem(
-                            text = { Text("Undo changes") },
+                            text = { Text(stringResource(R.string.lyrics_editor_undo_changes)) },
                             leadingIcon = {
                                 Icon(
                                     imageVector = Icons.Rounded.RestartAlt,

@@ -556,6 +556,7 @@ fun SettingsScreen(
     val libraryCategories by AppSettings.visibleLibraryCategories.collectAsStateWithLifecycle()
     val libraryCategoryOrder by AppSettings.libraryCategoryOrder.collectAsStateWithLifecycle()
     val localFolderHierarchy by AppSettings.localFolderHierarchy.collectAsStateWithLifecycle()
+    val rememberLastOpenedFolder by AppSettings.rememberLastOpenedFolder.collectAsStateWithLifecycle()
     val localMusicFolderRoot by AppSettings.localMusicFolderUri.collectAsStateWithLifecycle()
     val fullScreenCollectionArtwork by AppSettings.fullScreenCollectionArtwork.collectAsStateWithLifecycle()
     val whiteCollectionActionButtons by AppSettings.whiteCollectionActionButtons.collectAsStateWithLifecycle()
@@ -1625,6 +1626,12 @@ fun SettingsScreen(
             listOf("folder", "hierarchy", "search", "フォルダ", "階層", "検索"),
             localFolderHierarchy,
         ) { AppSettings.setLocalFolderHierarchy(!localFolderHierarchy) },
+        SettingsSearchEntry(
+            stringResource(R.string.remember_last_opened_folder),
+            stringResource(R.string.remember_last_opened_folder_subtitle),
+            listOf("folder", "recent", "last opened", "remember", "フォルダ", "最近", "前回", "開いた場所"),
+            rememberLastOpenedFolder,
+        ) { AppSettings.setRememberLastOpenedFolder(!rememberLastOpenedFolder) },
         SettingsSearchEntry(
             stringResource(R.string.include_remote_source_media_in_library),
             stringResource(R.string.include_remote_source_media_in_library_subtitle),
@@ -4638,6 +4645,7 @@ fun SettingsScreen(
             localTabs = localTabs,
             localTabOrder = localTabOrder,
             localFolderHierarchy = localFolderHierarchy,
+            rememberLastOpenedFolder = rememberLastOpenedFolder,
             includeRemoteSourceMediaInLibrary = includeRemoteSourceMediaInLibrary,
             localMusicFolderRoot = localMusicFolderRoot,
             fullScreenCollectionArtwork = fullScreenCollectionArtwork,
@@ -5996,6 +6004,7 @@ private fun LocalMusicSettingsGroup(
     localTabs: Set<LocalLibraryTab>,
     localTabOrder: List<LocalLibraryTab>,
     localFolderHierarchy: Boolean,
+    rememberLastOpenedFolder: Boolean,
     includeRemoteSourceMediaInLibrary: Boolean,
     localMusicFolderRoot: String,
     fullScreenCollectionArtwork: Boolean,
@@ -6150,6 +6159,19 @@ SettingsGroup(header = stringResource(R.string.local_music)) {
             Switch(checked = localFolderHierarchy, onCheckedChange = AppSettings::setLocalFolderHierarchy)
         },
         onClick = { AppSettings.setLocalFolderHierarchy(!localFolderHierarchy) },
+    )
+    RowDivider()
+    SettingsRow(
+        icon = Icons.Rounded.History,
+        title = stringResource(R.string.remember_last_opened_folder),
+        subtitle = stringResource(R.string.remember_last_opened_folder_subtitle),
+        trailing = {
+            Switch(
+                checked = rememberLastOpenedFolder,
+                onCheckedChange = AppSettings::setRememberLastOpenedFolder,
+            )
+        },
+        onClick = { AppSettings.setRememberLastOpenedFolder(!rememberLastOpenedFolder) },
     )
     RowDivider()
     SettingsRow(

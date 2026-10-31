@@ -182,7 +182,7 @@ fun LyricsDownloadSheet(
                             modifier = Modifier.size(20.dp),
                         )
                         Text(
-                            text = "Found $previousResultsCount previous matches",
+                            text = stringResource(R.string.lyrics_found_previous_matches, previousResultsCount),
                             style = MaterialTheme.typography.bodyMedium.copy(fontWeight = FontWeight.SemiBold),
                             color = MaterialTheme.colorScheme.onSecondaryContainer,
                             modifier = Modifier.weight(1f),
@@ -192,7 +192,7 @@ fun LyricsDownloadSheet(
                             horizontalArrangement = Arrangement.spacedBy(2.dp),
                         ) {
                             Text(
-                                text = "View",
+                                text = stringResource(R.string.lyrics_editor_view),
                                 style = MaterialTheme.typography.labelMedium.copy(fontWeight = FontWeight.Bold),
                                 color = MaterialTheme.colorScheme.secondary,
                             )
@@ -222,8 +222,8 @@ fun LyricsDownloadSheet(
                     OutlinedTextField(
                         value = title,
                         onValueChange = { title = it },
-                        label = { Text("Title") },
-                        placeholder = { Text("Song title") },
+                        label = { Text(stringResource(R.string.lyrics_editor_title_label)) },
+                        placeholder = { Text(stringResource(R.string.lyrics_editor_title_hint)) },
                         leadingIcon = {
                             Icon(
                                 imageVector = Icons.Rounded.MusicNote,
@@ -237,7 +237,7 @@ fun LyricsDownloadSheet(
                                 IconButton(onClick = { title = "" }) {
                                     Icon(
                                         imageVector = Icons.Rounded.Clear,
-                                        contentDescription = "Clear title",
+                                        contentDescription = stringResource(R.string.lyrics_editor_clear_title),
                                         modifier = Modifier.size(18.dp),
                                     )
                                 }
@@ -260,8 +260,8 @@ fun LyricsDownloadSheet(
                     OutlinedTextField(
                         value = artist,
                         onValueChange = { artist = it },
-                        label = { Text("Artist") },
-                        placeholder = { Text("Artist name") },
+                        label = { Text(stringResource(R.string.lyrics_editor_artist_label)) },
+                        placeholder = { Text(stringResource(R.string.lyrics_editor_artist_hint)) },
                         leadingIcon = {
                             Icon(
                                 imageVector = Icons.Rounded.Person,
@@ -275,7 +275,7 @@ fun LyricsDownloadSheet(
                                 IconButton(onClick = { artist = "" }) {
                                     Icon(
                                         imageVector = Icons.Rounded.Clear,
-                                        contentDescription = "Clear artist",
+                                        contentDescription = stringResource(R.string.lyrics_editor_clear_artist),
                                         modifier = Modifier.size(18.dp),
                                     )
                                 }
@@ -298,8 +298,8 @@ fun LyricsDownloadSheet(
                     OutlinedTextField(
                         value = album,
                         onValueChange = { album = it },
-                        label = { Text("Album (Optional)") },
-                        placeholder = { Text("Album name") },
+                        label = { Text(stringResource(R.string.lyrics_editor_album_label)) },
+                        placeholder = { Text(stringResource(R.string.lyrics_editor_album_hint)) },
                         leadingIcon = {
                             Icon(
                                 imageVector = Icons.Rounded.Album,
@@ -313,7 +313,7 @@ fun LyricsDownloadSheet(
                                 IconButton(onClick = { album = "" }) {
                                     Icon(
                                         imageVector = Icons.Rounded.Clear,
-                                        contentDescription = "Clear album",
+                                        contentDescription = stringResource(R.string.lyrics_editor_clear_album),
                                         modifier = Modifier.size(18.dp),
                                     )
                                 }
@@ -356,7 +356,7 @@ fun LyricsDownloadSheet(
                             horizontalArrangement = Arrangement.spacedBy(8.dp),
                         ) {
                             Text(
-                                text = "Lyrics Providers",
+                                text = stringResource(R.string.lyrics_editor_providers),
                                 style = MaterialTheme.typography.titleSmall.copy(fontWeight = FontWeight.Bold),
                             )
                             Surface(
@@ -388,7 +388,13 @@ fun LyricsDownloadSheet(
                                 }
                             },
                         ) {
-                            Text(if (allSelected) "Select One" else "Select All", fontSize = 12.5.sp)
+                            Text(
+                                stringResource(
+                                    if (allSelected) R.string.lyrics_editor_select_one
+                                    else R.string.lyrics_editor_select_all_providers,
+                                ),
+                                fontSize = 12.5.sp,
+                            )
                         }
                     }
 
@@ -473,7 +479,7 @@ fun LyricsDownloadSheet(
                     )
                     Spacer(modifier = Modifier.width(8.dp))
                     Text(
-                        text = "Search Providers",
+                        text = stringResource(R.string.lyrics_search_providers),
                         style = MaterialTheme.typography.bodyLarge.copy(fontWeight = FontWeight.Bold),
                     )
                 }
@@ -501,7 +507,7 @@ fun LyricsDownloadSheet(
                     )
                     Spacer(modifier = Modifier.width(8.dp))
                     Text(
-                        text = "Auto Download (Best Match)",
+                        text = stringResource(R.string.lyrics_auto_download_best_match),
                         style = MaterialTheme.typography.bodyMedium.copy(fontWeight = FontWeight.SemiBold),
                     )
                 }

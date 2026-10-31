@@ -87,8 +87,8 @@ fun LyricsDownloadDialog(
                 OutlinedTextField(
                     value = title,
                     onValueChange = { title = it },
-                    label = { Text("Title") },
-                    placeholder = { Text("Song title") },
+                    label = { Text(stringResource(R.string.lyrics_editor_title_label)) },
+                    placeholder = { Text(stringResource(R.string.lyrics_editor_title_hint)) },
                     singleLine = true,
                     shape = RoundedCornerShape(12.dp),
                     modifier = Modifier.fillMaxWidth(),
@@ -97,8 +97,8 @@ fun LyricsDownloadDialog(
                 OutlinedTextField(
                     value = artist,
                     onValueChange = { artist = it },
-                    label = { Text("Artist") },
-                    placeholder = { Text("Artist name") },
+                    label = { Text(stringResource(R.string.lyrics_editor_artist_label)) },
+                    placeholder = { Text(stringResource(R.string.lyrics_editor_artist_hint)) },
                     singleLine = true,
                     keyboardOptions = KeyboardOptions(capitalization = KeyboardCapitalization.Words),
                     shape = RoundedCornerShape(12.dp),
@@ -108,8 +108,8 @@ fun LyricsDownloadDialog(
                 OutlinedTextField(
                     value = album,
                     onValueChange = { album = it },
-                    label = { Text("Album (Optional)") },
-                    placeholder = { Text("Album name") },
+                    label = { Text(stringResource(R.string.lyrics_editor_album_label)) },
+                    placeholder = { Text(stringResource(R.string.lyrics_editor_album_hint)) },
                     singleLine = true,
                     keyboardOptions = KeyboardOptions(capitalization = KeyboardCapitalization.Words),
                     shape = RoundedCornerShape(12.dp),
@@ -117,7 +117,7 @@ fun LyricsDownloadDialog(
                 )
 
                 Text(
-                    text = "Lyrics providers:",
+                    text = stringResource(R.string.lyrics_editor_providers),
                     style = MaterialTheme.typography.labelMedium,
                     color = MaterialTheme.colorScheme.onSurfaceVariant,
                     modifier = Modifier.padding(top = 4.dp),
@@ -161,7 +161,7 @@ fun LyricsDownloadDialog(
                     },
                     enabled = canSearch && selectedProviders.isNotEmpty(),
                 ) {
-                    Text("Auto")
+                    Text(stringResource(R.string.lyrics_auto_short))
                 }
 
                 Button(
@@ -175,13 +175,13 @@ fun LyricsDownloadDialog(
                     },
                     enabled = canSearch && selectedProviders.isNotEmpty(),
                 ) {
-                    Text("Search Results")
+                    Text(stringResource(R.string.lyrics_search_results))
                 }
             }
         },
         dismissButton = {
             TextButton(onClick = onDismissRequest) {
-                Text("Cancel")
+                Text(stringResource(R.string.lyrics_format_cancel))
             }
         },
         modifier = modifier,

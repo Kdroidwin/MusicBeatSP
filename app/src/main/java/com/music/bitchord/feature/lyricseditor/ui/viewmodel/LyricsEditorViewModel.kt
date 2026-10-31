@@ -3,6 +3,7 @@ package com.music.bitchord.feature.lyricseditor.ui.viewmodel
 import android.app.Application
 import androidx.lifecycle.AndroidViewModel
 import androidx.lifecycle.viewModelScope
+import com.music.bitchord.R
 import com.music.bitchord.data.lyrics.LyricsSource
 import com.music.bitchord.data.model.Song
 import com.music.bitchord.data.model.durationMillis
@@ -132,12 +133,12 @@ class LyricsEditorViewModel(app: Application) : AndroidViewModel(app) {
                 _candidateResult.value = result
             } else if (!result.synced.isNullOrBlank()) {
                 updateText(result.synced)
-                _toastMessage.emit("Synced lyrics loaded")
+                _toastMessage.emit(getApplication<Application>().getString(R.string.lyrics_synced_loaded))
             } else if (!result.plain.isNullOrBlank()) {
                 updateText(result.plain)
-                _toastMessage.emit("Plain lyrics loaded")
+                _toastMessage.emit(getApplication<Application>().getString(R.string.lyrics_plain_loaded))
             } else {
-                _toastMessage.emit("No lyrics found online")
+                _toastMessage.emit(getApplication<Application>().getString(R.string.lyrics_not_found))
             }
         }
     }
@@ -193,12 +194,12 @@ class LyricsEditorViewModel(app: Application) : AndroidViewModel(app) {
         } else if (item.hasSynced) {
             updateText(item.syncedLyrics!!)
             viewModelScope.launch {
-                _toastMessage.emit("Loaded synced lyrics from ${item.provider}")
+                _toastMessage.emit(getApplication<Application>().getString(R.string.lyrics_synced_loaded_from, item.provider))
             }
         } else if (item.hasPlain) {
             updateText(item.plainLyrics!!)
             viewModelScope.launch {
-                _toastMessage.emit("Loaded plain lyrics from ${item.provider}")
+                _toastMessage.emit(getApplication<Application>().getString(R.string.lyrics_plain_loaded_from, item.provider))
             }
         }
         // Do NOT call clearSearchResults() here: retain search results so user can switch or re-check.

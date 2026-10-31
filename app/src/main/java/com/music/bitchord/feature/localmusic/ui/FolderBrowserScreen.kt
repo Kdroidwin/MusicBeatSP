@@ -77,6 +77,22 @@ private val FolderPathStackSaver = listSaver<SnapshotStateList<String>, String>(
     restore = { it.toMutableStateList() },
 )
 
+private fun folderPathStack(root: FolderNode, targetPath: String): List<String>? {
+    fun normalized(path: String) = path.replace('\\', '/').trimEnd('/').ifEmpty { "/" }
+    val target = normalized(targetPath)
+    if (normalized(root.path) == target) return emptyList()
+
+    fun find(node: FolderNode, ancestors: List<String>): List<String>? {
+        node.subfolders.forEach { child ->
+            val path = ancestors + child.path
+            if (normalized(child.path) == target) return path
+            find(child, path)?.let { return it }
+        }
+        return null
+    }
+    return find(root, emptyList())
+}
+
 /** Hierarchical browser for the device's indexed local music folders. */
 @Composable
 fun FolderBrowserScreen(
@@ -89,6 +105,9 @@ fun FolderBrowserScreen(
     onShuffle: (List<Song>) -> Unit,
     contentPadding: PaddingValues,
     customRootPath: String? = null,
+    rememberLastOpenedFolder: Boolean = true,
+    lastOpenedFolderPath: String = "",
+    onLastOpenedFolderPathChange: ((String) -> Unit)? = null,
     onArtworkPaletteChanged: ((com.music.bitchord.ui.theme.ArtworkPalette?) -> Unit)? = null,
     onNavigationChanged: ((Boolean, (() -> Unit)?) -> Unit)? = null,
     modifier: Modifier = Modifier,
@@ -101,6 +120,13 @@ fun FolderBrowserScreen(
     val stackSnapshot = pathStack.toList()
     val currentNode by remember(tree, stackSnapshot) {
         mutableStateOf(stackSnapshot.lastOrNull()?.let(tree::findByPath) ?: tree)
+    }
+    LaunchedEffect(tree, rememberLastOpenedFolder, lastOpenedFolderPath) {
+        if (!rememberLastOpenedFolder || pathStack.isNotEmpty() || lastOpenedFolderPath.isBlank()) {
+            return@LaunchedEffect
+        }
+        val restoredPath = folderPathStack(tree, lastOpenedFolderPath)
+        if (!restoredPath.isNullOrEmpty()) pathStack.addAll(restoredPath)
     }
     var selectedSongIds by remember { mutableStateOf<Set<String>>(emptySet()) }
     var selectedFolderPaths by remember { mutableStateOf<Set<String>>(emptySet()) }
@@ -137,10 +163,18 @@ fun FolderBrowserScreen(
 
     val canGoBack = pathStack.isNotEmpty()
     val latestPathStack = rememberUpdatedState(pathStack)
+    val latestTree = rememberUpdatedState(tree)
+    val latestRememberLastOpenedFolder = rememberUpdatedState(rememberLastOpenedFolder)
+    val latestLastFolderPathChange = rememberUpdatedState(onLastOpenedFolderPathChange)
     val popBack = remember {
         {
             val stack = latestPathStack.value
-            if (stack.isNotEmpty()) stack.removeAt(stack.lastIndex)
+            if (stack.isNotEmpty()) {
+                stack.removeAt(stack.lastIndex)
+                if (latestRememberLastOpenedFolder.value) {
+                    latestLastFolderPathChange.value?.invoke(stack.lastOrNull() ?: latestTree.value.path)
+                }
+            }
         }
     }
     val latestNavigationCallback = rememberUpdatedState(onNavigationChanged)
@@ -251,7 +285,12 @@ fun FolderBrowserScreen(
                 folder = folder,
                 selected = folder.path in selectedFolderPaths,
                 onClick = {
-                    if (selectingSongs) toggleFolderSelection(folder) else pathStack.add(folder.path)
+                    if (selectingSongs) {
+                        toggleFolderSelection(folder)
+                    } else {
+                        pathStack.add(folder.path)
+                        if (rememberLastOpenedFolder) onLastOpenedFolderPathChange?.invoke(folder.path)
+                    }
                 },
                 onLongPress = { toggleFolderSelection(folder) },
             )

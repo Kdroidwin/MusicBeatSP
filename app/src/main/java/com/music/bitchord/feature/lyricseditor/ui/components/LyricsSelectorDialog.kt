@@ -20,8 +20,10 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.unit.dp
+import com.music.bitchord.R
 
 enum class LyricsSelectionMode {
     Synced,
@@ -40,7 +42,7 @@ fun LyricsSelectorDialog(
         onDismissRequest = onDismissRequest,
         shape = RoundedCornerShape(24.dp),
         title = {
-            Text(text = "Choose lyrics format")
+            Text(text = stringResource(R.string.lyrics_format_title))
         },
         text = {
             Column(
@@ -61,11 +63,11 @@ fun LyricsSelectorDialog(
                     )
                     Column(modifier = Modifier.padding(start = 8.dp)) {
                         Text(
-                            text = "Synced lyrics (LRC)",
+                            text = stringResource(R.string.lyrics_format_synced),
                             style = MaterialTheme.typography.bodyLarge,
                         )
                         Text(
-                            text = "Includes timestamps for karaoke synchronization",
+                            text = stringResource(R.string.lyrics_format_synced_description),
                             style = MaterialTheme.typography.bodySmall,
                             color = MaterialTheme.colorScheme.onSurfaceVariant,
                         )
@@ -86,11 +88,11 @@ fun LyricsSelectorDialog(
                     )
                     Column(modifier = Modifier.padding(start = 8.dp)) {
                         Text(
-                            text = "Plain lyrics",
+                            text = stringResource(R.string.lyrics_format_plain),
                             style = MaterialTheme.typography.bodyLarge,
                         )
                         Text(
-                            text = "Static un-synced text without timestamps",
+                            text = stringResource(R.string.lyrics_format_plain_description),
                             style = MaterialTheme.typography.bodySmall,
                             color = MaterialTheme.colorScheme.onSurfaceVariant,
                         )
@@ -100,12 +102,12 @@ fun LyricsSelectorDialog(
         },
         confirmButton = {
             Button(onClick = { onModeSelected(selectedMode) }) {
-                Text("Select")
+                Text(stringResource(R.string.lyrics_format_select))
             }
         },
         dismissButton = {
             TextButton(onClick = onDismissRequest) {
-                Text("Cancel")
+                Text(stringResource(R.string.lyrics_format_cancel))
             }
         },
         modifier = modifier,

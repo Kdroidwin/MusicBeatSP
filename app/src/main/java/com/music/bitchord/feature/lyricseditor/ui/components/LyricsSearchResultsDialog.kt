@@ -31,6 +31,8 @@ import androidx.compose.ui.draw.clip
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
+import androidx.compose.ui.res.stringResource
+import com.music.bitchord.R
 import com.music.bitchord.feature.lyricseditor.domain.model.LyricsSearchResultItem
 
 @Composable
@@ -48,12 +50,12 @@ fun LyricsSearchResultsDialog(
         title = {
             Column {
                 Text(
-                    text = "Lyrics Search Results",
+                    text = stringResource(R.string.lyrics_search_results),
                     style = MaterialTheme.typography.headlineSmall.copy(fontWeight = FontWeight.Bold),
                 )
                 if (!isSearching && results.isNotEmpty()) {
                     Text(
-                        text = "${results.size} matches found across providers",
+                        text = stringResource(R.string.lyrics_search_matches_count, results.size),
                         style = MaterialTheme.typography.bodySmall,
                         color = MaterialTheme.colorScheme.onSurfaceVariant,
                     )
@@ -74,7 +76,7 @@ fun LyricsSearchResultsDialog(
                     ) {
                         CircularProgressIndicator(modifier = Modifier.size(36.dp))
                         Text(
-                            text = "Querying lyrics providers...",
+                            text = stringResource(R.string.lyrics_searching_providers),
                             style = MaterialTheme.typography.bodyMedium,
                             color = MaterialTheme.colorScheme.onSurfaceVariant,
                         )
@@ -92,11 +94,11 @@ fun LyricsSearchResultsDialog(
                             modifier = Modifier.size(44.dp),
                         )
                         Text(
-                            text = "No matching lyrics found",
+                            text = stringResource(R.string.lyrics_search_no_matches),
                             style = MaterialTheme.typography.titleMedium.copy(fontWeight = FontWeight.SemiBold),
                         )
                         Text(
-                            text = "Try adjusting the title, artist, or album name.",
+                            text = stringResource(R.string.lyrics_search_no_matches_hint),
                             style = MaterialTheme.typography.bodySmall,
                             color = MaterialTheme.colorScheme.onSurfaceVariant,
                         )
@@ -118,12 +120,12 @@ fun LyricsSearchResultsDialog(
         },
         confirmButton = {
             TextButton(onClick = onRefineSearchClick) {
-                Text("Refine Search")
+                Text(stringResource(R.string.lyrics_search_refine))
             }
         },
         dismissButton = {
             TextButton(onClick = onDismissRequest) {
-                Text("Close")
+                Text(stringResource(R.string.lyrics_search_close))
             }
         },
         modifier = modifier,
@@ -203,7 +205,14 @@ private fun SearchResultRow(
                     },
                 ) {
                     Text(
-                        text = item.formatBadge,
+                        text = stringResource(
+                            when {
+                                item.hasSynced && item.hasPlain -> R.string.lyrics_format_synced_and_plain
+                                item.hasSynced -> R.string.lyrics_format_lrc_timed
+                                item.hasPlain -> R.string.lyrics_format_plain_badge
+                                else -> R.string.lyrics_format_lyrics
+                            },
+                        ),
                         style = MaterialTheme.typography.labelSmall,
                         color = if (item.hasSynced) {
                             MaterialTheme.colorScheme.onSecondaryContainer

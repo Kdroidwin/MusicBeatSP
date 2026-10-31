@@ -17,9 +17,10 @@ import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
-import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.lazy.LazyColumn
+import androidx.compose.foundation.lazy.LazyRow
 import androidx.compose.foundation.lazy.items
+import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
@@ -31,7 +32,6 @@ import androidx.compose.material.icons.rounded.Pause
 import androidx.compose.material.icons.rounded.PlayArrow
 import androidx.compose.material.icons.rounded.Radio
 import androidx.compose.material.icons.rounded.Search
-import androidx.compose.material.icons.rounded.Schedule
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Button
 import androidx.compose.material3.Card
@@ -395,6 +395,15 @@ private fun RadioStationDetail(
     val days = remember(programs) { programs.map { RadioRepository.programDay(it.startAt) }.distinct().sorted() }
     val dayPrograms = remember(programs, selectedDay) { programs.filter { RadioRepository.programDay(it.startAt) == selectedDay } }
     val currentProgram = remember(programs) { RadioRepository.currentProgram(programs) }
+    val dayListState = rememberLazyListState()
+    var hasPositionedInitialDay by remember(station.id) { mutableStateOf(false) }
+    LaunchedEffect(days, selectedDay) {
+        val selectedIndex = selectedDay?.let(days::indexOf) ?: -1
+        if (!hasPositionedInitialDay && selectedIndex >= 0) {
+            dayListState.scrollToItem(selectedIndex)
+            hasPositionedInitialDay = true
+        }
+    }
     LazyColumn(
         modifier = Modifier.fillMaxSize(),
         contentPadding = contentPadding,
@@ -436,16 +445,15 @@ private fun RadioStationDetail(
                     }
                 }
                 Row(verticalAlignment = Alignment.CenterVertically) {
-                    Icon(Icons.Rounded.Schedule, contentDescription = null, tint = MaterialTheme.colorScheme.primary)
-                    Spacer(Modifier.width(8.dp))
                     Text(stringResource(R.string.radio_program_schedule), style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Bold)
                 }
                 if (days.isNotEmpty()) {
-                    Row(
-                        modifier = Modifier.fillMaxWidth().horizontalScroll(rememberScrollState()),
+                    LazyRow(
+                        state = dayListState,
+                        modifier = Modifier.fillMaxWidth(),
                         horizontalArrangement = Arrangement.spacedBy(8.dp),
                     ) {
-                        days.forEach { day ->
+                        items(days, key = { it }) { day ->
                             FilterChip(
                                 selected = day == selectedDay,
                                 onClick = { onSelectDay(day) },

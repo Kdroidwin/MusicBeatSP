@@ -34,6 +34,8 @@ import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import coil3.compose.AsyncImage
+import androidx.compose.ui.res.stringResource
+import com.music.bitchord.R
 import com.music.bitchord.data.model.Song
 
 @Composable
@@ -88,14 +90,14 @@ fun LyricsEditorHeader(
                 verticalArrangement = Arrangement.spacedBy(4.dp),
             ) {
                 Text(
-                    text = song.title.ifBlank { "Unknown Title" },
+                    text = song.title.ifBlank { stringResource(R.string.lyrics_unknown_title) },
                     style = MaterialTheme.typography.titleMedium,
                     fontWeight = FontWeight.Bold,
                     maxLines = 1,
                     overflow = TextOverflow.Ellipsis,
                 )
                 Text(
-                    text = song.artist.ifBlank { "Unknown Artist" },
+                    text = song.artist.ifBlank { stringResource(R.string.lyrics_unknown_artist) },
                     style = MaterialTheme.typography.bodySmall,
                     color = MaterialTheme.colorScheme.onSurfaceVariant,
                     maxLines = 1,
@@ -132,7 +134,10 @@ fun LyricsEditorHeader(
                                 },
                             )
                             Text(
-                                text = if (isTimeSynced) "LRC Timed" else "Plain Text",
+                                text = stringResource(
+                                    if (isTimeSynced) R.string.lyrics_format_lrc_timed
+                                    else R.string.lyrics_format_plain_badge,
+                                ),
                                 style = MaterialTheme.typography.labelSmall.copy(
                                     fontSize = 11.sp,
                                     fontWeight = FontWeight.SemiBold,
@@ -152,7 +157,7 @@ fun LyricsEditorHeader(
                             color = MaterialTheme.colorScheme.surfaceContainerHigh,
                         ) {
                             Text(
-                                text = "$lineCount lines",
+                                text = stringResource(R.string.lyrics_line_count, lineCount),
                                 style = MaterialTheme.typography.labelSmall.copy(
                                     fontSize = 11.sp,
                                     fontWeight = FontWeight.Medium,

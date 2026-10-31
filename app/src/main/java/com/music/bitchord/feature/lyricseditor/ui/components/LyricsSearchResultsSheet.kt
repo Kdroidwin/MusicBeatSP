@@ -56,6 +56,8 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import androidx.compose.ui.res.stringResource
+import com.music.bitchord.R
 import com.music.bitchord.feature.lyricseditor.domain.model.LyricsSearchResultItem
 
 @OptIn(ExperimentalMaterial3Api::class)
@@ -107,7 +109,7 @@ fun LyricsSearchResultsSheet(
                         horizontalArrangement = Arrangement.spacedBy(8.dp),
                     ) {
                         Text(
-                            text = "Search Results",
+                            text = stringResource(R.string.lyrics_search_results),
                             style = MaterialTheme.typography.titleLarge.copy(
                                 fontWeight = FontWeight.Bold,
                                 letterSpacing = (-0.3).sp,
@@ -119,7 +121,7 @@ fun LyricsSearchResultsSheet(
                                 color = MaterialTheme.colorScheme.primary.copy(alpha = 0.15f),
                             ) {
                                 Text(
-                                    text = "${results.size} matches",
+                                    text = stringResource(R.string.lyrics_search_matches_count, results.size),
                                     style = MaterialTheme.typography.labelSmall.copy(
                                         fontWeight = FontWeight.Bold,
                                         color = MaterialTheme.colorScheme.primary,
@@ -130,7 +132,10 @@ fun LyricsSearchResultsSheet(
                         }
                     }
                     Text(
-                        text = if (isSearching) "Searching providers..." else "Tap any result to load into editor",
+                        text = stringResource(
+                            if (isSearching) R.string.lyrics_searching_providers
+                            else R.string.lyrics_search_results_hint,
+                        ),
                         style = MaterialTheme.typography.bodySmall,
                         color = MaterialTheme.colorScheme.onSurfaceVariant,
                     )
@@ -148,7 +153,7 @@ fun LyricsSearchResultsSheet(
                     ) {
                         Icon(
                             imageVector = Icons.Rounded.Refresh,
-                            contentDescription = "Re-search",
+                            contentDescription = stringResource(R.string.lyrics_search_research),
                             modifier = Modifier
                                 .size(20.dp)
                                 .then(if (isSearching) Modifier.rotate(rotation) else Modifier),
@@ -163,7 +168,7 @@ fun LyricsSearchResultsSheet(
                     ) {
                         Icon(
                             imageVector = Icons.Rounded.Tune,
-                            contentDescription = "Refine search query",
+                            contentDescription = stringResource(R.string.lyrics_search_refine),
                             modifier = Modifier.size(20.dp),
                         )
                     }
@@ -175,7 +180,7 @@ fun LyricsSearchResultsSheet(
                     ) {
                         Icon(
                             imageVector = Icons.Rounded.Close,
-                            contentDescription = "Close",
+                            contentDescription = stringResource(R.string.lyrics_search_close),
                             modifier = Modifier.size(20.dp),
                         )
                     }
@@ -200,11 +205,11 @@ fun LyricsSearchResultsSheet(
                             modifier = Modifier.size(42.dp),
                         )
                         Text(
-                            text = "Querying lyrics providers...",
+                            text = stringResource(R.string.lyrics_searching_providers),
                             style = MaterialTheme.typography.titleMedium.copy(fontWeight = FontWeight.SemiBold),
                         )
                         Text(
-                            text = "Aggregating matches across enabled sources",
+                            text = stringResource(R.string.lyrics_search_aggregate_hint),
                             style = MaterialTheme.typography.bodySmall,
                             color = MaterialTheme.colorScheme.onSurfaceVariant,
                         )
@@ -231,11 +236,11 @@ fun LyricsSearchResultsSheet(
                         }
 
                         Text(
-                            text = "No matching lyrics found",
+                            text = stringResource(R.string.lyrics_search_no_matches),
                             style = MaterialTheme.typography.titleMedium.copy(fontWeight = FontWeight.SemiBold),
                         )
                         Text(
-                            text = "Try re-searching or modifying the song title, artist, or providers.",
+                            text = stringResource(R.string.lyrics_search_no_matches_hint),
                             style = MaterialTheme.typography.bodySmall,
                             color = MaterialTheme.colorScheme.onSurfaceVariant,
                         )
@@ -256,7 +261,7 @@ fun LyricsSearchResultsSheet(
                                     modifier = Modifier.size(16.dp),
                                 )
                                 Spacer(modifier = Modifier.width(6.dp))
-                                Text("Re-search")
+                                Text(stringResource(R.string.lyrics_search_research))
                             }
 
                             OutlinedButton(
@@ -269,7 +274,7 @@ fun LyricsSearchResultsSheet(
                                     modifier = Modifier.size(16.dp),
                                 )
                                 Spacer(modifier = Modifier.width(6.dp))
-                                Text("Refine Query")
+                                Text(stringResource(R.string.lyrics_search_refine))
                             }
                         }
                     }
@@ -312,7 +317,7 @@ fun LyricsSearchResultsSheet(
                     )
                     Spacer(modifier = Modifier.width(8.dp))
                     Text(
-                        text = "Re-search",
+                        text = stringResource(R.string.lyrics_search_research),
                         style = MaterialTheme.typography.bodyMedium.copy(fontWeight = FontWeight.Bold),
                     )
                 }
@@ -330,7 +335,7 @@ fun LyricsSearchResultsSheet(
                     )
                     Spacer(modifier = Modifier.width(8.dp))
                     Text(
-                        text = "Refine Query",
+                        text = stringResource(R.string.lyrics_search_refine),
                         style = MaterialTheme.typography.bodyMedium.copy(fontWeight = FontWeight.SemiBold),
                     )
                 }
@@ -425,7 +430,14 @@ private fun ModernSearchResultCard(
                             )
                         }
                         Text(
-                            text = item.formatBadge,
+                            text = stringResource(
+                                when {
+                                    item.hasSynced && item.hasPlain -> R.string.lyrics_format_synced_and_plain
+                                    item.hasSynced -> R.string.lyrics_format_lrc_timed
+                                    item.hasPlain -> R.string.lyrics_format_plain_badge
+                                    else -> R.string.lyrics_format_lyrics
+                                },
+                            ),
                             style = MaterialTheme.typography.labelSmall.copy(fontWeight = FontWeight.SemiBold),
                             color = if (item.hasSynced) {
                                 MaterialTheme.colorScheme.onSecondaryContainer

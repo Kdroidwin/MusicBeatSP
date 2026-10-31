@@ -1024,6 +1024,10 @@ object AppSettings {
     val visibleLocalLibraryTabs = MutableStateFlow(LocalLibraryTab.entries.toSet())
     val localLibraryTabOrder = MutableStateFlow<List<LocalLibraryTab>>(LocalLibraryTab.entries.toList())
     val localFolderHierarchy = MutableStateFlow(false)
+    /** Reopens the folder browser at its last visited folder; enabled for new installs. */
+    val rememberLastOpenedFolder = MutableStateFlow(true)
+    /** Last folder is device-local because paths and storage permissions are device-specific. */
+    val lastOpenedFolderPath = MutableStateFlow("")
     val fullScreenCollectionArtwork = MutableStateFlow(false)
     /** On wide layouts, replaces the left page with synced lyrics beside the docked player. */
     val tabletFullscreenPlayer = MutableStateFlow(false)
@@ -1667,6 +1671,8 @@ object AppSettings {
         localAlbumsViewType.value = readLibraryViewType(KEY_LOCAL_ALBUMS_VIEW_TYPE, LibraryViewType.GRID)
         localArtistsViewType.value = readLibraryViewType(KEY_LOCAL_ARTISTS_VIEW_TYPE, LibraryViewType.GRID)
         localFolderHierarchy.value = prefs.getBoolean(KEY_LOCAL_FOLDER_HIERARCHY, false)
+        rememberLastOpenedFolder.value = prefs.getBoolean(KEY_REMEMBER_LAST_OPENED_FOLDER, true)
+        lastOpenedFolderPath.value = prefs.getString(KEY_LAST_OPENED_FOLDER_PATH, "").orEmpty()
         localMusicFolderUri.value = prefs.getString(KEY_LOCAL_MUSIC_FOLDER_PATH, "").orEmpty()
         webdavUrl.value = prefs.getString(KEY_WEBDAV_URL, "").orEmpty()
         webdavAllowInsecureHttp.value = prefs.getBoolean(KEY_WEBDAV_ALLOW_HTTP, false)
@@ -3618,6 +3624,25 @@ object AppSettings {
         prefs.edit().putBoolean(KEY_LOCAL_FOLDER_HIERARCHY, value).apply()
     }
 
+    fun setRememberLastOpenedFolder(value: Boolean) {
+        rememberLastOpenedFolder.value = value
+        if (!value) lastOpenedFolderPath.value = ""
+        prefs.edit()
+            .putBoolean(KEY_REMEMBER_LAST_OPENED_FOLDER, value)
+            .apply {
+                if (!value) remove(KEY_LAST_OPENED_FOLDER_PATH)
+            }
+            .apply()
+    }
+
+    fun setLastOpenedFolderPath(path: String) {
+        if (!rememberLastOpenedFolder.value) return
+        val safePath = path.trim().take(4096)
+        if (lastOpenedFolderPath.value == safePath) return
+        lastOpenedFolderPath.value = safePath
+        prefs.edit().putString(KEY_LAST_OPENED_FOLDER_PATH, safePath).apply()
+    }
+
     fun setIncludeRemoteSourceMediaInLibrary(value: Boolean) {
         includeRemoteSourceMediaInLibrary.value = value
         prefs.edit().putBoolean(KEY_INCLUDE_REMOTE_SOURCE_MEDIA_IN_LIBRARY, value).apply()
@@ -3980,6 +4005,7 @@ object AppSettings {
         "downloaded_collections",
         KEY_LAST_VERSION_CODE,
         KEY_LOCAL_MUSIC_FOLDER_PATH,
+        KEY_LAST_OPENED_FOLDER_PATH,
         KEY_LOCAL_MUSIC_ACCESS_TREE_URI,
         KEY_LOCAL_MUSIC_SCOPE_REQUIRED,
         KEY_ALL_FILES_PERMISSION_ASKED,
@@ -4244,6 +4270,8 @@ object AppSettings {
     private const val KEY_ALBUM_ARTISTS_TAB_MIGRATED = "album_artists_tab_migrated"
     private const val KEY_LOCAL_LIBRARY_TAB_ORDER = "local_library_tab_order"
     private const val KEY_LOCAL_FOLDER_HIERARCHY = "local_folder_hierarchy"
+    private const val KEY_REMEMBER_LAST_OPENED_FOLDER = "remember_last_opened_folder"
+    private const val KEY_LAST_OPENED_FOLDER_PATH = "last_opened_folder_path"
     private const val KEY_INCLUDE_REMOTE_SOURCE_MEDIA_IN_LIBRARY = "include_remote_source_media_in_library"
     private const val KEY_LOCAL_MUSIC_FOLDER_PATH = "local_music_folder_path"
     private const val KEY_LOCAL_MUSIC_ACCESS_TREE_URI = "local_music_access_tree_uri"
