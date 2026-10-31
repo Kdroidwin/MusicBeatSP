@@ -1621,6 +1621,10 @@ fun NowPlayingScreen(
             playerFillsWindow(windowWidth) ||
             tabletFullscreenPlayer
         )
+    // Landscape split players have a short vertical budget. Keep every control
+    // available, but give fixed gaps back to the cover instead of letting the
+    // stacked controls reduce it to a thumbnail-sized square.
+    val compactTabletLandscape = tabletFullscreenPlayer && tabletLandscapeBannerHeight > 0.dp
     val aurisHeroMode = heroMode && aurisFullBleedArtwork
     val useLargerHeroArtwork = heroMode && largerFullBleedArtwork
     val heroArtworkZoom = when {
@@ -2268,7 +2272,10 @@ fun NowPlayingScreen(
                     .weight(1f)
                     .widthIn(max = PLAYER_MAX_WIDTH)
                     .fillMaxWidth()
-                    .padding(top = ART_BOX_TOP_PAD, bottom = 18.dp)
+                    .padding(
+                        top = if (compactTabletLandscape) 0.dp else ART_BOX_TOP_PAD,
+                        bottom = if (compactTabletLandscape) 4.dp else 18.dp,
+                    )
                     .onGloballyPositioned { dockFrame.artworkBox = it },
             ) {
                 // The height this box would have if the controls at the foot of
@@ -2288,7 +2295,8 @@ fun NowPlayingScreen(
                 // rebuilt from scratch) was pocketed for good. The gaps
                 // ratcheted open a little at a time and the sleeve paid for it.
                 val integratedLyrics = lyricsOpen && lyricsReplaceArtworkOnly
-                val roomy = maxHeight + if (lyricsOpen && !integratedLyrics) 0.dp else controlSpread
+                val appliedControlSpread = if (compactTabletLandscape) 0.dp else controlSpread
+                val roomy = maxHeight + if (lyricsOpen && !integratedLyrics) 0.dp else appliedControlSpread
                 // The sleeve is square, so it is bounded by whichever of the
                 // two axes runs out first: the player's width on a phone, or —
                 // on a tablet, where there is width to spare — the height left
@@ -2338,7 +2346,7 @@ fun NowPlayingScreen(
                 // of settling — a full-amplitude standing oscillation, not the
                 // single-pixel shiver this rounding alone was built to absorb.
                 // See [granted] below for the fix.
-                if (!lyricsOpen || integratedLyrics) {
+                if (!compactTabletLandscape && (!lyricsOpen || integratedLyrics)) {
                     val target = with(density) {
                         val half = slack
                             .coerceAtMost(CONTROL_GAP_SPREAD_MAX * 2)
@@ -3422,7 +3430,11 @@ fun NowPlayingScreen(
             // which sit close enough together to read as one. Both of its own
             // gaps take half the spread, so on a tall screen it holds the
             // centre rather than drifting up under the seek bar.
-            Spacer(Modifier.height(14.dp + controlSpread / 2))
+            Spacer(
+                Modifier.height(
+                    if (compactTabletLandscape) 4.dp else 14.dp + controlSpread / 2,
+                ),
+            )
 
             // ---- Transport ----
             Row(
@@ -3591,9 +3603,17 @@ fun NowPlayingScreen(
             // the toggle row below it close the gap instead of leaving a
             // blank strip where the volume bar used to be.
             if (hideVolumeBar) {
-                Spacer(Modifier.height(24.dp + controlSpread / 2))
+                Spacer(
+                    Modifier.height(
+                        if (compactTabletLandscape) 8.dp else 24.dp + controlSpread / 2,
+                    ),
+                )
             } else {
-                Spacer(Modifier.height(18.dp + controlSpread / 2))
+                Spacer(
+                    Modifier.height(
+                        if (compactTabletLandscape) 6.dp else 18.dp + controlSpread / 2,
+                    ),
+                )
 
                 // ---- Volume ----
                 Row(
@@ -3635,7 +3655,7 @@ fun NowPlayingScreen(
                     )
                 }
 
-                Spacer(Modifier.height(24.dp))
+                Spacer(Modifier.height(if (compactTabletLandscape) 8.dp else 24.dp))
             }
 
             // ---- Shuffle · Repeat · AutoPlay · Queue ----
@@ -3739,7 +3759,9 @@ fun NowPlayingScreen(
                 }
             }
 
-            if (visiblePlayerControls.isNotEmpty()) Spacer(Modifier.height(18.dp))
+            if (visiblePlayerControls.isNotEmpty()) {
+                Spacer(Modifier.height(if (compactTabletLandscape) 6.dp else 18.dp))
+            }
             }
             }
             }
