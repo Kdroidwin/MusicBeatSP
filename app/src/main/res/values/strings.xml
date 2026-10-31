@@ -1492,6 +1492,8 @@
     <string name="saved_queues_section">Saved queues</string>
     <string name="hide_saved_queue_heading">Hide save-current-queue heading</string>
     <string name="hide_saved_queue_heading_subtitle">Hide the heading above the queue name field in the saved-queue manager. On by default.</string>
+    <string name="hide_queue_manager_title">Hide the Manage queues title</string>
+    <string name="hide_queue_manager_title_subtitle">Hide only the title at the top of the saved-queue manager. Off by default.</string>
 
     <string name="transport_left_action">Left transport side button</string>
     <string name="transport_right_action">Right transport side button</string>
@@ -1509,8 +1511,10 @@
     <string name="audio_output_rate_caveat">Android or the DAC may resample after AudioTrack. Final hardware rate is not exposed to ordinary apps.</string>
     <string name="music_only_device_mode">Music-only device mode</string>
     <string name="music_only_device_mode_subtitle">Uses Android screen pinning to keep this app in front and shows it over the lock screen. Android still controls unpinning and device security; this does not replace the Home app.</string>
-    <string name="white_collection_action_buttons">Use white play and shuffle buttons</string>
-    <string name="white_collection_action_buttons_subtitle">Use white backgrounds with black icons below album and playlist artwork. Off keeps the current dark style.</string>
+    <string name="white_collection_action_buttons">Use white collection action buttons</string>
+    <string name="white_collection_action_buttons_subtitle">Use white backgrounds with black icons for shuffle and other action buttons below collection artwork.</string>
+    <string name="white_collection_play_button">Use a white Play button</string>
+    <string name="white_collection_play_button_subtitle">Use a white background with a black play icon on album, album-artist, artist, and playlist pages. On by default.</string>
     <string name="settings_top_bar_more_icon">Use an overflow icon for Settings</string>
     <string name="settings_top_bar_more_icon_subtitle">Show a three-dot icon instead of the gear in the main top bar.</string>
     <string name="tablet_lyrics_beside_player">Tablet full-screen player</string>
@@ -1538,8 +1542,8 @@
     <string name="player_transport_button_spacing_subtitle">Adjust the gaps between the previous, play, and next controls. Auto keeps the current layout.</string>
     <string name="player_action_button_spacing">Player lower action button spacing</string>
     <string name="player_action_button_spacing_subtitle">Adjust the gaps between the lyrics, favorite, queue, and other buttons below the volume control.</string>
-    <string name="hide_playlist_play_button_label">Hide the Play label in playlists</string>
-    <string name="hide_playlist_play_button_label_subtitle">Show only the play icon on playlist detail pages. Off by default.</string>
+    <string name="hide_playlist_play_button_label">Hide the Play label on collection pages</string>
+    <string name="hide_playlist_play_button_label_subtitle">Show only the play icon on album, album-artist, artist, and playlist pages. Off by default.</string>
     <string name="player_transport_spacing_auto">Auto</string>
     <string name="player_transport_spacing_value">%1$d dp</string>
     <string name="show_player_top_grabber">Show player top handle</string>

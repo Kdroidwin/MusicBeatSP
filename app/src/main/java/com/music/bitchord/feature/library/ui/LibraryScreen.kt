@@ -1026,6 +1026,8 @@ fun LibraryScreen(
                             artworkUrl = null,
                             songs = historySongs,
                             fullScreenArtwork = false,
+                            isCollectionDetail = false,
+                            showHistoryArtworkCollage = true,
                             viewType = songsViewType,
                             onViewTypeToggle = {
                                 val next = if (songsViewType == LibraryViewType.GRID) LibraryViewType.LIST else LibraryViewType.GRID

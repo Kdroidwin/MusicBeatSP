@@ -64,6 +64,7 @@ import com.music.bitchord.data.model.ROW_ART_PX
 internal fun SavedQueuesDialog(
     redesigned: Boolean,
     hideSaveCurrentQueueHeading: Boolean,
+    hideManageQueueTitle: Boolean,
     queues: List<SavedQueue>,
     artworkPalette: ArtworkPalette,
     artworkUrl: String?,
@@ -80,6 +81,7 @@ internal fun SavedQueuesDialog(
     if (redesigned) {
         ModernSavedQueuesDialog(
             hideSaveCurrentQueueHeading = hideSaveCurrentQueueHeading,
+            hideManageQueueTitle = hideManageQueueTitle,
             queues = queues,
             artworkPalette = artworkPalette,
             artworkUrl = artworkUrl,
@@ -95,6 +97,7 @@ internal fun SavedQueuesDialog(
         )
     } else {
         LegacySavedQueuesDialog(
+            hideManageQueueTitle = hideManageQueueTitle,
             queues = queues,
             artworkPalette = artworkPalette,
             artworkUrl = artworkUrl,
@@ -114,6 +117,7 @@ internal fun SavedQueuesDialog(
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 private fun LegacySavedQueuesDialog(
+    hideManageQueueTitle: Boolean,
     queues: List<SavedQueue>,
     artworkPalette: ArtworkPalette,
     artworkUrl: String?,
@@ -147,13 +151,12 @@ private fun LegacySavedQueuesDialog(
         containerColor = if (useFrostedGlass) Color.Transparent else container,
         dragHandle = {
             Box(
-                Modifier.fillMaxWidth().padding(top = 8.dp, bottom = 4.dp),
+                Modifier.fillMaxWidth().height(32.dp),
                 contentAlignment = Alignment.Center,
             ) {
                 Box(
                     Modifier
-                        .height(4.dp)
-                        .fillMaxWidth(0.14f)
+                        .size(width = 48.dp, height = 6.dp)
                         .clip(RoundedCornerShape(50))
                         .background(foreground.copy(alpha = 0.38f)),
                 )
@@ -179,12 +182,14 @@ private fun LegacySavedQueuesDialog(
                     .heightIn(max = 640.dp)
                     .padding(start = 24.dp, end = 24.dp, bottom = 20.dp),
             ) {
-                Text(
-                    stringResource(R.string.manage_queues),
-                    color = foreground,
-                    style = MaterialTheme.typography.titleLarge,
-                    modifier = Modifier.padding(top = 8.dp, bottom = 12.dp),
-                )
+                if (!hideManageQueueTitle) {
+                    Text(
+                        stringResource(R.string.manage_queues),
+                        color = foreground,
+                        style = MaterialTheme.typography.titleLarge,
+                        modifier = Modifier.padding(top = 8.dp, bottom = 12.dp),
+                    )
+                }
                 OutlinedTextField(
                     value = name,
                     onValueChange = { name = it.take(80); saveError = false },
@@ -297,6 +302,7 @@ private fun LegacySavedQueuesDialog(
 @Composable
 private fun ModernSavedQueuesDialog(
     hideSaveCurrentQueueHeading: Boolean,
+    hideManageQueueTitle: Boolean,
     queues: List<SavedQueue>,
     artworkPalette: ArtworkPalette,
     artworkUrl: String?,
@@ -325,10 +331,10 @@ private fun ModernSavedQueuesDialog(
         shape = sheetShape,
         containerColor = if (useFrostedGlass) Color.Transparent else container,
         dragHandle = {
-            Box(Modifier.fillMaxWidth().padding(top = 8.dp, bottom = 4.dp), contentAlignment = Alignment.Center) {
+            Box(Modifier.fillMaxWidth().height(32.dp), contentAlignment = Alignment.Center) {
                 Box(
                     Modifier
-                        .size(width = 34.dp, height = 4.dp)
+                        .size(width = 48.dp, height = 6.dp)
                         .clip(RoundedCornerShape(50))
                         .background(foreground.copy(alpha = 0.34f)),
                 )
@@ -357,15 +363,17 @@ private fun ModernSavedQueuesDialog(
                     .padding(bottom = 10.dp),
             ) {
                 Row(
-                    Modifier.fillMaxWidth().padding(top = 2.dp, bottom = 18.dp),
+                    Modifier.fillMaxWidth().padding(top = 2.dp, bottom = if (hideManageQueueTitle) 4.dp else 18.dp),
                     verticalAlignment = Alignment.CenterVertically,
-                    horizontalArrangement = Arrangement.SpaceBetween,
+                    horizontalArrangement = if (hideManageQueueTitle) Arrangement.End else Arrangement.SpaceBetween,
                 ) {
-                    Text(
-                        text = stringResource(R.string.manage_queues),
-                        style = MaterialTheme.typography.titleLarge,
-                        color = foreground,
-                    )
+                    if (!hideManageQueueTitle) {
+                        Text(
+                            text = stringResource(R.string.manage_queues),
+                            style = MaterialTheme.typography.titleLarge,
+                            color = foreground,
+                        )
+                    }
                     IconButton(onClick = onDismiss) {
                         Icon(
                             imageVector = Icons.Rounded.Close,

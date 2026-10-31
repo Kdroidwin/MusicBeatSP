@@ -1466,6 +1466,8 @@
     <string name="profile_unavailable">このページではログイン済みプロフィールを利用できません。</string>
     <string name="hide_saved_queue_heading">「現在のキューを保存」の見出しを隠す</string>
     <string name="hide_saved_queue_heading_subtitle">保存済みキュー管理画面で、キュー名入力欄の上にある見出しを隠します。初期設定はオンです。</string>
+    <string name="hide_queue_manager_title">「再生キューを管理」のタイトルを隠す</string>
+    <string name="hide_queue_manager_title_subtitle">保存済みキュー管理画面の上部タイトルだけを隠します。初期設定はオフです。</string>
 
     <string name="transport_left_action">再生ボタン左側の操作</string>
     <string name="transport_right_action">再生ボタン右側の操作</string>
@@ -1483,8 +1485,10 @@
     <string name="audio_output_rate_caveat">AudioTrackの後段でAndroidやDACが再サンプリングする場合があります。一般アプリから最終的なハードウェア出力レートは取得できません。</string>
     <string name="music_only_device_mode">音楽専用機モード</string>
     <string name="music_only_device_mode_subtitle">Androidの画面固定でアプリを前面に保ち、ロック画面上にも表示します。固定解除と端末のセキュリティはAndroidが管理します。ホームアプリの置き換えは行いません。</string>
-    <string name="white_collection_action_buttons">再生・シャッフルボタンを白くする</string>
-    <string name="white_collection_action_buttons_subtitle">アルバムやプレイリストのアート下にあるボタンを白背景・黒アイコンにします。オフでは現在の暗い配色を使います。</string>
+    <string name="white_collection_action_buttons">コレクション操作ボタンを白くする</string>
+    <string name="white_collection_action_buttons_subtitle">コレクションアート下のシャッフルなどの操作ボタンを白背景・黒アイコンにします。</string>
+    <string name="white_collection_play_button">再生ボタンを白くする</string>
+    <string name="white_collection_play_button_subtitle">アルバム、アルバムアーティスト、アーティスト、プレイリスト画面の再生ボタンを白背景・黒い再生アイコンにします。初期設定はオンです。</string>
     <string name="settings_top_bar_more_icon">設定に三点アイコンを使う</string>
     <string name="settings_top_bar_more_icon_subtitle">メイン画面上部の歯車を三点メニューのアイコンに変更します。</string>
     <string name="tablet_lyrics_beside_player">タブレットでプレイヤーを全画面表示</string>
@@ -1512,8 +1516,8 @@
     <string name="player_transport_button_spacing_subtitle">前へ・再生・次へなどの操作ボタン間隔を調整します。「自動」では従来の配置を使います。</string>
     <string name="player_action_button_spacing">プレイヤー下部ボタンの間隔</string>
     <string name="player_action_button_spacing_subtitle">音量バーより下にある歌詞・お気に入り・キューなどのボタン間隔を調整します。</string>
-    <string name="hide_playlist_play_button_label">プレイリストの「再生」ラベルを隠す</string>
-    <string name="hide_playlist_play_button_label_subtitle">プレイリスト詳細画面の再生ボタンをアイコンだけにします。初期設定は表示です。</string>
+    <string name="hide_playlist_play_button_label">コレクション画面の「再生」ラベルを隠す</string>
+    <string name="hide_playlist_play_button_label_subtitle">アルバム、アルバムアーティスト、アーティスト、プレイリスト画面の再生ボタンをアイコンだけにします。初期設定は表示です。</string>
     <string name="player_transport_spacing_auto">自動</string>
     <string name="player_transport_spacing_value">%1$d dp</string>
     <string name="show_player_top_grabber">プレイヤー上部のハンドルを表示</string>

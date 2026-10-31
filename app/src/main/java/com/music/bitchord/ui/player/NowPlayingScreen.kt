@@ -407,6 +407,7 @@ private fun HeroArtworkBottomBlur(
     model: ImageRequest,
     alpha: Float,
     zoom: Float,
+    includeRightEdge: Boolean = false,
     modifier: Modifier = Modifier,
 ) {
     val strengthDp by AppSettings.fullBleedArtworkBottomBlurStrengthDp.collectAsStateWithLifecycle()
@@ -440,6 +441,19 @@ private fun HeroArtworkBottomBlur(
                     ),
                     blendMode = BlendMode.DstIn,
                 )
+                if (includeRightEdge) {
+                    drawRect(
+                        brush = Brush.horizontalGradient(
+                            colorStops = arrayOf(
+                                (0.58f / maskZoom) to Color.Transparent,
+                                (0.72f / maskZoom) to Color.Black.copy(alpha = 0.48f * intensity),
+                                (0.88f / maskZoom) to Color.Black.copy(alpha = 0.82f * intensity),
+                                (1f / maskZoom) to Color.Transparent,
+                            ),
+                        ),
+                        blendMode = BlendMode.DstIn,
+                    )
+                }
             }
             .blur(strengthDp.dp, BlurredEdgeTreatment.Rectangle),
     )
@@ -1176,6 +1190,7 @@ fun NowPlayingScreen(
     val frostedQueueManager by AppSettings.frostedQueueManager.collectAsStateWithLifecycle()
     val redesignedSavedQueueManager by AppSettings.redesignedSavedQueueManager.collectAsStateWithLifecycle()
     val hideSavedQueueHeading by AppSettings.hideSavedQueueHeading.collectAsStateWithLifecycle()
+    val hideQueueManagerTitle by AppSettings.hideQueueManagerTitle.collectAsStateWithLifecycle()
     val showPlayerLyricsStrip by AppSettings.showPlayerLyricsStrip.collectAsStateWithLifecycle()
     val offlineMode by AppSettings.offlineMode.collectAsStateWithLifecycle()
     val visiblePlayerControls by AppSettings.visiblePlayerControls.collectAsStateWithLifecycle()
@@ -1360,6 +1375,7 @@ fun NowPlayingScreen(
         SavedQueuesDialog(
             redesigned = redesignedSavedQueueManager,
             hideSaveCurrentQueueHeading = hideSavedQueueHeading,
+            hideManageQueueTitle = hideQueueManagerTitle,
             queues = savedQueues,
             // Use the same thumbnail size, source URL and dark palette as the
             // player-details sheet so the two surfaces share one colour set.
@@ -2025,6 +2041,7 @@ fun NowPlayingScreen(
                     alpha = heroVisible *
                         (1f - if (heroClip != null) canvasCover.floatValue else 0f),
                     zoom = heroArtworkZoom,
+                    includeRightEdge = tabletFullscreenPlayer,
                     modifier = Modifier
                         .align(Alignment.TopStart)
                         .fillMaxWidth()

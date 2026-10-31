@@ -128,6 +128,7 @@ fun DrillDownHeader(
     isPlaylist: Boolean = false,
     fullScreenArtwork: Boolean = false,
     preserveArtworkAspectRatio: Boolean = false,
+    showArtworkCollage: Boolean = false,
     artHeight: Dp? = null,
     palette: ArtworkPalette? = null,
     modifier: Modifier = Modifier,
@@ -149,6 +150,7 @@ fun DrillDownHeader(
             isArtist = isArtist,
             onBack = onBack,
             preserveArtworkAspectRatio = preserveArtworkAspectRatio,
+            showArtworkCollage = showArtworkCollage,
             modifier = modifier,
         )
     }
@@ -162,6 +164,7 @@ private fun CompactDrillDownHeader(
     isArtist: Boolean,
     onBack: (() -> Unit)?,
     preserveArtworkAspectRatio: Boolean,
+    showArtworkCollage: Boolean,
     modifier: Modifier,
 ) {
     Column(
@@ -204,6 +207,27 @@ private fun CompactDrillDownHeader(
                     tint = Color.White.copy(alpha = 0.95f),
                     modifier = Modifier.size(76.dp),
                 )
+            } else if (showArtworkCollage) {
+                val artworkTiles = remember(songs) {
+                    songs.take(4).mapNotNull { it.artworkAt(CARD_ART_PX) }
+                }
+                artworkTiles.forEachIndexed { index, imageUrl ->
+                    val tileAlignment = when (index) {
+                        0 -> Alignment.TopStart
+                        1 -> Alignment.TopEnd
+                        2 -> Alignment.BottomStart
+                        else -> Alignment.BottomEnd
+                    }
+                    AsyncImage(
+                        model = imageUrl,
+                        contentDescription = null,
+                        contentScale = ContentScale.Crop,
+                        modifier = Modifier
+                            .align(tileAlignment)
+                            .fillMaxWidth(0.5f)
+                            .aspectRatio(1f),
+                    )
+                }
             } else {
                 Icon(
                     imageVector = if (isArtist) Icons.Rounded.Person else Icons.Rounded.Album,
@@ -346,6 +370,7 @@ private fun FullScreenCollectionHeader(
 fun DrillDownActionRow(
     songs: List<Song>,
     isPlaylist: Boolean = false,
+    isCollectionDetail: Boolean = true,
     viewType: LibraryViewType? = null,
     onViewTypeToggle: (() -> Unit)? = null,
     onSongClick: (List<Song>, Int) -> Unit,
@@ -358,11 +383,15 @@ fun DrillDownActionRow(
     modifier: Modifier = Modifier,
 ) {
     val whiteActionButtons by AppSettings.whiteCollectionActionButtons.collectAsStateWithLifecycle()
+    val whitePlayButton by AppSettings.whiteCollectionPlayButton.collectAsStateWithLifecycle()
     val hidePlaylistPlayButtonLabel by AppSettings.hidePlaylistPlayButtonLabel.collectAsStateWithLifecycle()
-    val showPlayLabel = !isPlaylist || !hidePlaylistPlayButtonLabel
+    val showPlayLabel = !isCollectionDetail || !hidePlaylistPlayButtonLabel
     val buttonBackground = if (whiteActionButtons) Color.White else MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.7f)
     val buttonBorder = if (whiteActionButtons) Color.Transparent else MaterialTheme.colorScheme.onSurface.copy(alpha = 0.08f)
     val buttonContentColor = if (whiteActionButtons) Color.Black else MaterialTheme.colorScheme.onSurface
+    val playButtonBackground = if (isCollectionDetail && whitePlayButton) Color.White else buttonBackground
+    val playButtonBorder = if (isCollectionDetail && whitePlayButton) Color.Transparent else buttonBorder
+    val playButtonContentColor = if (isCollectionDetail && whitePlayButton) Color.Black else buttonContentColor
 
     Row(
         modifier = modifier
@@ -391,8 +420,8 @@ fun DrillDownActionRow(
             modifier = Modifier
                 .height(50.dp)
                 .clip(CircleShape)
-                .background(buttonBackground)
-                .border(0.5.dp, buttonBorder, CircleShape)
+                .background(playButtonBackground)
+                .border(0.5.dp, playButtonBorder, CircleShape)
                 .clickable { if (songs.isNotEmpty()) onSongClick(songs, 0) }
                 .padding(horizontal = if (showPlayLabel) 32.dp else 16.dp),
             verticalAlignment = Alignment.CenterVertically,
@@ -401,7 +430,7 @@ fun DrillDownActionRow(
             Icon(
                 BitChordIcons.Play,
                 contentDescription = if (showPlayLabel) null else stringResource(R.string.play),
-                tint = buttonContentColor,
+                tint = playButtonContentColor,
                 modifier = Modifier.size(18.dp),
             )
             if (showPlayLabel) Spacer(Modifier.width(6.dp))
@@ -409,7 +438,7 @@ fun DrillDownActionRow(
                 Text(
                     text = stringResource(R.string.play),
                     style = MaterialTheme.typography.titleMedium,
-                    color = buttonContentColor,
+                    color = playButtonContentColor,
                 )
             }
         }
@@ -594,6 +623,8 @@ fun DrillDownSongList(
     isSavedToLibrary: Boolean = false,
     onToggleLibrary: (() -> Unit)? = null,
     isPlaylist: Boolean = false,
+    isCollectionDetail: Boolean = true,
+    showHistoryArtworkCollage: Boolean = false,
     showArtworkInList: Boolean = false,
     showCollectionArtworkInList: Boolean = false,
     fullScreenArtwork: Boolean = false,
@@ -691,6 +722,7 @@ fun DrillDownSongList(
                         isArtist = isArtist,
                         onBack = onBack,
                         isPlaylist = isPlaylist,
+                        showArtworkCollage = showHistoryArtworkCollage,
                         fullScreenArtwork = fullScreenArtwork,
                         preserveArtworkAspectRatio = preserveArtworkAspectRatioInCollections && !isArtist,
                         artHeight = artHeight,
@@ -701,6 +733,7 @@ fun DrillDownSongList(
                     DrillDownActionRow(
                         songs = songs,
                         isPlaylist = isPlaylist,
+                        isCollectionDetail = isCollectionDetail,
                         viewType = viewType,
                         onViewTypeToggle = onViewTypeToggle,
                         onSongClick = onSongClick,
@@ -814,6 +847,7 @@ fun DrillDownSongList(
                         isArtist = isArtist,
                         onBack = onBack,
                         isPlaylist = isPlaylist,
+                        showArtworkCollage = showHistoryArtworkCollage,
                         fullScreenArtwork = fullScreenArtwork,
                         preserveArtworkAspectRatio = preserveArtworkAspectRatioInCollections && !isArtist,
                         artHeight = artHeight,
@@ -824,6 +858,7 @@ fun DrillDownSongList(
                     DrillDownActionRow(
                         songs = songs,
                         isPlaylist = isPlaylist,
+                        isCollectionDetail = isCollectionDetail,
                         viewType = viewType,
                         onViewTypeToggle = onViewTypeToggle,
                         onSongClick = onSongClick,

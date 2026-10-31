@@ -264,6 +264,36 @@ private fun libraryCategorySettingsSearchEntries(
     return listOf(historyArtwork) + categoryVisibility
 }
 
+@Composable
+private fun hideQueueManagerTitleSearchEntry(hidden: Boolean) = SettingsSearchEntry(
+    title = stringResource(R.string.hide_queue_manager_title),
+    subtitle = stringResource(R.string.hide_queue_manager_title_subtitle),
+    keywords = listOf("queue", "manager", "title", "heading", "再生キュー", "管理", "タイトル", "見出し"),
+    checked = hidden,
+) { AppSettings.setHideQueueManagerTitle(!hidden) }
+
+@Composable
+private fun hideCollectionPlayLabelSearchEntry(hidden: Boolean) = SettingsSearchEntry(
+    title = stringResource(R.string.hide_playlist_play_button_label),
+    subtitle = stringResource(R.string.hide_playlist_play_button_label_subtitle),
+    keywords = listOf(
+        "playlist", "album", "artist", "album artist", "play", "button", "label", "text",
+        "プレイリスト", "アルバム", "アーティスト", "アルバムアーティスト", "再生", "ボタン", "文字", "ラベル",
+    ),
+    checked = hidden,
+) { AppSettings.setHidePlaylistPlayButtonLabel(!hidden) }
+
+@Composable
+private fun whiteCollectionPlayButtonSearchEntry(enabled: Boolean) = SettingsSearchEntry(
+    title = stringResource(R.string.white_collection_play_button),
+    subtitle = stringResource(R.string.white_collection_play_button_subtitle),
+    keywords = listOf(
+        "album", "playlist", "artist", "play", "white", "button",
+        "アルバム", "プレイリスト", "アーティスト", "再生", "白", "ボタン",
+    ),
+    checked = enabled,
+) { AppSettings.setWhiteCollectionPlayButton(!enabled) }
+
 private fun PlayerInkGroup.titleResource(): Int = when (this) {
     PlayerInkGroup.BUTTONS -> R.string.player_ink_button_controls
     PlayerInkGroup.SEEK_VOLUME -> R.string.player_ink_seek_volume
@@ -560,12 +590,14 @@ fun SettingsScreen(
     val localMusicFolderRoot by AppSettings.localMusicFolderUri.collectAsStateWithLifecycle()
     val fullScreenCollectionArtwork by AppSettings.fullScreenCollectionArtwork.collectAsStateWithLifecycle()
     val whiteCollectionActionButtons by AppSettings.whiteCollectionActionButtons.collectAsStateWithLifecycle()
+    val whiteCollectionPlayButton by AppSettings.whiteCollectionPlayButton.collectAsStateWithLifecycle()
     val tabletFullscreenPlayer by AppSettings.tabletFullscreenPlayer.collectAsStateWithLifecycle()
     val hideCollectionTopBar by AppSettings.hideCollectionTopBar.collectAsStateWithLifecycle()
     val hideFloatingCollectionControls by AppSettings.hideFloatingCollectionControls.collectAsStateWithLifecycle()
     val frostedQueueManager by AppSettings.frostedQueueManager.collectAsStateWithLifecycle()
     val redesignedSavedQueueManager by AppSettings.redesignedSavedQueueManager.collectAsStateWithLifecycle()
     val hideSavedQueueHeading by AppSettings.hideSavedQueueHeading.collectAsStateWithLifecycle()
+    val hideQueueManagerTitle by AppSettings.hideQueueManagerTitle.collectAsStateWithLifecycle()
     val frostedPlayerDetails by AppSettings.frostedPlayerDetails.collectAsStateWithLifecycle()
     val detailsSheetArtworkBackdrop by AppSettings.detailsSheetArtworkBackdrop.collectAsStateWithLifecycle()
     val showEmbeddedComment by AppSettings.showEmbeddedComment.collectAsStateWithLifecycle()
@@ -820,6 +852,7 @@ fun SettingsScreen(
             listOf("queue", "save queue", "heading", "再生キュー", "現在のキュー", "見出し"),
             hideSavedQueueHeading,
         ) { AppSettings.setHideSavedQueueHeading(!hideSavedQueueHeading) },
+        hideQueueManagerTitleSearchEntry(hideQueueManagerTitle),
         SettingsSearchEntry(
             stringResource(R.string.frosted_player_details),
             stringResource(R.string.frosted_player_details_subtitle),
@@ -1260,12 +1293,7 @@ fun SettingsScreen(
         ) { AppSettings.setShowPlayerTopGrabber(!showPlayerTopGrabber) },
         SettingsSearchEntry(stringResource(R.string.filter_non_music_audio), stringResource(R.string.filter_non_music_audio_subtitle), listOf("filter", "audio", "music", "音楽", "フィルター"), filterNonMusicAudio) { AppSettings.setFilterNonMusicAudio(!filterNonMusicAudio) },
         SettingsSearchEntry(stringResource(R.string.playlist_song_artwork), stringResource(R.string.playlist_song_artwork_subtitle), listOf("playlist", "artwork", "プレイリスト", "アルバムアート"), showPlaylistSongArtwork) { AppSettings.setShowPlaylistSongArtwork(!showPlaylistSongArtwork) },
-        SettingsSearchEntry(
-            stringResource(R.string.hide_playlist_play_button_label),
-            stringResource(R.string.hide_playlist_play_button_label_subtitle),
-            listOf("playlist", "play", "button", "label", "text", "プレイリスト", "再生", "ボタン", "文字", "ラベル"),
-            hidePlaylistPlayButtonLabel,
-        ) { AppSettings.setHidePlaylistPlayButtonLabel(!hidePlaylistPlayButtonLabel) },
+        hideCollectionPlayLabelSearchEntry(hidePlaylistPlayButtonLabel),
         SettingsSearchEntry(
             stringResource(R.string.collection_song_artwork),
             stringResource(R.string.collection_song_artwork_subtitle),
@@ -1657,6 +1685,7 @@ fun SettingsScreen(
             listOf("album", "playlist", "play", "shuffle", "white", "アルバム", "プレイリスト", "再生", "シャッフル", "白背景"),
             whiteCollectionActionButtons,
         ) { AppSettings.setWhiteCollectionActionButtons(!whiteCollectionActionButtons) },
+        whiteCollectionPlayButtonSearchEntry(whiteCollectionPlayButton),
         SettingsSearchEntry(
             stringResource(R.string.tablet_lyrics_beside_player),
             stringResource(R.string.tablet_lyrics_beside_player_subtitle),
@@ -3634,6 +3663,19 @@ fun SettingsScreen(
             )
             RowDivider()
             SettingsRow(
+                icon = Icons.AutoMirrored.Rounded.QueueMusic,
+                title = stringResource(R.string.hide_queue_manager_title),
+                subtitle = stringResource(R.string.hide_queue_manager_title_subtitle),
+                trailing = {
+                    Switch(
+                        checked = hideQueueManagerTitle,
+                        onCheckedChange = AppSettings::setHideQueueManagerTitle,
+                    )
+                },
+                onClick = { AppSettings.setHideQueueManagerTitle(!hideQueueManagerTitle) },
+            )
+            RowDivider()
+            SettingsRow(
                 icon = Icons.Rounded.BlurOn,
                 title = stringResource(R.string.frosted_player_details),
                 subtitle = stringResource(R.string.frosted_player_details_subtitle),
@@ -4661,6 +4703,8 @@ fun SettingsScreen(
             keepCollectionArtworkAspectRatio = keepCollectionArtworkAspectRatio,
             localizeLibraryCollectionCount = localizeLibraryCollectionCount,
             whiteCollectionActionButtons = whiteCollectionActionButtons,
+            whiteCollectionPlayButton = whiteCollectionPlayButton,
+            hidePlaylistPlayButtonLabel = hidePlaylistPlayButtonLabel,
             hasAllFiles = hasAllFiles,
             onManageFolders = { showManageFoldersSheet = true },
             onChooseMusicFolder = { musicFolderRootPicker.launch(null) },
@@ -4696,19 +4740,6 @@ fun SettingsScreen(
         }
 
         SettingsGroup(header = stringResource(R.string.playlist_tools)) {
-            SettingsRow(
-                icon = Icons.Rounded.PlayArrow,
-                title = stringResource(R.string.hide_playlist_play_button_label),
-                subtitle = stringResource(R.string.hide_playlist_play_button_label_subtitle),
-                trailing = {
-                    Switch(
-                        checked = hidePlaylistPlayButtonLabel,
-                        onCheckedChange = AppSettings::setHidePlaylistPlayButtonLabel,
-                    )
-                },
-                onClick = { AppSettings.setHidePlaylistPlayButtonLabel(!hidePlaylistPlayButtonLabel) },
-            )
-            RowDivider()
             SettingsRow(
                 icon = Icons.Rounded.FileUpload,
                 title = stringResource(R.string.import_m3u_playlist),
@@ -6020,6 +6051,8 @@ private fun LocalMusicSettingsGroup(
     keepCollectionArtworkAspectRatio: Boolean,
     localizeLibraryCollectionCount: Boolean,
     whiteCollectionActionButtons: Boolean,
+    whiteCollectionPlayButton: Boolean,
+    hidePlaylistPlayButtonLabel: Boolean,
     hasAllFiles: Boolean,
     onManageFolders: () -> Unit,
     onChooseMusicFolder: () -> Unit,
@@ -6218,6 +6251,32 @@ SettingsGroup(header = stringResource(R.string.local_music)) {
             )
         },
         onClick = { AppSettings.setWhiteCollectionActionButtons(!whiteCollectionActionButtons) },
+    )
+    RowDivider()
+    SettingsRow(
+        icon = Icons.Rounded.PlayArrow,
+        title = stringResource(R.string.white_collection_play_button),
+        subtitle = stringResource(R.string.white_collection_play_button_subtitle),
+        trailing = {
+            Switch(
+                checked = whiteCollectionPlayButton,
+                onCheckedChange = AppSettings::setWhiteCollectionPlayButton,
+            )
+        },
+        onClick = { AppSettings.setWhiteCollectionPlayButton(!whiteCollectionPlayButton) },
+    )
+    RowDivider()
+    SettingsRow(
+        icon = Icons.Rounded.VisibilityOff,
+        title = stringResource(R.string.hide_playlist_play_button_label),
+        subtitle = stringResource(R.string.hide_playlist_play_button_label_subtitle),
+        trailing = {
+            Switch(
+                checked = hidePlaylistPlayButtonLabel,
+                onCheckedChange = AppSettings::setHidePlaylistPlayButtonLabel,
+            )
+        },
+        onClick = { AppSettings.setHidePlaylistPlayButtonLabel(!hidePlaylistPlayButtonLabel) },
     )
     RowDivider()
     SettingsRow(

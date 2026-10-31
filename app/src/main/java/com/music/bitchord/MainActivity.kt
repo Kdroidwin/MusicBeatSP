@@ -495,6 +495,12 @@ class MainActivity : AppCompatActivity() {
     }
 
     private fun applySystemBarPreferences() {
+        val forceWhiteNavigationBar = AppSettings.forceWhiteNavigationBar.value
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
+            // Avoid Android's automatic navigation-bar scrim overriding the
+            // requested white gesture handle / navigation glyphs.
+            window.isNavigationBarContrastEnforced = !forceWhiteNavigationBar
+        }
         val bars = WindowInsetsControllerCompat(window, window.decorView)
         bars.systemBarsBehavior = WindowInsetsControllerCompat.BEHAVIOR_SHOW_TRANSIENT_BARS_BY_SWIPE
         val showStatusBar = if (expandedPlayerSurfaceActive) {
@@ -506,7 +512,7 @@ class MainActivity : AppCompatActivity() {
         else bars.hide(WindowInsetsCompat.Type.statusBars())
         if (AppSettings.showNavigationBar.value) bars.show(WindowInsetsCompat.Type.navigationBars())
         else bars.hide(WindowInsetsCompat.Type.navigationBars())
-        if (AppSettings.forceWhiteNavigationBar.value) {
+        if (forceWhiteNavigationBar) {
             bars.isAppearanceLightNavigationBars = false
         }
     }
@@ -4616,12 +4622,12 @@ private fun PlaybackTuningDialog(
         containerColor = if (useArtworkBackdrop) Color.Transparent else MaterialTheme.colorScheme.surfaceContainerHigh,
         dragHandle = {
             Box(
-                Modifier.fillMaxWidth().padding(top = 8.dp, bottom = 4.dp),
+                Modifier.fillMaxWidth().height(32.dp),
                 contentAlignment = Alignment.Center,
             ) {
                 Box(
                     Modifier
-                        .size(width = 34.dp, height = 4.dp)
+                        .size(width = 48.dp, height = 6.dp)
                         .clip(CircleShape)
                         .background((if (useArtworkBackdrop) palette.onBackground else MaterialTheme.colorScheme.onSurface).copy(alpha = 0.38f)),
                 )

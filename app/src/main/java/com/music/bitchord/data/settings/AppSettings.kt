@@ -593,8 +593,10 @@ object AppSettings {
     val playerActionButtonSpacingDp = MutableStateFlow(0f)
     /** Strength of the artwork-matched lower blur in the full-screen player. */
     val fullBleedArtworkBottomBlurStrengthDp = MutableStateFlow(42)
-    /** Hides only the word label on the play button in playlist detail pages. */
+    /** Hides only the word label on the play button in collection detail pages. */
     val hidePlaylistPlayButtonLabel = MutableStateFlow(false)
+    /** Uses a white background and black play glyph for collection detail pages. */
+    val whiteCollectionPlayButton = MutableStateFlow(true)
     /** Shows the small drag handle at the top of the expanded player by default. */
     val showPlayerTopGrabber = MutableStateFlow(true)
     /** App-level second consent for cleartext connections to a configured local server. */
@@ -614,6 +616,8 @@ object AppSettings {
     val queueManagerEqualsIcon = MutableStateFlow(false)
     /** Uses the compact native-style saved queue manager in place of its legacy sheet. */
     val redesignedSavedQueueManager = MutableStateFlow(true)
+    /** Hides the saved-queue manager title; visible by default. */
+    val hideQueueManagerTitle = MutableStateFlow(false)
     /** Hides only the save-current-queue section heading in the redesigned queue manager. */
     val hideSavedQueueHeading = MutableStateFlow(true)
     /** Hides the queue heading while keeping its actions available. */
@@ -1416,6 +1420,7 @@ object AppSettings {
         fullBleedArtworkBottomBlurStrengthDp.value =
             prefs.getInt(KEY_FULL_BLEED_ARTWORK_BOTTOM_BLUR_STRENGTH_DP, 42).coerceIn(0, 96)
         hidePlaylistPlayButtonLabel.value = prefs.getBoolean(KEY_HIDE_PLAYLIST_PLAY_BUTTON_LABEL, false)
+        whiteCollectionPlayButton.value = prefs.getBoolean(KEY_WHITE_COLLECTION_PLAY_BUTTON, true)
         showPlayerTopGrabber.value = prefs.getBoolean(KEY_SHOW_PLAYER_TOP_GRABBER, true)
         cleartextHttpAllowed.value = prefs.getBoolean(KEY_CLEARTEXT_HTTP_ALLOWED, false)
         whiteCollectionActionButtons.value = prefs.getBoolean(KEY_WHITE_COLLECTION_ACTION_BUTTONS, false)
@@ -1429,6 +1434,7 @@ object AppSettings {
         showEmbeddedComment.value = prefs.getBoolean(KEY_SHOW_EMBEDDED_COMMENT, true)
         queueManagerEqualsIcon.value = prefs.getBoolean(KEY_QUEUE_MANAGER_EQUALS_ICON, false)
         redesignedSavedQueueManager.value = prefs.getBoolean(KEY_REDESIGNED_SAVED_QUEUE_MANAGER, true)
+        hideQueueManagerTitle.value = prefs.getBoolean(KEY_HIDE_QUEUE_MANAGER_TITLE, false)
         hideSavedQueueHeading.value = prefs.getBoolean(KEY_HIDE_SAVED_QUEUE_HEADING, true)
         hideQueueLabel.value = prefs.getBoolean(KEY_HIDE_QUEUE_LABEL, true)
         queueClearTrashIcon.value = prefs.getBoolean(KEY_QUEUE_CLEAR_TRASH_ICON, false)
@@ -2099,6 +2105,11 @@ object AppSettings {
         prefs.edit().putBoolean(KEY_HIDE_PLAYLIST_PLAY_BUTTON_LABEL, value).apply()
     }
 
+    fun setWhiteCollectionPlayButton(value: Boolean) {
+        whiteCollectionPlayButton.value = value
+        prefs.edit().putBoolean(KEY_WHITE_COLLECTION_PLAY_BUTTON, value).apply()
+    }
+
     fun setShowPlayerTopGrabber(value: Boolean) {
         showPlayerTopGrabber.value = value
         prefs.edit().putBoolean(KEY_SHOW_PLAYER_TOP_GRABBER, value).apply()
@@ -2400,6 +2411,11 @@ object AppSettings {
     fun setRedesignedSavedQueueManager(value: Boolean) {
         redesignedSavedQueueManager.value = value
         prefs.edit().putBoolean(KEY_REDESIGNED_SAVED_QUEUE_MANAGER, value).apply()
+    }
+
+    fun setHideQueueManagerTitle(value: Boolean) {
+        hideQueueManagerTitle.value = value
+        prefs.edit().putBoolean(KEY_HIDE_QUEUE_MANAGER_TITLE, value).apply()
     }
 
     fun setHideSavedQueueHeading(value: Boolean) {
@@ -4092,6 +4108,7 @@ object AppSettings {
     private const val KEY_PLAYER_TRANSPORT_BUTTON_SPACING_DP = "player_transport_button_spacing_dp"
     private const val KEY_PLAYER_ACTION_BUTTON_SPACING_DP = "player_action_button_spacing_dp"
     private const val KEY_HIDE_PLAYLIST_PLAY_BUTTON_LABEL = "hide_playlist_play_button_label"
+    private const val KEY_WHITE_COLLECTION_PLAY_BUTTON = "white_collection_play_button"
     private const val KEY_SHOW_PLAYER_TOP_GRABBER = "show_player_top_grabber"
     private const val KEY_CLEARTEXT_HTTP_ALLOWED = "cleartext_http_allowed"
     private const val KEY_WHITE_COLLECTION_ACTION_BUTTONS = "white_collection_action_buttons"
@@ -4123,6 +4140,7 @@ object AppSettings {
     private const val KEY_HIDE_PLAYBACK_TUNING_TITLE = "hide_playback_tuning_title"
     private const val KEY_REDESIGNED_SAVED_QUEUE_MANAGER = "redesigned_saved_queue_manager"
     private const val KEY_HIDE_SAVED_QUEUE_HEADING = "hide_saved_queue_heading"
+    private const val KEY_HIDE_QUEUE_MANAGER_TITLE = "hide_queue_manager_title"
     private const val KEY_PAXSENIX_API_KEY = "paxsenix_api_key"
     private const val KEY_PLAYBACK_TUNING_THIN_SLIDERS = "playback_tuning_thin_sliders"
     private const val KEY_AUTOPLAY = "autoplay"
