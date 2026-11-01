@@ -23,6 +23,7 @@ import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.produceState
 import androidx.compose.ui.Alignment
+import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.res.pluralStringResource
 import androidx.compose.ui.res.stringResource
@@ -30,6 +31,7 @@ import androidx.compose.ui.unit.dp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.music.bitchord.R
 import com.music.bitchord.playback.SleepTimer
+import com.music.bitchord.ui.theme.ArtworkPalette
 import kotlinx.coroutines.delay
 import java.util.Locale
 
@@ -41,7 +43,13 @@ import java.util.Locale
 fun LocalSleepTimerPicker(
     onBack: () -> Unit,
     modifier: Modifier = Modifier,
+    artworkPalette: ArtworkPalette? = null,
+    useArtworkColor: Boolean = false,
 ) {
+    val foreground = artworkPalette?.takeIf { useArtworkColor }?.onBackground ?: MaterialTheme.colorScheme.onSurface
+    val secondary = artworkPalette?.takeIf { useArtworkColor }?.onBackgroundVariant ?: MaterialTheme.colorScheme.onSurfaceVariant
+    val accent = artworkPalette?.takeIf { useArtworkColor }?.accent ?: MaterialTheme.colorScheme.primary
+    val divider = artworkPalette?.takeIf { useArtworkColor }?.divider ?: MaterialTheme.colorScheme.outlineVariant
     val chosen by SleepTimer.minutes.collectAsStateWithLifecycle()
     val afterTrack by SleepTimer.afterTrack.collectAsStateWithLifecycle()
     val deadline by SleepTimer.deadline.collectAsStateWithLifecycle()
@@ -74,14 +82,14 @@ fun LocalSleepTimerPicker(
                 Icon(
                     Icons.AutoMirrored.Rounded.ArrowBack,
                     contentDescription = stringResource(R.string.back),
-                    tint = MaterialTheme.colorScheme.onSurface,
+                    tint = foreground,
                 )
             }
             Column(Modifier.weight(1f)) {
                 Text(
                     text = stringResource(R.string.sleep_timer),
                     style = MaterialTheme.typography.titleLarge,
-                    color = MaterialTheme.colorScheme.onSurface,
+                    color = foreground,
                 )
                 Text(
                     text = when {
@@ -90,7 +98,7 @@ fun LocalSleepTimerPicker(
                         else -> stringResource(R.string.pause_after_a_while)
                     },
                     style = MaterialTheme.typography.bodyMedium,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    color = secondary,
                 )
             }
         }
@@ -98,12 +106,14 @@ fun LocalSleepTimerPicker(
         HorizontalDivider(
             modifier = Modifier.padding(horizontal = 20.dp, vertical = 4.dp),
             thickness = 0.5.dp,
-            color = MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.5f),
+            color = divider.copy(alpha = 0.5f),
         )
 
         LocalSleepOptionRow(
             label = stringResource(R.string.after_this_song),
             selected = afterTrack,
+            accent = accent,
+            foreground = foreground,
             onClick = {
                 SleepTimer.startAfterTrack()
                 onBack()
@@ -118,6 +128,8 @@ fun LocalSleepTimerPicker(
                     pluralStringResource(R.plurals.minute_count, minutes, minutes)
                 },
                 selected = minutes == chosen,
+                accent = accent,
+                foreground = foreground,
                 onClick = {
                     SleepTimer.start(minutes)
                     onBack()
@@ -159,6 +171,8 @@ fun LocalSleepTimerPicker(
 private fun LocalSleepOptionRow(
     label: String,
     selected: Boolean,
+    accent: Color,
+    foreground: Color,
     onClick: () -> Unit,
     modifier: Modifier = Modifier,
 ) {
@@ -172,14 +186,14 @@ private fun LocalSleepOptionRow(
         Text(
             text = label,
             style = MaterialTheme.typography.bodyLarge,
-            color = if (selected) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurface,
+            color = if (selected) accent else foreground,
             modifier = Modifier.weight(1f),
         )
         if (selected) {
             Icon(
                 Icons.Rounded.Check,
                 contentDescription = null,
-                tint = MaterialTheme.colorScheme.primary,
+                tint = accent,
                 modifier = Modifier.size(20.dp),
             )
         }

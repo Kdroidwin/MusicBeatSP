@@ -167,6 +167,7 @@ private fun CompactDrillDownHeader(
     showArtworkCollage: Boolean,
     modifier: Modifier,
 ) {
+    val artistDeezerArtworkEnabled by AppSettings.artistDeezerArtworkEnabled.collectAsStateWithLifecycle()
     Column(
         modifier = modifier
             .fillMaxWidth()
@@ -236,11 +237,12 @@ private fun CompactDrillDownHeader(
                     modifier = Modifier.size(64.dp),
                 )
                 val imageModel: Any? = if (isArtist) {
-                    remember(label, artworkUrl) {
+                    remember(label, artworkUrl, artistDeezerArtworkEnabled) {
                         ArtistImage(
                             name = label,
                             fallbackUrl = artworkUrl ?: songs.firstNotNullOfOrNull { it.thumbnailUrl },
                             isLarge = true,
+                            allowOnlineLookup = artistDeezerArtworkEnabled,
                         )
                     }
                 } else {

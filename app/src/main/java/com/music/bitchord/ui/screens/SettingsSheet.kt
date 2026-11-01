@@ -178,6 +178,7 @@ import com.music.bitchord.data.settings.PlayerArtworkMode
 import com.music.bitchord.data.settings.PlayerInkGroup
 import com.music.bitchord.data.settings.PLAYER_INK_AUTOMATIC
 import com.music.bitchord.data.settings.PLAYER_INK_DEFAULT_COLOR
+import com.music.bitchord.feature.artistimage.data.DeezerArtistService
 import com.music.bitchord.data.settings.AutomixPerformanceMode
 import com.music.bitchord.data.settings.LocalLibraryTab
 import com.music.bitchord.data.settings.LibraryCategory
@@ -227,6 +228,51 @@ private data class SettingsSearchEntry(
     val onSliderValueChange: ((Float) -> Unit)? = null,
     val enabled: Boolean = true,
     val activate: () -> Unit,
+)
+
+private fun resetDeezerArtistArtwork(context: Context) {
+    AppSettings.setArtistDeezerArtworkEnabled(false)
+    AppSettings.setOnlineAlbumArtistArtwork(false)
+    DeezerArtistService.clearCache()
+    SingletonImageLoader.get(context).let { loader ->
+        loader.memoryCache?.clear()
+        loader.diskCache?.clear()
+    }
+    Toast.makeText(context, context.getString(R.string.deezer_artist_artwork_reset_done), Toast.LENGTH_SHORT).show()
+}
+
+@Composable
+private fun additionalArtworkSettingsSearchEntries(
+    playerPopupsUseArtworkColor: Boolean,
+    queueHeadingMusicNoteIcon: Boolean,
+    artistDeezerArtworkEnabled: Boolean,
+    context: Context,
+): List<SettingsSearchEntry> = listOf(
+    SettingsSearchEntry(
+        stringResource(R.string.player_popups_artwork_color),
+        stringResource(R.string.player_popups_artwork_color_subtitle),
+        listOf("player", "popup", "artwork", "color", "プレーヤー", "ポップアップ", "アルバムアート", "色"),
+        playerPopupsUseArtworkColor,
+    ) { AppSettings.setPlayerPopupsUseArtworkColor(!playerPopupsUseArtworkColor) },
+    SettingsSearchEntry(
+        stringResource(R.string.queue_heading_music_note_icon),
+        stringResource(R.string.queue_heading_music_note_icon_subtitle),
+        listOf("queue", "heading", "music note", "icon", "再生キュー", "見出し", "音符", "アイコン"),
+        queueHeadingMusicNoteIcon,
+    ) { AppSettings.setQueueHeadingMusicNoteIcon(!queueHeadingMusicNoteIcon) },
+    SettingsSearchEntry(
+        title = stringResource(R.string.artist_deezer_artwork_enabled),
+        subtitle = stringResource(R.string.artist_deezer_artwork_enabled_subtitle),
+        keywords = listOf("artist", "deezer", "cover", "画像", "アーティスト", "Deezer", "カバー"),
+        checked = artistDeezerArtworkEnabled,
+        activate = { AppSettings.setArtistDeezerArtworkEnabled(!artistDeezerArtworkEnabled) },
+    ),
+    SettingsSearchEntry(
+        title = stringResource(R.string.reset_deezer_artist_artwork),
+        subtitle = stringResource(R.string.reset_deezer_artist_artwork_subtitle),
+        keywords = listOf("artist", "deezer", "reset", "clear", "default", "アーティスト", "リセット", "初期化", "標準画像"),
+        activate = { resetDeezerArtistArtwork(context) },
+    ),
 )
 
 @Composable
@@ -599,10 +645,12 @@ fun SettingsScreen(
     val hideSavedQueueHeading by AppSettings.hideSavedQueueHeading.collectAsStateWithLifecycle()
     val hideQueueManagerTitle by AppSettings.hideQueueManagerTitle.collectAsStateWithLifecycle()
     val frostedPlayerDetails by AppSettings.frostedPlayerDetails.collectAsStateWithLifecycle()
+    val playerPopupsUseArtworkColor by AppSettings.playerPopupsUseArtworkColor.collectAsStateWithLifecycle()
     val detailsSheetArtworkBackdrop by AppSettings.detailsSheetArtworkBackdrop.collectAsStateWithLifecycle()
     val showEmbeddedComment by AppSettings.showEmbeddedComment.collectAsStateWithLifecycle()
     val queueManagerEqualsIcon by AppSettings.queueManagerEqualsIcon.collectAsStateWithLifecycle()
     val hideQueueLabel by AppSettings.hideQueueLabel.collectAsStateWithLifecycle()
+    val queueHeadingMusicNoteIcon by AppSettings.queueHeadingMusicNoteIcon.collectAsStateWithLifecycle()
     val queueClearTrashIcon by AppSettings.queueClearTrashIcon.collectAsStateWithLifecycle()
     val hidePlaybackTuningTitle by AppSettings.hidePlaybackTuningTitle.collectAsStateWithLifecycle()
     val playbackTuningThinSliders by AppSettings.playbackTuningThinSliders.collectAsStateWithLifecycle()
@@ -610,6 +658,7 @@ fun SettingsScreen(
     val artistsOpenAlbums by AppSettings.artistsOpenAlbums.collectAsStateWithLifecycle()
     val shuffleArtistAlbums by AppSettings.shuffleArtistAlbums.collectAsStateWithLifecycle()
     val onlineAlbumArtistArtwork by AppSettings.onlineAlbumArtistArtwork.collectAsStateWithLifecycle()
+    val artistDeezerArtworkEnabled by AppSettings.artistDeezerArtworkEnabled.collectAsStateWithLifecycle()
     val startupTab by AppSettings.startupTab.collectAsStateWithLifecycle()
     val quickActions by AppSettings.playerQuickActions.collectAsStateWithLifecycle()
     val hidePlayerQuickActionCircles by AppSettings.hidePlayerQuickActionCircles.collectAsStateWithLifecycle()
@@ -1737,7 +1786,13 @@ fun SettingsScreen(
             onSelect = { openPlayerInkPicker(group) },
         )
     }
-    val settingsSearchEntries = buildSettingsSearchEntries() + playerInkSearchEntries + SettingsSearchEntry(
+    val settingsSearchEntries = buildSettingsSearchEntries() +
+        additionalArtworkSettingsSearchEntries(
+            playerPopupsUseArtworkColor = playerPopupsUseArtworkColor,
+            queueHeadingMusicNoteIcon = queueHeadingMusicNoteIcon,
+            artistDeezerArtworkEnabled = artistDeezerArtworkEnabled,
+            context = context,
+        ) + playerInkSearchEntries + SettingsSearchEntry(
         stringResource(R.string.navigation_bar_force_white),
         stringResource(R.string.navigation_bar_force_white_subtitle),
         listOf("navigation bar", "system bar", "gesture handle", "back", "home", "white", "ナビゲーションバー", "戻る", "ホーム", "ジェスチャーバー", "白"),
@@ -3689,6 +3744,19 @@ fun SettingsScreen(
             )
             RowDivider()
             SettingsRow(
+                icon = Icons.Rounded.AutoAwesome,
+                title = stringResource(R.string.player_popups_artwork_color),
+                subtitle = stringResource(R.string.player_popups_artwork_color_subtitle),
+                trailing = {
+                    Switch(
+                        checked = playerPopupsUseArtworkColor,
+                        onCheckedChange = AppSettings::setPlayerPopupsUseArtworkColor,
+                    )
+                },
+                onClick = { AppSettings.setPlayerPopupsUseArtworkColor(!playerPopupsUseArtworkColor) },
+            )
+            RowDivider()
+            SettingsRow(
                 icon = Icons.Rounded.Tune,
                 title = stringResource(R.string.queue_manage_equals_icon),
                 subtitle = stringResource(R.string.queue_manage_equals_icon_subtitle),
@@ -3712,6 +3780,19 @@ fun SettingsScreen(
                     )
                 },
                 onClick = { AppSettings.setHideQueueLabel(!hideQueueLabel) },
+            )
+            RowDivider()
+            SettingsRow(
+                icon = Icons.Rounded.MusicNote,
+                title = stringResource(R.string.queue_heading_music_note_icon),
+                subtitle = stringResource(R.string.queue_heading_music_note_icon_subtitle),
+                trailing = {
+                    Switch(
+                        checked = queueHeadingMusicNoteIcon,
+                        onCheckedChange = AppSettings::setQueueHeadingMusicNoteIcon,
+                    )
+                },
+                onClick = { AppSettings.setQueueHeadingMusicNoteIcon(!queueHeadingMusicNoteIcon) },
             )
             RowDivider()
             SettingsRow(
@@ -4696,6 +4777,7 @@ fun SettingsScreen(
             artistsOpenAlbums = artistsOpenAlbums,
             shuffleArtistAlbums = shuffleArtistAlbums,
             onlineAlbumArtistArtwork = onlineAlbumArtistArtwork,
+            artistDeezerArtworkEnabled = artistDeezerArtworkEnabled,
             filterNonMusicAudio = filterNonMusicAudio,
             showPlaylistSongArtwork = showPlaylistSongArtwork,
             showCollectionSongArtwork = showCollectionSongArtwork,
@@ -6044,6 +6126,7 @@ private fun LocalMusicSettingsGroup(
     artistsOpenAlbums: Boolean,
     shuffleArtistAlbums: Boolean,
     onlineAlbumArtistArtwork: Boolean,
+    artistDeezerArtworkEnabled: Boolean,
     filterNonMusicAudio: Boolean,
     showPlaylistSongArtwork: Boolean,
     showCollectionSongArtwork: Boolean,
@@ -6222,6 +6305,26 @@ SettingsGroup(header = stringResource(R.string.local_music)) {
             )
         },
         onClick = { AppSettings.setIncludeRemoteSourceMediaInLibrary(!includeRemoteSourceMediaInLibrary) },
+    )
+    RowDivider()
+    SettingsRow(
+        icon = Icons.Rounded.Person,
+        title = stringResource(R.string.artist_deezer_artwork_enabled),
+        subtitle = stringResource(R.string.artist_deezer_artwork_enabled_subtitle),
+        trailing = {
+            Switch(
+                checked = artistDeezerArtworkEnabled,
+                onCheckedChange = AppSettings::setArtistDeezerArtworkEnabled,
+            )
+        },
+        onClick = { AppSettings.setArtistDeezerArtworkEnabled(!artistDeezerArtworkEnabled) },
+    )
+    RowDivider()
+    SettingsRow(
+        icon = Icons.Rounded.DeleteSweep,
+        title = stringResource(R.string.reset_deezer_artist_artwork),
+        subtitle = stringResource(R.string.reset_deezer_artist_artwork_subtitle),
+        onClick = { resetDeezerArtistArtwork(context) },
     )
     RowDivider()
     LocalMusicFolderRootSettingsRow(

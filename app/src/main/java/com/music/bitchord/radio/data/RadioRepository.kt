@@ -35,7 +35,11 @@ object RadioRepository {
         val areaId: String,
     )
 
-    suspend fun prepareLiveStream(station: Station, preferredAreaId: String): LiveStream = withContext(Dispatchers.IO) {
+    suspend fun prepareLiveStream(
+        station: Station,
+        preferredAreaId: String,
+        updatePlaybackSession: Boolean = true,
+    ): LiveStream = withContext(Dispatchers.IO) {
         ensureNetworkAllowed()
         val candidateAreas = buildList {
             if (preferredAreaId in station.areaIds) add(preferredAreaId)
@@ -50,7 +54,7 @@ object RadioRepository {
             "X-Radiko-AuthToken" to session.token,
             "X-Radiko-AreaId" to session.areaId,
         )
-        RadioPlaybackSession.setHeaders(headers)
+        if (updatePlaybackSession) RadioPlaybackSession.setHeaders(headers)
         LiveStream(station, streamUrl, headers, session.areaId)
     }
 

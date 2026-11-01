@@ -6,6 +6,7 @@ import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
+import androidx.compose.foundation.layout.WindowInsets
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.navigationBarsPadding
@@ -51,11 +52,13 @@ fun LocalArtistPickerSheet(
     artists: List<String>,
     onSelectArtist: (String) -> Unit,
     onDismissRequest: () -> Unit,
+    allowArtworkColor: Boolean = true,
     modifier: Modifier = Modifier,
 ) {
     val sheetState = rememberModalBottomSheetState(skipPartiallyExpanded = true)
     val palette = rememberArtworkPalette(song.thumbnailUrl, dark = true, artPx = ROW_ART_PX)
-    val useArtworkBackdrop by AppSettings.frostedPlayerDetails.collectAsStateWithLifecycle()
+    val frostedPlayerDetails by AppSettings.frostedPlayerDetails.collectAsStateWithLifecycle()
+    val useArtworkBackdrop = frostedPlayerDetails && allowArtworkColor
     val sheetShape = RoundedCornerShape(topStart = 24.dp, topEnd = 24.dp)
     val foreground = if (useArtworkBackdrop) palette.onBackground else MaterialTheme.colorScheme.onSurface
     val secondary = if (useArtworkBackdrop) palette.onBackgroundVariant else MaterialTheme.colorScheme.onSurfaceVariant
@@ -66,6 +69,7 @@ fun LocalArtistPickerSheet(
         sheetState = sheetState,
         shape = sheetShape,
         containerColor = container,
+        contentWindowInsets = { WindowInsets(0, 0, 0, 0) },
         modifier = modifier,
     ) {
         Box(Modifier.fillMaxWidth().clip(sheetShape)) {

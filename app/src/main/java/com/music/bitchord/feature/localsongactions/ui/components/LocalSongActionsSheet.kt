@@ -10,6 +10,7 @@ import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.navigationBarsPadding
+import androidx.compose.foundation.layout.WindowInsets
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.rememberScrollState
@@ -98,7 +99,9 @@ fun LocalSongActionsSheet(
     // track instead of falling back to the app's AMOLED surface.
     val artworkPalette = rememberArtworkPalette(song.thumbnailUrl, dark = true, artPx = CARD_ART_PX)
     val frostedPlayerDetails by AppSettings.frostedPlayerDetails.collectAsStateWithLifecycle()
-    val useArtworkBackdrop = frostedPlayerDetails && (showPlayerActions || song.localUri != null)
+    val playerPopupsUseArtworkColor by AppSettings.playerPopupsUseArtworkColor.collectAsStateWithLifecycle()
+    val useArtworkBackdrop = frostedPlayerDetails && (showPlayerActions || song.localUri != null) &&
+        (!showPlayerActions || playerPopupsUseArtworkColor)
     var pickingSleepTimer by remember { mutableStateOf(false) }
     val hiddenActions by AppSettings.hiddenPlayerDetailsActions.collectAsStateWithLifecycle()
 
@@ -151,6 +154,7 @@ fun LocalSongActionsSheet(
             { BottomSheetDefaults.DragHandle() }
         },
         modifier = modifier,
+        contentWindowInsets = { WindowInsets(0, 0, 0, 0) },
     ) {
         Box(
             Modifier
@@ -187,6 +191,8 @@ fun LocalSongActionsSheet(
                     if (inSleepTimerPicker) {
                         LocalSleepTimerPicker(
                             onBack = { pickingSleepTimer = false },
+                            artworkPalette = artworkPalette,
+                            useArtworkColor = useArtworkBackdrop,
                         )
                     } else {
                         Column(

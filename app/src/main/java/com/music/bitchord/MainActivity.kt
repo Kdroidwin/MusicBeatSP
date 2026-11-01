@@ -781,12 +781,14 @@ private fun BitChordApp(
     // Separate from [songActions] so the menu can close behind it — the picker
     // is the next step, not a second sheet stacked on the first.
     var playlistTarget by remember { mutableStateOf<Song?>(null) }
+    var playlistTargetFromPlayer by remember { mutableStateOf(false) }
     // A collection action needs every page's tracks before the picker opens;
     // keep its label with the list so the picker can identify what will be added.
     var playlistCollectionTarget by remember { mutableStateOf<Pair<String, List<Song>>?>(null) }
     // App-local playlists accept remote catalogue IDs without requiring a
     // Google account or writing anything to the user's YouTube account.
     var localPlaylistSongTarget by remember { mutableStateOf<Song?>(null) }
+    var localPlaylistSongFromPlayer by remember { mutableStateOf(false) }
     var localPlaylistCollectionTarget by remember { mutableStateOf<List<Song>?>(null) }
     // The picker opened from the Library tab, where there is no track and
     // creating the playlist is the whole errand.
@@ -940,6 +942,7 @@ private fun BitChordApp(
         controller?.clearMediaItems()
     }
     val shuffleEnabled by QueueShuffle.enabled.collectAsStateWithLifecycle()
+    val playerPopupsUseArtworkColor by AppSettings.playerPopupsUseArtworkColor.collectAsStateWithLifecycle()
     // A conversion is deliberately scoped to the current listening session.
     // Keeping the complete original row here lets Revert restore the exact
     // video upload, including its title and playlist identity, rather than
@@ -2217,7 +2220,13 @@ private fun BitChordApp(
                 songActions = song
             },
             onQuickAddToPlaylist = {
-                if (signedIn) playlistTarget = song else localPlaylistSongTarget = song
+                if (signedIn) {
+                    playlistTarget = song
+                    playlistTargetFromPlayer = true
+                } else {
+                    localPlaylistSongTarget = song
+                    localPlaylistSongFromPlayer = true
+                }
             },
             onQuickPlaybackTuning = { showPlaybackTuning = true },
             onQuickMenuAction = { action ->
@@ -3656,6 +3665,7 @@ private fun BitChordApp(
             } else if (showDetailsSheet) {
                 LocalSongDetailsSheet(
                     song = song,
+                    allowArtworkColor = !menuFromPlayer || playerPopupsUseArtworkColor,
                     onDismissRequest = {
                         showDetailsSheet = false
                         songActions = null
@@ -3684,6 +3694,11 @@ private fun BitChordApp(
             } else if (showAddToPlaylist) {
                 LocalAddToPlaylistSheet(
                     songs = listOf(song),
+                    artworkPalette = if (menuFromPlayer && playerPopupsUseArtworkColor) {
+                        rememberArtworkPalette(song.thumbnailUrl, dark = true, artPx = ROW_ART_PX)
+                    } else null,
+                    artworkUrl = song.thumbnailUrl,
+                    useArtworkColor = menuFromPlayer && playerPopupsUseArtworkColor,
                     onDismissRequest = {
                         showAddToPlaylist = false
                         songActions = null
@@ -3697,6 +3712,7 @@ private fun BitChordApp(
                 LocalArtistPickerSheet(
                     song = song,
                     artists = artists,
+                    allowArtworkColor = !menuFromPlayer || playerPopupsUseArtworkColor,
                     onDismissRequest = {
                         showArtistPicker = false
                         songActions = null
@@ -3756,6 +3772,7 @@ private fun BitChordApp(
                             // signed-in YouTube Music users.
                             songActions = null
                             playlistTarget = song
+                            playlistTargetFromPlayer = menuFromPlayer
                             viewModel.loadPlaylists()
                         }
                     },
@@ -3834,7 +3851,15 @@ private fun BitChordApp(
         localPlaylistSongTarget?.let { targetSong ->
             LocalAddToPlaylistSheet(
                 songs = listOf(targetSong),
-                onDismissRequest = { localPlaylistSongTarget = null },
+                artworkPalette = if (localPlaylistSongFromPlayer && playerPopupsUseArtworkColor) {
+                    rememberArtworkPalette(targetSong.thumbnailUrl, dark = true, artPx = ROW_ART_PX)
+                } else null,
+                artworkUrl = targetSong.thumbnailUrl,
+                useArtworkColor = localPlaylistSongFromPlayer && playerPopupsUseArtworkColor,
+                onDismissRequest = {
+                    localPlaylistSongTarget = null
+                    localPlaylistSongFromPlayer = false
+                },
             )
         }
         localPlaylistCollectionTarget?.let { songs ->
@@ -3848,12 +3873,18 @@ private fun BitChordApp(
             val collection = playlistCollectionTarget
             val dismiss = {
                 playlistTarget = null
+                playlistTargetFromPlayer = false
                 playlistCollectionTarget = null
                 creatingPlaylist = false
             }
+            val usePlayerArtwork = target != null && playlistTargetFromPlayer && playerPopupsUseArtworkColor
+            val playlistArtworkPalette = if (usePlayerArtwork) {
+                rememberArtworkPalette(target?.thumbnailUrl, dark = true, artPx = ROW_ART_PX)
+            } else null
             ModalBottomSheet(
                 onDismissRequest = dismiss,
-                containerColor = MaterialTheme.colorScheme.background,
+                containerColor = playlistArtworkPalette?.background ?: MaterialTheme.colorScheme.background,
+                contentWindowInsets = { WindowInsets(0, 0, 0, 0) },
             ) {
                 PlaylistPickerSheet(
                     playlists = playlists,
@@ -3862,6 +3893,9 @@ private fun BitChordApp(
                     songs = collection?.second.orEmpty(),
                     collectionTitle = collection?.first,
                     startCreating = target == null && collection == null,
+                    artworkPalette = playlistArtworkPalette,
+                    artworkUrl = target?.thumbnailUrl,
+                    useArtworkColor = usePlayerArtwork,
                     onPick = { playlist ->
                         target?.let { targetSong ->
                             viewModel.addToPlaylist(playlist, targetSong) { result ->
@@ -4607,7 +4641,9 @@ private fun PlaybackTuningDialog(
     var speed by remember { mutableStateOf(AppSettings.playbackSpeed.value) }
     var pitch by remember { mutableStateOf(AppSettings.playbackPitch.value) }
     val palette = rememberArtworkPalette(song?.thumbnailUrl, dark = true, artPx = ROW_ART_PX)
-    val useArtworkBackdrop by AppSettings.frostedPlayerDetails.collectAsStateWithLifecycle()
+    val frostedPlayerDetails by AppSettings.frostedPlayerDetails.collectAsStateWithLifecycle()
+    val playerPopupsUseArtworkColor by AppSettings.playerPopupsUseArtworkColor.collectAsStateWithLifecycle()
+    val useArtworkBackdrop = frostedPlayerDetails && playerPopupsUseArtworkColor
     val hideTitle by AppSettings.hidePlaybackTuningTitle.collectAsStateWithLifecycle()
     val useThinSliders by AppSettings.playbackTuningThinSliders.collectAsStateWithLifecycle()
     val foreground = if (useArtworkBackdrop) palette.onBackground else MaterialTheme.colorScheme.onSurface
@@ -4620,19 +4656,8 @@ private fun PlaybackTuningDialog(
         sheetState = rememberModalBottomSheetState(skipPartiallyExpanded = true),
         shape = sheetShape,
         containerColor = if (useArtworkBackdrop) Color.Transparent else MaterialTheme.colorScheme.surfaceContainerHigh,
-        dragHandle = {
-            Box(
-                Modifier.fillMaxWidth().height(32.dp),
-                contentAlignment = Alignment.Center,
-            ) {
-                Box(
-                    Modifier
-                        .size(width = 48.dp, height = 6.dp)
-                        .clip(CircleShape)
-                        .background((if (useArtworkBackdrop) palette.onBackground else MaterialTheme.colorScheme.onSurface).copy(alpha = 0.38f)),
-                )
-            }
-        },
+        dragHandle = null,
+        contentWindowInsets = { WindowInsets(0, 0, 0, 0) },
     ) {
         Box(Modifier.fillMaxWidth().clip(sheetShape)) {
             if (useArtworkBackdrop) {
@@ -4644,21 +4669,48 @@ private fun PlaybackTuningDialog(
                     artPx = ROW_ART_PX,
                 )
             }
+            // Draw the grip inside the artwork/sheet surface. Material's
+            // separate dragHandle slot is clipped independently and made the
+            // grip appear detached or disappear when shifted down.
+            Box(
+                Modifier
+                    .fillMaxWidth()
+                    .height(32.dp)
+                    .align(Alignment.TopCenter),
+                contentAlignment = Alignment.Center,
+            ) {
+                Box(
+                    Modifier
+                        .size(width = 48.dp, height = 6.dp)
+                        .clip(CircleShape)
+                        .background((if (useArtworkBackdrop) palette.onBackground else MaterialTheme.colorScheme.onSurface).copy(alpha = 0.38f)),
+                )
+            }
             Column(
                 Modifier
                     .fillMaxWidth()
+                    .padding(top = 32.dp)
                     .navigationBarsPadding()
                     .verticalScroll(rememberScrollState())
                     .padding(horizontal = 24.dp)
                     .padding(bottom = 24.dp),
             ) {
-                if (!hideTitle) {
-                    Text(
-                        text = stringResource(R.string.playback_tuning),
-                        style = MaterialTheme.typography.titleLarge,
-                        color = foreground,
-                        modifier = Modifier.padding(top = 8.dp, bottom = 16.dp),
-                    )
+                // Keep the heading row in the layout when its label is hidden;
+                // otherwise the controls jump upward under the drag handle.
+                Box(
+                    Modifier
+                        .fillMaxWidth()
+                        .padding(top = 4.dp, bottom = 8.dp)
+                        .heightIn(min = 24.dp),
+                    contentAlignment = Alignment.CenterStart,
+                ) {
+                    if (!hideTitle) {
+                        Text(
+                            text = stringResource(R.string.playback_tuning),
+                            style = MaterialTheme.typography.titleLarge,
+                            color = foreground,
+                        )
+                    }
                 }
                 Text(
                     text = stringResource(R.string.playback_speed) + " · " + String.format(Locale.ROOT, "%.1fx", speed),
@@ -4690,7 +4742,7 @@ private fun PlaybackTuningDialog(
                         ),
                     )
                 }
-                Spacer(Modifier.height(12.dp))
+                Spacer(Modifier.height(8.dp))
                 Text(
                     text = stringResource(R.string.playback_pitch) + " · " + String.format(Locale.ROOT, "%.2fx", pitch),
                     style = MaterialTheme.typography.titleMedium,
@@ -4723,7 +4775,7 @@ private fun PlaybackTuningDialog(
                     )
                 }
                 Row(
-                    Modifier.fillMaxWidth().padding(top = 8.dp),
+                    Modifier.fillMaxWidth().padding(top = 4.dp),
                     horizontalArrangement = Arrangement.End,
                     verticalAlignment = Alignment.CenterVertically,
                 ) {

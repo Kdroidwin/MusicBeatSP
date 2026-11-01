@@ -608,6 +608,8 @@ object AppSettings {
     val launcherIcon = MutableStateFlow(LauncherIcon.PINK)
     val frostedQueueManager = MutableStateFlow(true)
     val frostedPlayerDetails = MutableStateFlow(true)
+    /** Master switch for artwork colours on sheets opened from the player. */
+    val playerPopupsUseArtworkColor = MutableStateFlow(true)
     /** Artwork-colored background for local track metadata and file details. */
     val detailsSheetArtworkBackdrop = MutableStateFlow(true)
     /** Shows a non-empty COMMENT tag in the local track details sheet. */
@@ -622,6 +624,8 @@ object AppSettings {
     val hideSavedQueueHeading = MutableStateFlow(true)
     /** Hides the queue heading while keeping its actions available. */
     val hideQueueLabel = MutableStateFlow(true)
+    /** Replaces the queue heading text with a music-note glyph. */
+    val queueHeadingMusicNoteIcon = MutableStateFlow(false)
     /** Replaces the clear-queue label with a trash icon. */
     val queueClearTrashIcon = MutableStateFlow(false)
     /** Hides the heading and its vertical gap in the playback tuning sheet. */
@@ -1045,6 +1049,8 @@ object AppSettings {
     val shuffleArtistAlbums = MutableStateFlow(false)
     /** Deezer lookup for album-artist portraits; off keeps album artists local by default. */
     val onlineAlbumArtistArtwork = MutableStateFlow(false)
+    /** Allows Deezer lookups for artist portraits. Resetting artist art turns this off. */
+    val artistDeezerArtworkEnabled = MutableStateFlow(true)
     val localMusicViewType = MutableStateFlow(LibraryViewType.LIST)
     val downloadedSongsViewType = MutableStateFlow(LibraryViewType.LIST)
     val downloadedAlbumsViewType = MutableStateFlow(LibraryViewType.GRID)
@@ -1430,6 +1436,7 @@ object AppSettings {
         }.getOrDefault(LauncherIcon.PINK)
         frostedQueueManager.value = prefs.getBoolean(KEY_FROSTED_QUEUE_MANAGER, true)
         frostedPlayerDetails.value = prefs.getBoolean(KEY_FROSTED_PLAYER_DETAILS, true)
+        playerPopupsUseArtworkColor.value = prefs.getBoolean(KEY_PLAYER_POPUPS_ARTWORK_COLOR, true)
         detailsSheetArtworkBackdrop.value = prefs.getBoolean(KEY_DETAILS_SHEET_ARTWORK_BACKDROP, true)
         showEmbeddedComment.value = prefs.getBoolean(KEY_SHOW_EMBEDDED_COMMENT, true)
         queueManagerEqualsIcon.value = prefs.getBoolean(KEY_QUEUE_MANAGER_EQUALS_ICON, false)
@@ -1437,6 +1444,7 @@ object AppSettings {
         hideQueueManagerTitle.value = prefs.getBoolean(KEY_HIDE_QUEUE_MANAGER_TITLE, false)
         hideSavedQueueHeading.value = prefs.getBoolean(KEY_HIDE_SAVED_QUEUE_HEADING, true)
         hideQueueLabel.value = prefs.getBoolean(KEY_HIDE_QUEUE_LABEL, true)
+        queueHeadingMusicNoteIcon.value = prefs.getBoolean(KEY_QUEUE_HEADING_MUSIC_NOTE_ICON, false)
         queueClearTrashIcon.value = prefs.getBoolean(KEY_QUEUE_CLEAR_TRASH_ICON, false)
         hidePlaybackTuningTitle.value = prefs.getBoolean(KEY_HIDE_PLAYBACK_TUNING_TITLE, true)
         playbackTuningThinSliders.value = prefs.getBoolean(KEY_PLAYBACK_TUNING_THIN_SLIDERS, true)
@@ -1703,6 +1711,7 @@ object AppSettings {
         artistsOpenAlbums.value = prefs.getBoolean(KEY_ARTISTS_OPEN_ALBUMS, false)
         shuffleArtistAlbums.value = prefs.getBoolean(KEY_SHUFFLE_ARTIST_ALBUMS, false)
         onlineAlbumArtistArtwork.value = prefs.getBoolean(KEY_ONLINE_ALBUM_ARTIST_ARTWORK, false)
+        artistDeezerArtworkEnabled.value = prefs.getBoolean(KEY_ARTIST_DEEZER_ARTWORK_ENABLED, true)
         downloadedMusicViewType.value = readLibraryViewType(KEY_DOWNLOADED_MUSIC_VIEW_TYPE, LibraryViewType.LIST)
         downloadedSongsViewType.value = readLibraryViewType(KEY_DOWNLOADED_SONGS_VIEW_TYPE, downloadedMusicViewType.value)
         downloadedAlbumsViewType.value = readLibraryViewType(KEY_DOWNLOADED_ALBUMS_VIEW_TYPE, LibraryViewType.GRID)
@@ -2393,6 +2402,11 @@ object AppSettings {
         prefs.edit().putBoolean(KEY_FROSTED_PLAYER_DETAILS, value).apply()
     }
 
+    fun setPlayerPopupsUseArtworkColor(value: Boolean) {
+        playerPopupsUseArtworkColor.value = value
+        prefs.edit().putBoolean(KEY_PLAYER_POPUPS_ARTWORK_COLOR, value).apply()
+    }
+
     fun setDetailsSheetArtworkBackdrop(value: Boolean) {
         detailsSheetArtworkBackdrop.value = value
         prefs.edit().putBoolean(KEY_DETAILS_SHEET_ARTWORK_BACKDROP, value).apply()
@@ -2426,6 +2440,11 @@ object AppSettings {
     fun setHideQueueLabel(value: Boolean) {
         hideQueueLabel.value = value
         prefs.edit().putBoolean(KEY_HIDE_QUEUE_LABEL, value).apply()
+    }
+
+    fun setQueueHeadingMusicNoteIcon(value: Boolean) {
+        queueHeadingMusicNoteIcon.value = value
+        prefs.edit().putBoolean(KEY_QUEUE_HEADING_MUSIC_NOTE_ICON, value).apply()
     }
 
     fun setQueueClearTrashIcon(value: Boolean) {
@@ -3789,6 +3808,11 @@ object AppSettings {
         prefs.edit().putBoolean(KEY_ONLINE_ALBUM_ARTIST_ARTWORK, value).apply()
     }
 
+    fun setArtistDeezerArtworkEnabled(value: Boolean) {
+        artistDeezerArtworkEnabled.value = value
+        prefs.edit().putBoolean(KEY_ARTIST_DEEZER_ARTWORK_ENABLED, value).apply()
+    }
+
     fun setLocalMusicViewType(value: LibraryViewType) {
         setLocalSongsViewType(value)
     }
@@ -4132,10 +4156,12 @@ object AppSettings {
     private const val KEY_LAUNCHER_ICON = "launcher_icon"
     private const val KEY_FROSTED_QUEUE_MANAGER = "frosted_queue_manager"
     private const val KEY_FROSTED_PLAYER_DETAILS = "frosted_player_details"
+    private const val KEY_PLAYER_POPUPS_ARTWORK_COLOR = "player_popups_artwork_color"
     private const val KEY_DETAILS_SHEET_ARTWORK_BACKDROP = "details_sheet_artwork_backdrop"
     private const val KEY_SHOW_EMBEDDED_COMMENT = "show_embedded_comment"
     private const val KEY_QUEUE_MANAGER_EQUALS_ICON = "queue_manager_equals_icon"
     private const val KEY_HIDE_QUEUE_LABEL = "hide_queue_label"
+    private const val KEY_QUEUE_HEADING_MUSIC_NOTE_ICON = "queue_heading_music_note_icon"
     private const val KEY_QUEUE_CLEAR_TRASH_ICON = "queue_clear_trash_icon"
     private const val KEY_HIDE_PLAYBACK_TUNING_TITLE = "hide_playback_tuning_title"
     private const val KEY_REDESIGNED_SAVED_QUEUE_MANAGER = "redesigned_saved_queue_manager"
@@ -4309,6 +4335,7 @@ object AppSettings {
     private const val KEY_ARTISTS_OPEN_ALBUMS = "artists_open_albums"
     private const val KEY_SHUFFLE_ARTIST_ALBUMS = "shuffle_artist_albums"
     private const val KEY_ONLINE_ALBUM_ARTIST_ARTWORK = "online_album_artist_artwork"
+    private const val KEY_ARTIST_DEEZER_ARTWORK_ENABLED = "artist_deezer_artwork_enabled"
     private const val KEY_LIBRARY_SORT = "library_sort"
     private const val KEY_DETAIL_SONG_SORTS = "detail_song_sorts"
     private const val KEY_LOCAL_MUSIC_VIEW_TYPE = "local_music_view_type"

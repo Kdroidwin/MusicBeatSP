@@ -4,6 +4,7 @@ import coil3.ImageLoader
 import coil3.fetch.FetchResult
 import coil3.fetch.Fetcher
 import coil3.request.Options
+import com.music.bitchord.data.settings.AppSettings
 import com.music.bitchord.feature.artistimage.data.DeezerArtistService
 import com.music.bitchord.feature.artistimage.model.ArtistImage
 
@@ -18,7 +19,7 @@ class ArtistImageFetcher(
 ) : Fetcher {
 
     override suspend fun fetch(): FetchResult? {
-        val deezerUrl = if (image.allowOnlineLookup) {
+        val deezerUrl = if (image.allowOnlineLookup && AppSettings.artistDeezerArtworkEnabled.value) {
             DeezerArtistService.getArtistImageUrl(image.name, image.isLarge)
         } else {
             null

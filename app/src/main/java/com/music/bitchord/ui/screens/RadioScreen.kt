@@ -1,7 +1,12 @@
 package com.music.bitchord.ui.screens
 
 import android.content.Intent
+import android.net.Uri
+import android.os.Build
+import android.provider.Settings
 import android.widget.Toast
+import androidx.activity.compose.rememberLauncherForActivityResult
+import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
@@ -64,6 +69,7 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.core.net.toUri
+import androidx.documentfile.provider.DocumentFile
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.media3.session.MediaController
 import coil3.compose.AsyncImage
@@ -80,6 +86,8 @@ import com.music.bitchord.radio.model.ProgramEntry
 import com.music.bitchord.radio.model.Station
 import com.music.bitchord.radio.model.StationRegistry
 import com.music.bitchord.radio.model.logoUrl
+import com.music.bitchord.radio.recording.RadioAutoRecordingScheduler
+import com.music.bitchord.radio.recording.RadioAutoRecordingStore
 import kotlinx.coroutines.launch
 
 @Composable
@@ -97,6 +105,14 @@ fun RadioScreen(
     var stationDetail by remember { mutableStateOf<Station?>(null) }
     var showRegionPicker by remember { mutableStateOf(false) }
     var selectedProgram by remember { mutableStateOf<ProgramEntry?>(null) }
+    var pendingAutoRecordProgram by remember { mutableStateOf<ProgramEntry?>(null) }
+    var autoRecordingIds by remember { mutableStateOf(RadioAutoRecordingStore.recordings(context).mapTo(mutableSetOf()) { it.id }) }
+    var recordingFolderName by remember {
+        mutableStateOf(
+            RadioAutoRecordingStore.folderUri(context)?.let { uri -> DocumentFile.fromTreeUri(context, uri)?.name }
+                ?: context.getString(R.string.radio_recording_choose_folder_first),
+        )
+    }
     var query by remember { mutableStateOf("") }
     var weeklyPrograms by remember(stationDetail?.id) { mutableStateOf<List<ProgramEntry>>(emptyList()) }
     var isLoadingPrograms by remember(stationDetail?.id) { mutableStateOf(false) }
@@ -108,6 +124,74 @@ fun RadioScreen(
     val networkUnavailable = offlineMode || context.packageName.endsWith(".nointernet")
     val currentStationId = currentSong?.takeIf { it.isLiveRadio }
         ?.videoId?.removePrefix("radiko:")
+
+    val exactAlarmLauncher = rememberLauncherForActivityResult(ActivityResultContracts.StartActivityForResult()) {
+        val program = pendingAutoRecordProgram
+        if (program != null) {
+            if (RadioAutoRecordingScheduler.canScheduleExactAlarms(context)) {
+                when (scheduleRadioAutoRecording(context, program, selectedAreaId)) {
+                    RadioScheduleResult.SCHEDULED -> {
+                        autoRecordingIds = RadioAutoRecordingStore.recordings(context).mapTo(mutableSetOf()) { it.id }
+                        Toast.makeText(context, context.getString(R.string.radio_recording_scheduled_toast, program.title), Toast.LENGTH_LONG).show()
+                    }
+                    RadioScheduleResult.ENDED -> Toast.makeText(context, R.string.radio_recording_time_passed, Toast.LENGTH_LONG).show()
+                    RadioScheduleResult.OVERLAP -> Toast.makeText(context, R.string.radio_recording_overlap, Toast.LENGTH_LONG).show()
+                    RadioScheduleResult.ERROR -> Toast.makeText(context, R.string.radio_recording_exact_alarm_denied, Toast.LENGTH_LONG).show()
+                }
+            } else {
+                Toast.makeText(context, R.string.radio_recording_exact_alarm_denied, Toast.LENGTH_LONG).show()
+            }
+            pendingAutoRecordProgram = null
+        }
+    }
+
+    val folderPicker = rememberLauncherForActivityResult(ActivityResultContracts.OpenDocumentTree()) { uri: Uri? ->
+        if (uri == null) {
+            pendingAutoRecordProgram = null
+        } else {
+            val persisted = runCatching {
+                context.contentResolver.takePersistableUriPermission(
+                    uri,
+                    Intent.FLAG_GRANT_READ_URI_PERMISSION or Intent.FLAG_GRANT_WRITE_URI_PERMISSION,
+                )
+            }.isSuccess
+            if (!persisted) {
+                Toast.makeText(context, R.string.radio_recording_folder_unavailable, Toast.LENGTH_LONG).show()
+                pendingAutoRecordProgram = null
+            } else {
+                RadioAutoRecordingStore.setFolderUri(context, uri)
+                recordingFolderName = DocumentFile.fromTreeUri(context, uri)?.name ?: uri.lastPathSegment.orEmpty()
+                pendingAutoRecordProgram?.let { program ->
+                    if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S && !RadioAutoRecordingScheduler.canScheduleExactAlarms(context)) {
+                        Toast.makeText(context, R.string.radio_recording_exact_alarm_needed, Toast.LENGTH_LONG).show()
+                        exactAlarmLauncher.launch(
+                            Intent(Settings.ACTION_REQUEST_SCHEDULE_EXACT_ALARM, Uri.parse("package:${context.packageName}")),
+                        )
+                    } else {
+                        when (scheduleRadioAutoRecording(context, program, selectedAreaId)) {
+                            RadioScheduleResult.SCHEDULED -> {
+                                autoRecordingIds = RadioAutoRecordingStore.recordings(context).mapTo(mutableSetOf()) { it.id }
+                                Toast.makeText(context, context.getString(R.string.radio_recording_scheduled_toast, program.title), Toast.LENGTH_LONG).show()
+                                pendingAutoRecordProgram = null
+                            }
+                            RadioScheduleResult.ENDED -> {
+                                Toast.makeText(context, R.string.radio_recording_time_passed, Toast.LENGTH_LONG).show()
+                                pendingAutoRecordProgram = null
+                            }
+                            RadioScheduleResult.OVERLAP -> {
+                                Toast.makeText(context, R.string.radio_recording_overlap, Toast.LENGTH_LONG).show()
+                                pendingAutoRecordProgram = null
+                            }
+                            RadioScheduleResult.ERROR -> {
+                                Toast.makeText(context, R.string.radio_recording_folder_unavailable, Toast.LENGTH_LONG).show()
+                                pendingAutoRecordProgram = null
+                            }
+                        }
+                    }
+                } ?: Toast.makeText(context, context.getString(R.string.radio_recording_folder_set, recordingFolderName), Toast.LENGTH_LONG).show()
+            }
+        }
+    }
 
     LaunchedEffect(currentStationId) {
         playingStationId = currentStationId
@@ -187,7 +271,59 @@ fun RadioScreen(
     }
 
     selectedProgram?.let { program ->
-        RadioProgramDialog(program = program, amoledBlack = amoledBlack, onDismiss = { selectedProgram = null })
+        val recordingId = RadioAutoRecordingStore.programId(program.stationId, program.startAt)
+        RadioProgramDialog(
+            program = program,
+            amoledBlack = amoledBlack,
+            autoRecordEnabled = !networkUnavailable,
+            isRecordingScheduled = recordingId in autoRecordingIds,
+            recordingFolderName = recordingFolderName,
+            onAutoRecord = {
+                if (recordingId in autoRecordingIds) {
+                    RadioAutoRecordingScheduler.cancel(context, recordingId)
+                    autoRecordingIds = RadioAutoRecordingStore.recordings(context).mapTo(mutableSetOf()) { it.id }
+                    Toast.makeText(context, R.string.radio_recording_cancelled_toast, Toast.LENGTH_SHORT).show()
+                } else if (networkUnavailable) {
+                    Toast.makeText(context, R.string.radio_offline_unavailable, Toast.LENGTH_SHORT).show()
+                } else {
+                    pendingAutoRecordProgram = program
+                    val folder = RadioAutoRecordingStore.folderUri(context)
+                    if (folder == null) {
+                        folderPicker.launch(null)
+                    } else if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S && !RadioAutoRecordingScheduler.canScheduleExactAlarms(context)) {
+                        Toast.makeText(context, R.string.radio_recording_exact_alarm_needed, Toast.LENGTH_LONG).show()
+                        exactAlarmLauncher.launch(
+                            Intent(Settings.ACTION_REQUEST_SCHEDULE_EXACT_ALARM, Uri.parse("package:${context.packageName}")),
+                        )
+                    } else {
+                        when (scheduleRadioAutoRecording(context, program, selectedAreaId)) {
+                            RadioScheduleResult.SCHEDULED -> {
+                                autoRecordingIds = RadioAutoRecordingStore.recordings(context).mapTo(mutableSetOf()) { it.id }
+                                Toast.makeText(context, context.getString(R.string.radio_recording_scheduled_toast, program.title), Toast.LENGTH_LONG).show()
+                                pendingAutoRecordProgram = null
+                            }
+                            RadioScheduleResult.ENDED -> {
+                                Toast.makeText(context, R.string.radio_recording_time_passed, Toast.LENGTH_LONG).show()
+                                pendingAutoRecordProgram = null
+                            }
+                            RadioScheduleResult.OVERLAP -> {
+                                Toast.makeText(context, R.string.radio_recording_overlap, Toast.LENGTH_LONG).show()
+                                pendingAutoRecordProgram = null
+                            }
+                            RadioScheduleResult.ERROR -> {
+                                Toast.makeText(context, R.string.radio_recording_folder_unavailable, Toast.LENGTH_LONG).show()
+                                pendingAutoRecordProgram = null
+                            }
+                        }
+                    }
+                }
+            },
+            onChooseFolder = {
+                pendingAutoRecordProgram = null
+                folderPicker.launch(RadioAutoRecordingStore.folderUri(context))
+            },
+            onDismiss = { selectedProgram = null },
+        )
     }
 
     val station = stationDetail
@@ -311,7 +447,10 @@ fun RadioScreen(
             onBack = { stationDetail = null },
             onPlay = { startStation(station) },
             onSelectDay = { selectedDay = it },
-            onSelectProgram = { selectedProgram = it },
+            onSelectProgram = {
+                autoRecordingIds = RadioAutoRecordingStore.recordings(context).mapTo(mutableSetOf()) { item -> item.id }
+                selectedProgram = it
+            },
             onRetry = {
                 hasProgramError = false
                 stationDetail = station
@@ -529,7 +668,16 @@ private fun RadioScheduleMessage(message: String) {
 }
 
 @Composable
-private fun RadioProgramDialog(program: ProgramEntry, amoledBlack: Boolean, onDismiss: () -> Unit) {
+private fun RadioProgramDialog(
+    program: ProgramEntry,
+    amoledBlack: Boolean,
+    autoRecordEnabled: Boolean,
+    isRecordingScheduled: Boolean,
+    recordingFolderName: String,
+    onAutoRecord: () -> Unit,
+    onChooseFolder: () -> Unit,
+    onDismiss: () -> Unit,
+) {
     val context = LocalContext.current
     AlertDialog(
         onDismissRequest = onDismiss,
@@ -540,6 +688,27 @@ private fun RadioProgramDialog(program: ProgramEntry, amoledBlack: Boolean, onDi
                 modifier = Modifier.heightIn(max = 480.dp).verticalScroll(rememberScrollState()),
                 verticalArrangement = Arrangement.spacedBy(10.dp),
             ) {
+                Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(4.dp)) {
+                    Button(onClick = onAutoRecord, enabled = autoRecordEnabled, modifier = Modifier.weight(1f)) {
+                        Text(
+                            stringResource(
+                                if (isRecordingScheduled) R.string.radio_auto_record_scheduled else R.string.radio_auto_record,
+                            ),
+                            maxLines = 1,
+                            overflow = TextOverflow.Ellipsis,
+                        )
+                    }
+                    TextButton(onClick = onChooseFolder) {
+                        Text(stringResource(R.string.radio_recording_choose_folder), maxLines = 1)
+                    }
+                }
+                Text(
+                    stringResource(R.string.radio_recording_folder_set, recordingFolderName),
+                    style = MaterialTheme.typography.labelSmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    maxLines = 2,
+                    overflow = TextOverflow.Ellipsis,
+                )
                 program.imageUrl?.let { url ->
                     AsyncImage(
                         model = url,
@@ -580,6 +749,36 @@ private fun RadioProgramDialog(program: ProgramEntry, amoledBlack: Boolean, onDi
             }
         },
     )
+}
+
+private enum class RadioScheduleResult { SCHEDULED, ENDED, OVERLAP, ERROR }
+
+private fun scheduleRadioAutoRecording(
+    context: android.content.Context,
+    program: ProgramEntry,
+    areaId: String,
+): RadioScheduleResult {
+    return runCatching {
+        val station = StationRegistry.getStation(program.stationId) ?: return RadioScheduleResult.ERROR
+        val recording = RadioAutoRecordingStore.fromProgram(
+            stationId = program.stationId,
+            stationName = station.name,
+            areaId = areaId,
+            title = program.title,
+            startAt = program.startAt,
+            endAt = program.endAt,
+            artworkUrl = program.imageUrl,
+        )
+        val now = System.currentTimeMillis()
+        if (recording.startTimeMs <= now || recording.endTimeMs <= now) return RadioScheduleResult.ENDED
+        val overlaps = RadioAutoRecordingStore.recordings(context).any { existing ->
+            existing.id != recording.id && recording.startTimeMs < existing.endTimeMs && existing.startTimeMs < recording.endTimeMs
+        }
+        if (overlaps) return RadioScheduleResult.OVERLAP
+        if (RadioAutoRecordingStore.folderUri(context) == null) return RadioScheduleResult.ERROR
+        RadioAutoRecordingScheduler.schedule(context, recording)
+        RadioScheduleResult.SCHEDULED
+    }.getOrDefault(RadioScheduleResult.ERROR)
 }
 
 @Composable

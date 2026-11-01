@@ -117,6 +117,7 @@ import androidx.compose.material.icons.rounded.History
 import androidx.compose.material.icons.rounded.Info
 import androidx.compose.material.icons.rounded.MoreHoriz
 import androidx.compose.material.icons.rounded.MoreVert
+import androidx.compose.material.icons.rounded.MusicNote
 import androidx.compose.material.icons.rounded.Person
 import androidx.compose.material.icons.rounded.PlaylistAdd
 import androidx.compose.material.icons.rounded.Share
@@ -246,6 +247,7 @@ import com.music.bitchord.ui.theme.SystemBarIcons
 import com.music.bitchord.ui.theme.SystemBarVisibility
 import com.music.bitchord.ui.rememberIsForeground
 import com.music.bitchord.ui.theme.rememberArtworkPalette
+import com.music.bitchord.ui.components.ArtworkBackdrop
 import com.music.bitchord.ui.components.thumbnailBorder
 import com.music.bitchord.ui.components.optimizedHazeEffect
 import com.music.bitchord.ui.haptics.Haptic
@@ -1188,6 +1190,7 @@ fun NowPlayingScreen(
     val hidePlayerHeaderDuringLyrics by AppSettings.hidePlayerHeaderDuringLyrics.collectAsStateWithLifecycle()
     val reducePlayerAnimations by AppSettings.reduceAnimation.collectAsStateWithLifecycle()
     val frostedQueueManager by AppSettings.frostedQueueManager.collectAsStateWithLifecycle()
+    val playerPopupsUseArtworkColor by AppSettings.playerPopupsUseArtworkColor.collectAsStateWithLifecycle()
     val redesignedSavedQueueManager by AppSettings.redesignedSavedQueueManager.collectAsStateWithLifecycle()
     val hideSavedQueueHeading by AppSettings.hideSavedQueueHeading.collectAsStateWithLifecycle()
     val hideQueueManagerTitle by AppSettings.hideQueueManagerTitle.collectAsStateWithLifecycle()
@@ -1381,7 +1384,7 @@ fun NowPlayingScreen(
             // player-details sheet so the two surfaces share one colour set.
             artworkPalette = rememberArtworkPalette(song.thumbnailUrl, dark = true, artPx = ROW_ART_PX),
             artworkUrl = song.thumbnailUrl,
-            useFrostedGlass = frostedQueueManager,
+            useFrostedGlass = frostedQueueManager && playerPopupsUseArtworkColor,
             currentSongs = queue,
             currentIndex = queueIndex,
             positionMs = positionMs,
@@ -1394,11 +1397,48 @@ fun NowPlayingScreen(
     }
 
     if (quickSleepTimerOpen) {
+        val sleepTimerShape = RoundedCornerShape(topStart = 24.dp, topEnd = 24.dp)
         ModalBottomSheet(
             onDismissRequest = { quickSleepTimerOpen = false },
             sheetState = rememberModalBottomSheetState(skipPartiallyExpanded = true),
+            shape = sleepTimerShape,
+            containerColor = if (playerPopupsUseArtworkColor) Color.Transparent else MaterialTheme.colorScheme.surfaceContainerHigh,
+            dragHandle = null,
+            contentWindowInsets = { WindowInsets(0, 0, 0, 0) },
         ) {
-            LocalSleepTimerPicker(onBack = { quickSleepTimerOpen = false })
+            Box(Modifier.fillMaxWidth().clip(sleepTimerShape)) {
+                if (playerPopupsUseArtworkColor) {
+                    ArtworkBackdrop(
+                        palette = artworkPalette,
+                        imageUrl = song.thumbnailUrl,
+                        modifier = Modifier.matchParentSize(),
+                        washFraction = 0.75f,
+                        artPx = ROW_ART_PX,
+                    )
+                }
+                Column(Modifier.fillMaxWidth()) {
+                    Box(
+                        Modifier.fillMaxWidth().height(48.dp),
+                        contentAlignment = Alignment.Center,
+                    ) {
+                        Box(
+                            Modifier
+                                .offset(y = 20.dp)
+                                .size(width = 48.dp, height = 6.dp)
+                                .clip(CircleShape)
+                                .background(
+                                    (if (playerPopupsUseArtworkColor) artworkPalette.onBackground else MaterialTheme.colorScheme.onSurfaceVariant)
+                                        .copy(alpha = 0.38f),
+                                ),
+                        )
+                    }
+                    LocalSleepTimerPicker(
+                        onBack = { quickSleepTimerOpen = false },
+                        artworkPalette = artworkPalette,
+                        useArtworkColor = playerPopupsUseArtworkColor,
+                    )
+                }
+            }
         }
     }
 
@@ -5972,6 +6012,7 @@ private fun InlineQueue(
 ) {
     val useEqualsForManage by AppSettings.queueManagerEqualsIcon.collectAsStateWithLifecycle()
     val hideQueueHeading by AppSettings.hideQueueLabel.collectAsStateWithLifecycle()
+    val queueHeadingMusicNoteIcon by AppSettings.queueHeadingMusicNoteIcon.collectAsStateWithLifecycle()
     val useTrashForClear by AppSettings.queueClearTrashIcon.collectAsStateWithLifecycle()
     val manageQueueDescription = stringResource(R.string.manage_queues)
     val listState = rememberLazyListState()
@@ -6053,7 +6094,18 @@ private fun InlineQueue(
             modifier = Modifier.fillMaxWidth(),
             verticalAlignment = Alignment.CenterVertically,
         ) {
-            if (hideQueueHeading) {
+            if (queueHeadingMusicNoteIcon) {
+                Box(
+                    modifier = Modifier.weight(1f),
+                    contentAlignment = Alignment.CenterStart,
+                ) {
+                    Icon(
+                        imageVector = Icons.Rounded.MusicNote,
+                        contentDescription = stringResource(R.string.queue),
+                        tint = Color.White,
+                    )
+                }
+            } else if (hideQueueHeading) {
                 Spacer(Modifier.weight(1f))
             } else {
                 Text(

@@ -353,6 +353,7 @@ fun LocalMusicScreen(
     val artistsOpenAlbums by AppSettings.artistsOpenAlbums.collectAsStateWithLifecycle()
     val shuffleArtistAlbums by AppSettings.shuffleArtistAlbums.collectAsStateWithLifecycle()
     val onlineAlbumArtistArtwork by AppSettings.onlineAlbumArtistArtwork.collectAsStateWithLifecycle()
+    val artistDeezerArtworkEnabled by AppSettings.artistDeezerArtworkEnabled.collectAsStateWithLifecycle()
     val playlistTrackMenuUsesArtworkColor by AppSettings.playlistTrackMenuUsesArtworkColor.collectAsStateWithLifecycle()
     val offlineMode by AppSettings.offlineMode.collectAsStateWithLifecycle()
     val drillDownViewType by if (isDownloads) {
@@ -1046,6 +1047,7 @@ fun LocalMusicScreen(
                     }
                     ArtistsTab(
                         artists = artists,
+                        allowRemoteArtwork = artistDeezerArtworkEnabled,
                         viewType = artistsViewType,
                         onViewTypeToggle = {
                             val next = if (artistsViewType == LibraryViewType.GRID) LibraryViewType.LIST else LibraryViewType.GRID
@@ -1099,7 +1101,7 @@ fun LocalMusicScreen(
                     }
                     ArtistsTab(
                         artists = albumArtists,
-                        allowRemoteArtwork = onlineAlbumArtistArtwork && !offlineMode,
+                        allowRemoteArtwork = artistDeezerArtworkEnabled && onlineAlbumArtistArtwork && !offlineMode,
                         viewType = artistsViewType,
                         onViewTypeToggle = {
                             val next = if (artistsViewType == LibraryViewType.GRID) LibraryViewType.LIST else LibraryViewType.GRID

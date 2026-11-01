@@ -62,6 +62,7 @@ import androidx.compose.material.icons.rounded.KeyboardArrowDown
 import androidx.compose.material.icons.rounded.KeyboardArrowUp
 import androidx.compose.material.icons.rounded.PlaylistAdd
 import androidx.compose.material.icons.rounded.Reorder
+import androidx.compose.material.icons.rounded.SelectAll
 import androidx.compose.material.icons.rounded.Share
 import androidx.compose.material.icons.rounded.Album
 import androidx.compose.runtime.Composable
@@ -126,7 +127,9 @@ private data class PendingBulkArtworkWrite(
 @Composable
 private fun PlaylistSelectionToolbar(
     count: Int,
+    allSelected: Boolean,
     contentColor: Color,
+    onSelectAll: () -> Unit,
     onAddToPlaylist: () -> Unit,
     onEditTags: () -> Unit,
     onChangeArtwork: () -> Unit,
@@ -155,6 +158,13 @@ private fun PlaylistSelectionToolbar(
             modifier = Modifier.padding(end = 4.dp),
             maxLines = 1,
         )
+        IconButton(onClick = onSelectAll) {
+            Icon(
+                Icons.Rounded.SelectAll,
+                contentDescription = stringResource(if (allSelected) R.string.deselect_all else R.string.select_all),
+                tint = contentColor,
+            )
+        }
         IconButton(onClick = onAddToPlaylist) {
             Icon(Icons.Rounded.PlaylistAdd, contentDescription = stringResource(R.string.add_to_playlist), tint = contentColor)
         }
@@ -806,7 +816,18 @@ fun LibraryScreen(
                         { contentColor ->
                             PlaylistSelectionToolbar(
                                 count = selectedPlaylistSongIds.size,
+                                allSelected = drillDownSongs.isNotEmpty() && drillDownSongs.all(::isPlaylistSongSelected),
                                 contentColor = contentColor,
+                                onSelectAll = {
+                                    val allSelected = drillDownSongs.isNotEmpty() && drillDownSongs.all(::isPlaylistSongSelected)
+                                    if (allSelected) {
+                                        selectedPlaylistSongIds = emptySet()
+                                        playlistSelectionMode = false
+                                    } else {
+                                        selectedPlaylistSongIds = drillDownSongs.mapTo(mutableSetOf()) { it.localUri ?: it.videoId }
+                                        playlistSelectionMode = true
+                                    }
+                                },
                                 onAddToPlaylist = { showAddSelectedToPlaylist = true },
                                 onEditTags = { showBulkTagEditor = true },
                                 onChangeArtwork = {

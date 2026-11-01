@@ -77,6 +77,7 @@
     <string name="shuffle">Shuffle</string>
     <string name="more">More</string>
     <string name="add_to_playlist">Add to playlist</string>
+    <string name="local_playlist_selected_count">%1$d songs · %2$d selected</string>
     <string name="add_to_library">Add to library</string>
     <string name="remove_from_library">Remove from library</string>
     <string name="subscribe">Subscribe</string>
@@ -92,6 +93,10 @@
     <plurals name="track_count_plural">
         <item quantity="one">%1$d track</item>
         <item quantity="other">%1$d tracks</item>
+    </plurals>
+    <plurals name="local_playlist_songs_added">
+        <item quantity="one">Added %1$d song to %2$s</item>
+        <item quantity="other">Added %1$d songs to %2$s</item>
     </plurals>
     <plurals name="artist_count">
         <item quantity="one">%1$d artist</item>
@@ -1047,6 +1052,28 @@
     <string name="radio_schedule_empty">No schedule information is available.</string>
     <string name="radio_open_program_site">Program details</string>
     <string name="radio_play_failed">Could not start this radio station. Check your connection and try again.</string>
+    <string name="radio_auto_record">Auto record</string>
+    <string name="radio_auto_record_scheduled">Recording scheduled</string>
+    <string name="radio_auto_record_cancel">Cancel recording</string>
+    <string name="radio_recording_choose_folder">Save folder</string>
+    <string name="radio_recording_choose_folder_first">Choose a folder for radio recordings</string>
+    <string name="radio_recording_folder_set">Radio recordings will be saved to %1$s</string>
+    <string name="radio_recording_exact_alarm_needed">Allow exact alarms so recordings can start at the program time.</string>
+    <string name="radio_recording_exact_alarm_denied">Exact alarm access is needed to schedule a radio recording.</string>
+    <string name="radio_recording_scheduled_toast">Recording scheduled: %1$s</string>
+    <string name="radio_recording_cancelled_toast">Recording cancelled.</string>
+    <string name="radio_recording_time_passed">This program has already ended.</string>
+    <string name="radio_recording_overlap">Another radio recording is already scheduled during this program.</string>
+    <string name="radio_recording_notification_title">Radio recording</string>
+    <string name="radio_recording_starting">Starting scheduled recording</string>
+    <string name="radio_recording_in_progress">Recording %1$s</string>
+    <string name="radio_recording_saved">Saved %1$s as M4A</string>
+    <string name="radio_recording_failed">Could not save %1$s</string>
+    <string name="radio_recording_folder_missing">Choose a folder for radio recordings.</string>
+    <string name="radio_recording_folder_unavailable">The selected folder is unavailable or cannot be written to.</string>
+    <string name="radio_recording_station_missing">This radio station is no longer available.</string>
+    <string name="radio_recording_cancelled">Radio recording cancelled</string>
+    <string name="radio_recording_background_limit">Radio recording stopped by the Android background time limit.</string>
     <string name="album_artists">Album artists</string>
     <string name="local_library_tabs">Local library tabs</string>
     <string name="local_library_tabs_subtitle">Show, hide, and reorder the tabs in the local library</string>
@@ -1062,6 +1089,8 @@
     <string name="frosted_queue_manager_subtitle">Use the same artwork-derived palette as BitChord</string>
     <string name="frosted_player_details">Use an album art backdrop for player details</string>
     <string name="frosted_player_details_subtitle">Use BitChord’s blurred artwork and color backdrop</string>
+    <string name="player_popups_artwork_color">Match player pop-ups to album artwork</string>
+    <string name="player_popups_artwork_color_subtitle">Use current-track colors for player details, sleep timer, speed and pitch, queue management, and playlist sheets. On by default.</string>
     <string name="app_icon">App icon</string>
     <string name="app_icon_subtitle">Choose the icon shown on the home screen</string>
     <string name="app_icon_pink">Pink</string>
@@ -1075,6 +1104,11 @@
     <string name="shuffle_artist_albums_subtitle">During artist shuffle, change album order while keeping each album’s track order</string>
     <string name="online_album_artist_artwork">Online album-artist artwork</string>
     <string name="online_album_artist_artwork_subtitle">Allow album-artist images to be searched on Deezer. When off, only local album artwork is used. Off by default.</string>
+    <string name="artist_deezer_artwork_enabled">Use Deezer artist images</string>
+    <string name="artist_deezer_artwork_enabled_subtitle">Allow Deezer lookups for artist covers. Turn this off to use local artwork or the default icon.</string>
+    <string name="reset_deezer_artist_artwork">Restore default artist covers</string>
+    <string name="reset_deezer_artist_artwork_subtitle">Stop Deezer lookups, clear cached images, and return to local album artwork or the default icon.</string>
+    <string name="deezer_artist_artwork_reset_done">Deezer artist images were cleared. Local artwork and default icons are now used.</string>
     <string name="play_cue_sheet">Play CUE sheet</string>
     <string name="play_cue_sheet_subtitle">Choose a CUE file; referenced audio must be available in the library</string>
     <string name="cue_play_result">Playing %1$d CUE tracks; skipped %2$d unavailable entries.</string>
@@ -1386,10 +1420,12 @@
     <string name="queue_manage_equals_icon_subtitle">Show an equals icon instead of the text label in the player queue.</string>
     <string name="hide_queue_label">Hide Queue label</string>
     <string name="hide_queue_label_subtitle">Hide the Queue heading while keeping queue actions visible.</string>
+    <string name="queue_heading_music_note_icon">Show ♪ instead of the Queue heading</string>
+    <string name="queue_heading_music_note_icon_subtitle">Replace the Queue text with a music note icon. Off by default.</string>
     <string name="queue_clear_trash_icon">Use trash icon to clear the queue</string>
     <string name="queue_clear_trash_icon_subtitle">Replace the Clear text with a white trash icon in the player queue.</string>
     <string name="hide_playback_tuning_title">Hide speed and pitch title</string>
-    <string name="hide_playback_tuning_title_subtitle">Hide the heading and its spacing in the playback speed and pitch menu.</string>
+    <string name="hide_playback_tuning_title_subtitle">Hide only the heading text; keep its space so the controls stay in place below the drag handle.</string>
     <string name="queue_name">Queue name</string>
     <string name="save_current_queue">Save current queue</string>
     <string name="queue_save_failed">Could not save. Check the name, queue contents, and available queue slots.</string>

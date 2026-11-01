@@ -11,6 +11,7 @@ import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.imePadding
+import androidx.compose.foundation.layout.navigationBarsPadding
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
@@ -48,6 +49,8 @@ import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.focus.FocusRequester
 import androidx.compose.ui.focus.focusRequester
 import androidx.compose.ui.graphics.SolidColor
+import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.luminance
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.platform.LocalFocusManager
 import androidx.compose.ui.text.input.ImeAction
@@ -62,6 +65,7 @@ import com.music.bitchord.data.model.Song
 import com.music.bitchord.data.model.UserPlaylist
 import com.music.bitchord.data.model.artworkAt
 import com.music.bitchord.ui.components.thumbnailBorder
+import com.music.bitchord.ui.theme.ArtworkPalette
 import com.music.bitchord.ui.icons.BitChordIcons
 import java.util.Locale
 
@@ -89,104 +93,144 @@ fun PlaylistPickerSheet(
     songs: List<Song> = emptyList(),
     collectionTitle: String? = null,
     startCreating: Boolean = false,
+    artworkPalette: ArtworkPalette? = null,
+    artworkUrl: String? = null,
+    useArtworkColor: Boolean = false,
 ) {
     var creating by remember { mutableStateOf(startCreating) }
-
-    if (creating) {
-        NewPlaylistForm(
-            // Nowhere to go back to when the sheet opened straight onto the
-            // form; the sheet's own dismiss is the way out.
-            onBack = if (startCreating) null else ({ creating = false }),
-            onCreate = onCreate,
-            modifier = modifier,
+    val palette = artworkPalette.takeIf { useArtworkColor }
+    val baseColors = MaterialTheme.colorScheme
+    val sheetColors = if (palette != null) {
+        baseColors.copy(
+            primary = palette.accent,
+            onPrimary = if (palette.accent.luminance() > 0.52f) Color.Black else Color.White,
+            primaryContainer = palette.elevated,
+            onPrimaryContainer = palette.onBackground,
+            background = palette.background,
+            onBackground = palette.onBackground,
+            surface = palette.background,
+            onSurface = palette.onBackground,
+            surfaceVariant = palette.elevated,
+            onSurfaceVariant = palette.onBackgroundVariant,
+            outline = palette.divider,
+            outlineVariant = palette.divider,
+            surfaceContainerLow = palette.elevated,
+            surfaceContainerHigh = palette.elevated,
+            surfaceContainerHighest = palette.elevated,
         )
-        return
-    }
+    } else baseColors
 
-    Column(modifier.fillMaxWidth()) {
-        if (song != null) {
-            SheetTrackHeader(song)
-            HorizontalDivider(thickness = 0.5.dp, color = MaterialTheme.colorScheme.outline)
-        } else if (!collectionTitle.isNullOrBlank() && songs.isNotEmpty()) {
-            Row(
-                modifier = Modifier.fillMaxWidth().padding(horizontal = 20.dp, vertical = 12.dp),
-                verticalAlignment = Alignment.CenterVertically,
-            ) {
-                AsyncImage(
-                    model = songs.firstOrNull()?.thumbnailUrl.artworkAt(ROW_ART_PX),
-                    contentDescription = null,
-                    contentScale = ContentScale.Crop,
-                    modifier = Modifier
-                        .size(48.dp)
-                        .clip(RoundedCornerShape(8.dp))
-                        .thumbnailBorder(RoundedCornerShape(8.dp))
-                        .background(MaterialTheme.colorScheme.surfaceVariant),
-                )
-                Column(Modifier.weight(1f).padding(start = 14.dp)) {
-                    Text(
-                        text = collectionTitle,
-                        style = MaterialTheme.typography.titleSmall,
-                        maxLines = 1,
-                        overflow = TextOverflow.Ellipsis,
-                    )
-                    Text(
-                        text = pluralStringResource(R.plurals.track_count_plural, songs.size, songs.size),
-                        style = MaterialTheme.typography.bodySmall,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant,
-                    )
-                }
-            }
-            HorizontalDivider(thickness = 0.5.dp, color = MaterialTheme.colorScheme.outline)
-        }
-        SheetHeading(
-            stringResource(if (song != null || songs.isNotEmpty()) R.string.add_to_playlist else R.string.your_playlists)
-                .uppercase(Locale.getDefault()),
-        )
-
-        ActionRow(
-            icon = BitChordIcons.Plus,
-            label = stringResource(R.string.new_playlist),
-            onClick = { creating = true },
-        )
-
-        when {
-            // Only while there is nothing to show: re-fetching under a list
-            // that is already up would replace it with a spinner for no gain.
-            loading && playlists.isEmpty() -> Box(
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .height(120.dp),
-                contentAlignment = Alignment.Center,
-            ) {
-                CircularProgressIndicator(
-                    strokeWidth = 2.5.dp,
-                    modifier = Modifier.size(26.dp),
-                )
-            }
-
-            playlists.isEmpty() -> Text(
-                text = stringResource(R.string.no_playlists_yet),
-                style = MaterialTheme.typography.bodyMedium,
-                color = MaterialTheme.colorScheme.onSurfaceVariant,
-                modifier = Modifier.padding(horizontal = 22.dp, vertical = 18.dp),
+    Box(
+        modifier = modifier
+            .fillMaxWidth()
+            .clip(RoundedCornerShape(topStart = 28.dp, topEnd = 28.dp)),
+    ) {
+        if (palette != null) {
+            ArtworkBackdrop(
+                palette = palette,
+                imageUrl = artworkUrl ?: song?.thumbnailUrl ?: songs.firstOrNull()?.thumbnailUrl,
+                modifier = Modifier.matchParentSize(),
+                washFraction = 0.75f,
+                artPx = ROW_ART_PX,
             )
-
-            else -> {
-                HorizontalDivider(
-                    modifier = Modifier.padding(vertical = 6.dp),
-                    thickness = 0.5.dp,
-                    color = MaterialTheme.colorScheme.outline,
+        }
+        MaterialTheme(colorScheme = sheetColors) {
+            if (creating) {
+                NewPlaylistForm(
+                    // Nowhere to go back to when the sheet opened straight onto the
+                    // form; the sheet's own dismiss is the way out.
+                    onBack = if (startCreating) null else ({ creating = false }),
+                    onCreate = onCreate,
+                    modifier = Modifier.fillMaxWidth().navigationBarsPadding(),
                 )
-                // Capped so a long list can't push the sheet past the screen;
-                // it scrolls inside the sheet instead.
-                LazyColumn(Modifier.heightIn(max = 320.dp)) {
-                    items(playlists, key = { it.playlistId }) { playlist ->
-                        PlaylistRow(playlist = playlist, onClick = { onPick(playlist) })
+            } else {
+                Column(Modifier.fillMaxWidth().navigationBarsPadding()) {
+                    if (song != null) {
+                        SheetTrackHeader(song)
+                        HorizontalDivider(thickness = 0.5.dp, color = MaterialTheme.colorScheme.outline)
+                    } else if (!collectionTitle.isNullOrBlank() && songs.isNotEmpty()) {
+                        Row(
+                            modifier = Modifier.fillMaxWidth().padding(horizontal = 20.dp, vertical = 12.dp),
+                            verticalAlignment = Alignment.CenterVertically,
+                        ) {
+                            AsyncImage(
+                                model = songs.firstOrNull()?.thumbnailUrl.artworkAt(ROW_ART_PX),
+                                contentDescription = null,
+                                contentScale = ContentScale.Crop,
+                                modifier = Modifier
+                                    .size(48.dp)
+                                    .clip(RoundedCornerShape(8.dp))
+                                    .thumbnailBorder(RoundedCornerShape(8.dp))
+                                    .background(MaterialTheme.colorScheme.surfaceVariant),
+                            )
+                            Column(Modifier.weight(1f).padding(start = 14.dp)) {
+                                Text(
+                                    text = collectionTitle,
+                                    style = MaterialTheme.typography.titleSmall,
+                                    maxLines = 1,
+                                    overflow = TextOverflow.Ellipsis,
+                                )
+                                Text(
+                                    text = pluralStringResource(R.plurals.track_count_plural, songs.size, songs.size),
+                                    style = MaterialTheme.typography.bodySmall,
+                                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                                )
+                            }
+                        }
+                        HorizontalDivider(thickness = 0.5.dp, color = MaterialTheme.colorScheme.outline)
                     }
+                    SheetHeading(
+                        stringResource(if (song != null || songs.isNotEmpty()) R.string.add_to_playlist else R.string.your_playlists)
+                            .uppercase(Locale.getDefault()),
+                    )
+
+                    ActionRow(
+                        icon = BitChordIcons.Plus,
+                        label = stringResource(R.string.new_playlist),
+                        onClick = { creating = true },
+                    )
+
+                    when {
+                        // Only while there is nothing to show: re-fetching under a list
+                        // that is already up would replace it with a spinner for no gain.
+                        loading && playlists.isEmpty() -> Box(
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .height(120.dp),
+                            contentAlignment = Alignment.Center,
+                        ) {
+                            CircularProgressIndicator(
+                                strokeWidth = 2.5.dp,
+                                modifier = Modifier.size(26.dp),
+                            )
+                        }
+
+                        playlists.isEmpty() -> Text(
+                            text = stringResource(R.string.no_playlists_yet),
+                            style = MaterialTheme.typography.bodyMedium,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant,
+                            modifier = Modifier.padding(horizontal = 22.dp, vertical = 18.dp),
+                        )
+
+                        else -> {
+                            HorizontalDivider(
+                                modifier = Modifier.padding(vertical = 6.dp),
+                                thickness = 0.5.dp,
+                                color = MaterialTheme.colorScheme.outline,
+                            )
+                            // Capped so a long list can't push the sheet past the screen;
+                            // it scrolls inside the sheet instead.
+                            LazyColumn(Modifier.heightIn(max = 320.dp)) {
+                                items(playlists, key = { it.playlistId }) { playlist ->
+                                    PlaylistRow(playlist = playlist, onClick = { onPick(playlist) })
+                                }
+                            }
+                        }
+                    }
+                    Spacer(Modifier.height(24.dp))
                 }
             }
         }
-        Spacer(Modifier.height(24.dp))
     }
 }
 

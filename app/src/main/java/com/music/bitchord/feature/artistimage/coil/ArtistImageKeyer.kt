@@ -2,6 +2,7 @@ package com.music.bitchord.feature.artistimage.coil
 
 import coil3.key.Keyer
 import coil3.request.Options
+import com.music.bitchord.data.settings.AppSettings
 import com.music.bitchord.feature.artistimage.model.ArtistImage
 
 /**
@@ -10,6 +11,6 @@ import com.music.bitchord.feature.artistimage.model.ArtistImage
 class ArtistImageKeyer : Keyer<ArtistImage> {
     override fun key(data: ArtistImage, options: Options): String {
         val normalizedName = data.name.trim().lowercase()
-        return "artist::name=$normalizedName|large=${data.isLarge}|online=${data.allowOnlineLookup}|fallback=${data.fallbackUrl.orEmpty()}"
+        return "artist::name=$normalizedName|large=${data.isLarge}|online=${data.allowOnlineLookup}|deezer=${AppSettings.artistDeezerArtworkEnabled.value}|fallback=${data.fallbackUrl.orEmpty()}"
     }
 }

@@ -107,6 +107,31 @@ object TagLibWriter {
             }
         }
 
+    /** Write a front cover into an app-owned audio file without touching its audio frames. */
+    suspend fun writeArtworkFile(file: File, artwork: PreparedArtwork): Boolean = withContext(Dispatchers.IO) {
+        try {
+            if (!file.isFile || file.length() <= 0L) return@withContext false
+            ParcelFileDescriptor.open(file, ParcelFileDescriptor.MODE_READ_WRITE).use { descriptor ->
+                TagLib.savePictures(
+                    descriptor.dup().detachFd(),
+                    arrayOf(
+                        Picture(
+                            data = artwork.bytes,
+                            description = "Front Cover",
+                            pictureType = "Front Cover",
+                            mimeType = artwork.mimeType,
+                        ),
+                    ),
+                )
+            }
+        } catch (cancelled: CancellationException) {
+            throw cancelled
+        } catch (error: Exception) {
+            Log.w(TAG, "Failed writing artwork into ${file.name}", error)
+            false
+        }
+    }
+
     /** Reads only the embedded comment tag; this avoids decoding artwork on the details path. */
     suspend fun readEmbeddedComment(context: Context, song: Song): String? = withContext(Dispatchers.IO) {
         runCatching {

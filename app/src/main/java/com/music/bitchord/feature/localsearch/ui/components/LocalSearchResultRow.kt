@@ -24,6 +24,7 @@ import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.getValue
 import androidx.compose.runtime.remember
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -33,11 +34,13 @@ import androidx.compose.ui.res.pluralStringResource
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import coil3.compose.AsyncImage
+import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.music.bitchord.R
 import com.music.bitchord.data.model.ROW_ART_PX
 import com.music.bitchord.data.model.Song
 import com.music.bitchord.data.model.artworkAt
 import com.music.bitchord.data.model.isSameTrackAs
+import com.music.bitchord.data.settings.AppSettings
 import com.music.bitchord.feature.artistimage.model.ArtistImage
 import com.music.bitchord.feature.localsearch.domain.model.LocalSearchResult
 import com.music.bitchord.ui.components.PAGE_GUTTER
@@ -174,6 +177,7 @@ private fun ArtistResultRow(
     onClick: () -> Unit,
     modifier: Modifier = Modifier,
 ) {
+    val artistDeezerArtworkEnabled by AppSettings.artistDeezerArtworkEnabled.collectAsStateWithLifecycle()
     Row(
         modifier = modifier
             .fillMaxWidth()
@@ -194,11 +198,12 @@ private fun ArtistResultRow(
                 tint = MaterialTheme.colorScheme.onPrimaryContainer,
                 modifier = Modifier.size(26.dp),
             )
-            val imageModel = remember(artist.name, artist.thumbnailUrl) {
+            val imageModel = remember(artist.name, artist.thumbnailUrl, artistDeezerArtworkEnabled) {
                 ArtistImage(
                     name = artist.name,
                     fallbackUrl = artist.thumbnailUrl?.artworkAt(ROW_ART_PX),
                     isLarge = false,
+                    allowOnlineLookup = artistDeezerArtworkEnabled,
                 )
             }
             AsyncImage(

@@ -9,6 +9,7 @@ import androidx.compose.foundation.layout.FlowRow
 import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
+import androidx.compose.foundation.layout.WindowInsets
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.navigationBarsPadding
@@ -79,12 +80,14 @@ fun LocalSongDetailsSheet(
     onLyricsEditorClick: () -> Unit,
     onTagEditorClick: () -> Unit,
     onAudioCutterClick: (() -> Unit)? = null,
+    allowArtworkColor: Boolean = true,
     modifier: Modifier = Modifier,
 ) {
     val context = LocalContext.current
     val sheetState = rememberModalBottomSheetState(skipPartiallyExpanded = true)
     val audioCutterEnabled by AppSettings.audioCutterEnabled.collectAsStateWithLifecycle()
-    val useArtworkBackdrop by AppSettings.detailsSheetArtworkBackdrop.collectAsStateWithLifecycle()
+    val artworkBackdropEnabled by AppSettings.detailsSheetArtworkBackdrop.collectAsStateWithLifecycle()
+    val useArtworkBackdrop = artworkBackdropEnabled && allowArtworkColor
     val showEmbeddedComment by AppSettings.showEmbeddedComment.collectAsStateWithLifecycle()
     val palette = rememberArtworkPalette(song.thumbnailUrl, dark = true, artPx = ROW_ART_PX)
     val baseColors = MaterialTheme.colorScheme
@@ -122,6 +125,7 @@ fun LocalSongDetailsSheet(
         sheetState = sheetState,
         shape = RoundedCornerShape(topStart = 28.dp, topEnd = 28.dp),
         containerColor = if (useArtworkBackdrop) Color.Transparent else MaterialTheme.colorScheme.surface,
+        contentWindowInsets = { WindowInsets(0, 0, 0, 0) },
         dragHandle = {
             Box(
                 Modifier.fillMaxWidth().padding(top = 8.dp, bottom = 4.dp),

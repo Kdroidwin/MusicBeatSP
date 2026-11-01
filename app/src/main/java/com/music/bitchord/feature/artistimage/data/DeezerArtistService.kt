@@ -19,6 +19,12 @@ object DeezerArtistService {
     private val urlCache = ConcurrentHashMap<String, String>()
     private val negativeCache = ConcurrentHashMap.newKeySet<String>()
 
+    /** Forget resolved and negative responses when the user resets artist artwork. */
+    fun clearCache() {
+        urlCache.clear()
+        negativeCache.clear()
+    }
+
     /**
      * Resolves the official artist image URL from Deezer for the given [artistName].
      *
