@@ -38,7 +38,9 @@ import androidx.compose.material.icons.rounded.PlayArrow
 import androidx.compose.material.icons.rounded.Radio
 import androidx.compose.material.icons.rounded.Refresh
 import androidx.compose.material.icons.rounded.Search
+import androidx.compose.material.icons.rounded.Star
 import androidx.compose.material.icons.rounded.FileDownload
+import androidx.compose.material.icons.rounded.Delete
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Button
 import androidx.compose.material3.Card
@@ -95,6 +97,11 @@ import com.music.bitchord.radio.model.StationRegistry
 import com.music.bitchord.radio.model.logoUrl
 import com.music.bitchord.radio.recording.RadioAutoRecordingScheduler
 import com.music.bitchord.radio.recording.RadioAutoRecordingStore
+import com.music.bitchord.radio.recording.RadioFavoriteKind
+import com.music.bitchord.radio.recording.RadioFavoriteRepeat
+import com.music.bitchord.radio.recording.RadioRecordingFavorite
+import com.music.bitchord.radio.recording.RadioRecordingFavoriteScheduler
+import com.music.bitchord.radio.recording.RadioRecordingFavoriteStore
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 
@@ -125,6 +132,9 @@ fun RadioScreen(
     var hasOnsenProgramError by remember { mutableStateOf(false) }
     var refreshOnsenProgramKey by remember { mutableStateOf(0) }
     var selectedProgram by remember { mutableStateOf<ProgramEntry?>(null) }
+    var keywordFavoriteStation by remember { mutableStateOf<Station?>(null) }
+    var showRecordingFavorites by remember { mutableStateOf(false) }
+    var favoritesVersion by remember { mutableStateOf(0) }
     var pendingAutoRecordProgram by remember { mutableStateOf<ProgramEntry?>(null) }
     var pendingOnsenDownload by remember { mutableStateOf<Song?>(null) }
     var autoRecordingIds by remember { mutableStateOf(RadioAutoRecordingStore.recordings(context).mapTo(mutableSetOf()) { it.id }) }
@@ -150,8 +160,8 @@ fun RadioScreen(
 
     val exactAlarmLauncher = rememberLauncherForActivityResult(ActivityResultContracts.StartActivityForResult()) {
         val program = pendingAutoRecordProgram
-        if (program != null) {
-            if (RadioAutoRecordingScheduler.canScheduleExactAlarms(context)) {
+        if (RadioAutoRecordingScheduler.canScheduleExactAlarms(context)) {
+            if (program != null) {
                 when (scheduleRadioAutoRecording(context, program, selectedAreaId)) {
                     RadioScheduleResult.SCHEDULED -> {
                         autoRecordingIds = RadioAutoRecordingStore.recordings(context).mapTo(mutableSetOf()) { it.id }
@@ -162,10 +172,13 @@ fun RadioScreen(
                     RadioScheduleResult.ERROR -> Toast.makeText(context, R.string.radio_recording_exact_alarm_denied, Toast.LENGTH_LONG).show()
                 }
             } else {
-                Toast.makeText(context, R.string.radio_recording_exact_alarm_denied, Toast.LENGTH_LONG).show()
+                RadioRecordingFavoriteScheduler.scheduleAllTimeFavorites(context)
+                RadioRecordingFavoriteScheduler.requestKeywordRefresh(context)
             }
-            pendingAutoRecordProgram = null
+        } else if (program != null) {
+            Toast.makeText(context, R.string.radio_recording_exact_alarm_denied, Toast.LENGTH_LONG).show()
         }
+        pendingAutoRecordProgram = null
     }
 
     val onsenDownloadFolderPicker = rememberLauncherForActivityResult(ActivityResultContracts.OpenDocumentTree()) { uri ->
@@ -203,6 +216,10 @@ fun RadioScreen(
             } else {
                 RadioAutoRecordingStore.setFolderUri(context, uri)
                 recordingFolderName = DocumentFile.fromTreeUri(context, uri)?.name ?: uri.lastPathSegment.orEmpty()
+                if (RadioAutoRecordingScheduler.canScheduleExactAlarms(context)) {
+                    RadioRecordingFavoriteScheduler.scheduleAllTimeFavorites(context)
+                    RadioRecordingFavoriteScheduler.requestKeywordRefresh(context)
+                }
                 pendingAutoRecordProgram?.let { program ->
                     if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S && !RadioAutoRecordingScheduler.canScheduleExactAlarms(context)) {
                         Toast.makeText(context, R.string.radio_recording_exact_alarm_needed, Toast.LENGTH_LONG).show()
@@ -230,7 +247,19 @@ fun RadioScreen(
                             }
                         }
                     }
-                } ?: Toast.makeText(context, context.getString(R.string.radio_recording_folder_set, recordingFolderName), Toast.LENGTH_LONG).show()
+                } ?: run {
+                    if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S &&
+                        !RadioAutoRecordingScheduler.canScheduleExactAlarms(context) &&
+                        RadioRecordingFavoriteStore.favorites(context).isNotEmpty()
+                    ) {
+                        Toast.makeText(context, R.string.radio_recording_exact_alarm_needed, Toast.LENGTH_LONG).show()
+                        exactAlarmLauncher.launch(
+                            Intent(Settings.ACTION_REQUEST_SCHEDULE_EXACT_ALARM, Uri.parse("package:${context.packageName}")),
+                        )
+                    } else {
+                        Toast.makeText(context, context.getString(R.string.radio_recording_folder_set, recordingFolderName), Toast.LENGTH_LONG).show()
+                    }
+                }
             }
         }
     }
@@ -410,6 +439,53 @@ fun RadioScreen(
         )
     }
 
+    if (showRecordingFavorites) {
+        RadioRecordingFavoritesDialog(
+            favorites = remember(favoritesVersion) { RadioRecordingFavoriteStore.favorites(context) },
+            amoledBlack = amoledBlack,
+            onRemove = { favorite ->
+                RadioRecordingFavoriteStore.remove(context, favorite.id)
+                favoritesVersion++
+                autoRecordingIds = RadioAutoRecordingStore.recordings(context).mapTo(mutableSetOf()) { it.id }
+            },
+            onDismiss = { showRecordingFavorites = false },
+        )
+    }
+
+    keywordFavoriteStation?.let { favoriteStation ->
+        RadioKeywordFavoriteDialog(
+            stationName = favoriteStation.name,
+            amoledBlack = amoledBlack,
+            onChooseFolder = { folderPicker.launch(RadioAutoRecordingStore.folderUri(context)) },
+            onDismiss = { keywordFavoriteStation = null },
+            onSave = { keyword ->
+                if (networkUnavailable) {
+                    Toast.makeText(context, R.string.radio_offline_unavailable, Toast.LENGTH_SHORT).show()
+                } else if (RadioAutoRecordingStore.folderUri(context) == null) {
+                    Toast.makeText(context, R.string.radio_recording_choose_folder_first, Toast.LENGTH_LONG).show()
+                    folderPicker.launch(null)
+                } else {
+                    runCatching {
+                        RadioRecordingFavoriteStore.addKeywordFavorite(context, favoriteStation.id, selectedAreaId, keyword)
+                    }.onSuccess {
+                        favoritesVersion++
+                        keywordFavoriteStation = null
+                        Toast.makeText(context, R.string.radio_recording_favorite_added, Toast.LENGTH_SHORT).show()
+                        if (RadioAutoRecordingScheduler.canScheduleExactAlarms(context)) {
+                            RadioRecordingFavoriteScheduler.requestKeywordRefresh(context)
+                        } else if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) {
+                            exactAlarmLauncher.launch(
+                                Intent(Settings.ACTION_REQUEST_SCHEDULE_EXACT_ALARM, Uri.parse("package:${context.packageName}")),
+                            )
+                        }
+                    }.onFailure {
+                        Toast.makeText(context, R.string.radio_recording_favorite_failed, Toast.LENGTH_SHORT).show()
+                    }
+                }
+            },
+        )
+    }
+
     selectedProgram?.let { program ->
         val recordingId = RadioAutoRecordingStore.programId(program.stationId, program.startAt)
         RadioProgramDialog(
@@ -455,6 +531,27 @@ fun RadioScreen(
                                 pendingAutoRecordProgram = null
                             }
                         }
+                    }
+                }
+            },
+            onAddTimeFavorite = { repeat ->
+                val favorite = runCatching {
+                    RadioRecordingFavoriteStore.addTimeFavorite(context, program, selectedAreaId, repeat)
+                }.getOrNull()
+                if (favorite == null) {
+                    Toast.makeText(context, R.string.radio_recording_favorite_failed, Toast.LENGTH_SHORT).show()
+                } else {
+                    favoritesVersion++
+                    Toast.makeText(context, R.string.radio_recording_favorite_added, Toast.LENGTH_SHORT).show()
+                    if (RadioAutoRecordingStore.folderUri(context) == null) {
+                        Toast.makeText(context, R.string.radio_recording_choose_folder_first, Toast.LENGTH_LONG).show()
+                        folderPicker.launch(null)
+                    } else if (!RadioAutoRecordingScheduler.canScheduleExactAlarms(context) && Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) {
+                        exactAlarmLauncher.launch(
+                            Intent(Settings.ACTION_REQUEST_SCHEDULE_EXACT_ALARM, Uri.parse("package:${context.packageName}")),
+                        )
+                    } else {
+                        RadioRecordingFavoriteScheduler.scheduleNextTimeFavorite(context, favorite.id)
                     }
                 }
             },
@@ -536,6 +633,13 @@ fun RadioScreen(
                             )
                         }
                         Row(verticalAlignment = Alignment.CenterVertically) {
+                            if (isRadikoSelected) {
+                                TextButton(onClick = { showRecordingFavorites = true }) {
+                                    Icon(Icons.Rounded.Star, contentDescription = null)
+                                    Spacer(Modifier.width(4.dp))
+                                    Text(stringResource(R.string.radio_recording_favorites))
+                                }
+                            }
                             TextButton(onClick = { showServicePicker = true }) {
                                 Icon(Icons.Rounded.Radio, contentDescription = null)
                                 Spacer(Modifier.width(4.dp))
@@ -689,6 +793,7 @@ fun RadioScreen(
                 autoRecordingIds = RadioAutoRecordingStore.recordings(context).mapTo(mutableSetOf()) { item -> item.id }
                 selectedProgram = it
             },
+            onAddKeywordFavorite = { keywordFavoriteStation = station },
             onRetry = {
                 hasProgramError = false
                 stationDetail = station
@@ -987,6 +1092,7 @@ private fun RadioStationDetail(
     onPlay: () -> Unit,
     onSelectDay: (String) -> Unit,
     onSelectProgram: (ProgramEntry) -> Unit,
+    onAddKeywordFavorite: () -> Unit,
     onRetry: () -> Unit,
 ) {
     val days = remember(programs) { programs.map { RadioRepository.programDay(it.startAt) }.distinct().sorted() }
@@ -1043,6 +1149,12 @@ private fun RadioStationDetail(
                 }
                 Row(verticalAlignment = Alignment.CenterVertically) {
                     Text(stringResource(R.string.radio_program_schedule), style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Bold)
+                    Spacer(Modifier.weight(1f))
+                    TextButton(onClick = onAddKeywordFavorite, enabled = !networkUnavailable) {
+                        Icon(Icons.Rounded.Star, contentDescription = null)
+                        Spacer(Modifier.width(4.dp))
+                        Text(stringResource(R.string.radio_recording_keyword_favorite))
+                    }
                 }
                 if (days.isNotEmpty()) {
                     LazyRow(
@@ -1133,10 +1245,13 @@ private fun RadioProgramDialog(
     isRecordingScheduled: Boolean,
     recordingFolderName: String,
     onAutoRecord: () -> Unit,
+    onAddTimeFavorite: (RadioFavoriteRepeat) -> Unit,
     onChooseFolder: () -> Unit,
     onDismiss: () -> Unit,
 ) {
     val context = LocalContext.current
+    var showTimeFavoriteDialog by remember(program.stationId, program.startAt) { mutableStateOf(false) }
+    var selectedRepeat by remember(program.stationId, program.startAt) { mutableStateOf(RadioFavoriteRepeat.WEEKLY) }
     AlertDialog(
         onDismissRequest = onDismiss,
         containerColor = if (amoledBlack) Color.Black else MaterialTheme.colorScheme.surface,
@@ -1167,6 +1282,11 @@ private fun RadioProgramDialog(
                     maxLines = 2,
                     overflow = TextOverflow.Ellipsis,
                 )
+                TextButton(onClick = { showTimeFavoriteDialog = true }, modifier = Modifier.fillMaxWidth()) {
+                    Icon(Icons.Rounded.Star, contentDescription = null)
+                    Spacer(Modifier.width(6.dp))
+                    Text(stringResource(R.string.radio_recording_time_favorite))
+                }
                 program.imageUrl?.let { url ->
                     AsyncImage(
                         model = url,
@@ -1205,6 +1325,137 @@ private fun RadioProgramDialog(
                 }
                 TextButton(onClick = onDismiss) { Text(stringResource(R.string.close)) }
             }
+        },
+    )
+
+    if (showTimeFavoriteDialog) {
+        AlertDialog(
+            onDismissRequest = { showTimeFavoriteDialog = false },
+            containerColor = if (amoledBlack) Color.Black else MaterialTheme.colorScheme.surface,
+            title = { Text(stringResource(R.string.radio_recording_repeat_title)) },
+            text = {
+                Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
+                    Text(stringResource(R.string.radio_recording_repeat_help))
+                    Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                        FilterChip(
+                            selected = selectedRepeat == RadioFavoriteRepeat.WEEKLY,
+                            onClick = { selectedRepeat = RadioFavoriteRepeat.WEEKLY },
+                            label = { Text(stringResource(R.string.radio_recording_weekly)) },
+                        )
+                        FilterChip(
+                            selected = selectedRepeat == RadioFavoriteRepeat.DAILY,
+                            onClick = { selectedRepeat = RadioFavoriteRepeat.DAILY },
+                            label = { Text(stringResource(R.string.radio_recording_daily)) },
+                        )
+                    }
+                }
+            },
+            confirmButton = {
+                TextButton(onClick = {
+                    onAddTimeFavorite(selectedRepeat)
+                    showTimeFavoriteDialog = false
+                }) { Text(stringResource(R.string.radio_recording_favorite_add)) }
+            },
+            dismissButton = {
+                TextButton(onClick = { showTimeFavoriteDialog = false }) { Text(stringResource(R.string.cancel)) }
+            },
+        )
+    }
+}
+
+@Composable
+private fun RadioKeywordFavoriteDialog(
+    stationName: String,
+    amoledBlack: Boolean,
+    onChooseFolder: () -> Unit,
+    onDismiss: () -> Unit,
+    onSave: (String) -> Unit,
+) {
+    var keyword by remember(stationName) { mutableStateOf("") }
+    AlertDialog(
+        onDismissRequest = onDismiss,
+        containerColor = if (amoledBlack) Color.Black else MaterialTheme.colorScheme.surface,
+        title = { Text(stringResource(R.string.radio_recording_keyword_favorite)) },
+        text = {
+            Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                Text(stringResource(R.string.radio_recording_keyword_help, stationName))
+                OutlinedTextField(
+                    value = keyword,
+                    onValueChange = { keyword = it },
+                    singleLine = true,
+                    label = { Text(stringResource(R.string.radio_recording_keyword_label)) },
+                )
+                TextButton(onClick = onChooseFolder) {
+                    Text(stringResource(R.string.radio_recording_choose_folder))
+                }
+            }
+        },
+        confirmButton = {
+            TextButton(onClick = { onSave(keyword) }, enabled = keyword.isNotBlank()) {
+                Text(stringResource(R.string.radio_recording_favorite_add))
+            }
+        },
+        dismissButton = {
+            TextButton(onClick = onDismiss) { Text(stringResource(R.string.cancel)) }
+        },
+    )
+}
+
+@Composable
+private fun RadioRecordingFavoritesDialog(
+    favorites: List<RadioRecordingFavorite>,
+    amoledBlack: Boolean,
+    onRemove: (RadioRecordingFavorite) -> Unit,
+    onDismiss: () -> Unit,
+) {
+    AlertDialog(
+        onDismissRequest = onDismiss,
+        containerColor = if (amoledBlack) Color.Black else MaterialTheme.colorScheme.surface,
+        title = { Text(stringResource(R.string.radio_recording_favorites)) },
+        text = {
+            if (favorites.isEmpty()) {
+                Text(stringResource(R.string.radio_recording_favorites_empty))
+            } else {
+                Column(
+                    modifier = Modifier.heightIn(max = 460.dp).verticalScroll(rememberScrollState()),
+                    verticalArrangement = Arrangement.spacedBy(4.dp),
+                ) {
+                    favorites.forEach { favorite ->
+                        Row(verticalAlignment = Alignment.CenterVertically) {
+                            Column(Modifier.weight(1f).padding(vertical = 8.dp)) {
+                                Text(
+                                    text = if (favorite.kind == RadioFavoriteKind.TIME) {
+                                        val repeatLabel = stringResource(
+                                            if (favorite.repeat == RadioFavoriteRepeat.DAILY) R.string.radio_recording_daily
+                                            else R.string.radio_recording_weekly,
+                                        )
+                                        stringResource(
+                                            R.string.radio_recording_time_favorite_item,
+                                            favorite.stationName,
+                                            favorite.timeOfDay.orEmpty().let { if (it.length >= 4) "${it.take(2)}:${it.substring(2, 4)}" else it },
+                                            repeatLabel,
+                                        )
+                                    } else {
+                                        stringResource(
+                                            R.string.radio_recording_keyword_favorite_item,
+                                            favorite.stationName,
+                                            favorite.keyword.orEmpty(),
+                                        )
+                                    },
+                                    style = MaterialTheme.typography.bodyMedium,
+                                )
+                                Text(favorite.title, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                            }
+                            IconButton(onClick = { onRemove(favorite) }) {
+                                Icon(Icons.Rounded.Delete, contentDescription = stringResource(R.string.radio_recording_favorite_remove))
+                            }
+                        }
+                    }
+                }
+            }
+        },
+        confirmButton = {
+            TextButton(onClick = onDismiss) { Text(stringResource(R.string.close)) }
         },
     )
 }

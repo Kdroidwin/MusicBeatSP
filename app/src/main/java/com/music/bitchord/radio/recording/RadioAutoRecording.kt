@@ -24,6 +24,7 @@ data class RadioAutoRecording(
     val startTimeMs: Long,
     val endTimeMs: Long,
     val artworkUrl: String? = null,
+    val favoriteId: String? = null,
 )
 
 object RadioAutoRecordingStore {
@@ -83,6 +84,7 @@ object RadioAutoRecordingStore {
                     startTimeMs = row.getLong("startTimeMs"),
                     endTimeMs = row.getLong("endTimeMs"),
                     artworkUrl = row.optString("artworkUrl").takeIf { it.isNotBlank() && it != "null" },
+                    favoriteId = row.optString("favoriteId").takeIf { it.isNotBlank() && it != "null" },
                 )
             }
         }.getOrDefault(emptyList())
@@ -127,7 +129,8 @@ object RadioAutoRecordingStore {
                     .put("endAt", item.endAt)
                     .put("startTimeMs", item.startTimeMs)
                     .put("endTimeMs", item.endTimeMs)
-                    .put("artworkUrl", item.artworkUrl),
+                    .put("artworkUrl", item.artworkUrl)
+                    .put("favoriteId", item.favoriteId),
             )
         }
         prefs(context).edit().putString(KEY_RECORDINGS, array.toString()).apply()

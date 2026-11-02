@@ -313,6 +313,10 @@
             android:exported="false" />
 
         <receiver
+            android:name=".radio.recording.RadioFavoriteRefreshReceiver"
+            android:exported="false" />
+
+        <receiver
             android:name=".radio.recording.RadioRecordingBootReceiver"
             android:enabled="true"
             android:exported="true">

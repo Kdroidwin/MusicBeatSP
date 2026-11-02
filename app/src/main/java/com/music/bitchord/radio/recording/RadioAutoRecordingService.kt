@@ -126,6 +126,9 @@ class RadioAutoRecordingService : Service() {
                 if (!destroying) {
                     RadioAutoRecordingStore.setActive(this@RadioAutoRecordingService, id, false)
                     RadioAutoRecordingStore.remove(this@RadioAutoRecordingService, id)
+                    recording.favoriteId?.let { favoriteId ->
+                        RadioRecordingFavoriteScheduler.scheduleNextTimeFavorite(this@RadioAutoRecordingService, favoriteId)
+                    }
                     if (jobs.isEmpty()) {
                         releaseCpu()
                         stopForeground(STOP_FOREGROUND_DETACH)

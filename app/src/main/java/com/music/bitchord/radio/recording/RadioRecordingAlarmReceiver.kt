@@ -4,6 +4,7 @@ import android.content.BroadcastReceiver
 import android.content.Context
 import android.content.Intent
 import androidx.core.content.ContextCompat
+import kotlinx.coroutines.launch
 
 class RadioRecordingAlarmReceiver : BroadcastReceiver() {
     override fun onReceive(context: Context, intent: Intent?) {
@@ -28,6 +29,27 @@ class RadioRecordingBootReceiver : BroadcastReceiver() {
     override fun onReceive(context: Context, intent: Intent?) {
         if (intent?.action == Intent.ACTION_BOOT_COMPLETED) {
             RadioAutoRecordingScheduler.rescheduleAfterBoot(context)
+            RadioRecordingFavoriteScheduler.onBoot(context)
+        }
+    }
+}
+
+class RadioFavoriteRefreshReceiver : BroadcastReceiver() {
+    override fun onReceive(context: Context, intent: Intent?) {
+        if (intent?.action != RadioRecordingFavoriteScheduler.ACTION_REFRESH_KEYWORDS) return
+        val pendingResult = goAsync()
+        kotlinx.coroutines.CoroutineScope(kotlinx.coroutines.Dispatchers.IO).launch {
+            try {
+                runCatching {
+                    RadioRecordingFavoriteScheduler.refreshKeywordFavorites(context.applicationContext)
+                }
+            } finally {
+                try {
+                    RadioRecordingFavoriteScheduler.scheduleNextKeywordRefresh(context.applicationContext)
+                } finally {
+                    pendingResult.finish()
+                }
+            }
         }
     }
 }
