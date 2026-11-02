@@ -2693,7 +2693,10 @@ fun NowPlayingScreen(
                                 RoundedCornerShape(lerp(10.dp, 7.dp, p)),
                             )
                             .clip(RoundedCornerShape(lerp(10.dp, 7.dp, p)))
-                            .background(Color.Black.copy(alpha = 0.18f)),
+                            .background(
+                                if (preserveSleeveArtworkShape) Color.Transparent
+                                else Color.Black.copy(alpha = 0.18f),
+                            ),
                         contentAlignment = Alignment.Center,
                     ) {
                         if (!artLoaded && !canvasRendered) {
