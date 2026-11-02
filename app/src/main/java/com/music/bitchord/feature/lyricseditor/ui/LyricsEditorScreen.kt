@@ -42,13 +42,16 @@ import androidx.compose.material.icons.rounded.SkipNext
 import androidx.compose.material.icons.rounded.SkipPrevious
 import androidx.compose.material.icons.rounded.Sync
 import androidx.compose.material3.HorizontalDivider
+import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Slider
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
+import androidx.compose.material3.TextButton
 import androidx.compose.material3.TextField
 import androidx.compose.material3.TextFieldDefaults
 import androidx.compose.runtime.Composable
@@ -121,6 +124,10 @@ fun LyricsEditorScreen(
 
     var showDownloadDialog by remember { mutableStateOf(false) }
     var showSearchResultsDialog by remember { mutableStateOf(false) }
+    var showShiftTimestampsDialog by remember { mutableStateOf(false) }
+    var showSetFirstTimestampDialog by remember { mutableStateOf(false) }
+    var timestampInput by remember { mutableStateOf("[00:00.0]") }
+    var shiftTimestampsForward by remember { mutableStateOf(true) }
     var syncMode by remember(song.videoId) { mutableStateOf(false) }
     var textFieldValue by remember { mutableStateOf(TextFieldValue(currentText)) }
 
@@ -212,6 +219,20 @@ fun LyricsEditorScreen(
         viewModel.toastMessage.collect { msg ->
             Toast.makeText(context, msg, Toast.LENGTH_SHORT).show()
         }
+    }
+
+    fun applyTimestampEdit(updatedText: String?) {
+        if (updatedText == null) {
+            val message = if (LyricsTimestampEditor.hasTimestamps(textFieldValue.text)) {
+                R.string.lyrics_timestamp_would_be_negative
+            } else {
+                R.string.lyrics_no_timestamps_found
+            }
+            Toast.makeText(context, message, Toast.LENGTH_SHORT).show()
+            return
+        }
+        textFieldValue = TextFieldValue(updatedText, selection = TextRange(updatedText.length))
+        viewModel.updateText(updatedText)
     }
 
     val isFileSource = selectedSource == LyricsEditorSource.File
@@ -307,6 +328,14 @@ fun LyricsEditorScreen(
                     textFieldValue = TextFieldValue("")
                     viewModel.updateText("")
                     Toast.makeText(context, context.getString(R.string.lyrics_cleared), Toast.LENGTH_SHORT).show()
+                },
+                onShiftTimestampsClick = {
+                    timestampInput = "[00:00.0]"
+                    showShiftTimestampsDialog = true
+                },
+                onSetFirstTimestampClick = {
+                    timestampInput = "[00:00.0]"
+                    showSetFirstTimestampDialog = true
                 },
             )
         },
@@ -530,6 +559,91 @@ fun LyricsEditorScreen(
                 }
             }
         }
+    }
+
+    if (showShiftTimestampsDialog) {
+        AlertDialog(
+            onDismissRequest = { showShiftTimestampsDialog = false },
+            title = { Text(stringResource(R.string.lyrics_shift_all_timestamps)) },
+            text = {
+                Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                    Text(stringResource(R.string.lyrics_shift_all_timestamps_help))
+                    OutlinedTextField(
+                        value = timestampInput,
+                        onValueChange = { timestampInput = it },
+                        singleLine = true,
+                        label = { Text(stringResource(R.string.lyrics_timestamp_format)) },
+                    )
+                    Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                        TextButton(onClick = { shiftTimestampsForward = true }) {
+                            Text(stringResource(R.string.lyrics_timestamp_advance) + if (shiftTimestampsForward) " ✓" else "")
+                        }
+                        TextButton(onClick = { shiftTimestampsForward = false }) {
+                            Text(stringResource(R.string.lyrics_timestamp_delay) + if (!shiftTimestampsForward) " ✓" else "")
+                        }
+                    }
+                }
+            },
+            confirmButton = {
+                TextButton(onClick = {
+                    val offset = LyricsTimestampEditor.parseInput(timestampInput)
+                    if (offset == null) {
+                        Toast.makeText(context, R.string.lyrics_timestamp_format_error, Toast.LENGTH_SHORT).show()
+                    } else {
+                        val signedOffset = if (shiftTimestampsForward) offset else -offset
+                        val shifted = LyricsTimestampEditor.shiftAll(textFieldValue.text, signedOffset)
+                        if (shifted != null) {
+                            applyTimestampEdit(shifted)
+                            showShiftTimestampsDialog = false
+                        } else if (LyricsTimestampEditor.hasTimestamps(textFieldValue.text)) {
+                            Toast.makeText(context, R.string.lyrics_timestamp_would_be_negative, Toast.LENGTH_SHORT).show()
+                        } else {
+                            Toast.makeText(context, R.string.lyrics_no_timestamps_found, Toast.LENGTH_SHORT).show()
+                        }
+                    }
+                }) { Text(stringResource(R.string.lyrics_timestamp_apply)) }
+            },
+            dismissButton = {
+                TextButton(onClick = { showShiftTimestampsDialog = false }) { Text(stringResource(R.string.cancel)) }
+            },
+        )
+    }
+
+    if (showSetFirstTimestampDialog) {
+        AlertDialog(
+            onDismissRequest = { showSetFirstTimestampDialog = false },
+            title = { Text(stringResource(R.string.lyrics_set_first_timestamp)) },
+            text = {
+                Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                    Text(stringResource(R.string.lyrics_set_first_timestamp_help))
+                    OutlinedTextField(
+                        value = timestampInput,
+                        onValueChange = { timestampInput = it },
+                        singleLine = true,
+                        label = { Text(stringResource(R.string.lyrics_timestamp_format)) },
+                    )
+                }
+            },
+            confirmButton = {
+                TextButton(onClick = {
+                    val target = LyricsTimestampEditor.parseInput(timestampInput)
+                    if (target == null) {
+                        Toast.makeText(context, R.string.lyrics_timestamp_format_error, Toast.LENGTH_SHORT).show()
+                    } else {
+                        val shifted = LyricsTimestampEditor.setFirst(textFieldValue.text, target)
+                        if (shifted != null) {
+                            applyTimestampEdit(shifted)
+                            showSetFirstTimestampDialog = false
+                        } else {
+                            Toast.makeText(context, R.string.lyrics_no_timestamps_found, Toast.LENGTH_SHORT).show()
+                        }
+                    }
+                }) { Text(stringResource(R.string.lyrics_timestamp_apply)) }
+            },
+            dismissButton = {
+                TextButton(onClick = { showSetFirstTimestampDialog = false }) { Text(stringResource(R.string.cancel)) }
+            },
+        )
     }
 
     if (showDownloadDialog) {

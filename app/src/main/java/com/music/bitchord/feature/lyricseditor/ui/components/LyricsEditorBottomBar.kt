@@ -60,6 +60,8 @@ fun LyricsEditorBottomBar(
     onUndoChangesClick: () -> Unit,
     onInsertTimestampClick: (() -> Unit)? = null,
     onClearAllClick: (() -> Unit)? = null,
+    onShiftTimestampsClick: (() -> Unit)? = null,
+    onSetFirstTimestampClick: (() -> Unit)? = null,
     modifier: Modifier = Modifier,
 ) {
     var menuExpanded by remember { mutableStateOf(false) }
@@ -237,6 +239,40 @@ fun LyricsEditorBottomBar(
                                 onClick = {
                                     menuExpanded = false
                                     onClearAllClick()
+                                },
+                            )
+                        }
+
+                        if (onShiftTimestampsClick != null) {
+                            DropdownMenuItem(
+                                text = { Text(stringResource(R.string.lyrics_shift_all_timestamps)) },
+                                leadingIcon = {
+                                    Icon(
+                                        imageVector = Icons.Rounded.RestartAlt,
+                                        contentDescription = null,
+                                        modifier = Modifier.size(20.dp),
+                                    )
+                                },
+                                onClick = {
+                                    menuExpanded = false
+                                    onShiftTimestampsClick()
+                                },
+                            )
+                        }
+
+                        if (onSetFirstTimestampClick != null) {
+                            DropdownMenuItem(
+                                text = { Text(stringResource(R.string.lyrics_set_first_timestamp)) },
+                                leadingIcon = {
+                                    Icon(
+                                        imageVector = Icons.Rounded.Add,
+                                        contentDescription = null,
+                                        modifier = Modifier.size(20.dp),
+                                    )
+                                },
+                                onClick = {
+                                    menuExpanded = false
+                                    onSetFirstTimestampClick()
                                 },
                             )
                         }
