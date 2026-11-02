@@ -323,6 +323,26 @@ class WordSyncTest {
         assertEquals(6f, repeated.revealedChars(2_000), 0.01f)
     }
 
+    @Test
+    fun `per-character synced lyrics keep reveal offsets inside a one-line text`() {
+        val text = "歌詞を表示"
+        val line = LyricLine(
+            timeMs = 1_000,
+            text = text,
+            words = text.mapIndexed { index, character ->
+                val start = 1_000L + index * 120L
+                LyricWord(start, start + 120L, character.toString())
+            },
+        )
+
+        for (position in 900L..1_800L step 3L) {
+            val revealed = line.revealedChars(position)
+            assertTrue("non-finite reveal offset at $position ms: $revealed", revealed.isFinite())
+            assertTrue("negative reveal offset at $position ms: $revealed", revealed >= 0f)
+            assertTrue("reveal offset past the measured text at $position ms: $revealed", revealed <= text.length)
+        }
+    }
+
     // ---- Glow intensity ------------------------------------------------------
 
     /** Peak intensity reached anywhere inside a word of the given length. */

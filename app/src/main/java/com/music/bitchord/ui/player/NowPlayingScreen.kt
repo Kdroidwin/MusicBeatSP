@@ -95,6 +95,7 @@ import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import com.music.bitchord.feature.localmusic.data.LocalFavoritesStore
 import com.music.bitchord.data.lyrics.LyricsFurigana
+import com.music.bitchord.data.sources.SourceRegistry
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.rounded.QueueMusic
 import androidx.compose.material.icons.automirrored.rounded.PlaylistPlay
@@ -1222,6 +1223,11 @@ fun NowPlayingScreen(
     val playerVolumeBarThicknessDp by AppSettings.playerVolumeBarThicknessDp.collectAsStateWithLifecycle()
     val favoriteIds by LocalFavoritesStore.favoriteIds.collectAsStateWithLifecycle()
     val localUri = song.localUri
+    // Source-backed IDs are namespaced (src:<config>::<track>) and cannot be
+    // rated by YouTube, even while a YouTube account is signed in. Keep those
+    // favorites in this app; ordinary YouTube Music IDs can use account likes.
+    val isSourceBackedTrack = SourceRegistry.parseTrackKey(song.videoId) != null
+    val useDeviceFavorite = !localUri.isNullOrBlank() || isSourceBackedTrack || !signedIn
     val normalizedArtistName = song.artist.trim().lowercase(Locale.ROOT)
     val isUnknownArtist = normalizedArtistName.isBlank() || normalizedArtistName in setOf(
         "unknown artist",
@@ -1235,7 +1241,7 @@ fun NowPlayingScreen(
     // when a YouTube Music rating write cannot be completed.
     val liked = (localUri ?: song.videoId) in favoriteIds ||
         song.videoId in favoriteIds ||
-        (signedIn && likeStatus == LikeStatus.LIKE)
+        (!isSourceBackedTrack && signedIn && likeStatus == LikeStatus.LIKE)
     // When signed out, keep remote favorites device-local instead of disabling
     // the control. Signed-in users continue to use YouTube's account rating.
     val likeAvailable = true
@@ -1247,7 +1253,7 @@ fun NowPlayingScreen(
     }
     val likeDescription = stringResource(if (liked) R.string.remove_from_liked else R.string.like)
     val toggleLike: () -> Unit = {
-        if (localUri != null || !signedIn) {
+        if (useDeviceFavorite) {
             LocalFavoritesStore.toggleFavorite(localUri ?: song.videoId)
         } else onToggleLike()
         Unit
@@ -1259,6 +1265,7 @@ fun NowPlayingScreen(
     // track" check lives.
     val canvasEnabled by AppSettings.animatedCanvas.collectAsStateWithLifecycle()
     val canvasOverCellular by AppSettings.canvasOverCellular.collectAsStateWithLifecycle()
+    val prioritizeSpotifyCanvas by AppSettings.prioritizeSpotifyCanvas.collectAsStateWithLifecycle()
     val meteredConnection by AppSettings.meteredConnection.collectAsStateWithLifecycle()
     // The switch turns the feature off outright; this is the narrower "not
     // over cellular" case — see [AppSettings.canvasOverCellular] for why a
@@ -1301,7 +1308,7 @@ fun NowPlayingScreen(
     // read, not the number of them: the frame comes back at `frameCapturePx`
     // rather than full-bleed, and is averaged on a stride off the main thread.
     val meshRefreshMs = MESH_REFRESH_MS
-    LaunchedEffect(song.videoId, song.albumName, canvasAllowedNow) {
+    LaunchedEffect(song.videoId, song.albumName, canvasAllowedNow, prioritizeSpotifyCanvas) {
         if (!canvasAllowedNow) {
             canvas = null
             return@LaunchedEffect
