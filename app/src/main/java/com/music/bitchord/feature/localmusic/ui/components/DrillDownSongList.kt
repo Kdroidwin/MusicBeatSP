@@ -98,6 +98,7 @@ import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.music.bitchord.ui.components.FastScroller
 import com.music.bitchord.ui.components.SectionIndexer
 import com.music.bitchord.feature.artistimage.model.ArtistImage
+import com.music.bitchord.feature.artistimage.data.ArtistArtworkStore
 import com.music.bitchord.ui.components.ExplicitSongTitle
 import com.music.bitchord.ui.components.PAGE_GUTTER
 import com.music.bitchord.ui.components.ROW_DIVIDER_INSET
@@ -168,6 +169,7 @@ private fun CompactDrillDownHeader(
     modifier: Modifier,
 ) {
     val artistDeezerArtworkEnabled by AppSettings.artistDeezerArtworkEnabled.collectAsStateWithLifecycle()
+    val artistArtworkUris by ArtistArtworkStore.imageUris.collectAsStateWithLifecycle()
     Column(
         modifier = modifier
             .fillMaxWidth()
@@ -237,12 +239,14 @@ private fun CompactDrillDownHeader(
                     modifier = Modifier.size(64.dp),
                 )
                 val imageModel: Any? = if (isArtist) {
-                    remember(label, artworkUrl, artistDeezerArtworkEnabled) {
+                    val customArtworkUrl = ArtistArtworkStore.imageUriFor(label, artistArtworkUris)
+                    remember(label, artworkUrl, artistDeezerArtworkEnabled, customArtworkUrl) {
                         ArtistImage(
                             name = label,
                             fallbackUrl = artworkUrl ?: songs.firstNotNullOfOrNull { it.thumbnailUrl },
                             isLarge = true,
                             allowOnlineLookup = artistDeezerArtworkEnabled,
+                            customArtworkUrl = customArtworkUrl,
                         )
                     }
                 } else {

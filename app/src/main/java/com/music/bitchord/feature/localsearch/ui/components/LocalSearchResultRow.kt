@@ -42,6 +42,7 @@ import com.music.bitchord.data.model.artworkAt
 import com.music.bitchord.data.model.isSameTrackAs
 import com.music.bitchord.data.settings.AppSettings
 import com.music.bitchord.feature.artistimage.model.ArtistImage
+import com.music.bitchord.feature.artistimage.data.ArtistArtworkStore
 import com.music.bitchord.feature.localsearch.domain.model.LocalSearchResult
 import com.music.bitchord.ui.components.PAGE_GUTTER
 import com.music.bitchord.ui.components.SongRow
@@ -178,6 +179,7 @@ private fun ArtistResultRow(
     modifier: Modifier = Modifier,
 ) {
     val artistDeezerArtworkEnabled by AppSettings.artistDeezerArtworkEnabled.collectAsStateWithLifecycle()
+    val artistArtworkUris by ArtistArtworkStore.imageUris.collectAsStateWithLifecycle()
     Row(
         modifier = modifier
             .fillMaxWidth()
@@ -198,12 +200,14 @@ private fun ArtistResultRow(
                 tint = MaterialTheme.colorScheme.onPrimaryContainer,
                 modifier = Modifier.size(26.dp),
             )
-            val imageModel = remember(artist.name, artist.thumbnailUrl, artistDeezerArtworkEnabled) {
+            val customArtworkUrl = ArtistArtworkStore.imageUriFor(artist.name, artistArtworkUris)
+            val imageModel = remember(artist.name, artist.thumbnailUrl, artistDeezerArtworkEnabled, customArtworkUrl) {
                 ArtistImage(
                     name = artist.name,
                     fallbackUrl = artist.thumbnailUrl?.artworkAt(ROW_ART_PX),
                     isLarge = false,
                     allowOnlineLookup = artistDeezerArtworkEnabled,
+                    customArtworkUrl = customArtworkUrl,
                 )
             }
             AsyncImage(

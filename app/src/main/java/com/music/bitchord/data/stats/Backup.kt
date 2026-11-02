@@ -2,6 +2,7 @@ package com.music.bitchord.data.stats
 
 import android.content.Context
 import android.net.Uri
+import android.util.Base64
 import com.music.bitchord.BuildConfig
 import com.music.bitchord.data.model.Song
 import com.music.bitchord.data.settings.AppSettings
@@ -9,6 +10,7 @@ import com.music.bitchord.data.settings.EqualizerBackup
 import com.music.bitchord.data.settings.EqualizerSettings
 import com.music.bitchord.data.settings.SearchHistory
 import com.music.bitchord.feature.localmusic.data.LocalFavoritesStore
+import com.music.bitchord.feature.artistimage.data.ArtistArtworkStore
 import com.music.bitchord.feature.localmusic.data.LocalPlaylistStore
 import com.music.bitchord.feature.localmusic.domain.model.LocalPlaylist
 import com.music.bitchord.feature.localsongactions.data.LocalPlayStatsStore
@@ -39,8 +41,8 @@ import java.time.format.DateTimeFormatter
 object Backup {
 
     private const val APP_TAG = "musicbeat"
-    private const val SCHEMA_VERSION = 4
-    private const val MAX_IMPORT_BYTES = 32 * 1024 * 1024
+    private const val SCHEMA_VERSION = 5
+    private const val MAX_IMPORT_BYTES = 128 * 1024 * 1024
 
     private val json = Json {
         ignoreUnknownKeys = true
@@ -68,6 +70,10 @@ object Backup {
                 PrefValue.of(value)?.let { key to it }
             }.toMap()
             val savedQueues = SavedQueueStore.exportQueues().map { it.toBackupQueue() }
+            val artistArtwork = ArtistArtworkStore.exportBackup(context)
+            require(artistArtwork.sumOf { it.bytes.size.toLong() } <= 90L * 1024 * 1024) {
+                "Artist images are too large to include in one backup"
+            }
 
             val file = BackupFile(
                 app = APP_TAG,
@@ -81,8 +87,16 @@ object Backup {
                 equalizer = equalizer,
                 listening = buckets,
                 savedQueues = savedQueues,
+                artistArtwork = artistArtwork.map { item ->
+                    ArtistArtworkBackup(
+                        artistName = item.artistName,
+                        mimeType = item.mimeType,
+                        imageBase64 = Base64.encodeToString(item.bytes, Base64.NO_WRAP),
+                    )
+                },
             )
             val text = json.encodeToString(BackupFile.serializer(), file)
+            require(text.toByteArray().size <= MAX_IMPORT_BYTES) { "Backup is too large to import" }
             context.contentResolver.openOutputStream(target, "wt")
                 ?.use { it.write(text.toByteArray()) }
                 ?: error("Couldn't open that file for writing")
@@ -128,6 +142,14 @@ object Backup {
             SearchHistory.reload()
             check(SavedQueueStore.importQueues(file.savedQueues.map { it.toSavedQueue() })) {
                 "Could not restore saved queues"
+            }
+            if (file.version >= 5) {
+                val artwork = file.artistArtwork.map { item ->
+                    val bytes = runCatching { Base64.decode(item.imageBase64, Base64.DEFAULT) }
+                        .getOrElse { error("That backup contains an invalid artist image") }
+                    ArtistArtworkStore.BackupArtwork(item.artistName, item.mimeType, bytes)
+                }
+                ArtistArtworkStore.importBackup(context, artwork)
             }
 
             Summary(
@@ -194,6 +216,14 @@ object Backup {
         val equalizer: EqualizerBackup? = null,
         val listening: List<StoredBucket> = emptyList(),
         val savedQueues: List<BackupQueue> = emptyList(),
+        val artistArtwork: List<ArtistArtworkBackup> = emptyList(),
+    )
+
+    @Serializable
+    data class ArtistArtworkBackup(
+        val artistName: String,
+        val mimeType: String,
+        val imageBase64: String,
     )
 
     @Serializable

@@ -1391,6 +1391,10 @@
     <string name="delete_from_device">Delete from device</string>
     <string name="go_to_album">Go to Album</string>
     <string name="go_to_artist">Go to Artist</string>
+    <string name="change_artist_image">Change artist image</string>
+    <string name="reset_artist_image">Reset artist image</string>
+    <string name="artist_image_updated">Artist image updated</string>
+    <string name="artist_image_update_failed">Couldn’t save artist image</string>
     <string name="edit_lyrics">Edit lyrics</string>
     <string name="share_file">Share file</string>
     <string name="metadata">Metadata</string>

@@ -115,6 +115,7 @@ import com.music.bitchord.data.model.artworkAt
 import com.music.bitchord.data.model.sortedByAlbumTrackOrder
 import com.music.bitchord.feature.artistimage.model.ArtistEntry
 import com.music.bitchord.feature.artistimage.model.ArtistImage
+import com.music.bitchord.feature.artistimage.data.ArtistArtworkStore
 import com.music.bitchord.feature.artistimage.model.ArtistSort
 import com.music.bitchord.feature.artistimage.util.ArtistSplitter
 import com.music.bitchord.ui.components.ArtistViewAndSortControls
@@ -239,6 +240,8 @@ fun LocalMusicScreen(
      * here has a browse id to fetch, so this is the only way these get one.
      */
     onCollectionLongPress: ((String, List<Song>) -> Unit)? = null,
+    /** Artist grouping menu; separate so caller can add artist-specific actions. */
+    onArtistLongPress: ((String, List<Song>) -> Unit)? = null,
     /**
      * The albums and playlists that were downloaded *as* albums and playlists.
      *
@@ -1071,7 +1074,7 @@ fun LocalMusicScreen(
                             parentArtistAlbums = null
                             parentArtistLabel = artist
                         },
-                        onArtistLongPress = onCollectionLongPress,
+                        onArtistLongPress = onArtistLongPress ?: onCollectionLongPress,
                         contentPadding = bodyContentPadding,
                     )
                 }
@@ -1125,7 +1128,7 @@ fun LocalMusicScreen(
                             parentArtistAlbums = null
                             parentArtistLabel = artist
                         },
-                        onArtistLongPress = onCollectionLongPress,
+                        onArtistLongPress = onArtistLongPress ?: onCollectionLongPress,
                         contentPadding = bodyContentPadding,
                     )
                 }
@@ -1574,6 +1577,7 @@ private fun ArtistsTab(
     onArtistLongPress: ((String, List<Song>) -> Unit)?,
     contentPadding: PaddingValues,
 ) {
+    val artistArtworkUris by ArtistArtworkStore.imageUris.collectAsStateWithLifecycle()
     if (viewType == LibraryViewType.GRID) {
         val gridState = rememberLazyGridState()
         Box(modifier = Modifier.fillMaxSize()) {
@@ -1610,6 +1614,7 @@ private fun ArtistsTab(
                         name = entry.name,
                         songCount = entry.songs.size,
                         thumbnailUrl = entry.thumbnailUrl,
+                        customArtworkUrl = ArtistArtworkStore.imageUriFor(entry.name, artistArtworkUris),
                         allowRemoteArtwork = allowRemoteArtwork,
                         onClick = { onArtistClick(entry.name, entry.songs) },
                         onLongPress = onArtistLongPress?.let { { it(entry.name, entry.songs) } },
@@ -1653,6 +1658,7 @@ private fun ArtistsTab(
                         name = entry.name,
                         songCount = entry.songs.size,
                         thumbnailUrl = entry.thumbnailUrl,
+                        customArtworkUrl = ArtistArtworkStore.imageUriFor(entry.name, artistArtworkUris),
                         allowRemoteArtwork = allowRemoteArtwork,
                         onClick = { onArtistClick(entry.name, entry.songs) },
                         onLongPress = onArtistLongPress?.let { { it(entry.name, entry.songs) } },
@@ -1680,6 +1686,7 @@ private fun ArtistRow(
     name: String,
     songCount: Int,
     thumbnailUrl: String? = null,
+    customArtworkUrl: String? = null,
     allowRemoteArtwork: Boolean = true,
     onClick: () -> Unit,
     onLongPress: (() -> Unit)? = null,
@@ -1705,12 +1712,13 @@ private fun ArtistRow(
                 tint = MaterialTheme.colorScheme.onPrimaryContainer,
                 modifier = Modifier.size(26.dp),
             )
-            val imageModel = remember(name, thumbnailUrl, allowRemoteArtwork) {
+            val imageModel = remember(name, thumbnailUrl, allowRemoteArtwork, customArtworkUrl) {
                 ArtistImage(
                     name = name,
                     fallbackUrl = thumbnailUrl?.artworkAt(ROW_ART_PX),
                     isLarge = false,
                     allowOnlineLookup = allowRemoteArtwork,
+                    customArtworkUrl = customArtworkUrl,
                 )
             }
             AsyncImage(
@@ -1753,6 +1761,7 @@ private fun ArtistGridCard(
     name: String,
     songCount: Int,
     thumbnailUrl: String?,
+    customArtworkUrl: String? = null,
     allowRemoteArtwork: Boolean = true,
     onClick: () -> Unit,
     onLongPress: (() -> Unit)? = null,
@@ -1779,12 +1788,13 @@ private fun ArtistGridCard(
                 tint = MaterialTheme.colorScheme.onPrimaryContainer,
                 modifier = Modifier.size(44.dp),
             )
-            val imageModel = remember(name, thumbnailUrl, allowRemoteArtwork) {
+            val imageModel = remember(name, thumbnailUrl, allowRemoteArtwork, customArtworkUrl) {
                 ArtistImage(
                     name = name,
                     fallbackUrl = thumbnailUrl?.artworkAt(CARD_ART_PX),
                     isLarge = false,
                     allowOnlineLookup = allowRemoteArtwork,
+                    customArtworkUrl = customArtworkUrl,
                 )
             }
             AsyncImage(

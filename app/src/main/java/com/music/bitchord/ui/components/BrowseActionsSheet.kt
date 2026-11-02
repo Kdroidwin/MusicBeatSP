@@ -20,6 +20,7 @@ import androidx.compose.material.icons.rounded.BookmarkAdd
 import androidx.compose.material.icons.rounded.Delete
 import androidx.compose.material.icons.rounded.DeleteForever
 import androidx.compose.material.icons.rounded.Edit
+import androidx.compose.material.icons.rounded.Image
 import androidx.compose.material.icons.rounded.PlayArrow
 import androidx.compose.material.icons.rounded.PlaylistAdd
 import androidx.compose.material3.HorizontalDivider
@@ -161,6 +162,8 @@ fun BrowseActionsSheet(
      * also happens to be downloaded.
      */
     onDeleteDownload: (() -> Unit)? = null,
+    onChangeArtistImage: (() -> Unit)? = null,
+    onResetArtistImage: (() -> Unit)? = null,
 ) {
     var renaming by remember { mutableStateOf(false) }
     var confirmingDelete by remember { mutableStateOf(false) }
@@ -212,6 +215,24 @@ fun BrowseActionsSheet(
             foreground = palette.onBackground,
             onClick = onAddToQueue,
         )
+        onChangeArtistImage?.let { change ->
+            ActionRow(
+                icon = Icons.Rounded.Image,
+                label = stringResource(R.string.change_artist_image),
+                accent = palette.accent,
+                foreground = palette.onBackground,
+                onClick = change,
+            )
+        }
+        onResetArtistImage?.let { reset ->
+            ActionRow(
+                icon = Icons.Rounded.Image,
+                label = stringResource(R.string.reset_artist_image),
+                accent = palette.accent,
+                foreground = palette.onBackground,
+                onClick = reset,
+            )
+        }
         onAddToPlaylist?.let { add ->
             ActionRow(
                 Icons.Rounded.PlaylistAdd,

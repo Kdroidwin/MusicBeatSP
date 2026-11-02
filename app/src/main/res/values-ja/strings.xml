@@ -1300,6 +1300,10 @@
     <string name="delete_from_device">端末から削除</string>
     <string name="go_to_album">アルバムを開く</string>
     <string name="go_to_artist">アーティストを開く</string>
+    <string name="change_artist_image">アーティスト画像を変更</string>
+    <string name="reset_artist_image">アーティスト画像をリセット</string>
+    <string name="artist_image_updated">アーティスト画像を変更しました</string>
+    <string name="artist_image_update_failed">アーティスト画像を保存できませんでした</string>
     <string name="edit_lyrics">歌詞を編集</string>
     <string name="share_file">ファイルを共有</string>
     <string name="metadata">メタデータ</string>

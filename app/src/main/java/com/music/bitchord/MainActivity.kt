@@ -18,6 +18,7 @@ import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.compose.setContent
 import androidx.activity.enableEdgeToEdge
 import androidx.activity.result.contract.ActivityResultContracts
+import androidx.activity.result.PickVisualMediaRequest
 import androidx.activity.result.IntentSenderRequest
 import androidx.appcompat.app.AppCompatActivity
 import androidx.media3.session.MediaController
@@ -295,6 +296,7 @@ import androidx.compose.ui.window.DialogProperties
 import androidx.compose.ui.window.DialogWindowProvider
 import com.music.bitchord.feature.localmusic.ui.components.DrillDownSongList
 import com.music.bitchord.feature.localmusic.data.LocalPlaylistStore
+import com.music.bitchord.feature.artistimage.data.ArtistArtworkStore
 import com.music.bitchord.feature.tageditor.data.TagLibWriter
 import com.music.bitchord.widget.QuickPlayTileState
 import com.music.bitchord.ui.screens.LocalMusicScreen
@@ -1168,6 +1170,28 @@ private fun BitChordApp(
     }
 
     val scope = rememberCoroutineScope()
+    var pendingArtistImageName by remember { mutableStateOf<String?>(null) }
+    val artistImagePicker = rememberLauncherForActivityResult(
+        ActivityResultContracts.PickVisualMedia(),
+    ) { uri ->
+        val artistName = pendingArtistImageName
+        pendingArtistImageName = null
+        if (uri != null && !artistName.isNullOrBlank()) {
+            scope.launch {
+                val saved = runCatching { ArtistArtworkStore.set(context, artistName, uri) }.getOrDefault(false)
+                Toast.makeText(
+                    context,
+                    if (saved) R.string.artist_image_updated else R.string.artist_image_update_failed,
+                    Toast.LENGTH_SHORT,
+                ).show()
+            }
+        }
+    }
+
+    fun chooseArtistImage(artistName: String) {
+        pendingArtistImageName = artistName
+        artistImagePicker.launch(PickVisualMediaRequest(ActivityResultContracts.PickVisualMedia.ImageOnly))
+    }
 
     suspend fun writeLocalArtistRename(pending: PendingLocalArtistRename) {
         val updatedTracks = withContext(Dispatchers.IO) {
@@ -2615,6 +2639,18 @@ private fun BitChordApp(
                                     downloadId = downloadId,
                                 )
                             },
+                            onArtistLongPress = { artistName, grouped ->
+                                browseActions = BrowseTarget(
+                                    browseId = null,
+                                    title = artistName,
+                                    subtitle = grouped.firstOrNull()?.artist.orEmpty()
+                                        .takeUnless { it == artistName }
+                                        .orEmpty(),
+                                    thumbnailUrl = grouped.firstOrNull()?.thumbnailUrl,
+                                    type = BrowseType.ARTIST,
+                                    songs = grouped,
+                                )
+                            },
                             onSongTagsOrLyricsSaved = { viewModel.reloadLyrics(it) },
                             onSongMetadataUpdated = viewModel::updateLocalSongMetadata,
                             contentPadding = listPadding,
@@ -4035,6 +4071,9 @@ private fun BitChordApp(
             val savedToLibrary = savableCollectionId?.let { id ->
                 savedYoutubeCollections.any { it.browseId == id }
             } == true
+            val artistArtworkUris by ArtistArtworkStore.imageUris.collectAsStateWithLifecycle()
+            val hasCustomArtistArtwork = target.type == BrowseType.ARTIST &&
+                ArtistArtworkStore.imageUriFor(target.title, artistArtworkUris) != null
             ModalBottomSheet(
                 onDismissRequest = { browseActions = null },
                 containerColor = Color.Transparent,
@@ -4160,6 +4199,18 @@ private fun BitChordApp(
                             scope.launch { Downloads.deleteCollection(context, id) }
                         }
                     },
+                    onChangeArtistImage = if (target.type == BrowseType.ARTIST) {
+                        {
+                            browseActions = null
+                            chooseArtistImage(target.title)
+                        }
+                    } else null,
+                    onResetArtistImage = if (hasCustomArtistArtwork) {
+                        {
+                            ArtistArtworkStore.remove(context, target.title)
+                            browseActions = null
+                        }
+                    } else null,
                 )
             }
         }

@@ -19,7 +19,7 @@ class ArtistImageFetcher(
 ) : Fetcher {
 
     override suspend fun fetch(): FetchResult? {
-        val deezerUrl = if (image.allowOnlineLookup && AppSettings.artistDeezerArtworkEnabled.value) {
+        val deezerUrl = if (image.customArtworkUrl.isNullOrBlank() && image.allowOnlineLookup && AppSettings.artistDeezerArtworkEnabled.value) {
             DeezerArtistService.getArtistImageUrl(image.name, image.isLarge)
         } else {
             null
@@ -31,7 +31,7 @@ class ArtistImageFetcher(
             image.allowOnlineLookup ||
                 (!it.startsWith("http://", ignoreCase = true) && !it.startsWith("https://", ignoreCase = true))
         }
-        val target = deezerUrl ?: fallbackUrl
+        val target = image.customArtworkUrl ?: deezerUrl ?: fallbackUrl
 
         if (!target.isNullOrBlank()) {
             val mapped = loader.components.map(target, options)
