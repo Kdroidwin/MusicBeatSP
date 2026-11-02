@@ -93,6 +93,7 @@ import com.music.bitchord.radio.model.StationRegistry
 import com.music.bitchord.radio.model.logoUrl
 import com.music.bitchord.radio.recording.RadioAutoRecordingScheduler
 import com.music.bitchord.radio.recording.RadioAutoRecordingStore
+import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 
 @Composable
@@ -112,7 +113,9 @@ fun RadioScreen(
     var showRegionPicker by remember { mutableStateOf(false) }
     var showServicePicker by remember { mutableStateOf(false) }
     var onsenPrograms by remember { mutableStateOf<List<OnsenProgram>>(emptyList()) }
+    var searchedOnsenPrograms by remember { mutableStateOf<Pair<String, List<OnsenProgram>>?>(null) }
     var isLoadingOnsenPrograms by remember { mutableStateOf(false) }
+    var isSearchingOnsenPrograms by remember { mutableStateOf(false) }
     var hasOnsenProgramsError by remember { mutableStateOf(false) }
     var refreshOnsenProgramsKey by remember { mutableStateOf(0) }
     var selectedOnsenProgram by remember { mutableStateOf<OnsenProgram?>(null) }
@@ -227,6 +230,18 @@ fun RadioScreen(
             .onSuccess { onsenPrograms = it }
             .onFailure { hasOnsenProgramsError = true }
         isLoadingOnsenPrograms = false
+    }
+
+    LaunchedEffect(selectedRadioService, query, networkUnavailable, refreshOnsenProgramsKey) {
+        val word = query.trim()
+        searchedOnsenPrograms = null
+        isSearchingOnsenPrograms = false
+        if (selectedRadioService != RadioService.ONSEN || word.isBlank() || networkUnavailable) return@LaunchedEffect
+        delay(350)
+        isSearchingOnsenPrograms = true
+        runCatching { OnsenRepository.searchPrograms(word) }
+            .onSuccess { searchedOnsenPrograms = word to it }
+        isSearchingOnsenPrograms = false
     }
 
     LaunchedEffect(selectedOnsenProgram?.id, networkUnavailable, refreshOnsenProgramKey) {
@@ -441,9 +456,15 @@ fun RadioScreen(
         val filteredOnsenPrograms = remember(onsenPrograms, onsenSearch) {
             if (onsenSearch.isBlank()) onsenPrograms else onsenPrograms.filter { program ->
                 program.title.contains(onsenSearch, ignoreCase = true) ||
-                    program.performer.orEmpty().contains(onsenSearch, ignoreCase = true)
+                    program.performer.orEmpty().contains(onsenSearch, ignoreCase = true) ||
+                    program.description.contains(onsenSearch, ignoreCase = true) ||
+                    program.directoryName.contains(onsenSearch, ignoreCase = true)
             }
         }
+        val visibleOnsenPrograms = searchedOnsenPrograms
+            ?.takeIf { it.first == onsenSearch }
+            ?.second
+            ?: filteredOnsenPrograms
         LazyColumn(
             modifier = Modifier.fillMaxSize(),
             contentPadding = contentPadding,
@@ -574,6 +595,12 @@ fun RadioScreen(
                         CircularProgressIndicator()
                     }
                 }
+            } else if (isSearchingOnsenPrograms && visibleOnsenPrograms.isEmpty()) {
+                item {
+                    Box(Modifier.fillMaxWidth().padding(28.dp), contentAlignment = Alignment.Center) {
+                        CircularProgressIndicator()
+                    }
+                }
             } else if (hasOnsenProgramsError) {
                 item {
                     Column(Modifier.fillMaxWidth().padding(20.dp), horizontalAlignment = Alignment.CenterHorizontally) {
@@ -581,7 +608,7 @@ fun RadioScreen(
                         TextButton(onClick = { refreshOnsenProgramsKey++ }) { Text(stringResource(R.string.retry)) }
                     }
                 }
-            } else if (filteredOnsenPrograms.isEmpty()) {
+            } else if (visibleOnsenPrograms.isEmpty()) {
                 item {
                     Text(
                         text = stringResource(R.string.radio_onsen_no_programs),
@@ -590,7 +617,7 @@ fun RadioScreen(
                     )
                 }
             } else {
-                items(filteredOnsenPrograms, key = { "onsen-${it.id}" }) { program ->
+                items(visibleOnsenPrograms, key = { "onsen-${it.id}" }) { program ->
                     OnsenProgramRow(
                         program = program,
                         amoledBlack = amoledBlack,

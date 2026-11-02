@@ -10,6 +10,7 @@ import kotlinx.coroutines.withContext
 import okhttp3.Request
 import org.json.JSONArray
 import org.json.JSONObject
+import org.json.JSONTokener
 import java.io.IOException
 
 /** Onsen's public program catalog and episode playback URLs. */
@@ -29,7 +30,7 @@ object OnsenRepository {
         if (!forceRefresh && cachedPrograms.isNotEmpty() && now - cachedAtMs < PROGRAM_CACHE_MS) {
             return@withContext cachedPrograms
         }
-        val root = JSONObject(getText("$BASE_URL/web_api/programs"))
+        val root = JSONTokener(getText("$BASE_URL/web_api/programs")).nextValue()
         val programs = programArray(root)
             .mapNotNull(::parseProgram)
             .filter { it.id.isNotBlank() && it.title.isNotBlank() }
@@ -43,11 +44,37 @@ object OnsenRepository {
     suspend fun fetchProgram(id: String): OnsenProgram = withContext(Dispatchers.IO) {
         ensureNetworkAllowed()
         require(id.isNotBlank()) { "Missing Onsen program id" }
-        val url = Uri.parse("$BASE_URL/web_api/programs/${Uri.encode(id)}").toString()
-        val root = JSONObject(getText(url))
-        val payload = unwrapProgram(root)
-        parseProgram(payload, fallbackId = id)
-            ?: throw IOException("Onsen returned an invalid program")
+        cachedPrograms.firstOrNull { it.id == id }
+            ?: fetchPrograms().firstOrNull { it.id == id }
+            ?: throw IOException("Onsen program was not found")
+    }
+
+    suspend fun searchPrograms(query: String): List<OnsenProgram> = withContext(Dispatchers.IO) {
+        ensureNetworkAllowed()
+        val word = query.trim()
+        val programs = fetchPrograms()
+        if (word.isBlank()) return@withContext programs
+
+        val searchUrl = Uri.parse("$BASE_URL/web_api/programs/search")
+            .buildUpon()
+            .appendQueryParameter("word", word)
+            .build()
+            .toString()
+        val ids = runCatching {
+            parseProgramIds(JSONTokener(getText(searchUrl)).nextValue())
+        }.getOrNull()
+        if (ids != null) {
+            val programsById = programs.associateBy(OnsenProgram::id)
+            val matches = ids.mapNotNull(programsById::get).distinctBy(OnsenProgram::id)
+            if (matches.isNotEmpty() || ids.isEmpty()) return@withContext matches
+        }
+
+        programs.filter { program ->
+            program.title.contains(word, ignoreCase = true) ||
+                program.performer.orEmpty().contains(word, ignoreCase = true) ||
+                program.description.contains(word, ignoreCase = true) ||
+                program.directoryName.contains(word, ignoreCase = true)
+        }
     }
 
     private suspend fun getText(url: String): String {
@@ -55,6 +82,8 @@ object OnsenRepository {
         val request = Request.Builder()
             .url(url)
             .header("Accept", "application/json")
+            .header("Content-Type", "application/json; charset=utf-8")
+            .header("X-Client", "onsen-web")
             .header("Referer", "$BASE_URL/")
             .get()
             .build()
@@ -69,23 +98,45 @@ object OnsenRepository {
         if (AppSettings.offlineMode.value) throw IOException("Offline mode is enabled")
     }
 
-    private fun programArray(root: JSONObject): List<JSONObject> {
-        val data = root.opt("data")
-        val candidate = when (data) {
-            is JSONArray -> data
-            is JSONObject -> data.optJSONArray("programs") ?: data.optJSONArray("all")
+    private fun programArray(root: Any?): List<JSONObject> {
+        val candidate = when (root) {
+            is JSONArray -> root
+            is JSONObject -> {
+                val data = root.opt("data")
+                when (data) {
+                    is JSONArray -> data
+                    is JSONObject -> data.optJSONArray("programs")
+                        ?: data.optJSONArray("all")
+                        ?: data.optJSONArray("data")
+                    else -> null
+                } ?: root.optJSONArray("programs")
+                    ?: root.optJSONObject("programs")?.optJSONArray("all")
+                    ?: root.optJSONObject("programs")?.optJSONObject("programs")?.optJSONArray("all")
+                    ?: root.optJSONObject("state")?.optJSONObject("programs")
+                        ?.optJSONObject("programs")?.optJSONArray("all")
+            }
             else -> null
-        } ?: root.optJSONArray("programs")
-            ?: root.optJSONObject("programs")?.optJSONArray("all")
-            ?: root.optJSONObject("programs")?.optJSONObject("programs")?.optJSONArray("all")
+        }
         return candidate?.objects().orEmpty().filter { item ->
             item.optBoolean("list", true) && item.optBoolean("display", true)
         }
     }
 
-    private fun unwrapProgram(root: JSONObject): JSONObject {
-        val data = root.optJSONObject("data") ?: root
-        return data.optJSONObject("program") ?: data
+    private fun parseProgramIds(root: Any?): List<String>? {
+        val candidate = when (root) {
+            is JSONArray -> root
+            is JSONObject -> root.optJSONArray("data")
+                ?: root.optJSONArray("program_ids")
+                ?: root.optJSONObject("data")?.optJSONArray("program_ids")
+            else -> null
+        } ?: return null
+        return List(candidate.length()) { index ->
+            when (val value = candidate.opt(index)) {
+                is Number -> value.toLong().takeIf { it > 0L }?.toString()
+                is String -> value.trim().takeIf(String::isNotBlank)
+                else -> null
+            }
+        }.filterNotNull().distinct()
     }
 
     private fun parseProgram(row: JSONObject, fallbackId: String? = null): OnsenProgram? {
@@ -160,7 +211,13 @@ object OnsenRepository {
     }
 
     private fun JSONObject.imageUrl(vararg keys: String): String? = keys.firstNotNullOfOrNull { key ->
-        (opt(key) as? String)?.trim()?.takeIf(String::isNotBlank)?.let(::absoluteHttpsUrl)
+        val value = opt(key)
+        val url = when (value) {
+            is String -> value
+            is JSONObject -> value.string("url", "src", "image_url")
+            else -> null
+        }
+        url?.trim()?.takeIf(String::isNotBlank)?.let(::absoluteHttpsUrl)
     }
 
     private fun JSONObject.string(vararg keys: String): String? = keys.firstNotNullOfOrNull { key ->
