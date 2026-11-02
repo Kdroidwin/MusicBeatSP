@@ -89,6 +89,8 @@ data class Song(
     val isLiveRadio: Boolean = false,
     /** Ephemeral live HLS URL; the durable station identity remains [videoId]. */
     val radioStreamUrl: String? = null,
+    /** An on-demand HLS episode from Onsen; its signed URL must not be persisted in the queue. */
+    val isOnsenAudio: Boolean = false,
 )
 
 /**

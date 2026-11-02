@@ -1805,7 +1805,7 @@ class PlaybackService : MediaLibraryService() {
             return
         }
         val current = exoPlayer.currentMediaItem?.toSong() ?: return
-        if (current.isLiveRadio) return
+        if (current.isLiveRadio || current.isOnsenAudio) return
         // A file opened from a file manager is a one-track preview session.
         // Do not append unrelated online suggestions when its player activates.
         if (current.isExternalPreview) return
@@ -2130,7 +2130,7 @@ class PlaybackService : MediaLibraryService() {
         // Audio opened from a file manager is a real listen too. The preview
         // flag only controls the temporary one-file queue and popup; it must
         // not exclude that track from recent/most-played statistics.
-        val statsSong = song?.takeUnless { it.isLiveRadio }
+        val statsSong = song?.takeUnless { it.isLiveRadio || it.isOnsenAudio }
         val songId = statsSong?.let(::localPlayStatsIdentity)
         if (songId != null && songId != currentPlayStatsSongId) {
             finishCurrentLocalPlayStatsSegment()
@@ -2970,7 +2970,7 @@ class PlaybackService : MediaLibraryService() {
      */
     private fun lookForBetterCopy(player: ExoPlayer) {
         val item = player.currentMediaItem ?: return
-        if (item.toSong().isLiveRadio) return
+        if (item.toSong().isLiveRadio || item.toSong().isOnsenAudio) return
         val mediaId = item.mediaId
         // Local files have no remote quality candidates. A duplicate queue
         // entry can share this media id with a remote copy that has a pending
@@ -3923,7 +3923,7 @@ class PlaybackService : MediaLibraryService() {
     /** Serialize only the bounded window needed for a future cold-start resume. */
     private fun saveQueueSnapshot(player: ExoPlayer) {
         if (isExternalPreviewPlaying(player)) return
-        if (player.currentMediaItem?.toSong()?.isLiveRadio == true) return
+        if (player.currentMediaItem?.toSong()?.let { it.isLiveRadio || it.isOnsenAudio } == true) return
         if (player.mediaItemCount == 0) {
             persistedQueueStart = 0
             LastPlayed.clear()
@@ -3942,7 +3942,7 @@ class PlaybackService : MediaLibraryService() {
     /** Make the newly installed radio queue the durable cold-start boundary. */
     private fun saveQueueSnapshotImmediately(player: ExoPlayer) {
         if (isExternalPreviewPlaying(player)) return
-        if (player.currentMediaItem?.toSong()?.isLiveRadio == true) return
+        if (player.currentMediaItem?.toSong()?.let { it.isLiveRadio || it.isOnsenAudio } == true) return
         if (player.mediaItemCount == 0) {
             persistedQueueStart = 0
             LastPlayed.clearImmediately()
@@ -3975,7 +3975,7 @@ class PlaybackService : MediaLibraryService() {
             player.currentMediaItem?.toSong()?.let { saveLongTrackPosition(player, it) }
             return
         }
-        if (player.currentMediaItem?.toSong()?.isLiveRadio == true) return
+        if (player.currentMediaItem?.toSong()?.let { it.isLiveRadio || it.isOnsenAudio } == true) return
         if (player.mediaItemCount == 0) return
         player.currentMediaItem?.toSong()?.let { saveLongTrackPosition(player, it) }
         LastPlayed.savePlaybackState(

@@ -31,11 +31,12 @@ import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.rounded.ArrowBack
+import androidx.compose.material.icons.automirrored.rounded.ArrowBack
 import androidx.compose.material.icons.rounded.LocationOn
 import androidx.compose.material.icons.rounded.Pause
 import androidx.compose.material.icons.rounded.PlayArrow
 import androidx.compose.material.icons.rounded.Radio
+import androidx.compose.material.icons.rounded.Refresh
 import androidx.compose.material.icons.rounded.Search
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Button
@@ -80,9 +81,13 @@ import com.music.bitchord.data.settings.ThemeMode
 import com.music.bitchord.playback.beginRadioQueue
 import com.music.bitchord.playback.playSongs
 import com.music.bitchord.radio.RadioPlaybackSession
+import com.music.bitchord.radio.data.OnsenRepository
 import com.music.bitchord.radio.data.RadioRepository
+import com.music.bitchord.radio.model.OnsenEpisode
+import com.music.bitchord.radio.model.OnsenProgram
 import com.music.bitchord.radio.model.PrefectureData
 import com.music.bitchord.radio.model.ProgramEntry
+import com.music.bitchord.radio.model.RadioService
 import com.music.bitchord.radio.model.Station
 import com.music.bitchord.radio.model.StationRegistry
 import com.music.bitchord.radio.model.logoUrl
@@ -102,8 +107,18 @@ fun RadioScreen(
     val themeMode by AppSettings.themeMode.collectAsStateWithLifecycle()
     val amoledBlack = themeMode == ThemeMode.AMOLED
     val selectedAreaId by AppSettings.radioAreaId.collectAsStateWithLifecycle()
+    val selectedRadioService by AppSettings.radioService.collectAsStateWithLifecycle()
     var stationDetail by remember { mutableStateOf<Station?>(null) }
     var showRegionPicker by remember { mutableStateOf(false) }
+    var showServicePicker by remember { mutableStateOf(false) }
+    var onsenPrograms by remember { mutableStateOf<List<OnsenProgram>>(emptyList()) }
+    var isLoadingOnsenPrograms by remember { mutableStateOf(false) }
+    var hasOnsenProgramsError by remember { mutableStateOf(false) }
+    var refreshOnsenProgramsKey by remember { mutableStateOf(0) }
+    var selectedOnsenProgram by remember { mutableStateOf<OnsenProgram?>(null) }
+    var isLoadingOnsenProgram by remember { mutableStateOf(false) }
+    var hasOnsenProgramError by remember { mutableStateOf(false) }
+    var refreshOnsenProgramKey by remember { mutableStateOf(0) }
     var selectedProgram by remember { mutableStateOf<ProgramEntry?>(null) }
     var pendingAutoRecordProgram by remember { mutableStateOf<ProgramEntry?>(null) }
     var autoRecordingIds by remember { mutableStateOf(RadioAutoRecordingStore.recordings(context).mapTo(mutableSetOf()) { it.id }) }
@@ -123,7 +138,9 @@ fun RadioScreen(
     val scope = rememberCoroutineScope()
     val networkUnavailable = offlineMode || context.packageName.endsWith(".nointernet")
     val currentStationId = currentSong?.takeIf { it.isLiveRadio }
-        ?.videoId?.removePrefix("radiko:")
+        ?.videoId?.takeIf { it.startsWith("radiko:") }?.removePrefix("radiko:")
+    val currentOnsenEpisodeId = currentSong?.takeIf { it.isOnsenAudio }
+        ?.videoId?.removePrefix("onsen:")
 
     val exactAlarmLauncher = rememberLauncherForActivityResult(ActivityResultContracts.StartActivityForResult()) {
         val program = pendingAutoRecordProgram
@@ -197,6 +214,36 @@ fun RadioScreen(
         playingStationId = currentStationId
     }
 
+    LaunchedEffect(selectedRadioService, networkUnavailable, refreshOnsenProgramsKey) {
+        if (selectedRadioService != RadioService.ONSEN) return@LaunchedEffect
+        if (networkUnavailable) {
+            hasOnsenProgramsError = true
+            isLoadingOnsenPrograms = false
+            return@LaunchedEffect
+        }
+        isLoadingOnsenPrograms = true
+        hasOnsenProgramsError = false
+        runCatching { OnsenRepository.fetchPrograms(forceRefresh = refreshOnsenProgramsKey > 0) }
+            .onSuccess { onsenPrograms = it }
+            .onFailure { hasOnsenProgramsError = true }
+        isLoadingOnsenPrograms = false
+    }
+
+    LaunchedEffect(selectedOnsenProgram?.id, networkUnavailable, refreshOnsenProgramKey) {
+        val program = selectedOnsenProgram ?: return@LaunchedEffect
+        if (networkUnavailable) {
+            hasOnsenProgramError = true
+            isLoadingOnsenProgram = false
+            return@LaunchedEffect
+        }
+        isLoadingOnsenProgram = true
+        hasOnsenProgramError = false
+        runCatching { OnsenRepository.fetchProgram(program.id) }
+            .onSuccess { selectedOnsenProgram = it }
+            .onFailure { hasOnsenProgramError = true }
+        isLoadingOnsenProgram = false
+    }
+
     LaunchedEffect(stationDetail?.id, selectedAreaId, networkUnavailable) {
         val station = stationDetail ?: return@LaunchedEffect
         if (networkUnavailable) {
@@ -258,6 +305,35 @@ fun RadioScreen(
         }
     }
 
+    val playOnsenEpisode: (OnsenEpisode, OnsenProgram) -> Unit = { episode, program ->
+        val streamUrl = episode.streamingUrl
+        val activeEpisodeId = currentSong?.takeIf { it.isOnsenAudio }?.videoId?.removePrefix("onsen:")
+        when {
+            activeEpisodeId == episode.id && controller != null -> if (isPlaying) controller.pause() else controller.play()
+            networkUnavailable -> Toast.makeText(context, R.string.radio_offline_unavailable, Toast.LENGTH_SHORT).show()
+            !episode.isAudio || streamUrl.isNullOrBlank() -> Toast.makeText(context, R.string.radio_onsen_episode_unavailable, Toast.LENGTH_SHORT).show()
+            controller == null -> Toast.makeText(context, R.string.radio_play_failed, Toast.LENGTH_SHORT).show()
+            else -> scope.launch {
+                runCatching {
+                    val activeController = controller
+                    activeController.beginRadioQueue()
+                    val song = Song(
+                        videoId = "onsen:${episode.id}",
+                        title = episode.title.ifBlank { program.title },
+                        artist = program.performer ?: program.title,
+                        thumbnailUrl = episode.imageUrl ?: program.imageUrl,
+                        radioName = program.title,
+                        isOnsenAudio = true,
+                        radioStreamUrl = streamUrl,
+                    )
+                    activeController.playSongs(listOf(song), 0)
+                }.onFailure {
+                    Toast.makeText(context, R.string.radio_onsen_play_failed, Toast.LENGTH_LONG).show()
+                }
+            }
+        }
+    }
+
     if (showRegionPicker) {
         RadioRegionDialog(
             selectedAreaId = selectedAreaId,
@@ -267,6 +343,19 @@ fun RadioScreen(
                 showRegionPicker = false
             },
             onDismiss = { showRegionPicker = false },
+        )
+    }
+
+    if (showServicePicker) {
+        RadioServiceDialog(
+            selectedService = selectedRadioService,
+            amoledBlack = amoledBlack,
+            onSelect = { service ->
+                AppSettings.setRadioService(service)
+                if (service == RadioService.ONSEN) stationDetail = null else selectedOnsenProgram = null
+                showServicePicker = false
+            },
+            onDismiss = { showServicePicker = false },
         )
     }
 
@@ -327,10 +416,33 @@ fun RadioScreen(
     }
 
     val station = stationDetail
-    if (station == null) {
+    val onsenProgram = selectedOnsenProgram
+    if (onsenProgram != null) {
+        OnsenProgramDetail(
+            program = onsenProgram,
+            amoledBlack = amoledBlack,
+            isLoading = isLoadingOnsenProgram,
+            hasError = hasOnsenProgramError,
+            networkUnavailable = networkUnavailable,
+            currentEpisodeId = currentOnsenEpisodeId,
+            isPlaybackPlaying = isPlaying,
+            contentPadding = contentPadding,
+            onBack = { selectedOnsenProgram = null },
+            onRetry = { refreshOnsenProgramKey++ },
+            onPlayEpisode = { episode -> playOnsenEpisode(episode, onsenProgram) },
+        )
+    } else if (station == null) {
         val areaName = PrefectureData.prefecture(selectedAreaId)?.name.orEmpty()
+        val isRadikoSelected = selectedRadioService == RadioService.RADIKO
         val stations = remember(selectedAreaId, query) {
             StationRegistry.search(query, selectedAreaId)
+        }
+        val onsenSearch = query.trim()
+        val filteredOnsenPrograms = remember(onsenPrograms, onsenSearch) {
+            if (onsenSearch.isBlank()) onsenPrograms else onsenPrograms.filter { program ->
+                program.title.contains(onsenSearch, ignoreCase = true) ||
+                    program.performer.orEmpty().contains(onsenSearch, ignoreCase = true)
+            }
         }
         LazyColumn(
             modifier = Modifier.fillMaxSize(),
@@ -349,20 +461,39 @@ fun RadioScreen(
                     ) {
                         Column(modifier = Modifier.weight(1f)) {
                             Text(
-                                text = stringResource(R.string.radio_station_list),
+                                text = stringResource(
+                                    if (isRadikoSelected) R.string.radio_station_list else R.string.radio_onsen_program_list,
+                                ),
                                 style = MaterialTheme.typography.titleLarge,
                                 fontWeight = FontWeight.Bold,
                             )
                             Text(
-                                text = stringResource(R.string.radio_area_current, areaName),
+                                text = if (isRadikoSelected) {
+                                    stringResource(R.string.radio_area_current, areaName)
+                                } else {
+                                    stringResource(R.string.radio_onsen_all_programs)
+                                },
                                 style = MaterialTheme.typography.bodyMedium,
                                 color = MaterialTheme.colorScheme.onSurfaceVariant,
                             )
                         }
-                        TextButton(onClick = { showRegionPicker = true }) {
-                            Icon(Icons.Rounded.LocationOn, contentDescription = null)
-                            Spacer(Modifier.width(4.dp))
-                            Text(stringResource(R.string.radio_change_area))
+                        Row(verticalAlignment = Alignment.CenterVertically) {
+                            TextButton(onClick = { showServicePicker = true }) {
+                                Icon(Icons.Rounded.Radio, contentDescription = null)
+                                Spacer(Modifier.width(4.dp))
+                                Text(stringResource(R.string.radio_change_service))
+                            }
+                            if (selectedRadioService == RadioService.RADIKO) {
+                                TextButton(onClick = { showRegionPicker = true }) {
+                                    Icon(Icons.Rounded.LocationOn, contentDescription = null)
+                                    Spacer(Modifier.width(4.dp))
+                                    Text(stringResource(R.string.radio_change_area))
+                                }
+                            } else {
+                                IconButton(onClick = { refreshOnsenProgramsKey++ }) {
+                                    Icon(Icons.Rounded.Refresh, contentDescription = stringResource(R.string.radio_onsen_refresh))
+                                }
+                            }
                         }
                     }
                     OutlinedTextField(
@@ -371,7 +502,14 @@ fun RadioScreen(
                         modifier = Modifier.fillMaxWidth(),
                         singleLine = true,
                         leadingIcon = { Icon(Icons.Rounded.Search, contentDescription = null) },
-                        label = { Text(stringResource(R.string.radio_search_station)) },
+                        label = {
+                            Text(
+                                stringResource(
+                                    if (selectedRadioService == RadioService.RADIKO) R.string.radio_search_station
+                                    else R.string.radio_onsen_search,
+                                ),
+                            )
+                        },
                     )
                     if (networkUnavailable) {
                         Card(colors = CardDefaults.cardColors(
@@ -384,7 +522,7 @@ fun RadioScreen(
                             )
                         }
                     }
-                    currentSong?.takeIf { it.isLiveRadio }?.let { song ->
+                    currentSong?.takeIf { it.isLiveRadio || it.isOnsenAudio }?.let { song ->
                         Card(
                             colors = CardDefaults.cardColors(
                                 containerColor = if (amoledBlack) Color.Black else MaterialTheme.colorScheme.secondaryContainer,
@@ -411,7 +549,7 @@ fun RadioScreen(
                     }
                 }
             }
-            if (stations.isEmpty()) {
+            if (selectedRadioService == RadioService.RADIKO && stations.isEmpty()) {
                 item {
                     Text(
                         text = stringResource(R.string.radio_no_stations),
@@ -419,7 +557,7 @@ fun RadioScreen(
                         color = MaterialTheme.colorScheme.onSurfaceVariant,
                     )
                 }
-            } else {
+            } else if (selectedRadioService == RadioService.RADIKO) {
                 items(stations, key = { it.id }) { item ->
                     RadioStationRow(
                         station = item,
@@ -428,6 +566,42 @@ fun RadioScreen(
                         isStarting = item.id == startingStationId,
                         onDetails = { stationDetail = item },
                         onPlay = { startStation(item) },
+                    )
+                }
+            } else if (isLoadingOnsenPrograms) {
+                item {
+                    Box(Modifier.fillMaxWidth().padding(28.dp), contentAlignment = Alignment.Center) {
+                        CircularProgressIndicator()
+                    }
+                }
+            } else if (hasOnsenProgramsError) {
+                item {
+                    Column(Modifier.fillMaxWidth().padding(20.dp), horizontalAlignment = Alignment.CenterHorizontally) {
+                        Text(stringResource(R.string.radio_onsen_loading_error), color = MaterialTheme.colorScheme.onSurfaceVariant)
+                        TextButton(onClick = { refreshOnsenProgramsKey++ }) { Text(stringResource(R.string.retry)) }
+                    }
+                }
+            } else if (filteredOnsenPrograms.isEmpty()) {
+                item {
+                    Text(
+                        text = stringResource(R.string.radio_onsen_no_programs),
+                        modifier = Modifier.fillMaxWidth().padding(24.dp),
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    )
+                }
+            } else {
+                items(filteredOnsenPrograms, key = { "onsen-${it.id}" }) { program ->
+                    OnsenProgramRow(
+                        program = program,
+                        amoledBlack = amoledBlack,
+                        isPlaying = isPlaying && (
+                            program.episodes.any { it.id == currentOnsenEpisodeId } ||
+                                program.title == currentSong?.takeIf { it.isOnsenAudio }?.radioName
+                            ),
+                        onClick = {
+                            selectedOnsenProgram = program
+                            hasOnsenProgramError = false
+                        },
                     )
                 }
             }
@@ -467,6 +641,206 @@ fun RadioScreen(
                 }
             },
         )
+    }
+}
+
+@Composable
+private fun RadioServiceDialog(
+    selectedService: RadioService,
+    amoledBlack: Boolean,
+    onSelect: (RadioService) -> Unit,
+    onDismiss: () -> Unit,
+) {
+    AlertDialog(
+        onDismissRequest = onDismiss,
+        containerColor = if (amoledBlack) Color.Black else MaterialTheme.colorScheme.surface,
+        title = { Text(stringResource(R.string.radio_select_service)) },
+        text = {
+            Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                FilterChip(
+                    selected = selectedService == RadioService.RADIKO,
+                    onClick = { onSelect(RadioService.RADIKO) },
+                    label = { Text(stringResource(R.string.radio_service_radiko)) },
+                )
+                FilterChip(
+                    selected = selectedService == RadioService.ONSEN,
+                    onClick = { onSelect(RadioService.ONSEN) },
+                    label = { Text(stringResource(R.string.radio_service_onsen)) },
+                )
+            }
+        },
+        confirmButton = { TextButton(onClick = onDismiss) { Text(stringResource(R.string.close)) } },
+    )
+}
+
+@Composable
+private fun OnsenProgramRow(
+    program: OnsenProgram,
+    amoledBlack: Boolean,
+    isPlaying: Boolean,
+    onClick: () -> Unit,
+) {
+    Card(
+        modifier = Modifier.fillMaxWidth().padding(horizontal = 16.dp).clickable(onClick = onClick),
+        shape = RoundedCornerShape(20.dp),
+        colors = CardDefaults.cardColors(
+            containerColor = if (amoledBlack) Color.Black else MaterialTheme.colorScheme.surfaceContainerHigh,
+        ),
+    ) {
+        Row(
+            modifier = Modifier.fillMaxWidth().padding(14.dp),
+            verticalAlignment = Alignment.CenterVertically,
+        ) {
+            Box(
+                modifier = Modifier.size(58.dp).clip(RoundedCornerShape(14.dp))
+                    .background(if (amoledBlack) Color(0xFF171717) else MaterialTheme.colorScheme.surfaceVariant),
+                contentAlignment = Alignment.Center,
+            ) {
+                if (program.imageUrl != null) {
+                    AsyncImage(
+                        model = program.imageUrl,
+                        contentDescription = program.title,
+                        modifier = Modifier.fillMaxSize(),
+                        contentScale = ContentScale.Crop,
+                    )
+                } else {
+                    Icon(Icons.Rounded.Radio, contentDescription = null, tint = MaterialTheme.colorScheme.onSurfaceVariant)
+                }
+            }
+            Spacer(Modifier.width(14.dp))
+            Column(Modifier.weight(1f)) {
+                Text(program.title, style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.SemiBold, maxLines = 2, overflow = TextOverflow.Ellipsis)
+                program.performer?.takeIf(String::isNotBlank)?.let {
+                    Text(it, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant, maxLines = 1, overflow = TextOverflow.Ellipsis)
+                }
+                if (isPlaying) Text(stringResource(R.string.radio_now_playing), style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.primary)
+            }
+        }
+    }
+}
+
+@Composable
+private fun OnsenProgramDetail(
+    program: OnsenProgram,
+    amoledBlack: Boolean,
+    isLoading: Boolean,
+    hasError: Boolean,
+    networkUnavailable: Boolean,
+    currentEpisodeId: String?,
+    isPlaybackPlaying: Boolean,
+    contentPadding: PaddingValues,
+    onBack: () -> Unit,
+    onRetry: () -> Unit,
+    onPlayEpisode: (OnsenEpisode) -> Unit,
+) {
+    val episodes = remember(program.episodes) { program.episodes.filter(OnsenEpisode::isAudio) }
+    LazyColumn(
+        modifier = Modifier.fillMaxSize(),
+        contentPadding = contentPadding,
+        verticalArrangement = Arrangement.spacedBy(10.dp),
+    ) {
+        item(key = "onsen-detail-heading") {
+            Column(Modifier.fillMaxWidth().padding(horizontal = 16.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
+                Row(verticalAlignment = Alignment.CenterVertically) {
+                    IconButton(onClick = onBack) { Icon(Icons.AutoMirrored.Rounded.ArrowBack, contentDescription = stringResource(R.string.back)) }
+                    Text(program.title, style = MaterialTheme.typography.titleLarge, fontWeight = FontWeight.Bold, modifier = Modifier.weight(1f), maxLines = 2, overflow = TextOverflow.Ellipsis)
+                }
+                Card(
+                    shape = RoundedCornerShape(24.dp),
+                    colors = CardDefaults.cardColors(
+                        containerColor = if (amoledBlack) Color.Black else MaterialTheme.colorScheme.surfaceContainerHigh,
+                    ),
+                ) {
+                    Row(Modifier.fillMaxWidth().padding(16.dp), verticalAlignment = Alignment.CenterVertically) {
+                        program.imageUrl?.let { url ->
+                            AsyncImage(
+                                model = url,
+                                contentDescription = program.title,
+                                modifier = Modifier.size(76.dp).clip(RoundedCornerShape(16.dp)),
+                                contentScale = ContentScale.Crop,
+                            )
+                            Spacer(Modifier.width(14.dp))
+                        }
+                        Column(Modifier.weight(1f)) {
+                            program.performer?.takeIf(String::isNotBlank)?.let {
+                                Text(it, style = MaterialTheme.typography.labelMedium, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                            }
+                            program.description.takeIf(String::isNotBlank)?.let {
+                                Text(it, style = MaterialTheme.typography.bodySmall, maxLines = 5, overflow = TextOverflow.Ellipsis)
+                            }
+                        }
+                    }
+                }
+                Text(stringResource(R.string.radio_onsen_episodes), style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Bold)
+            }
+        }
+        when {
+            networkUnavailable -> item { RadioScheduleMessage(stringResource(R.string.radio_offline_unavailable)) }
+            isLoading -> item {
+                Box(Modifier.fillMaxWidth().padding(28.dp), contentAlignment = Alignment.Center) { CircularProgressIndicator() }
+            }
+            hasError -> item {
+                Column(Modifier.fillMaxWidth().padding(20.dp), horizontalAlignment = Alignment.CenterHorizontally) {
+                    Text(stringResource(R.string.radio_onsen_loading_error), color = MaterialTheme.colorScheme.onSurfaceVariant)
+                    TextButton(onClick = onRetry) { Text(stringResource(R.string.retry)) }
+                }
+            }
+            episodes.isEmpty() -> item { RadioScheduleMessage(stringResource(R.string.radio_onsen_episode_list_empty)) }
+            else -> items(episodes, key = { "onsen-episode-${it.id}" }) { episode ->
+                OnsenEpisodeRow(
+                    episode = episode,
+                    amoledBlack = amoledBlack,
+                    isPlaying = episode.id == currentEpisodeId && isPlaybackPlaying,
+                    onClick = { onPlayEpisode(episode) },
+                )
+            }
+        }
+    }
+}
+
+@Composable
+private fun OnsenEpisodeRow(
+    episode: OnsenEpisode,
+    amoledBlack: Boolean,
+    isPlaying: Boolean,
+    onClick: () -> Unit,
+) {
+    val canPlay = episode.isAudio && !episode.streamingUrl.isNullOrBlank()
+    Card(
+        modifier = Modifier.fillMaxWidth().padding(horizontal = 16.dp),
+        shape = RoundedCornerShape(16.dp),
+        colors = CardDefaults.cardColors(
+            containerColor = if (amoledBlack) Color.Black else MaterialTheme.colorScheme.surfaceContainerHigh,
+        ),
+    ) {
+        Row(
+            modifier = Modifier.fillMaxWidth().clickable(enabled = canPlay, onClick = onClick)
+                .padding(horizontal = 14.dp, vertical = 12.dp),
+            verticalAlignment = Alignment.CenterVertically,
+        ) {
+            Column(Modifier.weight(1f)) {
+                Text(episode.title.ifBlank { stringResource(R.string.radio_onsen_episode_play) }, style = MaterialTheme.typography.titleSmall, fontWeight = FontWeight.SemiBold, maxLines = 2, overflow = TextOverflow.Ellipsis)
+                episode.deliveryDate?.takeIf(String::isNotBlank)?.let {
+                    Text(it, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                }
+                when {
+                    isPlaying -> Text(stringResource(R.string.radio_now_playing), style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.primary)
+                    !canPlay -> Text(
+                        stringResource(if (episode.isPremium) R.string.radio_onsen_premium_required else R.string.radio_onsen_episode_unavailable),
+                        style = MaterialTheme.typography.labelSmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    )
+                }
+            }
+            Spacer(Modifier.width(8.dp))
+            IconButton(onClick = onClick, enabled = canPlay) {
+                Icon(
+                    if (isPlaying) Icons.Rounded.Pause else Icons.Rounded.PlayArrow,
+                    contentDescription = stringResource(if (canPlay) R.string.play else R.string.radio_onsen_episode_unavailable),
+                    tint = if (canPlay) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurfaceVariant,
+                )
+            }
+        }
     }
 }
 
@@ -551,7 +925,7 @@ private fun RadioStationDetail(
         item(key = "station-detail-heading") {
             Column(Modifier.fillMaxWidth().padding(horizontal = 16.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
                 Row(verticalAlignment = Alignment.CenterVertically) {
-                    IconButton(onClick = onBack) { Icon(Icons.Rounded.ArrowBack, contentDescription = stringResource(R.string.back)) }
+                    IconButton(onClick = onBack) { Icon(Icons.AutoMirrored.Rounded.ArrowBack, contentDescription = stringResource(R.string.back)) }
                     Text(station.name, style = MaterialTheme.typography.titleLarge, fontWeight = FontWeight.Bold, modifier = Modifier.weight(1f), maxLines = 2, overflow = TextOverflow.Ellipsis)
                 }
                 Card(

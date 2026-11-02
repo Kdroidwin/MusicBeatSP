@@ -16,6 +16,7 @@ import com.music.bitchord.data.innertube.YoutubeStreamBootstrap
 import com.music.bitchord.data.sources.SourceKind
 import com.music.bitchord.feature.artistimage.model.ArtistSort
 import com.music.bitchord.playback.equalizer.EelEqParser
+import com.music.bitchord.radio.model.RadioService
 import kotlinx.coroutines.flow.MutableStateFlow
 import org.json.JSONArray
 import org.json.JSONObject
@@ -796,6 +797,8 @@ object AppSettings {
     val offlineMode = MutableStateFlow(false)
     /** Last selected Radiko prefecture; kept in the shared settings backup. */
     val radioAreaId = MutableStateFlow("JP13")
+    /** The selected radio catalog. Radiko remains the default for existing installs. */
+    val radioService = MutableStateFlow(RadioService.RADIKO)
 
     /** YouTube Music catalog/search/playback is opt-in; fresh installs make no YouTube requests. */
     val youtubeMusicEnabled = MutableStateFlow(false)
@@ -1564,6 +1567,7 @@ object AppSettings {
         radioAreaId.value = prefs.getString(KEY_RADIO_AREA_ID, "JP13")
             ?.takeIf { it.matches(Regex("JP\\d{1,2}")) }
             ?: "JP13"
+        radioService.value = RadioService.fromKey(prefs.getString(KEY_RADIO_SERVICE, RadioService.RADIKO.key))
         val wasYoutubeMusicEnabled = youtubeMusicEnabled.value
         youtubeMusicEnabled.value = prefs.getBoolean(KEY_YOUTUBE_MUSIC_ENABLED, false)
         youtubeMusicSearchDefault.value = prefs.getBoolean(KEY_YOUTUBE_MUSIC_SEARCH_DEFAULT, false)
@@ -2980,6 +2984,11 @@ object AppSettings {
         prefs.edit().putString(KEY_RADIO_AREA_ID, value).apply()
     }
 
+    fun setRadioService(value: RadioService) {
+        radioService.value = value
+        prefs.edit().putString(KEY_RADIO_SERVICE, value.key).apply()
+    }
+
     fun setYoutubeMusicEnabled(value: Boolean) {
         val wasEnabled = youtubeMusicEnabled.value
         youtubeMusicEnabled.value = value
@@ -4294,6 +4303,7 @@ object AppSettings {
     private const val KEY_SHOW_PLAYER_LYRICS_STRIP = "show_player_lyrics_strip"
     private const val KEY_OFFLINE_MODE = "offline_mode"
     private const val KEY_RADIO_AREA_ID = "radio_area_id"
+    private const val KEY_RADIO_SERVICE = "radio_service"
     private const val KEY_RADIO_TAB_MIGRATED = "radio_tab_migrated"
     private const val KEY_YOUTUBE_MUSIC_ENABLED = "youtube_music_enabled"
     private const val KEY_YOUTUBE_MUSIC_SEARCH_DEFAULT = "youtube_music_search_default"

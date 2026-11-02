@@ -314,6 +314,7 @@ fun MediaItem.toSong() = Song(
     isExternalPreview = mediaMetadata.extras?.getBoolean(EXTRA_EXTERNAL_PREVIEW) == true,
     isLiveRadio = mediaMetadata.extras?.getBoolean(EXTRA_LIVE_RADIO) == true,
     radioStreamUrl = mediaMetadata.extras?.getString(EXTRA_RADIO_STREAM_URL),
+    isOnsenAudio = mediaMetadata.extras?.getBoolean(EXTRA_ONSEN_AUDIO) == true,
 )
 
 /** @see Song.fromAutoplay */
@@ -359,6 +360,7 @@ internal const val EXTRA_LOCAL_PATH = "bitchord.localPath"
 internal const val EXTRA_EXTERNAL_PREVIEW = "bitchord.externalPreview"
 private const val EXTRA_LIVE_RADIO = "bitchord.liveRadio"
 private const val EXTRA_RADIO_STREAM_URL = "bitchord.radioStreamUrl"
+private const val EXTRA_ONSEN_AUDIO = "bitchord.onsenAudio"
 
 /**
  * How long the track runs, as the row that queued it said.
@@ -525,8 +527,8 @@ fun Song.toMediaItem(): MediaItem {
 
     return MediaItem.Builder()
         .setMediaId(videoId)
-        .setUri(resolvePlaybackUri(uriString, if (isLiveRadio) null else localPath))
-        .apply { if (isLiveRadio) setMimeType(MimeTypes.APPLICATION_M3U8) }
+        .setUri(resolvePlaybackUri(uriString, if (isLiveRadio || isOnsenAudio) null else localPath))
+        .apply { if (isLiveRadio || isOnsenAudio) setMimeType(MimeTypes.APPLICATION_M3U8) }
         .apply { clipping?.let(::setClippingConfiguration) }
     .setMediaMetadata(
         MediaMetadata.Builder()
@@ -574,7 +576,7 @@ fun Song.toMediaItem(): MediaItem {
             // depends on.
             .apply {
                 if (fromAutoplay || offlineUri != null || durationText != null || isExternalPreview ||
-                    artistId != null || albumId != null || setVideoId != null || isLiveRadio ||
+                    artistId != null || albumId != null || setVideoId != null || isLiveRadio || isOnsenAudio ||
                     isExplicit != null || isVideo || isVideoOrigin || radioName != null ||
                     thumbnailUrl != null
                 ) {
@@ -599,6 +601,7 @@ fun Song.toMediaItem(): MediaItem {
                             EXTRA_EXTERNAL_PREVIEW to isExternalPreview,
                             EXTRA_LIVE_RADIO to isLiveRadio,
                             EXTRA_RADIO_STREAM_URL to radioStreamUrl,
+                            EXTRA_ONSEN_AUDIO to isOnsenAudio,
                         ),
                     )
                 }

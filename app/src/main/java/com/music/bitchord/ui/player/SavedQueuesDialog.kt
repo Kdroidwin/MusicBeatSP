@@ -228,7 +228,10 @@ private fun LegacySavedQueuesDialog(
                 }
                 if (saveError) {
                     Text(
-                        text = stringResource(R.string.queue_save_failed),
+                        text = stringResource(
+                            if (currentSongs.any { it.isOnsenAudio }) R.string.radio_onsen_saved_queue_unavailable
+                            else R.string.queue_save_failed,
+                        ),
                         color = accent,
                         style = MaterialTheme.typography.bodySmall,
                     )
@@ -434,7 +437,10 @@ private fun ModernSavedQueuesDialog(
                 }
                 if (saveError) {
                     Text(
-                        text = stringResource(R.string.queue_save_failed),
+                        text = stringResource(
+                            if (currentSongs.any { it.isOnsenAudio }) R.string.radio_onsen_saved_queue_unavailable
+                            else R.string.queue_save_failed,
+                        ),
                         color = MaterialTheme.colorScheme.error,
                         style = MaterialTheme.typography.bodySmall,
                         modifier = Modifier.padding(top = 4.dp),

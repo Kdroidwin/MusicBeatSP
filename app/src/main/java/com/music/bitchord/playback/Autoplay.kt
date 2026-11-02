@@ -20,7 +20,7 @@ suspend fun youtubeSeedFor(song: Song): String? {
     if (SourceRegistry.parseTrackKey(song.videoId) == null) {
         // A content URI or a MediaStore id is not a YouTube id. Avoid turning
         // local playback into an unrelated or malformed online lookup.
-        if (song.isLiveRadio || song.isExternalPreview ||
+        if (song.isLiveRadio || song.isOnsenAudio || song.isExternalPreview ||
             song.videoId.startsWith("content://") || song.videoId.startsWith("file://")
         ) return null
         return song.videoId.takeIf(YOUTUBE_VIDEO_ID::matches)
