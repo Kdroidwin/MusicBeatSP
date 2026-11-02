@@ -218,6 +218,8 @@ object DownloadStore {
         private val part: File?,
         /** Set on the legacy path only: what [part] is renamed to. */
         private val target: File?,
+        /** A document URI created by the system picker, which has no MediaStore pending flag. */
+        private val userSelectedUri: Boolean = false,
     ) {
         /** The bytes being built, whether this is a MediaStore row or a legacy `.part` file. */
         val tagUri: Uri get() = part?.let(Uri::fromFile) ?: uri
@@ -229,6 +231,7 @@ object DownloadStore {
 
         /** @return the uri the finished file can be reached at. */
         fun commit(): Uri {
+            if (userSelectedUri) return uri
             if (part != null && target != null) {
                 if (!part.renameTo(target)) error("Could not finish writing $name")
                 // Nothing indexes a file that simply appeared; without this it
@@ -252,9 +255,22 @@ object DownloadStore {
 
         fun abort() {
             part?.delete()
-            if (part == null) runCatching { context.contentResolver.delete(uri, null, null) }
+            // A picker URI belongs to the listener. Leave it intact if a copy
+            // fails; deleting it could remove a document the provider returned
+            // after the listener confirmed a same-name file.
+            if (part == null && !userSelectedUri) runCatching { context.contentResolver.delete(uri, null, null) }
         }
     }
+
+    /** Write into a document selected through ACTION_CREATE_DOCUMENT. */
+    fun beginAtUri(context: Context, uri: Uri, name: String): Pending = Pending(
+        context = context,
+        uri = uri,
+        name = name,
+        part = null,
+        target = null,
+        userSelectedUri = true,
+    )
 
     /**
      * Reserve [name] and return somewhere to write it.

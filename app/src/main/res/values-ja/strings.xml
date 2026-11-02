@@ -973,6 +973,8 @@
     <string name="radio_onsen_loading_error">音泉の番組を読み込めませんでした。</string>
     <string name="radio_onsen_episode_list_empty">再生可能な音声配信回がありません。</string>
     <string name="radio_onsen_episode_play">配信回を再生</string>
+    <string name="radio_onsen_download">音泉の配信回をダウンロード</string>
+    <string name="radio_onsen_download_started">音泉の配信回をM4A形式でダウンロードしています。</string>
     <string name="radio_onsen_premium_required">プレミアム会員向けの配信回です。</string>
     <string name="radio_onsen_saved_queue_unavailable">音泉の再生URLは期限切れになるため、保存キューには登録できません。ラジオタブから配信回を開き直してください。</string>
     <string name="radio_play_failed">ラジオ局を再生できませんでした。通信状態を確認して再試行してください。</string>

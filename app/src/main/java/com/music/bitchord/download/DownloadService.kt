@@ -134,7 +134,12 @@ class DownloadService : Service() {
             // Its own job, so one track can be cancelled out from under the
             // loop without taking the rest of the queue with it.
             val job = scope.launch {
-                Downloads.run(this@DownloadService, song, request.forceHighestYoutubeOpus)
+                Downloads.run(
+                    this@DownloadService,
+                    song,
+                    request.forceHighestYoutubeOpus,
+                    request.destinationUri,
+                )
             }
             Downloads.onRunning(song.videoId, job)
             job.join()

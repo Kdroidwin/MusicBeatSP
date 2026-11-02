@@ -38,6 +38,7 @@ import androidx.compose.material.icons.rounded.PlayArrow
 import androidx.compose.material.icons.rounded.Radio
 import androidx.compose.material.icons.rounded.Refresh
 import androidx.compose.material.icons.rounded.Search
+import androidx.compose.material.icons.rounded.FileDownload
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Button
 import androidx.compose.material3.Card
@@ -78,6 +79,8 @@ import com.music.bitchord.R
 import com.music.bitchord.data.model.Song
 import com.music.bitchord.data.settings.AppSettings
 import com.music.bitchord.data.settings.ThemeMode
+import com.music.bitchord.download.DownloadStore
+import com.music.bitchord.download.Downloads
 import com.music.bitchord.playback.beginRadioQueue
 import com.music.bitchord.playback.playSongs
 import com.music.bitchord.radio.RadioPlaybackSession
@@ -124,6 +127,7 @@ fun RadioScreen(
     var refreshOnsenProgramKey by remember { mutableStateOf(0) }
     var selectedProgram by remember { mutableStateOf<ProgramEntry?>(null) }
     var pendingAutoRecordProgram by remember { mutableStateOf<ProgramEntry?>(null) }
+    var pendingOnsenDownload by remember { mutableStateOf<Song?>(null) }
     var autoRecordingIds by remember { mutableStateOf(RadioAutoRecordingStore.recordings(context).mapTo(mutableSetOf()) { it.id }) }
     var recordingFolderName by remember {
         mutableStateOf(
@@ -162,6 +166,21 @@ fun RadioScreen(
                 Toast.makeText(context, R.string.radio_recording_exact_alarm_denied, Toast.LENGTH_LONG).show()
             }
             pendingAutoRecordProgram = null
+        }
+    }
+
+    val onsenDownloadPicker = rememberLauncherForActivityResult(ActivityResultContracts.CreateDocument("audio/mp4")) { uri ->
+        val song = pendingOnsenDownload
+        pendingOnsenDownload = null
+        if (uri != null && song != null) {
+            runCatching {
+                context.contentResolver.takePersistableUriPermission(
+                    uri,
+                    Intent.FLAG_GRANT_READ_URI_PERMISSION or Intent.FLAG_GRANT_WRITE_URI_PERMISSION,
+                )
+            }
+            Downloads.enqueueToUri(context, song, uri)
+            Toast.makeText(context, R.string.radio_onsen_download_started, Toast.LENGTH_SHORT).show()
         }
     }
 
@@ -324,7 +343,7 @@ fun RadioScreen(
         val streamUrl = episode.streamingUrl
         val activeEpisodeId = currentSong?.takeIf { it.isOnsenAudio }?.videoId?.removePrefix("onsen:")
         when {
-            activeEpisodeId == episode.id && controller != null -> if (isPlaying) controller.pause() else controller.play()
+            activeEpisodeId == episode.id && controller != null && isPlaying -> controller.pause()
             networkUnavailable -> Toast.makeText(context, R.string.radio_offline_unavailable, Toast.LENGTH_SHORT).show()
             !episode.isAudio || streamUrl.isNullOrBlank() -> Toast.makeText(context, R.string.radio_onsen_episode_unavailable, Toast.LENGTH_SHORT).show()
             controller == null -> Toast.makeText(context, R.string.radio_play_failed, Toast.LENGTH_SHORT).show()
@@ -345,6 +364,20 @@ fun RadioScreen(
                 }.onFailure {
                     Toast.makeText(context, R.string.radio_onsen_play_failed, Toast.LENGTH_LONG).show()
                 }
+            }
+        }
+    }
+
+    val downloadOnsenEpisode: (OnsenEpisode, OnsenProgram) -> Unit = { episode, program ->
+        val streamUrl = episode.streamingUrl
+        when {
+            networkUnavailable -> Toast.makeText(context, R.string.radio_offline_unavailable, Toast.LENGTH_SHORT).show()
+            !episode.isAudio || streamUrl.isNullOrBlank() ->
+                Toast.makeText(context, R.string.radio_onsen_episode_unavailable, Toast.LENGTH_SHORT).show()
+            else -> {
+                val song = onsenSong(episode, program)
+                pendingOnsenDownload = song
+                onsenDownloadPicker.launch(DownloadStore.fileNameFor(song, "m4a"))
             }
         }
     }
@@ -445,6 +478,7 @@ fun RadioScreen(
             onBack = { selectedOnsenProgram = null },
             onRetry = { refreshOnsenProgramKey++ },
             onPlayEpisode = { episode -> playOnsenEpisode(episode, onsenProgram) },
+            onDownloadEpisode = { episode -> downloadOnsenEpisode(episode, onsenProgram) },
         )
     } else if (station == null) {
         val areaName = PrefectureData.prefecture(selectedAreaId)?.name.orEmpty()
@@ -759,6 +793,7 @@ private fun OnsenProgramDetail(
     onBack: () -> Unit,
     onRetry: () -> Unit,
     onPlayEpisode: (OnsenEpisode) -> Unit,
+    onDownloadEpisode: (OnsenEpisode) -> Unit,
 ) {
     val episodes = remember(program.episodes) { program.episodes.filter(OnsenEpisode::isAudio) }
     LazyColumn(
@@ -819,6 +854,7 @@ private fun OnsenProgramDetail(
                     amoledBlack = amoledBlack,
                     isPlaying = episode.id == currentEpisodeId && isPlaybackPlaying,
                     onClick = { onPlayEpisode(episode) },
+                    onDownload = { onDownloadEpisode(episode) },
                 )
             }
         }
@@ -831,6 +867,7 @@ private fun OnsenEpisodeRow(
     amoledBlack: Boolean,
     isPlaying: Boolean,
     onClick: () -> Unit,
+    onDownload: () -> Unit,
 ) {
     val canPlay = episode.isAudio && !episode.streamingUrl.isNullOrBlank()
     Card(
@@ -867,9 +904,26 @@ private fun OnsenEpisodeRow(
                     tint = if (canPlay) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurfaceVariant,
                 )
             }
+            IconButton(onClick = onDownload, enabled = canPlay) {
+                Icon(
+                    Icons.Rounded.FileDownload,
+                    contentDescription = stringResource(R.string.radio_onsen_download),
+                    tint = if (canPlay) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurfaceVariant,
+                )
+            }
         }
     }
 }
+
+private fun onsenSong(episode: OnsenEpisode, program: OnsenProgram) = Song(
+    videoId = "onsen:${episode.id}",
+    title = episode.title.ifBlank { program.title },
+    artist = program.performer ?: program.title,
+    thumbnailUrl = episode.imageUrl ?: program.imageUrl,
+    radioName = program.title,
+    isOnsenAudio = true,
+    radioStreamUrl = episode.streamingUrl,
+)
 
 @Composable
 private fun RadioStationRow(

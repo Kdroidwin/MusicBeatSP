@@ -129,6 +129,7 @@ object Downloads {
     internal data class DownloadRequest(
         val song: Song,
         val forceHighestYoutubeOpus: Boolean = false,
+        val destinationUri: Uri? = null,
     )
 
     private val lock = Any()
@@ -183,6 +184,11 @@ object Downloads {
         enqueueInternal(context, song, from, forceHighestYoutubeOpus = false)
     }
 
+    /** Queue a track into the exact document the listener selected with the system picker. */
+    fun enqueueToUri(context: Context, song: Song, destinationUri: Uri) {
+        enqueueInternal(context, song, from = null, forceHighestYoutubeOpus = false, destinationUri = destinationUri)
+    }
+
     /** Queue the YouTube audio at its highest available Opus bitrate. */
     fun enqueueHighestYoutubeOpus(context: Context, song: Song) {
         enqueueInternal(context, song, from = null, forceHighestYoutubeOpus = true)
@@ -193,6 +199,7 @@ object Downloads {
         song: Song,
         from: String?,
         forceHighestYoutubeOpus: Boolean,
+        destinationUri: Uri? = null,
     ) {
         val id = song.videoId
         if (!AppSettings.downloadsAllowedNow) {
@@ -209,7 +216,7 @@ object Downloads {
         }
         synchronized(lock) {
             if (id in pending || id in running) return
-            pending[id] = DownloadRequest(song, forceHighestYoutubeOpus)
+            pending[id] = DownloadRequest(song, forceHighestYoutubeOpus, destinationUri)
         }
         _active.update { it + (id to DownloadState.Queued) }
         DownloadSession.queued(song, from)
@@ -700,6 +707,7 @@ object Downloads {
         context: Context,
         song: Song,
         forceHighestYoutubeOpus: Boolean = false,
+        destinationUri: Uri? = null,
     ) = withContext(Dispatchers.IO) {
         val id = song.videoId
         // Set before the lookup, not after it. Resolving where a lossless track
@@ -716,7 +724,7 @@ object Downloads {
             // being written. Corrected here rather than left to disagree with
             // the notification and with the Downloads page afterwards.
             DownloadSession.retitle(id, plan.track)
-            transfer(context, song, plan)
+            transfer(context, song, plan, destinationUri)
         } catch (e: CancellationException) {
             clear(id)
             throw e
@@ -756,6 +764,24 @@ object Downloads {
         // matching is a manual playback action and must not silently change a
         // download or its filename.
         val track = song
+        if (track.isOnsenAudio) {
+            val streamUrl = track.radioStreamUrl?.takeIf(String::isNotBlank)
+                ?: error("This Onsen episode has no downloadable audio URL")
+            return@withContext Prepared(
+                song.videoId,
+                track,
+                route = Route(
+                    extension = "m4a",
+                    mimeType = "audio/mp4",
+                    describe = "Onsen AAC",
+                    downloadFormat = "AAC",
+                    write = { sink, onProgress ->
+                        OnsenM4aExporter.write(context, streamUrl, sink, onProgress)
+                    },
+                ),
+                alreadyAt = null,
+            )
+        }
         // Read once, here, for the whole of this track. Both routes below
         // and the re-resolve inside [Downloader.fetch] have to agree on
         // which rung they are fetching, and re-reading the setting per call
@@ -810,7 +836,7 @@ object Downloads {
      * commits or aborts, so a caller is free to call it a second time with a
      * freshly resolved plan without the first attempt leaving anything behind.
      */
-    private suspend fun transfer(context: Context, song: Song, plan: Prepared) {
+    private suspend fun transfer(context: Context, song: Song, plan: Prepared, destinationUri: Uri?) {
         val id = song.videoId
         val track = plan.track
 
@@ -850,7 +876,7 @@ object Downloads {
                 }
 
                 val name = DownloadStore.fileNameFor(track, route.extension)
-                val alreadyThere = DownloadStore.existing(context, name)
+                val alreadyThere = if (destinationUri == null) DownloadStore.existing(context, name) else null
                 if (alreadyThere != null) {
                     Log.d(TAG, "$name is already in Music; adopting it")
                     remember(song, track, alreadyThere)
@@ -894,7 +920,8 @@ object Downloads {
                     return@coroutineScope
                 }
 
-                val destination = DownloadStore.begin(context, name, route.mimeType)
+                val destination = destinationUri?.let { DownloadStore.beginAtUri(context, it, name) }
+                    ?: DownloadStore.begin(context, name, route.mimeType)
                 pending = destination
                 destination.openStream().use { sink ->
                     route.write(sink) { written, total ->
