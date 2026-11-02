@@ -101,10 +101,12 @@ import com.music.bitchord.feature.library.ui.components.LibraryListContent
 import com.music.bitchord.feature.localmusic.data.LocalFavoritesStore
 import com.music.bitchord.feature.localmusic.data.LocalPlaylistStore
 import com.music.bitchord.feature.localmusic.data.resolvePlaylistSongs
+import com.music.bitchord.feature.localmusic.data.resolveSmartPlaylistSongs
 import com.music.bitchord.feature.localsongactions.data.LocalPlayStatsStore
 import com.music.bitchord.feature.localmusic.domain.model.LocalPlaylist
 import com.music.bitchord.feature.artistimage.util.ArtistSplitter
 import com.music.bitchord.feature.localmusic.ui.components.CreatePlaylistDialog
+import com.music.bitchord.feature.localmusic.ui.components.SmartPlaylistEditorDialog
 import com.music.bitchord.feature.localsongactions.ui.components.LocalAddToPlaylistSheet
 import com.music.bitchord.feature.localsongactions.ui.components.LocalSongDropdownMenu
 import com.music.bitchord.feature.localsongactions.ui.LocalSongActionsHelper
@@ -139,6 +141,8 @@ private fun PlaylistSelectionToolbar(
     onMoveDown: () -> Unit,
     onMoveToTop: () -> Unit,
     onMoveToBottom: () -> Unit,
+    allowRemove: Boolean = true,
+    allowReorder: Boolean = true,
     reorderEnabled: Boolean,
     onToggleReorder: () -> Unit,
     onCancel: () -> Unit,
@@ -177,33 +181,37 @@ private fun PlaylistSelectionToolbar(
         IconButton(onClick = onShare) {
             Icon(Icons.Rounded.Share, contentDescription = stringResource(R.string.selection_share), tint = contentColor)
         }
-        IconButton(onClick = onDeleteFromPlaylist) {
-            Icon(
-                Icons.Rounded.DeleteOutline,
-                contentDescription = stringResource(R.string.remove_from_playlist),
-                tint = contentColor,
-            )
+        if (allowRemove) {
+            IconButton(onClick = onDeleteFromPlaylist) {
+                Icon(
+                    Icons.Rounded.DeleteOutline,
+                    contentDescription = stringResource(R.string.remove_from_playlist),
+                    tint = contentColor,
+                )
+            }
         }
-        IconButton(onClick = onToggleReorder) {
-            Icon(
-                Icons.Rounded.Reorder,
-                contentDescription = stringResource(R.string.toggle_playlist_reorder),
-                tint = contentColor,
-            )
-        }
-        IconButton(onClick = onMoveUp) {
-            Icon(Icons.Rounded.KeyboardArrowUp, contentDescription = stringResource(R.string.selection_move_up), tint = contentColor)
-        }
-        IconButton(onClick = onMoveDown) {
-            Icon(Icons.Rounded.KeyboardArrowDown, contentDescription = stringResource(R.string.selection_move_down), tint = contentColor)
-        }
-        TextButton(onClick = onMoveToTop) {
-            Icon(Icons.Rounded.ArrowUpward, contentDescription = null, tint = contentColor)
-            Text(stringResource(R.string.selection_move_to_top), color = contentColor)
-        }
-        TextButton(onClick = onMoveToBottom) {
-            Icon(Icons.Rounded.ArrowDownward, contentDescription = null, tint = contentColor)
-            Text(stringResource(R.string.selection_move_to_bottom), color = contentColor)
+        if (allowReorder) {
+            IconButton(onClick = onToggleReorder) {
+                Icon(
+                    Icons.Rounded.Reorder,
+                    contentDescription = stringResource(R.string.toggle_playlist_reorder),
+                    tint = contentColor,
+                )
+            }
+            IconButton(onClick = onMoveUp) {
+                Icon(Icons.Rounded.KeyboardArrowUp, contentDescription = stringResource(R.string.selection_move_up), tint = contentColor)
+            }
+            IconButton(onClick = onMoveDown) {
+                Icon(Icons.Rounded.KeyboardArrowDown, contentDescription = stringResource(R.string.selection_move_down), tint = contentColor)
+            }
+            TextButton(onClick = onMoveToTop) {
+                Icon(Icons.Rounded.ArrowUpward, contentDescription = null, tint = contentColor)
+                Text(stringResource(R.string.selection_move_to_top), color = contentColor)
+            }
+            TextButton(onClick = onMoveToBottom) {
+                Icon(Icons.Rounded.ArrowDownward, contentDescription = null, tint = contentColor)
+                Text(stringResource(R.string.selection_move_to_bottom), color = contentColor)
+            }
         }
         IconButton(onClick = onCancel) {
             Icon(Icons.Rounded.Close, contentDescription = stringResource(R.string.cancel), tint = contentColor)
@@ -241,6 +249,7 @@ fun LibraryScreen(
     val context = LocalContext.current.applicationContext
     val playlists by LocalPlaylistStore.playlists.collectAsStateWithLifecycle()
     val favoriteIds by LocalFavoritesStore.favoriteIds.collectAsStateWithLifecycle()
+    val smartPlaylistsEnabled by AppSettings.smartPlaylistsEnabled.collectAsStateWithLifecycle()
     val savedYoutubeCollections by AppSettings.savedYoutubeCollections.collectAsStateWithLifecycle()
     val libraryViewType by AppSettings.libraryPlaylistsViewType.collectAsStateWithLifecycle()
     val songsViewType by AppSettings.librarySongsViewType.collectAsStateWithLifecycle()
@@ -256,11 +265,33 @@ fun LibraryScreen(
     val playlistTrackMenuUsesArtworkColor by AppSettings.playlistTrackMenuUsesArtworkColor.collectAsStateWithLifecycle()
     val favoritesLabel = stringResource(R.string.favorites)
     val playStatsRevision by LocalPlayStatsStore.revision.collectAsStateWithLifecycle()
+    var smartPlaylistSongs by remember { mutableStateOf<Map<String, List<Song>>>(emptyMap()) }
+    val smartPlaylistTrackCounts = remember(smartPlaylistSongs) {
+        smartPlaylistSongs.mapValues { (_, matchingSongs) -> matchingSongs.size }
+    }
     var recentlyPlayedSongs by remember { mutableStateOf<List<Song>>(emptyList()) }
     var mostPlayedSongs by remember { mutableStateOf<List<Song>>(emptyList()) }
     var historyRefresh by remember { mutableStateOf(0) }
+    val playStatsSnapshot = remember(context, playStatsRevision, historyRefresh) {
+        LocalPlayStatsStore.snapshot(context)
+    }
     val choosePlaylistCover = rememberPlaylistCoverPicker { playlistId, uri ->
         LocalPlaylistStore.setPlaylistCover(playlistId, uri)
+    }
+
+    LaunchedEffect(playlists, songs, playStatsSnapshot, favoriteIds) {
+        smartPlaylistSongs = emptyMap()
+        val definitions = playlists.filter { it.smartDefinition != null }
+        smartPlaylistSongs = withContext(Dispatchers.Default) {
+            definitions.associate { playlist ->
+                playlist.id to resolveSmartPlaylistSongs(
+                    definition = requireNotNull(playlist.smartDefinition),
+                    librarySongs = songs,
+                    playStats = playStatsSnapshot,
+                    favoriteIds = favoriteIds,
+                )
+            }
+        }
     }
 
     LaunchedEffect(songs, playStatsRevision, historyRefresh) {
@@ -351,7 +382,9 @@ fun LibraryScreen(
     val collectionListState = rememberLazyListState()
     val collectionGridState = rememberLazyGridState()
     var showCreateDialog by remember { mutableStateOf(false) }
+    var showCreateSmartPlaylistDialog by remember { mutableStateOf(false) }
     var playlistToRename by remember { mutableStateOf<LocalPlaylist?>(null) }
+    var smartPlaylistToEdit by remember { mutableStateOf<LocalPlaylist?>(null) }
     var youtubeCollectionToRename by remember { mutableStateOf<SavedYoutubeCollection?>(null) }
 
     // Drill down navigation inside Library (e.g. for Favorites or specific Playlist)
@@ -359,6 +392,9 @@ fun LibraryScreen(
     var drillDownSongs by remember { mutableStateOf<List<Song>>(emptyList()) }
     var drillDownArt by remember { mutableStateOf<String?>(null) }
     var drillDownPlaylistId by remember { mutableStateOf<String?>(null) }
+    val drillDownIsSmartPlaylist = remember(playlists, drillDownPlaylistId) {
+        playlists.firstOrNull { it.id == drillDownPlaylistId }?.smartDefinition != null
+    }
     var playlistReorderEnabled by rememberSaveable { mutableStateOf(false) }
     var playlistSelectionMode by rememberSaveable { mutableStateOf(false) }
     var selectedPlaylistSongIds by rememberSaveable { mutableStateOf(emptySet<String>()) }
@@ -479,10 +515,14 @@ fun LibraryScreen(
     // Keep an already-open playlist backed by the latest MediaStore rows.
     // Tag editing refreshes `songs`; without re-resolving here, the visible
     // playlist and its playback queue retain the pre-edit Song objects.
-    LaunchedEffect(songs, playlists, drillDownPlaylistId) {
+    LaunchedEffect(songs, playlists, drillDownPlaylistId, playStatsSnapshot, favoriteIds, smartPlaylistSongs) {
         val playlistId = drillDownPlaylistId ?: return@LaunchedEffect
         val playlist = playlists.firstOrNull { it.id == playlistId } ?: return@LaunchedEffect
-        val refreshedSongs = resolvePlaylistSongs(playlist, songs)
+        val refreshedSongs = if (playlist.smartDefinition != null) {
+            smartPlaylistSongs[playlistId] ?: emptyList()
+        } else {
+            resolvePlaylistSongs(playlist, songs)
+        }
         if (refreshedSongs != drillDownSongs) {
             drillDownSongs = refreshedSongs
             drillDownArt = playlist.customCoverUrl
@@ -671,7 +711,7 @@ fun LibraryScreen(
             },
             artworkUrlForPalette = drillDownArt.takeIf { playlistTrackMenuUsesArtworkColor },
             disableArtworkPalette = drillDownPlaylistId != null && !playlistTrackMenuUsesArtworkColor,
-            onRemoveFromPlaylist = if (drillDownPlaylistId != null) {
+            onRemoveFromPlaylist = if (drillDownPlaylistId != null && !drillDownIsSmartPlaylist) {
                 {
                     activePlaylistMenuSong = null
                     val playlistId = drillDownPlaylistId ?: return@LocalSongDropdownMenu
@@ -838,6 +878,8 @@ fun LibraryScreen(
                                 },
                                 onShare = { LocalSongActionsHelper.shareSongs(context, selectedPlaylistSongs) },
                                 onDeleteFromPlaylist = { showDeleteFromPlaylistDialog = true },
+                                allowRemove = !drillDownIsSmartPlaylist,
+                                allowReorder = !drillDownIsSmartPlaylist,
                                 onMoveUp = { moveSelectedSongsByOne(-1) },
                                 onMoveDown = { moveSelectedSongsByOne(1) },
                                 onMoveToTop = { persistSelectedOrder(toTop = true) },
@@ -886,8 +928,8 @@ fun LibraryScreen(
                     onSongSwipe = onSongSwipe,
                     onShuffle = onShuffle,
                     onMore = null,
-                    reorderEnabled = playlistReorderEnabled && drillDownPlaylistId != null,
-                    onReorderToggle = if (drillDownPlaylistId != null) {
+                    reorderEnabled = playlistReorderEnabled && drillDownPlaylistId != null && !drillDownIsSmartPlaylist,
+                    onReorderToggle = if (drillDownPlaylistId != null && !drillDownIsSmartPlaylist) {
                         {
                             if (playlistReorderEnabled) {
                                 playlistReorderEnabled = false
@@ -901,7 +943,7 @@ fun LibraryScreen(
                     } else null,
                     onReorderComplete = { reorderedSongs ->
                         val playlistId = drillDownPlaylistId
-                        if (playlistId != null) {
+                        if (playlistId != null && !drillDownIsSmartPlaylist) {
                             drillDownSongs = reorderedSongs
                             persistPlaylistSongOrder(playlistId, reorderedSongs)
                         }
@@ -926,6 +968,8 @@ fun LibraryScreen(
                             AppSettings.setLibraryPlaylistsViewType(next)
                         },
                         onCreatePlaylist = { showCreateDialog = true },
+                        smartPlaylistsEnabled = smartPlaylistsEnabled,
+                        onCreateSmartPlaylist = { showCreateSmartPlaylistDialog = true },
                         visibleCategories = visibleLibraryCategories,
                         categoryOrder = libraryCategoryOrder,
                     )
@@ -1031,6 +1075,8 @@ fun LibraryScreen(
                             AppSettings.setLibraryPlaylistsViewType(next)
                         },
                         onCreatePlaylist = { showCreateDialog = true },
+                        smartPlaylistsEnabled = smartPlaylistsEnabled,
+                        onCreateSmartPlaylist = { showCreateSmartPlaylistDialog = true },
                         visibleCategories = visibleLibraryCategories,
                         categoryOrder = libraryCategoryOrder,
                     )
@@ -1084,6 +1130,8 @@ fun LibraryScreen(
                             AppSettings.setLibraryPlaylistsViewType(next)
                         },
                         onCreatePlaylist = { showCreateDialog = true },
+                        smartPlaylistsEnabled = smartPlaylistsEnabled,
+                        onCreateSmartPlaylist = { showCreateSmartPlaylistDialog = true },
                         visibleCategories = visibleLibraryCategories,
                         categoryOrder = libraryCategoryOrder,
                     )
@@ -1106,15 +1154,26 @@ fun LibraryScreen(
                         drillDownPlaylistId = playlist.id
                         playlistReorderEnabled = false
                         drillDownLabel = playlist.name
-                        val pSongs = resolvePlaylistSongs(playlist, songs)
+                        val pSongs = if (playlist.smartDefinition != null) {
+                            smartPlaylistSongs[playlist.id].orEmpty()
+                        } else {
+                            resolvePlaylistSongs(playlist, songs)
+                        }
                         drillDownSongs = pSongs
                         drillDownArt = playlist.customCoverUrl ?: playlist.coverUrl ?: pSongs.firstNotNullOfOrNull { it.thumbnailUrl }
                     }
 
                     val onPlaylistPlay: (LocalPlaylist) -> Unit = { playlist ->
-                        val pSongs = resolvePlaylistSongs(playlist, songs)
-                        if (pSongs.isNotEmpty()) {
-                            onSongClick(pSongs, 0)
+                        if (playlist.smartDefinition != null) {
+                            scope.launch {
+                                val pSongs = withContext(Dispatchers.Default) {
+                                    resolvePlaylistSongs(playlist, songs, playStatsSnapshot, favoriteIds)
+                                }
+                                if (pSongs.isNotEmpty()) onSongClick(pSongs, 0)
+                            }
+                        } else {
+                            val pSongs = resolvePlaylistSongs(playlist, songs)
+                            if (pSongs.isNotEmpty()) onSongClick(pSongs, 0)
                         }
                     }
 
@@ -1128,12 +1187,14 @@ fun LibraryScreen(
                             onPlaylistClick = onPlaylistClick,
                             onPlaylistPlay = onPlaylistPlay,
                             onRenamePlaylist = { playlistToRename = it },
+                            onEditSmartPlaylist = { smartPlaylistToEdit = it },
                             onDeletePlaylist = { LocalPlaylistStore.deletePlaylist(it.id) },
                             onChangePlaylistCover = { choosePlaylistCover(it.id) },
                             onResetPlaylistCover = { LocalPlaylistStore.setPlaylistCover(it.id, null) },
                             onMovePlaylist = { playlist, offset -> LocalPlaylistStore.movePlaylist(playlist.id, offset) },
                             onCreatePlaylist = { showCreateDialog = true },
                             librarySongs = songs,
+                            smartPlaylistTrackCounts = smartPlaylistTrackCounts,
                             favoriteUsesStar = favoriteUsesStar,
                             visibleCategories = visibleLibraryCategories,
                             contentPadding = PaddingValues(
@@ -1152,12 +1213,14 @@ fun LibraryScreen(
                             onPlaylistClick = onPlaylistClick,
                             onPlaylistPlay = onPlaylistPlay,
                             onRenamePlaylist = { playlistToRename = it },
+                            onEditSmartPlaylist = { smartPlaylistToEdit = it },
                             onDeletePlaylist = { LocalPlaylistStore.deletePlaylist(it.id) },
                             onChangePlaylistCover = { choosePlaylistCover(it.id) },
                             onResetPlaylistCover = { LocalPlaylistStore.setPlaylistCover(it.id, null) },
                             onMovePlaylist = { playlist, offset -> LocalPlaylistStore.movePlaylist(playlist.id, offset) },
                             onCreatePlaylist = { showCreateDialog = true },
                             librarySongs = songs,
+                            smartPlaylistTrackCounts = smartPlaylistTrackCounts,
                             favoriteUsesStar = favoriteUsesStar,
                             localizeCollectionCount = localizeCollectionCount,
                             visibleCategories = visibleLibraryCategories,
@@ -1229,6 +1292,28 @@ fun LibraryScreen(
         )
     }
 
+    if (showCreateSmartPlaylistDialog) {
+        SmartPlaylistEditorDialog(
+            onDismiss = { showCreateSmartPlaylistDialog = false },
+            onSave = { name, definition ->
+                LocalPlaylistStore.createSmartPlaylist(name, definition)
+                showCreateSmartPlaylistDialog = false
+            },
+        )
+    }
+
+    smartPlaylistToEdit?.let { playlist ->
+        SmartPlaylistEditorDialog(
+            initialName = playlist.name,
+            initialDefinition = playlist.smartDefinition,
+            onDismiss = { smartPlaylistToEdit = null },
+            onSave = { name, definition ->
+                LocalPlaylistStore.updateSmartPlaylist(playlist.id, name, definition)
+                smartPlaylistToEdit = null
+            },
+        )
+    }
+
     playlistToRename?.let { target ->
         CreatePlaylistDialog(
             initialName = target.name,
@@ -1266,7 +1351,7 @@ fun LibraryScreen(
         )
     }
 
-    if (showDeleteFromPlaylistDialog && drillDownPlaylistId != null) {
+    if (showDeleteFromPlaylistDialog && drillDownPlaylistId != null && !drillDownIsSmartPlaylist) {
         val playlistId = drillDownPlaylistId!!
         val selectedIds = selectedPlaylistSongIds
         AlertDialog(

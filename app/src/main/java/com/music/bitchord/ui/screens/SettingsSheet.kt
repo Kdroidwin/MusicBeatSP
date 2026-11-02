@@ -246,6 +246,8 @@ private fun resetDeezerArtistArtwork(context: Context) {
 private fun additionalArtworkSettingsSearchEntries(
     playerPopupsUseArtworkColor: Boolean,
     queueHeadingMusicNoteIcon: Boolean,
+    queueHeadingItalicPlayQueue: Boolean,
+    smartPlaylistsEnabled: Boolean,
     artistDeezerArtworkEnabled: Boolean,
     context: Context,
 ): List<SettingsSearchEntry> = listOf(
@@ -261,6 +263,18 @@ private fun additionalArtworkSettingsSearchEntries(
         listOf("queue", "heading", "music note", "icon", "再生キュー", "見出し", "音符", "アイコン"),
         queueHeadingMusicNoteIcon,
     ) { AppSettings.setQueueHeadingMusicNoteIcon(!queueHeadingMusicNoteIcon) },
+    SettingsSearchEntry(
+        stringResource(R.string.queue_heading_italic_play_queue),
+        stringResource(R.string.queue_heading_italic_play_queue_subtitle),
+        listOf("queue", "heading", "italic", "play queue", "再生キュー", "見出し", "斜体", "イタリック"),
+        queueHeadingItalicPlayQueue,
+    ) { AppSettings.setQueueHeadingItalicPlayQueue(!queueHeadingItalicPlayQueue) },
+    SettingsSearchEntry(
+        stringResource(R.string.smart_playlists_enabled),
+        stringResource(R.string.smart_playlists_enabled_subtitle),
+        listOf("smart playlist", "rules", "dynamic", "プレイリスト", "スマート", "条件", "自動"),
+        smartPlaylistsEnabled,
+    ) { AppSettings.setSmartPlaylistsEnabled(!smartPlaylistsEnabled) },
     SettingsSearchEntry(
         title = stringResource(R.string.artist_deezer_artwork_enabled),
         subtitle = stringResource(R.string.artist_deezer_artwork_enabled_subtitle),
@@ -638,6 +652,7 @@ fun SettingsScreen(
     val rememberLastOpenedFolder by AppSettings.rememberLastOpenedFolder.collectAsStateWithLifecycle()
     val localMusicFolderRoot by AppSettings.localMusicFolderUri.collectAsStateWithLifecycle()
     val fullScreenCollectionArtwork by AppSettings.fullScreenCollectionArtwork.collectAsStateWithLifecycle()
+    val smartPlaylistsEnabled by AppSettings.smartPlaylistsEnabled.collectAsStateWithLifecycle()
     val whiteCollectionActionButtons by AppSettings.whiteCollectionActionButtons.collectAsStateWithLifecycle()
     val whiteCollectionPlayButton by AppSettings.whiteCollectionPlayButton.collectAsStateWithLifecycle()
     val tabletFullscreenPlayer by AppSettings.tabletFullscreenPlayer.collectAsStateWithLifecycle()
@@ -654,6 +669,7 @@ fun SettingsScreen(
     val queueManagerEqualsIcon by AppSettings.queueManagerEqualsIcon.collectAsStateWithLifecycle()
     val hideQueueLabel by AppSettings.hideQueueLabel.collectAsStateWithLifecycle()
     val queueHeadingMusicNoteIcon by AppSettings.queueHeadingMusicNoteIcon.collectAsStateWithLifecycle()
+    val queueHeadingItalicPlayQueue by AppSettings.queueHeadingItalicPlayQueue.collectAsStateWithLifecycle()
     val queueClearTrashIcon by AppSettings.queueClearTrashIcon.collectAsStateWithLifecycle()
     val hidePlaybackTuningTitle by AppSettings.hidePlaybackTuningTitle.collectAsStateWithLifecycle()
     val playbackTuningThinSliders by AppSettings.playbackTuningThinSliders.collectAsStateWithLifecycle()
@@ -1795,6 +1811,8 @@ fun SettingsScreen(
         additionalArtworkSettingsSearchEntries(
             playerPopupsUseArtworkColor = playerPopupsUseArtworkColor,
             queueHeadingMusicNoteIcon = queueHeadingMusicNoteIcon,
+            queueHeadingItalicPlayQueue = queueHeadingItalicPlayQueue,
+            smartPlaylistsEnabled = smartPlaylistsEnabled,
             artistDeezerArtworkEnabled = artistDeezerArtworkEnabled,
             context = context,
         ) + playerInkSearchEntries + SettingsSearchEntry(
@@ -3801,6 +3819,19 @@ fun SettingsScreen(
             )
             RowDivider()
             SettingsRow(
+                icon = Icons.Rounded.PlayArrow,
+                title = stringResource(R.string.queue_heading_italic_play_queue),
+                subtitle = stringResource(R.string.queue_heading_italic_play_queue_subtitle),
+                trailing = {
+                    Switch(
+                        checked = queueHeadingItalicPlayQueue,
+                        onCheckedChange = AppSettings::setQueueHeadingItalicPlayQueue,
+                    )
+                },
+                onClick = { AppSettings.setQueueHeadingItalicPlayQueue(!queueHeadingItalicPlayQueue) },
+            )
+            RowDivider()
+            SettingsRow(
                 icon = Icons.Rounded.Tune,
                 title = stringResource(R.string.queue_clear_trash_icon),
                 subtitle = stringResource(R.string.queue_clear_trash_icon_subtitle),
@@ -4824,6 +4855,7 @@ fun SettingsScreen(
             includeRemoteSourceMediaInLibrary = includeRemoteSourceMediaInLibrary,
             localMusicFolderRoot = localMusicFolderRoot,
             fullScreenCollectionArtwork = fullScreenCollectionArtwork,
+            smartPlaylistsEnabled = smartPlaylistsEnabled,
             hideCollectionTopBar = hideCollectionTopBar,
             hideFloatingCollectionControls = hideFloatingCollectionControls,
             artistsOpenAlbums = artistsOpenAlbums,
@@ -6215,6 +6247,7 @@ private fun LocalMusicSettingsGroup(
     includeRemoteSourceMediaInLibrary: Boolean,
     localMusicFolderRoot: String,
     fullScreenCollectionArtwork: Boolean,
+    smartPlaylistsEnabled: Boolean,
     hideCollectionTopBar: Boolean,
     hideFloatingCollectionControls: Boolean,
     artistsOpenAlbums: Boolean,
@@ -6435,6 +6468,16 @@ SettingsGroup(header = stringResource(R.string.local_music)) {
             Switch(checked = fullScreenCollectionArtwork, onCheckedChange = AppSettings::setFullScreenCollectionArtwork)
         },
         onClick = { AppSettings.setFullScreenCollectionArtwork(!fullScreenCollectionArtwork) },
+    )
+    RowDivider()
+    SettingsRow(
+        icon = Icons.Rounded.Tune,
+        title = stringResource(R.string.smart_playlists_enabled),
+        subtitle = stringResource(R.string.smart_playlists_enabled_subtitle),
+        trailing = {
+            Switch(checked = smartPlaylistsEnabled, onCheckedChange = AppSettings::setSmartPlaylistsEnabled)
+        },
+        onClick = { AppSettings.setSmartPlaylistsEnabled(!smartPlaylistsEnabled) },
     )
     RowDivider()
     SettingsRow(

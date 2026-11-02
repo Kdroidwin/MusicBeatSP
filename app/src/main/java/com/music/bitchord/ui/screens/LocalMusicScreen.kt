@@ -123,11 +123,15 @@ import com.music.bitchord.feature.localmusic.domain.model.LocalFolder
 import com.music.bitchord.feature.localmusic.domain.model.LocalPlaylist
 import com.music.bitchord.feature.localmusic.data.LocalPlaylistStore
 import com.music.bitchord.feature.localmusic.data.resolvePlaylistSongs
+import com.music.bitchord.feature.localmusic.data.LocalFavoritesStore
+import com.music.bitchord.feature.localmusic.data.resolveSmartPlaylistSongs
 import com.music.bitchord.feature.localmusic.ui.components.LocalFoldersTab
 import com.music.bitchord.feature.localmusic.ui.components.LocalPlaylistsTab
 import com.music.bitchord.feature.localmusic.ui.components.rememberPlaylistCoverPicker
 import com.music.bitchord.feature.localmusic.ui.components.BlacklistedFoldersSheet
 import com.music.bitchord.feature.localmusic.ui.components.CreatePlaylistDialog
+import com.music.bitchord.feature.localmusic.ui.components.SmartPlaylistEditorDialog
+import com.music.bitchord.feature.localsongactions.data.LocalPlayStatsStore
 import com.music.bitchord.feature.localmusic.ui.components.DrillDownSongList
 import com.music.bitchord.feature.localmusic.ui.components.SongGridCard
 import com.music.bitchord.ui.components.FastScroller
@@ -373,11 +377,38 @@ fun LocalMusicScreen(
     val scope = rememberCoroutineScope()
     val blacklistedFolders by AppSettings.blacklistedFolders.collectAsStateWithLifecycle()
     val localPlaylists by LocalPlaylistStore.playlists.collectAsStateWithLifecycle()
+    val smartPlaylistsEnabled by AppSettings.smartPlaylistsEnabled.collectAsStateWithLifecycle()
+    val favoriteIds by LocalFavoritesStore.favoriteIds.collectAsStateWithLifecycle()
+    val playStatsRevision by LocalPlayStatsStore.revision.collectAsStateWithLifecycle()
+    val playStatsSnapshot = remember(context, playStatsRevision) {
+        LocalPlayStatsStore.snapshot(context)
+    }
+    var smartPlaylistSongs by remember { mutableStateOf<Map<String, List<Song>>>(emptyMap()) }
+    val smartPlaylistTrackCounts = remember(smartPlaylistSongs) {
+        smartPlaylistSongs.mapValues { (_, matchingSongs) -> matchingSongs.size }
+    }
     var discoveredFolders by remember { mutableStateOf<List<LocalFolder>>(emptyList()) }
     var showManageFoldersSheet by remember { mutableStateOf(false) }
     val manageFoldersSheetState = rememberModalBottomSheetState()
     var showCreatePlaylistDialog by remember { mutableStateOf(false) }
+    var showCreateSmartPlaylistDialog by remember { mutableStateOf(false) }
     var playlistToRename by remember { mutableStateOf<LocalPlaylist?>(null) }
+    var smartPlaylistToEdit by remember { mutableStateOf<LocalPlaylist?>(null) }
+
+    LaunchedEffect(localPlaylists, songs, playStatsSnapshot, favoriteIds) {
+        smartPlaylistSongs = emptyMap()
+        val definitions = localPlaylists.filter { it.smartDefinition != null }
+        smartPlaylistSongs = withContext(Dispatchers.Default) {
+            definitions.associate { playlist ->
+                playlist.id to resolveSmartPlaylistSongs(
+                    definition = requireNotNull(playlist.smartDefinition),
+                    librarySongs = songs,
+                    playStats = playStatsSnapshot,
+                    favoriteIds = favoriteIds,
+                )
+            }
+        }
+    }
 
     LaunchedEffect(Unit) {
         discoveredFolders = LocalMediaRepository.getAllDiscoveredFolders(context)
@@ -521,6 +552,9 @@ fun LocalMusicScreen(
 
     // When non-null, we are showing a drill-down list for that artist or album.
     var drillDownPlaylistId by remember { mutableStateOf<String?>(null) }
+    val drillDownIsSmartPlaylist = remember(localPlaylists, drillDownPlaylistId) {
+        localPlaylists.firstOrNull { it.id == drillDownPlaylistId }?.smartDefinition != null
+    }
     // The release's own cover, for the drill-down header. Only a downloaded
     // album or playlist has one worth showing — a tag-derived grouping's
     // "artwork" is just whichever of its rows happened to be first.
@@ -533,10 +567,14 @@ fun LocalMusicScreen(
     // library snapshot. Tag edits refresh `songs`, so resolve the same stored
     // IDs again to keep both the visible rows and playback metadata current.
     // This does not write to the playlist or change its saved track order.
-    LaunchedEffect(songs, localPlaylists, drillDownPlaylistId) {
+    LaunchedEffect(songs, localPlaylists, drillDownPlaylistId, smartPlaylistSongs) {
         val playlistId = drillDownPlaylistId ?: return@LaunchedEffect
         val playlist = localPlaylists.firstOrNull { it.id == playlistId } ?: return@LaunchedEffect
-        val refreshedSongs = resolvePlaylistSongs(playlist, songs)
+        val refreshedSongs = if (playlist.smartDefinition != null) {
+            smartPlaylistSongs[playlistId] ?: emptyList()
+        } else {
+            resolvePlaylistSongs(playlist, songs)
+        }
         if (refreshedSongs != drillDownSongs) {
             drillDownSongs = refreshedSongs
             drillDownArt = playlist.customCoverUrl
@@ -685,7 +723,7 @@ fun LocalMusicScreen(
                 drillDownPlaylistId != null && playlistTrackMenuUsesArtworkColor
             },
             disableArtworkPalette = drillDownPlaylistId != null && !playlistTrackMenuUsesArtworkColor,
-            onRemoveFromPlaylist = if (drillDownPlaylistId != null) {
+            onRemoveFromPlaylist = if (drillDownPlaylistId != null && !drillDownIsSmartPlaylist) {
                 {
                     activeMenuSong = null
                     val playlistId = drillDownPlaylistId ?: return@LocalSongDropdownMenu
@@ -775,7 +813,8 @@ fun LocalMusicScreen(
             DownloadSelectionBar(
                 count = selectedSongIds.size,
                 allSelected = selectableSongs.isNotEmpty() && selectedSongIds.containsAll(selectableSongs.map(::songSelectionKey)),
-                showDelete = isDownloads || (inDrillDown && drillDownPlaylistId != null),
+                showDelete = isDownloads ||
+                    (inDrillDown && drillDownPlaylistId != null && !drillDownIsSmartPlaylist),
                 onEditArtist = if (
                     inDrillDown && !drillDownShowsAlbums &&
                     (drillDownIsArtist || parentArtistAlbums != null)
@@ -799,7 +838,7 @@ fun LocalMusicScreen(
                     }
                 },
                 onDelete = {
-                    if (drillDownPlaylistId != null) {
+                    if (drillDownPlaylistId != null && !drillDownIsSmartPlaylist) {
                         showRemoveFromPlaylistDialog = true
                     } else {
                         val chosen = songs.filter { songSelectionKey(it) in selectedSongIds }
@@ -1204,18 +1243,37 @@ fun LocalMusicScreen(
                             drillDownLabel = playlist.name
                             selectedSongIds = emptySet()
                             selectedAlbumKeys = emptySet()
-                            drillDownSongs = resolvePlaylistSongs(playlist, songs)
-                            drillDownArt = playlist.customCoverUrl ?: playlist.coverUrl
+                            drillDownSongs = if (playlist.smartDefinition != null) {
+                                smartPlaylistSongs[playlist.id].orEmpty()
+                            } else {
+                                resolvePlaylistSongs(playlist, songs)
+                            }
+                            drillDownArt = playlist.customCoverUrl
+                                ?: playlist.coverUrl
+                                ?: smartPlaylistSongs[playlist.id].orEmpty().firstNotNullOfOrNull { it.thumbnailUrl }
                             // The art-led layout is scoped to album details and
                             // the dedicated Library screen, not this playlist
                             // browser or other local music lists.
                             drillDownFullScreenArtwork = false
                         },
                         onPlaylistPlay = { playlist ->
-                            val pSongs = resolvePlaylistSongs(playlist, songs)
-                            if (pSongs.isNotEmpty()) onSongClick(pSongs, 0)
+                            if (playlist.smartDefinition == null) {
+                                val pSongs = resolvePlaylistSongs(playlist, songs)
+                                if (pSongs.isNotEmpty()) onSongClick(pSongs, 0)
+                            } else {
+                                scope.launch {
+                                    val pSongs = withContext(Dispatchers.Default) {
+                                        resolvePlaylistSongs(playlist, songs, playStatsSnapshot, favoriteIds)
+                                    }
+                                    if (pSongs.isNotEmpty()) onSongClick(pSongs, 0)
+                                }
+                            }
                         },
                         onCreatePlaylist = { showCreatePlaylistDialog = true },
+                        smartPlaylistsEnabled = smartPlaylistsEnabled,
+                        onCreateSmartPlaylist = { showCreateSmartPlaylistDialog = true },
+                        onEditSmartPlaylist = { smartPlaylistToEdit = it },
+                        smartPlaylistTrackCounts = smartPlaylistTrackCounts,
                         onRenamePlaylist = { playlistToRename = it },
                         onDeletePlaylist = { LocalPlaylistStore.deletePlaylist(it.id) },
                         onChangePlaylistCover = { choosePlaylistCover(it.id) },
@@ -1237,6 +1295,28 @@ fun LocalMusicScreen(
                 showCreatePlaylistDialog = false
             },
             onDismiss = { showCreatePlaylistDialog = false },
+        )
+    }
+
+    if (showCreateSmartPlaylistDialog) {
+        SmartPlaylistEditorDialog(
+            onDismiss = { showCreateSmartPlaylistDialog = false },
+            onSave = { name, definition ->
+                LocalPlaylistStore.createSmartPlaylist(name, definition)
+                showCreateSmartPlaylistDialog = false
+            },
+        )
+    }
+
+    smartPlaylistToEdit?.let { playlist ->
+        SmartPlaylistEditorDialog(
+            initialName = playlist.name,
+            initialDefinition = playlist.smartDefinition,
+            onDismiss = { smartPlaylistToEdit = null },
+            onSave = { name, definition ->
+                LocalPlaylistStore.updateSmartPlaylist(playlist.id, name, definition)
+                smartPlaylistToEdit = null
+            },
         )
     }
 
@@ -1311,10 +1391,11 @@ fun LocalMusicScreen(
             },
             confirmButton = {
                 TextButton(
-                    enabled = selectedSongIds.isNotEmpty() && drillDownPlaylistId != null,
+                    enabled = selectedSongIds.isNotEmpty() &&
+                        drillDownPlaylistId != null && !drillDownIsSmartPlaylist,
                     onClick = {
                         val playlistId = drillDownPlaylistId
-                        if (playlistId != null && selectedSongIds.isNotEmpty()) {
+                        if (playlistId != null && !drillDownIsSmartPlaylist && selectedSongIds.isNotEmpty()) {
                             LocalPlaylistStore.removeSongsFromPlaylist(playlistId, selectedSongIds)
                             drillDownSongs = drillDownSongs.filterNot { songSelectionKey(it) in selectedSongIds }
                             Toast.makeText(context, R.string.remove_from_playlist, Toast.LENGTH_SHORT).show()

@@ -56,6 +56,7 @@ fun LibraryPlaylistCard(
     onClick: () -> Unit,
     onPlay: () -> Unit,
     onRename: () -> Unit,
+    onEditSmartPlaylist: () -> Unit = {},
     onDelete: () -> Unit,
     onChangeCover: () -> Unit = {},
     onResetCover: () -> Unit = {},
@@ -64,6 +65,7 @@ fun LibraryPlaylistCard(
     onMoveUp: () -> Unit = {},
     onMoveDown: () -> Unit = {},
     librarySongs: List<Song> = emptyList(),
+    resolvedTrackCount: Int = playlist.songIds.size,
     modifier: Modifier = Modifier,
 ) {
     var menuOpen by remember { mutableStateOf(false) }
@@ -107,7 +109,7 @@ fun LibraryPlaylistCard(
                     )
                 }
 
-                if (playlist.songIds.isNotEmpty()) {
+                if (resolvedTrackCount > 0) {
                     IconButton(
                         onClick = onPlay,
                         modifier = Modifier
@@ -146,7 +148,11 @@ fun LibraryPlaylistCard(
                     )
                     Spacer(modifier = Modifier.height(2.dp))
                     Text(
-                        text = "${playlist.songIds.size} ${if (playlist.songIds.size == 1) "song" else "songs"}",
+                        text = if (playlist.smartDefinition != null) {
+                            stringResource(R.string.smart_playlist_track_count, resolvedTrackCount)
+                        } else {
+                            "$resolvedTrackCount ${if (resolvedTrackCount == 1) "song" else "songs"}"
+                        },
                         style = MaterialTheme.typography.bodySmall,
                         color = MaterialTheme.colorScheme.onSurfaceVariant,
                         maxLines = 1,
@@ -186,13 +192,15 @@ fun LibraryPlaylistCard(
                                 },
                             )
                         }
-                        DropdownMenuItem(
-                            text = { Text(stringResource(R.string.export_m3u)) },
-                            onClick = {
-                                menuOpen = false
-                                exportM3u()
-                            },
-                        )
+                        if (playlist.smartDefinition == null) {
+                            DropdownMenuItem(
+                                text = { Text(stringResource(R.string.export_m3u)) },
+                                onClick = {
+                                    menuOpen = false
+                                    exportM3u()
+                                },
+                            )
+                        }
                         DropdownMenuItem(
                             text = { Text(stringResource(R.string.move_playlist_up)) },
                             enabled = canMoveUp,
@@ -210,13 +218,20 @@ fun LibraryPlaylistCard(
                             },
                         )
                         DropdownMenuItem(
-                            text = { Text("Rename") },
+                            text = {
+                                Text(
+                                    stringResource(
+                                        if (playlist.smartDefinition != null) R.string.edit_smart_playlist_rules
+                                        else R.string.rename_playlist,
+                                    ),
+                                )
+                            },
                             leadingIcon = {
                                 Icon(Icons.Rounded.Edit, contentDescription = null)
                             },
                             onClick = {
                                 menuOpen = false
-                                onRename()
+                                if (playlist.smartDefinition != null) onEditSmartPlaylist() else onRename()
                             },
                         )
                         DropdownMenuItem(

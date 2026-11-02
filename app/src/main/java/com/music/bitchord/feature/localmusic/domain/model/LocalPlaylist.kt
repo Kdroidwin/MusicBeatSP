@@ -24,6 +24,8 @@ data class LocalPlaylist(
     val songMetadata: Map<String, LocalPlaylistSongMetadata> = emptyMap(),
     /** Explicit tag edits; separate from import snapshots so old cached tags never override fresh MediaStore data. */
     val editedSongMetadata: Map<String, LocalPlaylistSongMetadata> = emptyMap(),
+    /** When present, membership is computed from rules instead of [songIds]. */
+    val smartDefinition: SmartPlaylistDefinition? = null,
 )
 
 @Serializable

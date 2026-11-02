@@ -4,6 +4,7 @@ import android.content.Context
 import com.music.bitchord.data.model.Song
 import com.music.bitchord.feature.localmusic.domain.model.LocalPlaylist
 import com.music.bitchord.feature.localmusic.domain.model.LocalPlaylistSongMetadata
+import com.music.bitchord.feature.localmusic.domain.model.SmartPlaylistDefinition
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.flow.MutableStateFlow
@@ -64,6 +65,7 @@ object LocalPlaylistStore {
         songIds: List<String> = emptyList(),
         songMetadata: Map<String, LocalPlaylistSongMetadata> = emptyMap(),
         coverUrl: String? = null,
+        smartDefinition: SmartPlaylistDefinition? = null,
     ): LocalPlaylist {
         val trimmed = name.trim().ifBlank { "New Playlist" }
         val newPlaylist = LocalPlaylist(
@@ -73,10 +75,25 @@ object LocalPlaylistStore {
             songIds = songIds.filter(String::isNotBlank).distinct(),
             coverUrl = coverUrl,
             songMetadata = songMetadata.filterKeys { it in songIds },
+            smartDefinition = smartDefinition,
         )
         _playlists.value = _playlists.value + newPlaylist
         persist()
         return newPlaylist
+    }
+
+    fun createSmartPlaylist(name: String, definition: SmartPlaylistDefinition): LocalPlaylist =
+        createPlaylist(name = name, smartDefinition = definition)
+
+    fun updateSmartPlaylist(id: String, name: String, definition: SmartPlaylistDefinition) {
+        val trimmed = name.trim()
+        if (trimmed.isBlank()) return
+        _playlists.value = _playlists.value.map { playlist ->
+            if (playlist.id == id && playlist.smartDefinition != null) {
+                playlist.copy(name = trimmed, smartDefinition = definition)
+            } else playlist
+        }
+        persist()
     }
 
     fun renamePlaylist(id: String, newName: String) {
@@ -118,7 +135,7 @@ object LocalPlaylistStore {
     fun setSongOrder(playlistId: String, orderedSongIds: List<String>) {
         var changed = false
         _playlists.value = _playlists.value.map { playlist ->
-            if (playlist.id != playlistId) return@map playlist
+            if (playlist.id != playlistId || playlist.smartDefinition != null) return@map playlist
             val reordered = PlaylistOrdering.setSongOrder(playlist, orderedSongIds)
             if (reordered != playlist) changed = true
             reordered
@@ -127,16 +144,18 @@ object LocalPlaylistStore {
     }
 
     fun addSongToPlaylist(playlistId: String, songId: String, artworkUrl: String? = null) {
+        var changed = false
         _playlists.value = _playlists.value.map { pl ->
-            if (pl.id == playlistId) {
+            if (pl.id == playlistId && pl.smartDefinition == null) {
                 val updatedIds = if (songId in pl.songIds) pl.songIds else pl.songIds + songId
                 val updatedCover = pl.coverUrl ?: artworkUrl
+                changed = updatedIds != pl.songIds || updatedCover != pl.coverUrl
                 pl.copy(songIds = updatedIds, coverUrl = updatedCover)
             } else {
                 pl
             }
         }
-        persist()
+        if (changed) persist()
     }
 
     /** Adds a selected batch in one state update and persistence write. */
@@ -149,7 +168,7 @@ object LocalPlaylistStore {
         val additions = songIds.filter(String::isNotBlank).distinct()
         var addedCount = 0
         _playlists.value = _playlists.value.map { playlist ->
-            if (playlist.id != playlistId) return@map playlist
+            if (playlist.id != playlistId || playlist.smartDefinition != null) return@map playlist
             val existing = playlist.songIds.toHashSet()
             val newIds = additions.filterNot(existing::contains)
             addedCount = newIds.size
@@ -242,7 +261,7 @@ object LocalPlaylistStore {
     fun removeSongFromPlaylist(playlistId: String, songId: String) {
         var changed = false
         _playlists.value = _playlists.value.map { pl ->
-            if (pl.id == playlistId) {
+            if (pl.id == playlistId && pl.smartDefinition == null) {
                 if (songId in pl.songIds) changed = true
                 pl.copy(
                     songIds = pl.songIds - songId,
@@ -260,7 +279,7 @@ object LocalPlaylistStore {
         if (songIds.isEmpty()) return
         var changed = false
         _playlists.value = _playlists.value.map { pl ->
-            if (pl.id != playlistId) return@map pl
+            if (pl.id != playlistId || pl.smartDefinition != null) return@map pl
             val updatedIds = pl.songIds.filterNot(songIds::contains)
             if (updatedIds.size != pl.songIds.size) changed = true
             pl.copy(

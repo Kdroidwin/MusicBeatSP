@@ -68,6 +68,7 @@ fun LocalAddToPlaylistSheet(
     val context = LocalContext.current
     val sheetState = rememberModalBottomSheetState(skipPartiallyExpanded = true)
     val playlists by LocalPlaylistStore.playlists.collectAsStateWithLifecycle()
+    val manualPlaylists = remember(playlists) { playlists.filter { it.smartDefinition == null } }
     var showCreateDialog by remember { mutableStateOf(false) }
 
     val distinctSongs = remember(songs) {
@@ -216,7 +217,7 @@ fun LocalAddToPlaylistSheet(
                     HorizontalDivider(modifier = Modifier.padding(horizontal = 20.dp))
 
                     LazyColumn(modifier = Modifier.weight(1f, fill = false)) {
-                        items(playlists, key = { it.id }) { playlist ->
+                        items(manualPlaylists, key = { it.id }) { playlist ->
                             Row(
                                 modifier = Modifier
                                     .fillMaxWidth()

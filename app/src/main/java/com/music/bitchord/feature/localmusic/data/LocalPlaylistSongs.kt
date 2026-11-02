@@ -3,11 +3,20 @@ package com.music.bitchord.feature.localmusic.data
 import android.net.Uri
 import com.music.bitchord.data.model.Song
 import com.music.bitchord.feature.localmusic.domain.model.LocalPlaylist
+import com.music.bitchord.feature.localsongactions.domain.model.LocalPlayStats
 import java.io.File
 
 /** Resolves stored playlist IDs and recreates playable SAF/file references when needed. */
-fun resolvePlaylistSongs(playlist: LocalPlaylist, librarySongs: List<Song>): List<Song> =
-    playlist.songIds.mapNotNull { id ->
+fun resolvePlaylistSongs(
+    playlist: LocalPlaylist,
+    librarySongs: List<Song>,
+    playStats: Map<String, LocalPlayStats> = emptyMap(),
+    favoriteIds: Set<String> = emptySet(),
+): List<Song> {
+    playlist.smartDefinition?.let { definition ->
+        return resolveSmartPlaylistSongs(definition, librarySongs, playStats, favoriteIds)
+    }
+    return playlist.songIds.mapNotNull { id ->
         val editedMetadata = playlist.editedSongMetadata[id]
         val resolved = librarySongs.firstOrNull { song -> song.localUri == id }
             ?: librarySongs.firstOrNull { song -> song.videoId == id }
@@ -73,3 +82,4 @@ fun resolvePlaylistSongs(playlist: LocalPlaylist, librarySongs: List<Song>): Lis
             file?.isFile != true || !file.canRead()
         }
     }
+}

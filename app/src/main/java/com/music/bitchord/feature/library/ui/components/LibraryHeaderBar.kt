@@ -19,12 +19,18 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.rounded.Add
 import androidx.compose.material3.FilterChip
 import androidx.compose.material3.FilterChipDefaults
+import androidx.compose.material3.DropdownMenu
+import androidx.compose.material3.DropdownMenuItem
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.remember
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
@@ -64,11 +70,14 @@ fun LibraryHeaderBar(
     viewType: LibraryViewType,
     onToggleViewType: () -> Unit,
     onCreatePlaylist: () -> Unit,
+    smartPlaylistsEnabled: Boolean = false,
+    onCreateSmartPlaylist: (() -> Unit)? = null,
     visibleCategories: Set<LibraryCategory> = LibraryCategory.entries.toSet(),
     categoryOrder: List<LibraryCategory> = LibraryCategory.entries.toList(),
     modifier: Modifier = Modifier,
 ) {
     val haptics = rememberHaptics()
+    var createMenuExpanded by remember { mutableStateOf(false) }
 
     Row(
         modifier = modifier
@@ -149,22 +158,49 @@ fun LibraryHeaderBar(
                 )
             }
 
-            Box(
-                modifier = Modifier
-                    .size(36.dp)
-                    .clip(CircleShape)
-                    .clickable {
-                        haptics.play(Haptic.Tap)
-                        onCreatePlaylist()
-                    },
-                contentAlignment = Alignment.Center,
-            ) {
-                Icon(
-                    imageVector = Icons.Rounded.Add,
-                    contentDescription = stringResource(R.string.new_playlist),
-                    tint = MaterialTheme.colorScheme.onSurfaceVariant,
-                    modifier = Modifier.size(22.dp),
-                )
+            Box {
+                Box(
+                    modifier = Modifier
+                        .size(36.dp)
+                        .clip(CircleShape)
+                        .clickable {
+                            haptics.play(Haptic.Tap)
+                            if (smartPlaylistsEnabled && onCreateSmartPlaylist != null) {
+                                createMenuExpanded = true
+                            } else {
+                                onCreatePlaylist()
+                            }
+                        },
+                    contentAlignment = Alignment.Center,
+                ) {
+                    Icon(
+                        imageVector = Icons.Rounded.Add,
+                        contentDescription = stringResource(R.string.new_playlist),
+                        tint = MaterialTheme.colorScheme.onSurfaceVariant,
+                        modifier = Modifier.size(22.dp),
+                    )
+                }
+                if (smartPlaylistsEnabled && onCreateSmartPlaylist != null) {
+                    DropdownMenu(
+                        expanded = createMenuExpanded,
+                        onDismissRequest = { createMenuExpanded = false },
+                    ) {
+                        DropdownMenuItem(
+                            text = { Text(stringResource(R.string.new_playlist)) },
+                            onClick = {
+                                createMenuExpanded = false
+                                onCreatePlaylist()
+                            },
+                        )
+                        DropdownMenuItem(
+                            text = { Text(stringResource(R.string.create_smart_playlist)) },
+                            onClick = {
+                                createMenuExpanded = false
+                                onCreateSmartPlaylist()
+                            },
+                        )
+                    }
+                }
             }
         }
     }

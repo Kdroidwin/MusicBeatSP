@@ -219,6 +219,8 @@ import androidx.compose.ui.text.rememberTextMeasurer
 import androidx.compose.ui.text.SpanStyle
 import androidx.compose.ui.text.buildAnnotatedString
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.font.FontFamily
+import androidx.compose.ui.text.font.FontStyle
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.text.withStyle
@@ -1427,7 +1429,6 @@ fun NowPlayingScreen(
                     ) {
                         Box(
                             Modifier
-                                .offset(y = 20.dp)
                                 .size(width = 48.dp, height = 6.dp)
                                 .clip(CircleShape)
                                 .background(
@@ -6031,6 +6032,7 @@ private fun InlineQueue(
     val useEqualsForManage by AppSettings.queueManagerEqualsIcon.collectAsStateWithLifecycle()
     val hideQueueHeading by AppSettings.hideQueueLabel.collectAsStateWithLifecycle()
     val queueHeadingMusicNoteIcon by AppSettings.queueHeadingMusicNoteIcon.collectAsStateWithLifecycle()
+    val queueHeadingItalicPlayQueue by AppSettings.queueHeadingItalicPlayQueue.collectAsStateWithLifecycle()
     val useTrashForClear by AppSettings.queueClearTrashIcon.collectAsStateWithLifecycle()
     val manageQueueDescription = stringResource(R.string.manage_queues)
     val listState = rememberLazyListState()
@@ -6123,6 +6125,18 @@ private fun InlineQueue(
                         tint = Color.White,
                     )
                 }
+            } else if (queueHeadingItalicPlayQueue) {
+                Text(
+                    text = stringResource(R.string.play_queue),
+                    style = MaterialTheme.typography.titleLarge.copy(
+                        fontFamily = FontFamily.Cursive,
+                        fontStyle = FontStyle.Italic,
+                        fontWeight = FontWeight.Medium,
+                        letterSpacing = 0.25.sp,
+                    ),
+                    color = Color.White,
+                    modifier = Modifier.weight(1f),
+                )
             } else if (hideQueueHeading) {
                 Spacer(Modifier.weight(1f))
             } else {

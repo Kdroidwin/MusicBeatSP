@@ -28,12 +28,14 @@ fun LibraryGridContent(
     onPlaylistClick: (LocalPlaylist) -> Unit,
     onPlaylistPlay: (LocalPlaylist) -> Unit,
     onRenamePlaylist: (LocalPlaylist) -> Unit,
+    onEditSmartPlaylist: (LocalPlaylist) -> Unit = {},
     onDeletePlaylist: (LocalPlaylist) -> Unit,
     onChangePlaylistCover: (LocalPlaylist) -> Unit = {},
     onResetPlaylistCover: (LocalPlaylist) -> Unit = {},
     onMovePlaylist: (LocalPlaylist, Int) -> Unit,
     onCreatePlaylist: () -> Unit,
     librarySongs: List<Song> = emptyList(),
+    smartPlaylistTrackCounts: Map<String, Int> = emptyMap(),
     favoriteUsesStar: Boolean = false,
     visibleCategories: Set<LibraryCategory> = LibraryCategory.entries.toSet(),
     contentPadding: PaddingValues,
@@ -77,6 +79,7 @@ fun LibraryGridContent(
                     onClick = { onPlaylistClick(playlist) },
                     onPlay = { onPlaylistPlay(playlist) },
                     onRename = { onRenamePlaylist(playlist) },
+                    onEditSmartPlaylist = { onEditSmartPlaylist(playlist) },
                     onDelete = { onDeletePlaylist(playlist) },
                     onChangeCover = { onChangePlaylistCover(playlist) },
                     onResetCover = { onResetPlaylistCover(playlist) },
@@ -85,6 +88,7 @@ fun LibraryGridContent(
                     onMoveUp = { onMovePlaylist(playlist, -1) },
                     onMoveDown = { onMovePlaylist(playlist, 1) },
                     librarySongs = librarySongs,
+                    resolvedTrackCount = smartPlaylistTrackCounts[playlist.id] ?: playlist.songIds.size,
                 )
             }
 

@@ -27,7 +27,10 @@ import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.res.stringResource
+import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
+import com.music.bitchord.R
 import com.music.bitchord.feature.localmusic.domain.model.LocalPlaylist
 import com.music.bitchord.data.model.Song
 
@@ -40,6 +43,10 @@ fun LocalPlaylistsTab(
     onPlaylistClick: (LocalPlaylist) -> Unit,
     onPlaylistPlay: (LocalPlaylist) -> Unit,
     onCreatePlaylist: () -> Unit,
+    smartPlaylistsEnabled: Boolean = false,
+    onCreateSmartPlaylist: () -> Unit = {},
+    onEditSmartPlaylist: (LocalPlaylist) -> Unit = {},
+    smartPlaylistTrackCounts: Map<String, Int> = emptyMap(),
     onRenamePlaylist: (LocalPlaylist) -> Unit,
     onDeletePlaylist: (LocalPlaylist) -> Unit,
     onChangePlaylistCover: (LocalPlaylist) -> Unit = {},
@@ -88,6 +95,17 @@ fun LocalPlaylistsTab(
                     Spacer(modifier = Modifier.width(8.dp))
                     Text("New Playlist")
                 }
+                if (smartPlaylistsEnabled) {
+                    Spacer(Modifier.height(10.dp))
+                    OutlinedButton(
+                        onClick = onCreateSmartPlaylist,
+                        shape = RoundedCornerShape(16.dp),
+                    ) {
+                        Icon(imageVector = Icons.Rounded.Add, contentDescription = null)
+                        Spacer(modifier = Modifier.width(8.dp))
+                        Text(stringResource(R.string.create_smart_playlist))
+                    }
+                }
             }
         }
         return
@@ -104,30 +122,57 @@ fun LocalPlaylistsTab(
         verticalArrangement = Arrangement.spacedBy(8.dp),
     ) {
         item {
-            Row(
+            Column(
                 modifier = Modifier
                     .fillMaxWidth()
                     .padding(vertical = 8.dp),
-                horizontalArrangement = Arrangement.SpaceBetween,
-                verticalAlignment = Alignment.CenterVertically,
+                verticalArrangement = Arrangement.spacedBy(8.dp),
             ) {
                 Text(
                     text = "${playlists.size} ${if (playlists.size == 1) "Playlist" else "Playlists"}",
                     style = MaterialTheme.typography.titleMedium,
                     color = MaterialTheme.colorScheme.onSurfaceVariant,
                 )
-                OutlinedButton(
-                    onClick = onCreatePlaylist,
-                    shape = RoundedCornerShape(12.dp),
-                    contentPadding = PaddingValues(horizontal = 12.dp, vertical = 4.dp),
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.spacedBy(8.dp),
                 ) {
-                    Icon(
-                        imageVector = Icons.Rounded.Add,
-                        contentDescription = null,
-                        modifier = Modifier.size(18.dp),
-                    )
-                    Spacer(modifier = Modifier.width(6.dp))
-                    Text(text = "New Playlist", style = MaterialTheme.typography.labelMedium)
+                    OutlinedButton(
+                        onClick = onCreatePlaylist,
+                        modifier = Modifier.weight(1f),
+                        shape = RoundedCornerShape(12.dp),
+                        contentPadding = PaddingValues(horizontal = 12.dp, vertical = 4.dp),
+                    ) {
+                        Icon(
+                            imageVector = Icons.Rounded.Add,
+                            contentDescription = null,
+                            modifier = Modifier.size(18.dp),
+                        )
+                        Spacer(modifier = Modifier.width(6.dp))
+                        Text(
+                            text = "New Playlist",
+                            style = MaterialTheme.typography.labelMedium,
+                            maxLines = 1,
+                            overflow = TextOverflow.Ellipsis,
+                        )
+                    }
+                    if (smartPlaylistsEnabled) {
+                        OutlinedButton(
+                            onClick = onCreateSmartPlaylist,
+                            modifier = Modifier.weight(1f),
+                            shape = RoundedCornerShape(12.dp),
+                            contentPadding = PaddingValues(horizontal = 12.dp, vertical = 4.dp),
+                        ) {
+                            Icon(Icons.Rounded.Add, contentDescription = null, modifier = Modifier.size(18.dp))
+                            Spacer(Modifier.width(6.dp))
+                            Text(
+                                text = stringResource(R.string.create_smart_playlist),
+                                style = MaterialTheme.typography.labelMedium,
+                                maxLines = 1,
+                                overflow = TextOverflow.Ellipsis,
+                            )
+                        }
+                    }
                 }
             }
         }
@@ -138,6 +183,7 @@ fun LocalPlaylistsTab(
                 onClick = { onPlaylistClick(playlist) },
                 onPlay = { onPlaylistPlay(playlist) },
                 onRename = { onRenamePlaylist(playlist) },
+                onEditSmartPlaylist = { onEditSmartPlaylist(playlist) },
                 onDelete = { onDeletePlaylist(playlist) },
                 onChangeCover = { onChangePlaylistCover(playlist) },
                 onResetCover = { onResetPlaylistCover(playlist) },
@@ -146,6 +192,7 @@ fun LocalPlaylistsTab(
                 onMoveUp = { onMovePlaylist(playlist, -1) },
                 onMoveDown = { onMovePlaylist(playlist, 1) },
                 librarySongs = librarySongs,
+                resolvedTrackCount = smartPlaylistTrackCounts[playlist.id] ?: playlist.songIds.size,
             )
         }
     }

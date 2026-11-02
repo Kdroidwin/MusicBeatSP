@@ -629,6 +629,8 @@ object AppSettings {
     val hideQueueLabel = MutableStateFlow(true)
     /** Replaces the queue heading text with a music-note glyph. */
     val queueHeadingMusicNoteIcon = MutableStateFlow(false)
+    /** Uses an italic English heading in place of the queue label. */
+    val queueHeadingItalicPlayQueue = MutableStateFlow(false)
     /** Replaces the clear-queue label with a trash icon. */
     val queueClearTrashIcon = MutableStateFlow(false)
     /** Hides the heading and its vertical gap in the playback tuning sheet. */
@@ -1043,6 +1045,8 @@ object AppSettings {
     /** Last folder is device-local because paths and storage permissions are device-specific. */
     val lastOpenedFolderPath = MutableStateFlow("")
     val fullScreenCollectionArtwork = MutableStateFlow(false)
+    /** Enables creation of rule-based local smart playlists; kept opt-in. */
+    val smartPlaylistsEnabled = MutableStateFlow(false)
     /** On wide layouts, replaces the left page with synced lyrics beside the docked player. */
     val tabletFullscreenPlayer = MutableStateFlow(false)
     /** App-local YouTube Music albums and playlists saved for quick access. */
@@ -1451,6 +1455,7 @@ object AppSettings {
         hideSavedQueueHeading.value = prefs.getBoolean(KEY_HIDE_SAVED_QUEUE_HEADING, true)
         hideQueueLabel.value = prefs.getBoolean(KEY_HIDE_QUEUE_LABEL, true)
         queueHeadingMusicNoteIcon.value = prefs.getBoolean(KEY_QUEUE_HEADING_MUSIC_NOTE_ICON, false)
+        queueHeadingItalicPlayQueue.value = prefs.getBoolean(KEY_QUEUE_HEADING_ITALIC_PLAY_QUEUE, false)
         queueClearTrashIcon.value = prefs.getBoolean(KEY_QUEUE_CLEAR_TRASH_ICON, false)
         hidePlaybackTuningTitle.value = prefs.getBoolean(KEY_HIDE_PLAYBACK_TUNING_TITLE, true)
         playbackTuningThinSliders.value = prefs.getBoolean(KEY_PLAYBACK_TUNING_THIN_SLIDERS, true)
@@ -1717,6 +1722,7 @@ object AppSettings {
             webdavUrl.value, webdavUsername.value, webdavPassword.value, webdavAllowInsecureHttp.value,
         )
         fullScreenCollectionArtwork.value = prefs.getBoolean(KEY_FULL_SCREEN_COLLECTION_ARTWORK, false)
+        smartPlaylistsEnabled.value = prefs.getBoolean(KEY_SMART_PLAYLISTS_ENABLED, false)
         tabletFullscreenPlayer.value = prefs.getBoolean(KEY_TABLET_LYRICS_BESIDE_PLAYER, false)
         savedYoutubeCollections.value = readSavedYoutubeCollections()
         hideCollectionTopBar.value = prefs.getBoolean(KEY_HIDE_COLLECTION_TOP_BAR, true)
@@ -2457,7 +2463,28 @@ object AppSettings {
 
     fun setQueueHeadingMusicNoteIcon(value: Boolean) {
         queueHeadingMusicNoteIcon.value = value
-        prefs.edit().putBoolean(KEY_QUEUE_HEADING_MUSIC_NOTE_ICON, value).apply()
+        if (value) {
+            queueHeadingItalicPlayQueue.value = false
+            prefs.edit()
+                .putBoolean(KEY_QUEUE_HEADING_MUSIC_NOTE_ICON, true)
+                .putBoolean(KEY_QUEUE_HEADING_ITALIC_PLAY_QUEUE, false)
+                .apply()
+        } else {
+            prefs.edit().putBoolean(KEY_QUEUE_HEADING_MUSIC_NOTE_ICON, false).apply()
+        }
+    }
+
+    fun setQueueHeadingItalicPlayQueue(value: Boolean) {
+        queueHeadingItalicPlayQueue.value = value
+        if (value) {
+            queueHeadingMusicNoteIcon.value = false
+            prefs.edit()
+                .putBoolean(KEY_QUEUE_HEADING_ITALIC_PLAY_QUEUE, true)
+                .putBoolean(KEY_QUEUE_HEADING_MUSIC_NOTE_ICON, false)
+                .apply()
+        } else {
+            prefs.edit().putBoolean(KEY_QUEUE_HEADING_ITALIC_PLAY_QUEUE, false).apply()
+        }
     }
 
     fun setQueueClearTrashIcon(value: Boolean) {
@@ -3806,6 +3833,11 @@ object AppSettings {
         prefs.edit().putBoolean(KEY_FULL_SCREEN_COLLECTION_ARTWORK, value).apply()
     }
 
+    fun setSmartPlaylistsEnabled(value: Boolean) {
+        smartPlaylistsEnabled.value = value
+        prefs.edit().putBoolean(KEY_SMART_PLAYLISTS_ENABLED, value).apply()
+    }
+
     fun setHideCollectionTopBar(value: Boolean) {
         hideCollectionTopBar.value = value
         prefs.edit().putBoolean(KEY_HIDE_COLLECTION_TOP_BAR, value).apply()
@@ -4185,6 +4217,7 @@ object AppSettings {
     private const val KEY_QUEUE_MANAGER_EQUALS_ICON = "queue_manager_equals_icon"
     private const val KEY_HIDE_QUEUE_LABEL = "hide_queue_label"
     private const val KEY_QUEUE_HEADING_MUSIC_NOTE_ICON = "queue_heading_music_note_icon"
+    private const val KEY_QUEUE_HEADING_ITALIC_PLAY_QUEUE = "queue_heading_italic_play_queue"
     private const val KEY_QUEUE_CLEAR_TRASH_ICON = "queue_clear_trash_icon"
     private const val KEY_HIDE_PLAYBACK_TUNING_TITLE = "hide_playback_tuning_title"
     private const val KEY_REDESIGNED_SAVED_QUEUE_MANAGER = "redesigned_saved_queue_manager"
@@ -4355,6 +4388,7 @@ object AppSettings {
     private const val KEY_SMB_USERNAME = "smb_username"
     private const val KEY_SMB_PASSWORD = "smb_password"
     private const val KEY_FULL_SCREEN_COLLECTION_ARTWORK = "full_screen_collection_artwork"
+    private const val KEY_SMART_PLAYLISTS_ENABLED = "smart_playlists_enabled"
     private const val KEY_HIDE_COLLECTION_TOP_BAR = "hide_collection_top_bar"
     private const val KEY_HIDE_FLOATING_COLLECTION_CONTROLS = "hide_floating_collection_controls"
     private const val KEY_ARTISTS_OPEN_ALBUMS = "artists_open_albums"
