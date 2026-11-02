@@ -1224,6 +1224,7 @@ fun NowPlayingScreen(
     val playerSeekBarThicknessDp by AppSettings.playerSeekBarThicknessDp.collectAsStateWithLifecycle()
     val playerVolumeBarThicknessDp by AppSettings.playerVolumeBarThicknessDp.collectAsStateWithLifecycle()
     val favoriteIds by LocalFavoritesStore.favoriteIds.collectAsStateWithLifecycle()
+    val savedFavoriteSongs by LocalFavoritesStore.favoriteSongs.collectAsStateWithLifecycle()
     val localUri = song.localUri
     // Source-backed IDs are namespaced (src:<config>::<track>) and cannot be
     // rated by YouTube, even while a YouTube account is signed in. Use them as
@@ -1235,7 +1236,19 @@ fun NowPlayingScreen(
         !localUri.isNullOrBlank() -> localUri
         else -> song.videoId
     }
-    val hasAppFavorite = favoriteId in favoriteIds || song.videoId in favoriteIds
+    val legacyFavoriteId = localUri?.takeIf { it in favoriteIds && it != favoriteId }
+    val hasAppFavorite = favoriteId in favoriteIds || song.videoId in favoriteIds || legacyFavoriteId != null
+    LaunchedEffect(song.videoId, favoriteId, localUri, favoriteIds, savedFavoriteSongs) {
+        val existingId = when {
+            favoriteId in favoriteIds -> favoriteId
+            song.videoId in favoriteIds -> song.videoId
+            else -> localUri?.takeIf { it in favoriteIds }
+        }
+        if (existingId != null) {
+            if (existingId != favoriteId) LocalFavoritesStore.removeFavorite(existingId)
+            if (favoriteId !in savedFavoriteSongs) LocalFavoritesStore.addFavorite(favoriteId, song)
+        }
+    }
     val accountLikeAvailable = signedIn && !isSourceBackedTrack && localUri.isNullOrBlank()
     val accountLiked = accountLikeAvailable && likeStatus == LikeStatus.LIKE
     val normalizedArtistName = song.artist.trim().lowercase(Locale.ROOT)
