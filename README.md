@@ -122,6 +122,7 @@ The standard Android package is `io.pockets.musicbestsp`. Because this differs f
 ### Supported Sources
 - YouTube Music search and playback are opt-in and disabled by default; the app does not make YouTube Music requests while the feature is disabled or Offline Mode is active.
 - radiko
+- 音泉（onsen.ag）
 - BitChord addon(Navidrome)
 - webDAB
 - SMB
