@@ -944,6 +944,7 @@ fun NowPlayingScreen(
     onOpenSearch: () -> Unit,
     onOpenAlbum: (String) -> Unit,
     onOpenArtist: (String) -> Unit,
+    instantStatusBarReveal: Boolean = false,
     lyrics: List<LyricLine>?,
     lyricsSource: LyricsSource?,
     lyricsUnavailable: Boolean,
@@ -1153,8 +1154,9 @@ fun NowPlayingScreen(
         val showPlayerStatusBar by AppSettings.showPlayerStatusBar.collectAsStateWithLifecycle()
         val showNavigationBar by AppSettings.showNavigationBar.collectAsStateWithLifecycle()
         SystemBarVisibility(
-            showStatusBar = showPlayerStatusBar,
+            showStatusBar = showPlayerStatusBar || instantStatusBarReveal,
             showNavigationBar = showNavigationBar,
+            revealStatusBarInstantly = instantStatusBarReveal,
         )
     }
 
@@ -1224,17 +1226,18 @@ fun NowPlayingScreen(
     val favoriteIds by LocalFavoritesStore.favoriteIds.collectAsStateWithLifecycle()
     val localUri = song.localUri
     // Source-backed IDs are namespaced (src:<config>::<track>) and cannot be
-    // rated by YouTube, even while a YouTube account is signed in. Keep those
-    // favorites in this app; ordinary YouTube Music IDs can use account likes.
-    // Prefer the stable source key over localUri: online sources may attach a
-    // short-lived stream URL there, which must not become the saved favorite ID.
+    // rated by YouTube, even while a YouTube account is signed in. Use them as
+    // their local favorite key; for every online song, the track ID is stable
+    // while localUri may be a short-lived stream URL.
     val isSourceBackedTrack = SourceRegistry.parseTrackKey(song.videoId) != null
-    val deviceFavoriteId = when {
+    val favoriteId = when {
         isSourceBackedTrack -> song.videoId
         !localUri.isNullOrBlank() -> localUri
-        !signedIn -> song.videoId
-        else -> null
+        else -> song.videoId
     }
+    val hasAppFavorite = favoriteId in favoriteIds || song.videoId in favoriteIds
+    val accountLikeAvailable = signedIn && !isSourceBackedTrack && localUri.isNullOrBlank()
+    val accountLiked = accountLikeAvailable && likeStatus == LikeStatus.LIKE
     val normalizedArtistName = song.artist.trim().lowercase(Locale.ROOT)
     val isUnknownArtist = normalizedArtistName.isBlank() || normalizedArtistName in setOf(
         "unknown artist",
@@ -1244,13 +1247,9 @@ fun NowPlayingScreen(
         "不明なアーティスト",
     )
     val showPlayerArtist = !hidePlayerArtist && !(hideUnknownPlayerArtist && isUnknownArtist)
-    // Account likes are preferred, while app-local favorites remain visible
-    // when a YouTube Music rating write cannot be completed.
-    val liked = (localUri ?: song.videoId) in favoriteIds ||
-        song.videoId in favoriteIds ||
-        (!isSourceBackedTrack && signedIn && likeStatus == LikeStatus.LIKE)
-    // When signed out, keep remote favorites device-local instead of disabling
-    // the control. Signed-in users continue to use YouTube's account rating.
+    // The heart is an app favorite for every source. YouTube's account rating
+    // remains synchronized when possible, but doesn't own the favorite list.
+    val liked = hasAppFavorite || accountLiked
     val likeAvailable = true
     val likeIcon = when {
         favoriteUsesStar && liked -> BitChordIcons.StarFilled
@@ -1260,11 +1259,19 @@ fun NowPlayingScreen(
     }
     val likeDescription = stringResource(if (liked) R.string.remove_from_liked else R.string.like)
     val toggleLike: () -> Unit = {
-        val favoriteId = deviceFavoriteId
-        if (favoriteId != null) {
-            LocalFavoritesStore.toggleFavorite(favoriteId)
+        if (!accountLikeAvailable) {
+            LocalFavoritesStore.toggleFavorite(favoriteId, song)
+        } else if (hasAppFavorite) {
+            LocalFavoritesStore.removeFavorite(favoriteId)
+            if (song.videoId != favoriteId) LocalFavoritesStore.removeFavorite(song.videoId)
+            if (accountLiked) onToggleLike()
+        } else if (accountLiked) {
+            onToggleLike()
         } else {
             onToggleLike()
+            // Save metadata so the Favorites collection can show and play the
+            // track even when YouTube's rating endpoint is unavailable.
+            LocalFavoritesStore.addFavorite(favoriteId, song)
         }
         Unit
     }

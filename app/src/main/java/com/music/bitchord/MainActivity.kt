@@ -11,9 +11,6 @@ import android.os.Bundle
 import android.os.Process
 import android.provider.MediaStore
 import android.view.View
-import android.view.WindowInsets as AndroidWindowInsets
-import android.view.WindowInsetsAnimationControlListener
-import android.view.WindowInsetsAnimationController
 import android.view.WindowManager
 import android.widget.Toast
 import androidx.activity.compose.BackHandler
@@ -475,14 +472,14 @@ class MainActivity : AppCompatActivity() {
                             appBackdrop = appBackdrop,
                             controller = controller,
                             player = player,
+                            onPlayerCloseStarted = {
+                                expandedPlayerSurfaceActive = false
+                                applySystemBarPreferences()
+                            },
                             onPlayerSurfaceVisibilityChanged = { visible ->
                                 if (expandedPlayerSurfaceActive != visible) {
-                                    val closingExpandedPlayer = expandedPlayerSurfaceActive && !visible
                                     expandedPlayerSurfaceActive = visible
-                                    applySystemBarPreferences(
-                                        instantlyRevealStatusBar = closingExpandedPlayer &&
-                                            AppSettings.instantStatusBarOnPlayerClose.value,
-                                    )
+                                    applySystemBarPreferences()
                                 }
                             },
                         )
@@ -503,7 +500,7 @@ class MainActivity : AppCompatActivity() {
         if (hasFocus) applySystemBarPreferences()
     }
 
-    private fun applySystemBarPreferences(instantlyRevealStatusBar: Boolean = false) {
+    private fun applySystemBarPreferences() {
         val forceWhiteNavigationBar = AppSettings.forceWhiteNavigationBar.value
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
             // Avoid Android's automatic navigation-bar scrim overriding the
@@ -517,32 +514,7 @@ class MainActivity : AppCompatActivity() {
         } else {
             AppSettings.showStatusBar.value
         }
-        if (showStatusBar && instantlyRevealStatusBar && Build.VERSION.SDK_INT >= Build.VERSION_CODES.R) {
-            val controller = window.insetsController
-            if (controller != null) {
-                runCatching {
-                    controller.controlWindowInsetsAnimation(
-                        AndroidWindowInsets.Type.statusBars(),
-                        0L,
-                        null,
-                        null,
-                        object : WindowInsetsAnimationControlListener {
-                            override fun onReady(animationController: WindowInsetsAnimationController, types: Int) {
-                                animationController.finish(true)
-                            }
-
-                            override fun onFinished(animationController: WindowInsetsAnimationController) = Unit
-
-                            override fun onCancelled(animationController: WindowInsetsAnimationController?) {
-                                bars.show(WindowInsetsCompat.Type.statusBars())
-                            }
-                        },
-                    )
-                }.onFailure { bars.show(WindowInsetsCompat.Type.statusBars()) }
-            } else {
-                bars.show(WindowInsetsCompat.Type.statusBars())
-            }
-        } else if (showStatusBar) {
+        if (showStatusBar) {
             bars.show(WindowInsetsCompat.Type.statusBars())
         } else {
             bars.hide(WindowInsetsCompat.Type.statusBars())
@@ -608,11 +580,15 @@ private fun BitChordApp(
     appBackdrop: LayerBackdrop,
     controller: MediaController?,
     player: PlayerState,
+    onPlayerCloseStarted: () -> Unit,
     onPlayerSurfaceVisibilityChanged: (Boolean) -> Unit,
     viewModel: MainViewModel = viewModel(),
 ) {
     val context = LocalContext.current
     val clipboard = LocalClipboardManager.current
+    val showStatusBar by AppSettings.showStatusBar.collectAsStateWithLifecycle()
+    val showPlayerStatusBar by AppSettings.showPlayerStatusBar.collectAsStateWithLifecycle()
+    val instantStatusBarOnPlayerClose by AppSettings.instantStatusBarOnPlayerClose.collectAsStateWithLifecycle()
     val hazeState = remember { HazeState() }
     val playerHazeState = remember { HazeState() }
     // Recording the backdrop layer costs a draw pass, so it only runs when the
@@ -689,7 +665,9 @@ private fun BitChordApp(
      * question this used to answer on its own: is the player covering the page?
      */
     var showNowPlaying by remember { mutableStateOf(false) }
+    var revealStatusBarDuringPlayerClose by remember { mutableStateOf(false) }
     LaunchedEffect(showNowPlaying) {
+        revealStatusBarDuringPlayerClose = false
         if (!showNowPlaying) expandedDockedPlayer = false
     }
     LaunchedEffect(showNowPlaying, playerDocked) {
@@ -707,6 +685,14 @@ private fun BitChordApp(
             setShown = { showNowPlaying = it },
         )
     }
+    fun preparePlayerStatusBarReveal() {
+        val shouldReveal = instantStatusBarOnPlayerClose &&
+            showStatusBar &&
+            !showPlayerStatusBar
+        val revealWasRequested = revealStatusBarDuringPlayerClose
+        revealStatusBarDuringPlayerClose = shouldReveal
+        if (shouldReveal && !revealWasRequested) onPlayerCloseStarted()
+    }
     val motionWindowInfo = androidx.compose.ui.platform.LocalWindowInfo.current
     val motionDensity = LocalDensity.current
     LaunchedEffect(motionWindowInfo, motionDensity) {
@@ -716,6 +702,7 @@ private fun BitChordApp(
     val normalNowPlayingSheetState = rememberModalBottomSheetState(
         skipPartiallyExpanded = true,
         confirmValueChange = { target ->
+            if (target == SheetValue.Hidden) preparePlayerStatusBarReveal()
             if (target == SheetValue.Hidden && AppSettings.reduceAnimation.value) {
                 showNowPlaying = false
                 false
@@ -725,6 +712,7 @@ private fun BitChordApp(
         },
     )
     fun openNowPlaying() {
+        revealStatusBarDuringPlayerClose = false
         if (widePlayerLayout) {
             expandedDockedPlayer = dockedPlayerAvailable(windowWidth)
             showNowPlaying = true
@@ -735,6 +723,7 @@ private fun BitChordApp(
     }
     fun dismissNowPlaying() {
         if (!showNowPlaying) return
+        preparePlayerStatusBarReveal()
         if (playerArtworkTransitionEnabled && !widePlayerLayout) {
             playerSheetMotion.close()
             return
@@ -2165,6 +2154,7 @@ private fun BitChordApp(
         NowPlayingScreen(
             song = displayedSong,
             tabletFullscreenPlayer = tabletPlayerFullscreen,
+            instantStatusBarReveal = revealStatusBarDuringPlayerClose,
             tabletLandscapeBannerHeight = if (
                 tabletPlayerFullscreen && windowWidth >= windowHeight * 1.45f
             ) windowHeight * 0.9f else 0.dp,
@@ -3484,6 +3474,7 @@ private fun BitChordApp(
             val sheetDensity = LocalDensity.current
             val confirmSheetValue: (SheetValue) -> Boolean = { target ->
                 if (target == SheetValue.Hidden) {
+                    preparePlayerStatusBarReveal()
                     playerSheetMotion.close()
                     false
                 } else {
@@ -3514,7 +3505,10 @@ private fun BitChordApp(
                 }
             }
             ModalBottomSheet(
-                onDismissRequest = { playerSheetMotion.close() },
+                onDismissRequest = {
+                    preparePlayerStatusBarReveal()
+                    playerSheetMotion.close()
+                },
                 sheetState = animatedSheetState,
                 scrimColor = Color.Transparent,
                 // The player fills the screen and paints its own background to
@@ -3529,7 +3523,10 @@ private fun BitChordApp(
                 contentWindowInsets = { WindowInsets(0, 0, 0, 0) },
                 properties = ModalBottomSheetProperties(shouldDismissOnBackPress = false),
             ) {
-                BackHandler { playerSheetMotion.close() }
+                BackHandler {
+                    preparePlayerStatusBarReveal()
+                    playerSheetMotion.close()
+                }
                 val sheetWindow = (LocalView.current.parent as? DialogWindowProvider)?.window
                 DisposableEffect(sheetWindow) {
                     playerSheetMotion.attachWindow(sheetWindow)

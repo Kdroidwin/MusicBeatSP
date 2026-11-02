@@ -41,7 +41,7 @@ import java.time.format.DateTimeFormatter
 object Backup {
 
     private const val APP_TAG = "musicbeat"
-    private const val SCHEMA_VERSION = 5
+    private const val SCHEMA_VERSION = 6
     private const val MAX_IMPORT_BYTES = 128 * 1024 * 1024
 
     private val json = Json {
@@ -64,6 +64,9 @@ object Backup {
             val buckets = ListeningStats.exportAll()
             val playlists = LocalPlaylistStore.exportPlaylists()
             val favorites = LocalFavoritesStore.exportFavorites()
+            val favoriteSongs = LocalFavoritesStore.exportFavoriteSongs().map { (id, song) ->
+                BackupFavoriteSong.from(id, song)
+            }
             val playStats = LocalPlayStatsStore.exportStats(context)
             val equalizer = EqualizerSettings.exportBackup()
             val settingsMap = AppSettings.exportPrefs().mapNotNull { (key, value) ->
@@ -83,6 +86,7 @@ object Backup {
                 settings = settingsMap,
                 playlists = playlists,
                 favorites = favorites,
+                favoriteSongs = favoriteSongs,
                 playStats = playStats,
                 equalizer = equalizer,
                 listening = buckets,
@@ -132,6 +136,11 @@ object Backup {
             LocalPlaylistStore.importPlaylists(file.playlists)
             if (file.version >= 2 || file.favorites.isNotEmpty()) {
                 LocalFavoritesStore.importFavorites(file.favorites)
+            }
+            if (file.version >= 6 || file.favoriteSongs.isNotEmpty()) {
+                LocalFavoritesStore.importFavoriteSongs(
+                    file.favoriteSongs.associate { it.favoriteId to it.toSong() },
+                )
             }
             if (file.version >= 2 || file.playStats.isNotEmpty()) {
                 LocalPlayStatsStore.importStats(context, file.playStats)
@@ -212,6 +221,7 @@ object Backup {
         val settings: Map<String, PrefValue> = emptyMap(),
         val playlists: List<LocalPlaylist> = emptyList(),
         val favorites: Set<String> = emptySet(),
+        val favoriteSongs: List<BackupFavoriteSong> = emptyList(),
         val playStats: Map<String, LocalPlayStats> = emptyMap(),
         val equalizer: EqualizerBackup? = null,
         val listening: List<StoredBucket> = emptyList(),
@@ -225,6 +235,68 @@ object Backup {
         val mimeType: String,
         val imageBase64: String,
     )
+
+    @Serializable
+    data class BackupFavoriteSong(
+        val favoriteId: String,
+        val videoId: String,
+        val title: String,
+        val artist: String,
+        val thumbnailUrl: String? = null,
+        val durationText: String? = null,
+        val artistId: String? = null,
+        val albumId: String? = null,
+        val albumName: String? = null,
+        val isVideo: Boolean = false,
+        val isVideoOrigin: Boolean = false,
+        val localUri: String? = null,
+        val downloadFormat: String? = null,
+        val localPath: String? = null,
+        val albumArtist: String? = null,
+        val sourceQuality: String? = null,
+        val isExplicit: Boolean? = null,
+    ) {
+        fun toSong() = Song(
+            videoId = videoId,
+            title = title,
+            artist = artist,
+            thumbnailUrl = thumbnailUrl,
+            durationText = durationText,
+            artistId = artistId,
+            albumId = albumId,
+            albumName = albumName,
+            isVideo = isVideo,
+            isVideoOrigin = isVideoOrigin,
+            localUri = localUri,
+            downloadFormat = downloadFormat,
+            localPath = localPath,
+            albumArtist = albumArtist,
+            sourceQuality = sourceQuality,
+            isExplicit = isExplicit,
+        )
+
+        companion object {
+            fun from(favoriteId: String, song: Song) = BackupFavoriteSong(
+                favoriteId = favoriteId,
+                videoId = song.videoId,
+                title = song.title,
+                artist = song.artist,
+                thumbnailUrl = song.thumbnailUrl,
+                durationText = song.durationText,
+                artistId = song.artistId,
+                albumId = song.albumId,
+                albumName = song.albumName,
+                isVideo = song.isVideo,
+                isVideoOrigin = song.isVideoOrigin,
+                localUri = song.localUri,
+                downloadFormat = song.downloadFormat,
+                localPath = song.localPath,
+                albumArtist = song.albumArtist,
+                sourceQuality = song.sourceQuality,
+                isExplicit = song.isExplicit,
+            )
+        }
+    }
 
     @Serializable
     data class BackupQueue(

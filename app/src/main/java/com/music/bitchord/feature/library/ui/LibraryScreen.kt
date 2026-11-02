@@ -250,6 +250,7 @@ fun LibraryScreen(
     val context = LocalContext.current.applicationContext
     val playlists by LocalPlaylistStore.playlists.collectAsStateWithLifecycle()
     val favoriteIds by LocalFavoritesStore.favoriteIds.collectAsStateWithLifecycle()
+    val savedFavoriteSongs by LocalFavoritesStore.favoriteSongs.collectAsStateWithLifecycle()
     val smartPlaylistsEnabled by AppSettings.smartPlaylistsEnabled.collectAsStateWithLifecycle()
     val savedYoutubeCollections by AppSettings.savedYoutubeCollections.collectAsStateWithLifecycle()
     val libraryViewType by AppSettings.libraryPlaylistsViewType.collectAsStateWithLifecycle()
@@ -809,11 +810,21 @@ fun LibraryScreen(
     }
 
     // Filter favorite songs matching persisted favorite IDs
-    val favoriteSongs = remember(songs, favoriteIds) {
-        songs.filter { s ->
+    val favoriteSongs = remember(songs, favoriteIds, savedFavoriteSongs) {
+        val catalogFavorites = songs.filter { s ->
             val localKey = s.localUri ?: s.videoId
             localKey in favoriteIds || s.videoId in favoriteIds
         }
+        val catalogFavoriteIds = catalogFavorites.flatMap { song ->
+            listOfNotNull(song.videoId, song.localUri)
+        }.toSet()
+        val savedOnlineFavorites = savedFavoriteSongs
+            .filterKeys { it in favoriteIds }
+            .values
+            .filter { song ->
+                song.videoId !in catalogFavoriteIds && song.localUri !in catalogFavoriteIds
+            }
+        (catalogFavorites + savedOnlineFavorites).distinctBy { it.localUri ?: it.videoId }
     }
 
     Box(modifier = modifier.fillMaxSize()) {

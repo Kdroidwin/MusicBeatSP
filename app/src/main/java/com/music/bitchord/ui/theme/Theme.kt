@@ -1,6 +1,11 @@
 package com.music.bitchord.ui.theme
 
 import android.app.Activity
+import android.os.Build
+import android.view.Window
+import android.view.WindowInsets
+import android.view.WindowInsetsAnimationControlListener
+import android.view.WindowInsetsAnimationController
 import androidx.compose.foundation.isSystemInDarkTheme
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.darkColorScheme
@@ -9,6 +14,9 @@ import androidx.compose.material3.Typography
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.SideEffect
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.remember
+import androidx.compose.runtime.setValue
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.lerp
@@ -226,19 +234,34 @@ fun SystemBarIcons(dark: Boolean) {
 
 /** Applies visibility preferences to a modal surface's own window as well as its host. */
 @Composable
-fun SystemBarVisibility(showStatusBar: Boolean, showNavigationBar: Boolean) {
+fun SystemBarVisibility(
+    showStatusBar: Boolean,
+    showNavigationBar: Boolean,
+    revealStatusBarInstantly: Boolean = false,
+) {
     val forceWhiteNavigationBar by AppSettings.forceWhiteNavigationBar.collectAsStateWithLifecycle()
     val view = LocalView.current
     if (view.isInEditMode) return
     val window = findWindow(view) ?: return
+    var instantRevealApplied by remember(window) { mutableStateOf(false) }
     SideEffect {
         if (android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.Q) {
             window.isNavigationBarContrastEnforced = !forceWhiteNavigationBar
         }
         WindowInsetsControllerCompat(window, window.decorView).apply {
             systemBarsBehavior = WindowInsetsControllerCompat.BEHAVIOR_SHOW_TRANSIENT_BARS_BY_SWIPE
-            if (showStatusBar) show(WindowInsetsCompat.Type.statusBars())
-            else hide(WindowInsetsCompat.Type.statusBars())
+            if (showStatusBar) {
+                if (revealStatusBarInstantly) {
+                    if (!instantRevealApplied) showStatusBarImmediately(window, this)
+                    instantRevealApplied = true
+                } else {
+                    instantRevealApplied = false
+                    show(WindowInsetsCompat.Type.statusBars())
+                }
+            } else {
+                instantRevealApplied = false
+                hide(WindowInsetsCompat.Type.statusBars())
+            }
             if (showNavigationBar) show(WindowInsetsCompat.Type.navigationBars())
             else hide(WindowInsetsCompat.Type.navigationBars())
             // A modal sheet can restore automatic contrast when it changes bar
@@ -246,6 +269,42 @@ fun SystemBarVisibility(showStatusBar: Boolean, showNavigationBar: Boolean) {
             if (forceWhiteNavigationBar) isAppearanceLightNavigationBars = false
         }
     }
+}
+
+/** Snaps the owning modal window's status bar to its shown state during player close. */
+private fun showStatusBarImmediately(window: Window, fallback: WindowInsetsControllerCompat) {
+    if (Build.VERSION.SDK_INT < Build.VERSION_CODES.R) {
+        fallback.show(WindowInsetsCompat.Type.statusBars())
+        return
+    }
+    val controller = window.insetsController
+    if (controller == null) {
+        fallback.show(WindowInsetsCompat.Type.statusBars())
+        return
+    }
+    runCatching {
+        controller.controlWindowInsetsAnimation(
+            WindowInsets.Type.statusBars(),
+            0L,
+            null,
+            null,
+            object : WindowInsetsAnimationControlListener {
+                override fun onReady(animationController: WindowInsetsAnimationController, types: Int) {
+                    if (types and WindowInsets.Type.statusBars() != 0) {
+                        animationController.finish(true)
+                    } else {
+                        fallback.show(WindowInsetsCompat.Type.statusBars())
+                    }
+                }
+
+                override fun onFinished(animationController: WindowInsetsAnimationController) = Unit
+
+                override fun onCancelled(animationController: WindowInsetsAnimationController?) {
+                    fallback.show(WindowInsetsCompat.Type.statusBars())
+                }
+            },
+        )
+    }.onFailure { fallback.show(WindowInsetsCompat.Type.statusBars()) }
 }
 
 // Walks up the Compose view hierarchy to find a DialogWindowProvider (e.g. modal player) before falling back to Activity context.
