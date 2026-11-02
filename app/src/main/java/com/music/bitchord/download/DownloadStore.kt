@@ -226,7 +226,7 @@ object DownloadStore {
 
         fun openStream(): OutputStream =
             part?.outputStream()
-                ?: context.contentResolver.openOutputStream(uri)
+                ?: context.contentResolver.openOutputStream(uri, if (userSelectedUri) "wt" else "w")
                 ?: error("Could not open $name for writing")
 
         /** @return the uri the finished file can be reached at. */

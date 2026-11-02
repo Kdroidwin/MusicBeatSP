@@ -30,8 +30,9 @@ import kotlinx.coroutines.withTimeoutOrNull
 import kotlinx.serialization.builtins.MapSerializer
 import kotlinx.serialization.builtins.serializer
 import kotlinx.serialization.json.Json
-import java.io.OutputStream
 import java.io.File
+import java.io.IOException
+import java.io.OutputStream
 import java.util.Locale
 
 /** Where a track is between "not on this device" and "on it". */
@@ -68,6 +69,7 @@ sealed interface DownloadState {
 object Downloads {
 
     private const val TAG = "BitChord"
+    private const val COPY_BUFFER_BYTES = 128 * 1024
     private const val KEY_SAVED_METADATA = "downloaded_tracks_metadata"
     private const val KEY_SAVED_COLLECTIONS = "downloaded_collections"
 
@@ -775,6 +777,7 @@ object Downloads {
                     mimeType = "audio/mp4",
                     describe = "Onsen AAC",
                     downloadFormat = "AAC",
+                    stageUserSelectedDocument = true,
                     write = { sink, onProgress ->
                         OnsenM4aExporter.write(context, streamUrl, sink, onProgress)
                     },
@@ -920,27 +923,60 @@ object Downloads {
                     return@coroutineScope
                 }
 
-                val destination = destinationUri?.let { DownloadStore.beginAtUri(context, it, name) }
-                    ?: DownloadStore.begin(context, name, route.mimeType)
-                pending = destination
-                destination.openStream().use { sink ->
-                    route.write(sink) { written, total ->
-                        val fraction = written.toFloat() / total
-                        _active.update { it + (id to DownloadState.Running(fraction)) }
-                        DownloadSession.running(id, fraction)
-                    }
+                val stageForSelectedDocument = destinationUri != null && route.stageUserSelectedDocument
+                val stagedFile = if (stageForSelectedDocument) {
+                    File.createTempFile("onsen-download-", ".${route.extension}", context.cacheDir)
+                } else {
+                    null
                 }
-                val words = lyrics?.await()
-                val cover = artwork?.await()
-                // Publish only after metadata is part of the file. This keeps
-                // concurrent album workers from exposing untagged tracks.
-                MediaTagger.embed(context, destination.tagUri, track, route.extension, words, cover)
-                val savedUri = destination.commit()
-                pending = null
-                remember(song, track, savedUri, route.downloadFormat)
-                DownloadSession.done(id)
-                clear(id)
-                Log.d(TAG, "saved $name")
+                try {
+                    // HLS export can take a while. Keep the user selected SAF
+                    // document closed until export and tagging finish; some
+                    // providers leave a 0-byte file when a stream sits open
+                    // throughout that work.
+                    val destination = if (stagedFile != null) {
+                        null
+                    } else {
+                        destinationUri?.let { DownloadStore.beginAtUri(context, it, name) }
+                            ?: DownloadStore.begin(context, name, route.mimeType)
+                    }
+                    pending = destination
+                    val sink = stagedFile?.outputStream()?.buffered()
+                        ?: requireNotNull(destination).openStream()
+                    sink.use { output ->
+                        route.write(output) { written, total ->
+                            val fraction = written.toFloat() / total
+                            _active.update { it + (id to DownloadState.Running(fraction)) }
+                            DownloadSession.running(id, fraction)
+                        }
+                    }
+                    val words = lyrics?.await()
+                    val cover = artwork?.await()
+                    // Tag a private staged copy before opening a picked
+                    // document. This avoids rewriting an exported MP4 through
+                    // a provider that cannot safely replace its contents.
+                    val tagUri = stagedFile?.let(Uri::fromFile) ?: requireNotNull(destination).tagUri
+                    MediaTagger.embed(context, tagUri, track, route.extension, words, cover)
+
+                    val finalDestination = if (stagedFile != null) {
+                        val stagedBytes = stagedFile.length()
+                        if (stagedBytes <= 0L) throw IOException("The M4A export produced no audio")
+                        val selected = DownloadStore.beginAtUri(context, requireNotNull(destinationUri), name)
+                        pending = selected
+                        copyStagedFileToDocument(context, stagedFile, selected, stagedBytes)
+                        selected
+                    } else {
+                        requireNotNull(destination)
+                    }
+                    val savedUri = finalDestination.commit()
+                    pending = null
+                    remember(song, track, savedUri, route.downloadFormat)
+                    DownloadSession.done(id)
+                    clear(id)
+                    Log.d(TAG, "saved $name")
+                } finally {
+                    stagedFile?.delete()
+                }
             }
         } catch (e: Throwable) {
             pending?.abort()
@@ -975,8 +1011,37 @@ object Downloads {
         val downloadFormat: String? = null,
         val taggable: Boolean = true,
         val offlineHls: Manifest? = null,
+        /** Build locally before opening a user selected document, for long exports. */
+        val stageUserSelectedDocument: Boolean = false,
         val write: suspend (OutputStream, (written: Long, total: Long) -> Unit) -> Unit,
     )
+
+    private fun copyStagedFileToDocument(
+        context: Context,
+        staged: File,
+        destination: DownloadStore.Pending,
+        expectedBytes: Long,
+    ) {
+        val copied = staged.inputStream().buffered().use { input ->
+            destination.openStream().buffered().use { output -> input.copyTo(output, COPY_BUFFER_BYTES) }
+        }
+        if (copied != expectedBytes) throw IOException("The M4A export copy was incomplete")
+
+        val observedSize = runCatching {
+            context.contentResolver.openFileDescriptor(destination.uri, "r")?.use { it.statSize }
+        }.getOrNull() ?: -1L
+        if (observedSize > 0L && observedSize != expectedBytes) {
+            throw IOException("The selected M4A file was not saved completely")
+        }
+        // Some document providers expose a pipe and report a zero/unknown
+        // descriptor size even after a successful write. In that case, check
+        // that the provider can read back the first byte instead.
+        if (observedSize <= 0L) {
+            val firstByte = context.contentResolver.openInputStream(destination.uri)?.use { it.read() }
+                ?: throw IOException("Could not verify the selected M4A file")
+            if (firstByte < 0) throw IOException("The selected M4A file is empty")
+        }
+    }
 
     /**
      * A stream that arrived as an index rather than as audio, and which of the
