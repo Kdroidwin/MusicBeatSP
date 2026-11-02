@@ -1,6 +1,7 @@
 package com.music.bitchord.radio.data
 
 import android.net.Uri
+import android.util.Log
 import com.music.bitchord.data.Http
 import com.music.bitchord.data.settings.AppSettings
 import com.music.bitchord.radio.model.OnsenEpisode
@@ -79,16 +80,14 @@ object OnsenRepository {
 
     private suspend fun getText(url: String): String {
         ensureNetworkAllowed()
-        val request = Request.Builder()
-            .url(url)
-            .header("Accept", "application/json")
-            .header("Content-Type", "application/json; charset=utf-8")
-            .header("X-Client", "onsen-web")
-            .header("Referer", "$BASE_URL/")
-            .get()
-            .build()
+        val requestBuilder = Request.Builder().url(url)
+        OnsenRequestHeaders.api.forEach { (name, value) -> requestBuilder.header(name, value) }
+        val request = requestBuilder.get().build()
         return Http.client.newCall(request).execute().use { response ->
-            if (!response.isSuccessful) throw IOException("Onsen returned HTTP ${response.code}")
+            if (!response.isSuccessful) {
+                Log.w(TAG, "HTTP ${response.code} for ${request.url.encodedPath}")
+                throw IOException("Onsen returned HTTP ${response.code}")
+            }
             Http.readBoundedUtf8(response.body, MAX_RESPONSE_BYTES)
                 ?: throw IOException("Onsen returned an empty response")
         }
@@ -97,6 +96,8 @@ object OnsenRepository {
     private fun ensureNetworkAllowed() {
         if (AppSettings.offlineMode.value) throw IOException("Offline mode is enabled")
     }
+
+    private const val TAG = "OnsenRepository"
 
     private fun programArray(root: Any?): List<JSONObject> {
         val candidate = when (root) {

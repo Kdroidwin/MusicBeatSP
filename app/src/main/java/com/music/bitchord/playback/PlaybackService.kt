@@ -2512,7 +2512,7 @@ class PlaybackService : MediaLibraryService() {
     private fun recoverFrom(error: PlaybackException, player: ExoPlayer) {
         val item = player.currentMediaItem ?: return
         val mediaId = item.mediaId
-        if (item.toSong().isOnsenAudio) {
+        if (item.mediaId.startsWith("onsen:") || item.toSong().isOnsenAudio) {
             // The Onsen CDN is a direct HLS source, so clearing the cache or
             // resolving another catalogue cannot fix a DNS/connection failure.
             // Re-preparing here created an endless BUFFERING spinner on devices
@@ -5766,7 +5766,9 @@ class PlaybackService : MediaLibraryService() {
         /** Re-prepare an Onsen item only after the listener explicitly asks to play again. */
         private fun prepareOnsenAfterFailure() {
             if (wrappedPlayer.playbackState == Player.STATE_IDLE &&
-                wrappedPlayer.currentMediaItem?.toSong()?.isOnsenAudio == true
+                wrappedPlayer.currentMediaItem?.let { current ->
+                    current.mediaId.startsWith("onsen:") || current.toSong().isOnsenAudio
+                } == true
             ) {
                 wrappedPlayer.prepare()
             }

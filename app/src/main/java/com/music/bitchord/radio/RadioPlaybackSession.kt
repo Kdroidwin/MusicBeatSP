@@ -2,6 +2,7 @@ package com.music.bitchord.radio
 
 import android.net.Uri
 import androidx.media3.datasource.DataSpec
+import com.music.bitchord.radio.data.OnsenRequestHeaders
 
 /** Short-lived Radiko request headers; never written to preferences or queue backups. */
 object RadioPlaybackSession {
@@ -26,6 +27,11 @@ object RadioPlaybackSession {
 
     /** Applies credentials only to Radiko's own HTTPS host family. */
     fun addHeadersFor(uri: Uri, dataSpec: DataSpec): DataSpec {
+        if (isOnsenCdnUri(uri)) {
+            return dataSpec.buildUpon()
+                .setHttpRequestHeaders(dataSpec.httpRequestHeaders + OnsenRequestHeaders.cdn)
+                .build()
+        }
         if (!isRadikoUri(uri)) return dataSpec
         val headers = authHeaders
         if (headers.isEmpty()) return dataSpec
@@ -33,4 +39,8 @@ object RadioPlaybackSession {
             .setHttpRequestHeaders(dataSpec.httpRequestHeaders + headers)
             .build()
     }
+
+    private fun isOnsenCdnUri(uri: Uri): Boolean =
+        uri.scheme.equals("https", ignoreCase = true) &&
+            uri.host?.lowercase()?.endsWith(".sslcs.cdngc.net") == true
 }

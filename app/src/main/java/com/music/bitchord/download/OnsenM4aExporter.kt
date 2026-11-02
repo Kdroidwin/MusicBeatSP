@@ -6,9 +6,15 @@ import android.os.Handler
 import android.os.Looper
 import androidx.media3.common.MediaItem
 import androidx.media3.common.MimeTypes
+import androidx.media3.common.util.Clock
+import androidx.media3.common.util.UnstableApi
+import androidx.media3.datasource.okhttp.OkHttpDataSource
+import androidx.media3.exoplayer.source.DefaultMediaSourceFactory
 import androidx.media3.transformer.AudioEncoderSettings
 import androidx.media3.transformer.Composition
 import androidx.media3.transformer.DefaultEncoderFactory
+import androidx.media3.transformer.DefaultAssetLoaderFactory
+import androidx.media3.transformer.DefaultDecoderFactory
 import androidx.media3.transformer.EditedMediaItem
 import androidx.media3.transformer.ExportException
 import androidx.media3.transformer.ExportResult
@@ -16,6 +22,9 @@ import androidx.media3.transformer.Transformer
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.suspendCancellableCoroutine
 import kotlinx.coroutines.withContext
+import com.music.bitchord.data.Http
+import com.music.bitchord.playback.CoilBitmapLoader
+import com.music.bitchord.radio.data.OnsenRequestHeaders
 import java.io.File
 import java.io.IOException
 import java.io.OutputStream
@@ -92,6 +101,7 @@ internal object OnsenM4aExporter {
                 val transformer = Transformer.Builder(context)
                     .setAudioMimeType(MimeTypes.AUDIO_AAC)
                     .setEncoderFactory(encoderFactory)
+                    .setAssetLoaderFactory(onsenAssetLoaderFactory(context))
                     .addListener(listener)
                     .build()
                 continuation.invokeOnCancellation {
@@ -109,6 +119,20 @@ internal object OnsenM4aExporter {
                 }
             }
         }
+
+    @OptIn(UnstableApi::class)
+    private fun onsenAssetLoaderFactory(context: Context): DefaultAssetLoaderFactory {
+        val dataSourceFactory = OkHttpDataSource.Factory(Http.client)
+            .setDefaultRequestProperties(OnsenRequestHeaders.cdn)
+        val mediaSourceFactory = DefaultMediaSourceFactory(dataSourceFactory)
+        return DefaultAssetLoaderFactory(
+            context,
+            DefaultDecoderFactory(context),
+            Clock.DEFAULT,
+            mediaSourceFactory,
+            CoilBitmapLoader(context),
+        )
+    }
 
     private const val AAC_BITRATE_BPS = 256_000
     private const val COPY_BUFFER_BYTES = 128 * 1024
