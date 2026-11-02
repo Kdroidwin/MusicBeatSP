@@ -379,6 +379,11 @@
     <string name="player_artwork_transition_subtitle">Move the artwork between the mini and full player and animate lyric changes. Separate from Reduce animation.</string>
     <string name="walkman_player_style">Walkman-style player</string>
     <string name="walkman_player_style_subtitle">Use a compact centered cover, centered track information, and circular playback controls. Off by default.</string>
+    <string name="retro_player_mode">Retro mode</string>
+    <string name="retro_player_mode_subtitle">Use a classic centered player with album art, track details, seek bar, and playback controls. Off by default.</string>
+    <string name="retro_player_background">Retro mode background</string>
+    <string name="retro_player_background_black">Black</string>
+    <string name="retro_player_background_artwork">Album art color</string>
     <string name="pill_motion_style">Tab transition speed</string>
     <string name="pill_motion_style_subtitle">Adjust how quickly the selected tab indicator moves</string>
     <string name="pill_motion_fast">Fast</string>

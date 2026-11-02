@@ -101,6 +101,9 @@ enum class PlayerArtworkMode(val persistedValue: Int) {
     }
 }
 
+/** Solid fill used behind the optional retro player layout. */
+enum class RetroPlayerBackground { BLACK, ARTWORK_COLOR }
+
 /** Independently customisable ink groups painted over the expanded player. */
 enum class PlayerInkGroup(val preferenceSuffix: String) {
     BUTTONS("buttons"),
@@ -662,6 +665,9 @@ object AppSettings {
     val playerArtworkTransition = MutableStateFlow(true)
     /** Opt-in Walkman-inspired layout for the expanded player surface. */
     val walkmanPlayerStyle = MutableStateFlow(false)
+    /** Screenshot-inspired classic transport layout; off by default. */
+    val retroPlayerMode = MutableStateFlow(false)
+    val retroPlayerBackground = MutableStateFlow(RetroPlayerBackground.BLACK)
 
     /** Speed and fluidity of the floating tab selection animation. */
     val pillMotionStyle = MutableStateFlow(PillMotionStyle.DEFAULT)
@@ -1466,6 +1472,13 @@ object AppSettings {
         reduceAnimation.value = prefs.getBoolean(KEY_REDUCE_ANIMATION, false)
         playerArtworkTransition.value = prefs.getBoolean(KEY_PLAYER_ARTWORK_TRANSITION, true)
         walkmanPlayerStyle.value = prefs.getBoolean(KEY_WALKMAN_PLAYER_STYLE, false)
+        retroPlayerMode.value = prefs.getBoolean(KEY_RETRO_PLAYER_MODE, false)
+        retroPlayerBackground.value = runCatching {
+            RetroPlayerBackground.valueOf(
+                prefs.getString(KEY_RETRO_PLAYER_BACKGROUND, RetroPlayerBackground.BLACK.name)
+                    ?: RetroPlayerBackground.BLACK.name,
+            )
+        }.getOrDefault(RetroPlayerBackground.BLACK)
         pillMotionStyle.value = runCatching {
             PillMotionStyle.valueOf(prefs.getString(KEY_PILL_MOTION_STYLE, null) ?: PillMotionStyle.DEFAULT.name)
         }.getOrDefault(PillMotionStyle.DEFAULT)
@@ -2478,6 +2491,16 @@ object AppSettings {
     fun setWalkmanPlayerStyle(value: Boolean) {
         walkmanPlayerStyle.value = value
         prefs.edit().putBoolean(KEY_WALKMAN_PLAYER_STYLE, value).apply()
+    }
+
+    fun setRetroPlayerMode(value: Boolean) {
+        retroPlayerMode.value = value
+        prefs.edit().putBoolean(KEY_RETRO_PLAYER_MODE, value).apply()
+    }
+
+    fun setRetroPlayerBackground(value: RetroPlayerBackground) {
+        retroPlayerBackground.value = value
+        prefs.edit().putString(KEY_RETRO_PLAYER_BACKGROUND, value.name).apply()
     }
 
     fun setPillMotionStyle(value: PillMotionStyle) {
@@ -4183,6 +4206,8 @@ object AppSettings {
     private const val KEY_REDUCE_ANIMATION = "reduce_animation"
     private const val KEY_PLAYER_ARTWORK_TRANSITION = "player_artwork_transition"
     private const val KEY_WALKMAN_PLAYER_STYLE = "walkman_player_style"
+    private const val KEY_RETRO_PLAYER_MODE = "retro_player_mode"
+    private const val KEY_RETRO_PLAYER_BACKGROUND = "retro_player_background"
     private const val KEY_PILL_MOTION_STYLE = "pill_motion_style"
     private const val KEY_HIGH_PERFORMANCE_MODE = "high_performance_mode"
     private const val KEY_PERFORMANCE_REFRESH_RATE = "performance_refresh_rate"

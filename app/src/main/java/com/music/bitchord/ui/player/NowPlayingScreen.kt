@@ -264,6 +264,7 @@ import com.music.bitchord.data.lyrics.LyricsSource
 import com.music.bitchord.ui.components.LyricsLogConsole
 import com.music.bitchord.ui.player.components.DoubleTapSeekArea
 import com.music.bitchord.data.settings.AppSettings
+import com.music.bitchord.data.settings.RetroPlayerBackground
 import com.music.bitchord.data.settings.LyricsTextAlignment
 import com.music.bitchord.data.settings.SeekButtonMode
 import com.music.bitchord.data.settings.TransportSideAction
@@ -1034,9 +1035,11 @@ fun NowPlayingScreen(
     val playerArtworkTransitionEnabled by AppSettings.playerArtworkTransition.collectAsStateWithLifecycle()
     val preserveArtworkShapeInCompactTransitions by AppSettings.preserveArtworkShapeInCompactTransitions.collectAsStateWithLifecycle()
     val playerArtworkMode by AppSettings.playerArtworkMode.collectAsStateWithLifecycle()
-    val fullBleedArt = playerArtworkMode.usesFullScreenArtwork
-    val largerFullBleedArtwork = playerArtworkMode == PlayerArtworkMode.FULL_SCREEN_LARGER
-    val aurisFullBleedArtwork = playerArtworkMode == PlayerArtworkMode.AURIS_FULL_SCREEN
+    val retroPlayerMode by AppSettings.retroPlayerMode.collectAsStateWithLifecycle()
+    val retroPlayerBackground by AppSettings.retroPlayerBackground.collectAsStateWithLifecycle()
+    val fullBleedArt = playerArtworkMode.usesFullScreenArtwork && !retroPlayerMode
+    val largerFullBleedArtwork = playerArtworkMode == PlayerArtworkMode.FULL_SCREEN_LARGER && !retroPlayerMode
+    val aurisFullBleedArtwork = playerArtworkMode == PlayerArtworkMode.AURIS_FULL_SCREEN && !retroPlayerMode
     val preserveSleeveArtworkShape = playerArtworkMode == PlayerArtworkMode.STANDARD_ORIGINAL_ASPECT
     val preserveTransitionArtworkProportions =
         preserveArtworkShapeInCompactTransitions && preserveSleeveArtworkShape
@@ -1206,6 +1209,7 @@ fun NowPlayingScreen(
     val centerPlayerTrackInfo by AppSettings.centerPlayerTrackInfo.collectAsStateWithLifecycle()
     val playerDetailsVerticalMenu by AppSettings.playerDetailsVerticalMenu.collectAsStateWithLifecycle()
     val walkmanPlayerStyle by AppSettings.walkmanPlayerStyle.collectAsStateWithLifecycle()
+    val retroPlayerLayout = walkmanPlayerStyle || retroPlayerMode
     val artworkBackdropBlurDp by AppSettings.artworkBackdropBlurDp.collectAsStateWithLifecycle()
     val fullBleedArtworkBottomBlurStrengthDp by AppSettings.fullBleedArtworkBottomBlurStrengthDp.collectAsStateWithLifecycle()
     val useLibraryIconForPlaylistControl by AppSettings.useLibraryIconForPlaylistControl.collectAsStateWithLifecycle()
@@ -1634,7 +1638,7 @@ fun NowPlayingScreen(
     )
     // Keep the new transport treatment on the settled, expanded player only.
     // Queue and lyrics surfaces retain their established controls and gestures.
-    val walkmanControlsActive = walkmanPlayerStyle && p < 0.01f && !queueOpen && !lyricsOpen
+    val walkmanControlsActive = retroPlayerLayout && p < 0.01f && !queueOpen && !lyricsOpen
     var loadedArtworkAspectRatio by remember(song.videoId, artUrl) { mutableFloatStateOf(1f) }
     val animatedArtworkAspectRatio by animateFloatAsState(
         targetValue = loadedArtworkAspectRatio,
@@ -1895,6 +1899,17 @@ fun NowPlayingScreen(
             LocalPlayerSongArtistInk provides songArtistInk,
             LocalPlayerLyricInk provides lyricInk,
         ) {
+        if (retroPlayerMode) {
+            Box(
+                Modifier
+                    .fillMaxSize()
+                    .background(
+                        if (retroPlayerBackground == RetroPlayerBackground.BLACK) {
+                            Color.Black
+                        } else artworkPalette.background
+                    ),
+            )
+        }
         // Anchored to the sleeve's bottom edge, so the screen carries on in the
         // colours the artwork ended in rather than in a quantiser's idea of what
         // the artwork was about. Position ticks recompose this screen twice a
@@ -1911,7 +1926,7 @@ fun NowPlayingScreen(
         } else {
             artworkBackdropBlurDp.dp
         }
-        if (!sharedPlayerBackdrop && legacyMesh) {
+        if (!retroPlayerMode && !sharedPlayerBackdrop && legacyMesh) {
             // v1.5's backdrop, restored verbatim: no seam, because the blobs
             // are not anchored to anything on screen — they fill the player and
             // the artwork simply sits on top of them. Keyed on the track, so
@@ -1924,7 +1939,7 @@ fun NowPlayingScreen(
                 trackKey = song.videoId,
                 blurRadius = activeBackdropBlur,
             )
-        } else if (!sharedPlayerBackdrop) {
+        } else if (!retroPlayerMode && !sharedPlayerBackdrop) {
             ArtworkMeshBackdrop(
                 mesh = artMesh,
                 seam = if (heroMode) heroHeight else 0.dp,
@@ -2367,7 +2382,7 @@ fun NowPlayingScreen(
                 // failure than a credits row overhanging the lyric strip.
                 val walkmanTopGap = minOf(40.dp, maxHeight * 0.08f)
                 val walkmanHeightLimit = maxHeight - walkmanTopGap - ART_TITLE_GAP - HEADER_HEIGHT
-                val fullArt = if (walkmanPlayerStyle) {
+                val fullArt = if (retroPlayerLayout) {
                     minOf(maxWidth * 0.76f, walkmanHeightLimit)
                 } else {
                     minOf(wantArt, maxHeight - ART_TITLE_GAP - HEADER_HEIGHT)
@@ -2443,7 +2458,7 @@ fun NowPlayingScreen(
                 // square footprint used by the old sleeve layout.
                 val expandedArtWidth = fullArt * minOf(1f, sleeveAspectRatio)
                 val expandedArtHeight = fullArt * minOf(1f, 1f / sleeveAspectRatio)
-                val groupTop = if (walkmanPlayerStyle) {
+                val groupTop = if (retroPlayerLayout) {
                     walkmanTopGap
                 } else {
                     (maxHeight - expandedArtHeight - ART_TITLE_GAP - HEADER_HEIGHT)
@@ -2907,7 +2922,7 @@ fun NowPlayingScreen(
                     ) {
                     Column(
                         Modifier.weight(1f),
-                        horizontalAlignment = if (centerPlayerTrackInfo || walkmanPlayerStyle) {
+                        horizontalAlignment = if (centerPlayerTrackInfo || retroPlayerLayout) {
                             Alignment.CenterHorizontally
                         } else Alignment.Start,
                     ) {

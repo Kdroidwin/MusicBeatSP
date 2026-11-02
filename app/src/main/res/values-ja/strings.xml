@@ -350,6 +350,11 @@
     <string name="player_artwork_transition_subtitle">ミニプレーヤーから全画面プレーヤーへのアートの移動と歌詞の切り替えをアニメーションします。「アニメーションを減らす」とは別に設定できます</string>
     <string name="walkman_player_style">ウォークマン風プレーヤー</string>
     <string name="walkman_player_style_subtitle">小さめの中央配置アート、中央揃えの曲情報、円で囲んだ再生操作を使います。初期設定はオフです。</string>
+    <string name="retro_player_mode">レトロモード</string>
+    <string name="retro_player_mode_subtitle">アルバムアート、曲情報、シークバー、再生操作を中央に配置したクラシックなプレーヤーを使います。初期設定はオフです。</string>
+    <string name="retro_player_background">レトロモードの背景</string>
+    <string name="retro_player_background_black">黒</string>
+    <string name="retro_player_background_artwork">アルバムアートの色</string>
     <string name="pill_motion_style">タブ切り替えの速さ</string>
     <string name="pill_motion_style_subtitle">選択中タブのインジケーターが移動する速さを調整します</string>
     <string name="pill_motion_fast">スピーディ</string>

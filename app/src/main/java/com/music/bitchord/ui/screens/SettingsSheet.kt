@@ -176,6 +176,7 @@ import com.music.bitchord.data.scrobbling.LastFM
 import com.music.bitchord.data.settings.AppSettings
 import com.music.bitchord.data.settings.PlayerArtworkMode
 import com.music.bitchord.data.settings.PlayerInkGroup
+import com.music.bitchord.data.settings.RetroPlayerBackground
 import com.music.bitchord.data.settings.PLAYER_INK_AUTOMATIC
 import com.music.bitchord.data.settings.PLAYER_INK_DEFAULT_COLOR
 import com.music.bitchord.feature.artistimage.data.DeezerArtistService
@@ -614,6 +615,8 @@ fun SettingsScreen(
     val reduceAnimation by AppSettings.reduceAnimation.collectAsStateWithLifecycle()
     val playerArtworkTransition by AppSettings.playerArtworkTransition.collectAsStateWithLifecycle()
     val walkmanPlayerStyle by AppSettings.walkmanPlayerStyle.collectAsStateWithLifecycle()
+    val retroPlayerMode by AppSettings.retroPlayerMode.collectAsStateWithLifecycle()
+    val retroPlayerBackground by AppSettings.retroPlayerBackground.collectAsStateWithLifecycle()
     val pillMotionStyle by AppSettings.pillMotionStyle.collectAsStateWithLifecycle()
     val reduceDynamicBlur by AppSettings.reduceDynamicBlur.collectAsStateWithLifecycle()
     val liquidGlass by AppSettings.liquidGlass.collectAsStateWithLifecycle()
@@ -818,6 +821,7 @@ fun SettingsScreen(
     var showThemePicker by rememberSaveable { mutableStateOf(false) }
     var showMediaControlActionPicker by rememberSaveable { mutableStateOf(false) }
     var showPlayerArtworkModePicker by rememberSaveable { mutableStateOf(false) }
+    var showRetroPlayerBackgroundPicker by rememberSaveable { mutableStateOf(false) }
     var playerInkDialogGroupKey by rememberSaveable { mutableStateOf<String?>(null) }
     var playerInkAutomaticSelected by rememberSaveable { mutableStateOf(true) }
     var playerInkHexDraft by rememberSaveable { mutableStateOf("#FFFFFF") }
@@ -1230,6 +1234,7 @@ fun SettingsScreen(
         SettingsSearchEntry(stringResource(R.string.reduce_animation), stringResource(R.string.reduce_animation_subtitle), listOf("animation", "reduce", "アニメーション"), reduceAnimation) { AppSettings.setReduceAnimation(!reduceAnimation) },
         SettingsSearchEntry(stringResource(R.string.player_artwork_transition), stringResource(R.string.player_artwork_transition_subtitle), listOf("player", "artwork", "cover", "lyrics", "animation", "transition", "プレイヤー", "アート", "歌詞", "遷移", "アニメーション"), playerArtworkTransition) { AppSettings.setPlayerArtworkTransition(!playerArtworkTransition) },
         SettingsSearchEntry(stringResource(R.string.walkman_player_style), stringResource(R.string.walkman_player_style_subtitle), listOf("player", "walkman", "sony", "controls", "ウォークマン", "ソニー", "プレイヤー", "再生ボタン"), walkmanPlayerStyle) { AppSettings.setWalkmanPlayerStyle(!walkmanPlayerStyle) },
+        SettingsSearchEntry(stringResource(R.string.retro_player_mode), stringResource(R.string.retro_player_mode_subtitle), listOf("player", "retro", "classic", "remote", "レトロ", "プレーヤー", "リモコン"), retroPlayerMode) { AppSettings.setRetroPlayerMode(!retroPlayerMode) },
         SettingsSearchEntry(
             title = stringResource(R.string.pill_motion_style),
             subtitle = stringResource(R.string.pill_motion_style_subtitle),
@@ -4180,6 +4185,53 @@ fun SettingsScreen(
             )
             RowDivider()
             SettingsRow(
+                icon = Icons.Rounded.MusicNote,
+                title = stringResource(R.string.retro_player_mode),
+                subtitle = stringResource(R.string.retro_player_mode_subtitle),
+                trailing = {
+                    Switch(
+                        checked = retroPlayerMode,
+                        onCheckedChange = AppSettings::setRetroPlayerMode,
+                        colors = SwitchDefaults.colors(
+                            checkedTrackColor = MaterialTheme.colorScheme.primary,
+                            checkedBorderColor = MaterialTheme.colorScheme.primary,
+                        ),
+                    )
+                },
+                onClick = { AppSettings.setRetroPlayerMode(!retroPlayerMode) },
+            )
+            if (retroPlayerMode) {
+                SettingsRow(
+                    icon = Icons.Rounded.Gradient,
+                    title = stringResource(R.string.retro_player_background),
+                    subtitle = stringResource(
+                        if (retroPlayerBackground == RetroPlayerBackground.BLACK) {
+                            R.string.retro_player_background_black
+                        } else R.string.retro_player_background_artwork
+                    ),
+                    trailing = {
+                        Row(verticalAlignment = Alignment.CenterVertically) {
+                            Text(
+                                stringResource(
+                                    if (retroPlayerBackground == RetroPlayerBackground.BLACK) {
+                                        R.string.retro_player_background_black
+                                    } else R.string.retro_player_background_artwork
+                                ),
+                                style = MaterialTheme.typography.bodyMedium,
+                                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                            )
+                            Icon(
+                                imageVector = Icons.Rounded.ChevronRight,
+                                contentDescription = null,
+                                tint = MaterialTheme.colorScheme.onSurfaceVariant,
+                            )
+                        }
+                    },
+                    onClick = { showRetroPlayerBackgroundPicker = true },
+                )
+            }
+            RowDivider()
+            SettingsRow(
                 icon = Icons.Rounded.ViewStream,
                 title = stringResource(R.string.preserve_artwork_shape_in_compact_transitions),
                 subtitle = stringResource(R.string.preserve_artwork_shape_in_compact_transitions_subtitle),
@@ -5242,6 +5294,48 @@ fun SettingsScreen(
                 },
                 confirmButton = {
                     TextButton(onClick = { showPlayerArtworkModePicker = false }) {
+                        Text(stringResource(R.string.done))
+                    }
+                },
+            )
+        }
+
+        if (showRetroPlayerBackgroundPicker) {
+            AlertDialog(
+                onDismissRequest = { showRetroPlayerBackgroundPicker = false },
+                title = { Text(stringResource(R.string.retro_player_background)) },
+                text = {
+                    Column {
+                        RetroPlayerBackground.entries.forEach { option ->
+                            val label = stringResource(
+                                if (option == RetroPlayerBackground.BLACK) {
+                                    R.string.retro_player_background_black
+                                } else R.string.retro_player_background_artwork
+                            )
+                            Row(
+                                modifier = Modifier
+                                    .fillMaxWidth()
+                                    .clickable {
+                                        AppSettings.setRetroPlayerBackground(option)
+                                        showRetroPlayerBackgroundPicker = false
+                                    }
+                                    .padding(vertical = 6.dp),
+                                verticalAlignment = Alignment.CenterVertically,
+                            ) {
+                                RadioButton(
+                                    selected = retroPlayerBackground == option,
+                                    onClick = {
+                                        AppSettings.setRetroPlayerBackground(option)
+                                        showRetroPlayerBackgroundPicker = false
+                                    },
+                                )
+                                Text(label, modifier = Modifier.padding(start = 8.dp))
+                            }
+                        }
+                    }
+                },
+                confirmButton = {
+                    TextButton(onClick = { showRetroPlayerBackgroundPicker = false }) {
                         Text(stringResource(R.string.done))
                     }
                 },
