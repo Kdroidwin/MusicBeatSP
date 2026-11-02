@@ -1735,6 +1735,7 @@ private fun BitChordApp(
     // only asked for from API 33. So the branches below are mutually exclusive
     // by SDK level, and nothing here can stack two dialogs on each other.
     var downloadPending by remember { mutableStateOf<List<Song>>(emptyList()) }
+    var downloadPendingHighestYoutubeOpus by remember { mutableStateOf(false) }
     /**
      * What the pending batch was asked for as, held alongside it for the same
      * reason: the storage-permission dialog is a round trip through another
@@ -1750,12 +1751,17 @@ private fun BitChordApp(
     ) { granted ->
         val songs = downloadPending
         val from = downloadPendingFrom
+        val forceHighestYoutubeOpus = downloadPendingHighestYoutubeOpus
         downloadPending = emptyList()
         downloadPendingFrom = null
+        downloadPendingHighestYoutubeOpus = false
         when {
             songs.isEmpty() -> Unit
             granted -> {
-                songs.forEach { Downloads.enqueue(context, it, from?.title) }
+                songs.forEach { song ->
+                    if (forceHighestYoutubeOpus) Downloads.enqueueHighestYoutubeOpus(context, song)
+                    else Downloads.enqueue(context, song, from?.title)
+                }
                 if (from != null) Downloads.markRequested(from.id, songs.map { it.videoId })
             }
             // The one case where refusing is fatal: below API 29 there is no
@@ -1897,6 +1903,7 @@ private fun BitChordApp(
             if (needsStorage) {
                 downloadPending = songs
                 downloadPendingFrom = from
+                downloadPendingHighestYoutubeOpus = false
                 storagePermission.launch(Manifest.permission.WRITE_EXTERNAL_STORAGE)
             } else {
                 songs.forEach { Downloads.enqueue(context, it, from?.title) }
@@ -1932,6 +1939,39 @@ private fun BitChordApp(
                     )
                 }
                 Toast.makeText(context, message, Toast.LENGTH_SHORT).show()
+            }
+        }
+    }
+    val startHighestYoutubeOpusDownload: (Song) -> Unit = { song ->
+        when {
+            song.videoId in Downloads.saved.value -> {
+                Toast.makeText(context, R.string.already_downloaded, Toast.LENGTH_SHORT).show()
+            }
+            !AppSettings.downloadsAllowedNow -> {
+                Toast.makeText(context, R.string.wifi_only_download_refusal, Toast.LENGTH_LONG).show()
+            }
+            else -> {
+                val needsStorage = AppSettings.exportDownloads.value && DownloadStore.needsLegacyPermission() &&
+                    ContextCompat.checkSelfPermission(
+                        context,
+                        Manifest.permission.WRITE_EXTERNAL_STORAGE,
+                    ) != PackageManager.PERMISSION_GRANTED
+                if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU &&
+                    ContextCompat.checkSelfPermission(
+                        context,
+                        Manifest.permission.POST_NOTIFICATIONS,
+                    ) != PackageManager.PERMISSION_GRANTED
+                ) {
+                    notifyPermission.launch(Manifest.permission.POST_NOTIFICATIONS)
+                }
+                if (needsStorage) {
+                    downloadPending = listOf(song)
+                    downloadPendingFrom = null
+                    downloadPendingHighestYoutubeOpus = true
+                    storagePermission.launch(Manifest.permission.WRITE_EXTERNAL_STORAGE)
+                } else {
+                    Downloads.enqueueHighestYoutubeOpus(context, song)
+                }
             }
         }
     }
@@ -3728,9 +3768,24 @@ private fun BitChordApp(
                     },
                 )
             } else {
+                val youtubeAudio = song.localUri.isNullOrBlank() &&
+                    song.localPath.isNullOrBlank() &&
+                    !song.isLiveRadio &&
+                    !song.isExternalPreview &&
+                    song.sourceQuality.isNullOrBlank() &&
+                    song.videoId.length == 11 &&
+                    song.videoId.all { it.isLetterOrDigit() || it == '_' || it == '-' } &&
+                    !song.videoId.startsWith("radio:") &&
+                    !song.videoId.startsWith("local:")
                 LocalSongActionsSheet(
                     song = song,
                     onDismissRequest = { songActions = null },
+                    onDownloadYoutubeOpus = if (menuFromPlayer && youtubeAudio) {
+                        {
+                            songActions = null
+                            startHighestYoutubeOpusDownload(song)
+                        }
+                    } else null,
                     onGoToAlbum = {
                         songActions = null
                         dismissNowPlaying()

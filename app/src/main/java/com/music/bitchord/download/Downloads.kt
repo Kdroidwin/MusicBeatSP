@@ -124,7 +124,12 @@ object Downloads {
     val collections: StateFlow<Map<String, SavedCollection>> = _collections.asStateFlow()
 
     /** Waiting, in the order asked for. Guarded by [lock]. */
-    private val pending = LinkedHashMap<String, Song>()
+    private val pending = LinkedHashMap<String, DownloadRequest>()
+
+    internal data class DownloadRequest(
+        val song: Song,
+        val forceHighestYoutubeOpus: Boolean = false,
+    )
 
     private val lock = Any()
 
@@ -175,6 +180,20 @@ object Downloads {
      *   only thing that has to say *why* forty tracks are in the queue.
      */
     fun enqueue(context: Context, song: Song, from: String? = null) {
+        enqueueInternal(context, song, from, forceHighestYoutubeOpus = false)
+    }
+
+    /** Queue the YouTube audio at its highest available Opus bitrate. */
+    fun enqueueHighestYoutubeOpus(context: Context, song: Song) {
+        enqueueInternal(context, song, from = null, forceHighestYoutubeOpus = true)
+    }
+
+    private fun enqueueInternal(
+        context: Context,
+        song: Song,
+        from: String?,
+        forceHighestYoutubeOpus: Boolean,
+    ) {
         val id = song.videoId
         if (!AppSettings.downloadsAllowedNow) {
             // Distinct from the duplicate-tap no-op below: nothing is in flight
@@ -190,7 +209,7 @@ object Downloads {
         }
         synchronized(lock) {
             if (id in pending || id in running) return
-            pending[id] = song
+            pending[id] = DownloadRequest(song, forceHighestYoutubeOpus)
         }
         _active.update { it + (id to DownloadState.Queued) }
         DownloadSession.queued(song, from)
@@ -616,7 +635,7 @@ object Downloads {
      * instant where a track is in neither the queue nor the running slot and a
      * [cancel] for it would quietly do nothing.
      */
-    internal fun takeNext(): Song? = synchronized(lock) {
+    internal fun takeNext(): DownloadRequest? = synchronized(lock) {
         val entry = pending.entries.firstOrNull() ?: return null
         pending.remove(entry.key)
         running[entry.key] = null
@@ -677,7 +696,11 @@ object Downloads {
      * shared between them but the two state flows, and both are written through
      * atomic updates for exactly that reason.
      */
-    internal suspend fun run(context: Context, song: Song) = withContext(Dispatchers.IO) {
+    internal suspend fun run(
+        context: Context,
+        song: Song,
+        forceHighestYoutubeOpus: Boolean = false,
+    ) = withContext(Dispatchers.IO) {
         val id = song.videoId
         // Set before the lookup, not after it. Resolving where a lossless track
         // comes from is the long part of a download, and leaving the row on
@@ -687,7 +710,7 @@ object Downloads {
         DownloadSession.running(id, 0f)
 
         try {
-            val plan = prepare(context, song)
+            val plan = prepare(context, song, forceHighestYoutubeOpus)
             // The manager is showing the row that was tapped, which for a music
             // video is the wrong title and the wrong cover for the file actually
             // being written. Corrected here rather than left to disagree with
@@ -724,7 +747,11 @@ object Downloads {
      * running for a track that is still queued — or for one that gets cancelled
      * before its turn — and a preparation is not a download.
      */
-    internal suspend fun prepare(context: Context, song: Song): Prepared = withContext(Dispatchers.IO) {
+    internal suspend fun prepare(
+        context: Context,
+        song: Song,
+        forceHighestYoutubeOpus: Boolean = false,
+    ): Prepared = withContext(Dispatchers.IO) {
         // Downloads preserve the exact item the listener picked. Catalogue
         // matching is a manual playback action and must not silently change a
         // download or its filename.
@@ -745,7 +772,7 @@ object Downloads {
         // be lossless are worth guessing at: an `.m4a` may be this app's ALAC
         // or its AAC, and adopting the wrong one would quietly answer a request
         // for lossless with a transcode.
-        if (quality.keepsLossless) {
+        if (!forceHighestYoutubeOpus && quality.keepsLossless) {
             LOSSLESS_EXTENSIONS.firstNotNullOfOrNull { extension ->
                 DownloadStore.existing(context, DownloadStore.fileNameFor(track, extension))
             }?.let { uri ->
@@ -753,7 +780,7 @@ object Downloads {
             }
         }
 
-        val route = routeFor(track, quality)
+        val route = if (forceHighestYoutubeOpus) highestYoutubeOpusRoute(track) else routeFor(track, quality)
         Log.d(TAG, "downloading ${song.videoId} as .${route.extension} (${route.describe}, ${quality.label})")
         Prepared(song.videoId, track, route = route, alreadyAt = null)
     }
@@ -995,6 +1022,33 @@ object Downloads {
             extension = youtube.downloadExtension,
             mimeType = youtube.downloadMimeType,
             describe = "YouTube ${youtube.kbps} kbps ${youtube.codec.orEmpty()}",
+            taggable = true,
+            write = { sink, onProgress ->
+                Downloader.fetchYouTube(
+                    url = youtube.url,
+                    headers = StreamResolver.mediaHeadersFor(youtube.url),
+                    sink = sink,
+                    onProgress = onProgress,
+                )
+            },
+        )
+    }
+
+    /** Bypasses configured catalogues and export-format preferences for the explicit Opus action. */
+    private suspend fun highestYoutubeOpusRoute(track: Song): Route {
+        if (!AppSettings.youtubeMusicNetworkAllowed) {
+            error("YouTube Music is disabled or offline mode is enabled")
+        }
+        val youtube = StreamResolver.resolveForDownload(
+            videoId = track.videoId,
+            maxKbps = Int.MAX_VALUE,
+            requireM4a = false,
+        )
+        check(youtube.downloadExtension == "webm") { "No downloadable Opus audio for this track" }
+        return Route(
+            extension = youtube.downloadExtension,
+            mimeType = youtube.downloadMimeType,
+            describe = "YouTube ${youtube.kbps} kbps ${youtube.codec.orEmpty()} Opus",
             taggable = true,
             write = { sink, onProgress ->
                 Downloader.fetchYouTube(

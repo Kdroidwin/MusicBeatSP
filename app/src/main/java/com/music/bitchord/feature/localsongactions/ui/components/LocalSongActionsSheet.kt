@@ -25,6 +25,7 @@ import androidx.compose.material.icons.automirrored.rounded.PlaylistAdd
 import androidx.compose.material.icons.rounded.Album
 import androidx.compose.material.icons.rounded.Bedtime
 import androidx.compose.material.icons.rounded.Edit
+import androidx.compose.material.icons.rounded.FileDownload
 import androidx.compose.material.icons.rounded.GraphicEq
 import androidx.compose.material.icons.rounded.Info
 import androidx.compose.material.icons.rounded.Person
@@ -91,6 +92,7 @@ fun LocalSongActionsSheet(
     onShareFile: () -> Unit,
     onDismissRequest: () -> Unit,
     modifier: Modifier = Modifier,
+    onDownloadYoutubeOpus: (() -> Unit)? = null,
 ) {
     val sheetState = rememberModalBottomSheetState(skipPartiallyExpanded = true)
     val sheetShape = RoundedCornerShape(topStart = 24.dp, topEnd = 24.dp)
@@ -213,6 +215,15 @@ fun LocalSongActionsSheet(
                                     MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.65f)
                                 } else MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.5f),
                             )
+
+                    // This action deliberately precedes the existing album row.
+                    onDownloadYoutubeOpus?.let { download ->
+                        LocalSongActionItem(
+                            icon = Icons.Rounded.FileDownload,
+                            label = stringResource(R.string.download),
+                            onClick = download,
+                        )
+                    }
 
                     // 1. Go to Album
                     if (PlayerDetailsAction.ALBUM !in hiddenActions) {
