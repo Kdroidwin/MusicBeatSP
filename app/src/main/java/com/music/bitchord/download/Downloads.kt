@@ -131,7 +131,7 @@ object Downloads {
     internal data class DownloadRequest(
         val song: Song,
         val forceHighestYoutubeOpus: Boolean = false,
-        val destinationUri: Uri? = null,
+        val destinationTreeUri: Uri? = null,
     )
 
     private val lock = Any()
@@ -186,9 +186,15 @@ object Downloads {
         enqueueInternal(context, song, from, forceHighestYoutubeOpus = false)
     }
 
-    /** Queue a track into the exact document the listener selected with the system picker. */
-    fun enqueueToUri(context: Context, song: Song, destinationUri: Uri) {
-        enqueueInternal(context, song, from = null, forceHighestYoutubeOpus = false, destinationUri = destinationUri)
+    /** Queue an Onsen episode into the folder the listener selected with the system picker. */
+    fun enqueueToFolder(context: Context, song: Song, destinationTreeUri: Uri) {
+        enqueueInternal(
+            context,
+            song,
+            from = null,
+            forceHighestYoutubeOpus = false,
+            destinationTreeUri = destinationTreeUri,
+        )
     }
 
     /** Queue the YouTube audio at its highest available Opus bitrate. */
@@ -201,7 +207,7 @@ object Downloads {
         song: Song,
         from: String?,
         forceHighestYoutubeOpus: Boolean,
-        destinationUri: Uri? = null,
+        destinationTreeUri: Uri? = null,
     ) {
         val id = song.videoId
         if (!AppSettings.downloadsAllowedNow) {
@@ -218,7 +224,7 @@ object Downloads {
         }
         synchronized(lock) {
             if (id in pending || id in running) return
-            pending[id] = DownloadRequest(song, forceHighestYoutubeOpus, destinationUri)
+            pending[id] = DownloadRequest(song, forceHighestYoutubeOpus, destinationTreeUri)
         }
         _active.update { it + (id to DownloadState.Queued) }
         DownloadSession.queued(song, from)
@@ -709,7 +715,7 @@ object Downloads {
         context: Context,
         song: Song,
         forceHighestYoutubeOpus: Boolean = false,
-        destinationUri: Uri? = null,
+        destinationTreeUri: Uri? = null,
     ) = withContext(Dispatchers.IO) {
         val id = song.videoId
         // Set before the lookup, not after it. Resolving where a lossless track
@@ -726,7 +732,7 @@ object Downloads {
             // being written. Corrected here rather than left to disagree with
             // the notification and with the Downloads page afterwards.
             DownloadSession.retitle(id, plan.track)
-            transfer(context, song, plan, destinationUri)
+            transfer(context, song, plan, destinationTreeUri)
         } catch (e: CancellationException) {
             clear(id)
             throw e
@@ -777,7 +783,7 @@ object Downloads {
                     mimeType = "audio/mp4",
                     describe = "Onsen AAC",
                     downloadFormat = "AAC",
-                    stageUserSelectedDocument = true,
+                    stageUserSelectedFolder = true,
                     write = { sink, onProgress ->
                         OnsenM4aExporter.write(context, streamUrl, sink, onProgress)
                     },
@@ -839,7 +845,7 @@ object Downloads {
      * commits or aborts, so a caller is free to call it a second time with a
      * freshly resolved plan without the first attempt leaving anything behind.
      */
-    private suspend fun transfer(context: Context, song: Song, plan: Prepared, destinationUri: Uri?) {
+    private suspend fun transfer(context: Context, song: Song, plan: Prepared, destinationTreeUri: Uri?) {
         val id = song.videoId
         val track = plan.track
 
@@ -879,7 +885,7 @@ object Downloads {
                 }
 
                 val name = DownloadStore.fileNameFor(track, route.extension)
-                val alreadyThere = if (destinationUri == null) DownloadStore.existing(context, name) else null
+                val alreadyThere = if (destinationTreeUri == null) DownloadStore.existing(context, name) else null
                 if (alreadyThere != null) {
                     Log.d(TAG, "$name is already in Music; adopting it")
                     remember(song, track, alreadyThere)
@@ -923,21 +929,22 @@ object Downloads {
                     return@coroutineScope
                 }
 
-                val stageForSelectedDocument = destinationUri != null && route.stageUserSelectedDocument
-                val stagedFile = if (stageForSelectedDocument) {
+                val stageForSelectedFolder = destinationTreeUri != null && route.stageUserSelectedFolder
+                val stagedFile = if (stageForSelectedFolder) {
                     File.createTempFile("onsen-download-", ".${route.extension}", context.cacheDir)
                 } else {
                     null
                 }
                 try {
-                    // HLS export can take a while. Keep the user selected SAF
-                    // document closed until export and tagging finish; some
-                    // providers leave a 0-byte file when a stream sits open
-                    // throughout that work.
+                    // HLS export can take a while. Keep the selected folder
+                    // untouched until export and tagging finish so the picker
+                    // does not leave a visible 0-byte placeholder for minutes.
                     val destination = if (stagedFile != null) {
                         null
                     } else {
-                        destinationUri?.let { DownloadStore.beginAtUri(context, it, name) }
+                        destinationTreeUri?.let {
+                            DownloadStore.beginInTree(context, it, name, route.mimeType)
+                        }
                             ?: DownloadStore.begin(context, name, route.mimeType)
                     }
                     pending = destination
@@ -961,7 +968,12 @@ object Downloads {
                     val finalDestination = if (stagedFile != null) {
                         val stagedBytes = stagedFile.length()
                         if (stagedBytes <= 0L) throw IOException("The M4A export produced no audio")
-                        val selected = DownloadStore.beginAtUri(context, requireNotNull(destinationUri), name)
+                        val selected = DownloadStore.beginInTree(
+                            context,
+                            requireNotNull(destinationTreeUri),
+                            name,
+                            route.mimeType,
+                        )
                         pending = selected
                         copyStagedFileToDocument(context, stagedFile, selected, stagedBytes)
                         selected
@@ -1011,8 +1023,8 @@ object Downloads {
         val downloadFormat: String? = null,
         val taggable: Boolean = true,
         val offlineHls: Manifest? = null,
-        /** Build locally before opening a user selected document, for long exports. */
-        val stageUserSelectedDocument: Boolean = false,
+        /** Build locally before creating a user selected folder's output document. */
+        val stageUserSelectedFolder: Boolean = false,
         val write: suspend (OutputStream, (written: Long, total: Long) -> Unit) -> Unit,
     )
 

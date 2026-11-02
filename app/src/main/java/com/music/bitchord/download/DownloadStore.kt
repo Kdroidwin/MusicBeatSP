@@ -10,6 +10,7 @@ import android.provider.MediaStore
 import com.music.bitchord.data.DebugLog as Log
 import com.music.bitchord.data.settings.AppSettings
 import androidx.annotation.RequiresApi
+import androidx.documentfile.provider.DocumentFile
 import com.music.bitchord.data.model.Song
 import java.io.File
 import java.io.OutputStream
@@ -218,8 +219,10 @@ object DownloadStore {
         private val part: File?,
         /** Set on the legacy path only: what [part] is renamed to. */
         private val target: File?,
-        /** A document URI created by the system picker, which has no MediaStore pending flag. */
+        /** A user-accessible SAF document, which has no MediaStore pending flag. */
         private val userSelectedUri: Boolean = false,
+        /** True only for a fresh document this operation created inside a selected folder. */
+        private val deleteOnAbort: Boolean = false,
     ) {
         /** The bytes being built, whether this is a MediaStore row or a legacy `.part` file. */
         val tagUri: Uri get() = part?.let(Uri::fromFile) ?: uri
@@ -255,22 +258,29 @@ object DownloadStore {
 
         fun abort() {
             part?.delete()
-            // A picker URI belongs to the listener. Leave it intact if a copy
-            // fails; deleting it could remove a document the provider returned
-            // after the listener confirmed a same-name file.
-            if (part == null && !userSelectedUri) runCatching { context.contentResolver.delete(uri, null, null) }
+            if (part == null && (!userSelectedUri || deleteOnAbort)) {
+                runCatching { context.contentResolver.delete(uri, null, null) }
+            }
         }
     }
 
-    /** Write into a document selected through ACTION_CREATE_DOCUMENT. */
-    fun beginAtUri(context: Context, uri: Uri, name: String): Pending = Pending(
-        context = context,
-        uri = uri,
-        name = name,
-        part = null,
-        target = null,
-        userSelectedUri = true,
-    )
+    /** Create a fresh destination only after the selected-folder export is ready to copy. */
+    fun beginInTree(context: Context, treeUri: Uri, name: String, mimeType: String): Pending {
+        val tree = DocumentFile.fromTreeUri(context, treeUri)
+            ?: error("Could not open the selected download folder")
+        if (!tree.isDirectory) error("The selected download location is not a folder")
+        val document = tree.createFile(mimeType, name)
+            ?: error("Could not create $name in the selected download folder")
+        return Pending(
+            context = context,
+            uri = document.uri,
+            name = document.name ?: name,
+            part = null,
+            target = null,
+            userSelectedUri = true,
+            deleteOnAbort = true,
+        )
+    }
 
     /**
      * Reserve [name] and return somewhere to write it.

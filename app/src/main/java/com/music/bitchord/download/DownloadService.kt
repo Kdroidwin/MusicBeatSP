@@ -138,7 +138,7 @@ class DownloadService : Service() {
                     this@DownloadService,
                     song,
                     request.forceHighestYoutubeOpus,
-                    request.destinationUri,
+                    request.destinationTreeUri,
                 )
             }
             Downloads.onRunning(song.videoId, job)

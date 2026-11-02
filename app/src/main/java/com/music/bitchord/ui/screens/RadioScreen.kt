@@ -79,7 +79,6 @@ import com.music.bitchord.R
 import com.music.bitchord.data.model.Song
 import com.music.bitchord.data.settings.AppSettings
 import com.music.bitchord.data.settings.ThemeMode
-import com.music.bitchord.download.DownloadStore
 import com.music.bitchord.download.Downloads
 import com.music.bitchord.playback.beginRadioQueue
 import com.music.bitchord.playback.playSongs
@@ -169,18 +168,22 @@ fun RadioScreen(
         }
     }
 
-    val onsenDownloadPicker = rememberLauncherForActivityResult(ActivityResultContracts.CreateDocument("audio/mp4")) { uri ->
+    val onsenDownloadFolderPicker = rememberLauncherForActivityResult(ActivityResultContracts.OpenDocumentTree()) { uri ->
         val song = pendingOnsenDownload
         pendingOnsenDownload = null
         if (uri != null && song != null) {
-            runCatching {
+            val persisted = runCatching {
                 context.contentResolver.takePersistableUriPermission(
                     uri,
                     Intent.FLAG_GRANT_READ_URI_PERMISSION or Intent.FLAG_GRANT_WRITE_URI_PERMISSION,
                 )
+            }.isSuccess
+            if (persisted) {
+                Downloads.enqueueToFolder(context, song, uri)
+                Toast.makeText(context, R.string.radio_onsen_download_started, Toast.LENGTH_SHORT).show()
+            } else {
+                Toast.makeText(context, R.string.radio_onsen_download_folder_unavailable, Toast.LENGTH_LONG).show()
             }
-            Downloads.enqueueToUri(context, song, uri)
-            Toast.makeText(context, R.string.radio_onsen_download_started, Toast.LENGTH_SHORT).show()
         }
     }
 
@@ -377,7 +380,7 @@ fun RadioScreen(
             else -> {
                 val song = onsenSong(episode, program)
                 pendingOnsenDownload = song
-                onsenDownloadPicker.launch(DownloadStore.fileNameFor(song, "m4a"))
+                onsenDownloadFolderPicker.launch(null)
             }
         }
     }

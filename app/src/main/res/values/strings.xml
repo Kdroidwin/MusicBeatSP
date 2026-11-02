@@ -1074,7 +1074,8 @@
     <string name="radio_onsen_episode_list_empty">No playable audio episodes are available.</string>
     <string name="radio_onsen_episode_play">Play episode</string>
     <string name="radio_onsen_download">Download Onsen episode</string>
-    <string name="radio_onsen_download_started">Downloading this Onsen episode as M4A.</string>
+    <string name="radio_onsen_download_started">The M4A will appear in the selected folder when the download is complete.</string>
+    <string name="radio_onsen_download_folder_unavailable">Cannot access the selected download folder.</string>
     <string name="radio_onsen_premium_required">Premium member access required.</string>
     <string name="radio_onsen_saved_queue_unavailable">Onsen playback links can expire, so episodes cannot be saved in a named queue. Reopen an episode from the Radio tab to play it again.</string>
     <string name="radio_play_failed">Could not start this radio station. Check your connection and try again.</string>
