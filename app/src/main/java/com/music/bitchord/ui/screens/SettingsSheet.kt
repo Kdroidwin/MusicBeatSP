@@ -711,6 +711,9 @@ fun SettingsScreen(
     val shuffleArtistAlbums by AppSettings.shuffleArtistAlbums.collectAsStateWithLifecycle()
     val onlineAlbumArtistArtwork by AppSettings.onlineAlbumArtistArtwork.collectAsStateWithLifecycle()
     val artistDeezerArtworkEnabled by AppSettings.artistDeezerArtworkEnabled.collectAsStateWithLifecycle()
+    val signatureApiEnabled by AppSettings.signatureApiEnabled.collectAsStateWithLifecycle()
+    val spotifySpdcToken by AppSettings.spotifySpdcToken.collectAsStateWithLifecycle()
+    val prioritizeSpotifyCanvas by AppSettings.prioritizeSpotifyCanvas.collectAsStateWithLifecycle()
     val startupTab by AppSettings.startupTab.collectAsStateWithLifecycle()
     val quickActions by AppSettings.playerQuickActions.collectAsStateWithLifecycle()
     val hidePlayerQuickActionCircles by AppSettings.hidePlayerQuickActionCircles.collectAsStateWithLifecycle()
@@ -895,6 +898,8 @@ fun SettingsScreen(
         currentDisplay.resolvePerformanceRefreshRate(performanceRefreshRate)
     }
     var settingsSearchQuery by rememberSaveable { mutableStateOf("") }
+    var showArtistSignatureEditor by rememberSaveable { mutableStateOf(false) }
+    var showSpotifyCanvasEditor by rememberSaveable { mutableStateOf(false) }
     var showLauncherIconPicker by rememberSaveable { mutableStateOf(false) }
     var showThemePicker by rememberSaveable { mutableStateOf(false) }
     var showMediaControlActionPicker by rememberSaveable { mutableStateOf(false) }
@@ -1884,7 +1889,35 @@ fun SettingsScreen(
         stringResource(R.string.navigation_bar_force_white_subtitle),
         listOf("navigation bar", "system bar", "gesture handle", "back", "home", "white", "ナビゲーションバー", "戻る", "ホーム", "ジェスチャーバー", "白"),
         forceWhiteNavigationBar,
-    ) { AppSettings.setForceWhiteNavigationBar(!forceWhiteNavigationBar) }
+    ) { AppSettings.setForceWhiteNavigationBar(!forceWhiteNavigationBar) } + listOf(
+        SettingsSearchEntry(
+            title = stringResource(R.string.artist_signatures),
+            subtitle = stringResource(R.string.artist_signatures_subtitle),
+            keywords = listOf("artist signature", "signature", "autograph", "アーティスト署名", "署名"),
+            checked = signatureApiEnabled,
+            activate = { AppSettings.setSignatureApiEnabled(!signatureApiEnabled) },
+        ),
+        SettingsSearchEntry(
+            title = stringResource(R.string.artist_signatures_url),
+            subtitle = stringResource(R.string.artist_signatures_subtitle),
+            keywords = listOf("artist signature api", "signature url", "アーティスト署名API", "署名API", "API URL"),
+            activate = { showArtistSignatureEditor = true },
+        ),
+        SettingsSearchEntry(
+            title = stringResource(R.string.spotify_canvas_setup),
+            subtitle = stringResource(R.string.spotify_canvas_setup_description),
+            keywords = listOf("Spotify Canvas", "Spotify", "Canvas", "sp_dc", "スポティファイ", "キャンバス"),
+            valueLabel = stringResource(R.string.spotify_canvas_cookie_saved).takeIf { spotifySpdcToken.isNotBlank() },
+            activate = { showSpotifyCanvasEditor = true },
+        ),
+        SettingsSearchEntry(
+            title = stringResource(R.string.prioritize_spotify_canvas),
+            subtitle = stringResource(R.string.prioritize_spotify_canvas_subtitle),
+            keywords = listOf("Spotify Canvas priority", "Spotify", "Canvas", "Spotify優先", "Canvas優先"),
+            checked = prioritizeSpotifyCanvas,
+            activate = { AppSettings.setPrioritizeSpotifyCanvas(!prioritizeSpotifyCanvas) },
+        ),
+    )
 
 
     LaunchedEffect(selectedPerformanceRefreshRate, performanceRefreshRate) {
@@ -5091,6 +5124,8 @@ fun SettingsScreen(
                     LocalMediaRepository.requestAllFilesAccess(context)
                 }
             },
+            onOpenArtistSignatureEditor = { showArtistSignatureEditor = true },
+            onOpenSpotifyCanvasSetup = { showSpotifyCanvasEditor = true },
         )
 
         SettingsGroup(header = stringResource(R.string.storage)) {
@@ -5853,6 +5888,15 @@ fun SettingsScreen(
 
 
 
+    ArtistSignatureApiSettingsDialog(
+        show = showArtistSignatureEditor,
+        onDismiss = { showArtistSignatureEditor = false },
+    )
+    SpotifyCanvasSetupDialog(
+        show = showSpotifyCanvasEditor,
+        onDismiss = { showSpotifyCanvasEditor = false },
+    )
+
     // Asked before the picker opens rather than after a file is chosen: the
     // thing being confirmed is that this device's own history is about to be
     // thrown away, and that is true whichever file gets picked.
@@ -6477,6 +6521,8 @@ private fun LocalMusicSettingsGroup(
     onChooseMusicFolder: () -> Unit,
     onClearMusicFolder: () -> Unit,
     onOpenAllFiles: () -> Unit,
+    onOpenArtistSignatureEditor: () -> Unit,
+    onOpenSpotifyCanvasSetup: () -> Unit,
 ) {
     val context = LocalContext.current
 SettingsGroup(header = stringResource(R.string.local_music)) {
@@ -6665,9 +6711,9 @@ SettingsGroup(header = stringResource(R.string.local_music)) {
         onClick = { resetDeezerArtistArtwork(context) },
     )
     RowDivider()
-    ArtistSignatureApiSettingsRow()
+    ArtistSignatureApiSettingsRow(onOpenEditor = onOpenArtistSignatureEditor)
     RowDivider()
-    SpotifyCanvasSettingsRows()
+    SpotifyCanvasSettingsRows(onOpenSetup = onOpenSpotifyCanvasSetup)
     RowDivider()
     LocalMusicFolderRootSettingsRow(
         path = localMusicFolderRoot,
@@ -6913,14 +6959,8 @@ SettingsGroup(header = stringResource(R.string.local_music)) {
 }
 
 @Composable
-private fun ArtistSignatureApiSettingsRow() {
+private fun ArtistSignatureApiSettingsRow(onOpenEditor: () -> Unit) {
     val enabled by AppSettings.signatureApiEnabled.collectAsStateWithLifecycle()
-    val storedUrl by AppSettings.signatureApiUrl.collectAsStateWithLifecycle()
-    val scope = rememberCoroutineScope()
-    var showEditor by remember { mutableStateOf(false) }
-    var input by remember(storedUrl) { mutableStateOf(storedUrl) }
-    var testing by remember { mutableStateOf(false) }
-    var testResult by remember { mutableStateOf<Boolean?>(null) }
 
     SettingsRow(
         icon = Icons.Rounded.Person,
@@ -6932,86 +6972,89 @@ private fun ArtistSignatureApiSettingsRow() {
                 onCheckedChange = AppSettings::setSignatureApiEnabled,
             )
         },
-        onClick = {
-            input = storedUrl
-            testResult = null
-            showEditor = true
-        },
+        onClick = onOpenEditor,
     )
-    if (showEditor) {
-        AlertDialog(
-            onDismissRequest = { showEditor = false },
-            title = { Text(stringResource(R.string.artist_signatures_url)) },
-            text = {
-                Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
-                    Text(stringResource(R.string.artist_signatures_subtitle))
-                    OutlinedTextField(
-                        value = input,
-                        onValueChange = { input = it; testResult = null },
-                        label = { Text(stringResource(R.string.artist_signatures_url)) },
-                        placeholder = { Text(stringResource(R.string.artist_signatures_url_hint)) },
-                        singleLine = true,
-                        enabled = !testing,
-                    )
-                    testResult?.let { success ->
-                        Text(
-                            stringResource(if (success) R.string.connected else R.string.artist_signatures_test_failed),
-                            color = if (success) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.error,
-                        )
-                    }
-                }
-            },
-            confirmButton = {
-                Row {
-                    TextButton(
-                        enabled = input.isNotBlank() && !testing,
-                        onClick = {
-                            val normalized = AppSettings.normalizeSignatureApiUrl(input)
-                            if (!ArtistSignatureRepository.isValidBaseUrl(normalized)) {
-                                testResult = false
-                            } else {
-                                testing = true
-                                scope.launch {
-                                    testResult = ArtistSignatureRepository.checkHealth(normalized)
-                                    testing = false
-                                }
-                            }
-                        },
-                    ) { Text(stringResource(R.string.artist_signatures_test)) }
-                    TextButton(
-                        enabled = !testing,
-                        onClick = {
-                            AppSettings.setSignatureApiUrl(input)
-                            AppSettings.setSignatureApiEnabled(input.isNotBlank())
-                            ArtistSignatureRepository.clear()
-                            showEditor = false
-                        },
-                    ) { Text(stringResource(R.string.save)) }
-                }
-            },
-            dismissButton = {
-                TextButton(onClick = { showEditor = false }) { Text(stringResource(R.string.cancel)) }
-            },
-        )
-    }
 }
 
 @Composable
-private fun SpotifyCanvasSettingsRows() {
+private fun ArtistSignatureApiSettingsDialog(
+    show: Boolean,
+    onDismiss: () -> Unit,
+) {
+    if (!show) return
+    val storedUrl by AppSettings.signatureApiUrl.collectAsStateWithLifecycle()
+    val scope = rememberCoroutineScope()
+    var input by remember(storedUrl) { mutableStateOf(storedUrl) }
+    var testing by remember { mutableStateOf(false) }
+    var testResult by remember { mutableStateOf<Boolean?>(null) }
+
+    AlertDialog(
+        onDismissRequest = onDismiss,
+        title = { Text(stringResource(R.string.artist_signatures_url)) },
+        text = {
+            Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
+                Text(stringResource(R.string.artist_signatures_subtitle))
+                OutlinedTextField(
+                    value = input,
+                    onValueChange = { input = it; testResult = null },
+                    label = { Text(stringResource(R.string.artist_signatures_url)) },
+                    placeholder = { Text(stringResource(R.string.artist_signatures_url_hint)) },
+                    singleLine = true,
+                    enabled = !testing,
+                )
+                testResult?.let { success ->
+                    Text(
+                        stringResource(if (success) R.string.connected else R.string.artist_signatures_test_failed),
+                        color = if (success) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.error,
+                    )
+                }
+            }
+        },
+        confirmButton = {
+            Row {
+                TextButton(
+                    enabled = input.isNotBlank() && !testing,
+                    onClick = {
+                        val normalized = AppSettings.normalizeSignatureApiUrl(input)
+                        if (!ArtistSignatureRepository.isValidBaseUrl(normalized)) {
+                            testResult = false
+                        } else {
+                            testing = true
+                            scope.launch {
+                                testResult = ArtistSignatureRepository.checkHealth(normalized)
+                                testing = false
+                            }
+                        }
+                    },
+                ) { Text(stringResource(R.string.artist_signatures_test)) }
+                TextButton(
+                    enabled = !testing,
+                    onClick = {
+                        AppSettings.setSignatureApiUrl(input)
+                        AppSettings.setSignatureApiEnabled(input.isNotBlank())
+                        ArtistSignatureRepository.clear()
+                        onDismiss()
+                    },
+                ) { Text(stringResource(R.string.save)) }
+            }
+        },
+        dismissButton = {
+            TextButton(onClick = onDismiss) { Text(stringResource(R.string.cancel)) }
+        },
+    )
+}
+
+@Composable
+private fun SpotifyCanvasSettingsRows(onOpenSetup: () -> Unit) {
     val storedToken by AppSettings.spotifySpdcToken.collectAsStateWithLifecycle()
     val prioritizeSpotify by AppSettings.prioritizeSpotifyCanvas.collectAsStateWithLifecycle()
-    var showEditor by remember { mutableStateOf(false) }
-    var input by remember(storedToken) { mutableStateOf(storedToken) }
 
     SettingsRow(
         icon = Icons.Rounded.SmartDisplay,
         title = stringResource(R.string.spotify_canvas_setup),
         subtitle = stringResource(R.string.spotify_canvas_setup_description),
         value = if (storedToken.isBlank()) null else stringResource(R.string.spotify_canvas_cookie_saved),
-        onClick = {
-            input = storedToken
-            showEditor = true
-        },
+        onClick = onOpenSetup,
     )
     RowDivider()
     SettingsRow(
@@ -7030,39 +7073,45 @@ private fun SpotifyCanvasSettingsRows() {
         },
         onClick = { AppSettings.setPrioritizeSpotifyCanvas(!prioritizeSpotify) },
     )
+}
 
-    if (showEditor) {
-        AlertDialog(
-            onDismissRequest = { showEditor = false },
-            title = { Text(stringResource(R.string.spotify_canvas_setup)) },
-            text = {
-                Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
-                    Text(stringResource(R.string.spotify_canvas_setup_description))
-                    Text(stringResource(R.string.spotify_canvas_setup_steps))
-                    OutlinedTextField(
-                        value = input,
-                        onValueChange = { input = it },
-                        label = { Text(stringResource(R.string.spdc_token)) },
-                        singleLine = true,
-                        visualTransformation = PasswordVisualTransformation(),
-                    )
-                }
-            },
-            confirmButton = {
-                TextButton(
-                    onClick = {
-                        AppSettings.setSpotifySpdcToken(input.trim())
-                        showEditor = false
-                    },
-                ) { Text(stringResource(R.string.save)) }
-            },
-            dismissButton = {
-                TextButton(onClick = { showEditor = false }) {
-                    Text(stringResource(R.string.cancel))
-                }
-            },
-        )
-    }
+@Composable
+private fun SpotifyCanvasSetupDialog(
+    show: Boolean,
+    onDismiss: () -> Unit,
+) {
+    if (!show) return
+    val storedToken by AppSettings.spotifySpdcToken.collectAsStateWithLifecycle()
+    var input by remember(storedToken) { mutableStateOf(storedToken) }
+
+    AlertDialog(
+        onDismissRequest = onDismiss,
+        title = { Text(stringResource(R.string.spotify_canvas_setup)) },
+        text = {
+            Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
+                Text(stringResource(R.string.spotify_canvas_setup_description))
+                Text(stringResource(R.string.spotify_canvas_setup_steps))
+                OutlinedTextField(
+                    value = input,
+                    onValueChange = { input = it },
+                    label = { Text(stringResource(R.string.spdc_token)) },
+                    singleLine = true,
+                    visualTransformation = PasswordVisualTransformation(),
+                )
+            }
+        },
+        confirmButton = {
+            TextButton(
+                onClick = {
+                    AppSettings.setSpotifySpdcToken(input.trim())
+                    onDismiss()
+                },
+            ) { Text(stringResource(R.string.save)) }
+        },
+        dismissButton = {
+            TextButton(onClick = onDismiss) { Text(stringResource(R.string.cancel)) }
+        },
+    )
 }
 
 @Composable
