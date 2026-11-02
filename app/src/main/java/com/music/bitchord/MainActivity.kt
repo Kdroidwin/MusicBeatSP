@@ -3660,6 +3660,7 @@ private fun BitChordApp(
             }
             var showAddToPlaylist by remember { mutableStateOf(false) }
             var showArtistPicker by remember { mutableStateOf(false) }
+            var showArtistPickerForArtwork by remember(songIdentityKey) { mutableStateOf(false) }
 
             if (showTagEditor) {
                 Dialog(
@@ -3791,28 +3792,37 @@ private fun BitChordApp(
                     allowArtworkColor = !menuFromPlayer || playerPopupsUseArtworkColor,
                     onDismissRequest = {
                         showArtistPicker = false
+                        showArtistPickerForArtwork = false
                         songActions = null
                     },
                     onSelectArtist = { selectedArtist ->
+                        val forArtwork = showArtistPickerForArtwork
                         showArtistPicker = false
+                        showArtistPickerForArtwork = false
                         songActions = null
-                        dismissNowPlaying()
                         val cleanArtist = selectedArtist.trim()
                         if (cleanArtist.isNotBlank()) {
-                            openLocalArtist(cleanArtist, null)
+                            if (forArtwork) {
+                                chooseArtistImage(cleanArtist)
+                            } else {
+                                dismissNowPlaying()
+                                openLocalArtist(cleanArtist, null)
+                            }
                         }
                     },
                 )
             } else {
-                val youtubeAudio = song.localUri.isNullOrBlank() &&
-                    song.localPath.isNullOrBlank() &&
-                    !song.isLiveRadio &&
-                    !song.isExternalPreview &&
-                    song.sourceQuality.isNullOrBlank() &&
-                    song.videoId.length == 11 &&
+                val youtubeVideoId = song.videoId.length == 11 &&
                     song.videoId.all { it.isLetterOrDigit() || it == '_' || it == '-' } &&
                     !song.videoId.startsWith("radio:") &&
                     !song.videoId.startsWith("local:")
+                val savedYoutubeDownload = youtubeVideoId && song.videoId in Downloads.saved.value
+                val youtubeAudio = youtubeVideoId && !song.isLiveRadio && !song.isExternalPreview &&
+                    (savedYoutubeDownload || (
+                        song.localUri.isNullOrBlank() &&
+                            song.localPath.isNullOrBlank() &&
+                            song.sourceQuality.isNullOrBlank()
+                        ))
                 LocalSongActionsSheet(
                     song = song,
                     onDismissRequest = { songActions = null },
@@ -3820,6 +3830,32 @@ private fun BitChordApp(
                         {
                             songActions = null
                             startHighestYoutubeOpusDownload(song)
+                        }
+                    } else null,
+                    onDeleteYoutubeDownload = if (menuFromPlayer && youtubeVideoId) {
+                        {
+                            scope.launch {
+                                val deleted = Downloads.delete(context, song.videoId)
+                                Toast.makeText(
+                                    context,
+                                    if (deleted) R.string.youtube_download_deleted
+                                    else R.string.youtube_download_delete_failed,
+                                    Toast.LENGTH_SHORT,
+                                ).show()
+                            }
+                        }
+                    } else null,
+                    onChangeArtistImage = if (menuFromPlayer && song.artist.isNotBlank()) {
+                        {
+                            val artists = com.music.bitchord.feature.artistimage.util.ArtistSplitter.split(song.artist)
+                                .ifEmpty { listOf(song.artist) }
+                            if (artists.size > 1) {
+                                showArtistPickerForArtwork = true
+                                showArtistPicker = true
+                            } else {
+                                songActions = null
+                                chooseArtistImage(artists.first().trim())
+                            }
                         }
                     } else null,
                     onGoToAlbum = {

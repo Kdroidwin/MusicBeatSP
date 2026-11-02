@@ -513,6 +513,8 @@
     <string name="dislike">Dislike</string>
     <string name="done">Done</string>
     <string name="download">Download</string>
+    <string name="youtube_download_deleted">Downloaded YouTube audio deleted</string>
+    <string name="youtube_download_delete_failed">Couldn’t delete the downloaded audio</string>
     <string name="download_quality_dialog_subtitle">For files kept on this device</string>
     <string name="downloaded">Downloaded</string>
     <string name="drag_to_reorder">Drag to reorder</string>

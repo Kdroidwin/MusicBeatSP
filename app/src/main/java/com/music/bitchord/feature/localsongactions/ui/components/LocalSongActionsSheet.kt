@@ -25,8 +25,10 @@ import androidx.compose.material.icons.automirrored.rounded.PlaylistAdd
 import androidx.compose.material.icons.rounded.Album
 import androidx.compose.material.icons.rounded.Bedtime
 import androidx.compose.material.icons.rounded.Edit
+import androidx.compose.material.icons.rounded.Delete
 import androidx.compose.material.icons.rounded.FileDownload
 import androidx.compose.material.icons.rounded.GraphicEq
+import androidx.compose.material.icons.rounded.Image
 import androidx.compose.material.icons.rounded.Info
 import androidx.compose.material.icons.rounded.Person
 import androidx.compose.material.icons.rounded.Share
@@ -55,6 +57,7 @@ import com.music.bitchord.data.model.Song
 import com.music.bitchord.data.model.CARD_ART_PX
 import com.music.bitchord.data.settings.AppSettings
 import com.music.bitchord.data.settings.PlayerDetailsAction
+import com.music.bitchord.download.Downloads
 import com.music.bitchord.playback.cast.CastActionItem
 import com.music.bitchord.playback.SleepTimer
 import kotlinx.coroutines.delay
@@ -93,6 +96,8 @@ fun LocalSongActionsSheet(
     onDismissRequest: () -> Unit,
     modifier: Modifier = Modifier,
     onDownloadYoutubeOpus: (() -> Unit)? = null,
+    onDeleteYoutubeDownload: (() -> Unit)? = null,
+    onChangeArtistImage: (() -> Unit)? = null,
 ) {
     val sheetState = rememberModalBottomSheetState(skipPartiallyExpanded = true)
     val sheetShape = RoundedCornerShape(topStart = 24.dp, topEnd = 24.dp)
@@ -106,6 +111,7 @@ fun LocalSongActionsSheet(
         (!showPlayerActions || playerPopupsUseArtworkColor)
     var pickingSleepTimer by remember { mutableStateOf(false) }
     val hiddenActions by AppSettings.hiddenPlayerDetailsActions.collectAsStateWithLifecycle()
+    val savedDownloads by Downloads.saved.collectAsStateWithLifecycle()
 
     val afterTrack by SleepTimer.afterTrack.collectAsStateWithLifecycle()
     val deadline by SleepTimer.deadline.collectAsStateWithLifecycle()
@@ -218,10 +224,18 @@ fun LocalSongActionsSheet(
 
                     // This action deliberately precedes the existing album row.
                     onDownloadYoutubeOpus?.let { download ->
+                        val deleteDownload = onDeleteYoutubeDownload?.takeIf {
+                            song.videoId in savedDownloads
+                        }
                         LocalSongActionItem(
                             icon = Icons.Rounded.FileDownload,
                             label = stringResource(R.string.download),
                             onClick = download,
+                            trailingActionIcon = deleteDownload?.let { Icons.Rounded.Delete },
+                            trailingActionContentDescription = deleteDownload?.let {
+                                stringResource(R.string.delete_download)
+                            },
+                            onTrailingAction = deleteDownload,
                         )
                     }
 
@@ -250,6 +264,13 @@ fun LocalSongActionsSheet(
                             icon = Icons.AutoMirrored.Rounded.PlaylistAdd,
                             label = stringResource(R.string.add_to_playlist),
                             onClick = onAddToPlaylist,
+                        )
+                    }
+                    onChangeArtistImage?.let { changeImage ->
+                        LocalSongActionItem(
+                            icon = Icons.Rounded.Image,
+                            label = stringResource(R.string.change_artist_image),
+                            onClick = changeImage,
                         )
                     }
 

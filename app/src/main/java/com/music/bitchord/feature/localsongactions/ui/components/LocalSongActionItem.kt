@@ -8,6 +8,7 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.material3.Icon
+import androidx.compose.material3.IconButton
 import androidx.compose.material3.LocalContentColor
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
@@ -37,6 +38,9 @@ fun LocalSongActionItem(
     value: String? = null,
     trailingIcon: ImageVector? = null,
     enabled: Boolean = true,
+    trailingActionIcon: ImageVector? = null,
+    trailingActionContentDescription: String? = null,
+    onTrailingAction: (() -> Unit)? = null,
 ) {
     val contentAlpha = if (enabled) 1f else 0.4f
     val contentColor = LocalContentColor.current
@@ -77,6 +81,20 @@ fun LocalSongActionItem(
                 tint = contentColor.copy(alpha = 0.6f * contentAlpha),
                 modifier = Modifier.size(20.dp),
             )
+        }
+        if (trailingActionIcon != null && onTrailingAction != null) {
+            IconButton(
+                onClick = onTrailingAction,
+                enabled = enabled,
+                modifier = Modifier.size(48.dp),
+            ) {
+                Icon(
+                    imageVector = trailingActionIcon,
+                    contentDescription = trailingActionContentDescription,
+                    tint = contentColor.copy(alpha = contentAlpha),
+                    modifier = Modifier.size(22.dp),
+                )
+            }
         }
     }
 }

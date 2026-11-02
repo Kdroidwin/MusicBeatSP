@@ -469,6 +469,8 @@
     <string name="dislike">低評価</string>
     <string name="done">完了</string>
     <string name="download">ダウンロード</string>
+    <string name="youtube_download_deleted">ダウンロードしたYouTube音源を削除しました</string>
+    <string name="youtube_download_delete_failed">ダウンロード音源を削除できませんでした</string>
     <string name="download_quality_dialog_subtitle">このデバイスに保存するファイル向け</string>
     <string name="downloaded">ダウンロード済み</string>
     <string name="drag_to_reorder">ドラッグして並べ替え</string>
