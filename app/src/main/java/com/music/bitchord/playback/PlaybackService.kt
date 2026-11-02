@@ -2512,6 +2512,18 @@ class PlaybackService : MediaLibraryService() {
     private fun recoverFrom(error: PlaybackException, player: ExoPlayer) {
         val item = player.currentMediaItem ?: return
         val mediaId = item.mediaId
+        if (item.toSong().isOnsenAudio) {
+            // The Onsen CDN is a direct HLS source, so clearing the cache or
+            // resolving another catalogue cannot fix a DNS/connection failure.
+            // Re-preparing here created an endless BUFFERING spinner on devices
+            // whose resolver rejects the CDN. Stop cleanly and let an explicit
+            // play request start a fresh attempt.
+            recoveries.remove(mediaId)
+            TrackLog.w("BitChord", "Onsen stream failed; waiting for a manual retry", error, about = mediaId)
+            player.stop()
+            Toast.makeText(applicationContext, R.string.radio_onsen_play_failed, Toast.LENGTH_LONG).show()
+            return
+        }
         val uri = item.localConfiguration?.uri
         val position = player.currentPosition.coerceAtLeast(0L)
         val attempts = recoveries.getOrDefault(mediaId, 0) + 1
@@ -5729,7 +5741,12 @@ class PlaybackService : MediaLibraryService() {
 
         override fun play() {
             if (!canStartPlayback()) return
-            if (cast.active) cast.play() else wrappedPlayer.play()
+            if (cast.active) {
+                cast.play()
+            } else {
+                prepareOnsenAfterFailure()
+                wrappedPlayer.play()
+            }
         }
 
         override fun pause() {
@@ -5741,7 +5758,17 @@ class PlaybackService : MediaLibraryService() {
             if (cast.active) {
                 if (playWhenReady) cast.play() else cast.pause()
             } else {
+                if (playWhenReady) prepareOnsenAfterFailure()
                 wrappedPlayer.playWhenReady = playWhenReady
+            }
+        }
+
+        /** Re-prepare an Onsen item only after the listener explicitly asks to play again. */
+        private fun prepareOnsenAfterFailure() {
+            if (wrappedPlayer.playbackState == Player.STATE_IDLE &&
+                wrappedPlayer.currentMediaItem?.toSong()?.isOnsenAudio == true
+            ) {
+                wrappedPlayer.prepare()
             }
         }
 
