@@ -645,16 +645,23 @@ fun DrillDownSongList(
     modifier: Modifier = Modifier,
 ) {
     val hideUnknownPlaylistArtist by AppSettings.hideUnknownPlaylistArtist.collectAsStateWithLifecycle()
-    val selectionArtworkUrl = remember(artworkUrl, songs) {
+    val artworkRequestPx = if (fullScreenArtwork) FULL_SCREEN_COLLECTION_ART_PX else HEADER_ART_PX
+    val selectionArtworkUrl = remember(artworkUrl, songs, artworkRequestPx) {
         artworkUrl
             ?.takeIf { it.isNotBlank() && it != "favorites" }
-            ?.artworkAt(HEADER_ART_PX)
-            ?: songs.firstNotNullOfOrNull { it.artworkAt(HEADER_ART_PX) }
+            ?.artworkAt(artworkRequestPx)
+            ?: songs.firstNotNullOfOrNull { it.artworkAt(artworkRequestPx) }
     }
+    // The playlist/album card has usually already loaded its original thumbnail.
+    // Keep it visible while the larger full-screen rendition is fetched.
+    val previewArtworkUrl = if (fullScreenArtwork) {
+        artworkUrl?.takeIf { it.isNotBlank() && it != "favorites" }?.artworkAt(CARD_ART_PX)
+            ?: songs.firstNotNullOfOrNull { it.artworkAt(CARD_ART_PX) }
+    } else null
     val pageArtworkUrl = selectionArtworkUrl.takeIf { fullScreenArtwork }
     val artworkPalette = rememberArtworkPalette(
         imageUrl = selectionArtworkUrl,
-        artPx = HEADER_ART_PX,
+        artPx = artworkRequestPx,
     )
     SideEffect {
         onArtworkPaletteChanged?.invoke(artworkPalette.takeIf { fullScreenArtwork })
@@ -696,6 +703,7 @@ fun DrillDownSongList(
             if (fullScreenArtwork) {
                 CollectionPageBackground(
                     imageUrl = pageArtworkUrl,
+                    previewImageUrl = previewArtworkUrl,
                     palette = artworkPalette,
                     artHeight = artHeight,
                     artTopPx = {
@@ -829,6 +837,7 @@ fun DrillDownSongList(
             if (fullScreenArtwork) {
                 CollectionPageBackground(
                     imageUrl = pageArtworkUrl,
+                    previewImageUrl = previewArtworkUrl,
                     palette = artworkPalette,
                     artHeight = artHeight,
                     artTopPx = {
@@ -1030,6 +1039,7 @@ fun DrillDownSongList(
 @Composable
 private fun CollectionPageBackground(
     imageUrl: String?,
+    previewImageUrl: String?,
     palette: ArtworkPalette,
     artHeight: Dp,
     artTopPx: () -> Float,
@@ -1045,6 +1055,16 @@ private fun CollectionPageBackground(
                     .height(artHeight)
                     .offset { IntOffset(0, artTopPx().roundToInt()) },
             ) {
+                if (!previewImageUrl.isNullOrBlank() && previewImageUrl != imageUrl) {
+                    AsyncImage(
+                        model = previewImageUrl,
+                        contentDescription = null,
+                        contentScale = ContentScale.Crop,
+                        modifier = Modifier
+                            .fillMaxSize()
+                            .background(palette.elevated),
+                    )
+                }
                 AsyncImage(
                     model = imageUrl,
                     contentDescription = null,
@@ -1095,6 +1115,7 @@ private val SOFT_FOOT_MASK = Brush.verticalGradient(
 )
 
 private val SOFT_FOOT_BLUR = 48.dp
+private const val FULL_SCREEN_COLLECTION_ART_PX = 1440
 
 /** Drag-to-reorder state for the song section below the two static header rows. */
 @Composable

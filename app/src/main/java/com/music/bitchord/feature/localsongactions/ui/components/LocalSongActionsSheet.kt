@@ -144,12 +144,12 @@ fun LocalSongActionsSheet(
                 Box(
                     Modifier
                         .fillMaxWidth()
-                        .padding(top = 8.dp, bottom = 4.dp),
+                        .height(48.dp),
                     contentAlignment = androidx.compose.ui.Alignment.Center,
                 ) {
                     Box(
                         Modifier
-                            .size(width = 34.dp, height = 4.dp)
+                            .size(width = 48.dp, height = 6.dp)
                             .clip(RoundedCornerShape(50))
                             .background(
                                 (if (useArtworkBackdrop) artworkPalette.onBackground else MaterialTheme.colorScheme.onSurface)
