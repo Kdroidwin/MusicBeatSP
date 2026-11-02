@@ -1226,8 +1226,15 @@ fun NowPlayingScreen(
     // Source-backed IDs are namespaced (src:<config>::<track>) and cannot be
     // rated by YouTube, even while a YouTube account is signed in. Keep those
     // favorites in this app; ordinary YouTube Music IDs can use account likes.
+    // Prefer the stable source key over localUri: online sources may attach a
+    // short-lived stream URL there, which must not become the saved favorite ID.
     val isSourceBackedTrack = SourceRegistry.parseTrackKey(song.videoId) != null
-    val useDeviceFavorite = !localUri.isNullOrBlank() || isSourceBackedTrack || !signedIn
+    val deviceFavoriteId = when {
+        isSourceBackedTrack -> song.videoId
+        !localUri.isNullOrBlank() -> localUri
+        !signedIn -> song.videoId
+        else -> null
+    }
     val normalizedArtistName = song.artist.trim().lowercase(Locale.ROOT)
     val isUnknownArtist = normalizedArtistName.isBlank() || normalizedArtistName in setOf(
         "unknown artist",
@@ -1253,9 +1260,12 @@ fun NowPlayingScreen(
     }
     val likeDescription = stringResource(if (liked) R.string.remove_from_liked else R.string.like)
     val toggleLike: () -> Unit = {
-        if (useDeviceFavorite) {
-            LocalFavoritesStore.toggleFavorite(localUri ?: song.videoId)
-        } else onToggleLike()
+        val favoriteId = deviceFavoriteId
+        if (favoriteId != null) {
+            LocalFavoritesStore.toggleFavorite(favoriteId)
+        } else {
+            onToggleLike()
+        }
         Unit
     }
 
