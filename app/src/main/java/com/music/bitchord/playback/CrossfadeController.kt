@@ -1,5 +1,7 @@
 package com.music.bitchord.playback
 
+import com.music.bitchord.playback.audio.bitperfect.BitPerfectOutput
+
 import android.os.SystemClock
 import android.util.Log
 import androidx.media3.common.C
@@ -1893,9 +1895,9 @@ class CrossfadeController(
     // ---- Numbers ------------------------------------------------------------
 
     private fun smartFadeIsEnabled(): Boolean = AppSettings.smartFadeEnabled.value &&
-        !AppSettings.bitPerfectPlayback.value && !AppSettings.audioOffloadEnabled.value
+        !BitPerfectOutput.ready.value && !AppSettings.audioOffloadEnabled.value
 
-    private fun configuredFadeMs(): Long = if (AppSettings.bitPerfectPlayback.value || AppSettings.audioOffloadEnabled.value) {
+    private fun configuredFadeMs(): Long = if (BitPerfectOutput.ready.value || AppSettings.audioOffloadEnabled.value) {
         0L
     } else {
         AppSettings.crossfadeSeconds.value * 1000L

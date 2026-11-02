@@ -50,6 +50,7 @@ enum class LibraryFilter {
     YOUTUBE_MUSIC,
     RECENTLY_PLAYED,
     MOST_PLAYED,
+    REPLAY,
 }
 
 private fun LibraryCategory.toLibraryFilter(): LibraryFilter = when (this) {
@@ -58,6 +59,7 @@ private fun LibraryCategory.toLibraryFilter(): LibraryFilter = when (this) {
     LibraryCategory.YOUTUBE_MUSIC -> LibraryFilter.YOUTUBE_MUSIC
     LibraryCategory.MOST_PLAYED -> LibraryFilter.MOST_PLAYED
     LibraryCategory.RECENTLY_PLAYED -> LibraryFilter.RECENTLY_PLAYED
+    LibraryCategory.REPLAY -> LibraryFilter.REPLAY
 }
 
 /**
@@ -115,6 +117,7 @@ fun LibraryHeaderBar(
                     LibraryCategory.YOUTUBE_MUSIC -> stringResource(R.string.youtube_music_saved)
                     LibraryCategory.MOST_PLAYED -> stringResource(R.string.most_played)
                     LibraryCategory.RECENTLY_PLAYED -> stringResource(R.string.recently_played)
+                    LibraryCategory.REPLAY -> stringResource(R.string.replay)
                 }
                 FilterChip(
                     selected = selectedFilter == filter,

@@ -195,10 +195,13 @@ import com.music.bitchord.data.settings.PlayerDetailsAction
 import com.music.bitchord.data.settings.MediaControlSecondaryAction
 import com.music.bitchord.data.settings.ScreenOrientationMode
 import com.music.bitchord.data.settings.OutputPcmMode
+import com.music.bitchord.data.settings.BitPerfectMode
+import com.music.bitchord.data.canvas.ArtistSignatureRepository
 import com.music.bitchord.data.settings.LyricsTextAlignment
 import com.music.bitchord.playback.AudioOutputStatus
 import com.music.bitchord.R
 import com.music.bitchord.data.settings.ThemeMode
+import com.music.bitchord.playback.audio.bitperfect.BitPerfectOutput
 import com.music.bitchord.data.settings.PillMotionStyle
 import com.music.bitchord.data.stats.Backup
 import com.music.bitchord.feature.localmusic.data.LocalPlaylistStore
@@ -311,6 +314,7 @@ private fun libraryCategorySettingsSearchEntries(
             LibraryCategory.YOUTUBE_MUSIC -> R.string.youtube_music_saved
             LibraryCategory.MOST_PLAYED -> R.string.most_played
             LibraryCategory.RECENTLY_PLAYED -> R.string.recently_played
+            LibraryCategory.REPLAY -> R.string.replay
         })
         SettingsSearchEntry(
             title = stringResource(R.string.show_library_category, title),
@@ -490,6 +494,33 @@ private fun fullBleedArtworkBottomBlurSearchEntry(strengthDp: Int) = SettingsSea
 )
 
 @Composable
+private fun instantStatusBarOnPlayerCloseSearchEntry(enabled: Boolean) = SettingsSearchEntry(
+    title = stringResource(R.string.instant_status_bar_on_player_close),
+    subtitle = stringResource(R.string.instant_status_bar_on_player_close_subtitle),
+    keywords = listOf("status bar", "player", "instant", "ステータスバー", "プレイヤー", "即時"),
+    checked = enabled,
+    activate = { AppSettings.setInstantStatusBarOnPlayerClose(!enabled) },
+)
+
+@Composable
+private fun hideRadioTopLabelsSearchEntry(enabled: Boolean) = SettingsSearchEntry(
+    title = stringResource(R.string.hide_radio_top_labels),
+    subtitle = stringResource(R.string.hide_radio_top_labels_subtitle),
+    keywords = listOf("radio", "labels", "ラジオ", "ラベル", "お気に入り", "地域", "サービス"),
+    checked = enabled,
+    activate = { AppSettings.setHideRadioTopLabels(!enabled) },
+)
+
+@Composable
+private fun bitPerfectPlaybackSearchEntry(enabled: Boolean, onActivate: () -> Unit) = SettingsSearchEntry(
+    title = stringResource(R.string.bit_perfect_playback),
+    subtitle = stringResource(R.string.bit_perfect_playback_subtitle),
+    keywords = listOf("bitperfect", "bit-perfect", "bit perfect", "USB DAC", "AAudio", "PCM", "ビットパーフェクト", "音質"),
+    checked = enabled,
+    activate = onActivate,
+)
+
+@Composable
 private fun FullBleedArtworkBottomBlurSettingsRow(strengthDp: Int) {
     SettingsRow(
         icon = Icons.Rounded.BlurOn,
@@ -638,6 +669,7 @@ fun SettingsScreen(
     val mainNavigationTabsPopup by AppSettings.mainNavigationTabsPopup.collectAsStateWithLifecycle()
     val settingsTopBarUsesMoreIcon by AppSettings.settingsTopBarUsesMoreIcon.collectAsStateWithLifecycle()
     val hideNavBarLabels by AppSettings.hideNavigationBarLabels.collectAsStateWithLifecycle()
+    val hideRadioTopLabels by AppSettings.hideRadioTopLabels.collectAsStateWithLifecycle()
     val navigationBarMatchesMiniPlayerColor by AppSettings.navigationBarMatchesMiniPlayerColor.collectAsStateWithLifecycle()
     val forceWhiteNavigationBar by AppSettings.forceWhiteNavigationBar.collectAsStateWithLifecycle()
     val playerInkColors by AppSettings.playerInkColors.collectAsStateWithLifecycle()
@@ -688,6 +720,7 @@ fun SettingsScreen(
     val keepScreenOnDuringLyrics by AppSettings.keepScreenOnDuringLyrics.collectAsStateWithLifecycle()
     val showStatusBar by AppSettings.showStatusBar.collectAsStateWithLifecycle()
     val showPlayerStatusBar by AppSettings.showPlayerStatusBar.collectAsStateWithLifecycle()
+    val instantStatusBarOnPlayerClose by AppSettings.instantStatusBarOnPlayerClose.collectAsStateWithLifecycle()
     val showNavigationBar by AppSettings.showNavigationBar.collectAsStateWithLifecycle()
     val musicOnlyDeviceMode by AppSettings.musicOnlyDeviceMode.collectAsStateWithLifecycle()
     val orientationMode by AppSettings.screenOrientationMode.collectAsStateWithLifecycle()
@@ -781,7 +814,10 @@ fun SettingsScreen(
     val reverbEnabled by AppSettings.reverbEnabled.collectAsStateWithLifecycle()
     val sessionId by AppSettings.audioSessionId.collectAsStateWithLifecycle()
     val outputPcmMode by AppSettings.outputPcmMode.collectAsStateWithLifecycle()
-    val bitPerfectPlayback by AppSettings.bitPerfectPlayback.collectAsStateWithLifecycle()
+    val bitPerfectMode by AppSettings.bitPerfectMode.collectAsStateWithLifecycle()
+    val bitPerfectStatus by BitPerfectOutput.status.collectAsStateWithLifecycle()
+    val usbAllowFixedVolume by AppSettings.usbAllowFixedVolume.collectAsStateWithLifecycle()
+    val convertForLimitedDac by AppSettings.convertForLimitedDac.collectAsStateWithLifecycle()
     val preferUsbDac by AppSettings.preferUsbDac.collectAsStateWithLifecycle()
     val speakerPlaybackAllowed by AppSettings.speakerPlaybackAllowed.collectAsStateWithLifecycle()
     val outputStatus by AudioOutputStatus.current.collectAsStateWithLifecycle()
@@ -803,10 +839,35 @@ fun SettingsScreen(
         }.getOrDefault(emptyList())
     }
     var transportActionSlot by rememberSaveable { mutableStateOf("") }
-    val bitPerfectOutputStatus = stringResource(
-        if (outputStatus.bitPerfectMixerActive) R.string.bit_perfect_mixer_requested
-        else R.string.bit_perfect_mixer_unavailable,
+    var showBitPerfectModeDialog by remember { mutableStateOf(false) }
+    var pendingBitPerfectMode by remember { mutableStateOf<BitPerfectMode?>(null) }
+    var showFixedVolumeConfirmation by remember { mutableStateOf(false) }
+    val bitPerfectModeLabel = stringResource(
+        when (bitPerfectMode) {
+            BitPerfectMode.OFF -> R.string.off
+            BitPerfectMode.USB_ANDROID -> R.string.bit_perfect_mode_usb_android
+            BitPerfectMode.DAP_EXCLUSIVE -> R.string.bit_perfect_mode_dap_exclusive
+            BitPerfectMode.USB_DIRECT -> R.string.bit_perfect_mode_usb_direct
+        },
     )
+    val bitPerfectModeDescription = stringResource(
+        when {
+            bitPerfectMode == BitPerfectMode.USB_ANDROID && Build.VERSION.SDK_INT < 34 -> R.string.bit_perfect_requires_android_14
+            bitPerfectMode == BitPerfectMode.DAP_EXCLUSIVE && Build.VERSION.SDK_INT < 27 -> R.string.bit_perfect_requires_android_8_1
+            bitPerfectMode == BitPerfectMode.OFF -> R.string.bit_perfect_mode_off_subtitle
+            bitPerfectMode == BitPerfectMode.USB_ANDROID -> R.string.bit_perfect_mode_usb_android_subtitle
+            bitPerfectMode == BitPerfectMode.DAP_EXCLUSIVE -> R.string.bit_perfect_mode_dap_exclusive_subtitle
+            else -> R.string.bit_perfect_mode_usb_direct_subtitle
+        },
+    )
+    val bitPerfectModeStatus = if (bitPerfectStatus.active) {
+        stringResource(
+            R.string.bit_perfect_status_active,
+            bitPerfectStatus.deviceName.orEmpty(),
+            bitPerfectStatus.sampleRateHz / 1000f,
+            bitPerfectStatus.outputBits,
+        )
+    } else bitPerfectModeDescription
     val audioFocusLevel by AppSettings.audioFocusLevel.collectAsStateWithLifecycle()
     val replayGenres by AppSettings.replayGenres.collectAsStateWithLifecycle()
     val stopOnTaskRemoved by AppSettings.stopOnTaskRemoved.collectAsStateWithLifecycle()
@@ -1039,6 +1100,8 @@ fun SettingsScreen(
         ) { AppSettings.setShowTrackDurationInsteadOfRemaining(!showTrackDurationInsteadOfRemaining) },
         SettingsSearchEntry(stringResource(R.string.show_status_bar), stringResource(R.string.show_status_bar_search_help), listOf("status bar", "library", "ステータスバー", "ライブラリ", "battery", "電池"), showStatusBar) { AppSettings.setShowStatusBar(!showStatusBar) },
         SettingsSearchEntry(stringResource(R.string.show_player_status_bar), stringResource(R.string.show_player_status_bar_subtitle), listOf("status bar", "player", "ステータスバー", "プレイヤー", "battery", "電池"), showPlayerStatusBar) { AppSettings.setShowPlayerStatusBar(!showPlayerStatusBar) },
+        instantStatusBarOnPlayerCloseSearchEntry(instantStatusBarOnPlayerClose),
+        hideRadioTopLabelsSearchEntry(hideRadioTopLabels),
         SettingsSearchEntry(stringResource(R.string.show_navigation_bar), stringResource(R.string.show_navigation_bar_search_help), listOf("navigation bar", "ナビゲーションバー", "戻る", "home"), showNavigationBar) { AppSettings.setShowNavigationBar(!showNavigationBar) },
         SettingsSearchEntry(stringResource(R.string.music_only_device_mode), stringResource(R.string.music_only_device_mode_subtitle), listOf("music only", "screen pinning", "lock screen", "home", "音楽専用", "画面固定", "ロック画面", "ホーム"), musicOnlyDeviceMode) { AppSettings.setMusicOnlyDeviceMode(!musicOnlyDeviceMode) },
         SettingsSearchEntry(stringResource(R.string.hide_player_artist), stringResource(R.string.hide_player_artist_subtitle), listOf("artist", "アーティスト", "player"), hidePlayerArtist) { AppSettings.setHidePlayerArtist(!hidePlayerArtist) },
@@ -1230,7 +1293,7 @@ fun SettingsScreen(
         appleMusicQueueButtonStyleSearchEntry(appleMusicQueueButtonStyle),
         SettingsSearchEntry(stringResource(R.string.prevent_play_at_zero_volume), stringResource(R.string.prevent_play_at_zero_volume_subtitle), listOf("volume", "音量", "zero", "0"), preventPlayAtZeroVolume) { AppSettings.setPreventPlayAtZeroVolume(!preventPlayAtZeroVolume) },
         SettingsSearchEntry(stringResource(R.string.pause_playback_at_zero_volume), stringResource(R.string.pause_playback_at_zero_volume_subtitle), listOf("volume", "音量", "zero", "0", "pause", "一時停止"), pausePlaybackAtZeroVolume) { AppSettings.setPausePlaybackAtZeroVolume(!pausePlaybackAtZeroVolume) },
-        SettingsSearchEntry(stringResource(R.string.bit_perfect_playback), stringResource(R.string.bit_perfect_playback_subtitle), listOf("bitperfect", "bit-perfect", "bit perfect", "USB DAC", "PCM", "ビットパーフェクト", "音質"), bitPerfectPlayback) { AppSettings.setBitPerfectPlayback(!bitPerfectPlayback) },
+        bitPerfectPlaybackSearchEntry(bitPerfectMode != BitPerfectMode.OFF) { showBitPerfectModeDialog = true },
         SettingsSearchEntry(stringResource(R.string.preload_album_art), stringResource(R.string.preload_album_art_subtitle), listOf("artwork", "album art", "preload", "先読み", "アルバムアート"), preloadAlbumArtOnStartup) { AppSettings.setPreloadAlbumArtOnStartup(!preloadAlbumArtOnStartup) },
         SettingsSearchEntry(stringResource(R.string.persistent_local_artwork), stringResource(R.string.persistent_local_artwork_subtitle), listOf("artwork", "album art", "storage", "画像", "ストレージ"), persistentLocalArtwork) { AppSettings.setPersistentLocalArtwork(!persistentLocalArtwork) },
         SettingsSearchEntry(stringResource(R.string.synced_lyrics), stringResource(R.string.synced_lyrics_subtitle), listOf("lyrics", "歌詞", "同期"), syncedLyrics) { AppSettings.setSyncedLyrics(!syncedLyrics) },
@@ -2341,13 +2404,6 @@ fun SettingsScreen(
                             maxLines = 2,
                             overflow = TextOverflow.Ellipsis,
                         )
-                        if (bitPerfectPlayback) {
-                            Text(
-                                text = bitPerfectOutputStatus,
-                                style = MaterialTheme.typography.bodySmall,
-                                color = MaterialTheme.colorScheme.onSurfaceVariant,
-                            )
-                        }
                         Text(
                             text = stringResource(R.string.audio_output_rate_caveat),
                             style = MaterialTheme.typography.bodySmall,
@@ -2367,19 +2423,145 @@ fun SettingsScreen(
             SettingsRow(
                 icon = Icons.Rounded.GraphicEq,
                 title = stringResource(R.string.bit_perfect_playback),
-                subtitle = stringResource(R.string.bit_perfect_playback_subtitle),
-                trailing = {
-                    Switch(
-                        checked = bitPerfectPlayback,
-                        onCheckedChange = AppSettings::setBitPerfectPlayback,
-                        colors = SwitchDefaults.colors(
-                            checkedTrackColor = MaterialTheme.colorScheme.primary,
-                            checkedBorderColor = MaterialTheme.colorScheme.primary,
-                        ),
-                    )
-                },
-                onClick = { AppSettings.setBitPerfectPlayback(!bitPerfectPlayback) },
+                subtitle = bitPerfectModeStatus,
+                value = bitPerfectModeLabel,
+                trailing = { Chevron() },
+                onClick = { showBitPerfectModeDialog = true },
             )
+            if (bitPerfectMode != BitPerfectMode.OFF) {
+                RowDivider()
+                SettingsRow(
+                    icon = Icons.Rounded.GraphicEq,
+                    title = stringResource(R.string.convert_for_limited_dac),
+                    subtitle = stringResource(R.string.convert_for_limited_dac_subtitle),
+                    trailing = {
+                        Switch(
+                            checked = convertForLimitedDac,
+                            onCheckedChange = AppSettings::setConvertForLimitedDac,
+                        )
+                    },
+                    onClick = { AppSettings.setConvertForLimitedDac(!convertForLimitedDac) },
+                )
+            }
+            if (bitPerfectMode == BitPerfectMode.USB_DIRECT) {
+                RowDivider()
+                SettingsRow(
+                    icon = Icons.AutoMirrored.Rounded.VolumeUp,
+                    title = stringResource(R.string.usb_allow_fixed_volume),
+                    subtitle = stringResource(R.string.usb_allow_fixed_volume_subtitle),
+                    trailing = {
+                        Switch(
+                            checked = usbAllowFixedVolume,
+                            onCheckedChange = { enabled ->
+                                if (enabled) showFixedVolumeConfirmation = true
+                                else AppSettings.setUsbAllowFixedVolume(false)
+                            },
+                        )
+                    },
+                    onClick = {
+                        if (usbAllowFixedVolume) AppSettings.setUsbAllowFixedVolume(false)
+                        else showFixedVolumeConfirmation = true
+                    },
+                )
+            }
+            if (showBitPerfectModeDialog) {
+                AlertDialog(
+                    onDismissRequest = { showBitPerfectModeDialog = false },
+                    title = { Text(stringResource(R.string.bit_perfect_playback)) },
+                    text = {
+                        Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                            BitPerfectMode.entries.forEach { mode ->
+                                val label = stringResource(
+                                    when (mode) {
+                                        BitPerfectMode.OFF -> R.string.off
+                                        BitPerfectMode.USB_ANDROID -> R.string.bit_perfect_mode_usb_android
+                                        BitPerfectMode.DAP_EXCLUSIVE -> R.string.bit_perfect_mode_dap_exclusive
+                                        BitPerfectMode.USB_DIRECT -> R.string.bit_perfect_mode_usb_direct
+                                    },
+                                )
+                                val supported = when (mode) {
+                                    BitPerfectMode.OFF, BitPerfectMode.USB_DIRECT -> true
+                                    BitPerfectMode.USB_ANDROID -> Build.VERSION.SDK_INT >= 34
+                                    BitPerfectMode.DAP_EXCLUSIVE -> Build.VERSION.SDK_INT >= 27
+                                }
+                                val description = stringResource(
+                                    when {
+                                        mode == BitPerfectMode.USB_ANDROID && !supported -> R.string.bit_perfect_requires_android_14
+                                        mode == BitPerfectMode.DAP_EXCLUSIVE && !supported -> R.string.bit_perfect_requires_android_8_1
+                                        mode == BitPerfectMode.OFF -> R.string.bit_perfect_mode_off_subtitle
+                                        mode == BitPerfectMode.USB_ANDROID -> R.string.bit_perfect_mode_usb_android_subtitle
+                                        mode == BitPerfectMode.DAP_EXCLUSIVE -> R.string.bit_perfect_mode_dap_exclusive_subtitle
+                                        else -> R.string.bit_perfect_mode_usb_direct_subtitle
+                                    },
+                                )
+                                Row(
+                                    modifier = Modifier
+                                        .fillMaxWidth()
+                                        .clickable(enabled = supported) {
+                                            showBitPerfectModeDialog = false
+                                            if (mode == BitPerfectMode.OFF) {
+                                                AppSettings.setBitPerfectMode(mode)
+                                            } else if (mode != bitPerfectMode) {
+                                                pendingBitPerfectMode = mode
+                                            }
+                                        }
+                                        .padding(vertical = 4.dp),
+                                    verticalAlignment = Alignment.CenterVertically,
+                                ) {
+                                    RadioButton(
+                                        selected = mode == bitPerfectMode,
+                                        enabled = supported,
+                                        onClick = {
+                                            showBitPerfectModeDialog = false
+                                            if (mode == BitPerfectMode.OFF) AppSettings.setBitPerfectMode(mode)
+                                            else if (mode != bitPerfectMode) pendingBitPerfectMode = mode
+                                        },
+                                    )
+                                    Column(Modifier.padding(start = 8.dp)) {
+                                        Text(label, color = if (supported) MaterialTheme.colorScheme.onSurface else MaterialTheme.colorScheme.onSurfaceVariant)
+                                        Text(description, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                                    }
+                                }
+                            }
+                        }
+                    },
+                    confirmButton = {
+                        TextButton(onClick = { showBitPerfectModeDialog = false }) { Text(stringResource(R.string.cancel)) }
+                    },
+                )
+            }
+            pendingBitPerfectMode?.let { requestedMode ->
+                AlertDialog(
+                    onDismissRequest = { pendingBitPerfectMode = null },
+                    title = { Text(stringResource(R.string.bit_perfect_confirm_title)) },
+                    text = { Text(stringResource(R.string.bit_perfect_confirm_message)) },
+                    confirmButton = {
+                        TextButton(onClick = {
+                            AppSettings.setBitPerfectMode(requestedMode)
+                            pendingBitPerfectMode = null
+                        }) { Text(stringResource(R.string.enable)) }
+                    },
+                    dismissButton = {
+                        TextButton(onClick = { pendingBitPerfectMode = null }) { Text(stringResource(R.string.cancel)) }
+                    },
+                )
+            }
+            if (showFixedVolumeConfirmation) {
+                AlertDialog(
+                    onDismissRequest = { showFixedVolumeConfirmation = false },
+                    title = { Text(stringResource(R.string.usb_allow_fixed_volume_confirm_title)) },
+                    text = { Text(stringResource(R.string.usb_allow_fixed_volume_confirm_message)) },
+                    confirmButton = {
+                        TextButton(onClick = {
+                            AppSettings.setUsbAllowFixedVolume(true)
+                            showFixedVolumeConfirmation = false
+                        }) { Text(stringResource(R.string.enable)) }
+                    },
+                    dismissButton = {
+                        TextButton(onClick = { showFixedVolumeConfirmation = false }) { Text(stringResource(R.string.cancel)) }
+                    },
+                )
+            }
             RowDivider()
             SettingsSubRow(
                 title = stringResource(R.string.prefer_usb_dac),
@@ -3935,6 +4117,19 @@ fun SettingsScreen(
             RowDivider()
             SettingsRow(
                 icon = Icons.Rounded.Fullscreen,
+                title = stringResource(R.string.instant_status_bar_on_player_close),
+                subtitle = stringResource(R.string.instant_status_bar_on_player_close_subtitle),
+                trailing = {
+                    Switch(
+                        checked = instantStatusBarOnPlayerClose,
+                        onCheckedChange = AppSettings::setInstantStatusBarOnPlayerClose,
+                    )
+                },
+                onClick = { AppSettings.setInstantStatusBarOnPlayerClose(!instantStatusBarOnPlayerClose) },
+            )
+            RowDivider()
+            SettingsRow(
+                icon = Icons.Rounded.Fullscreen,
                 title = stringResource(R.string.show_navigation_bar),
                 subtitle = stringResource(R.string.system_bar_visibility_subtitle),
                 trailing = {
@@ -4775,6 +4970,19 @@ fun SettingsScreen(
                     },
                 )
             }
+            RowDivider()
+            SettingsRow(
+                icon = Icons.Rounded.Radio,
+                title = stringResource(R.string.hide_radio_top_labels),
+                subtitle = stringResource(R.string.hide_radio_top_labels_subtitle),
+                trailing = {
+                    Switch(
+                        checked = hideRadioTopLabels,
+                        onCheckedChange = AppSettings::setHideRadioTopLabels,
+                    )
+                },
+                onClick = { AppSettings.setHideRadioTopLabels(!hideRadioTopLabels) },
+            )
         }
 
         SettingsGroup(header = stringResource(R.string.performance)) {
@@ -6284,6 +6492,7 @@ SettingsGroup(header = stringResource(R.string.local_music)) {
             LibraryCategory.YOUTUBE_MUSIC -> R.string.youtube_music_saved
             LibraryCategory.MOST_PLAYED -> R.string.most_played
             LibraryCategory.RECENTLY_PLAYED -> R.string.recently_played
+            LibraryCategory.REPLAY -> R.string.replay
         }
         val visible = category in libraryCategories
         SettingsRow(
@@ -6293,6 +6502,7 @@ SettingsGroup(header = stringResource(R.string.local_music)) {
                 LibraryCategory.YOUTUBE_MUSIC -> Icons.Rounded.SmartDisplay
                 LibraryCategory.MOST_PLAYED -> Icons.Rounded.BarChart
                 LibraryCategory.RECENTLY_PLAYED -> Icons.Rounded.History
+                LibraryCategory.REPLAY -> Icons.Rounded.BarChart
             },
             title = stringResource(titleRes),
             subtitle = stringResource(R.string.library_category_order_subtitle),
@@ -6453,6 +6663,8 @@ SettingsGroup(header = stringResource(R.string.local_music)) {
         subtitle = stringResource(R.string.reset_deezer_artist_artwork_subtitle),
         onClick = { resetDeezerArtistArtwork(context) },
     )
+    RowDivider()
+    ArtistSignatureApiSettingsRow()
     RowDivider()
     LocalMusicFolderRootSettingsRow(
         path = localMusicFolderRoot,
@@ -6695,8 +6907,90 @@ SettingsGroup(header = stringResource(R.string.local_music)) {
         onClick = { AppSettings.setKeepCollectionArtworkAspectRatio(!keepCollectionArtworkAspectRatio) },
     )
 }
+}
 
+@Composable
+private fun ArtistSignatureApiSettingsRow() {
+    val enabled by AppSettings.signatureApiEnabled.collectAsStateWithLifecycle()
+    val storedUrl by AppSettings.signatureApiUrl.collectAsStateWithLifecycle()
+    val scope = rememberCoroutineScope()
+    var showEditor by remember { mutableStateOf(false) }
+    var input by remember(storedUrl) { mutableStateOf(storedUrl) }
+    var testing by remember { mutableStateOf(false) }
+    var testResult by remember { mutableStateOf<Boolean?>(null) }
 
+    SettingsRow(
+        icon = Icons.Rounded.Person,
+        title = stringResource(R.string.artist_signatures),
+        subtitle = stringResource(R.string.artist_signatures_subtitle),
+        trailing = {
+            Switch(
+                checked = enabled,
+                onCheckedChange = AppSettings::setSignatureApiEnabled,
+            )
+        },
+        onClick = {
+            input = storedUrl
+            testResult = null
+            showEditor = true
+        },
+    )
+    if (showEditor) {
+        AlertDialog(
+            onDismissRequest = { showEditor = false },
+            title = { Text(stringResource(R.string.artist_signatures_url)) },
+            text = {
+                Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
+                    Text(stringResource(R.string.artist_signatures_subtitle))
+                    OutlinedTextField(
+                        value = input,
+                        onValueChange = { input = it; testResult = null },
+                        label = { Text(stringResource(R.string.artist_signatures_url)) },
+                        placeholder = { Text(stringResource(R.string.artist_signatures_url_hint)) },
+                        singleLine = true,
+                        enabled = !testing,
+                    )
+                    testResult?.let { success ->
+                        Text(
+                            stringResource(if (success) R.string.connected else R.string.artist_signatures_test_failed),
+                            color = if (success) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.error,
+                        )
+                    }
+                }
+            },
+            confirmButton = {
+                Row {
+                    TextButton(
+                        enabled = input.isNotBlank() && !testing,
+                        onClick = {
+                            val normalized = AppSettings.normalizeSignatureApiUrl(input)
+                            if (!ArtistSignatureRepository.isValidBaseUrl(normalized)) {
+                                testResult = false
+                            } else {
+                                testing = true
+                                scope.launch {
+                                    testResult = ArtistSignatureRepository.checkHealth(normalized)
+                                    testing = false
+                                }
+                            }
+                        },
+                    ) { Text(stringResource(R.string.artist_signatures_test)) }
+                    TextButton(
+                        enabled = !testing,
+                        onClick = {
+                            AppSettings.setSignatureApiUrl(input)
+                            AppSettings.setSignatureApiEnabled(input.isNotBlank())
+                            ArtistSignatureRepository.clear()
+                            showEditor = false
+                        },
+                    ) { Text(stringResource(R.string.save)) }
+                }
+            },
+            dismissButton = {
+                TextButton(onClick = { showEditor = false }) { Text(stringResource(R.string.cancel)) }
+            },
+        )
+    }
 }
 
 @Composable

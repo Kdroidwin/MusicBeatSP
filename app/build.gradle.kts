@@ -312,6 +312,7 @@ dependencies {
     // ---- Images: Coil 3 + Palette (dominant colors for the mesh gradient) ----
     implementation("io.coil-kt.coil3:coil-compose:3.0.4")
     implementation("io.coil-kt.coil3:coil-network-okhttp:3.0.4")
+    implementation("io.coil-kt.coil3:coil-svg:3.0.4")
     implementation("androidx.palette:palette-ktx:1.0.0")
 
     // ---- Frosted glass / progressive blur (Telegram-style bars) ----
@@ -372,4 +373,32 @@ dependencies {
     testImplementation("org.jetbrains.kotlinx:kotlinx-coroutines-test:1.10.2")
     androidTestImplementation("androidx.test.ext:junit:1.3.0")
     androidTestImplementation("androidx.test.espresso:espresso-core:3.7.0")
+}
+
+// Keep the existing standard/release directory, but use the requested
+// app-full-* artifact names for every ABI split and the universal APK.
+val renameStandardReleaseApks = tasks.register("renameStandardReleaseApks") {
+    doLast {
+        val outputDir = layout.buildDirectory.dir("outputs/apk/standard/release").get().asFile
+        if (!outputDir.isDirectory) return@doLast
+        outputDir.walkTopDown()
+            .filter {
+                it.isFile && it.name.startsWith("app-standard-") &&
+                    (it.name.endsWith("-release.apk") || it.name.endsWith("-release.dm"))
+            }
+            .forEach { apk ->
+                val destination = apk.resolveSibling(apk.name.replaceFirst("app-standard-", "app-full-"))
+                if (!apk.renameTo(destination)) {
+                    throw GradleException("Could not rename ${apk.name} to ${destination.name}")
+                }
+            }
+        val metadata = outputDir.resolve("output-metadata.json")
+        if (metadata.isFile) {
+            metadata.writeText(metadata.readText().replace("app-standard-", "app-full-"))
+        }
+    }
+}
+
+tasks.matching { it.name == "assembleStandardRelease" }.configureEach {
+    finalizedBy(renameStandardReleaseApks)
 }

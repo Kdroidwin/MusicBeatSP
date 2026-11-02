@@ -245,6 +245,7 @@ fun LibraryScreen(
     onArtworkPaletteChanged: ((ArtworkPalette?) -> Unit)? = null,
     onCollectionNavigationChanged: ((Boolean, (() -> Unit)?) -> Unit)? = null,
     onOpenYoutubeCollection: (SavedYoutubeCollection) -> Unit = {},
+    onOpenReplay: (() -> Unit)? = null,
 ) {
     val context = LocalContext.current.applicationContext
     val playlists by LocalPlaylistStore.playlists.collectAsStateWithLifecycle()
@@ -366,18 +367,23 @@ fun LibraryScreen(
             LibraryFilter.YOUTUBE_MUSIC -> LibraryCategory.YOUTUBE_MUSIC
             LibraryFilter.MOST_PLAYED -> LibraryCategory.MOST_PLAYED
             LibraryFilter.RECENTLY_PLAYED -> LibraryCategory.RECENTLY_PLAYED
+            LibraryFilter.REPLAY -> LibraryCategory.REPLAY
             LibraryFilter.ALL -> null
         }
         if (category != null && category !in visibleLibraryCategories) selectedFilter = LibraryFilter.ALL
     }
     val selectLibraryFilter: (LibraryFilter) -> Unit = { filter ->
-        if (filter == LibraryFilter.RECENTLY_PLAYED || filter == LibraryFilter.MOST_PLAYED) {
-            // The library can stay composed while another tab is visible, so
-            // take a fresh snapshot on each history visit instead of relying
-            // only on the in-process revision flow.
-            historyRefresh++
+        if (filter == LibraryFilter.REPLAY) {
+            onOpenReplay?.invoke()
+        } else {
+            if (filter == LibraryFilter.RECENTLY_PLAYED || filter == LibraryFilter.MOST_PLAYED) {
+                // The library can stay composed while another tab is visible, so
+                // take a fresh snapshot on each history visit instead of relying
+                // only on the in-process revision flow.
+                historyRefresh++
+            }
+            selectedFilter = filter
         }
-        selectedFilter = filter
     }
     val collectionListState = rememberLazyListState()
     val collectionGridState = rememberLazyGridState()

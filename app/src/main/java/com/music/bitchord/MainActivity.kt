@@ -11,6 +11,9 @@ import android.os.Bundle
 import android.os.Process
 import android.provider.MediaStore
 import android.view.View
+import android.view.WindowInsets as AndroidWindowInsets
+import android.view.WindowInsetsAnimationControlListener
+import android.view.WindowInsetsAnimationController
 import android.view.WindowManager
 import android.widget.Toast
 import androidx.activity.compose.BackHandler
@@ -474,8 +477,12 @@ class MainActivity : AppCompatActivity() {
                             player = player,
                             onPlayerSurfaceVisibilityChanged = { visible ->
                                 if (expandedPlayerSurfaceActive != visible) {
+                                    val closingExpandedPlayer = expandedPlayerSurfaceActive && !visible
                                     expandedPlayerSurfaceActive = visible
-                                    applySystemBarPreferences()
+                                    applySystemBarPreferences(
+                                        instantlyRevealStatusBar = closingExpandedPlayer &&
+                                            AppSettings.instantStatusBarOnPlayerClose.value,
+                                    )
                                 }
                             },
                         )
@@ -496,7 +503,7 @@ class MainActivity : AppCompatActivity() {
         if (hasFocus) applySystemBarPreferences()
     }
 
-    private fun applySystemBarPreferences() {
+    private fun applySystemBarPreferences(instantlyRevealStatusBar: Boolean = false) {
         val forceWhiteNavigationBar = AppSettings.forceWhiteNavigationBar.value
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
             // Avoid Android's automatic navigation-bar scrim overriding the
@@ -510,8 +517,36 @@ class MainActivity : AppCompatActivity() {
         } else {
             AppSettings.showStatusBar.value
         }
-        if (showStatusBar) bars.show(WindowInsetsCompat.Type.statusBars())
-        else bars.hide(WindowInsetsCompat.Type.statusBars())
+        if (showStatusBar && instantlyRevealStatusBar && Build.VERSION.SDK_INT >= Build.VERSION_CODES.R) {
+            val controller = window.insetsController
+            if (controller != null) {
+                runCatching {
+                    controller.controlWindowInsetsAnimation(
+                        AndroidWindowInsets.Type.statusBars(),
+                        0L,
+                        null,
+                        null,
+                        object : WindowInsetsAnimationControlListener {
+                            override fun onReady(animationController: WindowInsetsAnimationController, types: Int) {
+                                animationController.finish(true)
+                            }
+
+                            override fun onFinished(animationController: WindowInsetsAnimationController) = Unit
+
+                            override fun onCancelled(animationController: WindowInsetsAnimationController?) {
+                                bars.show(WindowInsetsCompat.Type.statusBars())
+                            }
+                        },
+                    )
+                }.onFailure { bars.show(WindowInsetsCompat.Type.statusBars()) }
+            } else {
+                bars.show(WindowInsetsCompat.Type.statusBars())
+            }
+        } else if (showStatusBar) {
+            bars.show(WindowInsetsCompat.Type.statusBars())
+        } else {
+            bars.hide(WindowInsetsCompat.Type.statusBars())
+        }
         if (AppSettings.showNavigationBar.value) bars.show(WindowInsetsCompat.Type.navigationBars())
         else bars.hide(WindowInsetsCompat.Type.navigationBars())
         if (forceWhiteNavigationBar) {
@@ -3091,6 +3126,7 @@ private fun BitChordApp(
                                         type = type,
                                     )
                                 },
+                                onOpenReplay = { showReplay = true },
                             )
                         }
                         TAB_SEARCH -> searchSaveableStateHolder.SaveableStateProvider("main-search") {

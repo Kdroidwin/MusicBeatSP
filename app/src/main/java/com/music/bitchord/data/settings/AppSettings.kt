@@ -129,6 +129,14 @@ enum class OutputPcmMode(val label: String) {
     FLOAT_32("32-bit float"),
 }
 
+/** Upstream BitChord's exclusive output paths, persisted by stable enum name. */
+enum class BitPerfectMode {
+    OFF,
+    USB_DIRECT,
+    DAP_EXCLUSIVE,
+    USB_ANDROID,
+}
+
 /** Text alignment for the full-screen lyrics panel. */
 enum class LyricsTextAlignment {
     LEFT,
@@ -159,7 +167,7 @@ enum class TransportSideAction {
 enum class LocalLibraryTab { SONGS, ALBUMS, ARTISTS, FOLDERS, PLAYLISTS, ALBUM_ARTISTS }
 
 /** Filter destinations shown in the Library header, independent of the always-visible All destination. */
-enum class LibraryCategory { FAVORITES, PLAYLISTS, YOUTUBE_MUSIC, MOST_PLAYED, RECENTLY_PLAYED }
+enum class LibraryCategory { FAVORITES, PLAYLISTS, YOUTUBE_MUSIC, MOST_PLAYED, RECENTLY_PLAYED, REPLAY }
 
 /**
  * What to keep when a track is saved to the device.
@@ -508,6 +516,14 @@ object AppSettings {
 
     /** Bypasses app DSP and requests Android's bit-perfect USB mixer when supported. */
     val bitPerfectPlayback = MutableStateFlow(false)
+    val bitPerfectMode = MutableStateFlow(BitPerfectMode.OFF)
+    /** Permit a direct USB DAC without app-controlled volume; the DAC's own control remains necessary. */
+    val usbAllowFixedVolume = MutableStateFlow(false)
+    /** Permit format conversion for a selected DAC that cannot accept the source format. */
+    val convertForLimitedDac = MutableStateFlow(false)
+    /** Optional user-hosted handwritten artist signature lookup for local artist pages. */
+    val signatureApiEnabled = MutableStateFlow(false)
+    val signatureApiUrl = MutableStateFlow("")
 
     /** Prefer an attached USB audio output over the system's normal route. */
     val preferUsbDac = MutableStateFlow(false)
@@ -689,6 +705,7 @@ object AppSettings {
 
     /** Hides the seek bar and timestamps while a live radio station is playing. */
     val hideRadioPlaybackBar = MutableStateFlow(true)
+    val hideRadioTopLabels = MutableStateFlow(false)
     /** Visible player seek-bar thickness in dp. */
     val playerSeekBarThicknessDp = MutableStateFlow(7)
     /** Visible player volume-bar thickness in dp. */
@@ -724,6 +741,7 @@ object AppSettings {
     val showStatusBar = MutableStateFlow(true)
     /** Status bar visibility while the player is expanded over the library. */
     val showPlayerStatusBar = MutableStateFlow(true)
+    val instantStatusBarOnPlayerClose = MutableStateFlow(true)
     val showNavigationBar = MutableStateFlow(true)
     /** Uses Android's user-confirmed screen pinning and exposes the player over the lock screen. */
     val musicOnlyDeviceMode = MutableStateFlow(false)
@@ -1071,7 +1089,7 @@ object AppSettings {
     val downloadedMusicViewType = MutableStateFlow(LibraryViewType.LIST)
     val libraryPlaylistsViewType = MutableStateFlow(LibraryViewType.GRID)
     val librarySongsViewType = MutableStateFlow(LibraryViewType.LIST)
-    val visibleLibraryCategories = MutableStateFlow(LibraryCategory.entries.toSet())
+    val visibleLibraryCategories = MutableStateFlow(LibraryCategory.entries.filterNot { it == LibraryCategory.REPLAY }.toSet())
     val libraryCategoryOrder = MutableStateFlow(LibraryCategory.entries.toList())
     /** Show each track's cover in a playlist detail list instead of its number. */
     val showPlaylistSongArtwork = MutableStateFlow(false)
@@ -1349,7 +1367,18 @@ object AppSettings {
                     ?: OutputPcmMode.PCM_16.name,
             )
         }.getOrDefault(OutputPcmMode.PCM_16)
-        bitPerfectPlayback.value = prefs.getBoolean(KEY_BIT_PERFECT_PLAYBACK, false)
+        val legacyBitPerfect = prefs.getBoolean(KEY_BIT_PERFECT_PLAYBACK, false)
+        bitPerfectMode.value = runCatching {
+            val storedMode = prefs.getString(KEY_BIT_PERFECT_MODE, null)
+            if (storedMode == null) {
+                if (legacyBitPerfect) BitPerfectMode.USB_ANDROID else BitPerfectMode.OFF
+            } else BitPerfectMode.valueOf(storedMode)
+        }.getOrDefault(BitPerfectMode.OFF)
+        bitPerfectPlayback.value = bitPerfectMode.value != BitPerfectMode.OFF
+        usbAllowFixedVolume.value = prefs.getBoolean(KEY_USB_ALLOW_FIXED_VOLUME, false)
+        convertForLimitedDac.value = prefs.getBoolean(KEY_CONVERT_FOR_LIMITED_DAC, false)
+        signatureApiEnabled.value = prefs.getBoolean(KEY_SIGNATURE_API_ENABLED, false)
+        signatureApiUrl.value = normalizeSignatureApiUrl(prefs.getString(KEY_SIGNATURE_API_URL, "").orEmpty())
         preferUsbDac.value = prefs.getBoolean(KEY_PREFER_USB_DAC, false)
         speakerPlaybackAllowed.value = prefs.getBoolean(KEY_SPEAKER_PLAYBACK_ALLOWED, true)
         dolbyAtmos.value = prefs.getBoolean(KEY_DOLBY_ATMOS, false)
@@ -1497,6 +1526,7 @@ object AppSettings {
         stopOnTaskRemoved.value = prefs.getBoolean(KEY_STOP_ON_TASK_REMOVED, false)
         hideVolumeBar.value = prefs.getBoolean(KEY_HIDE_VOLUME_BAR, false)
         hideRadioPlaybackBar.value = prefs.getBoolean(KEY_HIDE_RADIO_PLAYBACK_BAR, true)
+        hideRadioTopLabels.value = prefs.getBoolean(KEY_HIDE_RADIO_TOP_LABELS, false)
         playerSeekBarThicknessDp.value = prefs.getInt(KEY_PLAYER_SEEK_BAR_THICKNESS_DP, 7).coerceIn(2, 14)
         playerVolumeBarThicknessDp.value = prefs.getInt(KEY_PLAYER_VOLUME_BAR_THICKNESS_DP, 6).coerceIn(2, 14)
         swipeToPlayNext.value = prefs.getBoolean(KEY_SWIPE_TO_PLAY_NEXT, false)
@@ -1523,6 +1553,7 @@ object AppSettings {
                 prefs.edit().putBoolean(KEY_SHOW_PLAYER_STATUS_BAR, migratedValue).apply()
             }
         }
+        instantStatusBarOnPlayerClose.value = prefs.getBoolean(KEY_INSTANT_STATUS_BAR_ON_PLAYER_CLOSE, true)
         showNavigationBar.value = prefs.getBoolean(KEY_SHOW_NAVIGATION_BAR, true)
         musicOnlyDeviceMode.value = prefs.getBoolean(KEY_MUSIC_ONLY_DEVICE_MODE, false)
         keepScreenOn.value = prefs.getBoolean(KEY_KEEP_SCREEN_ON, false)
@@ -2554,6 +2585,11 @@ object AppSettings {
         prefs.edit().putBoolean(KEY_HIDE_RADIO_PLAYBACK_BAR, value).apply()
     }
 
+    fun setHideRadioTopLabels(value: Boolean) {
+        hideRadioTopLabels.value = value
+        prefs.edit().putBoolean(KEY_HIDE_RADIO_TOP_LABELS, value).apply()
+    }
+
     fun setPlayerSeekBarThicknessDp(value: Int) {
         val normalized = value.coerceIn(2, 14)
         playerSeekBarThicknessDp.value = normalized
@@ -2685,7 +2721,7 @@ object AppSettings {
         val stored = prefs.getStringSet(KEY_VISIBLE_LIBRARY_CATEGORIES, null)
             ?.mapNotNull { name -> LibraryCategory.entries.firstOrNull { it.name == name } }
             ?.toSet()
-        return stored ?: LibraryCategory.entries.toSet()
+        return stored ?: LibraryCategory.entries.filterNot { it == LibraryCategory.REPLAY }.toSet()
     }
 
     private fun readLibraryCategoryOrder(): List<LibraryCategory> {
@@ -2723,6 +2759,11 @@ object AppSettings {
     fun setShowPlayerStatusBar(value: Boolean) {
         showPlayerStatusBar.value = value
         prefs.edit().putBoolean(KEY_SHOW_PLAYER_STATUS_BAR, value).apply()
+    }
+
+    fun setInstantStatusBarOnPlayerClose(value: Boolean) {
+        instantStatusBarOnPlayerClose.value = value
+        prefs.edit().putBoolean(KEY_INSTANT_STATUS_BAR_ON_PLAYER_CLOSE, value).apply()
     }
 
     fun setShowNavigationBar(value: Boolean) {
@@ -3496,9 +3537,44 @@ object AppSettings {
     }
 
     fun setBitPerfectPlayback(value: Boolean) {
-        bitPerfectPlayback.value = value
-        prefs.edit().putBoolean(KEY_BIT_PERFECT_PLAYBACK, value).apply()
+        setBitPerfectMode(
+            if (!value) BitPerfectMode.OFF
+            else bitPerfectMode.value.takeIf { it != BitPerfectMode.OFF } ?: BitPerfectMode.USB_ANDROID,
+        )
     }
+
+    fun setBitPerfectMode(value: BitPerfectMode) {
+        bitPerfectMode.value = value
+        bitPerfectPlayback.value = value != BitPerfectMode.OFF
+        prefs.edit()
+            .putString(KEY_BIT_PERFECT_MODE, value.name)
+            .putBoolean(KEY_BIT_PERFECT_PLAYBACK, value != BitPerfectMode.OFF)
+            .apply()
+    }
+
+    fun setUsbAllowFixedVolume(value: Boolean) {
+        usbAllowFixedVolume.value = value
+        prefs.edit().putBoolean(KEY_USB_ALLOW_FIXED_VOLUME, value).apply()
+    }
+
+    fun setConvertForLimitedDac(value: Boolean) {
+        convertForLimitedDac.value = value
+        prefs.edit().putBoolean(KEY_CONVERT_FOR_LIMITED_DAC, value).apply()
+    }
+
+    fun setSignatureApiEnabled(value: Boolean) {
+        signatureApiEnabled.value = value
+        prefs.edit().putBoolean(KEY_SIGNATURE_API_ENABLED, value).apply()
+    }
+
+    fun setSignatureApiUrl(value: String) {
+        val normalized = normalizeSignatureApiUrl(value)
+        signatureApiUrl.value = normalized
+        prefs.edit().putString(KEY_SIGNATURE_API_URL, normalized).apply()
+    }
+
+    fun normalizeSignatureApiUrl(value: String): String =
+        value.trim().trimEnd('/').take(com.music.bitchord.data.canvas.ArtistSignatureRepository.MAX_BASE_URL_LENGTH)
 
     fun setPreferUsbDac(value: Boolean) {
         preferUsbDac.value = value
@@ -4169,6 +4245,11 @@ object AppSettings {
     private const val KEY_RESAMPLER_CUTOFF_HZ = "resampler_cutoff_hz"
     private const val KEY_OUTPUT_PCM_MODE = "output_pcm_mode"
     private const val KEY_BIT_PERFECT_PLAYBACK = "bit_perfect_playback"
+    private const val KEY_BIT_PERFECT_MODE = "bit_perfect_mode"
+    private const val KEY_USB_ALLOW_FIXED_VOLUME = "usb_allow_fixed_volume"
+    private const val KEY_CONVERT_FOR_LIMITED_DAC = "convert_for_limited_dac"
+    private const val KEY_SIGNATURE_API_ENABLED = "artist_signature_api_enabled"
+    private const val KEY_SIGNATURE_API_URL = "artist_signature_api_url"
     private const val KEY_PREFER_USB_DAC = "prefer_usb_dac"
     private const val KEY_SPEAKER_PLAYBACK_ALLOWED = "speaker_playback_allowed"
     private const val KEY_DOLBY_ATMOS = "dolby_atmos"
@@ -4256,6 +4337,7 @@ object AppSettings {
     private const val KEY_STOP_ON_TASK_REMOVED = "stop_on_task_removed"
     private const val KEY_HIDE_VOLUME_BAR = "hide_volume_bar"
     private const val KEY_HIDE_RADIO_PLAYBACK_BAR = "hide_radio_playback_bar"
+    private const val KEY_HIDE_RADIO_TOP_LABELS = "hide_radio_top_labels"
     private const val KEY_PLAYER_SEEK_BAR_THICKNESS_DP = "player_seek_bar_thickness_dp"
     private const val KEY_PLAYER_VOLUME_BAR_THICKNESS_DP = "player_volume_bar_thickness_dp"
     private const val KEY_SWIPE_TO_PLAY_NEXT = "swipe_to_play_next"
@@ -4271,6 +4353,7 @@ object AppSettings {
     private const val KEY_STARTUP_TAB = "startup_tab"
     private const val KEY_SHOW_STATUS_BAR = "show_status_bar"
     private const val KEY_SHOW_PLAYER_STATUS_BAR = "show_player_status_bar"
+    private const val KEY_INSTANT_STATUS_BAR_ON_PLAYER_CLOSE = "instant_status_bar_on_player_close"
     private const val KEY_SHOW_NAVIGATION_BAR = "show_navigation_bar"
     private const val KEY_MUSIC_ONLY_DEVICE_MODE = "music_only_device_mode"
     private const val KEY_KEEP_SCREEN_ON = "keep_screen_on"

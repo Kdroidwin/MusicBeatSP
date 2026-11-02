@@ -49,6 +49,7 @@ import com.music.bitchord.data.settings.EqualizerSettings
 import com.music.bitchord.playback.equalizer.EqualizerPreset
 import com.music.bitchord.ui.screens.equalizer.components.EqualizerPresetGroup
 import com.music.bitchord.playback.ReplayGainScanner
+import com.music.bitchord.playback.audio.bitperfect.BitPerfectOutput
 import com.music.bitchord.ui.screens.equalizer.components.AudioEnhancements
 import com.music.bitchord.ui.screens.equalizer.components.EqualizerBandSliders
 import com.music.bitchord.ui.screens.equalizer.components.EqualizerPresetChips

@@ -9,6 +9,7 @@ import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.isSystemInDarkTheme
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -116,8 +117,16 @@ fun RadioScreen(
     val offlineMode by AppSettings.offlineMode.collectAsStateWithLifecycle()
     val themeMode by AppSettings.themeMode.collectAsStateWithLifecycle()
     val amoledBlack = themeMode == ThemeMode.AMOLED
+    val darkTheme = when (themeMode) {
+        ThemeMode.DARK, ThemeMode.AMOLED -> true
+        ThemeMode.LIGHT -> false
+        ThemeMode.SYSTEM -> isSystemInDarkTheme()
+        ThemeMode.ARTWORK -> isSystemInDarkTheme()
+        ThemeMode.CUSTOM_IMAGE -> true
+    }
     val selectedAreaId by AppSettings.radioAreaId.collectAsStateWithLifecycle()
     val selectedRadioService by AppSettings.radioService.collectAsStateWithLifecycle()
+    val hideRadioTopLabels by AppSettings.hideRadioTopLabels.collectAsStateWithLifecycle()
     var stationDetail by remember { mutableStateOf<Station?>(null) }
     var showRegionPicker by remember { mutableStateOf(false) }
     var showServicePicker by remember { mutableStateOf(false) }
@@ -569,6 +578,7 @@ fun RadioScreen(
         OnsenProgramDetail(
             program = onsenProgram,
             amoledBlack = amoledBlack,
+            darkTheme = darkTheme,
             isLoading = isLoadingOnsenProgram,
             hasError = hasOnsenProgramError,
             networkUnavailable = networkUnavailable,
@@ -636,20 +646,26 @@ fun RadioScreen(
                             if (isRadikoSelected) {
                                 TextButton(onClick = { showRecordingFavorites = true }) {
                                     Icon(Icons.Rounded.Star, contentDescription = null)
-                                    Spacer(Modifier.width(4.dp))
-                                    Text(stringResource(R.string.radio_recording_favorites))
+                                    if (!hideRadioTopLabels) {
+                                        Spacer(Modifier.width(4.dp))
+                                        Text(stringResource(R.string.radio_recording_favorites))
+                                    }
                                 }
                             }
                             TextButton(onClick = { showServicePicker = true }) {
                                 Icon(Icons.Rounded.Radio, contentDescription = null)
-                                Spacer(Modifier.width(4.dp))
-                                Text(stringResource(R.string.radio_change_service))
+                                if (!hideRadioTopLabels) {
+                                    Spacer(Modifier.width(4.dp))
+                                    Text(stringResource(R.string.radio_change_service))
+                                }
                             }
                             if (selectedRadioService == RadioService.RADIKO) {
                                 TextButton(onClick = { showRegionPicker = true }) {
                                     Icon(Icons.Rounded.LocationOn, contentDescription = null)
+                                if (!hideRadioTopLabels) {
                                     Spacer(Modifier.width(4.dp))
                                     Text(stringResource(R.string.radio_change_area))
+                                }
                                 }
                             } else {
                                 IconButton(onClick = { refreshOnsenProgramsKey++ }) {
@@ -892,6 +908,7 @@ private fun OnsenProgramRow(
 private fun OnsenProgramDetail(
     program: OnsenProgram,
     amoledBlack: Boolean,
+    darkTheme: Boolean,
     isLoading: Boolean,
     hasError: Boolean,
     networkUnavailable: Boolean,
@@ -903,6 +920,7 @@ private fun OnsenProgramDetail(
     onPlayEpisode: (OnsenEpisode) -> Unit,
     onDownloadEpisode: (OnsenEpisode) -> Unit,
 ) {
+    val darkSurface = amoledBlack || darkTheme
     val episodes = remember(program.episodes) { program.episodes.filter(OnsenEpisode::isAudio) }
     LazyColumn(
         modifier = Modifier.fillMaxSize(),
@@ -913,7 +931,15 @@ private fun OnsenProgramDetail(
             Column(Modifier.fillMaxWidth().padding(horizontal = 16.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
                 Row(verticalAlignment = Alignment.CenterVertically) {
                     IconButton(onClick = onBack) { Icon(Icons.AutoMirrored.Rounded.ArrowBack, contentDescription = stringResource(R.string.back)) }
-                    Text(program.title, style = MaterialTheme.typography.titleLarge, fontWeight = FontWeight.Bold, modifier = Modifier.weight(1f), maxLines = 2, overflow = TextOverflow.Ellipsis)
+                    Text(
+                        text = program.title,
+                        style = MaterialTheme.typography.titleLarge,
+                        color = if (darkSurface) Color.White else MaterialTheme.colorScheme.onSurface,
+                        fontWeight = FontWeight.Bold,
+                        modifier = Modifier.weight(1f),
+                        maxLines = 2,
+                        overflow = TextOverflow.Ellipsis,
+                    )
                 }
                 Card(
                     shape = RoundedCornerShape(24.dp),

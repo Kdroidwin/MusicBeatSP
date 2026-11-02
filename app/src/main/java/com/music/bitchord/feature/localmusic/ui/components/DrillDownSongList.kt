@@ -71,6 +71,7 @@ import androidx.compose.ui.draw.drawWithContent
 import androidx.compose.ui.graphics.BlendMode
 import androidx.compose.ui.graphics.CompositingStrategy
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.ColorFilter
 import androidx.compose.ui.graphics.luminance
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.input.pointer.pointerInput
@@ -85,6 +86,9 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.IntOffset
 import coil3.compose.AsyncImage
+import coil3.request.ImageRequest
+import coil3.request.transformations
+import androidx.compose.ui.platform.LocalContext
 import com.music.bitchord.R
 import com.music.bitchord.data.model.CARD_ART_PX
 import com.music.bitchord.data.model.HEADER_ART_PX
@@ -94,6 +98,9 @@ import com.music.bitchord.data.model.durationMillis
 import com.music.bitchord.data.model.isSameTrackAs
 import com.music.bitchord.data.settings.LibraryViewType
 import com.music.bitchord.data.settings.AppSettings
+import com.music.bitchord.data.canvas.ArtistSignature
+import com.music.bitchord.data.canvas.ArtistSignatureRepository
+import com.music.bitchord.data.canvas.SignatureInkTransformation
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.music.bitchord.ui.components.FastScroller
 import com.music.bitchord.ui.components.SectionIndexer
@@ -134,11 +141,14 @@ fun DrillDownHeader(
     palette: ArtworkPalette? = null,
     modifier: Modifier = Modifier,
 ) {
+    val artistSignature = rememberArtistSignature(label, isArtist)
     if (fullScreenArtwork && artHeight != null && palette != null) {
         FullScreenCollectionHeader(
             label = label,
             songs = songs,
             isPlaylist = isPlaylist || label.equals("Favorites", ignoreCase = true) || artworkUrl == "favorites",
+            isArtist = isArtist,
+            artistSignature = artistSignature,
             artHeight = artHeight,
             palette = palette,
             modifier = modifier,
@@ -149,6 +159,7 @@ fun DrillDownHeader(
             artworkUrl = artworkUrl,
             songs = songs,
             isArtist = isArtist,
+            artistSignature = artistSignature,
             onBack = onBack,
             preserveArtworkAspectRatio = preserveArtworkAspectRatio,
             showArtworkCollage = showArtworkCollage,
@@ -158,11 +169,57 @@ fun DrillDownHeader(
 }
 
 @Composable
+private fun rememberArtistSignature(label: String, isArtist: Boolean): ArtistSignature? {
+    val enabled by AppSettings.signatureApiEnabled.collectAsStateWithLifecycle()
+    val baseUrl by AppSettings.signatureApiUrl.collectAsStateWithLifecycle()
+    val updates by ArtistSignatureRepository.updates.collectAsStateWithLifecycle()
+    val effectiveBase = remember(enabled, baseUrl) {
+        ArtistSignatureRepository.effectiveBaseUrl(enabled, baseUrl)
+    }
+    var signature by remember(label, isArtist, effectiveBase) {
+        mutableStateOf(ArtistSignatureRepository.cached(label, effectiveBase))
+    }
+    LaunchedEffect(label, isArtist, effectiveBase, updates) {
+        signature = ArtistSignatureRepository.cached(label, effectiveBase)
+        if (isArtist && effectiveBase != null) {
+            signature = ArtistSignatureRepository.signatureFor(label, effectiveBase)
+        }
+    }
+    return signature.takeIf { isArtist }
+}
+
+@Composable
+private fun ArtistSignatureImage(signature: ArtistSignature?, modifier: Modifier = Modifier) {
+    if (signature == null) return
+    val context = LocalContext.current
+    val isVector = signature.format == "svg"
+    val imageHeight = (180f / signature.aspect.coerceAtLeast(1f)).coerceIn(36f, 68f).dp
+    val model = remember(signature.imageUrl, signature.format, context) {
+        ImageRequest.Builder(context)
+            .data(signature.imageUrl)
+            .apply { if (!isVector) transformations(SignatureInkTransformation) }
+            .build()
+    }
+    AsyncImage(
+        model = model,
+        contentDescription = null,
+        contentScale = ContentScale.Fit,
+        colorFilter = if (isVector) ColorFilter.tint(Color.White) else null,
+        modifier = modifier
+            .width(180.dp)
+            .height(imageHeight)
+            .background(if (isVector) Color.White else Color.Black, RoundedCornerShape(8.dp))
+            .padding(4.dp),
+    )
+}
+
+@Composable
 private fun CompactDrillDownHeader(
     label: String,
     artworkUrl: String?,
     songs: List<Song>,
     isArtist: Boolean,
+    artistSignature: ArtistSignature?,
     onBack: (() -> Unit)?,
     preserveArtworkAspectRatio: Boolean,
     showArtworkCollage: Boolean,
@@ -278,6 +335,10 @@ private fun CompactDrillDownHeader(
                 .fillMaxWidth()
                 .padding(horizontal = PAGE_GUTTER),
         )
+        ArtistSignatureImage(
+            signature = artistSignature,
+            modifier = Modifier.align(Alignment.CenterHorizontally).padding(top = 8.dp),
+        )
         Spacer(Modifier.height(4.dp))
         Text(
             text = buildString {
@@ -300,6 +361,8 @@ private fun FullScreenCollectionHeader(
     label: String,
     songs: List<Song>,
     isPlaylist: Boolean,
+    isArtist: Boolean,
+    artistSignature: ArtistSignature?,
     artHeight: Dp,
     palette: ArtworkPalette,
     modifier: Modifier,
@@ -348,6 +411,7 @@ private fun FullScreenCollectionHeader(
                 maxLines = 2,
                 overflow = TextOverflow.Ellipsis,
             )
+            ArtistSignatureImage(artistSignature, Modifier.padding(top = 8.dp))
             if (artists.isNotBlank()) {
                 Spacer(Modifier.height(3.dp))
                 Text(
