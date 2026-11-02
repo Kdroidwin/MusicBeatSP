@@ -796,8 +796,8 @@ private fun SyncPlaybackBar(
     }
 }
 
-private val SYNC_STAMP = Regex("""\[\d{1,3}:\d{2}[.:]\d{2,3}]""")
-private val SYNC_PREFIX = Regex("""^(?:\[\d{1,3}:\d{2}(?:[.:]\d{2,3})?])+""")
+private val SYNC_STAMP = Regex("""\[\d{1,3}:\d{2}[.:]\d{1,3}]""")
+private val SYNC_PREFIX = Regex("""^(?:\[\d{1,3}:\d{2}(?:[.:]\d{1,3})?])+""")
 private val SYNC_METADATA = Regex("""\[[A-Za-z]{2,}:.*]""")
 
 private fun formatLrcTime(positionMs: Long): String {
@@ -814,7 +814,11 @@ private fun parseLrcTime(timestamp: String): Long? {
     val minutes = parts[0].toLongOrNull() ?: return null
     val seconds = parts[1].toLongOrNull() ?: return null
     val fraction = parts[2].toLongOrNull() ?: return null
-    val fractionMs = if (parts[2].length <= 2) fraction * 10L else fraction
+    val fractionMs = when (parts[2].length) {
+        1 -> fraction * 100L
+        2 -> fraction * 10L
+        else -> fraction
+    }
     return (minutes * 60_000L + seconds.coerceIn(0L, 59L) * 1_000L + fractionMs.coerceIn(0L, 999L))
         .coerceAtLeast(0L)
 }

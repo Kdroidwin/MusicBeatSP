@@ -4023,7 +4023,13 @@ private fun SweptLyricLine(
                 // offsets that are not safe to use directly as Compose text
                 // offsets (notably after a one-line layout clips the visual
                 // line). Keep the sweep inside the measured UTF-16 range.
-                sweepTo(it, richText.renderedOffset(line.revealedChars(position)))
+                try {
+                    sweepTo(it, richText.renderedOffset(line.revealedChars(position)))
+                } catch (_: RuntimeException) {
+                    // Bad third-party syllable offsets should degrade to a
+                    // static readable line, never crash the render thread.
+                    drawContent()
+                }
             }
         }
     }
@@ -4061,7 +4067,11 @@ private fun SweptLyricLine(
                     // Read in the layer block rather than in composition: the
                     // intensity changes every frame, and this way only the
                     // layer's alpha is recomputed, not the line.
-                    .graphicsLayer { alpha = glowAlpha * line.glowIntensity(clock.longValue) }
+                    .graphicsLayer {
+                        val intensity = runCatching { line.glowIntensity(clock.longValue) }
+                            .getOrDefault(0f).takeIf(Float::isFinite)?.coerceIn(0f, 1f) ?: 0f
+                        alpha = (glowAlpha * intensity).coerceIn(0f, 1f)
+                    }
                     .blur(glowRadius, BlurredEdgeTreatment.Unbounded)
                     .then(room)
                     // The band is masked with a DstIn gradient, which needs a
@@ -4076,11 +4086,13 @@ private fun SweptLyricLine(
                         // worth of arithmetic, not the whole panel's.
                         val measured = layout ?: return@drawWithContent
                         val position = clock.longValue
-                        glowAt(
-                            layout = measured,
-                            revealedChars = richText.renderedOffset(line.revealedChars(position)),
-                            intensity = line.glowIntensity(position),
-                        )
+                        runCatching {
+                            glowAt(
+                                layout = measured,
+                                revealedChars = richText.renderedOffset(line.revealedChars(position)),
+                                intensity = line.glowIntensity(position),
+                            )
+                        }
                     },
             )
         }
@@ -4983,14 +4995,18 @@ private fun fitLyricTextStyle(
 ): TextStyle {
     val originalFontSize = style.fontSize.value
     if (!enabled || availableWidth <= 0 || !originalFontSize.isFinite() || originalFontSize <= MIN_AUTOFIT_LYRIC_SP) return style
-    val measured = textMeasurer.measure(text = text, style = style, maxLines = 1, softWrap = false)
+    val measured = runCatching {
+        textMeasurer.measure(text = text, style = style, maxLines = 1, softWrap = false)
+    }.getOrNull() ?: return style
     if (measured.size.width <= availableWidth) return style
     var low = MIN_AUTOFIT_LYRIC_SP
     var high = originalFontSize
     repeat(12) {
         val candidate = (low + high) / 2f
         val candidateStyle = style.copy(fontSize = candidate.sp)
-        val layout = textMeasurer.measure(text = text, style = candidateStyle, maxLines = 1, softWrap = false)
+        val layout = runCatching {
+            textMeasurer.measure(text = text, style = candidateStyle, maxLines = 1, softWrap = false)
+        }.getOrNull() ?: return style
         if (layout.size.width <= availableWidth) low = candidate else high = candidate
     }
     val lineHeight = style.lineHeight

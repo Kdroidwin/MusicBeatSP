@@ -192,6 +192,7 @@ object LrcLib {
     private fun msOf(mark: MatchResult): Long {
         val (minutes, seconds, fraction) = mark.destructured
         val fractionMs = when (fraction.length) {
+            1 -> fraction.toLong() * 100
             2 -> fraction.toLong() * 10
             3 -> fraction.toLong()
             else -> 0L
@@ -199,8 +200,8 @@ object LrcLib {
         return minutes.toLong() * 60_000 + seconds.toLong() * 1_000 + fractionMs
     }
 
-    private val STAMP = Regex("""\[(\d{1,2}):(\d{2})[.:](\d{2,3})]""")
-    private val WORD_STAMP = Regex("""<(\d{1,3}):(\d{2})[.:](\d{2,3})>""")
+    private val STAMP = Regex("""\[(\d{1,2}):(\d{2})[.:](\d{1,3})]""")
+    private val WORD_STAMP = Regex("""<(\d{1,3}):(\d{2})[.:](\d{1,3})>""")
     private val NOISE = Regex(
         """\((?:from|feat\.?|official|lyrical|video|audio|remix)[^)]*\)|\[[^]]*]|""" +
             """\b(?:official (?:video|audio|music video)|lyrical|full song|4k video)\b""",

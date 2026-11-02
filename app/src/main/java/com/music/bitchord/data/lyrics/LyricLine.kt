@@ -118,25 +118,29 @@ data class LyricLine(
         words.forEachIndexed { index, word ->
             // Where this word sits in [text]. Built by walking rather than
             // searching, so a word repeated in the line still lines up.
-            val start = text.indexOf(word.text, offset).takeIf { it >= 0 } ?: offset
-            val end = start + word.text.length
+            val safeOffset = offset.coerceIn(0, text.length)
+            val start = text.indexOf(word.text, safeOffset).takeIf { it >= 0 } ?: safeOffset
+            val end = start + word.text.length.coerceAtMost(text.length - start)
             if (positionMs < word.startMs) return start.toFloat()
             if (positionMs < word.endMs) {
-                val span = (word.endMs - word.startMs).coerceAtLeast(1L)
-                val through = (positionMs - word.startMs).toFloat() / span
-                return start + through * word.text.length
+                val span = (word.endMs.toDouble() - word.startMs.toDouble()).coerceAtLeast(1.0)
+                val through = ((positionMs.toDouble() - word.startMs.toDouble()) / span)
+                    .takeIf(Double::isFinite)?.toFloat()?.coerceIn(0f, 1f) ?: 0f
+                return (start + through * (end - start)).coerceIn(0f, text.length.toFloat())
             }
             // Past this word: the trailing space fills over the pause before
             // the next one, so the highlight keeps creeping instead of resting
             // on the word's last letter.
             val next = words.getOrNull(index + 1)
             if (next != null && positionMs < next.startMs) {
-                val gapStart = text.indexOf(next.text, end).takeIf { it >= 0 } ?: end
-                val pause = (next.startMs - word.endMs).coerceAtLeast(1L)
-                val through = (positionMs - word.endMs).toFloat() / pause
-                return end + through * (gapStart - end)
+                val safeEnd = end.coerceIn(0, text.length)
+                val gapStart = text.indexOf(next.text, safeEnd).takeIf { it >= 0 } ?: safeEnd
+                val pause = (next.startMs.toDouble() - word.endMs.toDouble()).coerceAtLeast(1.0)
+                val through = ((positionMs.toDouble() - word.endMs.toDouble()) / pause)
+                    .takeIf(Double::isFinite)?.toFloat()?.coerceIn(0f, 1f) ?: 0f
+                return (safeEnd + through * (gapStart - safeEnd)).coerceIn(0f, text.length.toFloat())
             }
-            offset = end
+            offset = end.coerceIn(0, text.length)
         }
         return text.length.toFloat()
     }
@@ -159,8 +163,9 @@ data class LyricLine(
         val word = words.firstOrNull { positionMs < it.endMs } ?: return 0f
         if (positionMs < word.startMs) return 0f
 
-        val held = (word.endMs - word.startMs).coerceAtLeast(1L)
-        val through = ((positionMs - word.startMs).toFloat() / held).coerceIn(0f, 1f)
+        val held = (word.endMs.toDouble() - word.startMs.toDouble()).coerceAtLeast(1.0)
+        val through = ((positionMs.toDouble() - word.startMs.toDouble()) / held)
+            .takeIf(Double::isFinite)?.toFloat()?.coerceIn(0f, 1f) ?: 0f
         val envelope = when {
             through < GLOW_ATTACK -> through / GLOW_ATTACK
             through > 1f - GLOW_RELEASE -> (1f - through) / GLOW_RELEASE

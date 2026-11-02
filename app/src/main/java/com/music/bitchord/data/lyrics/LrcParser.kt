@@ -20,6 +20,7 @@ object LrcParser {
             val (minutes, seconds, fraction) = match.destructured
             // Two digits mean centiseconds, three mean milliseconds.
             val fractionMs = when (fraction.length) {
+                1 -> fraction.toLong() * 100
                 2 -> fraction.toLong() * 10
                 3 -> fraction.toLong()
                 else -> 0L
@@ -84,6 +85,7 @@ object LrcParser {
     private fun msOf(mark: MatchResult): Long {
         val (minutes, seconds, fraction) = mark.destructured
         val fractionMs = when (fraction.length) {
+            1 -> fraction.toLong() * 100
             2 -> fraction.toLong() * 10
             3 -> fraction.toLong()
             else -> 0L
@@ -106,8 +108,8 @@ object LrcParser {
             .map { it.trim().lowercase(java.util.Locale.ROOT) }
             .filter { it.length >= 2 }
 
-    private val STAMP = Regex("""\[(\d{1,3}):(\d{2})[.:](\d{2,3})]""")
-    private val WORD_STAMP = Regex("""<(\d{1,3}):(\d{2})[.:](\d{2,3})>""")
+    private val STAMP = Regex("""\[(\d{1,3}):(\d{2})[.:](\d{1,3})]""")
+    private val WORD_STAMP = Regex("""<(\d{1,3}):(\d{2})[.:](\d{1,3})>""")
 }
 
 fun cleanArtistForSearch(artist: String): String = LrcParser.cleanArtistForSearch(artist)

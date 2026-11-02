@@ -13,8 +13,8 @@ package com.music.bitchord.data.lyrics
  */
 object EnhancedLrc {
 
-    private val LINE = Regex("""^\[(\d{1,3}):(\d{2})[.:](\d{2,3})](.*)$""")
-    private val WORD = Regex("""<(\d{1,3}):(\d{2})[.:](\d{2,3})>([^<]*)""")
+    private val LINE = Regex("""^\[(\d{1,3}):(\d{2})[.:](\d{1,3})](.*)$""")
+    private val WORD = Regex("""<(\d{1,3}):(\d{2})[.:](\d{1,3})>([^<]*)""")
 
     /** Empty when [lrc] carries no word stamps — the caller can then fall back. */
     fun parse(lrc: String): List<LyricLine> {
@@ -67,7 +67,12 @@ object EnhancedLrc {
 
     private fun stamp(minutes: String, seconds: String, fraction: String): Long {
         // Two digits mean centiseconds, three mean milliseconds.
-        val fractionMs = if (fraction.length == 3) fraction.toLong() else fraction.toLong() * 10
+        val fractionMs = when (fraction.length) {
+            1 -> fraction.toLong() * 100
+            2 -> fraction.toLong() * 10
+            3 -> fraction.toLong()
+            else -> 0L
+        }
         return minutes.toLong() * 60_000 + seconds.toLong() * 1_000 + fractionMs
     }
 
