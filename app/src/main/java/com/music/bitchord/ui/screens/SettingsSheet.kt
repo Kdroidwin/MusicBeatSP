@@ -156,6 +156,7 @@ import androidx.compose.ui.text.buildAnnotatedString
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextDecoration
 import androidx.compose.ui.text.style.TextOverflow
+import androidx.compose.ui.text.input.PasswordVisualTransformation
 import androidx.compose.ui.text.withLink
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
@@ -6666,6 +6667,8 @@ SettingsGroup(header = stringResource(R.string.local_music)) {
     RowDivider()
     ArtistSignatureApiSettingsRow()
     RowDivider()
+    SpotifyCanvasSettingsRows()
+    RowDivider()
     LocalMusicFolderRootSettingsRow(
         path = localMusicFolderRoot,
         onChoose = onChooseMusicFolder,
@@ -6988,6 +6991,75 @@ private fun ArtistSignatureApiSettingsRow() {
             },
             dismissButton = {
                 TextButton(onClick = { showEditor = false }) { Text(stringResource(R.string.cancel)) }
+            },
+        )
+    }
+}
+
+@Composable
+private fun SpotifyCanvasSettingsRows() {
+    val storedToken by AppSettings.spotifySpdcToken.collectAsStateWithLifecycle()
+    val prioritizeSpotify by AppSettings.prioritizeSpotifyCanvas.collectAsStateWithLifecycle()
+    var showEditor by remember { mutableStateOf(false) }
+    var input by remember(storedToken) { mutableStateOf(storedToken) }
+
+    SettingsRow(
+        icon = Icons.Rounded.SmartDisplay,
+        title = stringResource(R.string.spotify_canvas_setup),
+        subtitle = stringResource(R.string.spotify_canvas_setup_description),
+        value = if (storedToken.isBlank()) null else stringResource(R.string.spotify_canvas_cookie_saved),
+        onClick = {
+            input = storedToken
+            showEditor = true
+        },
+    )
+    RowDivider()
+    SettingsRow(
+        icon = Icons.Rounded.MotionPhotosOff,
+        title = stringResource(R.string.prioritize_spotify_canvas),
+        subtitle = stringResource(R.string.prioritize_spotify_canvas_subtitle),
+        trailing = {
+            Switch(
+                checked = prioritizeSpotify,
+                onCheckedChange = AppSettings::setPrioritizeSpotifyCanvas,
+                colors = SwitchDefaults.colors(
+                    checkedTrackColor = MaterialTheme.colorScheme.primary,
+                    checkedBorderColor = MaterialTheme.colorScheme.primary,
+                ),
+            )
+        },
+        onClick = { AppSettings.setPrioritizeSpotifyCanvas(!prioritizeSpotify) },
+    )
+
+    if (showEditor) {
+        AlertDialog(
+            onDismissRequest = { showEditor = false },
+            title = { Text(stringResource(R.string.spotify_canvas_setup)) },
+            text = {
+                Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
+                    Text(stringResource(R.string.spotify_canvas_setup_description))
+                    Text(stringResource(R.string.spotify_canvas_setup_steps))
+                    OutlinedTextField(
+                        value = input,
+                        onValueChange = { input = it },
+                        label = { Text(stringResource(R.string.spdc_token)) },
+                        singleLine = true,
+                        visualTransformation = PasswordVisualTransformation(),
+                    )
+                }
+            },
+            confirmButton = {
+                TextButton(
+                    onClick = {
+                        AppSettings.setSpotifySpdcToken(input.trim())
+                        showEditor = false
+                    },
+                ) { Text(stringResource(R.string.save)) }
+            },
+            dismissButton = {
+                TextButton(onClick = { showEditor = false }) {
+                    Text(stringResource(R.string.cancel))
+                }
             },
         )
     }

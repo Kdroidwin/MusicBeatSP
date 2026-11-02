@@ -645,6 +645,9 @@
     <string name="spotify_canvas_setup">Spotify Canvasの設定</string>
     <string name="spotify_canvas_setup_description">Spotify Canvasを使うには、Spotifyのsp_dc cookieを入力してください。</string>
     <string name="spotify_canvas_setup_steps">1. ブラウザでopen.spotify.comにログインします。\n2. デベロッパーツールを開き、[Application]と[Cookies]を選択します。\n3. sp_dc cookieの値をコピーします。\n4. 下に貼り付けます。</string>
+    <string name="spotify_canvas_cookie_saved">Cookieを保存済み</string>
+    <string name="prioritize_spotify_canvas">Spotify Canvasを優先</string>
+    <string name="prioritize_spotify_canvas_subtitle">Apple Musicなどのモーションカバーより先にSpotifyを検索します</string>
     <string name="status">ステータス</string>
     <string name="status_dialog_message">プレゼンスが有効な間、アカウントに表示される内容です。</string>
     <string name="status_dnd">取り込み中</string>

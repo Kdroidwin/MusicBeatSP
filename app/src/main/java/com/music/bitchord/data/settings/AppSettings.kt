@@ -910,6 +910,8 @@ object AppSettings {
      * here and stays up regardless of this setting.
      */
     val canvasOverCellular = MutableStateFlow(false)
+    /** Search Spotify first when the listener has supplied their Spotify session cookie. */
+    val prioritizeSpotifyCanvas = MutableStateFlow(false)
 
     /**
      * Blows the player's cover art out to a full-bleed banner running off the
@@ -1652,6 +1654,7 @@ object AppSettings {
         if (highPerformanceMode.value) reduceAnimation.value = false
         animatedCanvas.value = prefs.getBoolean(KEY_ANIMATED_CANVAS, true)
         canvasOverCellular.value = prefs.getBoolean(KEY_CANVAS_OVER_CELLULAR, false)
+        prioritizeSpotifyCanvas.value = prefs.getBoolean(KEY_PRIORITIZE_SPOTIFY_CANVAS, false)
         val legacyFullBleedArtwork = prefs.getBoolean(KEY_FULL_BLEED_ARTWORK, true)
         val legacyLargerArtwork = prefs.getBoolean(KEY_LARGER_FULL_BLEED_ARTWORK, false)
         val legacyOriginalAspect = prefs.getBoolean(KEY_KEEP_ORIGINAL_ARTWORK_ASPECT_RATIO, false)
@@ -3349,6 +3352,11 @@ object AppSettings {
         prefs.edit().putBoolean(KEY_CANVAS_OVER_CELLULAR, value).apply()
     }
 
+    fun setPrioritizeSpotifyCanvas(value: Boolean) {
+        prioritizeSpotifyCanvas.value = value
+        prefs.edit().putBoolean(KEY_PRIORITIZE_SPOTIFY_CANVAS, value).apply()
+    }
+
     fun setFullBleedArtwork(value: Boolean) {
         val next = if (value) {
             PlayerArtworkMode.FULL_SCREEN
@@ -4421,6 +4429,7 @@ object AppSettings {
     private const val KEY_PRELOAD_ALBUM_ART_ON_STARTUP = "preload_album_art_on_startup"
     private const val KEY_ANIMATED_CANVAS = "animated_canvas"
     private const val KEY_CANVAS_OVER_CELLULAR = "canvas_over_cellular"
+    private const val KEY_PRIORITIZE_SPOTIFY_CANVAS = "prioritize_spotify_canvas"
     private const val KEY_FULL_BLEED_ARTWORK = "full_bleed_artwork"
     private const val KEY_PLAYER_ARTWORK_MODE = "player_artwork_mode"
     private const val KEY_LARGER_FULL_BLEED_ARTWORK = "larger_full_bleed_artwork"

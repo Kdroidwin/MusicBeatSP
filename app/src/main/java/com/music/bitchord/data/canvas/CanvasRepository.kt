@@ -2,6 +2,7 @@ package com.music.bitchord.data.canvas
 
 import com.music.bitchord.data.DebugLog as Log
 import com.music.bitchord.data.model.Song
+import com.music.bitchord.data.settings.AppSettings
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.sync.Mutex
 import kotlinx.coroutines.sync.withLock
@@ -68,7 +69,10 @@ object CanvasRepository {
      * a request.
      */
     suspend fun canvasFor(song: Song): CanvasArtwork? {
-        if (song.localUri != null || song.localPath != null) return null
+        // Downloaded songs keep their catalogue videoId, so Spotify can still
+        // return the original Canvas for them. A local file without an online
+        // identity has nothing to look up.
+        if (song.videoId.isBlank() && (song.localUri != null || song.localPath != null)) return null
 
         val title = song.title.cleaned()
         val artist = song.artist.cleaned()
@@ -80,15 +84,25 @@ object CanvasRepository {
         // a second time. [reusable] decides when the earlier answer still
         // stands instead.
         val album = song.albumName
-        val key = "song|${song.videoId}"
+        val spotifyFirst = AppSettings.prioritizeSpotifyCanvas.value
+        val key = cacheKey("song|${song.videoId}", spotifyFirst)
 
         return resolve(key, album != null) {
-            firstHit(
-                { AppleMusicCanvas.search(title, artist, album) },
-                { TidalCanvas.search(title, artist, album) },
-                { CommunityCanvas.search(title, artist, album) },
-                { SpotifyCanvas.search(title, artist, album) },
-            ) { it.matches(title, artist, album) }
+            if (spotifyFirst) {
+                firstHit(
+                    { SpotifyCanvas.search(title, artist, album) },
+                    { AppleMusicCanvas.search(title, artist, album) },
+                    { TidalCanvas.search(title, artist, album) },
+                    { CommunityCanvas.search(title, artist, album) },
+                ) { it.matches(title, artist, album) }
+            } else {
+                firstHit(
+                    { AppleMusicCanvas.search(title, artist, album) },
+                    { TidalCanvas.search(title, artist, album) },
+                    { CommunityCanvas.search(title, artist, album) },
+                    { SpotifyCanvas.search(title, artist, album) },
+                ) { it.matches(title, artist, album) }
+            }
         }
     }
 
@@ -99,8 +113,13 @@ object CanvasRepository {
      * reopening the player on a track resolved a minute ago should not go
      * through the settling delay again to arrive back at the same clip.
      */
-    fun cached(song: Song): CanvasArtwork? =
-        synchronized(cache) { cache["song|${song.videoId}"]?.artwork }
+    fun cached(song: Song): CanvasArtwork? {
+        val key = cacheKey(
+            base = "song|${song.videoId}",
+            spotifyFirst = AppSettings.prioritizeSpotifyCanvas.value,
+        )
+        return synchronized(cache) { cache[key]?.artwork }
+    }
 
     /**
      * The canvas for a release, for the album page's header artwork.
@@ -115,17 +134,29 @@ object CanvasRepository {
         val credit = artist.cleaned()
         if (name.isBlank() || credit.isBlank()) return null
 
-        return resolve("album|$name|$credit", withAlbum = true) {
-            firstHit(
-                { AppleMusicCanvas.searchAlbum(name, credit) },
-                { TidalCanvas.searchAlbum(name, credit) },
-                { CommunityCanvas.searchAlbum(name, credit) },
-                { SpotifyCanvas.searchAlbum(name, credit) },
-                // Album artwork names itself in both fields, so this is the
-                // same check the track path makes.
-            ) { it.matches(name, credit, name) }
+        val spotifyFirst = AppSettings.prioritizeSpotifyCanvas.value
+        return resolve(cacheKey("album|$name|$credit", spotifyFirst), withAlbum = true) {
+            if (spotifyFirst) {
+                firstHit(
+                    { SpotifyCanvas.searchAlbum(name, credit) },
+                    { AppleMusicCanvas.searchAlbum(name, credit) },
+                    { TidalCanvas.searchAlbum(name, credit) },
+                    { CommunityCanvas.searchAlbum(name, credit) },
+                ) { it.matches(name, credit, name) }
+            } else {
+                firstHit(
+                    { AppleMusicCanvas.searchAlbum(name, credit) },
+                    { TidalCanvas.searchAlbum(name, credit) },
+                    { CommunityCanvas.searchAlbum(name, credit) },
+                    { SpotifyCanvas.searchAlbum(name, credit) },
+                ) { it.matches(name, credit, name) }
+            }
         }
     }
+
+    /** Provider priority is part of the question, so the other order's result is not reused. */
+    private fun cacheKey(base: String, spotifyFirst: Boolean): String =
+        "$base|spotifyFirst=$spotifyFirst"
 
     private suspend fun resolve(
         key: String,
