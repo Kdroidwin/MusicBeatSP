@@ -59,6 +59,9 @@ object LyricsFetchEngine {
             if (sources.any { it.id == "netease" }) {
                 append(";neteaseCredits=")
                     .append(com.music.bitchord.data.settings.AppSettings.removeNeteaseLyricCredits.value)
+                // The old matcher could select unrelated search results. Do
+                // not serve lyrics cached by that matcher after this fix.
+                append(";neteaseMatch=2")
             }
         }
         val flightKey = "${artist.lowercase().trim()}|${title.lowercase().trim()}|${durationMs / 1000}|$cacheVariant"

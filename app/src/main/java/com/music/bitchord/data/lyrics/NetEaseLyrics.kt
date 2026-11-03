@@ -11,6 +11,7 @@ import kotlinx.coroutines.CancellationException
 import okhttp3.OkHttpClient
 import okhttp3.HttpUrl.Companion.toHttpUrl
 import okhttp3.Request
+import java.text.Normalizer
 import java.util.Locale
 import java.util.concurrent.TimeUnit
 import kotlin.math.abs
@@ -30,17 +31,35 @@ object NetEaseLyrics {
             .build()
     }
 
-    suspend fun lyrics(title: String, artist: String, durationMs: Long): List<LyricLine>? =
+    suspend fun lyrics(
+        title: String,
+        artist: String,
+        durationMs: Long,
+        album: String? = null,
+    ): List<LyricLine>? =
         withContext(Dispatchers.IO) {
             val query = "$title $artist".trim()
             if (query.isBlank()) return@withContext null
             LyricsLog.i("NetEase", "Searching NetEase for \"$title\" by \"$artist\"")
             val matches = search(query) ?: return@withContext null
-            val song = bestMatch(matches, title, artist, durationMs)
-            if (song == null) {
-                LyricsLog.w("NetEase", "Search returned no matching songs (${matches.size} candidates)")
+            val match = bestMatch(matches, title, artist, durationMs, album)
+            if (match == null) {
+                val closest = matches.maxByOrNull { textSimilarity(title.normalizedForMatch(), it.title.normalizedForMatch()) }
+                LyricsLog.w(
+                    "NetEase",
+                    if (closest == null) "No usable song candidates in the search response"
+                    else "Rejected ${matches.size} candidates; closest was '${closest.title}' by '${closest.artists.joinToString()}'",
+                )
                 return@withContext null
             }
+            val song = match.song
+            LyricsLog.i(
+                "NetEase",
+                "Selected '${song.title}' by '${song.artists.joinToString()}' " +
+                    "(title=${match.titleSimilarity.percent()}, artist=${match.artistSimilarity?.percent() ?: "n/a"}, " +
+                    "durationDiff=${match.durationDifferenceMs?.let { "${it / 1000}s" } ?: "n/a"}, " +
+                    "score=${match.score.percent()})",
+            )
             val response = getLyrics(song.id) ?: return@withContext null
 
             val removeCredits = com.music.bitchord.data.settings.AppSettings.removeNeteaseLyricCredits.value
@@ -96,40 +115,72 @@ object NetEaseLyrics {
                 runCatching { item.jsonObject.string("name") }.getOrNull()
             }
             val duration = song.long("duration") ?: song.long("dt")
-            SongHit(id, title, artists, duration)
+            val album = song.obj("album")?.string("name")
+                ?: song.obj("al")?.string("name")
+                ?: song.string("album")
+            SongHit(id, title, artists, duration, album)
         }
     }
 
-    private fun bestMatch(rows: List<SongHit>, title: String, artist: String, durationMs: Long): SongHit? {
+    private fun bestMatch(
+        rows: List<SongHit>,
+        title: String,
+        artist: String,
+        durationMs: Long,
+        album: String?,
+    ): SongMatch? {
         val targetTitle = title.normalizedForMatch()
-        val targetArtist = artist.normalizedForMatch()
+        val targetAlbum = album.orEmpty().normalizedForMatch()
         val targetDuration = durationMs.takeIf { it > 0L }
-        return rows.maxByOrNull { row ->
+        if (targetTitle.isBlank()) return null
+
+        val matches = rows.mapNotNull { row ->
             val candidateTitle = row.title.normalizedForMatch()
-            val candidateArtist = row.artists.joinToString(" ").normalizedForMatch()
-            var score = when {
-                candidateTitle == targetTitle -> 100
-                candidateTitle.contains(targetTitle) || targetTitle.contains(candidateTitle) -> 55
-                else -> 0
-            }
-            if (candidateArtist.isNotBlank() && targetArtist.isNotBlank()) {
-                score += when {
-                    candidateArtist == targetArtist -> 60
-                    candidateArtist.contains(targetArtist) || targetArtist.contains(candidateArtist) -> 35
-                    else -> 0
+            val titleSimilarity = textSimilarity(targetTitle, candidateTitle)
+            val artistSimilarity = artistSimilarity(artist, row.artists)
+            val candidateAlbum = row.album.orEmpty().normalizedForMatch()
+            val albumSimilarity = if (targetAlbum.isNotBlank() && candidateAlbum.isNotBlank()) {
+                textSimilarity(targetAlbum, candidateAlbum)
+            } else null
+            val durationDifference = if (targetDuration != null && row.durationMs != null) {
+                abs(row.durationMs - targetDuration)
+            } else null
+
+            // Reject a different title or performer before ranking. Previously
+            // maxByOrNull always returned some result, even when every score was 0.
+            if (titleSimilarity < MIN_TITLE_SIMILARITY) return@mapNotNull null
+            if (artistSimilarity != null && artistSimilarity < MIN_ARTIST_SIMILARITY) return@mapNotNull null
+            if (durationDifference != null && durationDifference > MAX_DURATION_DIFFERENCE_MS &&
+                !(titleSimilarity >= 0.98 && (artistSimilarity == null || artistSimilarity >= 0.80))
+            ) return@mapNotNull null
+
+            val weightedScore = buildList {
+                add(titleSimilarity to TITLE_WEIGHT)
+                artistSimilarity?.let { add(it to ARTIST_WEIGHT) }
+                durationDifference?.let {
+                    add((1.0 - (it.toDouble() / DURATION_SCORE_WINDOW_MS).coerceAtMost(1.0)) to DURATION_WEIGHT)
                 }
+                albumSimilarity?.let { add(it to ALBUM_WEIGHT) }
             }
-            if (targetDuration != null && row.durationMs != null) {
-                val difference = abs(row.durationMs - targetDuration)
-                score += when {
-                    difference <= 3_000L -> 30
-                    difference <= 8_000L -> 18
-                    difference <= 15_000L -> 5
-                    else -> -20
-                }
-            }
-            score
+            val totalWeight = weightedScore.sumOf { it.second }
+            val score = weightedScore.sumOf { (similarity, weight) -> similarity * weight } / totalWeight
+            SongMatch(row, titleSimilarity, artistSimilarity, durationDifference, score)
         }
+
+        val ranked = matches.sortedWith(
+            compareBy<SongMatch> { it.score }
+                .thenBy { it.titleSimilarity }
+                .thenBy { it.artistSimilarity ?: 0.0 },
+        ).asReversed()
+        val best = ranked.firstOrNull()?.takeIf { it.score >= MIN_TOTAL_SIMILARITY } ?: return null
+        val runnerUp = ranked.getOrNull(1)
+        if (runnerUp != null &&
+            best.score - runnerUp.score < AMBIGUOUS_SCORE_GAP &&
+            (best.artistSimilarity == null || runnerUp.artistSimilarity == null) &&
+            best.song.artists.joinToString().normalizedForMatch() !=
+            runnerUp.song.artists.joinToString().normalizedForMatch()
+        ) return null
+        return best
     }
 
     private fun getLyrics(id: Long): JsonObject? {
@@ -183,7 +234,52 @@ object NetEaseLyrics {
         .joinToString("\n")
 
     private fun String.normalizedForMatch(): String =
-        lowercase(Locale.ROOT).filter(Char::isLetterOrDigit)
+        Normalizer.normalize(this, Normalizer.Form.NFKC)
+            .lowercase(Locale.ROOT)
+            .filter(Char::isLetterOrDigit)
+
+    private fun textSimilarity(left: String, right: String): Double {
+        if (left.isBlank() || right.isBlank()) return 0.0
+        if (left == right) return 1.0
+        if (left.length >= MIN_CONTAINMENT_LENGTH && right.length >= MIN_CONTAINMENT_LENGTH &&
+            (left.contains(right) || right.contains(left))
+        ) {
+            return 0.92 + (0.08 * minOf(left.length, right.length).toDouble() / maxOf(left.length, right.length))
+        }
+
+        // Titles are short; a two-row edit-distance calculation is cheap and
+        // avoids substring hits making unrelated short titles look identical.
+        val previous = IntArray(right.length + 1) { it }
+        val current = IntArray(right.length + 1)
+        left.forEachIndexed { leftIndex, leftChar ->
+            current[0] = leftIndex + 1
+            right.forEachIndexed { rightIndex, rightChar ->
+                current[rightIndex + 1] = minOf(
+                    current[rightIndex] + 1,
+                    previous[rightIndex + 1] + 1,
+                    previous[rightIndex] + if (leftChar == rightChar) 0 else 1,
+                )
+            }
+            current.copyInto(previous)
+        }
+        val longest = maxOf(left.length, right.length)
+        return (1.0 - previous[right.length].toDouble() / longest).coerceAtLeast(0.0)
+    }
+
+    private fun artistSimilarity(target: String, candidates: List<String>): Double? {
+        val targetNames = target.split(ARTIST_SEPARATOR)
+            .map { it.normalizedForMatch() }
+            .filter { it.isNotBlank() }
+        val candidateNames = candidates.flatMap { it.split(ARTIST_SEPARATOR) }
+            .map { it.normalizedForMatch() }
+            .filter { it.isNotBlank() }
+        if (targetNames.isEmpty() || candidateNames.isEmpty()) return null
+        return targetNames.maxOfOrNull { targetName ->
+            candidateNames.maxOfOrNull { candidateName -> textSimilarity(targetName, candidateName) } ?: 0.0
+        }
+    }
+
+    private fun Double.percent(): String = "${(this * 100).toInt()}%"
 
     private fun JsonObject.obj(key: String): JsonObject? = runCatching { this[key]?.jsonObject }.getOrNull()
     private fun JsonObject.array(key: String) = runCatching { this[key]?.jsonArray }.getOrNull()
@@ -195,6 +291,31 @@ object NetEaseLyrics {
         val title: String,
         val artists: List<String>,
         val durationMs: Long?,
+        val album: String?,
+    )
+
+    private data class SongMatch(
+        val song: SongHit,
+        val titleSimilarity: Double,
+        val artistSimilarity: Double?,
+        val durationDifferenceMs: Long?,
+        val score: Double,
+    )
+
+    private const val MIN_CONTAINMENT_LENGTH = 4
+    private const val MIN_TITLE_SIMILARITY = 0.78
+    private const val MIN_ARTIST_SIMILARITY = 0.45
+    private const val MIN_TOTAL_SIMILARITY = 0.72
+    private const val AMBIGUOUS_SCORE_GAP = 0.025
+    private const val MAX_DURATION_DIFFERENCE_MS = 45_000L
+    private const val DURATION_SCORE_WINDOW_MS = 30_000L
+    private const val TITLE_WEIGHT = 0.58
+    private const val ARTIST_WEIGHT = 0.27
+    private const val DURATION_WEIGHT = 0.10
+    private const val ALBUM_WEIGHT = 0.05
+    private val ARTIST_SEPARATOR = Regex(
+        """\s*(?:,|&|/|;|、|，|＆|×)\s*|\s+(?:feat\.?|ft\.?|with|x)\s+""",
+        RegexOption.IGNORE_CASE,
     )
 
     /** Stamped songwriter/composer/arranger credits are metadata, not sung lines. */

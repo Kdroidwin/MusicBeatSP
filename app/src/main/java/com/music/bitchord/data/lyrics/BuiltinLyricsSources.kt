@@ -52,7 +52,7 @@ internal object BuiltinLyricsSources {
         "youtube_transcript" -> YouTubeTranscriptLyrics.lyrics(videoId)
         "youtube_music" -> YouTubeMusicLyrics.lyrics(videoId)
         "kugou" -> KuGou.lyrics(title, artist, durationMs, album)
-        "netease" -> NetEaseLyrics.lyrics(title, artist, durationMs)
+        "netease" -> NetEaseLyrics.lyrics(title, artist, durationMs, album)
         "lrclib" -> LrcLib.lyrics(title, artist, durationMs)
         "musixmatch" -> Musixmatch.lyrics(title, artist, durationMs)
         "genius" -> Genius.lyrics(title, artist)
