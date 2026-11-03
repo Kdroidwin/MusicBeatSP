@@ -45,13 +45,23 @@ private val authenticatedClient by lazy {
 }
 
 /** Body of a successful GET, or null for any failure at all. */
-internal fun lyricsGet(url: String, headers: Map<String, String> = emptyMap()): String? = runCatching {
+internal fun lyricsGet(
+    url: String,
+    headers: Map<String, String> = emptyMap(),
+    timeoutSeconds: Long = LYRICS_TIMEOUT_SECONDS,
+): String? = runCatching {
     val request = Request.Builder().url(url)
         .header("User-Agent", LYRICS_AGENT)
         .header("Accept", "application/json")
         .apply { headers.forEach { (name, value) -> header(name, value) } }
         .build()
-    client.newCall(request).execute().use { response ->
+    val requestClient = if (timeoutSeconds == LYRICS_TIMEOUT_SECONDS) client else {
+        client.newBuilder()
+            .callTimeout(timeoutSeconds.coerceAtLeast(1L), TimeUnit.SECONDS)
+            .connectTimeout(minOf(5L, timeoutSeconds.coerceAtLeast(1L)), TimeUnit.SECONDS)
+            .build()
+    }
+    requestClient.newCall(request).execute().use { response ->
         if (response.isSuccessful) Http.readBoundedUtf8(response.body, MAX_LYRICS_RESPONSE_BYTES) else null
     }
 }.getOrNull()

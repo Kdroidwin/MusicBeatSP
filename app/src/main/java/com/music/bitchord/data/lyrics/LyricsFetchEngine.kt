@@ -63,6 +63,10 @@ object LyricsFetchEngine {
                 // not serve lyrics cached by that matcher after this fix.
                 append(";neteaseMatch=2")
             }
+            if (sources.any { it.id == "qq_music" }) {
+                // Invalidate results cached before the QQ matching and fallback fixes.
+                append(";qqMatch=2")
+            }
         }
         val flightKey = "${artist.lowercase().trim()}|${title.lowercase().trim()}|${durationMs / 1000}|$cacheVariant"
 

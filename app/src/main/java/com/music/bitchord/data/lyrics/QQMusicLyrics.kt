@@ -26,7 +26,10 @@ object QQMusicLyrics {
     private const val SEARCH_URL = "https://c.y.qq.com/soso/fcgi-bin/client_search_cp"
     private const val LYRICS_URL = "https://paxsenix.alwaysdata.net/getQQLyrics.php"
     private const val MIN_TITLE_MATCH = 0.78
-    private const val MIN_ARTIST_MATCH = 0.45
+    private const val MAX_DURATION_DIFFERENCE_MS = 90_000L
+    private const val FALLBACK_TITLE_MATCH = 0.62
+    private const val FALLBACK_DURATION_DIFFERENCE_MS = 30_000L
+    private const val QQ_SEARCH_TIMEOUT_SECONDS = 12L
 
     suspend fun lyrics(
         title: String,
@@ -36,8 +39,13 @@ object QQMusicLyrics {
     ): List<LyricLine>? = withContext(Dispatchers.IO) {
         if (title.isBlank()) return@withContext null
         try {
-            val candidates = search(title, artist)
-            val selected = bestMatch(candidates, title, artist, durationMs, album)
+            var candidates = search(title, artist)
+            var selected = bestMatch(candidates, title, artist, durationMs, album)
+            if (selected == null && artist.isNotBlank()) {
+                LyricsLog.i("QQ Music", "Retrying QQ catalogue search with title only")
+                candidates = search(title, "")
+                selected = bestMatch(candidates, title, "", durationMs, album)
+            }
             if (selected == null) {
                 LyricsLog.i("QQ Music", "No sufficiently close catalogue result for '$title'")
                 return@withContext null
@@ -50,9 +58,16 @@ object QQMusicLyrics {
                 put("title", selected.title)
             }.toString()
             val response = lyricsPostJson(LYRICS_URL, payload)?.takeIf(String::isNotBlank)
-                ?: return@withContext null
+                ?: run {
+                    LyricsLog.w("QQ Music", "QQ lyric endpoint returned no response for song ${selected.id}")
+                    return@withContext null
+                }
             parsePaxResponse(response)?.takeIf { lines -> lines.any { it.text.isNotBlank() } }
                 ?.also { LyricsLog.s("QQ Music", "Returned ${it.size} lines") }
+                ?: run {
+                    LyricsLog.w("QQ Music", "QQ lyric response could not be parsed (${response.length} chars)")
+                    null
+                }
         } catch (cancelled: CancellationException) {
             throw cancelled
         } catch (error: Exception) {
@@ -83,10 +98,20 @@ object QQMusicLyrics {
                 "User-Agent" to "Mozilla/5.0 (Windows NT 10.0; Win64; x64)",
                 "Content-Type" to "application/json",
             ),
-        ) ?: return emptyList()
-        val root = runCatching { lyricsJson.parseToJsonElement(body) }.getOrNull() ?: return emptyList()
-        val songs = root.obj("data")?.obj("song")?.array("list") ?: return emptyList()
-        return songs.mapNotNull { element ->
+            timeoutSeconds = QQ_SEARCH_TIMEOUT_SECONDS,
+        ) ?: run {
+            LyricsLog.w("QQ Music", "QQ catalogue request timed out or failed")
+            return emptyList()
+        }
+        val root = runCatching { lyricsJson.parseToJsonElement(body) }.getOrElse { error ->
+            LyricsLog.w("QQ Music", "QQ search returned invalid JSON (${error.javaClass.simpleName})")
+            return emptyList()
+        }
+        val songs = root.obj("data")?.obj("song")?.array("list") ?: run {
+            LyricsLog.w("QQ Music", "QQ search response has no song list")
+            return emptyList()
+        }
+        val candidates = songs.mapNotNull { element ->
             val song = element as? JsonObject ?: return@mapNotNull null
             val id = song.long("id") ?: return@mapNotNull null
             val songTitle = song.string("title") ?: song.string("name") ?: return@mapNotNull null
@@ -99,6 +124,8 @@ object QQMusicLyrics {
                 ?: song.long("duration")?.let { if (it > 20_000L) it else it * 1_000L }
             Candidate(id, songTitle, artists, songAlbum, duration)
         }
+        LyricsLog.i("QQ Music", "QQ catalogue returned ${candidates.size} candidates for '${title.take(50)}'")
+        return candidates
     }
 
     private fun bestMatch(
@@ -120,12 +147,11 @@ object QQMusicLyrics {
                 if (targetArtist.isEmpty() || names.isEmpty()) null
                 else targetArtist.maxOf { expected -> names.maxOf { actual -> similarity(expected, actual) } }
             }
-            if (artistScore != null && artistScore < MIN_ARTIST_MATCH) return@mapNotNull null
             val durationDifference = if (targetDuration != null && candidate.durationMs != null) {
                 abs(targetDuration - candidate.durationMs)
             } else null
-            if (durationDifference != null && durationDifference > 20_000L &&
-                !(titleScore >= 0.97 && (artistScore == null || artistScore >= 0.82))
+            if (durationDifference != null && durationDifference > MAX_DURATION_DIFFERENCE_MS &&
+                !(titleScore >= 0.96 && (artistScore == null || artistScore >= 0.65))
             ) return@mapNotNull null
             val albumScore = if (targetAlbum.isNotBlank() && !candidate.album.isNullOrBlank()) {
                 similarity(targetAlbum, candidate.album.normalized())
@@ -142,9 +168,30 @@ object QQMusicLyrics {
             candidate to parts.sumOf { it.first * it.second } / weight
         }.sortedByDescending { it.second }
 
-        val best = ranked.firstOrNull() ?: return null
+        val best = ranked.firstOrNull() ?: run {
+            val fallback = candidates
+                .map { candidate -> candidate to similarity(targetTitle, candidate.title.normalized()) }
+                .maxByOrNull { it.second }
+                ?.takeIf { (candidate, score) ->
+                    score >= FALLBACK_TITLE_MATCH &&
+                        (targetDuration == null || candidate.durationMs == null ||
+                            abs(targetDuration - candidate.durationMs) <= FALLBACK_DURATION_DIFFERENCE_MS)
+                }
+            if (fallback != null) {
+                LyricsLog.w(
+                    "QQ Music",
+                    "Using best title match after strict matching rejected candidates (${(fallback.second * 100).toInt()}%)",
+                )
+                return fallback.first
+            }
+            val closest = candidates.maxByOrNull { similarity(targetTitle, it.title.normalized()) }
+            LyricsLog.w("QQ Music", "No QQ title candidate passed matching; closest='${closest?.title.orEmpty()}'")
+            return null
+        }
         val runnerUp = ranked.getOrNull(1)
-        if (runnerUp != null && best.second - runnerUp.second < 0.025 &&
+        // When the user did not provide an artist, similar title matches must
+        // not make the whole provider return no result; use the best-ranked one.
+        if (runnerUp != null && targetArtist.isNotEmpty() && best.second - runnerUp.second < 0.025 &&
             best.first.artists.joinToString().normalized() != runnerUp.first.artists.joinToString().normalized()
         ) return null
         return best.first
@@ -155,10 +202,11 @@ object QQMusicLyrics {
         val type = root?.stringDeep("type")?.lowercase(Locale.ROOT)
         val rows = root?.paxRows()
         if (rows != null) {
-            if (type != "line") {
+            LyricsLog.i("QQ Music", "QQ lyrics response shape=${if (root is JsonArray) "array" else "object"}, rows=${rows.size}, type=${type ?: "unspecified"}")
+            if (root !is JsonArray && type != "line") {
                 // Handles object responses while retaining SongSync's part,
                 // syllable and backing-vocal timings when they are available.
-                PaxSenix.parseTimedApple(raw)
+                runCatching { PaxSenix.parseTimedApple(raw) }.getOrNull()
                     ?.takeIf { lines -> lines.any { it.isWordSynced && it.text.isNotBlank() } }
                     ?.map(::removeCjkSpacing)
                     ?.coalesceCjkCharacterRows()
@@ -169,7 +217,13 @@ object QQMusicLyrics {
                     (chunk as? JsonObject)?.long("timestamp") != null
                 } == true
             }
-            parseLineLyrics(rows, useWordTiming = hasWordTiming)?.let { return it }
+            parseLineLyrics(rows, useWordTiming = hasWordTiming)
+                ?.takeIf { it.isNotEmpty() }
+                ?.let { parsed ->
+                    LyricsLog.i("QQ Music", "Parsed QQ ${if (hasWordTiming) "word" else "line"}-timed lyrics: ${parsed.size} lines")
+                    return parsed
+                }
+            LyricsLog.w("QQ Music", "Structured QQ lyrics parser returned no usable rows")
             // Do not flatten a structured QQ response through ProviderLyrics:
             // that turns character chunks into untimed, one-character rows.
             if (type in setOf("line", "syllable") || rows.any { (it as? JsonObject)?.long("timestamp") != null }) {
