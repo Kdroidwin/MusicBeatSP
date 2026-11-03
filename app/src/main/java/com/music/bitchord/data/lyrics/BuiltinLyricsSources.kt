@@ -9,6 +9,7 @@ package com.music.bitchord.data.lyrics
  */
 internal object BuiltinLyricsSources {
     val sources: List<LyricsSource> = listOf(
+        LyricsSource("petit_lyrics", "PetitLyrics", "プチリリ — 日本語曲・アニソンに強い文字単位の同期歌詞", wordSynced = true),
         LyricsSource("lrc_red", "lrc.red", "Apple timings matched by recording", wordSynced = true),
         LyricsSource("bini_lyrics", "BiniLyrics", "Apple timings matched by recording", wordSynced = true),
         LyricsSource("better_lyrics", "BetterLyrics", "Apple Music word timings", wordSynced = true),
@@ -40,6 +41,7 @@ internal object BuiltinLyricsSources {
         durationMs: Long,
         album: String?,
     ): List<LyricLine>? = when (id) {
+        "petit_lyrics" -> PetitLyrics.lyrics(title, artist, durationMs, album)
         "lrc_red" -> LrcRed.lyrics(title, artist, durationMs)
         "bini_lyrics" -> BiniLyrics.lyrics(title, artist, durationMs, album)?.lines
         "better_lyrics" -> BetterLyrics.lyrics(title, artist, durationMs, album)
