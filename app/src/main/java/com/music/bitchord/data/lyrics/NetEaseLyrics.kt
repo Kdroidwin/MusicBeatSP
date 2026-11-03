@@ -7,9 +7,12 @@ import kotlinx.serialization.json.contentOrNull
 import kotlinx.serialization.json.jsonArray
 import kotlinx.serialization.json.jsonObject
 import kotlinx.serialization.json.jsonPrimitive
+import kotlinx.coroutines.CancellationException
+import okhttp3.OkHttpClient
 import okhttp3.HttpUrl.Companion.toHttpUrl
 import okhttp3.Request
 import java.util.Locale
+import java.util.concurrent.TimeUnit
 import kotlin.math.abs
 
 /** Line- and YRC word-timed lyrics from NetEase Cloud Music. */
@@ -18,14 +21,26 @@ object NetEaseLyrics {
     private const val BASE = "https://music.163.com/api/"
     private const val BROWSER_AGENT =
         "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 " +
-            "(KHTML, like Gecko) Chrome/131.0.0.0 Safari/537.36"
+            "(KHTML, like Gecko) Chrome/109.0.0.0 Safari/537.36"
+
+    private val client: OkHttpClient by lazy {
+        com.music.bitchord.data.Http.lyricsClient.newBuilder()
+            .callTimeout(8, TimeUnit.SECONDS)
+            .connectTimeout(4, TimeUnit.SECONDS)
+            .build()
+    }
 
     suspend fun lyrics(title: String, artist: String, durationMs: Long): List<LyricLine>? =
         withContext(Dispatchers.IO) {
             val query = "$title $artist".trim()
             if (query.isBlank()) return@withContext null
-            val song = search(query)?.let { bestMatch(it, title, artist, durationMs) }
-                ?: return@withContext null
+            LyricsLog.i("NetEase", "Searching NetEase for \"$title\" by \"$artist\"")
+            val matches = search(query) ?: return@withContext null
+            val song = bestMatch(matches, title, artist, durationMs)
+            if (song == null) {
+                LyricsLog.w("NetEase", "Search returned no matching songs (${matches.size} candidates)")
+                return@withContext null
+            }
             val response = getLyrics(song.id) ?: return@withContext null
 
             val removeCredits = com.music.bitchord.data.settings.AppSettings.removeNeteaseLyricCredits.value
@@ -34,12 +49,23 @@ object NetEaseLyrics {
             val timed = yrc?.let { raw ->
                 KaraokeLrc.parse(raw).takeIf { lines -> lines.any { it.isWordSynced } }
             }
-            if (!timed.isNullOrEmpty()) return@withContext timed
+            if (!timed.isNullOrEmpty()) {
+                LyricsLog.s("NetEase", "Returned ${timed.size} word-synced lines")
+                return@withContext timed
+            }
 
             val lrc = response.lyric("lrc")
                 ?.let { if (removeCredits) it.withoutCreditLines() else it }
-                ?: return@withContext null
+            if (lrc == null) {
+                LyricsLog.w("NetEase", "Song ${song.id} has no LRC lyrics")
+                return@withContext null
+            }
             LrcLib.parseLrc(lrc).takeIf { it.isNotEmpty() }
+                ?.also { LyricsLog.s("NetEase", "Returned ${it.size} line-synced lines") }
+                ?: run {
+                    LyricsLog.w("NetEase", "NetEase returned lyrics that could not be parsed")
+                    null
+                }
         }
 
     private fun search(query: String): List<SongHit>? {
@@ -47,11 +73,21 @@ object NetEaseLyrics {
             .addQueryParameter("limit", "10")
             .addQueryParameter("type", "1")
             .addQueryParameter("offset", "0")
+            .addQueryParameter("os", "pc")
             .addQueryParameter("s", query)
             .build()
-        val body = request(url.toString()) ?: return null
-        val root = runCatching { lyricsJson.parseToJsonElement(body).jsonObject }.getOrNull() ?: return null
-        val songs = root.obj("result")?.array("songs") ?: return null
+        val body = request(url.toString(), "search") ?: return null
+        val root = runCatching { lyricsJson.parseToJsonElement(body).jsonObject }.getOrNull()
+        if (root == null) {
+            LyricsLog.w("NetEase", "Search response was not valid JSON")
+            return null
+        }
+        val songs = root.obj("result")?.array("songs")
+            ?: root.obj("data")?.array("songs")
+            ?: run {
+                LyricsLog.w("NetEase", "Search response contained no song list (code=${root.string("code") ?: "unknown"})")
+                return null
+            }
         return songs.mapNotNull { element ->
             val song = runCatching { element.jsonObject }.getOrNull() ?: return@mapNotNull null
             val id = song.long("id") ?: return@mapNotNull null
@@ -102,24 +138,42 @@ object NetEaseLyrics {
             .addQueryParameter("lv", "1")
             .addQueryParameter("tv", "1")
             .addQueryParameter("rv", "1")
+            .addQueryParameter("os", "pc")
             .build()
-        val body = request(url.toString()) ?: return null
-        return runCatching { lyricsJson.parseToJsonElement(body).jsonObject }.getOrNull()
+        val body = request(url.toString(), "lyrics") ?: return null
+        return runCatching { lyricsJson.parseToJsonElement(body).jsonObject }
+            .getOrNull()
+            ?.also { response ->
+                if (response.string("code")?.toIntOrNull() !in listOf(null, 200)) {
+                    LyricsLog.w("NetEase", "Lyrics endpoint returned code ${response.string("code")}")
+                }
+            }
     }
 
-    private fun request(url: String): String? = runCatching {
+    private fun request(url: String, operation: String): String? = try {
         val request = Request.Builder()
             .url(url)
             .header("User-Agent", BROWSER_AGENT)
             .header("Accept", "application/json, text/plain, */*")
+            .header("Accept-Language", "en-US,en;q=0.9,ja;q=0.8")
+            .header("Cache-Control", "max-age=0")
+            .header("Cookie", "NMTID=")
             .header("Referer", "https://music.163.com/")
             .build()
-        com.music.bitchord.data.Http.lyricsClient.newCall(request).execute().use { response ->
+        client.newCall(request).execute().use { response ->
             if (response.isSuccessful) {
                 com.music.bitchord.data.Http.readBoundedUtf8(response.body, 2 * 1024 * 1024)
-            } else null
+            } else {
+                LyricsLog.w("NetEase", "$operation request failed with HTTP ${response.code}")
+                null
+            }
         }
-    }.getOrNull()
+    } catch (cancelled: CancellationException) {
+        throw cancelled
+    } catch (error: Exception) {
+        LyricsLog.w("NetEase", "$operation request failed (${error.javaClass.simpleName})")
+        null
+    }
 
     private fun JsonObject.lyric(key: String): String? =
         obj(key)?.string("lyric")?.takeIf(String::isNotBlank)

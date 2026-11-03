@@ -3278,8 +3278,22 @@ object AppSettings {
      */
     private fun readLyricsSources(allSources: List<LyricsSource>): Set<LyricsSource> {
         val stored = prefs.getString(KEY_LYRICS_SOURCES, null)
-            ?: return allSources.toSet()
-        val ids = stored.split(",").map { it.trim() }.filter { it.isNotEmpty() }.toSet()
+        if (stored == null) {
+            prefs.edit().putBoolean(KEY_NETEASE_LYRICS_SOURCE_MIGRATED, true).apply()
+            return allSources.toSet()
+        }
+        val ids = stored.split(",").map { it.trim() }.filter { it.isNotEmpty() }.toMutableSet()
+        if (!prefs.getBoolean(KEY_NETEASE_LYRICS_SOURCE_MIGRATED, false) &&
+            allSources.any { it.id == "netease" }
+        ) {
+            // Existing installs persist their enabled source IDs. Without this
+            // one-time migration a newly added provider is silently never queried.
+            ids += "netease"
+            prefs.edit()
+                .putString(KEY_LYRICS_SOURCES, ids.joinToString(","))
+                .putBoolean(KEY_NETEASE_LYRICS_SOURCE_MIGRATED, true)
+                .apply()
+        }
         val filtered = allSources.filter { it.id in ids }.toSet()
         return filtered.ifEmpty { allSources.toSet() }
     }
@@ -4474,6 +4488,7 @@ object AppSettings {
     private const val KEY_AUTO_FIT_ONE_LINE_LYRICS = "auto_fit_one_line_lyrics"
     private const val KEY_LYRICS_SOURCES = "lyrics_sources"
     private const val KEY_LYRICS_SOURCE_ORDER = "lyrics_source_order"
+    private const val KEY_NETEASE_LYRICS_SOURCE_MIGRATED = "netease_lyrics_source_migrated"
     private const val KEY_PRIORITIZE_SYLLABLE_SYNC = "prioritize_syllable_sync"
     private const val KEY_SHOW_LYRICS_LOGS = "show_lyrics_logs"
     private const val KEY_AUTO_EMBED_LYRICS = "auto_embed_lyrics"
