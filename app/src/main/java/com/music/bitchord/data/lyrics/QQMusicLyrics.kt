@@ -11,6 +11,7 @@ import kotlinx.serialization.json.buildJsonArray
 import kotlinx.serialization.json.buildJsonObject
 import kotlinx.serialization.json.contentOrNull
 import kotlinx.serialization.json.jsonPrimitive
+import kotlinx.serialization.json.booleanOrNull
 import kotlinx.serialization.json.put
 import okhttp3.HttpUrl.Companion.toHttpUrl
 import java.text.Normalizer
@@ -152,13 +153,29 @@ object QQMusicLyrics {
     private fun parsePaxResponse(raw: String): List<LyricLine>? {
         val root = runCatching { lyricsJson.parseToJsonElement(raw) }.getOrNull()
         val type = root?.stringDeep("type")?.lowercase(Locale.ROOT)
-        if (type == "line") return parseLineLyrics(root)
-        // PaxSenix already understands SongSync's syllable-level `part` runs,
-        // including word joins, syllable spans, and backing vocals.
-        PaxSenix.parseTimedApple(raw)
-            ?.takeIf { it.any(LyricLine::isWordSynced) }
-            ?.map(::removeCjkSpacing)
-            ?.let { return it }
+        val rows = root?.paxRows()
+        if (rows != null) {
+            if (type != "line") {
+                // Handles object responses while retaining SongSync's part,
+                // syllable and backing-vocal timings when they are available.
+                PaxSenix.parseTimedApple(raw)
+                    ?.takeIf { lines -> lines.any { it.isWordSynced && it.text.isNotBlank() } }
+                    ?.map(::removeCjkSpacing)
+                    ?.coalesceCjkCharacterRows()
+                    ?.let { return it }
+            }
+            val hasWordTiming = type != "line" && rows.any { element ->
+                (element as? JsonObject)?.array("text")?.any { chunk ->
+                    (chunk as? JsonObject)?.long("timestamp") != null
+                } == true
+            }
+            parseLineLyrics(rows, useWordTiming = hasWordTiming)?.let { return it }
+            // Do not flatten a structured QQ response through ProviderLyrics:
+            // that turns character chunks into untimed, one-character rows.
+            if (type in setOf("line", "syllable") || rows.any { (it as? JsonObject)?.long("timestamp") != null }) {
+                return null
+            }
+        }
         return ProviderLyrics.parse(raw)
     }
 
@@ -167,7 +184,7 @@ object QQMusicLyrics {
      * characters: those spaces made short Japanese lines wrap vertically. */
     private fun removeCjkSpacing(line: LyricLine): LyricLine = line.copy(
         text = if (line.words.isEmpty()) {
-            line.text
+            line.text.withoutCjkRunSpaces()
         } else if (line.words.none { word -> word.text.any { it.isUnspacedScript() } }) {
             line.words.joinToString(" ") { it.text }
         } else {
@@ -185,23 +202,182 @@ object QQMusicLyrics {
         background = line.background?.let(::removeCjkSpacing),
     )
 
-    private fun parseLineLyrics(root: JsonElement): List<LyricLine>? {
-        val rows = root.arrayDeep("content") ?: return null
-        val lines = rows.mapNotNull { element ->
-            val row = element as? JsonObject ?: return@mapNotNull null
-            val timestamp = row.long("timestamp") ?: return@mapNotNull null
-            val words = row.array("text").orEmpty().mapNotNull { (it as? JsonObject)?.string("text") }
-            val text = words.joinToString("").trim().takeIf(String::isNotEmpty) ?: return@mapNotNull null
-            val end = row.long("endtime")?.takeIf { it > timestamp }
-            LyricLine(timeMs = timestamp, text = text, sungUntilMs = end)
-        }.sortedBy(LyricLine::timeMs)
-        return lines.withInstrumentalGaps().takeIf { it.isNotEmpty() }
+    private fun String.withoutCjkRunSpaces(): String = buildString {
+        for (index in indices) {
+            val character = this@withoutCjkRunSpaces[index]
+            if (character.isWhitespace() && lastOrNull()?.isUnspacedScript() == true) {
+                val next = this@withoutCjkRunSpaces.drop(index + 1).firstOrNull { !it.isWhitespace() }
+                if (next?.isUnspacedScript() == true) continue
+            }
+            append(character)
+        }
     }
+
+    private fun JsonElement.paxRows(): JsonArray? = when (this) {
+        is JsonArray -> this
+        else -> arrayDeep("content")
+    }
+
+    private fun parseLineLyrics(rows: JsonArray, useWordTiming: Boolean): List<LyricLine>? {
+        val lines = rows.mapIndexedNotNull { index, element ->
+            val row = element as? JsonObject ?: return@mapIndexedNotNull null
+            val chunks = row.textChunks("text")
+            val nextLineTime = (rows.getOrNull(index + 1) as? JsonObject)?.long("timestamp")
+            val lineEnd = row.long("endtime")
+            val timestamp = row.long("timestamp")
+                ?: chunks.mapNotNull(PaxText::timestampMs).minOrNull()
+                ?: return@mapIndexedNotNull null
+            val words = if (useWordTiming) timedWords(chunks, lineEnd, nextLineTime) else emptyList()
+            val text = if (words.isNotEmpty()) renderWords(words) else renderPaxText(chunks)
+            if (text.isBlank()) return@mapIndexedNotNull null
+            val backgroundChunks = row.textChunks("backgroundText")
+            val background = if (row.boolean("background") == true && backgroundChunks.isNotEmpty()) {
+                val backgroundWords = timedWords(backgroundChunks, lineEnd, nextLineTime)
+                val backgroundText = if (backgroundWords.isNotEmpty()) renderWords(backgroundWords)
+                else renderPaxText(backgroundChunks)
+                backgroundText.takeIf(String::isNotBlank)?.let { textValue ->
+                    LyricLine(
+                        timeMs = backgroundChunks.mapNotNull(PaxText::timestampMs).minOrNull() ?: timestamp,
+                        text = textValue,
+                        words = backgroundWords,
+                    )
+                }
+            } else null
+            LyricLine(
+                timeMs = timestamp,
+                text = text,
+                words = words,
+                sungUntilMs = lineEnd?.takeIf { it > timestamp },
+                background = background,
+                alignment = if (row.boolean("oppositeTurn") == true) LyricAlignment.End else LyricAlignment.Start,
+            )
+        }.sortedBy(LyricLine::timeMs)
+        return lines.coalesceCjkCharacterRows().withInstrumentalGaps().takeIf { it.isNotEmpty() }
+    }
+
+    private fun JsonObject.textChunks(key: String): List<PaxText> =
+        (this[key] as? JsonArray).orEmpty().mapNotNull { element ->
+            when (element) {
+                is JsonObject -> element.string("text")?.let { text ->
+                    PaxText(
+                        text = text,
+                        timestampMs = element.long("timestamp"),
+                        endMs = element.long("endtime"),
+                        part = element.boolean("part"),
+                    )
+                }
+                is JsonPrimitive -> element.contentOrNull?.let { PaxText(it, null, null, null) }
+                else -> null
+            }
+        }.ifEmpty {
+            string(key)?.let { listOf(PaxText(it, null, null, null)) }.orEmpty()
+        }
+
+    private fun timedWords(
+        chunks: List<PaxText>,
+        lineEndMs: Long?,
+        nextLineMs: Long?,
+    ): List<LyricWord> {
+        if (chunks.isEmpty() || chunks.any { it.timestampMs == null }) return emptyList()
+        val runs = chunks.mapIndexedNotNull { index, chunk ->
+            val text = chunk.text.trim().takeIf(String::isNotEmpty) ?: return@mapIndexedNotNull null
+            val start = chunk.timestampMs ?: return@mapIndexedNotNull null
+            val end = chunk.endMs
+                ?: chunks.getOrNull(index + 1)?.timestampMs
+                ?: lineEndMs
+                ?: nextLineMs
+                ?: (start + 800L)
+            TimedRun(start, maxOf(start, end), if (chunk.part == true) text else "$text ")
+        }
+        return wordsFromRuns(runs, spacingIsExplicit = true)
+    }
+
+    private fun renderWords(words: List<LyricWord>): String {
+        if (words.none { word -> word.text.any { it.isUnspacedScript() } }) {
+            return words.joinToString(" ") { it.text }
+        }
+        return words.foldIndexed(StringBuilder()) { index, text, word ->
+            if (index > 0) {
+                val previous = words[index - 1].text.lastOrNull()
+                val next = word.text.firstOrNull()
+                if (previous != null && next != null &&
+                    !previous.isUnspacedScript() && !next.isUnspacedScript()
+                ) text.append(' ')
+            }
+            text.append(word.text)
+        }.toString()
+    }
+
+    private fun renderPaxText(chunks: List<PaxText>): String = buildString {
+        var previous: PaxText? = null
+        chunks.forEach { chunk ->
+            val text = chunk.text.trim()
+            if (text.isEmpty()) return@forEach
+            val before = previous
+            val previousChar = before?.text?.trim()?.lastOrNull()
+            val nextChar = text.firstOrNull()
+            val separatedText = previousChar != null && nextChar != null &&
+                !previousChar.isUnspacedScript() && !nextChar.isUnspacedScript()
+            if (isNotEmpty() && separatedText && before?.part != true) append(' ')
+            append(text)
+            previous = chunk
+        }
+    }
+
+    private fun List<LyricLine>.coalesceCjkCharacterRows(): List<LyricLine> {
+        if (count { it.isCjkCharacterRow() } < 2) return this
+        val result = mutableListOf<LyricLine>()
+        var index = 0
+        while (index < size) {
+            val first = this[index]
+            if (!first.isCjkCharacterRow()) {
+                result += first
+                index++
+                continue
+            }
+            val group = mutableListOf(first)
+            var next = index + 1
+            while (next < size) {
+                val candidate = this[next]
+                val previous = group.last()
+                if (!candidate.isCjkCharacterRow() ||
+                    candidate.timeMs - previous.timeMs > MAX_CJK_CHARACTER_GAP_MS
+                ) break
+                group += candidate
+                next++
+            }
+            if (group.size == 1) {
+                result += first
+            } else {
+                val words = group.mapIndexed { wordIndex, line ->
+                    val end = group.getOrNull(wordIndex + 1)?.timeMs
+                        ?: line.sungUntilMs
+                        ?: (line.timeMs + 800L)
+                    LyricWord(line.timeMs, maxOf(line.timeMs, end), line.text)
+                }
+                result += LyricLine(first.timeMs, group.joinToString("") { it.text }, words)
+            }
+            index = next.coerceAtLeast(index + 1)
+        }
+        return result
+    }
+
+    private fun LyricLine.isCjkCharacterRow(): Boolean =
+        text.length == 1 && text.first().isUnspacedScript() &&
+            background == null && alignment == LyricAlignment.Start
+
+    private data class PaxText(
+        val text: String,
+        val timestampMs: Long?,
+        val endMs: Long?,
+        val part: Boolean?,
+    )
 
     private fun JsonElement.obj(key: String): JsonObject? = (this as? JsonObject)?.get(key) as? JsonObject
     private fun JsonElement.array(key: String): JsonArray? = (this as? JsonObject)?.get(key) as? JsonArray
     private fun JsonObject.string(key: String): String? = (this[key] as? JsonPrimitive)?.contentOrNull
     private fun JsonObject.long(key: String): Long? = string(key)?.toLongOrNull()
+    private fun JsonObject.boolean(key: String): Boolean? = (this[key] as? JsonPrimitive)?.booleanOrNull
 
     private fun JsonElement.stringDeep(key: String): String? = when (this) {
         is JsonObject -> this[key]?.jsonPrimitive?.contentOrNull
@@ -260,4 +436,6 @@ object QQMusicLyrics {
         val album: String?,
         val durationMs: Long?,
     )
+
+    private const val MAX_CJK_CHARACTER_GAP_MS = 2_500L
 }
