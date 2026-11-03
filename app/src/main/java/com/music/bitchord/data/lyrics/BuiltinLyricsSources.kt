@@ -23,6 +23,7 @@ internal object BuiltinLyricsSources {
         // These three IDs replace the older script-backed providers while
         // preserving existing settings and source-order entries.
         LyricsSource("kugou", "KuGou", "Synced lyrics from KuGou's catalogue"),
+        LyricsSource("netease", "NetEase Cloud Music", "Line- and word-synced lyrics", wordSynced = true),
         LyricsSource("lrclib", "LRCLIB", "Open, line-synced lyrics database"),
         LyricsSource("musixmatch", "Musixmatch", "Line-synced lyrics from Musixmatch"),
         LyricsSource("genius", "Genius", "Plain-text fallback from Genius"),
@@ -51,6 +52,7 @@ internal object BuiltinLyricsSources {
         "youtube_transcript" -> YouTubeTranscriptLyrics.lyrics(videoId)
         "youtube_music" -> YouTubeMusicLyrics.lyrics(videoId)
         "kugou" -> KuGou.lyrics(title, artist, durationMs, album)
+        "netease" -> NetEaseLyrics.lyrics(title, artist, durationMs)
         "lrclib" -> LrcLib.lyrics(title, artist, durationMs)
         "musixmatch" -> Musixmatch.lyrics(title, artist, durationMs)
         "genius" -> Genius.lyrics(title, artist)

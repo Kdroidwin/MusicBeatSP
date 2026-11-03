@@ -748,6 +748,7 @@ fun SettingsScreen(
     val showLyricsFurigana by AppSettings.showLyricsFurigana.collectAsStateWithLifecycle()
     val autoFitOneLineLyrics by AppSettings.autoFitOneLineLyrics.collectAsStateWithLifecycle()
     val preferEmbeddedLocalLyrics by AppSettings.preferEmbeddedLocalLyrics.collectAsStateWithLifecycle()
+    val removeNeteaseLyricCredits by AppSettings.removeNeteaseLyricCredits.collectAsStateWithLifecycle()
     val showLyricsCloseButton by AppSettings.showLyricsCloseButton.collectAsStateWithLifecycle()
     val hideLyricsStatusText by AppSettings.hideLyricsStatusText.collectAsStateWithLifecycle()
     val hideLyricsSavedMessage by AppSettings.hideLyricsSavedMessage.collectAsStateWithLifecycle()
@@ -4932,6 +4933,23 @@ fun SettingsScreen(
                         .ifEmpty { stringResource(R.string.no_lyrics_sources_enabled) },
                     trailing = { Chevron() },
                     onClick = onLyricsSources,
+                )
+                RowDivider()
+                SettingsRow(
+                    icon = Icons.Rounded.DeleteSweep,
+                    title = stringResource(R.string.remove_netease_lyric_credits),
+                    subtitle = stringResource(R.string.remove_netease_lyric_credits_subtitle),
+                    trailing = {
+                        Switch(
+                            checked = removeNeteaseLyricCredits,
+                            onCheckedChange = AppSettings::setRemoveNeteaseLyricCredits,
+                            colors = SwitchDefaults.colors(
+                                checkedTrackColor = MaterialTheme.colorScheme.primary,
+                                checkedBorderColor = MaterialTheme.colorScheme.primary,
+                            ),
+                        )
+                    },
+                    onClick = { AppSettings.setRemoveNeteaseLyricCredits(!removeNeteaseLyricCredits) },
                 )
             }
         }

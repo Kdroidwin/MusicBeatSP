@@ -56,6 +56,10 @@ object LyricsFetchEngine {
             append("syllable=").append(prioritizeSyllableSync)
             append(";sources=").append(sources.map { it.id }.sorted().joinToString(","))
             append(";order=").append(order.map { it.id }.joinToString(","))
+            if (sources.any { it.id == "netease" }) {
+                append(";neteaseCredits=")
+                    .append(com.music.bitchord.data.settings.AppSettings.removeNeteaseLyricCredits.value)
+            }
         }
         val flightKey = "${artist.lowercase().trim()}|${title.lowercase().trim()}|${durationMs / 1000}|$cacheVariant"
 

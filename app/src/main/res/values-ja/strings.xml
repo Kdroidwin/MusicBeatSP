@@ -1254,6 +1254,8 @@
     <string name="lyrics_sync_preview_line">この歌詞行の位置へ移動</string>
     <string name="lyrics_sync_previous">前の曲</string>
     <string name="lyrics_sync_next">次の曲</string>
+    <string name="remove_netease_lyric_credits">NetEaseの歌詞からクレジット行を削除</string>
+    <string name="remove_netease_lyric_credits_subtitle">NetEaseの歌詞に含まれる作詞・作曲・編曲のタイムスタンプ行を削除します</string>
     <string name="lyrics_sync_seek_back_5">5秒戻る</string>
     <string name="lyrics_sync_seek_forward_5">5秒進む</string>
     <string name="lyrics_sync_five_second_seek">歌詞同期編集で5秒スキップを使う</string>
