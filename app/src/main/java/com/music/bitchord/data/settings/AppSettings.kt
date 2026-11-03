@@ -802,6 +802,9 @@ object AppSettings {
     /** Whether a tap on the player artwork opens the full lyrics panel. */
     val artworkTapOpensLyrics = MutableStateFlow(false)
 
+    /** Replaces track navigation with ±5-second seeking in the lyrics sync editor. */
+    val lyricsSyncFiveSecondSeek = MutableStateFlow(true)
+
     /** Uses the artwork area as an expanded lyrics view while leaving playback controls visible. */
     val lyricsReplaceArtworkOnly = MutableStateFlow(false)
 
@@ -1592,6 +1595,7 @@ object AppSettings {
             )
         }.getOrDefault(LyricsTextAlignment.CENTER)
         artworkTapOpensLyrics.value = prefs.getBoolean(KEY_ARTWORK_TAP_OPENS_LYRICS, false)
+        lyricsSyncFiveSecondSeek.value = prefs.getBoolean(KEY_LYRICS_SYNC_FIVE_SECOND_SEEK, true)
         lyricsReplaceArtworkOnly.value = prefs.getBoolean(KEY_LYRICS_REPLACE_ARTWORK_ONLY, false)
         hidePlayerHeaderDuringLyrics.value = prefs.getBoolean(KEY_HIDE_PLAYER_HEADER_DURING_LYRICS, false)
         showPlayerLyricsStrip.value = prefs.getBoolean(KEY_SHOW_PLAYER_LYRICS_STRIP, true)
@@ -2998,6 +3002,11 @@ object AppSettings {
         prefs.edit().putBoolean(KEY_ARTWORK_TAP_OPENS_LYRICS, value).apply()
     }
 
+    fun setLyricsSyncFiveSecondSeek(value: Boolean) {
+        lyricsSyncFiveSecondSeek.value = value
+        prefs.edit().putBoolean(KEY_LYRICS_SYNC_FIVE_SECOND_SEEK, value).apply()
+    }
+
     fun setLyricsReplaceArtworkOnly(value: Boolean) {
         lyricsReplaceArtworkOnly.value = value
         prefs.edit().putBoolean(KEY_LYRICS_REPLACE_ARTWORK_ONLY, value).apply()
@@ -4389,6 +4398,7 @@ object AppSettings {
     private const val KEY_LYRICS_FONT_SCALE = "lyrics_font_scale"
     private const val KEY_LYRICS_TEXT_ALIGNMENT = "lyrics_text_alignment"
     private const val KEY_ARTWORK_TAP_OPENS_LYRICS = "artwork_tap_opens_lyrics"
+    private const val KEY_LYRICS_SYNC_FIVE_SECOND_SEEK = "lyrics_sync_five_second_seek"
     private const val KEY_LYRICS_REPLACE_ARTWORK_ONLY = "lyrics_replace_artwork_only"
     private const val KEY_HIDE_PLAYER_HEADER_DURING_LYRICS = "hide_player_header_during_lyrics"
     private const val KEY_SHOW_PLAYER_LYRICS_STRIP = "show_player_lyrics_strip"

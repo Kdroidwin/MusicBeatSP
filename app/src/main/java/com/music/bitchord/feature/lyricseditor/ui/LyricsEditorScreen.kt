@@ -36,8 +36,10 @@ import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.rounded.Check
 import androidx.compose.material.icons.rounded.Code
+import androidx.compose.material.icons.rounded.Forward5
 import androidx.compose.material.icons.rounded.Pause
 import androidx.compose.material.icons.rounded.PlayArrow
+import androidx.compose.material.icons.rounded.Replay5
 import androidx.compose.material.icons.rounded.SkipNext
 import androidx.compose.material.icons.rounded.SkipPrevious
 import androidx.compose.material.icons.rounded.Sync
@@ -76,6 +78,7 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.lifecycle.viewmodel.compose.viewModel
 import com.music.bitchord.data.model.Song
+import com.music.bitchord.data.settings.AppSettings
 import com.music.bitchord.R
 import com.music.bitchord.feature.lyricseditor.domain.model.LyricsEditorSource
 import com.music.bitchord.feature.lyricseditor.ui.components.LyricsDownloadDialog
@@ -110,6 +113,7 @@ fun LyricsEditorScreen(
     SystemBarIcons(dark = !isDarkTheme)
 
     val context = LocalContext.current
+    val useFiveSecondSeek by AppSettings.lyricsSyncFiveSecondSeek.collectAsState()
     val clipboardManager = remember {
         context.getSystemService(Context.CLIPBOARD_SERVICE) as? ClipboardManager
     }
@@ -236,6 +240,17 @@ fun LyricsEditorScreen(
     }
 
     val isFileSource = selectedSource == LyricsEditorSource.File
+    val syncSeekBackward: (() -> Unit)? = if (useFiveSecondSeek) {
+        onSyncSeek?.let { seek -> { seek((playbackPositionMs - 5_000L).coerceAtLeast(0L)) } }
+    } else onSyncPrevious
+    val syncSeekForward: (() -> Unit)? = if (useFiveSecondSeek) {
+        onSyncSeek?.let { seek ->
+            {
+                val nextPosition = playbackPositionMs + 5_000L
+                seek(if (playbackDurationMs > 0L) nextPosition.coerceAtMost(playbackDurationMs) else nextPosition)
+            }
+        }
+    } else onSyncNext
 
     Scaffold(
         topBar = {
@@ -262,8 +277,9 @@ fun LyricsEditorScreen(
                     isPlaying = playbackIsPlaying,
                     enabled = !isLoading && !isSaving,
                     onPlayPause = { onSyncPlaybackToggle?.invoke() },
-                    onPrevious = { onSyncPrevious?.invoke() },
-                    onNext = { onSyncNext?.invoke() },
+                    useFiveSecondSeek = useFiveSecondSeek,
+                    onPrevious = syncSeekBackward,
+                    onNext = syncSeekForward,
                     onSeek = { onSyncSeek?.invoke(it) },
                 )
             } else LyricsEditorBottomBar(
@@ -737,9 +753,10 @@ private fun SyncPlaybackBar(
     durationMs: Long,
     isPlaying: Boolean,
     enabled: Boolean,
+    useFiveSecondSeek: Boolean,
     onPlayPause: () -> Unit,
-    onPrevious: () -> Unit,
-    onNext: () -> Unit,
+    onPrevious: (() -> Unit)?,
+    onNext: (() -> Unit)?,
     onSeek: (Long) -> Unit,
 ) {
     val canControlTrack = enabled && durationMs > 0L
@@ -780,11 +797,21 @@ private fun SyncPlaybackBar(
                     modifier = Modifier.size(27.dp),
                 )
             }
-            IconButton(onClick = onPrevious, enabled = canControlTrack) {
-                Icon(Icons.Rounded.SkipPrevious, contentDescription = stringResource(R.string.lyrics_sync_previous))
+            IconButton(onClick = { onPrevious?.invoke() }, enabled = canControlTrack && onPrevious != null) {
+                Icon(
+                    imageVector = if (useFiveSecondSeek) Icons.Rounded.Replay5 else Icons.Rounded.SkipPrevious,
+                    contentDescription = stringResource(
+                        if (useFiveSecondSeek) R.string.lyrics_sync_seek_back_5 else R.string.lyrics_sync_previous,
+                    ),
+                )
             }
-            IconButton(onClick = onNext, enabled = canControlTrack) {
-                Icon(Icons.Rounded.SkipNext, contentDescription = stringResource(R.string.lyrics_sync_next))
+            IconButton(onClick = { onNext?.invoke() }, enabled = canControlTrack && onNext != null) {
+                Icon(
+                    imageVector = if (useFiveSecondSeek) Icons.Rounded.Forward5 else Icons.Rounded.SkipNext,
+                    contentDescription = stringResource(
+                        if (useFiveSecondSeek) R.string.lyrics_sync_seek_forward_5 else R.string.lyrics_sync_next,
+                    ),
+                )
             }
             Spacer(Modifier.weight(1f))
             Text(

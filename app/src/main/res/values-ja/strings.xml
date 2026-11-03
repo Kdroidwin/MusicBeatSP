@@ -1254,6 +1254,10 @@
     <string name="lyrics_sync_preview_line">この歌詞行の位置へ移動</string>
     <string name="lyrics_sync_previous">前の曲</string>
     <string name="lyrics_sync_next">次の曲</string>
+    <string name="lyrics_sync_seek_back_5">5秒戻る</string>
+    <string name="lyrics_sync_seek_forward_5">5秒進む</string>
+    <string name="lyrics_sync_five_second_seek">歌詞同期編集で5秒スキップを使う</string>
+    <string name="lyrics_sync_five_second_seek_subtitle">前後の曲ボタンを5秒戻る・5秒進むボタンに置き換えます</string>
     <string name="lyrics_sync_instructions">曲を再生し、歌詞の行が始まるタイミングでその行をタップして時間を記録します。</string>
     <string name="lyrics_sync_play">曲を再生</string>
     <string name="lyrics_sync_pause">曲を一時停止</string>

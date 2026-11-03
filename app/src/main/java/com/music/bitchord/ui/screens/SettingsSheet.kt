@@ -760,6 +760,7 @@ fun SettingsScreen(
     val lyricsTransportControlsCentered by AppSettings.lyricsTransportControlsCentered.collectAsStateWithLifecycle()
     val artworkTapOpensLyrics by AppSettings.artworkTapOpensLyrics.collectAsStateWithLifecycle()
     val lyricsReplaceArtworkOnly by AppSettings.lyricsReplaceArtworkOnly.collectAsStateWithLifecycle()
+    val lyricsSyncFiveSecondSeek by AppSettings.lyricsSyncFiveSecondSeek.collectAsStateWithLifecycle()
     val hidePlayerHeaderDuringLyrics by AppSettings.hidePlayerHeaderDuringLyrics.collectAsStateWithLifecycle()
     val showPlayerLyricsStrip by AppSettings.showPlayerLyricsStrip.collectAsStateWithLifecycle()
     val offlineMode by AppSettings.offlineMode.collectAsStateWithLifecycle()
@@ -1303,6 +1304,7 @@ fun SettingsScreen(
         SettingsSearchEntry(stringResource(R.string.preload_album_art), stringResource(R.string.preload_album_art_subtitle), listOf("artwork", "album art", "preload", "先読み", "アルバムアート"), preloadAlbumArtOnStartup) { AppSettings.setPreloadAlbumArtOnStartup(!preloadAlbumArtOnStartup) },
         SettingsSearchEntry(stringResource(R.string.persistent_local_artwork), stringResource(R.string.persistent_local_artwork_subtitle), listOf("artwork", "album art", "storage", "画像", "ストレージ"), persistentLocalArtwork) { AppSettings.setPersistentLocalArtwork(!persistentLocalArtwork) },
         SettingsSearchEntry(stringResource(R.string.synced_lyrics), stringResource(R.string.synced_lyrics_subtitle), listOf("lyrics", "歌詞", "同期"), syncedLyrics) { AppSettings.setSyncedLyrics(!syncedLyrics) },
+        SettingsSearchEntry(stringResource(R.string.lyrics_sync_five_second_seek), stringResource(R.string.lyrics_sync_five_second_seek_subtitle), listOf("lyrics", "歌詞", "同期", "5 seconds", "5秒", "skip", "スキップ"), lyricsSyncFiveSecondSeek) { AppSettings.setLyricsSyncFiveSecondSeek(!lyricsSyncFiveSecondSeek) },
         autoShowLyricsSearchEntry(autoShowLyricsOnPlayback),
         SettingsSearchEntry(stringResource(R.string.blur_unfocused_lyrics), stringResource(R.string.blur_unfocused_lyrics_subtitle), listOf("lyrics", "歌詞", "blur", "ぼかし"), lyricsBlur) { AppSettings.setLyricsBlur(!lyricsBlur) },
         SettingsSearchEntry(stringResource(R.string.auto_embed_lyrics), stringResource(R.string.auto_embed_lyrics_subtitle), listOf("lyrics", "歌詞", "embed", "埋め込み"), autoEmbedLyrics) { AppSettings.setAutoEmbedLyrics(!autoEmbedLyrics) },
@@ -4562,6 +4564,23 @@ fun SettingsScreen(
                     )
                 },
                 onClick = { AppSettings.setSyncedLyrics(!syncedLyrics) },
+            )
+            RowDivider()
+            SettingsRow(
+                icon = Icons.Rounded.FastForward,
+                title = stringResource(R.string.lyrics_sync_five_second_seek),
+                subtitle = stringResource(R.string.lyrics_sync_five_second_seek_subtitle),
+                trailing = {
+                    Switch(
+                        checked = lyricsSyncFiveSecondSeek,
+                        onCheckedChange = AppSettings::setLyricsSyncFiveSecondSeek,
+                        colors = SwitchDefaults.colors(
+                            checkedTrackColor = MaterialTheme.colorScheme.primary,
+                            checkedBorderColor = MaterialTheme.colorScheme.primary,
+                        ),
+                    )
+                },
+                onClick = { AppSettings.setLyricsSyncFiveSecondSeek(!lyricsSyncFiveSecondSeek) },
             )
             RowDivider()
             SettingsRow(
