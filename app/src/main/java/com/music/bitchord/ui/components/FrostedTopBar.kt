@@ -106,9 +106,9 @@ fun topBarContentPadding(): Dp = topBarHeight() + TopBarContentGap
  * edge to draw a line across the page with. A uniform pane would put that line
  * back, which is the one thing every surface here is built to avoid.
  *
- * The exception is Reduce dynamic blur, where there is no fade to sit on and
- * the bar fills itself solid instead — title over raw scrolling content is
- * unreadable, so something has to carry it.
+ * The exceptions are Reduce dynamic blur and [solidBackground], where there
+ * is no fade to sit on and the bar fills itself solid instead — title over raw
+ * scrolling content is unreadable, so something has to carry it.
  *
  * Apple Music behaviour: the big in-list header owns the title at rest;
  * once the list scrolls, the small centered title fades in.
@@ -128,6 +128,8 @@ fun FrostedTopBar(
     artworkTint: Color? = null,
     /** Draws only floating navigation/actions over collection artwork. */
     floatingOnly: Boolean = false,
+    /** Uses a flat opaque fill, for feeds whose content should not show through the bar. */
+    solidBackground: Boolean = false,
 ) {
     val reduceDynamicBlur by AppSettings.reduceDynamicBlur.collectAsStateWithLifecycle()
     val titleAlpha by animateFloatAsState(
@@ -140,7 +142,7 @@ fun FrostedTopBar(
     // the fade exists to remove.
     val dividerColor by animateColorAsState(
         targetValue = MaterialTheme.colorScheme.outline.copy(
-            alpha = if (!floatingOnly && scrolled && reduceDynamicBlur) 0.6f else 0f,
+            alpha = if (!floatingOnly && scrolled && (reduceDynamicBlur || solidBackground)) 0.6f else 0f,
         ),
         animationSpec = tween(220),
         label = "topBarDivider",
@@ -152,6 +154,7 @@ fun FrostedTopBar(
             .then(
                 when {
                     floatingOnly -> Modifier.background(Color.Transparent)
+                    solidBackground -> Modifier.background(MaterialTheme.colorScheme.background)
                     artworkTint != null && reduceDynamicBlur -> Modifier.background(artworkTint)
                     artworkTint != null -> Modifier.background(Color.Transparent)
                     reduceDynamicBlur -> Modifier.background(MaterialTheme.colorScheme.surface)

@@ -3207,9 +3207,12 @@ private fun BitChordApp(
                     }
                 }
 
-                // Every top bar is a fade rather than a pane — see [TopFadeBlur].
-                // Drawn before the bar so the bar's own content sits on top of it.
+                // Top bars use a fade rather than a pane — see [TopFadeBlur].
+                // Radio is intentionally solid, so its scrolling text never blurs
+                // behind the pinned header (including its nested program details).
                 val isDetailVisible = detail != null && !isLocalDetail && !showSettings && !showReplay
+                val isRadioScreenVisible = selectedTab == TAB_RADIO && detail == null &&
+                    !showSettings && !showReplay && !showSources && !showWearOs
                 val isLocalCollectionArtworkVisible = localCollectionPalette != null &&
                     detail == null && !showSettings && !showReplay
                 val currentCollectionRouteKey = detail?.browseId ?: "$TAB_KEY$selectedTab"
@@ -3224,7 +3227,7 @@ private fun BitChordApp(
                     (detail != null && !isLocalDetail && detail.type in setOf(BrowseType.ALBUM, BrowseType.PLAYLIST))
                 val hideFloatingCollectionControlsNow =
                     hideFloatingCollectionControls && hideCollectionHeaderNow && isAlbumOrPlaylistArtworkDetail
-                if (!hideCollectionHeaderNow) {
+                if (!hideCollectionHeaderNow && !isRadioScreenVisible) {
                     TopFadeBlur(
                         hazeState = hazeState,
                         // Replay paints its own full-bleed black backdrop up under the
@@ -3271,6 +3274,7 @@ private fun BitChordApp(
                             else -> null
                         },
                         floatingOnly = hideCollectionHeaderNow,
+                        solidBackground = isRadioScreenVisible,
                         onBack = if (hideFloatingCollectionControlsNow) null else when {
                             showSources -> ({ showSources = false })
                             showWearOs -> ({ showWearOs = false })
