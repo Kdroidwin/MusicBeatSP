@@ -25,7 +25,7 @@ object QQMusicLyrics {
     private const val SEARCH_URL = "https://c.y.qq.com/soso/fcgi-bin/client_search_cp"
     private const val LYRICS_URL = "https://paxsenix.alwaysdata.net/getQQLyrics.php"
     private const val MIN_TITLE_MATCH = 0.78
-    private const val MIN_ARTIST_MATCH = 0.55
+    private const val MIN_ARTIST_MATCH = 0.45
 
     suspend fun lyrics(
         title: String,
@@ -155,9 +155,35 @@ object QQMusicLyrics {
         if (type == "line") return parseLineLyrics(root)
         // PaxSenix already understands SongSync's syllable-level `part` runs,
         // including word joins, syllable spans, and backing vocals.
-        PaxSenix.parseTimedApple(raw)?.takeIf { it.any(LyricLine::isWordSynced) }?.let { return it }
+        PaxSenix.parseTimedApple(raw)
+            ?.takeIf { it.any(LyricLine::isWordSynced) }
+            ?.map(::removeCjkSpacing)
+            ?.let { return it }
         return ProviderLyrics.parse(raw)
     }
+
+    /** QQ sometimes emits a timed run for every kana/kanji character. Keep each
+     * timing run for the sweep, but do not insert Latin word spaces between CJK
+     * characters: those spaces made short Japanese lines wrap vertically. */
+    private fun removeCjkSpacing(line: LyricLine): LyricLine = line.copy(
+        text = if (line.words.isEmpty()) {
+            line.text
+        } else if (line.words.none { word -> word.text.any { it.isUnspacedScript() } }) {
+            line.words.joinToString(" ") { it.text }
+        } else {
+            line.words.foldIndexed(StringBuilder()) { index, text, word ->
+                if (index > 0) {
+                    val previous = line.words[index - 1].text.lastOrNull()
+                    val next = word.text.firstOrNull()
+                    if (previous != null && next != null &&
+                        !previous.isUnspacedScript() && !next.isUnspacedScript()
+                    ) text.append(' ')
+                }
+                text.append(word.text)
+            }.toString()
+        },
+        background = line.background?.let(::removeCjkSpacing),
+    )
 
     private fun parseLineLyrics(root: JsonElement): List<LyricLine>? {
         val rows = root.arrayDeep("content") ?: return null
@@ -193,6 +219,13 @@ object QQMusicLyrics {
     private fun String.normalized(): String = Normalizer.normalize(this, Normalizer.Form.NFKC)
         .lowercase(Locale.ROOT)
         .filter(Char::isLetterOrDigit)
+
+    private fun Char.isUnspacedScript(): Boolean =
+        this in '\u3400'..'\u9FFF' || // Han
+            this in '\u3040'..'\u30FF' || // hiragana and katakana
+            this in '\u3000'..'\u303F' || // CJK punctuation
+            this in '\uFF00'..'\uFFEF' || // full-width forms
+            this in '\u0E00'..'\u0E7F' // Thai
 
     private fun String.normalizedNames(): List<String> = split(Regex("[,，、/&＆]+|\\b(?:feat(?:uring)?|ft)\\b", RegexOption.IGNORE_CASE))
         .map { it.normalized() }
