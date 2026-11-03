@@ -4,6 +4,8 @@ import com.music.bitchord.data.Http
 import kotlinx.serialization.json.Json
 import okhttp3.FormBody
 import okhttp3.Request
+import okhttp3.MediaType.Companion.toMediaType
+import okhttp3.RequestBody.Companion.toRequestBody
 import java.util.concurrent.TimeUnit
 
 /**
@@ -43,14 +45,33 @@ private val authenticatedClient by lazy {
 }
 
 /** Body of a successful GET, or null for any failure at all. */
-internal fun lyricsGet(url: String): String? = runCatching {
+internal fun lyricsGet(url: String, headers: Map<String, String> = emptyMap()): String? = runCatching {
     val request = Request.Builder().url(url)
         .header("User-Agent", LYRICS_AGENT)
         .header("Accept", "application/json")
+        .apply { headers.forEach { (name, value) -> header(name, value) } }
         .build()
     client.newCall(request).execute().use { response ->
         if (response.isSuccessful) Http.readBoundedUtf8(response.body, MAX_LYRICS_RESPONSE_BYTES) else null
     }
+}.getOrNull()
+
+/** Body of a successful UTF-8 JSON POST, using a slightly longer deadline for catalogue-backed lyrics. */
+internal fun lyricsPostJson(url: String, json: String): String? = runCatching {
+    val body = json.toRequestBody("application/json; charset=utf-8".toMediaType())
+    val request = Request.Builder()
+        .url(url)
+        .header("User-Agent", LYRICS_AGENT)
+        .header("Accept", "application/json, text/plain, */*")
+        .post(body)
+        .build()
+    client.newBuilder()
+        .callTimeout(12, TimeUnit.SECONDS)
+        .connectTimeout(5, TimeUnit.SECONDS)
+        .build()
+        .newCall(request).execute().use { response ->
+            if (response.isSuccessful) Http.readBoundedUtf8(response.body, MAX_LYRICS_RESPONSE_BYTES) else null
+        }
 }.getOrNull()
 
 /** Body of a successful UTF-8 form POST, or null for an unavailable provider. */

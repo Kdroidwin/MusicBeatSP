@@ -14,6 +14,7 @@ internal object BuiltinLyricsSources {
         LyricsSource("bini_lyrics", "BiniLyrics", "Apple timings matched by recording", wordSynced = true),
         LyricsSource("better_lyrics", "BetterLyrics", "Apple Music word timings", wordSynced = true),
         LyricsSource("better_lyrics_portato", "BetterLyrics Portato", "QQ Music karaoke timings", wordSynced = true),
+        LyricsSource("qq_music", "QQ Music", "Line- and word-synced QQ Music lyrics", wordSynced = true),
         LyricsSource("paxsenix", "PaxSenix", "Apple Music timings through PaxSenix", wordSynced = true),
         LyricsSource("paxsenix_spotify", "PaxSenix: Spotify", "Spotify lyrics; API key required"),
         LyricsSource("paxsenix_musixmatch", "PaxSenix: Musixmatch", "Musixmatch timings; API key required", wordSynced = true),
@@ -46,6 +47,7 @@ internal object BuiltinLyricsSources {
         "bini_lyrics" -> BiniLyrics.lyrics(title, artist, durationMs, album)?.lines
         "better_lyrics" -> BetterLyrics.lyrics(title, artist, durationMs, album)
         "better_lyrics_portato" -> BetterLyrics.portato(title, artist, durationMs, album)
+        "qq_music" -> QQMusicLyrics.lyrics(title, artist, durationMs, album)
         "paxsenix" -> PaxSenix.lyrics(title, artist, durationMs, album)
         "paxsenix_spotify" -> PaxSenix.spotifyLyrics(title, artist, durationMs)
         "paxsenix_musixmatch" -> PaxSenix.musixmatchLyrics(title, artist, durationMs)

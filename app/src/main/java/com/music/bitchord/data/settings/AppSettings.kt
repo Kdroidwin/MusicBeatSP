@@ -3282,6 +3282,7 @@ object AppSettings {
             prefs.edit()
                 .putBoolean(KEY_NETEASE_LYRICS_SOURCE_MIGRATED, true)
                 .putBoolean(KEY_PETIT_LYRICS_SOURCE_MIGRATED, true)
+                .putBoolean(KEY_QQ_MUSIC_LYRICS_SOURCE_MIGRATED, true)
                 .apply()
             return allSources.toSet()
         }
@@ -3300,8 +3301,15 @@ object AppSettings {
             changed = ids.add("petit_lyrics") || changed
             edit.putBoolean(KEY_PETIT_LYRICS_SOURCE_MIGRATED, true)
         }
+        if (allSources.any { it.id == "qq_music" } &&
+            !prefs.getBoolean(KEY_QQ_MUSIC_LYRICS_SOURCE_MIGRATED, false)
+        ) {
+            changed = ids.add("qq_music") || changed
+            edit.putBoolean(KEY_QQ_MUSIC_LYRICS_SOURCE_MIGRATED, true)
+        }
         if (changed || !prefs.getBoolean(KEY_NETEASE_LYRICS_SOURCE_MIGRATED, false) ||
-            !prefs.getBoolean(KEY_PETIT_LYRICS_SOURCE_MIGRATED, false)
+            !prefs.getBoolean(KEY_PETIT_LYRICS_SOURCE_MIGRATED, false) ||
+            !prefs.getBoolean(KEY_QQ_MUSIC_LYRICS_SOURCE_MIGRATED, false)
         ) {
             if (changed) edit.putString(KEY_LYRICS_SOURCES, ids.joinToString(","))
             edit.apply()
@@ -4502,6 +4510,7 @@ object AppSettings {
     private const val KEY_LYRICS_SOURCE_ORDER = "lyrics_source_order"
     private const val KEY_NETEASE_LYRICS_SOURCE_MIGRATED = "netease_lyrics_source_migrated"
     private const val KEY_PETIT_LYRICS_SOURCE_MIGRATED = "petit_lyrics_source_migrated"
+    private const val KEY_QQ_MUSIC_LYRICS_SOURCE_MIGRATED = "qq_music_lyrics_source_migrated"
     private const val KEY_PRIORITIZE_SYLLABLE_SYNC = "prioritize_syllable_sync"
     private const val KEY_SHOW_LYRICS_LOGS = "show_lyrics_logs"
     private const val KEY_AUTO_EMBED_LYRICS = "auto_embed_lyrics"

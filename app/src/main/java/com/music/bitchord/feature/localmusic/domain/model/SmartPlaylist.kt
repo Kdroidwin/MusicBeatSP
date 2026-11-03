@@ -22,7 +22,22 @@ data class SmartPlaylistRule(
 enum class SmartPlaylistMatchMode { ALL, ANY }
 
 @Serializable
-enum class SmartPlaylistField { TITLE, ARTIST, ALBUM, DURATION_MINUTES, PLAY_COUNT, FAVORITE }
+enum class SmartPlaylistField {
+    TITLE,
+    ARTIST,
+    ALBUM,
+    ALBUM_ARTIST,
+    FOLDER,
+    FILE_TYPE,
+    DURATION_MINUTES,
+    PLAY_COUNT,
+    SKIP_COUNT,
+    DATE_ADDED_DAYS_AGO,
+    LAST_PLAYED_DAYS_AGO,
+    FAVORITE,
+    NEVER_PLAYED,
+    MISSING_ARTWORK,
+}
 
 @Serializable
 enum class SmartPlaylistOperator {
@@ -33,7 +48,21 @@ enum class SmartPlaylistOperator {
     AT_MOST,
     IS_FAVORITE,
     IS_NOT_FAVORITE,
+    DOES_NOT_CONTAIN,
+    IS_NEVER_PLAYED,
+    HAS_BEEN_PLAYED,
+    IS_MISSING,
+    IS_PRESENT,
 }
 
 @Serializable
-enum class SmartPlaylistSort { TITLE, RECENTLY_ADDED, MOST_PLAYED, RECENTLY_PLAYED }
+enum class SmartPlaylistSort {
+    TITLE,
+    RECENTLY_ADDED,
+    MOST_PLAYED,
+    RECENTLY_PLAYED,
+    MOST_SKIPPED,
+    LEAST_PLAYED,
+    LONGEST_DURATION,
+    SHORTEST_DURATION,
+}
