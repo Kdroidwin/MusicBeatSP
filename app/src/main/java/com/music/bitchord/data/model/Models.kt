@@ -337,7 +337,30 @@ fun String?.durationMillis(): Long {
 }
 
 /** As [Song.artworkAt], for artwork that isn't a track's. */
-fun String?.artworkAt(px: Int): String? = this?.replace(SIZE_HINT, "w$px-h$px")
+fun String?.artworkAt(px: Int): String? {
+    val source = this ?: return null
+    val remoteSized = source.replace(SIZE_HINT, "w$px-h$px")
+    if (remoteSized != source) return remoteSized
+
+    // A local song can also be passed around as its bare MediaStore URI (for
+    // example, the cover stored on a local album collection). Without carrying
+    // the requested size in that URI, the artwork fetcher falls back to its
+    // small default thumbnail even when the caller is drawing a full-screen
+    // image. Keep the same size-specific cache identity as Song.artworkAt.
+    if (!source.isLocalAudioArtworkUri()) return source
+    val uri = runCatching { Uri.parse(source) }.getOrNull() ?: return source
+    val sizeParameter = LOCAL_ARTWORK_SIZE_PARAMETER
+    if (uri.getQueryParameter(sizeParameter) == px.toString()) return source
+    val builder = uri.buildUpon().clearQuery()
+    uri.queryParameterNames.forEach { key ->
+        if (key != sizeParameter) {
+            uri.getQueryParameters(key).forEach { value ->
+                builder.appendQueryParameter(key, value)
+            }
+        }
+    }
+    return builder.appendQueryParameter(sizeParameter, px.toString()).build().toString()
+}
 
 private val SIZE_HINT = Regex("""w\d+-h\d+""")
 
