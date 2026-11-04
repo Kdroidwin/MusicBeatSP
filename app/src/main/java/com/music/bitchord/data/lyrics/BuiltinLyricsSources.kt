@@ -25,6 +25,8 @@ internal object BuiltinLyricsSources {
         // These three IDs replace the older script-backed providers while
         // preserving existing settings and source-order entries.
         LyricsSource("kugou", "KuGou", "Synced lyrics from KuGou's catalogue"),
+        LyricsSource("kugeci", "Kugeci", "Synced lyrics from 酷歌词"),
+        LyricsSource("followlyrics", "Followlyrics", "Line-synced lyrics from Follow Lyrics"),
         LyricsSource("netease", "NetEase Cloud Music", "Line- and word-synced lyrics", wordSynced = true),
         LyricsSource("lrclib", "LRCLIB", "Open, line-synced lyrics database"),
         LyricsSource("musixmatch", "Musixmatch", "Line-synced lyrics from Musixmatch"),
@@ -56,6 +58,8 @@ internal object BuiltinLyricsSources {
         "youtube_transcript" -> YouTubeTranscriptLyrics.lyrics(videoId)
         "youtube_music" -> YouTubeMusicLyrics.lyrics(videoId)
         "kugou" -> KuGou.lyrics(title, artist, durationMs, album)
+        "kugeci" -> KugeciLyrics.lyrics(title, artist, durationMs)
+        "followlyrics" -> FollowLyrics.lyrics(title, artist, durationMs)
         "netease" -> NetEaseLyrics.lyrics(title, artist, durationMs, album)
         "lrclib" -> LrcLib.lyrics(title, artist, durationMs)
         "musixmatch" -> Musixmatch.lyrics(title, artist, durationMs)
