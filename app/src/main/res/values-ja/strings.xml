@@ -1859,8 +1859,9 @@
     <string name="folder_auto_rename_failed">リネームのプレビューを準備できませんでした</string>
     <string name="folder_auto_rename_preview">リネームの確認</string>
     <string name="folder_auto_rename_preview_summary">ファイル %1$d 件 · 曲番号を照合できないファイル %2$d 件</string>
-    <string name="folder_auto_rename_unmatched">ファイル名または音源タグから曲番号を一意に照合できないファイルがあります。番号・ディスク構成・アルバムを確認してください。</string>
+    <string name="folder_auto_rename_unmatched">現在のフォルダ内の実ファイル名と音源ファイル内の曲番号・ディスク番号タグ・アルバム名を照合できないファイルがあります。各行の理由を確認してください。</string>
     <string name="folder_auto_rename_match">照合番号 %1$s → アルバム %2$d-%3$02d · %4$s / %5$s</string>
+    <string name="folder_auto_rename_source_audio_tags">曲名・アーティストタグ</string>
     <string name="folder_auto_rename_apply">タグとファイル名を更新</string>
     <string name="folder_auto_rename_result">更新 %1$d 件 · 失敗 %2$d 件</string>
     <string name="folder_auto_rename_undo">直前の更新を元に戻す</string>

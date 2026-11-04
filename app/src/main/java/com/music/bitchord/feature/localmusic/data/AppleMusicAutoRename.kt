@@ -42,7 +42,7 @@ data class AutoRenameRow(
     val sourceTrackNumber: Int? = null,
     val issue: String? = null,
     val conflict: String? = null,
-    val selected: Boolean = track != null && conflict == null,
+    val selected: Boolean = track != null && issue == null && conflict == null,
 )
 
 data class AutoRenameResult(val changed: Int, val failed: Int, val message: String? = null)
@@ -140,16 +140,21 @@ object AppleMusicAutoRename {
                 if (extension !in audioExtensions && child.mime?.startsWith("audio/") != true) return@forEach
                 val prefix = leadingNumbers.find(child.name)?.value.orEmpty()
                 val parsedNumber = parseFilenameNumber(child.name)
+                val audioTags = readAudioTags(resolver, DocumentsContract.buildDocumentUriUsingTree(treeUri, child.id))
+                val tagNumber = parseTagTrackNumber(audioTags)
                 files += FileRow(
                     id = child.id,
                     parent = parentId,
                     path = (path + child.name).joinToString("/"),
                     name = child.name,
                     prefix = prefix,
-                    disc = inheritedDisc ?: parsedNumber?.disc,
-                    number = parsedNumber?.number,
+                    disc = inheritedDisc ?: parsedNumber?.disc ?: tagNumber?.disc,
+                    number = parsedNumber?.number ?: tagNumber?.number,
                     extension = child.name.substringAfterLast('.', "").let { ".$it" },
                     uri = DocumentsContract.buildDocumentUriUsingTree(treeUri, child.id),
+                    albumName = audioTags?.let { propertyValue(it, "ALBUM") },
+                    audioTitle = audioTags?.let { propertyValue(it, "TITLE") },
+                    audioArtist = audioTags?.let { propertyValue(it, "ARTIST") },
                 )
             }
         }
@@ -158,7 +163,12 @@ object AppleMusicAutoRename {
     }
 
     /** Preview the indexed songs under the folder currently open in FolderBrowserScreen. */
-    fun preview(resolver: ContentResolver, songs: List<Song>, tracks: List<AppleCatalogTrack>): List<AutoRenameRow> {
+    fun preview(
+        resolver: ContentResolver,
+        songs: List<Song>,
+        tracks: List<AppleCatalogTrack>,
+        albumTitle: String? = null,
+    ): List<AutoRenameRow> {
         val files = mutableListOf<FileRow>()
         val names = linkedMapOf<String, MutableSet<String>>()
         songs.distinctBy { it.localUri ?: it.localPath ?: it.videoId }.forEach { song ->
@@ -167,8 +177,12 @@ object AppleMusicAutoRename {
                 ?.let { runCatching { Uri.parse(it) }.getOrNull() }
                 ?: filePath?.let { Uri.fromFile(File(it)) }
                 ?: return@forEach
-            val name = filePath?.substringAfterLast('/')?.takeIf(String::isNotBlank)
-                ?: displayName(resolver, uri)?.takeIf(String::isNotBlank)
+            // For MediaStore items the provider's DISPLAY_NAME is the real
+            // filename. Song.title is tag metadata and is intentionally never
+            // used as a filename fallback here.
+            val name = (if (uri.scheme == "file") filePath?.substringAfterLast('/') else displayName(resolver, uri))
+                ?.takeIf(String::isNotBlank)
+                ?: filePath?.substringAfterLast('/')?.takeIf(String::isNotBlank)
                 ?: return@forEach
             val parent = song.localFolderPath?.takeIf(String::isNotBlank)
                 ?: filePath?.substringBeforeLast('/', "")?.takeIf(String::isNotBlank)
@@ -178,17 +192,26 @@ object AppleMusicAutoRename {
             val parentNames = names.getOrPut(parent) { linkedSetOf() }
             parentNames += name
             val filenameNumber = parseFilenameNumber(name)
-            val taggedNumber = parseMediaStoreTrackNumber(song.trackNumber)
+            val audioTags = readAudioTags(resolver, uri)
+            val audioTagNumber = parseTagTrackNumber(audioTags)
+            val mediaStoreNumber = parseMediaStoreTrackNumber(song.trackNumber)
+            val taggedNumber = audioTagNumber ?: mediaStoreNumber
             val directoryDisc = discDirectory.find(parent)?.groupValues?.getOrNull(1)?.toIntOrNull()
             val filenameDisc = filenameNumber?.disc
             val explicitDisc = directoryDisc ?: filenameDisc
             val numberIssue = when {
                 filenameNumber?.number != null && taggedNumber?.number != null && filenameNumber.number != taggedNumber.number ->
-                    "ファイル名と音源タグの曲番号が一致しません"
+                    "ファイル名と音源ファイル内の曲番号タグが一致しません"
+                filenameDisc != null && audioTagNumber?.disc != null && filenameDisc != audioTagNumber.disc ->
+                    "ファイル名と音源ファイル内のディスク番号タグが一致しません"
                 directoryDisc != null && filenameDisc != null && directoryDisc != filenameDisc ->
                     "フォルダ名とファイル名のディスク番号が一致しません"
                 explicitDisc != null && taggedNumber?.disc != null && explicitDisc != taggedNumber.disc ->
-                    "ファイル名またはフォルダ名と音源タグのディスク番号が一致しません"
+                    "ファイル名またはフォルダ名と音源ファイル内のディスク番号タグが一致しません"
+                audioTagNumber != null && mediaStoreNumber != null &&
+                    (audioTagNumber.number != mediaStoreNumber.number ||
+                        (audioTagNumber.disc != null && mediaStoreNumber.disc != null && audioTagNumber.disc != mediaStoreNumber.disc)) ->
+                    "音源ファイル内の曲番号と端末ライブラリの曲番号が一致しません"
                 else -> null
             }
             val disc = explicitDisc ?: taggedNumber?.disc
@@ -204,9 +227,14 @@ object AppleMusicAutoRename {
                 extension = name.substringAfterLast('.', "").let { ".$it" },
                 uri = uri,
                 issue = numberIssue,
+                albumName = propertyValue(audioTags, "ALBUM")
+                    ?.takeUnless(::isUnknownAlbum)
+                    ?: song.albumName?.takeUnless(::isUnknownAlbum),
+                audioTitle = propertyValue(audioTags, "TITLE") ?: song.title,
+                audioArtist = propertyValue(audioTags, "ARTIST") ?: song.artist,
             )
         }
-        return buildPreview(Uri.EMPTY, files, names, tracks)
+        return buildPreview(Uri.EMPTY, files, names, tracks, albumTitle)
     }
 
     private fun buildPreview(
@@ -214,6 +242,7 @@ object AppleMusicAutoRename {
         files: List<FileRow>,
         names: Map<String, Set<String>>,
         tracks: List<AppleCatalogTrack>,
+        albumTitle: String? = null,
     ): List<AutoRenameRow> {
         val orderedFiles = files.sortedWith(
             compareBy<FileRow> { it.disc ?: 1 }
@@ -223,25 +252,48 @@ object AppleMusicAutoRename {
         val orderedTracks = tracks.sortedWith(compareBy<AppleCatalogTrack> { it.disc }.thenBy { it.track })
         val assigned = linkedMapOf<String, AppleCatalogTrack>()
         val issues = hashMapOf<String, String>().apply {
-            orderedFiles.forEach { file -> file.issue?.let { put(file.id, it) } }
+            orderedFiles.forEach { file ->
+                val issue = file.issue ?: if (
+                    !albumTitle.isNullOrBlank() && !file.albumName.isNullOrBlank() &&
+                    !sameAlbum(file.albumName, albumTitle)
+                ) {
+                    "音源ファイルのアルバム名がApple Musicのアルバムと一致しません"
+                } else null
+                issue?.let { put(file.id, it) }
+            }
         }
         val flattenedCatalog = orderedTracks.map(AppleCatalogTrack::disc).distinct().size == 1
         val multipleFileDiscs = orderedFiles.mapNotNull(FileRow::disc).distinct().size > 1
+        fun canMatch(file: FileRow) = issues[file.id] == null
         if (flattenedCatalog && multipleFileDiscs) {
             val continuousTracks = orderedTracks.map(AppleCatalogTrack::track) == (1..orderedTracks.size).toList()
             val continuousFiles = orderedFiles.all { it.disc != null && it.number != null } &&
                 orderedFiles.groupBy(FileRow::disc).values.all { disk -> disk.mapNotNull(FileRow::number).sorted() == (1..disk.size).toList() }
-            if (orderedFiles.size == orderedTracks.size && continuousTracks && continuousFiles && orderedFiles.all { it.issue == null }) {
+            if (orderedFiles.size == orderedTracks.size && continuousTracks && continuousFiles && orderedFiles.all(::canMatch)) {
                 orderedFiles.zip(orderedTracks).forEach { (file, track) -> assigned[file.id] = track }
             } else orderedFiles.forEach { file ->
-                if (file.issue == null) issues[file.id] = "ディスクごとの曲数または連番が揃っていません"
+                if (canMatch(file)) issues[file.id] = "ディスクごとの曲数または連番が揃っていません"
             }
         } else {
             orderedFiles.forEach { file ->
-                if (file.issue != null) return@forEach
+                if (!canMatch(file)) return@forEach
                 val number = file.number
                 if (number == null) {
-                    issues[file.id] = "ファイル名から曲番号を読み取れません"
+                    val title = file.audioTitle?.takeIf(String::isNotBlank)
+                    val artist = file.audioArtist?.takeIf(String::isNotBlank)
+                    val titleMatches = if (title != null && artist != null) {
+                        orderedTracks.filter { track ->
+                            normalizeTrackText(track.title) == normalizeTrackText(title) &&
+                                normalizeTrackText(track.artist) == normalizeTrackText(artist) &&
+                                (file.disc == null || track.disc == file.disc)
+                        }
+                    } else emptyList()
+                    when {
+                        titleMatches.size > 1 -> issues[file.id] = "曲番号がなく、音源タグの曲名・アーティスト名でも一意に照合できません"
+                        titleMatches.isEmpty() -> issues[file.id] = "曲番号を読み取れず、音源タグの曲名・アーティスト名も一致しません"
+                        assigned.values.any { it.id == titleMatches.single().id } -> issues[file.id] = "同じアルバム曲が複数ファイルに一致しています"
+                        else -> assigned[file.id] = titleMatches.single()
+                    }
                     return@forEach
                 }
                 val candidates = orderedTracks.filter { it.track == number && (file.disc == null || it.disc == file.disc) }
@@ -274,6 +326,7 @@ object AppleMusicAutoRename {
                 sourceDiscNumber = file.disc,
                 sourceTrackNumber = file.number,
                 issue = issues[file.id],
+                selected = track != null && issues[file.id] == null,
             )
         }
         return initial.map { row ->
@@ -287,13 +340,13 @@ object AppleMusicAutoRename {
                 existing -> "同じ名前のファイルが既にあります"
                 else -> null
             }
-            row.copy(conflict = conflict, selected = conflict == null)
+            row.copy(conflict = conflict, selected = conflict == null && row.issue == null)
         }
     }
 
     suspend fun apply(context: Context, rows: List<AutoRenameRow>): AutoRenameResult = withContext(Dispatchers.IO) {
-        if (rows.any { it.track == null }) return@withContext AutoRenameResult(0, 0, "曲番号で照合できないファイルがあります。プレビューを確認してください。")
-        val selected = rows.filter { it.selected && it.track != null && it.newName != null && it.conflict == null }
+        if (rows.any { it.track == null || it.issue != null }) return@withContext AutoRenameResult(0, 0, "曲番号・アルバムを照合できないファイルがあります。プレビューを確認してください。")
+        val selected = rows.filter { it.selected && it.track != null && it.newName != null && it.issue == null && it.conflict == null }
         if (selected.isEmpty()) return@withContext AutoRenameResult(0, 0, "更新できるファイルがありません。")
         val pending = runCatching {
             selected.map { row ->
@@ -489,6 +542,49 @@ object AppleMusicAutoRename {
         return number.takeIf { it > 0 }?.let { TrackNumber(disc?.takeIf { value -> value > 0 }, it) }
     }
 
+    /** Reads the file's own tags; MediaStore's TRACK column can be absent or stale on rescanned files. */
+    private fun readAudioTags(resolver: ContentResolver, uri: Uri): Map<String, List<String>>? = runCatching {
+        resolver.openFileDescriptor(uri, "r")?.use { descriptor ->
+            val metadata = TagLib.getMetadata(descriptor.dup().detachFd(), readPictures = false)
+                ?: return@use null
+            metadata.propertyMap.mapValues { (_, values) -> values.toList() }
+        }
+    }.getOrNull()
+
+    private fun propertyValue(properties: Map<String, List<String>>?, vararg names: String): String? {
+        if (properties == null) return null
+        val accepted = names.map { it.replace("_", "").replace(" ", "").uppercase(Locale.ROOT) }.toSet()
+        return properties.entries.firstOrNull { (key, _) ->
+            key.replace("_", "").replace(" ", "").uppercase(Locale.ROOT) in accepted
+        }?.value?.firstOrNull()?.trim()?.takeIf(String::isNotBlank)
+    }
+
+    private fun parseTagTrackNumber(properties: Map<String, List<String>>?): TrackNumber? {
+        val trackValue = propertyValue(properties, "TRACKNUMBER", "TRACK", "PART_NUMBER") ?: return null
+        val rawTrack = trackValue.substringBefore('/').trim().toIntOrNull() ?: return null
+        val discValue = propertyValue(properties, "DISCNUMBER", "DISC")
+        val disc = discValue?.substringBefore('/')?.trim()?.toIntOrNull()?.takeIf { it > 0 }
+        val decoded = if (disc == null) parseMediaStoreTrackNumber(rawTrack) else null
+        val number = decoded?.number ?: rawTrack
+        if (number <= 0) return null
+        return TrackNumber(disc ?: decoded?.disc, number)
+    }
+
+    private fun isUnknownAlbum(album: String): Boolean = album.isBlank() ||
+        album.equals("<unknown>", ignoreCase = true) || album.equals("unknown album", ignoreCase = true)
+
+    private fun sameAlbum(left: String, right: String): Boolean {
+        val a = normalizeAlbum(left)
+        val b = normalizeAlbum(right)
+        return a.isNotBlank() && b.isNotBlank() && (a == b || a.contains(b) || b.contains(a))
+    }
+
+    private fun normalizeAlbum(value: String): String = value.lowercase(Locale.ROOT)
+        .replace(Regex("[\\s\\p{Punct}　]+"), "")
+
+    private fun normalizeTrackText(value: String): String = value.lowercase(Locale.ROOT)
+        .replace(Regex("[\\s\\p{Punct}　]+"), "")
+
     private fun naturalCompare(left: String, right: String): Int {
         val a = Regex("\\d+|\\D+").findAll(left.lowercase(Locale.ROOT)).map { it.value }.toList()
         val b = Regex("\\d+|\\D+").findAll(right.lowercase(Locale.ROOT)).map { it.value }.toList()
@@ -509,6 +605,9 @@ object AppleMusicAutoRename {
         val prefix: String, val disc: Int?, val number: Int?, val extension: String,
         val uri: Uri,
         val issue: String? = null,
+        val albumName: String? = null,
+        val audioTitle: String? = null,
+        val audioArtist: String? = null,
     )
 
     private data class UndoEntry(

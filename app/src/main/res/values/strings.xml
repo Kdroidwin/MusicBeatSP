@@ -1886,8 +1886,9 @@
     <string name="folder_auto_rename_failed">Could not prepare the rename preview</string>
     <string name="folder_auto_rename_preview">Rename preview</string>
     <string name="folder_auto_rename_preview_summary">%1$d files found · %2$d could not be matched</string>
-    <string name="folder_auto_rename_unmatched">Some files could not be matched uniquely from their filename or audio track tags. Check track and disc numbering, and confirm the album.</string>
+    <string name="folder_auto_rename_unmatched">Some files in the current folder could not be matched using their actual filenames and embedded track, disc, or album tags. Check the reason shown for each row.</string>
     <string name="folder_auto_rename_match">Matched %1$s → album %2$d-%3$02d · %4$s / %5$s</string>
+    <string name="folder_auto_rename_source_audio_tags">title/artist tags</string>
     <string name="folder_auto_rename_apply">Update tags and names</string>
     <string name="folder_auto_rename_result">%1$d files updated · %2$d failed</string>
     <string name="folder_auto_rename_undo">Undo last update</string>

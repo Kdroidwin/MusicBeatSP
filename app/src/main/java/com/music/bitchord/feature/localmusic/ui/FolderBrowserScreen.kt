@@ -453,7 +453,12 @@ fun FolderBrowserScreen(
                                 runCatching {
                                     withContext(Dispatchers.IO) {
                                         val album = AppleMusicAutoRename.fetchAlbum(albumUrlToLoad)
-                                        album.title to AppleMusicAutoRename.preview(context.contentResolver, folderSongs, album.tracks)
+                                        album.title to AppleMusicAutoRename.preview(
+                                            context.contentResolver,
+                                            folderSongs,
+                                            album.tracks,
+                                            albumTitle = album.title,
+                                        )
                                     }
                                 }.onSuccess { (title, rows) ->
                                     appleAlbumTitle = title
@@ -487,8 +492,8 @@ fun FolderBrowserScreen(
     }
 
     renameRows?.let { rows ->
-        val unmatched = rows.count { it.track == null }
-        val selectableCount = rows.count { it.track != null && it.conflict == null }
+        val unmatched = rows.count { it.track == null || it.issue != null }
+        val selectableCount = rows.count { it.track != null && it.issue == null && it.conflict == null }
         AlertDialog(
             onDismissRequest = { if (!isApplyingRename) renameRows = null },
             title = { Text(if (appleAlbumTitle.isBlank()) stringResource(R.string.folder_auto_rename_preview) else appleAlbumTitle) },
@@ -503,7 +508,7 @@ fun FolderBrowserScreen(
                             Row(verticalAlignment = Alignment.CenterVertically, modifier = Modifier.fillMaxWidth()) {
                                 Checkbox(
                                     checked = row.selected,
-                                    enabled = !isApplyingRename && row.track != null && row.conflict == null,
+                                    enabled = !isApplyingRename && row.track != null && row.issue == null && row.conflict == null,
                                     onCheckedChange = { checked ->
                                         renameRows = rows.toMutableList().also { it[index] = row.copy(selected = checked) }
                                     },
@@ -516,7 +521,9 @@ fun FolderBrowserScreen(
                                     )
                                     Text(row.path, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant, maxLines = 1, overflow = TextOverflow.Ellipsis)
                                     row.track?.let { matched ->
-                                        val sourceNumber = row.sourceDiscNumber?.let { "$it-" }.orEmpty() + (row.sourceTrackNumber?.toString() ?: "?")
+                                        val sourceNumber = row.sourceTrackNumber?.let {
+                                            row.sourceDiscNumber?.let { disc -> "$disc-" }.orEmpty() + it
+                                        } ?: stringResource(R.string.folder_auto_rename_source_audio_tags)
                                         Text(
                                             stringResource(
                                                 R.string.folder_auto_rename_match,
