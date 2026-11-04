@@ -88,7 +88,7 @@ fun LocalSleepTimerPicker(
             Column(Modifier.weight(1f)) {
                 Text(
                     text = stringResource(R.string.sleep_timer),
-                    style = MaterialTheme.typography.titleLarge,
+                    style = MaterialTheme.typography.titleMedium,
                     color = foreground,
                 )
                 Text(

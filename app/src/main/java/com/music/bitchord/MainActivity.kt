@@ -3213,6 +3213,7 @@ private fun BitChordApp(
                                 onLastOpenedFolderPathChange = AppSettings::setLastOpenedFolderPath,
                                 onArtworkPaletteChanged = onLocalArtworkPaletteChanged,
                                 onNavigationChanged = onCollectionNavigationChanged,
+                                onLocalFilesChanged = { viewModel.loadLocalMusic() },
                             )
                         }
                         TAB_RADIO -> RadioScreen(

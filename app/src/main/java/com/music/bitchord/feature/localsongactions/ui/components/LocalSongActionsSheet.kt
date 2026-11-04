@@ -159,7 +159,19 @@ fun LocalSongActionsSheet(
                 }
             }
         } else {
-            { BottomSheetDefaults.DragHandle() }
+            {
+                Box(
+                    Modifier.fillMaxWidth().height(48.dp),
+                    contentAlignment = androidx.compose.ui.Alignment.Center,
+                ) {
+                    Box(
+                        Modifier
+                            .size(width = 48.dp, height = 6.dp)
+                            .clip(RoundedCornerShape(50))
+                            .background(MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.38f)),
+                    )
+                }
+            }
         },
         modifier = modifier,
         contentWindowInsets = { WindowInsets(0, 0, 0, 0) },

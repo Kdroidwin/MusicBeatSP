@@ -36,12 +36,16 @@ import androidx.compose.material.icons.rounded.CheckCircle
 import androidx.compose.material.icons.rounded.PlayArrow
 import androidx.compose.material.icons.rounded.PlaylistAdd
 import androidx.compose.material.icons.rounded.Shuffle
+import androidx.compose.material.icons.rounded.Edit
 import androidx.compose.material3.FilledTonalButton
 import androidx.compose.material3.AlertDialog
+import androidx.compose.material3.Checkbox
+import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedButton
+import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
@@ -61,6 +65,8 @@ import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.saveable.listSaver
 import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.foundation.lazy.rememberLazyListState
+import androidx.compose.foundation.horizontalScroll
+import androidx.compose.foundation.rememberScrollState
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
@@ -82,6 +88,8 @@ import com.music.bitchord.feature.localmusic.domain.FolderNode
 import com.music.bitchord.feature.localmusic.domain.FolderTreeBuilder
 import com.music.bitchord.feature.localmusic.data.ZipAudioArchive
 import com.music.bitchord.feature.localmusic.data.ZipAudioEntry
+import com.music.bitchord.feature.localmusic.data.AppleMusicAutoRename
+import com.music.bitchord.feature.localmusic.data.AutoRenameRow
 import com.music.bitchord.feature.localsongactions.ui.components.LocalAddToPlaylistSheet
 import com.music.bitchord.ui.components.SongRow
 import kotlinx.coroutines.Dispatchers
@@ -126,6 +134,7 @@ fun FolderBrowserScreen(
     onLastOpenedFolderPathChange: ((String) -> Unit)? = null,
     onArtworkPaletteChanged: ((com.music.bitchord.ui.theme.ArtworkPalette?) -> Unit)? = null,
     onNavigationChanged: ((Boolean, (() -> Unit)?) -> Unit)? = null,
+    onLocalFilesChanged: (() -> Unit)? = null,
     modifier: Modifier = Modifier,
 ) {
     val context = LocalContext.current
@@ -134,6 +143,38 @@ fun FolderBrowserScreen(
     var zipArchiveUri by remember { mutableStateOf<Uri?>(null) }
     var zipArchiveName by remember { mutableStateOf("") }
     var isOpeningZipTrack by remember { mutableStateOf(false) }
+    var showAppleUrlDialog by remember { mutableStateOf(false) }
+    var albumUrl by remember { mutableStateOf("") }
+    var pendingAppleAlbumUrl by remember { mutableStateOf("") }
+    var appleAlbumTitle by remember { mutableStateOf("") }
+    var renameRows by remember { mutableStateOf<List<AutoRenameRow>?>(null) }
+    var isPreparingRename by remember { mutableStateOf(false) }
+    var isApplyingRename by remember { mutableStateOf(false) }
+    var undoAvailable by remember { mutableStateOf(AppleMusicAutoRename.hasUndo(context)) }
+    val renameFolderPicker = rememberLauncherForActivityResult(ActivityResultContracts.OpenDocumentTree()) { uri ->
+        if (uri != null) scope.launch {
+            runCatching {
+                context.contentResolver.takePersistableUriPermission(
+                    uri,
+                    Intent.FLAG_GRANT_READ_URI_PERMISSION or Intent.FLAG_GRANT_WRITE_URI_PERMISSION,
+                )
+            }
+            isPreparingRename = true
+            showAppleUrlDialog = false
+            runCatching {
+                withContext(Dispatchers.IO) {
+                    val album = AppleMusicAutoRename.fetchAlbum(pendingAppleAlbumUrl)
+                    album.title to AppleMusicAutoRename.preview(context.contentResolver, uri, album.tracks)
+                }
+            }.onSuccess { (title, rows) ->
+                appleAlbumTitle = title
+                renameRows = rows
+            }.onFailure {
+                Toast.makeText(context, it.localizedMessage ?: context.getString(R.string.folder_auto_rename_failed), Toast.LENGTH_LONG).show()
+            }
+            isPreparingRename = false
+        }
+    }
     val zipPicker = rememberLauncherForActivityResult(ActivityResultContracts.OpenDocument()) { uri: Uri? ->
         if (uri != null) scope.launch {
             runCatching { context.contentResolver.takePersistableUriPermission(uri, Intent.FLAG_GRANT_READ_URI_PERMISSION) }
@@ -300,6 +341,7 @@ fun FolderBrowserScreen(
                 rootName = tree.name,
                 onPlay = { if (currentNode.allSongs.isNotEmpty()) onSongClick(currentNode.allSongs, 0) },
                 onShuffle = { if (currentNode.allSongs.isNotEmpty()) onShuffle(currentNode.allSongs) },
+                onAutoRename = { showAppleUrlDialog = true },
                 onOpenZip = {
                     zipPicker.launch(arrayOf("application/zip", "application/x-zip-compressed", "application/octet-stream"))
                 },
@@ -361,6 +403,147 @@ fun FolderBrowserScreen(
                 onSwipeToQueue = if (selectingSongs) null else { { onSongSwipe(song) } },
             )
         }
+    }
+
+    if (showAppleUrlDialog) {
+        AlertDialog(
+            onDismissRequest = { showAppleUrlDialog = false },
+            title = { Text(stringResource(R.string.folder_auto_rename)) },
+            text = {
+                Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
+                    Text(stringResource(R.string.folder_auto_rename_instructions))
+                    OutlinedTextField(
+                        value = albumUrl,
+                        onValueChange = { albumUrl = it },
+                        modifier = Modifier.fillMaxWidth(),
+                        singleLine = true,
+                        label = { Text(stringResource(R.string.folder_auto_rename_apple_url)) },
+                    )
+                    if (undoAvailable) {
+                        TextButton(
+                            enabled = !isApplyingRename,
+                            onClick = {
+                                scope.launch {
+                                    isApplyingRename = true
+                                    val result = AppleMusicAutoRename.undo(context)
+                                    isApplyingRename = false
+                                    undoAvailable = AppleMusicAutoRename.hasUndo(context)
+                                    Toast.makeText(context, result.message ?: context.getString(R.string.folder_auto_rename_undone, result.changed), Toast.LENGTH_LONG).show()
+                                    if (result.changed > 0) onLocalFilesChanged?.invoke()
+                                }
+                            },
+                        ) { Text(stringResource(R.string.folder_auto_rename_undo)) }
+                    }
+                }
+            },
+            confirmButton = {
+                TextButton(
+                    enabled = albumUrl.isNotBlank(),
+                    onClick = {
+                        pendingAppleAlbumUrl = albumUrl.trim()
+                        showAppleUrlDialog = false
+                        renameFolderPicker.launch(null)
+                    },
+                ) { Text(stringResource(R.string.folder_auto_rename_choose_folder)) }
+            },
+            dismissButton = { TextButton(onClick = { showAppleUrlDialog = false }) { Text(stringResource(R.string.cancel)) } },
+        )
+    }
+
+    if (isPreparingRename) {
+        AlertDialog(
+            onDismissRequest = {},
+            title = { Text(stringResource(R.string.folder_auto_rename)) },
+            text = {
+                Row(verticalAlignment = Alignment.CenterVertically) {
+                    CircularProgressIndicator(modifier = Modifier.size(24.dp))
+                    Spacer(Modifier.width(14.dp))
+                    Text(stringResource(R.string.folder_auto_rename_loading))
+                }
+            },
+            confirmButton = {},
+        )
+    }
+
+    renameRows?.let { rows ->
+        val unmatched = rows.count { it.track == null }
+        val selectableCount = rows.count { it.track != null && it.conflict == null }
+        AlertDialog(
+            onDismissRequest = { if (!isApplyingRename) renameRows = null },
+            title = { Text(if (appleAlbumTitle.isBlank()) stringResource(R.string.folder_auto_rename_preview) else appleAlbumTitle) },
+            text = {
+                Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                    Text(stringResource(R.string.folder_auto_rename_preview_summary, rows.size, unmatched))
+                    if (unmatched > 0) {
+                        Text(stringResource(R.string.folder_auto_rename_unmatched), color = MaterialTheme.colorScheme.error)
+                    }
+                    LazyColumn(modifier = Modifier.heightIn(max = 420.dp)) {
+                        itemsIndexed(rows, key = { _, row -> row.documentId }) { index, row ->
+                            Row(verticalAlignment = Alignment.CenterVertically, modifier = Modifier.fillMaxWidth()) {
+                                Checkbox(
+                                    checked = row.selected,
+                                    enabled = !isApplyingRename && row.track != null && row.conflict == null,
+                                    onCheckedChange = { checked ->
+                                        renameRows = rows.toMutableList().also { it[index] = row.copy(selected = checked) }
+                                    },
+                                )
+                                Column(Modifier.weight(1f).padding(vertical = 8.dp)) {
+                                    Text(
+                                        text = row.newName?.let { "${row.oldName}  →  $it" } ?: row.oldName,
+                                        maxLines = 2,
+                                        overflow = TextOverflow.Ellipsis,
+                                    )
+                                    Text(row.path, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant, maxLines = 1, overflow = TextOverflow.Ellipsis)
+                                    row.track?.let { Text("${it.title} · ${it.artist}", style = MaterialTheme.typography.bodySmall, maxLines = 1, overflow = TextOverflow.Ellipsis) }
+                                    (row.issue ?: row.conflict)?.let { Text(it, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.error) }
+                                }
+                            }
+                        }
+                    }
+                }
+            },
+            confirmButton = {
+                TextButton(
+                    enabled = !isApplyingRename && unmatched == 0 && selectableCount > 0 && rows.any { it.selected },
+                    onClick = {
+                        scope.launch {
+                            isApplyingRename = true
+                            val result = AppleMusicAutoRename.apply(context, rows)
+                            isApplyingRename = false
+                            undoAvailable = AppleMusicAutoRename.hasUndo(context)
+                            renameRows = null
+                            val resultText = result.message ?: context.getString(R.string.folder_auto_rename_result, result.changed, result.failed)
+                            Toast.makeText(context, resultText, Toast.LENGTH_LONG).show()
+                            if (result.changed > 0) onLocalFilesChanged?.invoke()
+                        }
+                    },
+                ) {
+                    if (isApplyingRename) CircularProgressIndicator(modifier = Modifier.size(18.dp))
+                    else Text(stringResource(R.string.folder_auto_rename_apply))
+                }
+            },
+            dismissButton = {
+                Row {
+                    if (undoAvailable) {
+                        TextButton(
+                            enabled = !isApplyingRename,
+                            onClick = {
+                                scope.launch {
+                                    isApplyingRename = true
+                                    val result = AppleMusicAutoRename.undo(context)
+                                    isApplyingRename = false
+                                    undoAvailable = AppleMusicAutoRename.hasUndo(context)
+                                    renameRows = null
+                                    Toast.makeText(context, result.message ?: context.getString(R.string.folder_auto_rename_undone, result.changed), Toast.LENGTH_LONG).show()
+                                    if (result.changed > 0) onLocalFilesChanged?.invoke()
+                                }
+                            },
+                        ) { Text(stringResource(R.string.folder_auto_rename_undo)) }
+                    }
+                    TextButton(enabled = !isApplyingRename, onClick = { renameRows = null }) { Text(stringResource(R.string.cancel)) }
+                }
+            },
+        )
     }
 
     addToPlaylistSongs?.let { selected ->
@@ -428,6 +611,7 @@ private fun FolderHeader(
     rootName: String,
     onPlay: () -> Unit,
     onShuffle: () -> Unit,
+    onAutoRename: () -> Unit,
     onOpenZip: () -> Unit,
     modifier: Modifier = Modifier,
 ) {
@@ -450,7 +634,7 @@ private fun FolderHeader(
         )
         if (node.totalSongCount > 0) {
             Row(
-                modifier = Modifier.fillMaxWidth().padding(top = 12.dp),
+                modifier = Modifier.fillMaxWidth().padding(top = 12.dp).horizontalScroll(rememberScrollState()),
                 horizontalArrangement = Arrangement.spacedBy(10.dp),
             ) {
                 FilledTonalButton(onClick = onShuffle, enabled = node.totalSongCount > 1) {
@@ -462,6 +646,11 @@ private fun FolderHeader(
                     Icon(Icons.Rounded.PlayArrow, contentDescription = null, modifier = Modifier.size(18.dp))
                     Spacer(Modifier.width(6.dp))
                     Text(stringResource(R.string.play))
+                }
+                FilledTonalButton(onClick = onAutoRename) {
+                    Icon(Icons.Rounded.Edit, contentDescription = null, modifier = Modifier.size(18.dp))
+                    Spacer(Modifier.width(6.dp))
+                    Text(stringResource(R.string.folder_auto_rename))
                 }
             }
         }
