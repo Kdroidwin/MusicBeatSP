@@ -456,7 +456,8 @@ fun RadioScreen(
             amoledBlack = amoledBlack,
             onSelect = { service ->
                 AppSettings.setRadioService(service)
-                if (service == RadioService.ONSEN) stationDetail = null else selectedOnsenProgram = null
+                stationDetail = null
+                selectedOnsenProgram = null
                 showServicePicker = false
             },
             onDismiss = { showServicePicker = false },
@@ -604,6 +605,16 @@ fun RadioScreen(
             onRetry = { refreshOnsenProgramKey++ },
             onPlayEpisode = { episode -> playOnsenEpisode(episode, onsenProgram) },
             onDownloadEpisode = { episode -> downloadOnsenEpisode(episode, onsenProgram) },
+        )
+    } else if (station == null && selectedRadioService == RadioService.RSS) {
+        RssRadioScreen(
+            controller = controller,
+            currentSong = currentSong,
+            isPlaying = isPlaying,
+            contentPadding = contentPadding,
+            amoledBlack = amoledBlack,
+            networkUnavailable = networkUnavailable,
+            onChangeService = { showServicePicker = true },
         )
     } else if (station == null) {
         val areaName = PrefectureData.prefecture(selectedAreaId)?.name.orEmpty()
@@ -866,6 +877,11 @@ private fun RadioServiceDialog(
                     selected = selectedService == RadioService.ONSEN,
                     onClick = { onSelect(RadioService.ONSEN) },
                     label = { Text(stringResource(R.string.radio_service_onsen)) },
+                )
+                FilterChip(
+                    selected = selectedService == RadioService.RSS,
+                    onClick = { onSelect(RadioService.RSS) },
+                    label = { Text(stringResource(R.string.radio_service_rss)) },
                 )
             }
         },

@@ -1807,7 +1807,7 @@ class PlaybackService : MediaLibraryService() {
             return
         }
         val current = exoPlayer.currentMediaItem?.toSong() ?: return
-        if (current.isLiveRadio || current.isOnsenAudio) return
+        if (current.isLiveRadio || current.isOnsenAudio || current.isRssAudio) return
         // A file opened from a file manager is a one-track preview session.
         // Do not append unrelated online suggestions when its player activates.
         if (current.isExternalPreview) return
@@ -2132,7 +2132,7 @@ class PlaybackService : MediaLibraryService() {
         // Audio opened from a file manager is a real listen too. The preview
         // flag only controls the temporary one-file queue and popup; it must
         // not exclude that track from recent/most-played statistics.
-        val statsSong = song?.takeUnless { it.isLiveRadio || it.isOnsenAudio }
+        val statsSong = song?.takeUnless { it.isLiveRadio || it.isOnsenAudio || it.isRssAudio }
         val songId = statsSong?.let(::localPlayStatsIdentity)
         if (songId != null && songId != currentPlayStatsSongId) {
             finishCurrentLocalPlayStatsSegment()
@@ -2514,7 +2514,7 @@ class PlaybackService : MediaLibraryService() {
     private fun recoverFrom(error: PlaybackException, player: ExoPlayer) {
         val item = player.currentMediaItem ?: return
         val mediaId = item.mediaId
-        if (item.mediaId.startsWith("onsen:") || item.toSong().isOnsenAudio) {
+        if (item.mediaId.startsWith("onsen:") || item.toSong().isOnsenAudio || item.toSong().isRssAudio) {
             // The Onsen CDN is a direct HLS source, so clearing the cache or
             // resolving another catalogue cannot fix a DNS/connection failure.
             // Re-preparing here created an endless BUFFERING spinner on devices
@@ -2523,7 +2523,7 @@ class PlaybackService : MediaLibraryService() {
             recoveries.remove(mediaId)
             TrackLog.w("BitChord", "Onsen stream failed; waiting for a manual retry", error, about = mediaId)
             player.stop()
-            Toast.makeText(applicationContext, R.string.radio_onsen_play_failed, Toast.LENGTH_LONG).show()
+            Toast.makeText(applicationContext, if (item.toSong().isRssAudio) R.string.radio_play_failed else R.string.radio_onsen_play_failed, Toast.LENGTH_LONG).show()
             return
         }
         val uri = item.localConfiguration?.uri
@@ -2984,7 +2984,7 @@ class PlaybackService : MediaLibraryService() {
      */
     private fun lookForBetterCopy(player: ExoPlayer) {
         val item = player.currentMediaItem ?: return
-        if (item.toSong().isLiveRadio || item.toSong().isOnsenAudio) return
+        if (item.toSong().isLiveRadio || item.toSong().isOnsenAudio || item.toSong().isRssAudio) return
         val mediaId = item.mediaId
         // Local files have no remote quality candidates. A duplicate queue
         // entry can share this media id with a remote copy that has a pending
@@ -3937,7 +3937,7 @@ class PlaybackService : MediaLibraryService() {
     /** Serialize only the bounded window needed for a future cold-start resume. */
     private fun saveQueueSnapshot(player: ExoPlayer) {
         if (isExternalPreviewPlaying(player)) return
-        if (player.currentMediaItem?.toSong()?.let { it.isLiveRadio || it.isOnsenAudio } == true) return
+        if (player.currentMediaItem?.toSong()?.let { it.isLiveRadio || it.isOnsenAudio || it.isRssAudio } == true) return
         if (player.mediaItemCount == 0) {
             persistedQueueStart = 0
             LastPlayed.clear()
@@ -3956,7 +3956,7 @@ class PlaybackService : MediaLibraryService() {
     /** Make the newly installed radio queue the durable cold-start boundary. */
     private fun saveQueueSnapshotImmediately(player: ExoPlayer) {
         if (isExternalPreviewPlaying(player)) return
-        if (player.currentMediaItem?.toSong()?.let { it.isLiveRadio || it.isOnsenAudio } == true) return
+        if (player.currentMediaItem?.toSong()?.let { it.isLiveRadio || it.isOnsenAudio || it.isRssAudio } == true) return
         if (player.mediaItemCount == 0) {
             persistedQueueStart = 0
             LastPlayed.clearImmediately()
@@ -3989,7 +3989,7 @@ class PlaybackService : MediaLibraryService() {
             player.currentMediaItem?.toSong()?.let { saveLongTrackPosition(player, it) }
             return
         }
-        if (player.currentMediaItem?.toSong()?.let { it.isLiveRadio || it.isOnsenAudio } == true) return
+        if (player.currentMediaItem?.toSong()?.let { it.isLiveRadio || it.isOnsenAudio || it.isRssAudio } == true) return
         if (player.mediaItemCount == 0) return
         player.currentMediaItem?.toSong()?.let { saveLongTrackPosition(player, it) }
         LastPlayed.savePlaybackState(
@@ -5791,11 +5791,11 @@ class PlaybackService : MediaLibraryService() {
             }
         }
 
-        /** Re-prepare an Onsen item only after the listener explicitly asks to play again. */
+        /** Re-prepare a direct radio or RSS item only after an explicit retry. */
         private fun prepareOnsenAfterFailure() {
             if (wrappedPlayer.playbackState == Player.STATE_IDLE &&
                 wrappedPlayer.currentMediaItem?.let { current ->
-                    current.mediaId.startsWith("onsen:") || current.toSong().isOnsenAudio
+                    current.mediaId.startsWith("onsen:") || current.toSong().isOnsenAudio || current.toSong().isRssAudio
                 } == true
             ) {
                 wrappedPlayer.prepare()

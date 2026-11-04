@@ -17,6 +17,10 @@ import com.music.bitchord.feature.localsongactions.data.LocalPlayStatsStore
 import com.music.bitchord.feature.localsongactions.domain.model.LocalPlayStats
 import com.music.bitchord.playback.SavedQueue
 import com.music.bitchord.playback.SavedQueueStore
+import com.music.bitchord.radio.recording.RadioFavoriteKind
+import com.music.bitchord.radio.recording.RadioFavoriteRepeat
+import com.music.bitchord.radio.recording.RadioRecordingFavorite
+import com.music.bitchord.radio.recording.RadioRecordingFavoriteStore
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
 import kotlinx.serialization.Serializable
@@ -41,7 +45,7 @@ import java.time.format.DateTimeFormatter
 object Backup {
 
     private const val APP_TAG = "musicbeat"
-    private const val SCHEMA_VERSION = 6
+    private const val SCHEMA_VERSION = 7
     private const val MAX_IMPORT_BYTES = 128 * 1024 * 1024
 
     private val json = Json {
@@ -74,6 +78,7 @@ object Backup {
             }.toMap()
             val savedQueues = SavedQueueStore.exportQueues().map { it.toBackupQueue() }
             val artistArtwork = ArtistArtworkStore.exportBackup(context)
+            val radioFavorites = RadioRecordingFavoriteStore.favorites(context).map { BackupRadioFavorite.from(it) }
             require(artistArtwork.sumOf { it.bytes.size.toLong() } <= 90L * 1024 * 1024) {
                 "Artist images are too large to include in one backup"
             }
@@ -98,6 +103,7 @@ object Backup {
                         imageBase64 = Base64.encodeToString(item.bytes, Base64.NO_WRAP),
                     )
                 },
+                radioRecordingFavorites = radioFavorites,
             )
             val text = json.encodeToString(BackupFile.serializer(), file)
             require(text.toByteArray().size <= MAX_IMPORT_BYTES) { "Backup is too large to import" }
@@ -113,6 +119,7 @@ object Backup {
                 hasEqualizer = equalizer.enabled,
                 playStats = playStats.size,
                 queues = savedQueues.size,
+                radioFavorites = radioFavorites.size,
             )
         }
     }
@@ -160,6 +167,12 @@ object Backup {
                 }
                 ArtistArtworkStore.importBackup(context, artwork)
             }
+            if (file.version >= 7 || file.radioRecordingFavorites.isNotEmpty()) {
+                RadioRecordingFavoriteStore.restore(
+                    context,
+                    file.radioRecordingFavorites.map(BackupRadioFavorite::toFavorite),
+                )
+            }
 
             Summary(
                 playlists = file.playlists.size,
@@ -171,6 +184,7 @@ object Backup {
                 from = file.versionName,
                 at = file.exportedAt,
                 queues = file.savedQueues.size,
+                radioFavorites = file.radioRecordingFavorites.size,
             )
         }
     }
@@ -198,6 +212,7 @@ object Backup {
         val hasEqualizer: Boolean,
         val playStats: Int = 0,
         val queues: Int = 0,
+        val radioFavorites: Int = 0,
     )
 
     data class Summary(
@@ -210,6 +225,7 @@ object Backup {
         val from: String,
         val at: String,
         val queues: Int = 0,
+        val radioFavorites: Int = 0,
     )
 
     @Serializable
@@ -227,7 +243,56 @@ object Backup {
         val listening: List<StoredBucket> = emptyList(),
         val savedQueues: List<BackupQueue> = emptyList(),
         val artistArtwork: List<ArtistArtworkBackup> = emptyList(),
+        val radioRecordingFavorites: List<BackupRadioFavorite> = emptyList(),
     )
+
+    @Serializable
+    data class BackupRadioFavorite(
+        val id: String,
+        val kind: String,
+        val stationId: String,
+        val stationName: String,
+        val areaId: String,
+        val title: String,
+        val timeOfDay: String? = null,
+        val weekday: Int? = null,
+        val durationMs: Long? = null,
+        val repeat: String? = null,
+        val keyword: String? = null,
+        val artworkUrl: String? = null,
+    ) {
+        fun toFavorite() = RadioRecordingFavorite(
+            id = id,
+            kind = RadioFavoriteKind.valueOf(kind),
+            stationId = stationId,
+            stationName = stationName,
+            areaId = areaId,
+            title = title,
+            timeOfDay = timeOfDay,
+            weekday = weekday,
+            durationMs = durationMs,
+            repeat = repeat?.let(RadioFavoriteRepeat::valueOf),
+            keyword = keyword,
+            artworkUrl = artworkUrl,
+        )
+
+        companion object {
+            fun from(favorite: RadioRecordingFavorite) = BackupRadioFavorite(
+                id = favorite.id,
+                kind = favorite.kind.name,
+                stationId = favorite.stationId,
+                stationName = favorite.stationName,
+                areaId = favorite.areaId,
+                title = favorite.title,
+                timeOfDay = favorite.timeOfDay,
+                weekday = favorite.weekday,
+                durationMs = favorite.durationMs,
+                repeat = favorite.repeat?.name,
+                keyword = favorite.keyword,
+                artworkUrl = favorite.artworkUrl,
+            )
+        }
+    }
 
     @Serializable
     data class ArtistArtworkBackup(

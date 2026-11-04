@@ -37,7 +37,7 @@ object SavedQueueStore {
 
     fun saveAs(name: String, songs: List<Song>, currentIndex: Int, positionMs: Long): Boolean = synchronized(lock) {
         val cleanName = name.trim().take(MAX_NAME_LENGTH)
-        if (cleanName.isBlank() || songs.isEmpty() || songs.any(Song::isOnsenAudio) ||
+        if (cleanName.isBlank() || songs.isEmpty() || songs.any { it.isOnsenAudio || it.isRssAudio } ||
             songs.size > MAX_SONGS || queues.value.size >= MAX_QUEUES ||
             queues.value.any { it.name.equals(cleanName, ignoreCase = true) }
         ) {
@@ -54,7 +54,7 @@ object SavedQueueStore {
     }
 
     fun replace(id: String, songs: List<Song>, currentIndex: Int, positionMs: Long): Boolean = synchronized(lock) {
-        if (songs.isEmpty() || songs.any(Song::isOnsenAudio) || songs.size > MAX_SONGS) return@synchronized false
+        if (songs.isEmpty() || songs.any { it.isOnsenAudio || it.isRssAudio } || songs.size > MAX_SONGS) return@synchronized false
         if (queues.value.none { it.id == id }) return@synchronized false
         val updated = queues.value.map { queue ->
             if (queue.id == id) queue.copy(

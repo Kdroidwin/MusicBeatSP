@@ -315,6 +315,7 @@ fun MediaItem.toSong() = Song(
     isLiveRadio = mediaMetadata.extras?.getBoolean(EXTRA_LIVE_RADIO) == true,
     radioStreamUrl = mediaMetadata.extras?.getString(EXTRA_RADIO_STREAM_URL),
     isOnsenAudio = mediaMetadata.extras?.getBoolean(EXTRA_ONSEN_AUDIO) == true,
+    isRssAudio = mediaMetadata.extras?.getBoolean(EXTRA_RSS_AUDIO) == true,
 )
 
 /** @see Song.fromAutoplay */
@@ -361,6 +362,7 @@ internal const val EXTRA_EXTERNAL_PREVIEW = "bitchord.externalPreview"
 private const val EXTRA_LIVE_RADIO = "bitchord.liveRadio"
 private const val EXTRA_RADIO_STREAM_URL = "bitchord.radioStreamUrl"
 private const val EXTRA_ONSEN_AUDIO = "bitchord.onsenAudio"
+private const val EXTRA_RSS_AUDIO = "bitchord.rssAudio"
 
 /**
  * How long the track runs, as the row that queued it said.
@@ -527,7 +529,7 @@ fun Song.toMediaItem(): MediaItem {
 
     return MediaItem.Builder()
         .setMediaId(videoId)
-        .setUri(resolvePlaybackUri(uriString, if (isLiveRadio || isOnsenAudio) null else localPath))
+        .setUri(resolvePlaybackUri(uriString, if (isLiveRadio || isOnsenAudio || isRssAudio) null else localPath))
         .apply { if (isLiveRadio || isOnsenAudio) setMimeType(MimeTypes.APPLICATION_M3U8) }
         .apply { clipping?.let(::setClippingConfiguration) }
     .setMediaMetadata(
@@ -576,7 +578,7 @@ fun Song.toMediaItem(): MediaItem {
             // depends on.
             .apply {
                 if (fromAutoplay || offlineUri != null || durationText != null || isExternalPreview ||
-                    artistId != null || albumId != null || setVideoId != null || isLiveRadio || isOnsenAudio ||
+                    artistId != null || albumId != null || setVideoId != null || isLiveRadio || isOnsenAudio || isRssAudio ||
                     isExplicit != null || isVideo || isVideoOrigin || radioName != null ||
                     thumbnailUrl != null
                 ) {
@@ -602,6 +604,7 @@ fun Song.toMediaItem(): MediaItem {
                             EXTRA_LIVE_RADIO to isLiveRadio,
                             EXTRA_RADIO_STREAM_URL to radioStreamUrl,
                             EXTRA_ONSEN_AUDIO to isOnsenAudio,
+                            EXTRA_RSS_AUDIO to isRssAudio,
                         ),
                     )
                 }

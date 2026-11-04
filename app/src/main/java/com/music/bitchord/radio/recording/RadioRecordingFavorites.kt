@@ -66,6 +66,18 @@ object RadioRecordingFavoriteStore {
 
     fun find(context: Context, id: String): RadioRecordingFavorite? = favorites(context).firstOrNull { it.id == id }
 
+    /** Replace this device's favorite list with the copy from a user-selected backup. */
+    fun restore(context: Context, imported: List<RadioRecordingFavorite>) {
+        val cleaned = imported
+            .filter { it.id.isNotBlank() && it.stationId.isNotBlank() && it.title.isNotBlank() }
+            .distinctBy(RadioRecordingFavorite::id)
+        saveAll(context, cleaned)
+        RadioRecordingFavoriteScheduler.scheduleAllTimeFavorites(context)
+        if (cleaned.any { it.kind == RadioFavoriteKind.KEYWORD }) {
+            RadioRecordingFavoriteScheduler.requestKeywordRefresh(context)
+        }
+    }
+
     fun addTimeFavorite(
         context: Context,
         program: ProgramEntry,

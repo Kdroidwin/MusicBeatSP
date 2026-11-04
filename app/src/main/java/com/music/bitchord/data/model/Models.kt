@@ -91,6 +91,8 @@ data class Song(
     val radioStreamUrl: String? = null,
     /** An on-demand HLS episode from Onsen; its signed URL must not be persisted in the queue. */
     val isOnsenAudio: Boolean = false,
+    /** An RSS enclosure is a direct MP3/AAC/etc. URL, not HLS or a YouTube ID. */
+    val isRssAudio: Boolean = false,
 )
 
 /**

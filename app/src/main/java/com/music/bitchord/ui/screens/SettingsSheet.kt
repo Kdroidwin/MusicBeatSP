@@ -2022,6 +2022,7 @@ fun SettingsScreen(
                         if (summary.favorites > 0) parts += "${summary.favorites} ${if (summary.favorites == 1) "favorite" else "favorites"}"
                         if (summary.hasEqualizer) parts += "equalizer"
                         if (summary.queues > 0) parts += context.getString(R.string.saved_queue_count, summary.queues)
+                        if (summary.radioFavorites > 0) parts += context.getString(R.string.radio_recording_favorite_count, summary.radioFavorites)
                         parts += "settings"
                         if (summary.months > 0) parts += context.countOfMonths(summary.months)
                         append(parts.joinToString(", "))
@@ -2047,6 +2048,7 @@ fun SettingsScreen(
                         if (summary.favorites > 0) parts += "${summary.favorites} ${if (summary.favorites == 1) "favorite" else "favorites"}"
                         if (summary.hasEqualizer) parts += "equalizer"
                         if (summary.queues > 0) parts += context.getString(R.string.saved_queue_count, summary.queues)
+                        if (summary.radioFavorites > 0) parts += context.getString(R.string.radio_recording_favorite_count, summary.radioFavorites)
                         parts += "settings"
                         if (summary.months > 0) parts += context.countOfMonths(summary.months)
                         append(parts.joinToString(", "))
