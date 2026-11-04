@@ -10,7 +10,7 @@ import org.jsoup.Jsoup
 /** Search and LRC extraction for Follow Lyrics. */
 internal object FollowLyrics {
     private const val BASE = "https://followlyrics.com"
-    private val stamp = Regex("""\[\d{1,3}:\d{2}(?:[.:]\d{1,3})?\]""")
+    private val stamp = Regex("""\[(\d{1,3}):(\d{2})(?:[.:](\d{1,3}))?\]""")
     private val stampedBlock = Regex("""(\[\d{1,3}:\d{2}(?:[.:]\d{1,3})?\])([\s\S]*?)(?=\[\d{1,3}:\d{2}(?:[.:]\d{1,3})?\]|$)""")
     private val credits = Regex("""(?i)^\s*(?:作词|作詞|作曲|编曲|編曲|词|曲|詞|arranger|composer|lyricist|lyrics|music|producer)\s*[:：|].*$""")
 
@@ -32,12 +32,39 @@ internal object FollowLyrics {
                 }.distinct().take(4)
                 for (pageUrl in candidates) {
                     val page = get(pageUrl)?.let(Jsoup::parse) ?: continue
-                    val pageText = page.body()?.wholeText().orEmpty()
-                    val lrcText = stampedBlock.findAll(pageText).mapNotNull { match ->
+                    val pageText = page.body().wholeText()
+                    val blocks = stampedBlock.findAll(pageText).mapNotNull { match ->
+                        val stampMatch = stamp.matchAt(match.groupValues[1], 0) ?: return@mapNotNull null
+                        val (minutes, seconds, fraction) = stampMatch.destructured
+                        val fractionMs = when (fraction.length) {
+                            1 -> fraction.toLong() * 100
+                            2 -> fraction.toLong() * 10
+                            3 -> fraction.toLong()
+                            else -> 0L
+                        }
+                        val timeMs = minutes.toLong() * 60_000 + seconds.toLong() * 1_000 + fractionMs
                         val body = match.groupValues[2].trim().removePrefix("|").trim().replace(Regex("\\s+"), " ")
+                        Triple(timeMs, match.groupValues[1], body)
+                    }.toList()
+
+                    // FollowLyrics appends pinyin and tone-marked pinyin as
+                    // separate timed sections. Flattening the whole page makes
+                    // those translations look like extra lyrics at the exact
+                    // same timestamps. The original section ends when its next
+                    // line jumps back to the opening timestamp.
+                    val firstTime = blocks.firstOrNull()?.first ?: continue
+                    val originalBlock = buildList<Triple<Long, String, String>> {
+                        var previousTime = firstTime
+                        for ((timeMs, timeStamp, body) in blocks) {
+                            if (isNotEmpty() && timeMs <= firstTime + 1_000 && previousTime > timeMs + 10_000) break
+                            add(Triple(timeMs, timeStamp, body))
+                            previousTime = timeMs
+                        }
+                    }
+                    val lrcText = originalBlock.mapNotNull { (_, timeStamp, body) ->
                         if (body.isBlank() || credits.matches(body)) return@mapNotNull null
                         if (artist.isNotBlank() && body.contains(title, true) && body.contains(artist, true)) return@mapNotNull null
-                        match.groupValues[1] + body
+                        "$timeStamp$body"
                     }.joinToString("\n")
                     if (stamp.findAll(lrcText).count() < 2) continue
                     LrcLib.parseLrc(lrcText).takeIf { it.any { line -> line.text.isNotBlank() } }
