@@ -24,21 +24,38 @@ internal object KugeciLyrics {
                     .addQueryParameter("q", cleanTitle)
                     .build()
                 val search = get(searchUrl.toString())?.let(Jsoup::parse) ?: return@runCatching null
-                val pages = search.select("a[href]").mapNotNull { link ->
-                    if (!matchesTitle(link.text(), cleanTitle)) return@mapNotNull null
+                val pages = search.select("a[href*='/song/']").mapNotNull { link ->
+                    val resultTitle = link.text().ifBlank { link.attr("title") }
+                    if (!matchesTitle(resultTitle, cleanTitle)) return@mapNotNull null
                     val rawUrl = link.absUrl("href").ifBlank { link.attr("href") }
                     val path = Uri.parse(rawUrl).path.orEmpty()
                     if (!path.matches(Regex("""/song/[A-Za-z0-9_-]+/?"""))) return@mapNotNull null
-                    if (rawUrl.startsWith("/")) BASE + rawUrl else rawUrl
+                    val pageUrl = if (rawUrl.startsWith("/")) BASE + rawUrl else rawUrl
+                    if (!Uri.parse(pageUrl).host.equals("www.kugeci.com", ignoreCase = true)) return@mapNotNull null
+                    pageUrl
                 }.distinct().take(6)
                 for (pageUrl in pages) {
                     val page = get(pageUrl)?.let(Jsoup::parse) ?: continue
                     val pageTitle = page.selectFirst("title")?.text().orEmpty()
                     val titleAndArtist = pageTitle.substringBefore(" - 酷歌词")
-                    val pageArtistText = page.select("a[href]").filter { it.attr("href").contains("/artist/") }.joinToString(" ") { it.text() }
+                    val songTitle = page.selectFirst("main h1, .container h1, h1")?.text().orEmpty()
+                        .ifBlank { titleAndArtist.substringAfter(" - ", titleAndArtist) }
+                    val pageArtistText = page.select("a[href*='/singer/'], a[href*='/artist/']")
+                        .joinToString(" ") { it.text().replace(Regex("(?i)^\\s*(?:演唱|歌手)\\s*[:：]?\\s*"), "") }
                         .ifBlank { titleAndArtist.substringBefore(" - ") }
-                    if (!matchesTitle(pageTitle, cleanTitle) || !matchesArtist(pageArtistText, artist)) continue
-                    val lrc = page.selectFirst("#lyricsContainer")?.let(::preserveBreaks) ?: continue
+                    if (!matchesTitle(songTitle, cleanTitle) || !matchesArtist(pageArtistText, artist)) continue
+
+                    // Kugeci publishes the same LRC through a dedicated download
+                    // link. Prefer it to the HTML container; the latter remains
+                    // a fallback for pages that do not expose a download link.
+                    val downloadUrl = page.selectFirst("a.downloadlrc[href], a[href*='/download/lrc/']")
+                        ?.let { it.absUrl("href").ifBlank { it.attr("href") } }
+                        ?.let { href -> if (href.startsWith("/")) BASE + href else href }
+                        ?.takeIf { Uri.parse(it).host.equals("www.kugeci.com", ignoreCase = true) }
+                    val downloadedLrc = downloadUrl?.let(::get)
+                    val lrc = downloadedLrc?.takeIf { timedLine.findAll(it).count() >= 2 }
+                        ?: page.selectFirst("#lyricsContainer")?.let(::preserveBreaks)
+                        ?: continue
                     val parsed = parseTimedLrc(lrc, title)
                     if (parsed.isNotEmpty()) return@runCatching parsed
                 }
