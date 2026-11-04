@@ -1852,9 +1852,9 @@
     <string name="rss_episode_downloaded">ダウンロード済み</string>
     <string name="rss_downloaded_episodes">ダウンロード済みエピソード</string>
     <string name="folder_auto_rename">自動リネーム</string>
-    <string name="folder_auto_rename_instructions">Apple MusicのアルバムURLを貼り付け、音源のフォルダを選択してください。先頭の曲番号と区切りは維持され、サブフォルダも検索します。</string>
+    <string name="folder_auto_rename_instructions">Apple MusicのアルバムURLを貼り付けてください。現在開いているフォルダ内の音源とサブフォルダを使い、先頭の曲番号と区切りを維持します。</string>
     <string name="folder_auto_rename_apple_url">Apple MusicのアルバムURL</string>
-    <string name="folder_auto_rename_choose_folder">フォルダを選択</string>
+    <string name="folder_auto_rename_choose_folder">このフォルダで確認</string>
     <string name="folder_auto_rename_loading">アルバム情報と音源ファイルを読み込み中…</string>
     <string name="folder_auto_rename_failed">リネームのプレビューを準備できませんでした</string>
     <string name="folder_auto_rename_preview">リネームの確認</string>

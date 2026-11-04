@@ -1,12 +1,15 @@
 package com.music.bitchord.feature.localmusic.data
 
 import android.content.ContentResolver
+import android.content.ContentValues
 import android.content.Context
 import android.net.Uri
 import android.provider.DocumentsContract
+import android.provider.MediaStore
 import android.util.AtomicFile
 import com.kyant.taglib.TagLib
 import com.music.bitchord.data.Http
+import com.music.bitchord.data.model.Song
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
 import okhttp3.Request
@@ -42,7 +45,7 @@ data class AutoRenameRow(
 
 data class AutoRenameResult(val changed: Int, val failed: Int, val message: String? = null)
 
-/** SAF based Apple Music title/artist tagging and filename rename with preview and one-step undo. */
+/** Apple Music title/artist tagging and filename rename with preview and one-step undo. */
 object AppleMusicAutoRename {
     private val leadingNumbers = Regex("^(\\d+(?:\\s*[-_.]\\s*\\d+)*(?:\\s*[-_.]\\s*|\\s+)?)")
     private val numbers = Regex("^(\\d+)(?:\\s*[-_.]\\s*(\\d+))?")
@@ -146,10 +149,59 @@ object AppleMusicAutoRename {
                     disc = inheritedDisc ?: if (second == null) null else first,
                     number = second ?: first,
                     extension = child.name.substringAfterLast('.', "").let { ".$it" },
+                    uri = DocumentsContract.buildDocumentUriUsingTree(treeUri, child.id),
                 )
             }
         }
         walk(treeId, emptyList(), null)
+        return buildPreview(treeUri, files, names, tracks)
+    }
+
+    /** Preview the indexed songs under the folder currently open in FolderBrowserScreen. */
+    fun preview(resolver: ContentResolver, songs: List<Song>, tracks: List<AppleCatalogTrack>): List<AutoRenameRow> {
+        val files = mutableListOf<FileRow>()
+        val names = linkedMapOf<String, MutableSet<String>>()
+        songs.distinctBy { it.localUri ?: it.localPath ?: it.videoId }.forEach { song ->
+            val filePath = song.localPath?.takeIf(String::isNotBlank)
+            val uri = song.localUri?.takeIf { it.startsWith("content://") || it.startsWith("file://") }
+                ?.let { runCatching { Uri.parse(it) }.getOrNull() }
+                ?: filePath?.let { Uri.fromFile(File(it)) }
+                ?: return@forEach
+            val name = filePath?.substringAfterLast('/')?.takeIf(String::isNotBlank)
+                ?: displayName(resolver, uri)?.takeIf(String::isNotBlank)
+                ?: return@forEach
+            val parent = song.localFolderPath?.takeIf(String::isNotBlank)
+                ?: filePath?.substringBeforeLast('/', "")?.takeIf(String::isNotBlank)
+                ?: return@forEach
+            val prefix = leadingNumbers.find(name)?.value.orEmpty()
+            val number = numbers.find(prefix)
+            val first = number?.groupValues?.getOrNull(1)?.toIntOrNull()
+            val second = number?.groupValues?.getOrNull(2)?.takeIf(String::isNotEmpty)?.toIntOrNull()
+            val path = filePath ?: "$parent/$name"
+            val parentNames = names.getOrPut(parent) { linkedSetOf() }
+            parentNames += name
+            files += FileRow(
+                id = uri.toString(),
+                parent = parent,
+                path = path,
+                name = name,
+                prefix = prefix,
+                disc = discDirectory.find(parent)?.groupValues?.getOrNull(1)?.toIntOrNull()
+                    ?: if (second == null) null else first,
+                number = second ?: first,
+                extension = name.substringAfterLast('.', "").let { ".$it" },
+                uri = uri,
+            )
+        }
+        return buildPreview(Uri.EMPTY, files, names, tracks)
+    }
+
+    private fun buildPreview(
+        treeUri: Uri,
+        files: List<FileRow>,
+        names: Map<String, Set<String>>,
+        tracks: List<AppleCatalogTrack>,
+    ): List<AutoRenameRow> {
         val orderedFiles = files.sortedWith(
             compareBy<FileRow> { it.disc ?: 1 }
                 .thenBy { it.number ?: Int.MAX_VALUE }
@@ -193,7 +245,7 @@ object AppleMusicAutoRename {
             }
             AutoRenameRow(
                 treeUri = treeUri,
-                uri = DocumentsContract.buildDocumentUriUsingTree(treeUri, file.id),
+                uri = file.uri,
                 documentId = file.id,
                 parentId = file.parent,
                 path = file.path,
@@ -258,11 +310,11 @@ object AppleMusicAutoRename {
                     "書き込んだタイトル・アーティストを確認できませんでした"
                 }
                 if (row.newName != row.oldName) {
-                    currentUri = DocumentsContract.renameDocument(context.contentResolver, row.uri, requireNotNull(row.newName))
+                    currentUri = renameAudio(context, row.uri, requireNotNull(row.newName))
                         ?: error("ファイル名を変更できませんでした")
                     val actualName = displayName(context, currentUri)
                     if (actualName != row.newName) {
-                        val rollback = runCatching { DocumentsContract.renameDocument(context.contentResolver, currentUri, row.oldName) }.getOrNull()
+                        val rollback = runCatching { renameAudio(context, currentUri, row.oldName) }.getOrNull()
                         if (rollback != null) currentUri = rollback
                         error("保存先がファイル名を変更しました${if (rollback != null) "。元の名前に戻しました" else "。元の名前には戻せませんでした"}")
                     }
@@ -274,7 +326,7 @@ object AppleMusicAutoRename {
                 runCatching {
                     val currentName = displayName(context, currentUri)
                     if (currentName != null && currentName != row.oldName) {
-                        currentUri = DocumentsContract.renameDocument(context.contentResolver, currentUri, row.oldName) ?: currentUri
+                        currentUri = renameAudio(context, currentUri, row.oldName) ?: currentUri
                     }
                     writeTags(context, currentUri, oldTags)
                 }
@@ -303,7 +355,7 @@ object AppleMusicAutoRename {
                 require(writeTags(context, uri, entry.tags)) { "元のタグに戻せませんでした" }
                 val existingName = displayName(context, uri)
                 if (existingName != entry.originalName) {
-                    uri = DocumentsContract.renameDocument(context.contentResolver, uri, entry.originalName)
+                    uri = renameAudio(context, uri, entry.originalName)
                         ?: error("元のファイル名に戻せませんでした")
                 }
                 remaining.remove(entry)
@@ -331,18 +383,38 @@ object AppleMusicAutoRename {
         } ?: false
     }.getOrDefault(false)
 
+    private fun renameAudio(context: Context, uri: Uri, name: String): Uri? {
+        return when {
+            uri.scheme == "file" -> {
+            val source = uri.path?.let(::File) ?: return null
+            val parent = source.parentFile ?: return null
+            val target = File(parent, name)
+            if (target.exists() && target != source) return null
+            if (source.renameTo(target)) Uri.fromFile(target) else null
+            }
+            uri.authority == MediaStore.AUTHORITY -> {
+                val values = ContentValues().apply { put(MediaStore.MediaColumns.DISPLAY_NAME, name) }
+                uri.takeIf { context.contentResolver.update(uri, values, null, null) > 0 }
+            }
+            else -> DocumentsContract.renameDocument(context.contentResolver, uri, name)
+        }
+    }
+
     private fun tagValue(tags: Map<String, List<String>>, key: String): String? =
         tags.entries.firstOrNull { it.key.equals(key, true) }?.value?.firstOrNull()
 
     private fun displayName(context: Context, uri: Uri): String? = displayName(context.contentResolver, uri)
 
-    private fun displayName(resolver: ContentResolver, uri: Uri): String? = resolver.query(
-        uri,
-        arrayOf(DocumentsContract.Document.COLUMN_DISPLAY_NAME),
-        null,
-        null,
-        null,
-    )?.use { cursor -> if (cursor.moveToFirst()) cursor.getString(0) else null }
+    private fun displayName(resolver: ContentResolver, uri: Uri): String? = when (uri.scheme) {
+        "file" -> uri.path?.let(::File)?.name
+        else -> resolver.query(
+            uri,
+            arrayOf(DocumentsContract.Document.COLUMN_DISPLAY_NAME),
+            null,
+            null,
+            null,
+        )?.use { cursor -> if (cursor.moveToFirst()) cursor.getString(0) else null }
+    }
 
     private fun resolveUndoUri(resolver: ContentResolver, entry: UndoEntry): Uri? {
         sequenceOf(entry.currentUri, entry.originalUri).map(Uri::parse).forEach { uri ->
@@ -383,6 +455,7 @@ object AppleMusicAutoRename {
     private data class FileRow(
         val id: String, val parent: String, val path: String, val name: String,
         val prefix: String, val disc: Int?, val number: Int?, val extension: String,
+        val uri: Uri,
     )
 
     private data class UndoEntry(

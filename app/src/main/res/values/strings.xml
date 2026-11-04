@@ -1879,9 +1879,9 @@
     <string name="rss_episode_downloaded">Downloaded</string>
     <string name="rss_downloaded_episodes">Downloaded episodes</string>
     <string name="folder_auto_rename">Auto rename</string>
-    <string name="folder_auto_rename_instructions">Paste an Apple Music album URL, then choose the folder containing the audio files. Number prefixes and separators are kept; subfolders are scanned.</string>
+    <string name="folder_auto_rename_instructions">Paste an Apple Music album URL. Audio files in the currently open folder and its subfolders will be used; number prefixes and separators are kept.</string>
     <string name="folder_auto_rename_apple_url">Apple Music album URL</string>
-    <string name="folder_auto_rename_choose_folder">Choose folder</string>
+    <string name="folder_auto_rename_choose_folder">Preview this folder</string>
     <string name="folder_auto_rename_loading">Loading album details and scanning audio files…</string>
     <string name="folder_auto_rename_failed">Could not prepare the rename preview</string>
     <string name="folder_auto_rename_preview">Rename preview</string>

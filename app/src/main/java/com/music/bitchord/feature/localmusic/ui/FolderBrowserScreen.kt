@@ -1,11 +1,16 @@
 package com.music.bitchord.feature.localmusic.ui
 
+import android.app.Activity
 import android.content.Intent
+import android.content.pm.PackageManager
 import android.net.Uri
+import android.os.Build
+import android.provider.MediaStore
 import android.provider.OpenableColumns
 import android.widget.Toast
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
+import androidx.activity.result.IntentSenderRequest
 import androidx.activity.compose.BackHandler
 import androidx.compose.foundation.combinedClickable
 import androidx.compose.foundation.background
@@ -145,34 +150,31 @@ fun FolderBrowserScreen(
     var isOpeningZipTrack by remember { mutableStateOf(false) }
     var showAppleUrlDialog by remember { mutableStateOf(false) }
     var albumUrl by remember { mutableStateOf("") }
-    var pendingAppleAlbumUrl by remember { mutableStateOf("") }
     var appleAlbumTitle by remember { mutableStateOf("") }
     var renameRows by remember { mutableStateOf<List<AutoRenameRow>?>(null) }
     var isPreparingRename by remember { mutableStateOf(false) }
     var isApplyingRename by remember { mutableStateOf(false) }
+    var pendingRenamePermissionRows by remember { mutableStateOf<List<AutoRenameRow>?>(null) }
     var undoAvailable by remember { mutableStateOf(AppleMusicAutoRename.hasUndo(context)) }
-    val renameFolderPicker = rememberLauncherForActivityResult(ActivityResultContracts.OpenDocumentTree()) { uri ->
-        if (uri != null) scope.launch {
-            runCatching {
-                context.contentResolver.takePersistableUriPermission(
-                    uri,
-                    Intent.FLAG_GRANT_READ_URI_PERMISSION or Intent.FLAG_GRANT_WRITE_URI_PERMISSION,
-                )
-            }
-            isPreparingRename = true
-            showAppleUrlDialog = false
-            runCatching {
-                withContext(Dispatchers.IO) {
-                    val album = AppleMusicAutoRename.fetchAlbum(pendingAppleAlbumUrl)
-                    album.title to AppleMusicAutoRename.preview(context.contentResolver, uri, album.tracks)
-                }
-            }.onSuccess { (title, rows) ->
-                appleAlbumTitle = title
-                renameRows = rows
-            }.onFailure {
-                Toast.makeText(context, it.localizedMessage ?: context.getString(R.string.folder_auto_rename_failed), Toast.LENGTH_LONG).show()
-            }
-            isPreparingRename = false
+    fun applyRenameRows(rows: List<AutoRenameRow>) {
+        scope.launch {
+            isApplyingRename = true
+            val result = runCatching { AppleMusicAutoRename.apply(context, rows) }
+                .getOrElse { com.music.bitchord.feature.localmusic.data.AutoRenameResult(0, rows.size, it.localizedMessage) }
+            isApplyingRename = false
+            undoAvailable = AppleMusicAutoRename.hasUndo(context)
+            renameRows = null
+            val resultText = result.message ?: context.getString(R.string.folder_auto_rename_result, result.changed, result.failed)
+            Toast.makeText(context, resultText, Toast.LENGTH_LONG).show()
+            if (result.changed > 0) onLocalFilesChanged?.invoke()
+        }
+    }
+    val renameWritePermission = rememberLauncherForActivityResult(ActivityResultContracts.StartIntentSenderForResult()) { result ->
+        val rows = pendingRenamePermissionRows
+        pendingRenamePermissionRows = null
+        if (rows != null) {
+            if (result.resultCode == Activity.RESULT_OK) applyRenameRows(rows)
+            else Toast.makeText(context, R.string.bulk_tag_permission_denied, Toast.LENGTH_LONG).show()
         }
     }
     val zipPicker = rememberLauncherForActivityResult(ActivityResultContracts.OpenDocument()) { uri: Uri? ->
@@ -440,9 +442,28 @@ fun FolderBrowserScreen(
                 TextButton(
                     enabled = albumUrl.isNotBlank(),
                     onClick = {
-                        pendingAppleAlbumUrl = albumUrl.trim()
-                        showAppleUrlDialog = false
-                        renameFolderPicker.launch(null)
+                        val folderSongs = currentNode.allSongs
+                        if (folderSongs.isEmpty()) {
+                            Toast.makeText(context, R.string.folder_auto_rename_failed, Toast.LENGTH_LONG).show()
+                        } else {
+                            val albumUrlToLoad = albumUrl.trim()
+                            showAppleUrlDialog = false
+                            isPreparingRename = true
+                            scope.launch {
+                                runCatching {
+                                    withContext(Dispatchers.IO) {
+                                        val album = AppleMusicAutoRename.fetchAlbum(albumUrlToLoad)
+                                        album.title to AppleMusicAutoRename.preview(context.contentResolver, folderSongs, album.tracks)
+                                    }
+                                }.onSuccess { (title, rows) ->
+                                    appleAlbumTitle = title
+                                    renameRows = rows
+                                }.onFailure {
+                                    Toast.makeText(context, it.localizedMessage ?: context.getString(R.string.folder_auto_rename_failed), Toast.LENGTH_LONG).show()
+                                }
+                                isPreparingRename = false
+                            }
+                        }
                     },
                 ) { Text(stringResource(R.string.folder_auto_rename_choose_folder)) }
             },
@@ -506,15 +527,33 @@ fun FolderBrowserScreen(
                 TextButton(
                     enabled = !isApplyingRename && unmatched == 0 && selectableCount > 0 && rows.any { it.selected },
                     onClick = {
-                        scope.launch {
-                            isApplyingRename = true
-                            val result = AppleMusicAutoRename.apply(context, rows)
-                            isApplyingRename = false
-                            undoAvailable = AppleMusicAutoRename.hasUndo(context)
-                            renameRows = null
-                            val resultText = result.message ?: context.getString(R.string.folder_auto_rename_result, result.changed, result.failed)
-                            Toast.makeText(context, resultText, Toast.LENGTH_LONG).show()
-                            if (result.changed > 0) onLocalFilesChanged?.invoke()
+                        val mediaStoreUris = rows.asSequence()
+                            .filter { it.selected }
+                            .map { it.uri }
+                            .filter { it.authority == MediaStore.AUTHORITY }
+                            .distinct()
+                            .toList()
+                        val needsApproval = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.R) {
+                            mediaStoreUris.filter { uri ->
+                                context.checkUriPermission(
+                                    uri,
+                                    android.os.Process.myPid(),
+                                    android.os.Process.myUid(),
+                                    Intent.FLAG_GRANT_WRITE_URI_PERMISSION,
+                                ) != PackageManager.PERMISSION_GRANTED
+                            }
+                        } else emptyList()
+                        if (needsApproval.isEmpty()) {
+                            applyRenameRows(rows)
+                        } else {
+                            runCatching { MediaStore.createWriteRequest(context.contentResolver, needsApproval) }
+                                .onSuccess { request ->
+                                    pendingRenamePermissionRows = rows
+                                    renameWritePermission.launch(IntentSenderRequest.Builder(request.intentSender).build())
+                                }
+                                .onFailure {
+                                    Toast.makeText(context, it.localizedMessage ?: context.getString(R.string.bulk_tag_permission_denied), Toast.LENGTH_LONG).show()
+                                }
                         }
                     },
                 ) {
