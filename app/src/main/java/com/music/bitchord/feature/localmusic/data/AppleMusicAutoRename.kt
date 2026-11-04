@@ -267,27 +267,65 @@ object AppleMusicAutoRename {
         fun canMatch(file: FileRow) = issues[file.id] == null
         if (flattenedCatalog && multipleFileDiscs) {
             val continuousTracks = orderedTracks.map(AppleCatalogTrack::track) == (1..orderedTracks.size).toList()
-            val continuousFiles = orderedFiles.all { it.disc != null && it.number != null } &&
-                orderedFiles.groupBy(FileRow::disc).values.all { disk -> disk.mapNotNull(FileRow::number).sorted() == (1..disk.size).toList() }
-            if (orderedFiles.size == orderedTracks.size && continuousTracks && continuousFiles && orderedFiles.all(::canMatch)) {
-                orderedFiles.zip(orderedTracks).forEach { (file, track) -> assigned[file.id] = track }
-            } else orderedFiles.forEach { file ->
-                if (canMatch(file)) issues[file.id] = "ディスクごとの曲数または連番が揃っていません"
+            val filesByDisc = orderedFiles.groupBy(FileRow::disc)
+            val discSpans = filesByDisc.mapValues { (_, diskFiles) -> diskFiles.mapNotNull(FileRow::number).maxOrNull() ?: 0 }
+            val numberedDiscs = discSpans.keys.filterNotNull().sorted()
+            val trackNumbersAreUnambiguous = orderedFiles.all { it.disc != null && it.number != null } &&
+                numberedDiscs == (1..numberedDiscs.size).toList() &&
+                filesByDisc.values.all { diskFiles ->
+                    val numbers = diskFiles.mapNotNull(FileRow::number)
+                    numbers.isNotEmpty() && numbers.minOrNull() == 1 && numbers.distinct().size == numbers.size
+                } && discSpans.values.sum() == orderedTracks.size
+            if (continuousTracks && trackNumbersAreUnambiguous) {
+                // Apple sometimes collapses a multi-disc album into one disc.
+                // The local prefixes still retain each disc's original track
+                // numbers. Use each disc's highest numbered track as its span
+                // and map by number, so a missing file (a gap) never shifts all
+                // later tracks or blocks the rest of the album.
+                var discOffset = 0
+                numberedDiscs.forEach { disc ->
+                    val span = discSpans[disc] ?: 0
+                    filesByDisc[disc].orEmpty().forEach fileLoop@{ file ->
+                        if (!canMatch(file)) return@fileLoop
+                        val trackIndex = discOffset + (file.number!! - 1)
+                        val track = orderedTracks.getOrNull(trackIndex)
+                        when {
+                            track == null -> issues[file.id] = "ディスク番号と曲番号がApple Musicの曲数を超えています"
+                            assigned.values.any { it.id == track.id } -> issues[file.id] = "同じApple Music曲が複数ファイルに一致しています"
+                            else -> assigned[file.id] = track
+                        }
+                    }
+                    discOffset += span
+                }
+            } else {
+                // Some Apple storefronts flatten a multi-disc album into a
+                // single disc. A single missing or bonus track makes a
+                // positional zip unsafe, but should not invalidate the other
+                // files. Match those rows by their embedded title+artist, then
+                // leave only ambiguous or missing metadata rows unchecked.
+                orderedFiles.forEach { file ->
+                    if (!canMatch(file)) return@forEach
+                    val candidates = metadataTrackMatches(file, orderedTracks)
+                    when {
+                        candidates.size > 1 -> issues[file.id] = "音源タグの曲名・アーティスト名が複数のApple Music曲に一致します"
+                        candidates.isEmpty() -> Unit
+                        assigned.values.any { it.id == candidates.single().id } ->
+                            issues[file.id] = "同じApple Music曲が複数ファイルに一致しています"
+                        else -> assigned[file.id] = candidates.single()
+                    }
+                }
+                orderedFiles.forEach { file ->
+                    if (canMatch(file) && file.id !in assigned) {
+                        issues[file.id] = "複数ディスクの曲番号がApple Music側で連番になっておらず、音源タグでも一意に照合できません"
+                    }
+                }
             }
         } else {
             orderedFiles.forEach { file ->
                 if (!canMatch(file)) return@forEach
                 val number = file.number
                 if (number == null) {
-                    val title = file.audioTitle?.takeIf(String::isNotBlank)
-                    val artist = file.audioArtist?.takeIf(String::isNotBlank)
-                    val titleMatches = if (title != null && artist != null) {
-                        orderedTracks.filter { track ->
-                            normalizeTrackText(track.title) == normalizeTrackText(title) &&
-                                normalizeTrackText(track.artist) == normalizeTrackText(artist) &&
-                                (file.disc == null || track.disc == file.disc)
-                        }
-                    } else emptyList()
+                    val titleMatches = metadataTrackMatches(file, orderedTracks)
                     when {
                         titleMatches.size > 1 -> issues[file.id] = "曲番号がなく、音源タグの曲名・アーティスト名でも一意に照合できません"
                         titleMatches.isEmpty() -> issues[file.id] = "曲番号を読み取れず、音源タグの曲名・アーティスト名も一致しません"
@@ -584,6 +622,18 @@ object AppleMusicAutoRename {
 
     private fun normalizeTrackText(value: String): String = value.lowercase(Locale.ROOT)
         .replace(Regex("[\\s\\p{Punct}　]+"), "")
+
+    private fun metadataTrackMatches(
+        file: FileRow,
+        tracks: List<AppleCatalogTrack>,
+    ): List<AppleCatalogTrack> {
+        val title = file.audioTitle?.takeIf(String::isNotBlank) ?: return emptyList()
+        val artist = file.audioArtist?.takeIf(String::isNotBlank) ?: return emptyList()
+        val titleMatches = tracks.filter { track -> normalizeTrackText(track.title) == normalizeTrackText(title) }
+        if (titleMatches.size <= 1) return titleMatches
+        val artistMatches = titleMatches.filter { track -> normalizeTrackText(track.artist) == normalizeTrackText(artist) }
+        return artistMatches.ifEmpty { titleMatches }
+    }
 
     private fun naturalCompare(left: String, right: String): Int {
         val a = Regex("\\d+|\\D+").findAll(left.lowercase(Locale.ROOT)).map { it.value }.toList()
