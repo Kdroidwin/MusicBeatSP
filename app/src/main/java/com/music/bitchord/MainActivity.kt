@@ -986,6 +986,7 @@ private fun BitChordApp(
     val prioritizeSyllableSync by AppSettings.prioritizeSyllableSync.collectAsStateWithLifecycle()
     val preferEmbeddedLocalLyrics by AppSettings.preferEmbeddedLocalLyrics.collectAsStateWithLifecycle()
     val autoShowLyricsOnPlayback by AppSettings.autoShowLyricsOnPlayback.collectAsStateWithLifecycle()
+    val autoFetchLyricsOnYoutubePlayback by AppSettings.autoFetchLyricsOnYoutubePlayback.collectAsStateWithLifecycle()
     LaunchedEffect(
         player.song?.videoId,
         player.durationMs,
@@ -995,6 +996,7 @@ private fun BitChordApp(
         prioritizeSyllableSync,
         preferEmbeddedLocalLyrics,
         autoShowLyricsOnPlayback,
+        autoFetchLyricsOnYoutubePlayback,
     ) {
         player.song?.let {
             viewModel.loadLyrics(
@@ -1066,18 +1068,27 @@ private fun BitChordApp(
             remoteLibrarySongs = emptyList()
             return@LaunchedEffect
         }
-        val loaded = withContext(Dispatchers.IO) {
-            val serverSongs = SourceRegistry.remoteLibraryTracks()
-            val webdavSongs = try {
-                WebDavRepository.getSongs()
-            } catch (cancelled: CancellationException) {
-                throw cancelled
-            } catch (_: Exception) {
-                emptyList()
+        // A remote library can be temporarily empty while its first connection
+        // or credentials are still settling. Retry automatically so enabling
+        // this option never depends on the user pulling to refresh afterwards.
+        repeat(5) { attempt ->
+            val loaded = withContext(Dispatchers.IO) {
+                val serverSongs = SourceRegistry.remoteLibraryTracks()
+                val webdavSongs = try {
+                    WebDavRepository.getSongs()
+                } catch (cancelled: CancellationException) {
+                    throw cancelled
+                } catch (_: Exception) {
+                    emptyList()
+                }
+                (serverSongs + webdavSongs).distinctBy { it.videoId }
             }
-            (serverSongs + webdavSongs).distinctBy { it.videoId }
+            if (loaded.isNotEmpty()) {
+                remoteLibrarySongs = loaded
+                return@LaunchedEffect
+            }
+            if (attempt < 4) kotlinx.coroutines.delay(1_000L shl attempt)
         }
-        remoteLibrarySongs = loaded
     }
     val catalogSongs = remember(localSongs, remoteLibrarySongs, includeRemoteSourceMedia) {
         if (includeRemoteSourceMedia) (localSongs + remoteLibrarySongs).distinctBy { it.videoId }
@@ -1314,7 +1325,10 @@ private fun BitChordApp(
         scope.launch { writeLocalArtistRename(pending) }
     }
 
+    var pauseNextPlayRequest by remember { mutableStateOf(false) }
     val play: (List<Song>, Int) -> Unit = { songs, index ->
+        val shouldStartPlayback = !pauseNextPlayRequest
+        pauseNextPlayRequest = false
         playJob?.cancel()
         playRequestGeneration++
         activeRadioSeed = null
@@ -1358,7 +1372,7 @@ private fun BitChordApp(
                 val requestedIndex = index.coerceIn(songs.indices)
                 val startIndex = playable.indexOfFirst { (originalIndex, _) -> originalIndex >= requestedIndex }
                     .takeIf { it >= 0 } ?: 0
-                controller?.playSongs(playable.map { it.second }, startIndex)
+                controller?.playSongs(playable.map { it.second }, startIndex, shouldPlay = shouldStartPlayback)
                 // Nothing to raise where the player is already open beside the page.
                 openNowPlaying()
             } catch (cancelled: CancellationException) {
@@ -1368,6 +1382,10 @@ private fun BitChordApp(
                 Toast.makeText(context, R.string.couldnt_load_tracks, Toast.LENGTH_SHORT).show()
             }
         }
+    }
+    val playFromFolder: (List<Song>, Int) -> Unit = { songs, index ->
+        pauseNextPlayRequest = controller?.deviceVolume == 0
+        play(songs, index)
     }
     LaunchedEffect(player.song?.videoId) {
         if (activeRadioSeed?.first != player.song?.videoId) activeRadioSeed = null
@@ -3181,12 +3199,12 @@ private fun BitChordApp(
                                 songs = localSongs,
                                 currentSong = player.song,
                                 isPlaying = player.isPlaying,
-                                onSongClick = play,
+                                onSongClick = playFromFolder,
                                 onSongLongPress = openSongMenu,
                                 onSongSwipe = onSongSwipe,
                                 onShuffle = { songs ->
                                     QueueShuffle.enableForNextQueue()
-                                    play(songs, songs.indices.random())
+                                    playFromFolder(songs, songs.indices.random())
                                 },
                                 contentPadding = listPadding,
                                 customRootPath = localMusicFolderRoot.ifBlank { null },
@@ -3869,8 +3887,9 @@ private fun BitChordApp(
                             startHighestYoutubeOpusDownload(song)
                         }
                     } else null,
-                    onDeleteYoutubeDownload = if (menuFromPlayer && youtubeVideoId) {
+                    onDeleteYoutubeDownload = if (savedYoutubeDownload) {
                         {
+                            songActions = null
                             scope.launch {
                                 val deleted = Downloads.delete(context, song.videoId)
                                 Toast.makeText(

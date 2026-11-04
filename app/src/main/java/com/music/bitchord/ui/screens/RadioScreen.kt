@@ -85,6 +85,7 @@ import com.music.bitchord.data.settings.ThemeMode
 import com.music.bitchord.download.Downloads
 import com.music.bitchord.playback.beginRadioQueue
 import com.music.bitchord.playback.playSongs
+import com.music.bitchord.radio.OnsenPlaybackPositionStore
 import com.music.bitchord.radio.RadioPlaybackSession
 import com.music.bitchord.radio.data.OnsenRepository
 import com.music.bitchord.radio.data.RadioRepository
@@ -166,6 +167,16 @@ fun RadioScreen(
         ?.videoId?.takeIf { it.startsWith("radiko:") }?.removePrefix("radiko:")
     val currentOnsenEpisodeId = currentSong?.takeIf { it.isOnsenAudio }
         ?.videoId?.removePrefix("onsen:")
+
+    LaunchedEffect(controller, currentOnsenEpisodeId) {
+        val episodeId = currentOnsenEpisodeId ?: return@LaunchedEffect
+        val activeController = controller ?: return@LaunchedEffect
+        while (true) {
+            val position = activeController.currentPosition
+            if (position > 0L) OnsenPlaybackPositionStore.save(context, episodeId, position)
+            delay(1_000L)
+        }
+    }
 
     val exactAlarmLauncher = rememberLauncherForActivityResult(ActivityResultContracts.StartActivityForResult()) {
         val program = pendingAutoRecordProgram
@@ -401,7 +412,11 @@ fun RadioScreen(
                         isOnsenAudio = true,
                         radioStreamUrl = streamUrl,
                     )
-                    activeController.playSongs(listOf(song), 0)
+                    activeController.playSongs(
+                        listOf(song),
+                        0,
+                        startPositionMs = OnsenPlaybackPositionStore.get(context, episode.id),
+                    )
                 }.onFailure {
                     Toast.makeText(context, R.string.radio_onsen_play_failed, Toast.LENGTH_LONG).show()
                 }

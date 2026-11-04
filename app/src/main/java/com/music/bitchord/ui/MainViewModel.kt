@@ -344,7 +344,13 @@ class MainViewModel(app: Application) : AndroidViewModel(app) {
         )
         _lyricsVideoId.value = videoId
         val autoShowLyricsOnPlayback = AppSettings.autoShowLyricsOnPlayback.value
-        val sources = if (AppSettings.syncedLyrics.value || autoShowLyricsOnPlayback) {
+        val actualVideoId = song?.videoId ?: videoId
+        val isYoutubePlayback = actualVideoId.length == 11 &&
+            actualVideoId.all { it.isLetterOrDigit() || it == '_' || it == '-' } &&
+            song?.isLiveRadio != true && song?.isOnsenAudio != true && song?.isExternalPreview != true
+        val autoFetchAllowed = autoShowLyricsOnPlayback &&
+            (!isYoutubePlayback || AppSettings.autoFetchLyricsOnYoutubePlayback.value)
+        val sources = if (force || autoFetchAllowed) {
             AppSettings.lyricsSources.value
         } else {
             emptySet()

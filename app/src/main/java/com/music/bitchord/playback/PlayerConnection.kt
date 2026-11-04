@@ -687,7 +687,12 @@ fun mediaIdIn(uri: Uri): String? = if (uri.authority == "source") {
 
 const val FAST_START_QUEUE_BATCH_SIZE = 50
 
-fun MediaController.playSongs(songs: List<Song>, startIndex: Int) {
+fun MediaController.playSongs(
+    songs: List<Song>,
+    startIndex: Int,
+    startPositionMs: Long = 0L,
+    shouldPlay: Boolean = true,
+) {
     if (songs.isEmpty()) return
     val selectedIndex = startIndex.coerceIn(songs.indices)
     // A queue started while shuffle is on goes in shuffled rather than being
@@ -712,9 +717,10 @@ fun MediaController.playSongs(songs: List<Song>, startIndex: Int) {
     // Include the selected row even when a long history prefix precedes it.
     val initialCount = maxOf(FAST_START_QUEUE_BATCH_SIZE, queueStartIndex + 1)
     val initialBatch = queue.take(initialCount)
-    setMediaItems(initialBatch.map { it.toMediaItem() }, queueStartIndex, 0L)
+    if (!shouldPlay) pause()
+    setMediaItems(initialBatch.map { it.toMediaItem() }, queueStartIndex, startPositionMs.coerceAtLeast(0L))
     prepare()
-    play()
+    if (shouldPlay) play() else pause()
 
     // Background-convert remaining MediaItems and append asynchronously without blocking UI or Binder IPC
     if (queue.size > FAST_START_QUEUE_BATCH_SIZE) {

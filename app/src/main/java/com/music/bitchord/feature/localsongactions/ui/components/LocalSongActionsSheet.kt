@@ -238,6 +238,15 @@ fun LocalSongActionsSheet(
                             onTrailingAction = deleteDownload,
                         )
                     }
+                    if (onDownloadYoutubeOpus == null) {
+                        onDeleteYoutubeDownload?.takeIf { song.videoId in savedDownloads }?.let { delete ->
+                            LocalSongActionItem(
+                                icon = Icons.Rounded.Delete,
+                                label = stringResource(R.string.delete_download),
+                                onClick = delete,
+                            )
+                        }
+                    }
 
                     // 1. Go to Album
                     if (PlayerDetailsAction.ALBUM !in hiddenActions) {

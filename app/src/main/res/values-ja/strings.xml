@@ -306,6 +306,11 @@
     <string name="music_folder_root_auto">端末内のすべての音楽フォルダー</string>
     <string name="music_folder_root_unavailable">フォルダーの保存場所を解決できません。内部ストレージまたはSDカードのフォルダーを選択してください。</string>
     <string name="folder_no_tracks">このフォルダーに再生可能なローカル曲はありません</string>
+    <string name="folder_open_zip">ZIPを開く</string>
+    <string name="folder_zip_tracks">%1$s 内の曲</string>
+    <string name="folder_zip_no_tracks">このZIPに再生できる音源ファイルがありません。</string>
+    <string name="folder_zip_open_failed">ZIPファイルを読み込めませんでした。</string>
+    <string name="folder_zip_extract_failed">音源ファイルを取り出せませんでした。</string>
     <string name="folder_count">フォルダー %1$d 件</string>
     <string name="folder_subfolder_count">サブフォルダー %1$d 件</string>
     <string name="reverb">残響</string>
@@ -1457,6 +1462,11 @@
     <string name="auto_embed_lyrics_subtitle">オンライン歌詞を再生時にローカル音楽ファイルへ書き込みます</string>
     <string name="auto_show_lyrics_on_playback">歌詞を自動取得して表示</string>
     <string name="auto_show_lyrics_on_playback_subtitle">有効な歌詞ソースから再生中の曲の歌詞を取得し、見つかったら歌詞パネルを開きます。初期設定はオフです。</string>
+    <string name="auto_fetch_lyrics_on_youtube_playback">YouTube再生時に歌詞を自動取得</string>
+    <string name="auto_fetch_lyrics_on_youtube_playback_subtitle">全体の歌詞自動取得がオンのとき、YouTubeの曲も自動検索します。初期設定はオンです。</string>
+    <string name="lyrics_web_search_query">歌詞の検索クエリ</string>
+    <string name="lyrics_web_search_query_subtitle">{title} は曲名、{artist} はアーティスト名に置き換わります。例：{title} {artist} 歌詞 LRC</string>
+    <string name="lyrics_search_engine">既定の検索エンジンで検索</string>
     <string name="lyrics_extensions_enabled">歌詞拡張機能を有効にする</string>
     <string name="lyrics_extensions_enabled_subtitle">組み込み・ダウンロードした歌詞スクリプトを実行します。ネットワーク通信を行う場合があるため、信頼できる拡張機能だけ有効にしてください。</string>
     <string name="all_files_access">すべてのファイルへのアクセス</string>
@@ -1670,6 +1680,9 @@
     <string name="tablet_lyrics_beside_player">タブレットでプレイヤーを全画面表示</string>
     <string name="tablet_lyrics_beside_player_subtitle">横長画面ではプレイヤーを下部バーから全画面に広げ、左に再生操作、右に同期歌詞を表示します。上端を下へスワイプすると戻ります。</string>
     <string name="youtube_music_saved">YouTube Music</string>
+    <string name="library_youtube_downloads">YouTubeダウンロード</string>
+    <string name="youtube_downloads_empty">YouTubeからダウンロードした曲はありません。</string>
+    <string name="sort">並び替え</string>
     <string name="youtube_music_library_empty">YouTube Musicから保存したアルバムやプレイリストがここに表示されます。</string>
     <string name="remove_saved_youtube_collection">ライブラリから削除</string>
     <string name="add_youtube_collection_to_library">ライブラリに追加</string>

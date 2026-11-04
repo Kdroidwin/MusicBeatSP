@@ -1,5 +1,11 @@
 package com.music.bitchord.feature.localmusic.ui
 
+import android.content.Intent
+import android.net.Uri
+import android.provider.OpenableColumns
+import android.widget.Toast
+import androidx.activity.compose.rememberLauncherForActivityResult
+import androidx.activity.result.contract.ActivityResultContracts
 import androidx.activity.compose.BackHandler
 import androidx.compose.foundation.combinedClickable
 import androidx.compose.foundation.background
@@ -12,6 +18,7 @@ import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
@@ -30,9 +37,11 @@ import androidx.compose.material.icons.rounded.PlayArrow
 import androidx.compose.material.icons.rounded.PlaylistAdd
 import androidx.compose.material.icons.rounded.Shuffle
 import androidx.compose.material3.FilledTonalButton
+import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
@@ -48,6 +57,7 @@ import androidx.compose.runtime.snapshots.SnapshotStateList
 import androidx.compose.runtime.toMutableStateList
 import androidx.compose.runtime.SideEffect
 import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.saveable.listSaver
 import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.foundation.lazy.rememberLazyListState
@@ -55,6 +65,7 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.layout.ContentScale
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.res.pluralStringResource
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.font.FontWeight
@@ -69,8 +80,13 @@ import com.music.bitchord.data.model.artworkAt
 import com.music.bitchord.data.settings.AppSettings
 import com.music.bitchord.feature.localmusic.domain.FolderNode
 import com.music.bitchord.feature.localmusic.domain.FolderTreeBuilder
+import com.music.bitchord.feature.localmusic.data.ZipAudioArchive
+import com.music.bitchord.feature.localmusic.data.ZipAudioEntry
 import com.music.bitchord.feature.localsongactions.ui.components.LocalAddToPlaylistSheet
 import com.music.bitchord.ui.components.SongRow
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.launch
+import kotlinx.coroutines.withContext
 
 private val FolderPathStackSaver = listSaver<SnapshotStateList<String>, String>(
     save = { it.toList() },
@@ -112,6 +128,35 @@ fun FolderBrowserScreen(
     onNavigationChanged: ((Boolean, (() -> Unit)?) -> Unit)? = null,
     modifier: Modifier = Modifier,
 ) {
+    val context = LocalContext.current
+    val scope = rememberCoroutineScope()
+    var zipEntries by remember { mutableStateOf<List<ZipAudioEntry>?>(null) }
+    var zipArchiveUri by remember { mutableStateOf<Uri?>(null) }
+    var zipArchiveName by remember { mutableStateOf("") }
+    var isOpeningZipTrack by remember { mutableStateOf(false) }
+    val zipPicker = rememberLauncherForActivityResult(ActivityResultContracts.OpenDocument()) { uri: Uri? ->
+        if (uri != null) scope.launch {
+            runCatching { context.contentResolver.takePersistableUriPermission(uri, Intent.FLAG_GRANT_READ_URI_PERMISSION) }
+            val archiveName = withContext(Dispatchers.IO) {
+                context.contentResolver.query(uri, arrayOf(OpenableColumns.DISPLAY_NAME), null, null, null)?.use { cursor ->
+                    if (cursor.moveToFirst()) cursor.getString(0) else null
+                } ?: uri.lastPathSegment.orEmpty()
+            }
+            runCatching {
+                withContext(Dispatchers.IO) { ZipAudioArchive.listAudioEntries(context, uri, archiveName) }
+            }.onSuccess { entries ->
+                if (entries.isEmpty()) {
+                    Toast.makeText(context, R.string.folder_zip_no_tracks, Toast.LENGTH_SHORT).show()
+                } else {
+                    zipArchiveUri = uri
+                    zipArchiveName = archiveName
+                    zipEntries = entries
+                }
+            }.onFailure {
+                Toast.makeText(context, R.string.folder_zip_open_failed, Toast.LENGTH_LONG).show()
+            }
+        }
+    }
     val tree = remember(songs, customRootPath) { FolderTreeBuilder.build(songs, customRootPath) }
     val rootKey = customRootPath ?: tree.path
     val pathStack = rememberSaveable(rootKey, saver = FolderPathStackSaver) {
@@ -255,6 +300,9 @@ fun FolderBrowserScreen(
                 rootName = tree.name,
                 onPlay = { if (currentNode.allSongs.isNotEmpty()) onSongClick(currentNode.allSongs, 0) },
                 onShuffle = { if (currentNode.allSongs.isNotEmpty()) onShuffle(currentNode.allSongs) },
+                onOpenZip = {
+                    zipPicker.launch(arrayOf("application/zip", "application/x-zip-compressed", "application/octet-stream"))
+                },
                 modifier = Modifier.fillMaxWidth().padding(bottom = 4.dp),
             )
         }
@@ -321,6 +369,57 @@ fun FolderBrowserScreen(
             onDismissRequest = { addToPlaylistSongs = null },
         )
     }
+
+    zipEntries?.let { entries ->
+        AlertDialog(
+            onDismissRequest = { if (!isOpeningZipTrack) zipEntries = null },
+            title = { Text(stringResource(R.string.folder_zip_tracks, zipArchiveName)) },
+            text = {
+                LazyColumn(modifier = Modifier.heightIn(max = 440.dp)) {
+                    itemsIndexed(entries, key = { index, entry -> "$index:${entry.path}" }) { _, entry ->
+                        TextButton(
+                            modifier = Modifier.fillMaxWidth(),
+                            enabled = !isOpeningZipTrack,
+                            onClick = {
+                                val archiveUri = zipArchiveUri ?: return@TextButton
+                                scope.launch {
+                                    isOpeningZipTrack = true
+                                    val audio = runCatching {
+                                        withContext(Dispatchers.IO) {
+                                            ZipAudioArchive.extract(context, archiveUri, entry)
+                                        }
+                                    }.getOrNull()
+                                    isOpeningZipTrack = false
+                                    if (audio == null) {
+                                        Toast.makeText(context, R.string.folder_zip_extract_failed, Toast.LENGTH_LONG).show()
+                                    } else {
+                                        zipEntries = null
+                                        onSongClick(listOf(audio), 0)
+                                    }
+                                }
+                            },
+                        ) {
+                            Column(modifier = Modifier.fillMaxWidth()) {
+                                Text(entry.title, maxLines = 1, overflow = TextOverflow.Ellipsis)
+                                Text(
+                                    entry.path,
+                                    style = MaterialTheme.typography.bodySmall,
+                                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                                    maxLines = 1,
+                                    overflow = TextOverflow.Ellipsis,
+                                )
+                            }
+                        }
+                    }
+                }
+            },
+            confirmButton = {
+                TextButton(onClick = { zipEntries = null }, enabled = !isOpeningZipTrack) {
+                    Text(stringResource(R.string.close))
+                }
+            },
+        )
+    }
 }
 
 @Composable
@@ -329,6 +428,7 @@ private fun FolderHeader(
     rootName: String,
     onPlay: () -> Unit,
     onShuffle: () -> Unit,
+    onOpenZip: () -> Unit,
     modifier: Modifier = Modifier,
 ) {
     val trackCount = pluralStringResource(R.plurals.track_count_plural, node.totalSongCount, node.totalSongCount)
@@ -364,6 +464,11 @@ private fun FolderHeader(
                     Text(stringResource(R.string.play))
                 }
             }
+        }
+        OutlinedButton(onClick = onOpenZip, modifier = Modifier.padding(top = 8.dp)) {
+            Icon(Icons.Rounded.Folder, contentDescription = null, modifier = Modifier.size(18.dp))
+            Spacer(Modifier.width(6.dp))
+            Text(stringResource(R.string.folder_open_zip))
         }
     }
 }

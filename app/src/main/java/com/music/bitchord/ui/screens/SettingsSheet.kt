@@ -313,6 +313,7 @@ private fun libraryCategorySettingsSearchEntries(
             LibraryCategory.FAVORITES -> R.string.favorites
             LibraryCategory.PLAYLISTS -> R.string.playlists
             LibraryCategory.YOUTUBE_MUSIC -> R.string.youtube_music_saved
+            LibraryCategory.YOUTUBE_DOWNLOADS -> R.string.library_youtube_downloads
             LibraryCategory.MOST_PLAYED -> R.string.most_played
             LibraryCategory.RECENTLY_PLAYED -> R.string.recently_played
             LibraryCategory.REPLAY -> R.string.replay
@@ -793,6 +794,10 @@ fun SettingsScreen(
     val syncedLyrics by AppSettings.syncedLyrics.collectAsStateWithLifecycle()
     val autoEmbedLyrics by AppSettings.autoEmbedLyrics.collectAsStateWithLifecycle()
     val autoShowLyricsOnPlayback by AppSettings.autoShowLyricsOnPlayback.collectAsStateWithLifecycle()
+    val autoFetchLyricsOnYoutubePlayback by AppSettings.autoFetchLyricsOnYoutubePlayback.collectAsStateWithLifecycle()
+    val lyricsWebSearchQuery by AppSettings.lyricsWebSearchQuery.collectAsStateWithLifecycle()
+    var showLyricsWebSearchQueryDialog by remember { mutableStateOf(false) }
+    var lyricsWebSearchQueryDraft by remember(lyricsWebSearchQuery) { mutableStateOf(lyricsWebSearchQuery) }
     val lyricsExtensionsEnabled by AppSettings.lyricsExtensionsEnabled.collectAsStateWithLifecycle()
     val lyricsSources by AppSettings.lyricsSources.collectAsStateWithLifecycle()
     val lyricsSourceOrder by AppSettings.lyricsSourceOrder.collectAsStateWithLifecycle()
@@ -4603,6 +4608,32 @@ fun SettingsScreen(
             RowDivider()
             SettingsRow(
                 icon = Icons.AutoMirrored.Rounded.Notes,
+                title = stringResource(R.string.auto_fetch_lyrics_on_youtube_playback),
+                subtitle = stringResource(R.string.auto_fetch_lyrics_on_youtube_playback_subtitle),
+                trailing = {
+                    Switch(
+                        checked = autoFetchLyricsOnYoutubePlayback,
+                        onCheckedChange = AppSettings::setAutoFetchLyricsOnYoutubePlayback,
+                        colors = SwitchDefaults.colors(
+                            checkedTrackColor = MaterialTheme.colorScheme.primary,
+                            checkedBorderColor = MaterialTheme.colorScheme.primary,
+                        ),
+                    )
+                },
+                onClick = { AppSettings.setAutoFetchLyricsOnYoutubePlayback(!autoFetchLyricsOnYoutubePlayback) },
+            )
+            RowDivider()
+            SettingsRow(
+                icon = Icons.Rounded.Search,
+                title = stringResource(R.string.lyrics_web_search_query),
+                subtitle = stringResource(R.string.lyrics_web_search_query_subtitle),
+                value = lyricsWebSearchQuery,
+                trailing = { Chevron() },
+                onClick = { showLyricsWebSearchQueryDialog = true },
+            )
+            RowDivider()
+            SettingsRow(
+                icon = Icons.AutoMirrored.Rounded.Notes,
                 title = stringResource(R.string.player_lyrics_strip),
                 subtitle = stringResource(R.string.player_lyrics_strip_subtitle),
                 trailing = {
@@ -6437,6 +6468,36 @@ fun SettingsScreen(
         )
     }
 
+    if (showLyricsWebSearchQueryDialog) {
+        AlertDialog(
+            onDismissRequest = { showLyricsWebSearchQueryDialog = false },
+            title = { Text(stringResource(R.string.lyrics_web_search_query)) },
+            text = {
+                Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                    Text(stringResource(R.string.lyrics_web_search_query_subtitle))
+                    OutlinedTextField(
+                        value = lyricsWebSearchQueryDraft,
+                        onValueChange = { lyricsWebSearchQueryDraft = it },
+                        singleLine = true,
+                    )
+                }
+            },
+            confirmButton = {
+                TextButton(
+                    onClick = {
+                        AppSettings.setLyricsWebSearchQuery(lyricsWebSearchQueryDraft)
+                        showLyricsWebSearchQueryDialog = false
+                    },
+                ) { Text(stringResource(R.string.save)) }
+            },
+            dismissButton = {
+                TextButton(onClick = { showLyricsWebSearchQueryDialog = false }) {
+                    Text(stringResource(R.string.cancel))
+                }
+            },
+        )
+    }
+
 }
 
 @Composable
@@ -6574,6 +6635,7 @@ SettingsGroup(header = stringResource(R.string.local_music)) {
             LibraryCategory.FAVORITES -> R.string.favorites
             LibraryCategory.PLAYLISTS -> R.string.playlists
             LibraryCategory.YOUTUBE_MUSIC -> R.string.youtube_music_saved
+            LibraryCategory.YOUTUBE_DOWNLOADS -> R.string.library_youtube_downloads
             LibraryCategory.MOST_PLAYED -> R.string.most_played
             LibraryCategory.RECENTLY_PLAYED -> R.string.recently_played
             LibraryCategory.REPLAY -> R.string.replay
@@ -6584,6 +6646,7 @@ SettingsGroup(header = stringResource(R.string.local_music)) {
                 LibraryCategory.FAVORITES -> BitChordIcons.Heart
                 LibraryCategory.PLAYLISTS -> Icons.AutoMirrored.Rounded.QueueMusic
                 LibraryCategory.YOUTUBE_MUSIC -> Icons.Rounded.SmartDisplay
+                LibraryCategory.YOUTUBE_DOWNLOADS -> Icons.Rounded.FileDownload
                 LibraryCategory.MOST_PLAYED -> Icons.Rounded.BarChart
                 LibraryCategory.RECENTLY_PLAYED -> Icons.Rounded.History
                 LibraryCategory.REPLAY -> Icons.Rounded.BarChart

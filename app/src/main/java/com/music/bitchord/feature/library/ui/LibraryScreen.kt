@@ -91,7 +91,9 @@ import com.music.bitchord.data.model.sortedByAlbumTrackOrder
 import com.music.bitchord.data.settings.AppSettings
 import com.music.bitchord.data.settings.LibraryViewType
 import com.music.bitchord.data.settings.LibraryCategory
+import com.music.bitchord.data.settings.LibrarySort
 import com.music.bitchord.data.settings.SavedYoutubeCollection
+import com.music.bitchord.download.Downloads
 import com.music.bitchord.ui.theme.ArtworkPalette
 import com.music.bitchord.ui.theme.rememberArtworkPalette
 import com.music.bitchord.feature.library.ui.components.LibraryFilter
@@ -120,11 +122,15 @@ import com.music.bitchord.ui.components.SectionIndexer
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.withContext
+import java.util.Locale
 
 private data class PendingBulkArtworkWrite(
     val songs: List<Song>,
     val artwork: TagLibWriter.PreparedArtwork,
 )
+
+private fun String.isYoutubeVideoId(): Boolean = length == 11 &&
+    all { it.isLetterOrDigit() || it == '_' || it == '-' }
 
 @Composable
 private fun PlaylistSelectionToolbar(
@@ -253,6 +259,9 @@ fun LibraryScreen(
     val savedFavoriteSongs by LocalFavoritesStore.favoriteSongs.collectAsStateWithLifecycle()
     val smartPlaylistsEnabled by AppSettings.smartPlaylistsEnabled.collectAsStateWithLifecycle()
     val savedYoutubeCollections by AppSettings.savedYoutubeCollections.collectAsStateWithLifecycle()
+    val savedDownloadRecords by Downloads.saved.collectAsStateWithLifecycle()
+    val youtubeDownloadsSort by AppSettings.youtubeDownloadsSort.collectAsStateWithLifecycle()
+    val downloadedSongsViewType by AppSettings.downloadedSongsViewType.collectAsStateWithLifecycle()
     val libraryViewType by AppSettings.libraryPlaylistsViewType.collectAsStateWithLifecycle()
     val songsViewType by AppSettings.librarySongsViewType.collectAsStateWithLifecycle()
     val favoriteUsesStar by AppSettings.favoriteUsesStar.collectAsStateWithLifecycle()
@@ -273,12 +282,26 @@ fun LibraryScreen(
     }
     var recentlyPlayedSongs by remember { mutableStateOf<List<Song>>(emptyList()) }
     var mostPlayedSongs by remember { mutableStateOf<List<Song>>(emptyList()) }
+    var downloadedYoutubeSongs by remember { mutableStateOf<List<Song>>(emptyList()) }
     var historyRefresh by remember { mutableStateOf(0) }
     val playStatsSnapshot = remember(context, playStatsRevision, historyRefresh) {
         LocalPlayStatsStore.snapshot(context)
     }
     val choosePlaylistCover = rememberPlaylistCoverPicker { playlistId, uri ->
         LocalPlaylistStore.setPlaylistCover(playlistId, uri)
+    }
+
+    LaunchedEffect(savedDownloadRecords) {
+        downloadedYoutubeSongs = Downloads.getDownloadedSongs(context)
+            .filter { it.videoId.isYoutubeVideoId() }
+    }
+
+    val orderedYoutubeDownloads = remember(downloadedYoutubeSongs, youtubeDownloadsSort) {
+        when (youtubeDownloadsSort) {
+            LibrarySort.DEFAULT -> downloadedYoutubeSongs
+            LibrarySort.TITLE_ASC -> downloadedYoutubeSongs.sortedBy { it.title.lowercase(Locale.ROOT) }
+            LibrarySort.TITLE_DESC -> downloadedYoutubeSongs.sortedByDescending { it.title.lowercase(Locale.ROOT) }
+        }
     }
 
     LaunchedEffect(playlists, songs, playStatsSnapshot, favoriteIds) {
@@ -366,6 +389,7 @@ fun LibraryScreen(
             LibraryFilter.FAVORITES -> LibraryCategory.FAVORITES
             LibraryFilter.PLAYLISTS -> LibraryCategory.PLAYLISTS
             LibraryFilter.YOUTUBE_MUSIC -> LibraryCategory.YOUTUBE_MUSIC
+            LibraryFilter.YOUTUBE_DOWNLOADS -> LibraryCategory.YOUTUBE_DOWNLOADS
             LibraryFilter.MOST_PLAYED -> LibraryCategory.MOST_PLAYED
             LibraryFilter.RECENTLY_PLAYED -> LibraryCategory.RECENTLY_PLAYED
             LibraryFilter.REPLAY -> LibraryCategory.REPLAY
@@ -805,7 +829,7 @@ fun LibraryScreen(
         onDispose { collectionNavigationCallback.value?.invoke(false, null) }
     }
 
-    BackHandler(enabled = inDrillDown || inHistoryView || selectedFilter == LibraryFilter.YOUTUBE_MUSIC) {
+    BackHandler(enabled = inDrillDown || inHistoryView || selectedFilter == LibraryFilter.YOUTUBE_MUSIC || selectedFilter == LibraryFilter.YOUTUBE_DOWNLOADS) {
         if (inDrillDown) leaveDrillDown() else selectedFilter = LibraryFilter.ALL
     }
 
@@ -833,6 +857,7 @@ fun LibraryScreen(
                 LibraryFilter.RECENTLY_PLAYED -> "history:recent"
                 LibraryFilter.MOST_PLAYED -> "history:most"
                 LibraryFilter.YOUTUBE_MUSIC -> "library:youtube"
+                LibraryFilter.YOUTUBE_DOWNLOADS -> "library:youtube_downloads"
                 else -> "library_main"
             },
             transitionSpec = {
@@ -1073,6 +1098,63 @@ fun LibraryScreen(
                                 }
                             }
                         }
+                    }
+                }
+            } else if (key == "library:youtube_downloads") {
+                Column(
+                    modifier = Modifier
+                        .fillMaxSize()
+                        .padding(top = contentPadding.calculateTopPadding()),
+                ) {
+                    LibraryHeaderBar(
+                        selectedFilter = selectedFilter,
+                        onFilterSelect = selectLibraryFilter,
+                        viewType = downloadedSongsViewType,
+                        onToggleViewType = {
+                            val next = if (downloadedSongsViewType == LibraryViewType.GRID) LibraryViewType.LIST else LibraryViewType.GRID
+                            AppSettings.setDownloadedSongsViewType(next)
+                        },
+                        onCreatePlaylist = { showCreateDialog = true },
+                        smartPlaylistsEnabled = smartPlaylistsEnabled,
+                        onCreateSmartPlaylist = { showCreateSmartPlaylistDialog = true },
+                        visibleCategories = visibleLibraryCategories,
+                        categoryOrder = libraryCategoryOrder,
+                        youtubeDownloadsSort = youtubeDownloadsSort,
+                        onYoutubeDownloadsSort = AppSettings::setYoutubeDownloadsSort,
+                    )
+                    if (orderedYoutubeDownloads.isEmpty()) {
+                        Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
+                            Text(
+                                text = stringResource(R.string.youtube_downloads_empty),
+                                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                            )
+                        }
+                    } else {
+                        DrillDownSongList(
+                            label = stringResource(R.string.library_youtube_downloads),
+                            artworkUrl = null,
+                            songs = orderedYoutubeDownloads,
+                            fullScreenArtwork = false,
+                            isCollectionDetail = false,
+                            viewType = downloadedSongsViewType,
+                            onViewTypeToggle = {
+                                val next = if (downloadedSongsViewType == LibraryViewType.GRID) LibraryViewType.LIST else LibraryViewType.GRID
+                                AppSettings.setDownloadedSongsViewType(next)
+                            },
+                            currentSong = currentSong,
+                            isPlaying = isPlaying,
+                            onSongClick = onSongClick,
+                            onSongLongPress = onSongLongPress,
+                            onSongMore = onSongLongPress,
+                            onSongSwipe = onSongSwipe,
+                            onShuffle = onShuffle,
+                            showArtworkInList = true,
+                            showCollectionArtworkInList = true,
+                            onBack = { selectedFilter = LibraryFilter.ALL },
+                            contentPadding = PaddingValues(bottom = contentPadding.calculateBottomPadding()),
+                            songDropdownMenu = songDropdownMenu,
+                            modifier = Modifier.weight(1f),
+                        )
                     }
                 }
             } else if (key.startsWith("history:")) {

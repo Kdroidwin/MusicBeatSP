@@ -193,6 +193,20 @@ fun LyricsEditorScreen(
         viewModel.saveLyrics(song)
     }
 
+    fun searchLyricsOnWeb() {
+        val query = AppSettings.lyricsWebSearchQuery.value
+            .replace("{title}", song.title, ignoreCase = true)
+            .replace("{artist}", song.artist, ignoreCase = true)
+            .trim()
+        if (query.isBlank()) return
+        val webSearch = Intent(Intent.ACTION_WEB_SEARCH).apply {
+            putExtra(SearchManager.QUERY, query)
+        }
+        runCatching { context.startActivity(webSearch) }.onFailure {
+            Toast.makeText(context, R.string.lyrics_search_engine, Toast.LENGTH_SHORT).show()
+        }
+    }
+
     // Sync external currentText changes into TextFieldValue
     LaunchedEffect(currentText) {
         if (textFieldValue.text != currentText) {
@@ -284,21 +298,7 @@ fun LyricsEditorScreen(
                 )
             } else LyricsEditorBottomBar(
                 enabled = !isLoading && !isSaving,
-                onSearchClick = {
-                    val query = "${song.title} ${song.artist} lyrics".trim()
-                    runCatching {
-                        val intent = Intent(Intent.ACTION_WEB_SEARCH).apply {
-                            putExtra(SearchManager.QUERY, query)
-                        }
-                        context.startActivity(intent)
-                    }.onFailure {
-                        val fallback = Intent(
-                            Intent.ACTION_VIEW,
-                            Uri.parse("https://www.google.com/search?q=${Uri.encode(query)}")
-                        )
-                        context.startActivity(fallback)
-                    }
-                },
+                onSearchClick = ::searchLyricsOnWeb,
                 onDownloadClick = {
                     if (searchResults.isNotEmpty()) {
                         showSearchResultsDialog = true
@@ -353,6 +353,7 @@ fun LyricsEditorScreen(
                     timestampInput = "[00:00.0]"
                     showSetFirstTimestampDialog = true
                 },
+                onSearchEngineClick = ::searchLyricsOnWeb,
             )
         },
         containerColor = MaterialTheme.colorScheme.background,

@@ -17,6 +17,7 @@ import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.rounded.Add
+import androidx.compose.material.icons.rounded.Sort
 import androidx.compose.material3.FilterChip
 import androidx.compose.material3.FilterChipDefaults
 import androidx.compose.material3.DropdownMenu
@@ -39,6 +40,7 @@ import androidx.compose.ui.unit.dp
 import com.music.bitchord.R
 import com.music.bitchord.data.settings.LibraryViewType
 import com.music.bitchord.data.settings.LibraryCategory
+import com.music.bitchord.data.settings.LibrarySort
 import com.music.bitchord.ui.haptics.Haptic
 import com.music.bitchord.ui.haptics.rememberHaptics
 import com.music.bitchord.ui.icons.BitChordIcons
@@ -48,6 +50,7 @@ enum class LibraryFilter {
     FAVORITES,
     PLAYLISTS,
     YOUTUBE_MUSIC,
+    YOUTUBE_DOWNLOADS,
     RECENTLY_PLAYED,
     MOST_PLAYED,
     REPLAY,
@@ -57,6 +60,7 @@ private fun LibraryCategory.toLibraryFilter(): LibraryFilter = when (this) {
     LibraryCategory.FAVORITES -> LibraryFilter.FAVORITES
     LibraryCategory.PLAYLISTS -> LibraryFilter.PLAYLISTS
     LibraryCategory.YOUTUBE_MUSIC -> LibraryFilter.YOUTUBE_MUSIC
+    LibraryCategory.YOUTUBE_DOWNLOADS -> LibraryFilter.YOUTUBE_DOWNLOADS
     LibraryCategory.MOST_PLAYED -> LibraryFilter.MOST_PLAYED
     LibraryCategory.RECENTLY_PLAYED -> LibraryFilter.RECENTLY_PLAYED
     LibraryCategory.REPLAY -> LibraryFilter.REPLAY
@@ -76,10 +80,13 @@ fun LibraryHeaderBar(
     onCreateSmartPlaylist: (() -> Unit)? = null,
     visibleCategories: Set<LibraryCategory> = LibraryCategory.entries.toSet(),
     categoryOrder: List<LibraryCategory> = LibraryCategory.entries.toList(),
+    youtubeDownloadsSort: LibrarySort = LibrarySort.DEFAULT,
+    onYoutubeDownloadsSort: ((LibrarySort) -> Unit)? = null,
     modifier: Modifier = Modifier,
 ) {
     val haptics = rememberHaptics()
     var createMenuExpanded by remember { mutableStateOf(false) }
+    var downloadSortExpanded by remember { mutableStateOf(false) }
 
     Row(
         modifier = modifier
@@ -115,6 +122,7 @@ fun LibraryHeaderBar(
                     LibraryCategory.FAVORITES -> stringResource(R.string.favorites)
                     LibraryCategory.PLAYLISTS -> stringResource(R.string.playlists)
                     LibraryCategory.YOUTUBE_MUSIC -> stringResource(R.string.youtube_music_saved)
+                    LibraryCategory.YOUTUBE_DOWNLOADS -> stringResource(R.string.library_youtube_downloads)
                     LibraryCategory.MOST_PLAYED -> stringResource(R.string.most_played)
                     LibraryCategory.RECENTLY_PLAYED -> stringResource(R.string.recently_played)
                     LibraryCategory.REPLAY -> stringResource(R.string.replay)
@@ -141,6 +149,35 @@ fun LibraryHeaderBar(
             horizontalArrangement = Arrangement.spacedBy(4.dp),
             verticalAlignment = Alignment.CenterVertically,
         ) {
+            if (selectedFilter == LibraryFilter.YOUTUBE_DOWNLOADS && onYoutubeDownloadsSort != null) {
+                Box {
+                    IconButton(onClick = { downloadSortExpanded = true }) {
+                        Icon(
+                            imageVector = Icons.Rounded.Sort,
+                            contentDescription = stringResource(R.string.sort),
+                            tint = MaterialTheme.colorScheme.onSurfaceVariant,
+                        )
+                    }
+                    DropdownMenu(
+                        expanded = downloadSortExpanded,
+                        onDismissRequest = { downloadSortExpanded = false },
+                    ) {
+                        listOf(
+                            LibrarySort.DEFAULT to R.string.sort_default,
+                            LibrarySort.TITLE_ASC to R.string.sort_title_ascending,
+                            LibrarySort.TITLE_DESC to R.string.sort_title_descending,
+                        ).forEach { (sort, titleRes) ->
+                            DropdownMenuItem(
+                                text = { Text(stringResource(titleRes)) },
+                                onClick = {
+                                    onYoutubeDownloadsSort(sort)
+                                    downloadSortExpanded = false
+                                },
+                            )
+                        }
+                    }
+                }
+            }
             Box(
                 modifier = Modifier
                     .size(36.dp)

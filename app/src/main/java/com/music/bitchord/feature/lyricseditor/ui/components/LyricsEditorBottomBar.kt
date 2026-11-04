@@ -62,6 +62,7 @@ fun LyricsEditorBottomBar(
     onClearAllClick: (() -> Unit)? = null,
     onShiftTimestampsClick: (() -> Unit)? = null,
     onSetFirstTimestampClick: (() -> Unit)? = null,
+    onSearchEngineClick: (() -> Unit)? = null,
     modifier: Modifier = Modifier,
 ) {
     var menuExpanded by remember { mutableStateOf(false) }
@@ -239,6 +240,23 @@ fun LyricsEditorBottomBar(
                                 onClick = {
                                     menuExpanded = false
                                     onClearAllClick()
+                                },
+                            )
+                        }
+
+                        if (onSearchEngineClick != null) {
+                            DropdownMenuItem(
+                                text = { Text(stringResource(R.string.lyrics_search_engine)) },
+                                leadingIcon = {
+                                    Icon(
+                                        imageVector = Icons.Rounded.Search,
+                                        contentDescription = null,
+                                        modifier = Modifier.size(20.dp),
+                                    )
+                                },
+                                onClick = {
+                                    menuExpanded = false
+                                    onSearchEngineClick()
                                 },
                             )
                         }

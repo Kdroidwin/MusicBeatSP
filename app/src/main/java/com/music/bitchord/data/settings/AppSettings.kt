@@ -167,7 +167,7 @@ enum class TransportSideAction {
 enum class LocalLibraryTab { SONGS, ALBUMS, ARTISTS, FOLDERS, PLAYLISTS, ALBUM_ARTISTS }
 
 /** Filter destinations shown in the Library header, independent of the always-visible All destination. */
-enum class LibraryCategory { FAVORITES, PLAYLISTS, YOUTUBE_MUSIC, MOST_PLAYED, RECENTLY_PLAYED, REPLAY }
+enum class LibraryCategory { FAVORITES, PLAYLISTS, YOUTUBE_MUSIC, YOUTUBE_DOWNLOADS, MOST_PLAYED, RECENTLY_PLAYED, REPLAY }
 
 /**
  * What to keep when a track is saved to the device.
@@ -1022,6 +1022,10 @@ object AppSettings {
 
     /** Automatically opens the lyrics panel after lyrics for the current track have been found. */
     val autoShowLyricsOnPlayback = MutableStateFlow(false)
+    /** YouTube tracks may auto-fetch only while the master lyrics auto-fetch option is enabled. */
+    val autoFetchLyricsOnYoutubePlayback = MutableStateFlow(true)
+    /** Placeholders: {title}, {artist}. */
+    val lyricsWebSearchQuery = MutableStateFlow(DEFAULT_LYRICS_WEB_SEARCH_QUERY)
 
     /** Configurable repository URL for remote lyrics extensions (like SpotiFLAC). */
     val lyricsExtensionRepoUrl = MutableStateFlow(DEFAULT_LYRICS_EXTENSION_REPO_URL)
@@ -1108,6 +1112,7 @@ object AppSettings {
     val localDrillDownSongsViewType = MutableStateFlow(LibraryViewType.LIST)
     val downloadedDrillDownSongsViewType = MutableStateFlow(LibraryViewType.LIST)
     val librarySort = MutableStateFlow(LibrarySort.DEFAULT)
+    val youtubeDownloadsSort = MutableStateFlow(LibrarySort.DEFAULT)
 
     /**
      * Each album/playlist page's track-list order, keyed by browse id —
@@ -1712,6 +1717,9 @@ object AppSettings {
         showLyricsLogs.value = prefs.getBoolean(KEY_SHOW_LYRICS_LOGS, false)
         autoEmbedLyrics.value = prefs.getBoolean(KEY_AUTO_EMBED_LYRICS, true)
         autoShowLyricsOnPlayback.value = prefs.getBoolean(KEY_AUTO_SHOW_LYRICS_ON_PLAYBACK, false)
+        autoFetchLyricsOnYoutubePlayback.value = prefs.getBoolean(KEY_AUTO_FETCH_LYRICS_ON_YOUTUBE_PLAYBACK, true)
+        lyricsWebSearchQuery.value = prefs.getString(KEY_LYRICS_WEB_SEARCH_QUERY, null)
+            ?.takeIf(String::isNotBlank) ?: DEFAULT_LYRICS_WEB_SEARCH_QUERY
         lyricsExtensionRepoUrl.value = prefs.getString(KEY_LYRICS_EXTENSION_REPO_URL, DEFAULT_LYRICS_EXTENSION_REPO_URL)
             .orEmpty().ifBlank { DEFAULT_LYRICS_EXTENSION_REPO_URL }
         lyricsExtensionsEnabled.value = prefs.getBoolean(KEY_LYRICS_EXTENSIONS_ENABLED, false)
@@ -1789,6 +1797,9 @@ object AppSettings {
         localDrillDownSongsViewType.value = readLibraryViewType(KEY_LOCAL_DRILLDOWN_SONGS_VIEW_TYPE, LibraryViewType.LIST)
         downloadedDrillDownSongsViewType.value = readLibraryViewType(KEY_DOWNLOADED_DRILLDOWN_SONGS_VIEW_TYPE, LibraryViewType.LIST)
         librarySort.value = prefs.getString(KEY_LIBRARY_SORT, null)
+            ?.let { saved -> LibrarySort.entries.firstOrNull { it.name == saved } }
+            ?: LibrarySort.DEFAULT
+        youtubeDownloadsSort.value = prefs.getString(KEY_YOUTUBE_DOWNLOADS_SORT, null)
             ?.let { saved -> LibrarySort.entries.firstOrNull { it.name == saved } }
             ?: LibrarySort.DEFAULT
         detailSongSorts.value = readDetailSongSorts()
@@ -2729,10 +2740,19 @@ object AppSettings {
     }
 
     private fun readVisibleLibraryCategories(): Set<LibraryCategory> {
-        val stored = prefs.getStringSet(KEY_VISIBLE_LIBRARY_CATEGORIES, null)
-            ?.mapNotNull { name -> LibraryCategory.entries.firstOrNull { it.name == name } }
-            ?.toSet()
-        return stored ?: LibraryCategory.entries.filterNot { it == LibraryCategory.REPLAY }.toSet()
+        val storedNames = prefs.getStringSet(KEY_VISIBLE_LIBRARY_CATEGORIES, null)
+        if (storedNames == null) {
+            return LibraryCategory.entries.filterNot { it == LibraryCategory.REPLAY }.toSet()
+        }
+        val stored = storedNames
+            .mapNotNull { name -> LibraryCategory.entries.firstOrNull { it.name == name } }
+            .toSet()
+        if (LibraryCategory.YOUTUBE_DOWNLOADS.name !in storedNames) {
+            val migrated = stored + LibraryCategory.YOUTUBE_DOWNLOADS
+            prefs.edit().putStringSet(KEY_VISIBLE_LIBRARY_CATEGORIES, migrated.map { it.name }.toSet()).apply()
+            return migrated
+        }
+        return stored
     }
 
     private fun readLibraryCategoryOrder(): List<LibraryCategory> {
@@ -3359,6 +3379,17 @@ object AppSettings {
         prefs.edit().putBoolean(KEY_AUTO_SHOW_LYRICS_ON_PLAYBACK, value).apply()
     }
 
+    fun setAutoFetchLyricsOnYoutubePlayback(value: Boolean) {
+        autoFetchLyricsOnYoutubePlayback.value = value
+        prefs.edit().putBoolean(KEY_AUTO_FETCH_LYRICS_ON_YOUTUBE_PLAYBACK, value).apply()
+    }
+
+    fun setLyricsWebSearchQuery(value: String) {
+        val normalized = value.trim().ifBlank { DEFAULT_LYRICS_WEB_SEARCH_QUERY }
+        lyricsWebSearchQuery.value = normalized
+        prefs.edit().putString(KEY_LYRICS_WEB_SEARCH_QUERY, normalized).apply()
+    }
+
     fun setLyricsExtensionRepoUrl(value: String) {
         val normalized = value.trim()
         lyricsExtensionRepoUrl.value = normalized
@@ -3796,6 +3827,11 @@ object AppSettings {
     fun setLibrarySort(value: LibrarySort) {
         librarySort.value = value
         prefs.edit().putString(KEY_LIBRARY_SORT, value.name).apply()
+    }
+
+    fun setYoutubeDownloadsSort(value: LibrarySort) {
+        youtubeDownloadsSort.value = value
+        prefs.edit().putString(KEY_YOUTUBE_DOWNLOADS_SORT, value.name).apply()
     }
 
     fun setDetailSongSort(browseId: String, value: SongSort) {
@@ -4515,6 +4551,9 @@ object AppSettings {
     private const val KEY_SHOW_LYRICS_LOGS = "show_lyrics_logs"
     private const val KEY_AUTO_EMBED_LYRICS = "auto_embed_lyrics"
     private const val KEY_AUTO_SHOW_LYRICS_ON_PLAYBACK = "auto_show_lyrics_on_playback"
+    private const val KEY_AUTO_FETCH_LYRICS_ON_YOUTUBE_PLAYBACK = "auto_fetch_lyrics_on_youtube_playback"
+    private const val KEY_LYRICS_WEB_SEARCH_QUERY = "lyrics_web_search_query"
+    const val DEFAULT_LYRICS_WEB_SEARCH_QUERY = "{title} {artist} 歌詞"
     const val DEFAULT_LYRICS_EXTENSION_REPO_URL =
         "https://raw.githubusercontent.com/SamuelAdmand/MusicBeat-Lyrics-Extensions/main/registry.json"
     private const val KEY_LYRICS_EXTENSION_REPO_URL = "lyrics_extension_repo_url"
@@ -4555,6 +4594,7 @@ object AppSettings {
     private const val KEY_ONLINE_ALBUM_ARTIST_ARTWORK = "online_album_artist_artwork"
     private const val KEY_ARTIST_DEEZER_ARTWORK_ENABLED = "artist_deezer_artwork_enabled"
     private const val KEY_LIBRARY_SORT = "library_sort"
+    private const val KEY_YOUTUBE_DOWNLOADS_SORT = "youtube_downloads_sort"
     private const val KEY_DETAIL_SONG_SORTS = "detail_song_sorts"
     private const val KEY_LOCAL_MUSIC_VIEW_TYPE = "local_music_view_type"
     private const val KEY_LOCAL_SONGS_VIEW_TYPE = "local_songs_view_type"
