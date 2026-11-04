@@ -6,8 +6,6 @@ import android.os.Handler
 import android.os.Looper
 import android.os.SystemClock
 import android.webkit.CookieManager
-import android.webkit.WebResourceError
-import android.webkit.WebResourceRequest
 import android.webkit.WebSettings
 import android.webkit.WebView
 import android.webkit.WebViewClient
@@ -44,6 +42,16 @@ internal object KugeciWebViewFetcher {
 
     fun initialize(context: Context) {
         appContext = context.applicationContext
+    }
+
+    /** Shares the clearance cookie with OkHttp so later pages do not hit the challenge again. */
+    fun cookieFor(url: String): String? = runCatching {
+        CookieManager.getInstance().getCookie(url)
+    }.getOrNull()
+
+    /** Uses the same user agent that received the site's clearance cookie. */
+    fun userAgent(): String? = appContext?.let { context ->
+        runCatching { WebSettings.getDefaultUserAgent(context) }.getOrNull()
     }
 
     suspend fun fetchHtml(url: String): String? {
@@ -114,17 +122,13 @@ internal object KugeciWebViewFetcher {
                                 webViewClient = object : WebViewClient() {
                                     override fun onPageFinished(view: WebView, finishedUrl: String?) {
                                         if (!finished && !cancelled.get()) {
+                                            // Cloudflare's clearance cookie is
+                                            // persisted before the following
+                                            // search/detail request is issued.
+                                            runCatching { CookieManager.getInstance().flush() }
                                             handler.removeCallbacks(inspectRunnable)
                                             handler.postDelayed(inspectRunnable, 300L)
                                         }
-                                    }
-
-                                    override fun onReceivedError(
-                                        view: WebView,
-                                        request: WebResourceRequest,
-                                        error: WebResourceError,
-                                    ) {
-                                        if (request.isForMainFrame) finish(null)
                                     }
                                 }
                             }

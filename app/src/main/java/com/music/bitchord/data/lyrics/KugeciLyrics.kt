@@ -25,23 +25,41 @@ internal object KugeciLyrics {
 
     suspend fun lyrics(title: String, artist: String, durationMs: Long): List<LyricLine>? =
         withContext(Dispatchers.IO) {
-            runCatching {
+            try {
                 val cleanTitle = title.cleanQuery()
-                if (cleanTitle.isBlank()) return@runCatching null
-                val searchUrl = "$BASE/search".toHttpUrl().newBuilder()
-                    .addQueryParameter("q", cleanTitle)
-                    .build()
-                val search = get(searchUrl.toString())?.let(Jsoup::parse) ?: return@runCatching null
-                val pages = search.select("a[href]").mapNotNull { link ->
-                    val rawUrl = link.absUrl("href").ifBlank { link.attr("href") }
-                    val path = Uri.parse(rawUrl).path.orEmpty()
-                    if (!path.matches(Regex("""/song/[A-Za-z0-9_-]+/?"""))) return@mapNotNull null
-                    val pageUrl = if (rawUrl.startsWith("/")) BASE + rawUrl else rawUrl
-                    if (!Uri.parse(pageUrl).host.equals("www.kugeci.com", ignoreCase = true)) return@mapNotNull null
-                    pageUrl
-                }.distinct().take(6)
-                for (pageUrl in pages) {
-                    val page = get(pageUrl)?.let(Jsoup::parse) ?: continue
+                if (cleanTitle.isBlank()) return@withContext null
+
+                // Kugeci ranks title-only searches poorly on common song names.
+                // Search with the artist first, then retain the title-only
+                // fallback for sites where the singer spelling differs.
+                val queries = listOfNotNull(
+                    "$cleanTitle ${artist.cleanQuery()}".trim().takeIf { artist.isNotBlank() },
+                    cleanTitle,
+                ).distinct()
+                val pages = linkedSetOf<String>()
+                for (query in queries) {
+                    val searchUrl = "$BASE/search".toHttpUrl().newBuilder()
+                        .addQueryParameter("q", query)
+                        .build()
+                    val searchHtml = get(searchUrl.toString()) ?: continue
+                    val search = Jsoup.parse(searchHtml)
+                    search.select("a[href]").forEach { link ->
+                        val rawUrl = link.absUrl("href").ifBlank { link.attr("href") }
+                        val parsedUri = Uri.parse(rawUrl)
+                        if (!parsedUri.host.equals("www.kugeci.com", ignoreCase = true)) return@forEach
+                        if (!parsedUri.path.orEmpty().matches(Regex("""/song/[A-Za-z0-9_-]+/?"""))) return@forEach
+                        pages += parsedUri.buildUpon().clearQuery().fragment(null).build().toString()
+                    }
+                    if (pages.size >= 12) break
+                }
+                if (pages.isEmpty()) {
+                    LyricsLog.i("Kugeci", "Search returned no song pages for title/artist query")
+                    return@withContext null
+                }
+
+                for (pageUrl in pages.take(12)) {
+                    val pageHtml = get(pageUrl) ?: continue
+                    val page = Jsoup.parse(pageHtml)
                     val pageTitle = page.selectFirst("title")?.text().orEmpty()
                     val titleAndArtist = pageTitle.substringBefore(" - 酷歌词")
                     val songTitle = page.selectFirst("main h1, .container h1, h1")?.text().orEmpty()
@@ -51,22 +69,30 @@ internal object KugeciLyrics {
                         .ifBlank { titleAndArtist.substringBefore(" - ") }
                     if (!matchesTitle(songTitle, cleanTitle) || !matchesArtist(pageArtistText, artist)) continue
 
-                    // The page embeds its LRC and also links a download route.
-                    // Prefer the embedded copy so a separate challenge-protected
-                    // download request is only needed when the page omits it.
+                    // The site's actual detail pages embed the LRC in
+                    // #lyricsContainer (confirmed by the supplied HAR). A
+                    // download link is only a fallback for older page builds.
                     val downloadUrl = page.selectFirst("a.downloadlrc[href], a[href*='/download/lrc/']")
                         ?.let { it.absUrl("href").ifBlank { it.attr("href") } }
-                        ?.let { href -> if (href.startsWith("/")) BASE + href else href }
                         ?.takeIf { Uri.parse(it).host.equals("www.kugeci.com", ignoreCase = true) }
                     val pageLrc = page.selectFirst("#lyricsContainer")?.let(::preserveBreaks)
                         ?.takeIf { timedLine.findAll(it).count() >= 2 }
                     val downloadedLrc = if (pageLrc == null) downloadUrl?.let { get(it) } else null
                     val lrc = pageLrc ?: downloadedLrc?.takeIf { timedLine.findAll(it).count() >= 2 } ?: continue
                     val parsed = parseTimedLrc(lrc, title)
-                    if (parsed.isNotEmpty()) return@runCatching parsed
+                    if (parsed.isNotEmpty()) {
+                        LyricsLog.i("Kugeci", "Matched ${parsed.size} timed lines for '$songTitle'")
+                        return@withContext parsed
+                    }
                 }
+                LyricsLog.i("Kugeci", "No verified title/artist match among ${pages.size} song pages")
                 null
-            }.getOrNull()?.takeIf { it.isNotEmpty() }
+            } catch (error: kotlinx.coroutines.CancellationException) {
+                throw error
+            } catch (error: Exception) {
+                LyricsLog.w("Kugeci", "Lookup failed (${error.javaClass.simpleName})")
+                null
+            }
         }
 
     private fun preserveBreaks(element: Element): String = element.html()
@@ -92,13 +118,14 @@ internal object KugeciLyrics {
     }
 
     private suspend fun get(url: String): String? {
-        if (KugeciWebViewFetcher.isCoolingDown) return null
         val direct = withContext(Dispatchers.IO) {
             runCatching {
+                val cookie = KugeciWebViewFetcher.cookieFor(url)
                 val request = Request.Builder()
                     .url(url)
-                    .header("User-Agent", "MusicBeat/2.9")
+                    .header("User-Agent", KugeciWebViewFetcher.userAgent() ?: "Mozilla/5.0")
                     .header("Accept", "text/html, text/plain, */*")
+                    .apply { if (!cookie.isNullOrBlank()) header("Cookie", cookie) }
                     .build()
                 httpClient.newCall(request).execute().use { response ->
                     val body = Http.readBoundedUtf8(response.body, 2 * 1024 * 1024)
@@ -108,14 +135,33 @@ internal object KugeciLyrics {
         }
         val body = direct?.body
         if (direct?.code?.let { it in 200..299 } == true &&
-            !body.isNullOrBlank() && !KugeciWebViewFetcher.isCloudflareChallenge(body)
+            !body.isNullOrBlank() && isExpectedPage(url, body)
         ) {
             return body
         }
-        if (direct?.code == 403 || (!body.isNullOrBlank() && KugeciWebViewFetcher.isCloudflareChallenge(body))) {
-            LyricsLog.i("Kugeci", "Cloudflare JavaScript challenge detected; retrying in WebView")
+        if (direct?.code == 403 || direct?.code == null ||
+            (!body.isNullOrBlank() && !isExpectedPage(url, body))
+        ) {
+            LyricsLog.i("Kugeci", "Direct response was not a usable Kugeci page; retrying in WebView")
         }
-        return KugeciWebViewFetcher.fetchHtml(url)
+        return KugeciWebViewFetcher.fetchHtml(url)?.takeIf { isExpectedPage(url, it) }
+    }
+
+    private fun isExpectedPage(url: String, body: String): Boolean {
+        if (body.isBlank() || KugeciWebViewFetcher.isCloudflareChallenge(body)) return false
+        val path = Uri.parse(url).path.orEmpty()
+        return when {
+            path == "/search" -> {
+                val document = Jsoup.parse(body)
+                document.selectFirst("form[action*='/search']") != null
+            }
+            path.startsWith("/song/") -> {
+                val document = Jsoup.parse(body)
+                document.selectFirst("#lyricsContainer") != null && document.selectFirst("h1") != null
+            }
+            path.startsWith("/download/lrc/") -> timedLine.findAll(body).count() >= 2
+            else -> false
+        }
     }
 
     private data class DirectResponse(val code: Int, val body: String?)
