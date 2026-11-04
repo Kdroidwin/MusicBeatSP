@@ -19,6 +19,7 @@ import com.music.bitchord.playback.OriginalVersion
 import com.music.bitchord.playback.SavedQueueStore
 import com.music.bitchord.data.innertube.Innertube
 import com.music.bitchord.data.innertube.YoutubeStreamBootstrap
+import com.music.bitchord.data.lyrics.KugeciWebViewFetcher
 import com.music.bitchord.data.scrobbling.LastFM
 import com.music.bitchord.data.settings.AppSettings
 import com.music.bitchord.feature.artistimage.data.ArtistArtworkStore
@@ -46,6 +47,7 @@ class BitChordApplication : Application(), SingletonImageLoader.Factory {
         // Load network and playback preferences before asynchronous session
         // restoration can make a request.
         AppSettings.init(this)
+        KugeciWebViewFetcher.initialize(this)
         ArtistArtworkStore.init(this)
         // PlaybackService shares this process, so seeding the cookie here means
         // stream resolution is authenticated from the first play onwards.
