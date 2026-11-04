@@ -98,7 +98,7 @@ object AppleMusicAutoRename {
                     track = row.optInt("trackNumber", 0),
                 ))
             }
-        }.sortedWith(compareBy<AppleCatalogTrack> { it.disc }.thenBy { it.track })
+        }
         require(tracks.isNotEmpty()) { "Apple Musicにアルバムの曲が見つかりません。" }
         return AppleCatalogAlbum(albumTitle, albumArtist, tracks)
     }
@@ -249,7 +249,12 @@ object AppleMusicAutoRename {
                 .thenBy { it.number ?: Int.MAX_VALUE }
                 .thenComparator { left, right -> naturalCompare(left.path, right.path) },
         )
-        val orderedTracks = tracks.sortedWith(compareBy<AppleCatalogTrack> { it.disc }.thenBy { it.track })
+        // Keep the catalog's response order if it flattened all discs into
+        // disc 1. Sorting repeated track numbers in that case would interleave
+        // discs; when disc metadata is present, sort by the explicit numbers.
+        val orderedTracks = if (tracks.map(AppleCatalogTrack::disc).distinct().size > 1) {
+            tracks.sortedWith(compareBy<AppleCatalogTrack> { it.disc }.thenBy { it.track })
+        } else tracks
         val assigned = linkedMapOf<String, AppleCatalogTrack>()
         val issues = hashMapOf<String, String>().apply {
             orderedFiles.forEach { file ->
@@ -266,7 +271,6 @@ object AppleMusicAutoRename {
         val multipleFileDiscs = orderedFiles.mapNotNull(FileRow::disc).distinct().size > 1
         fun canMatch(file: FileRow) = issues[file.id] == null
         if (flattenedCatalog && multipleFileDiscs) {
-            val continuousTracks = orderedTracks.map(AppleCatalogTrack::track) == (1..orderedTracks.size).toList()
             val filesByDisc = orderedFiles.groupBy(FileRow::disc)
             val discSpans = filesByDisc.mapValues { (_, diskFiles) -> diskFiles.mapNotNull(FileRow::number).maxOrNull() ?: 0 }
             val numberedDiscs = discSpans.keys.filterNotNull().sorted()
@@ -276,7 +280,7 @@ object AppleMusicAutoRename {
                     val numbers = diskFiles.mapNotNull(FileRow::number)
                     numbers.isNotEmpty() && numbers.minOrNull() == 1 && numbers.distinct().size == numbers.size
                 } && discSpans.values.sum() == orderedTracks.size
-            if (continuousTracks && trackNumbersAreUnambiguous) {
+            if (trackNumbersAreUnambiguous) {
                 // Apple sometimes collapses a multi-disc album into one disc.
                 // The local prefixes still retain each disc's original track
                 // numbers. Use each disc's highest numbered track as its span
@@ -288,11 +292,11 @@ object AppleMusicAutoRename {
                     filesByDisc[disc].orEmpty().forEach fileLoop@{ file ->
                         if (!canMatch(file)) return@fileLoop
                         val trackIndex = discOffset + (file.number!! - 1)
-                        val track = orderedTracks.getOrNull(trackIndex)
+                        val catalogTrack = orderedTracks.getOrNull(trackIndex)
                         when {
-                            track == null -> issues[file.id] = "ディスク番号と曲番号がApple Musicの曲数を超えています"
-                            assigned.values.any { it.id == track.id } -> issues[file.id] = "同じApple Music曲が複数ファイルに一致しています"
-                            else -> assigned[file.id] = track
+                            catalogTrack == null -> issues[file.id] = "ディスク番号と曲番号がApple Musicの曲数を超えています"
+                            assigned.values.any { it.id == catalogTrack.id } -> issues[file.id] = "同じApple Music曲が複数ファイルに一致しています"
+                            else -> assigned[file.id] = catalogTrack.copy(disc = disc, track = file.number!!)
                         }
                     }
                     discOffset += span
