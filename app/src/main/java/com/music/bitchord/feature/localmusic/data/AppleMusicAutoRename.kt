@@ -38,6 +38,8 @@ data class AutoRenameRow(
     val prefix: String,
     val track: AppleCatalogTrack?,
     val newName: String?,
+    val sourceDiscNumber: Int? = null,
+    val sourceTrackNumber: Int? = null,
     val issue: String? = null,
     val conflict: String? = null,
     val selected: Boolean = track != null && conflict == null,
@@ -137,17 +139,15 @@ object AppleMusicAutoRename {
                 val extension = child.name.substringAfterLast('.', "").lowercase(Locale.ROOT)
                 if (extension !in audioExtensions && child.mime?.startsWith("audio/") != true) return@forEach
                 val prefix = leadingNumbers.find(child.name)?.value.orEmpty()
-                val number = numbers.find(prefix)
-                val first = number?.groupValues?.getOrNull(1)?.toIntOrNull()
-                val second = number?.groupValues?.getOrNull(2)?.takeIf(String::isNotEmpty)?.toIntOrNull()
+                val parsedNumber = parseFilenameNumber(child.name)
                 files += FileRow(
                     id = child.id,
                     parent = parentId,
                     path = (path + child.name).joinToString("/"),
                     name = child.name,
                     prefix = prefix,
-                    disc = inheritedDisc ?: if (second == null) null else first,
-                    number = second ?: first,
+                    disc = inheritedDisc ?: parsedNumber?.disc,
+                    number = parsedNumber?.number,
                     extension = child.name.substringAfterLast('.', "").let { ".$it" },
                     uri = DocumentsContract.buildDocumentUriUsingTree(treeUri, child.id),
                 )
@@ -174,23 +174,36 @@ object AppleMusicAutoRename {
                 ?: filePath?.substringBeforeLast('/', "")?.takeIf(String::isNotBlank)
                 ?: return@forEach
             val prefix = leadingNumbers.find(name)?.value.orEmpty()
-            val number = numbers.find(prefix)
-            val first = number?.groupValues?.getOrNull(1)?.toIntOrNull()
-            val second = number?.groupValues?.getOrNull(2)?.takeIf(String::isNotEmpty)?.toIntOrNull()
             val path = filePath ?: "$parent/$name"
             val parentNames = names.getOrPut(parent) { linkedSetOf() }
             parentNames += name
+            val filenameNumber = parseFilenameNumber(name)
+            val taggedNumber = parseMediaStoreTrackNumber(song.trackNumber)
+            val directoryDisc = discDirectory.find(parent)?.groupValues?.getOrNull(1)?.toIntOrNull()
+            val filenameDisc = filenameNumber?.disc
+            val explicitDisc = directoryDisc ?: filenameDisc
+            val numberIssue = when {
+                filenameNumber?.number != null && taggedNumber?.number != null && filenameNumber.number != taggedNumber.number ->
+                    "ファイル名と音源タグの曲番号が一致しません"
+                directoryDisc != null && filenameDisc != null && directoryDisc != filenameDisc ->
+                    "フォルダ名とファイル名のディスク番号が一致しません"
+                explicitDisc != null && taggedNumber?.disc != null && explicitDisc != taggedNumber.disc ->
+                    "ファイル名またはフォルダ名と音源タグのディスク番号が一致しません"
+                else -> null
+            }
+            val disc = explicitDisc ?: taggedNumber?.disc
+            val trackNumber = filenameNumber?.number ?: taggedNumber?.number
             files += FileRow(
                 id = uri.toString(),
                 parent = parent,
                 path = path,
                 name = name,
                 prefix = prefix,
-                disc = discDirectory.find(parent)?.groupValues?.getOrNull(1)?.toIntOrNull()
-                    ?: if (second == null) null else first,
-                number = second ?: first,
+                disc = disc,
+                number = trackNumber,
                 extension = name.substringAfterLast('.', "").let { ".$it" },
                 uri = uri,
+                issue = numberIssue,
             )
         }
         return buildPreview(Uri.EMPTY, files, names, tracks)
@@ -209,18 +222,23 @@ object AppleMusicAutoRename {
         )
         val orderedTracks = tracks.sortedWith(compareBy<AppleCatalogTrack> { it.disc }.thenBy { it.track })
         val assigned = linkedMapOf<String, AppleCatalogTrack>()
-        val issues = hashMapOf<String, String>()
+        val issues = hashMapOf<String, String>().apply {
+            orderedFiles.forEach { file -> file.issue?.let { put(file.id, it) } }
+        }
         val flattenedCatalog = orderedTracks.map(AppleCatalogTrack::disc).distinct().size == 1
         val multipleFileDiscs = orderedFiles.mapNotNull(FileRow::disc).distinct().size > 1
         if (flattenedCatalog && multipleFileDiscs) {
             val continuousTracks = orderedTracks.map(AppleCatalogTrack::track) == (1..orderedTracks.size).toList()
             val continuousFiles = orderedFiles.all { it.disc != null && it.number != null } &&
                 orderedFiles.groupBy(FileRow::disc).values.all { disk -> disk.mapNotNull(FileRow::number).sorted() == (1..disk.size).toList() }
-            if (orderedFiles.size == orderedTracks.size && continuousTracks && continuousFiles) {
+            if (orderedFiles.size == orderedTracks.size && continuousTracks && continuousFiles && orderedFiles.all { it.issue == null }) {
                 orderedFiles.zip(orderedTracks).forEach { (file, track) -> assigned[file.id] = track }
-            } else orderedFiles.forEach { issues[it.id] = "ディスクごとの曲数または連番が揃っていません" }
+            } else orderedFiles.forEach { file ->
+                if (file.issue == null) issues[file.id] = "ディスクごとの曲数または連番が揃っていません"
+            }
         } else {
             orderedFiles.forEach { file ->
+                if (file.issue != null) return@forEach
                 val number = file.number
                 if (number == null) {
                     issues[file.id] = "ファイル名から曲番号を読み取れません"
@@ -253,6 +271,8 @@ object AppleMusicAutoRename {
                 prefix = file.prefix,
                 track = track,
                 newName = name,
+                sourceDiscNumber = file.disc,
+                sourceTrackNumber = file.number,
                 issue = issues[file.id],
             )
         }
@@ -438,6 +458,37 @@ object AppleMusicAutoRename {
     private fun sanitize(value: String): String = value.replace(Regex("[/\\\\:*?\"<>|\\u0000-\\u001F]"), " ")
         .trim().trimEnd('.', ' ').ifEmpty { "untitled" }
 
+    private fun parseFilenameNumber(name: String): TrackNumber? {
+        val prefix = leadingNumbers.find(name)?.value ?: return null
+        val match = numbers.find(prefix) ?: return null
+        val first = match.groupValues.getOrNull(1)?.toIntOrNull() ?: return null
+        val second = match.groupValues.getOrNull(2)?.takeIf(String::isNotEmpty)?.toIntOrNull()
+        return if (second == null) TrackNumber(disc = null, number = first)
+        else TrackNumber(disc = first, number = second)
+    }
+
+    /** MediaStore encodes disc and track as 1xxx / 2xxx, or high16/low16 on old Android versions. */
+    private fun parseMediaStoreTrackNumber(rawValue: Int?): TrackNumber? {
+        val raw = rawValue?.takeIf { it > 0 }?.toLong() ?: return null
+        val disc: Int?
+        val number: Int
+        when {
+            raw >= 65_536L -> {
+                disc = (raw ushr 16).toInt()
+                number = (raw and 0xFFFFL).toInt()
+            }
+            raw >= 1_000L -> {
+                disc = (raw / 1_000L).toInt()
+                number = (raw % 1_000L).toInt()
+            }
+            else -> {
+                disc = null
+                number = raw.toInt()
+            }
+        }
+        return number.takeIf { it > 0 }?.let { TrackNumber(disc?.takeIf { value -> value > 0 }, it) }
+    }
+
     private fun naturalCompare(left: String, right: String): Int {
         val a = Regex("\\d+|\\D+").findAll(left.lowercase(Locale.ROOT)).map { it.value }.toList()
         val b = Regex("\\d+|\\D+").findAll(right.lowercase(Locale.ROOT)).map { it.value }.toList()
@@ -452,10 +503,12 @@ object AppleMusicAutoRename {
     }
 
     private data class Child(val id: String, val name: String, val mime: String?)
+    private data class TrackNumber(val disc: Int?, val number: Int)
     private data class FileRow(
         val id: String, val parent: String, val path: String, val name: String,
         val prefix: String, val disc: Int?, val number: Int?, val extension: String,
         val uri: Uri,
+        val issue: String? = null,
     )
 
     private data class UndoEntry(

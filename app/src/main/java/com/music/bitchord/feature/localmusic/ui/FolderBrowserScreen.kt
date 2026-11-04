@@ -515,7 +515,22 @@ fun FolderBrowserScreen(
                                         overflow = TextOverflow.Ellipsis,
                                     )
                                     Text(row.path, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant, maxLines = 1, overflow = TextOverflow.Ellipsis)
-                                    row.track?.let { Text("${it.title} · ${it.artist}", style = MaterialTheme.typography.bodySmall, maxLines = 1, overflow = TextOverflow.Ellipsis) }
+                                    row.track?.let { matched ->
+                                        val sourceNumber = row.sourceDiscNumber?.let { "$it-" }.orEmpty() + (row.sourceTrackNumber?.toString() ?: "?")
+                                        Text(
+                                            stringResource(
+                                                R.string.folder_auto_rename_match,
+                                                sourceNumber,
+                                                matched.disc,
+                                                matched.track,
+                                                matched.title,
+                                                matched.artist,
+                                            ),
+                                            style = MaterialTheme.typography.bodySmall,
+                                            maxLines = 2,
+                                            overflow = TextOverflow.Ellipsis,
+                                        )
+                                    }
                                     (row.issue ?: row.conflict)?.let { Text(it, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.error) }
                                 }
                             }
