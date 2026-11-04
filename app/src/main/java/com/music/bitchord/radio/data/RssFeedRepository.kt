@@ -50,6 +50,9 @@ object RssFeedRepository {
         val audioUrl = sequenceOf(
             enclosure?.attr("url"), atomEnclosure?.attr("href"), mediaContent?.attr("url"),
         ).filterNotNull().firstOrNull(::isHttpUrl) ?: return null
+        val audioMimeType = sequenceOf(
+            enclosure?.attr("type"), atomEnclosure?.attr("type"), mediaContent?.attr("type"),
+        ).filterNotNull().firstOrNull { it.startsWith("audio/", ignoreCase = true) }
         val title = item.directChildText("title")?.trim().orEmpty().ifBlank {
             item.directChildText("summary")?.trim().orEmpty()
         }.ifBlank { Uri.parse(audioUrl).lastPathSegment.orEmpty() }
@@ -77,6 +80,7 @@ object RssFeedRepository {
             audioUrl = audioUrl,
             imageUrl = image?.takeIf(::isHttpUrl),
             durationMs = durationMs,
+            audioMimeType = audioMimeType,
         )
     }
 

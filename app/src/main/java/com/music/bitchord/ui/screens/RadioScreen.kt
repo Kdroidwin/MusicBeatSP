@@ -113,6 +113,7 @@ fun RadioScreen(
     currentSong: Song?,
     isPlaying: Boolean,
     contentPadding: PaddingValues,
+    onDownloadRssEpisode: (Song) -> Unit,
 ) {
     val context = LocalContext.current
     val offlineMode by AppSettings.offlineMode.collectAsStateWithLifecycle()
@@ -615,6 +616,7 @@ fun RadioScreen(
             amoledBlack = amoledBlack,
             networkUnavailable = networkUnavailable,
             onChangeService = { showServicePicker = true },
+            onDownloadEpisode = onDownloadRssEpisode,
         )
     } else if (station == null) {
         val areaName = PrefectureData.prefecture(selectedAreaId)?.name.orEmpty()

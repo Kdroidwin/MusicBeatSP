@@ -1860,6 +1860,7 @@
     <string name="folder_auto_rename_loading">Loading album details and scanning audio files…</string>
     <string name="folder_auto_rename_failed">Could not prepare the rename preview</string>
     <string name="folder_auto_rename_preview">Rename preview</string>
+    <string name="rss_feed_name_hint">Podcast name</string>
     <string name="folder_auto_rename_preview_summary">%1$d files found · %2$d could not be matched</string>
     <string name="folder_auto_rename_unmatched">All files must match a unique track number before renaming. Check the numbering or album selection.</string>
     <string name="folder_auto_rename_apply">Update tags and names</string>
@@ -1867,3 +1868,12 @@
     <string name="folder_auto_rename_undo">Undo last update</string>
     <string name="folder_auto_rename_undone">%1$d files restored</string>
 </resources>
+    <string name="rss_shows_search">Search podcasts</string>
+    <string name="rss_show_empty">No podcasts match this search.</string>
+    <string name="rss_episode_count">%1$d episodes</string>
+    <string name="rss_back_to_shows">All podcasts</string>
+    <string name="rss_delete_feed_title">Remove %1$s?</string>
+    <string name="rss_delete_feed_message">This removes the RSS subscription and its episode list. Downloaded files are not deleted.</string>
+    <string name="rss_download_episode">Download episode</string>
+    <string name="rss_episode_downloaded">Downloaded</string>
+    <string name="rss_downloaded_episodes">Downloaded episodes</string>

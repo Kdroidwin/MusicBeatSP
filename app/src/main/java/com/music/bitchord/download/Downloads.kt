@@ -629,6 +629,7 @@ object Downloads {
                             albumName = meta.albumName,
                             localUri = meta.uri,
                             downloadFormat = meta.downloadFormat,
+                            isRssAudio = meta.videoId.startsWith("rss-"),
                         )
                     )
                 }
@@ -772,6 +773,25 @@ object Downloads {
         // matching is a manual playback action and must not silently change a
         // download or its filename.
         val track = song
+        if (track.isRssAudio) {
+            val streamUrl = track.radioStreamUrl?.takeIf(String::isNotBlank)
+                ?: error("This podcast episode has no downloadable audio URL")
+            val audioFormat = rssAudioFormat(track.radioAudioMimeType, streamUrl)
+            return@withContext Prepared(
+                song.videoId,
+                track,
+                route = Route(
+                    extension = audioFormat.extension,
+                    mimeType = audioFormat.mimeType,
+                    describe = "RSS podcast audio",
+                    taggable = false,
+                    write = { sink, onProgress ->
+                        Downloader.fetchDirect(streamUrl, emptyMap(), sink, onProgress)
+                    },
+                ),
+                alreadyAt = null,
+            )
+        }
         if (track.isOnsenAudio) {
             val streamUrl = track.radioStreamUrl?.takeIf(String::isNotBlank)
                 ?: error("This Onsen episode has no downloadable audio URL")
@@ -819,6 +839,39 @@ object Downloads {
         Log.d(TAG, "downloading ${song.videoId} as .${route.extension} (${route.describe}, ${quality.label})")
         Prepared(song.videoId, track, route = route, alreadyAt = null)
     }
+
+    private data class RssAudioFormat(val extension: String, val mimeType: String)
+
+    private fun rssAudioFormat(declaredMimeType: String?, url: String): RssAudioFormat {
+        val mimeType = declaredMimeType?.substringBefore(';')?.trim()?.lowercase(Locale.ROOT)
+        val urlExtension = Uri.parse(url).lastPathSegment
+            ?.substringAfterLast('.', "")
+            ?.lowercase(Locale.ROOT)
+        val extension = when {
+            urlExtension != null && urlExtension in RSS_AUDIO_MIME_TYPES -> urlExtension
+            mimeType in setOf("audio/mpeg", "audio/mp3") -> "mp3"
+            mimeType in setOf("audio/mp4", "audio/x-m4a", "audio/m4a") -> "m4a"
+            mimeType in setOf("audio/aac", "audio/x-aac", "audio/mp4a-latm") -> "aac"
+            mimeType in setOf("audio/ogg", "application/ogg") -> "ogg"
+            mimeType == "audio/opus" -> "opus"
+            mimeType in setOf("audio/flac", "audio/x-flac") -> "flac"
+            mimeType in setOf("audio/wav", "audio/x-wav", "audio/wave") -> "wav"
+            mimeType in setOf("audio/aiff", "audio/x-aiff") -> "aiff"
+            else -> error("This podcast audio format can't be downloaded yet")
+        }
+        return RssAudioFormat(extension, RSS_AUDIO_MIME_TYPES.getValue(extension))
+    }
+
+    private val RSS_AUDIO_MIME_TYPES = mapOf(
+        "mp3" to "audio/mpeg",
+        "m4a" to "audio/mp4",
+        "aac" to "audio/aac",
+        "ogg" to "audio/ogg",
+        "opus" to "audio/ogg",
+        "flac" to "audio/flac",
+        "wav" to "audio/x-wav",
+        "aiff" to "audio/aiff",
+    )
 
     /**
      * What [prepare] worked out, ready for a transfer to be run against it.

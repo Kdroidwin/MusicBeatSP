@@ -93,6 +93,8 @@ data class Song(
     val isOnsenAudio: Boolean = false,
     /** An RSS enclosure is a direct MP3/AAC/etc. URL, not HLS or a YouTube ID. */
     val isRssAudio: Boolean = false,
+    /** Enclosure MIME type, retained so RSS downloads keep the correct file extension. */
+    val radioAudioMimeType: String? = null,
 )
 
 /**

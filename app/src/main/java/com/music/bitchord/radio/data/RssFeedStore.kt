@@ -6,7 +6,12 @@ import org.json.JSONArray
 import org.json.JSONObject
 import java.util.UUID
 
-data class RssFeed(val id: String, val url: String, val title: String)
+data class RssFeed(
+    val id: String,
+    val url: String,
+    val title: String,
+    val customTitle: Boolean = false,
+)
 
 data class RssEpisode(
     val id: String,
@@ -18,6 +23,7 @@ data class RssEpisode(
     val audioUrl: String,
     val imageUrl: String?,
     val durationMs: Long?,
+    val audioMimeType: String? = null,
 )
 
 object RssFeedStore {
@@ -37,6 +43,7 @@ object RssFeedStore {
                         id = row.optString("id").takeIf(String::isNotBlank) ?: UUID.randomUUID().toString(),
                         url = url,
                         title = row.optString("title").takeIf(String::isNotBlank) ?: Uri.parse(url).host.orEmpty(),
+                        customTitle = row.optBoolean("customTitle", false),
                     ),
                 )
             }
@@ -44,12 +51,14 @@ object RssFeedStore {
     }.getOrDefault(emptyList())
 
     @Synchronized
-    fun add(context: Context, rawUrl: String): List<RssFeed> {
+    fun add(context: Context, rawUrl: String, rawTitle: String): List<RssFeed> {
         val url = rawUrl.trim()
+        val title = rawTitle.trim().take(120)
         require(isHttpUrl(url)) { "Enter a valid HTTP or HTTPS feed URL." }
+        require(title.isNotBlank()) { "Enter a name for this podcast." }
         val existing = feeds(context)
         require(existing.none { it.url.equals(url, ignoreCase = true) }) { "That feed has already been added." }
-        return (existing + RssFeed(UUID.randomUUID().toString(), url, Uri.parse(url).host.orEmpty())).also {
+        return (existing + RssFeed(UUID.randomUUID().toString(), url, title, customTitle = true)).also {
             write(context, it)
         }
     }
@@ -60,13 +69,19 @@ object RssFeedStore {
 
     @Synchronized
     fun updateTitle(context: Context, id: String, title: String): List<RssFeed> = feeds(context).map {
-        if (it.id == id && title.isNotBlank()) it.copy(title = title.trim().take(120)) else it
+        if (it.id == id && !it.customTitle && title.isNotBlank()) it.copy(title = title.trim().take(120)) else it
     }.also { write(context, it) }
 
     private fun write(context: Context, feeds: List<RssFeed>) {
         val rows = JSONArray().apply {
             feeds.forEach { feed ->
-                put(JSONObject().put("id", feed.id).put("url", feed.url).put("title", feed.title))
+                put(
+                    JSONObject()
+                        .put("id", feed.id)
+                        .put("url", feed.url)
+                        .put("title", feed.title)
+                        .put("customTitle", feed.customTitle),
+                )
             }
         }
         context.getSharedPreferences(PREFS, Context.MODE_PRIVATE).edit().putString(KEY_FEEDS, rows.toString()).apply()

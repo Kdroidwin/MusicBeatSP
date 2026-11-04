@@ -316,6 +316,7 @@ fun MediaItem.toSong() = Song(
     radioStreamUrl = mediaMetadata.extras?.getString(EXTRA_RADIO_STREAM_URL),
     isOnsenAudio = mediaMetadata.extras?.getBoolean(EXTRA_ONSEN_AUDIO) == true,
     isRssAudio = mediaMetadata.extras?.getBoolean(EXTRA_RSS_AUDIO) == true,
+    radioAudioMimeType = mediaMetadata.extras?.getString(EXTRA_RSS_AUDIO_MIME_TYPE),
 )
 
 /** @see Song.fromAutoplay */
@@ -363,6 +364,7 @@ private const val EXTRA_LIVE_RADIO = "bitchord.liveRadio"
 private const val EXTRA_RADIO_STREAM_URL = "bitchord.radioStreamUrl"
 private const val EXTRA_ONSEN_AUDIO = "bitchord.onsenAudio"
 private const val EXTRA_RSS_AUDIO = "bitchord.rssAudio"
+private const val EXTRA_RSS_AUDIO_MIME_TYPE = "bitchord.rssAudioMimeType"
 
 /**
  * How long the track runs, as the row that queued it said.
@@ -492,7 +494,9 @@ fun Song.toMediaItem(): MediaItem {
         localUri?.takeUnless(Downloads::isMissingLocalFile)
         ?: localPath?.takeIf { java.io.File(it).exists() }?.let { android.net.Uri.fromFile(java.io.File(it)).toString() }
         ?: Downloads.verifiedSavedUri(videoId)
-    val uriString = radioStreamUrl ?: remoteFileUri ?: offlineUri ?: when {
+    val uriString = if (isRssAudio) {
+        offlineUri ?: radioStreamUrl ?: remoteFileUri ?: "bitchord://unavailable?source=rss"
+    } else radioStreamUrl ?: remoteFileUri ?: offlineUri ?: when {
         WebDavConfig.isWebDavId(videoId) || SmbConfig.isSmbId(videoId) ->
             "bitchord://unavailable?source=remote-file"
         videoId.startsWith("content://") || videoId.startsWith("file://") -> videoId
@@ -579,7 +583,7 @@ fun Song.toMediaItem(): MediaItem {
             .apply {
                 if (fromAutoplay || offlineUri != null || durationText != null || isExternalPreview ||
                     artistId != null || albumId != null || setVideoId != null || isLiveRadio || isOnsenAudio || isRssAudio ||
-                    isExplicit != null || isVideo || isVideoOrigin || radioName != null ||
+                    radioAudioMimeType != null || isExplicit != null || isVideo || isVideoOrigin || radioName != null ||
                     thumbnailUrl != null
                 ) {
                     setExtras(
@@ -605,6 +609,7 @@ fun Song.toMediaItem(): MediaItem {
                             EXTRA_RADIO_STREAM_URL to radioStreamUrl,
                             EXTRA_ONSEN_AUDIO to isOnsenAudio,
                             EXTRA_RSS_AUDIO to isRssAudio,
+                            EXTRA_RSS_AUDIO_MIME_TYPE to radioAudioMimeType,
                         ),
                     )
                 }

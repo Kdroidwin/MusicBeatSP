@@ -3221,6 +3221,7 @@ private fun BitChordApp(
                             currentSong = player.song,
                             isPlaying = player.isPlaying,
                             contentPadding = listPadding,
+                            onDownloadRssEpisode = downloadSong,
                         )
                         else -> Box(modifier = Modifier.fillMaxSize())
                     }

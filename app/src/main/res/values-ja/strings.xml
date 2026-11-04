@@ -1833,6 +1833,7 @@
     <string name="folder_auto_rename_loading">アルバム情報と音源ファイルを読み込み中…</string>
     <string name="folder_auto_rename_failed">リネームのプレビューを準備できませんでした</string>
     <string name="folder_auto_rename_preview">リネームの確認</string>
+    <string name="rss_feed_name_hint">番組名</string>
     <string name="folder_auto_rename_preview_summary">ファイル %1$d 件 · 曲番号を照合できないファイル %2$d 件</string>
     <string name="folder_auto_rename_unmatched">安全にリネームするには、すべてのファイルを曲番号で一意に照合する必要があります。番号とアルバムを確認してください。</string>
     <string name="folder_auto_rename_apply">タグとファイル名を更新</string>
@@ -1840,3 +1841,12 @@
     <string name="folder_auto_rename_undo">直前の更新を元に戻す</string>
     <string name="folder_auto_rename_undone">%1$d 件を元に戻しました</string>
 </resources>
+    <string name="rss_shows_search">ポッドキャストを検索</string>
+    <string name="rss_show_empty">検索に一致するポッドキャストがありません。</string>
+    <string name="rss_episode_count">エピソード %1$d 件</string>
+    <string name="rss_back_to_shows">番組一覧</string>
+    <string name="rss_delete_feed_title">「%1$s」を削除しますか？</string>
+    <string name="rss_delete_feed_message">RSS登録と番組一覧を削除します。ダウンロード済みのファイルは削除されません。</string>
+    <string name="rss_download_episode">エピソードをダウンロード</string>
+    <string name="rss_episode_downloaded">ダウンロード済み</string>
+    <string name="rss_downloaded_episodes">ダウンロード済みエピソード</string>
