@@ -1561,6 +1561,7 @@
     <string name="lyrics_extensions_enabled">Enable lyrics extensions</string>
     <string name="lyrics_extensions_enabled_subtitle">Allows bundled and downloaded lyrics scripts to run. Extensions may access the network; enable only when you trust them.</string>
     <string name="all_files_access">All files access</string>
+    <string name="all_files_access_granted">Granted</string>
     <string name="original_developer">Original developer</string>
     <string name="details">Details</string>
     <string name="manage_queues">Manage queues</string>
@@ -1589,6 +1590,20 @@
     <string name="search_settings">Search settings</string>
     <string name="settings_search_results">Matching settings</string>
     <string name="settings_search_no_results">No matching settings</string>
+    <string name="settings_hierarchical_navigation">Group settings by category</string>
+    <string name="settings_hierarchical_navigation_subtitle">Browse settings through category pages</string>
+    <string name="settings_categories">Settings categories</string>
+    <string name="settings_all_categories">All categories</string>
+    <string name="settings_category_playback">Playback and sound</string>
+    <string name="settings_category_player">Player and controls</string>
+    <string name="settings_category_lyrics">Lyrics</string>
+    <string name="settings_category_library">Library and files</string>
+    <string name="settings_category_radio">Radio</string>
+    <string name="settings_category_appearance">Appearance</string>
+    <string name="settings_category_connections">Online services</string>
+    <string name="settings_category_system">App and system</string>
+    <string name="settings_category_other">Other</string>
+    <string name="settings_category_entry_count">%1$d settings</string>
     <string name="hide_lyrics_unavailable_label">Hide “No lyrics for this track” message</string>
     <string name="hide_lyrics_unavailable_label_subtitle">Hide no-lyrics messages in the player strip, lyrics header, and lyrics area</string>
     <string name="hide_lyrics_gap_note">Hide music note on lyric gaps</string>
@@ -1845,6 +1860,7 @@
     <string name="radio_service_rss">RSS</string>
     <string name="radio_recording_favorite_count">%1$d radio recording favorites</string>
     <string name="rss_feed_count">%1$d feeds</string>
+    <string name="rss_feed_name_hint">Podcast name</string>
     <string name="rss_feed_url_hint">RSS feed URL</string>
     <string name="rss_feed_add">Add</string>
     <string name="rss_feed_add_failed">Could not add this feed</string>
@@ -1853,21 +1869,6 @@
     <string name="rss_feed_empty">Add an RSS or Atom feed URL to listen to its episodes.</string>
     <string name="rss_feed_remove">Remove feed</string>
     <string name="rss_episode_empty">No episodes match this search.</string>
-    <string name="folder_auto_rename">Auto rename</string>
-    <string name="folder_auto_rename_instructions">Paste an Apple Music album URL, then choose the folder containing the audio files. Number prefixes and separators are kept; subfolders are scanned.</string>
-    <string name="folder_auto_rename_apple_url">Apple Music album URL</string>
-    <string name="folder_auto_rename_choose_folder">Choose folder</string>
-    <string name="folder_auto_rename_loading">Loading album details and scanning audio files…</string>
-    <string name="folder_auto_rename_failed">Could not prepare the rename preview</string>
-    <string name="folder_auto_rename_preview">Rename preview</string>
-    <string name="rss_feed_name_hint">Podcast name</string>
-    <string name="folder_auto_rename_preview_summary">%1$d files found · %2$d could not be matched</string>
-    <string name="folder_auto_rename_unmatched">All files must match a unique track number before renaming. Check the numbering or album selection.</string>
-    <string name="folder_auto_rename_apply">Update tags and names</string>
-    <string name="folder_auto_rename_result">%1$d files updated · %2$d failed</string>
-    <string name="folder_auto_rename_undo">Undo last update</string>
-    <string name="folder_auto_rename_undone">%1$d files restored</string>
-</resources>
     <string name="rss_shows_search">Search podcasts</string>
     <string name="rss_show_empty">No podcasts match this search.</string>
     <string name="rss_episode_count">%1$d episodes</string>
@@ -1877,3 +1878,17 @@
     <string name="rss_download_episode">Download episode</string>
     <string name="rss_episode_downloaded">Downloaded</string>
     <string name="rss_downloaded_episodes">Downloaded episodes</string>
+    <string name="folder_auto_rename">Auto rename</string>
+    <string name="folder_auto_rename_instructions">Paste an Apple Music album URL, then choose the folder containing the audio files. Number prefixes and separators are kept; subfolders are scanned.</string>
+    <string name="folder_auto_rename_apple_url">Apple Music album URL</string>
+    <string name="folder_auto_rename_choose_folder">Choose folder</string>
+    <string name="folder_auto_rename_loading">Loading album details and scanning audio files…</string>
+    <string name="folder_auto_rename_failed">Could not prepare the rename preview</string>
+    <string name="folder_auto_rename_preview">Rename preview</string>
+    <string name="folder_auto_rename_preview_summary">%1$d files found · %2$d could not be matched</string>
+    <string name="folder_auto_rename_unmatched">All files must match a unique track number before renaming. Check the numbering or album selection.</string>
+    <string name="folder_auto_rename_apply">Update tags and names</string>
+    <string name="folder_auto_rename_result">%1$d files updated · %2$d failed</string>
+    <string name="folder_auto_rename_undo">Undo last update</string>
+    <string name="folder_auto_rename_undone">%1$d files restored</string>
+</resources>

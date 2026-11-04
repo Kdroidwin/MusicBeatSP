@@ -1470,6 +1470,7 @@
     <string name="lyrics_extensions_enabled">歌詞拡張機能を有効にする</string>
     <string name="lyrics_extensions_enabled_subtitle">組み込み・ダウンロードした歌詞スクリプトを実行します。ネットワーク通信を行う場合があるため、信頼できる拡張機能だけ有効にしてください。</string>
     <string name="all_files_access">すべてのファイルへのアクセス</string>
+    <string name="all_files_access_granted">許可済み</string>
     <string name="original_developer">オリジナル開発者</string>
     <string name="details">詳細</string>
     <string name="manage_queues">再生キューを管理</string>
@@ -1498,6 +1499,20 @@
     <string name="search_settings">設定を検索</string>
     <string name="settings_search_results">該当する設定</string>
     <string name="settings_search_no_results">該当する設定はありません</string>
+    <string name="settings_hierarchical_navigation">設定を項目別の階層で表示</string>
+    <string name="settings_hierarchical_navigation_subtitle">カテゴリを選んでから設定項目を表示します</string>
+    <string name="settings_categories">設定カテゴリ</string>
+    <string name="settings_all_categories">すべてのカテゴリ</string>
+    <string name="settings_category_playback">再生と音質</string>
+    <string name="settings_category_player">プレイヤーと操作</string>
+    <string name="settings_category_lyrics">歌詞</string>
+    <string name="settings_category_library">ライブラリとファイル</string>
+    <string name="settings_category_radio">ラジオ</string>
+    <string name="settings_category_appearance">外観</string>
+    <string name="settings_category_connections">オンラインサービス</string>
+    <string name="settings_category_system">アプリとシステム</string>
+    <string name="settings_category_other">その他</string>
+    <string name="settings_category_entry_count">%1$d 件の設定</string>
     <string name="hide_lyrics_unavailable_label">「この曲の歌詞はありません」表示を隠す</string>
     <string name="hide_lyrics_unavailable_label_subtitle">プレーヤーの歌詞欄、歌詞画面のヘッダーと歌詞本文にある歌詞なしメッセージを隠します</string>
     <string name="hide_lyrics_gap_note">歌詞の空白行にある音符を隠す</string>
@@ -1818,6 +1833,7 @@
     <string name="radio_service_rss">RSS</string>
     <string name="radio_recording_favorite_count">ラジオ録音のお気に入り %1$d 件</string>
     <string name="rss_feed_count">フィード %1$d 件</string>
+    <string name="rss_feed_name_hint">番組名</string>
     <string name="rss_feed_url_hint">RSSフィードのURL</string>
     <string name="rss_feed_add">追加</string>
     <string name="rss_feed_add_failed">フィードを追加できませんでした</string>
@@ -1826,21 +1842,6 @@
     <string name="rss_feed_empty">RSSまたはAtomフィードのURLを追加すると、エピソードを再生できます。</string>
     <string name="rss_feed_remove">フィードを削除</string>
     <string name="rss_episode_empty">検索に一致するエピソードがありません。</string>
-    <string name="folder_auto_rename">自動リネーム</string>
-    <string name="folder_auto_rename_instructions">Apple MusicのアルバムURLを貼り付け、音源のフォルダを選択してください。先頭の曲番号と区切りは維持され、サブフォルダも検索します。</string>
-    <string name="folder_auto_rename_apple_url">Apple MusicのアルバムURL</string>
-    <string name="folder_auto_rename_choose_folder">フォルダを選択</string>
-    <string name="folder_auto_rename_loading">アルバム情報と音源ファイルを読み込み中…</string>
-    <string name="folder_auto_rename_failed">リネームのプレビューを準備できませんでした</string>
-    <string name="folder_auto_rename_preview">リネームの確認</string>
-    <string name="rss_feed_name_hint">番組名</string>
-    <string name="folder_auto_rename_preview_summary">ファイル %1$d 件 · 曲番号を照合できないファイル %2$d 件</string>
-    <string name="folder_auto_rename_unmatched">安全にリネームするには、すべてのファイルを曲番号で一意に照合する必要があります。番号とアルバムを確認してください。</string>
-    <string name="folder_auto_rename_apply">タグとファイル名を更新</string>
-    <string name="folder_auto_rename_result">更新 %1$d 件 · 失敗 %2$d 件</string>
-    <string name="folder_auto_rename_undo">直前の更新を元に戻す</string>
-    <string name="folder_auto_rename_undone">%1$d 件を元に戻しました</string>
-</resources>
     <string name="rss_shows_search">ポッドキャストを検索</string>
     <string name="rss_show_empty">検索に一致するポッドキャストがありません。</string>
     <string name="rss_episode_count">エピソード %1$d 件</string>
@@ -1850,3 +1851,17 @@
     <string name="rss_download_episode">エピソードをダウンロード</string>
     <string name="rss_episode_downloaded">ダウンロード済み</string>
     <string name="rss_downloaded_episodes">ダウンロード済みエピソード</string>
+    <string name="folder_auto_rename">自動リネーム</string>
+    <string name="folder_auto_rename_instructions">Apple MusicのアルバムURLを貼り付け、音源のフォルダを選択してください。先頭の曲番号と区切りは維持され、サブフォルダも検索します。</string>
+    <string name="folder_auto_rename_apple_url">Apple MusicのアルバムURL</string>
+    <string name="folder_auto_rename_choose_folder">フォルダを選択</string>
+    <string name="folder_auto_rename_loading">アルバム情報と音源ファイルを読み込み中…</string>
+    <string name="folder_auto_rename_failed">リネームのプレビューを準備できませんでした</string>
+    <string name="folder_auto_rename_preview">リネームの確認</string>
+    <string name="folder_auto_rename_preview_summary">ファイル %1$d 件 · 曲番号を照合できないファイル %2$d 件</string>
+    <string name="folder_auto_rename_unmatched">安全にリネームするには、すべてのファイルを曲番号で一意に照合する必要があります。番号とアルバムを確認してください。</string>
+    <string name="folder_auto_rename_apply">タグとファイル名を更新</string>
+    <string name="folder_auto_rename_result">更新 %1$d 件 · 失敗 %2$d 件</string>
+    <string name="folder_auto_rename_undo">直前の更新を元に戻す</string>
+    <string name="folder_auto_rename_undone">%1$d 件を元に戻しました</string>
+</resources>

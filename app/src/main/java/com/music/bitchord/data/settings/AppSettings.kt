@@ -321,6 +321,7 @@ enum class MainNavigationTab(val index: Int) {
     ALBUM_ARTISTS(5),
     FOLDERS(6),
     RADIO(7),
+    HOME(8),
 }
 
 enum class ScreenOrientationMode { SYSTEM, PORTRAIT, LANDSCAPE }
@@ -363,6 +364,9 @@ enum class PlayerDetailsAction {
 }
 
 object MainNavigationTabs {
+    /** Newly introduced destinations stay opt-in unless the user enables them. */
+    fun defaultVisibleTabs(): Set<MainNavigationTab> = MainNavigationTab.entries.toSet() - MainNavigationTab.HOME
+
     fun normalizeOrder(order: List<MainNavigationTab>): List<MainNavigationTab> =
         (order + MainNavigationTab.entries).distinct()
 
@@ -383,7 +387,7 @@ object MainNavigationTabs {
         tab: MainNavigationTab,
         visible: Boolean,
     ): Set<MainNavigationTab> {
-        val baseline = current.ifEmpty { MainNavigationTab.entries.toSet() }
+        val baseline = current.ifEmpty { defaultVisibleTabs() }
         if (visible) return baseline + tab
         if (baseline.size <= 1) return baseline
         return baseline - tab
@@ -394,7 +398,7 @@ object MainNavigationTabs {
         visible: Set<MainNavigationTab>,
         order: List<MainNavigationTab> = MainNavigationTab.entries,
     ): MainNavigationTab {
-        val available = visible.ifEmpty { MainNavigationTab.entries.toSet() }
+        val available = visible.ifEmpty { defaultVisibleTabs() }
         val ordered = normalizeOrder(order)
         val current = MainNavigationTab.entries.firstOrNull { it.index == selectedIndex }
         current?.takeIf { it in available }?.let { return it }
@@ -732,8 +736,11 @@ object AppSettings {
     /** Replaces the bottom navigation tabs with a single popup-menu button. */
     val mainNavigationTabsPopup = MutableStateFlow(false)
 
+    /** Replaces the long settings list with category → setting navigation. */
+    val settingsHierarchicalNavigation = MutableStateFlow(false)
+
     /** Main navigation destinations the user wants to keep in the bottom bar. */
-    val visibleMainNavigationTabs = MutableStateFlow(MainNavigationTab.entries.toSet())
+    val visibleMainNavigationTabs = MutableStateFlow(MainNavigationTabs.defaultVisibleTabs())
     val mainNavigationTabOrder = MutableStateFlow<List<MainNavigationTab>>(MainNavigationTab.entries)
     val startupTab = MutableStateFlow(MainNavigationTab.SONGS)
 
@@ -1547,6 +1554,7 @@ object AppSettings {
         reduceDynamicBlur.value = prefs.getBoolean(KEY_REDUCE_BLUR, false)
         liquidGlass.value = prefs.getBoolean(KEY_LIQUID_GLASS, false)
         classicNavBar.value = prefs.getBoolean(KEY_CLASSIC_NAV_BAR, false)
+        settingsHierarchicalNavigation.value = prefs.getBoolean(KEY_SETTINGS_HIERARCHICAL_NAVIGATION, false)
         hideNavigationBarLabels.value = prefs.getBoolean(KEY_HIDE_NAVIGATION_BAR_LABELS, false)
         mainNavigationTabsPopup.value = prefs.getBoolean(KEY_MAIN_NAVIGATION_TABS_POPUP, false)
         visibleLocalLibraryTabs.value = readVisibleLocalLibraryTabs()
@@ -2649,6 +2657,11 @@ object AppSettings {
         prefs.edit().putBoolean(KEY_CLASSIC_NAV_BAR, value).apply()
     }
 
+    fun setSettingsHierarchicalNavigation(value: Boolean) {
+        settingsHierarchicalNavigation.value = value
+        prefs.edit().putBoolean(KEY_SETTINGS_HIERARCHICAL_NAVIGATION, value).apply()
+    }
+
     fun setHideNavigationBarLabels(value: Boolean) {
         hideNavigationBarLabels.value = value
         prefs.edit().putBoolean(KEY_HIDE_NAVIGATION_BAR_LABELS, value).apply()
@@ -2912,10 +2925,10 @@ object AppSettings {
                 prefs.edit()
                     .putBoolean(KEY_MAIN_FOLDER_TAB_MIGRATED, true)
                     .putBoolean(KEY_RADIO_TAB_MIGRATED, true)
-                    .putStringSet(KEY_VISIBLE_MAIN_NAVIGATION_TABS, MainNavigationTab.entries.map { it.name }.toSet())
+                    .putStringSet(KEY_VISIBLE_MAIN_NAVIGATION_TABS, MainNavigationTabs.defaultVisibleTabs().map { it.name }.toSet())
                     .apply()
             }
-            return MainNavigationTab.entries.toSet()
+            return MainNavigationTabs.defaultVisibleTabs()
         }
         val migrated = saved.toMutableSet().apply {
             if (migrateFolders) add(MainNavigationTab.FOLDERS)
@@ -2928,7 +2941,7 @@ object AppSettings {
                 .putStringSet(KEY_VISIBLE_MAIN_NAVIGATION_TABS, migrated.map { it.name }.toSet())
                 .apply()
         }
-        return migrated.ifEmpty { MainNavigationTab.entries.toSet() }
+        return migrated.ifEmpty { MainNavigationTabs.defaultVisibleTabs() }
     }
 
     fun setHighPerformanceMode(value: Boolean) {
@@ -4450,6 +4463,7 @@ object AppSettings {
     private const val KEY_REDUCE_BLUR = "reduce_dynamic_blur"
     private const val KEY_LIQUID_GLASS = "liquid_glass"
     private const val KEY_CLASSIC_NAV_BAR = "classic_nav_bar"
+    private const val KEY_SETTINGS_HIERARCHICAL_NAVIGATION = "settings_hierarchical_navigation"
     private const val KEY_HIDE_NAVIGATION_BAR_LABELS = "hide_navigation_bar_labels"
     private const val KEY_MAIN_NAVIGATION_TABS_POPUP = "main_navigation_tabs_popup"
     private const val KEY_VISIBLE_MAIN_NAVIGATION_TABS = "visible_main_navigation_tabs"

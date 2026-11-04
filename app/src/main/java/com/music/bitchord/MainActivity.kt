@@ -80,6 +80,7 @@ import androidx.compose.material.icons.rounded.Check
 import androidx.compose.material.icons.rounded.Close
 import androidx.compose.material.icons.rounded.Fullscreen
 import androidx.compose.material.icons.rounded.History
+import androidx.compose.material.icons.rounded.Home
 import androidx.compose.material.icons.rounded.Edit
 import androidx.compose.material.icons.rounded.Person
 import androidx.compose.material.icons.rounded.Radio
@@ -125,6 +126,7 @@ import com.music.bitchord.ui.screens.LOCAL_TAB_ARTISTS
 import com.music.bitchord.ui.screens.LOCAL_TAB_FOLDERS
 import com.music.bitchord.ui.screens.LOCAL_TAB_PLAYLISTS
 import com.music.bitchord.ui.screens.RadioScreen
+import com.music.bitchord.ui.screens.HomeScreen
 import com.music.bitchord.feature.localsearch.ui.LocalSearchScreen
 import androidx.compose.material3.pulltorefresh.rememberPullToRefreshState
 import androidx.compose.material3.rememberModalBottomSheetState
@@ -628,19 +630,22 @@ private fun BitChordApp(
     }
     val visibleMainNavigationTabs by AppSettings.visibleMainNavigationTabs.collectAsStateWithLifecycle()
     val offlineMode by AppSettings.offlineMode.collectAsStateWithLifecycle()
+    val youtubeMusicEnabled by AppSettings.youtubeMusicEnabled.collectAsStateWithLifecycle()
     val radioAvailable = !offlineMode && !context.packageName.endsWith(".nointernet")
+    val homeAvailable = !offlineMode && youtubeMusicEnabled && !context.packageName.endsWith(".nointernet")
     val visibleLocalLibraryTabs by AppSettings.visibleLocalLibraryTabs.collectAsStateWithLifecycle()
     val localMusicFolderRoot by AppSettings.localMusicFolderUri.collectAsStateWithLifecycle()
     val rememberLastOpenedFolder by AppSettings.rememberLastOpenedFolder.collectAsStateWithLifecycle()
     val lastOpenedFolderPath by AppSettings.lastOpenedFolderPath.collectAsStateWithLifecycle()
     val mainNavigationTabOrder by AppSettings.mainNavigationTabOrder.collectAsStateWithLifecycle()
-    val effectiveVisibleMainTabs = remember(visibleMainNavigationTabs, visibleLocalLibraryTabs, radioAvailable) {
+    val effectiveVisibleMainTabs = remember(visibleMainNavigationTabs, visibleLocalLibraryTabs, radioAvailable, homeAvailable) {
         val tabs = if (com.music.bitchord.data.settings.LocalLibraryTab.ALBUM_ARTISTS in visibleLocalLibraryTabs) {
             visibleMainNavigationTabs + MainNavigationTab.ALBUM_ARTISTS
         } else {
             visibleMainNavigationTabs - MainNavigationTab.ALBUM_ARTISTS
         }
-        if (radioAvailable) tabs else tabs - MainNavigationTab.RADIO
+        val withRadio = if (radioAvailable) tabs else tabs - MainNavigationTab.RADIO
+        if (homeAvailable) withRadio else withRadio - MainNavigationTab.HOME
     }
     val visibleTabIndices = remember(effectiveVisibleMainTabs, mainNavigationTabOrder) {
         mainNavigationTabOrder
@@ -1151,6 +1156,17 @@ private fun BitChordApp(
     }
 
     val searchListState = rememberLazyListState()
+    val homeListState = rememberLazyListState()
+    val homePullState = rememberPullToRefreshState()
+    val homeState by viewModel.home.collectAsStateWithLifecycle()
+    val homeLoadingMore by viewModel.homeLoadingMore.collectAsStateWithLifecycle()
+    val refreshingFeeds by viewModel.refreshing.collectAsStateWithLifecycle()
+    LaunchedEffect(selectedTab, homeState, homeLoadingMore) {
+        if (selectedTab == TAB_HOME) {
+            viewModel.onHomeShown()
+            if (homeState is UiState.Loading && !homeLoadingMore) viewModel.loadHome()
+        }
+    }
     val currentListState = searchListState
     val refreshing = false
     val currentPull = null
@@ -1202,7 +1218,8 @@ private fun BitChordApp(
     val searchLabel = stringResource(R.string.search)
     val foldersLabel = stringResource(R.string.folders)
     val radioLabel = stringResource(R.string.radio)
-    val allTabs = remember(songsLabel, albumsLabel, artistsLabel, albumArtistsLabel, libraryLabel, searchLabel, foldersLabel, radioLabel) {
+    val homeLabel = stringResource(R.string.listen_now)
+    val allTabs = remember(songsLabel, albumsLabel, artistsLabel, albumArtistsLabel, libraryLabel, searchLabel, foldersLabel, radioLabel, homeLabel) {
         listOf(
             BottomTab(songsLabel, Icons.Rounded.MusicNote),
             BottomTab(albumsLabel, Icons.Rounded.Album),
@@ -1212,6 +1229,7 @@ private fun BitChordApp(
             BottomTab(albumArtistsLabel, Icons.Rounded.Person),
             BottomTab(foldersLabel, Icons.Rounded.Folder),
             BottomTab(radioLabel, Icons.Rounded.Radio),
+            BottomTab(homeLabel, Icons.Rounded.Home),
         )
     }
     val tabs = remember(allTabs, visibleTabIndices) {
@@ -3319,6 +3337,31 @@ private fun BitChordApp(
                             contentPadding = listPadding,
                             onDownloadRssEpisode = downloadSong,
                         )
+                        TAB_HOME -> HomeScreen(
+                            state = homeState,
+                            listState = homeListState,
+                            isRefreshing = MainViewModel.Feed.HOME in refreshingFeeds,
+                            onRefresh = { viewModel.refresh(MainViewModel.Feed.HOME) },
+                            pullState = homePullState,
+                            contentPadding = listPadding,
+                            onItemClick = { item, shelfTitle ->
+                                val song = shelfSong(item)
+                                val browseId = item.browseId
+                                when {
+                                    song != null -> playRadio(song)
+                                    browseId != null -> viewModel.openDetail(
+                                        browseId = browseId,
+                                        title = item.title,
+                                        subtitle = item.subtitle,
+                                        thumbnailUrl = item.thumbnailUrl,
+                                    )
+                                }
+                            },
+                            onItemLongPress = onShelfLongPress,
+                            onRetry = viewModel::loadHome,
+                            onLoadMore = viewModel::loadMoreHome,
+                            loadingMore = homeLoadingMore,
+                        )
                         else -> Box(modifier = Modifier.fillMaxSize())
                     }
                 }
@@ -5119,6 +5162,7 @@ private const val TAB_SEARCH = 4
 private const val TAB_ALBUM_ARTISTS = 5
 private const val TAB_FOLDERS = 6
 private const val TAB_RADIO = 7
+private const val TAB_HOME = 8
 
 
 

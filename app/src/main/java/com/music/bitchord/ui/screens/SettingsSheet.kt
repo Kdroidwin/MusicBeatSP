@@ -67,6 +67,7 @@ import androidx.compose.material.icons.rounded.Fullscreen
 import androidx.compose.material.icons.rounded.Gradient
 import androidx.compose.material.icons.rounded.GraphicEq
 import androidx.compose.material.icons.rounded.History
+import androidx.compose.material.icons.rounded.Home
 import androidx.compose.material.icons.rounded.Headphones
 import androidx.compose.material.icons.rounded.Info
 import androidx.compose.material.icons.rounded.Language
@@ -82,6 +83,7 @@ import androidx.compose.material.icons.rounded.Pause
 import androidx.compose.material.icons.rounded.PlayArrow
 import androidx.compose.material.icons.rounded.Radio
 import androidx.compose.material.icons.rounded.Search
+import androidx.compose.material.icons.rounded.Settings
 import androidx.compose.material.icons.rounded.SmartDisplay
 import androidx.compose.material.icons.rounded.Share
 import androidx.compose.material.icons.rounded.ScreenRotation
@@ -233,7 +235,167 @@ private data class SettingsSearchEntry(
     val onSliderValueChange: ((Float) -> Unit)? = null,
     val enabled: Boolean = true,
     val activate: () -> Unit,
+) {
+    val category: SettingsSearchCategory
+        get() = settingsSearchCategory("$title $subtitle ${keywords.joinToString(" ")}")
+}
+
+@Composable
+private fun supplementalSettingsSearchEntries(
+    hierarchicalNavigation: Boolean,
+    autoFetchYoutubeLyrics: Boolean,
+    lyricsWebSearchQuery: String,
+    removeNeteaseCredits: Boolean,
+    lyricsDebugLogs: Boolean,
+    bitPerfectMode: BitPerfectMode,
+    convertForLimitedDac: Boolean,
+    usbAllowFixedVolume: Boolean,
+    retroPlayerBackgroundLabel: String,
+    onEditLyricsSearchQuery: () -> Unit,
+    onOpenEqualizer: () -> Unit,
+    onOpenRetroPlayerBackground: () -> Unit,
+    onConfirmUsbFixedVolume: () -> Unit,
+): List<SettingsSearchEntry> = listOf(
+    SettingsSearchEntry(
+        title = stringResource(R.string.settings_hierarchical_navigation),
+        subtitle = stringResource(R.string.settings_hierarchical_navigation_subtitle),
+        keywords = listOf("settings", "categories", "hierarchy", "設定", "カテゴリ", "階層"),
+        checked = hierarchicalNavigation,
+    ) { AppSettings.setSettingsHierarchicalNavigation(!hierarchicalNavigation) },
+    SettingsSearchEntry(
+        title = stringResource(R.string.auto_fetch_lyrics_on_youtube_playback),
+        subtitle = stringResource(R.string.auto_fetch_lyrics_on_youtube_playback_subtitle),
+        keywords = listOf("lyrics", "youtube", "automatic", "歌詞", "YouTube", "自動取得", "自動検索"),
+        checked = autoFetchYoutubeLyrics,
+    ) { AppSettings.setAutoFetchLyricsOnYoutubePlayback(!autoFetchYoutubeLyrics) },
+    SettingsSearchEntry(
+        title = stringResource(R.string.lyrics_web_search_query),
+        subtitle = stringResource(R.string.lyrics_web_search_query_subtitle),
+        keywords = listOf("lyrics", "web", "search", "query", "browser", "歌詞", "検索", "クエリ", "ブラウザ"),
+        valueLabel = lyricsWebSearchQuery,
+        activate = onEditLyricsSearchQuery,
+    ),
+    SettingsSearchEntry(
+        title = stringResource(R.string.remove_netease_lyric_credits),
+        subtitle = stringResource(R.string.remove_netease_lyric_credits_subtitle),
+        keywords = listOf("lyrics", "netease", "credits", "composer", "歌詞", "NetEase", "作詞", "作曲", "編曲"),
+        checked = removeNeteaseCredits,
+    ) { AppSettings.setRemoveNeteaseLyricCredits(!removeNeteaseCredits) },
+    SettingsSearchEntry(
+        title = stringResource(R.string.lyrics_debug_logs),
+        subtitle = stringResource(R.string.lyrics_debug_logs_subtitle),
+        keywords = listOf("lyrics", "debug", "logs", "歌詞", "デバッグ", "ログ"),
+        checked = lyricsDebugLogs,
+    ) { AppSettings.setShowLyricsLogs(!lyricsDebugLogs) },
+    SettingsSearchEntry(
+        title = stringResource(R.string.equalizer),
+        subtitle = stringResource(R.string.equalizer_subtitle),
+        keywords = listOf("audio", "sound", "EQ", "equalizer", "イコライザー", "音質"),
+        activate = onOpenEqualizer,
+    ),
+    SettingsSearchEntry(
+        title = stringResource(R.string.convert_for_limited_dac),
+        subtitle = stringResource(R.string.convert_for_limited_dac_subtitle),
+        keywords = listOf("DAC", "USB", "bit perfect", "format conversion", "ビットパーフェクト", "変換"),
+        checked = convertForLimitedDac,
+        enabled = bitPerfectMode != BitPerfectMode.OFF,
+        activate = {
+            if (bitPerfectMode != BitPerfectMode.OFF) {
+                AppSettings.setConvertForLimitedDac(!convertForLimitedDac)
+            }
+        },
+    ),
+    SettingsSearchEntry(
+        title = stringResource(R.string.usb_allow_fixed_volume),
+        subtitle = stringResource(R.string.usb_allow_fixed_volume_subtitle),
+        keywords = listOf("USB DAC", "fixed volume", "volume", "USB DAC", "固定音量", "音量"),
+        checked = usbAllowFixedVolume,
+        enabled = bitPerfectMode == BitPerfectMode.USB_DIRECT,
+        activate = {
+            if (bitPerfectMode == BitPerfectMode.USB_DIRECT) {
+                if (usbAllowFixedVolume) AppSettings.setUsbAllowFixedVolume(false)
+                else onConfirmUsbFixedVolume()
+            }
+        },
+    ),
+    SettingsSearchEntry(
+        title = stringResource(R.string.retro_player_background),
+        subtitle = retroPlayerBackgroundLabel,
+        keywords = listOf("retro", "player", "background", "black", "artwork", "レトロ", "背景", "黒", "アルバムアート"),
+        valueLabel = retroPlayerBackgroundLabel,
+        activate = onOpenRetroPlayerBackground,
+    ),
 )
+
+private enum class SettingsSearchCategory(val titleRes: Int) {
+    PLAYBACK(R.string.settings_category_playback),
+    PLAYER(R.string.settings_category_player),
+    LYRICS(R.string.settings_category_lyrics),
+    LIBRARY(R.string.settings_category_library),
+    RADIO(R.string.settings_category_radio),
+    APPEARANCE(R.string.settings_category_appearance),
+    CONNECTIONS(R.string.settings_category_connections),
+    SYSTEM(R.string.settings_category_system),
+    OTHER(R.string.settings_category_other),
+}
+
+private fun settingsSearchCategory(text: String): SettingsSearchCategory {
+    val value = text.lowercase(Locale.ROOT)
+    return when {
+        listOf("lyrics", "歌詞", "lrc", "歌詞ソース").any(value::contains) -> SettingsSearchCategory.LYRICS
+        listOf("radio", "radiko", "onsen", "音泉", "ラジオ", "録音").any(value::contains) -> SettingsSearchCategory.RADIO
+        listOf("appearance", "theme", "color", "colour", "font", "artwork", "blur", "icon", "animation", "外観", "テーマ", "色", "フォント", "アートワーク", "ぼかし", "アイコン").any(value::contains) -> SettingsSearchCategory.APPEARANCE
+        listOf("library", "folder", "playlist", "album", "artist", "collection", "download", "history", "replay", "tab", "local", "ライブラリ", "フォルダ", "プレイリスト", "アルバム", "アーティスト", "コレクション", "ダウンロード", "履歴", "再生まとめ", "タブ", "ローカル").any(value::contains) -> SettingsSearchCategory.LIBRARY
+        listOf("server", "youtube", "spotify", "canvas", "deezer", "source", "online", "network", "webdav", "smb", "last.fm", "listenbrainz", "discord", "signature", "サーバー", "音源", "ソース", "オンライン", "通信", "署名").any(value::contains) -> SettingsSearchCategory.CONNECTIONS
+        listOf("playback", "audio", "sound", "volume", "quality", "equalizer", "dac", "crossfade", "reverb", "spatial", "seek", "speed", "pitch", "再生", "音質", "音量", "イコライザー", "音声", "速度", "ピッチ", "シーク").any(value::contains) -> SettingsSearchCategory.PLAYBACK
+        listOf("player", "queue", "timer", "control", "chromecast", "favorite", "media", "プレイヤー", "キュー", "タイマー", "操作", "お気に入り", "キャスト").any(value::contains) -> SettingsSearchCategory.PLAYER
+        listOf("status bar", "navigation bar", "system", "backup", "import", "export", "storage", "language", "performance", "screen", "settings", "app", "ステータスバー", "ナビゲーションバー", "バックアップ", "インポート", "エクスポート", "ストレージ", "言語", "パフォーマンス", "画面", "設定", "アプリ").any(value::contains) -> SettingsSearchCategory.SYSTEM
+        else -> SettingsSearchCategory.OTHER
+    }
+}
+
+@Composable
+private fun SettingsSearchEntryRows(entries: List<SettingsSearchEntry>) {
+    entries.forEachIndexed { index, entry ->
+        if (index > 0) RowDivider()
+        SettingsRow(
+            icon = Icons.Rounded.Tune,
+            title = entry.title,
+            subtitle = entry.subtitle,
+            trailing = entry.checked?.let { checked ->
+                {
+                    Switch(
+                        checked = checked,
+                        enabled = entry.enabled,
+                        onCheckedChange = { entry.activate() },
+                        colors = SwitchDefaults.colors(
+                            checkedTrackColor = MaterialTheme.colorScheme.primary,
+                            checkedBorderColor = MaterialTheme.colorScheme.primary,
+                        ),
+                    )
+                }
+            } ?: entry.valueLabel?.let { value ->
+                {
+                    Text(value, color = MaterialTheme.colorScheme.primary, style = MaterialTheme.typography.labelLarge)
+                }
+            },
+            onClick = if (entry.sliderValue == null) entry.activate else null,
+            enabled = entry.enabled,
+        )
+        val sliderValue = entry.sliderValue
+        val onSliderValueChange = entry.onSliderValueChange
+        if (sliderValue != null && onSliderValueChange != null) {
+            Slider(
+                value = sliderValue,
+                onValueChange = onSliderValueChange,
+                steps = entry.sliderSteps,
+                valueRange = entry.sliderValueRange,
+                enabled = entry.enabled,
+                modifier = Modifier.padding(start = ROW_INSET, end = ROW_INSET, bottom = 14.dp),
+            )
+        }
+    }
+}
 
 private fun resetDeezerArtistArtwork(context: Context) {
     AppSettings.setArtistDeezerArtworkEnabled(false)
@@ -668,6 +830,7 @@ fun SettingsScreen(
     val reduceDynamicBlur by AppSettings.reduceDynamicBlur.collectAsStateWithLifecycle()
     val liquidGlass by AppSettings.liquidGlass.collectAsStateWithLifecycle()
     val classicNavBar by AppSettings.classicNavBar.collectAsStateWithLifecycle()
+    val settingsHierarchicalNavigation by AppSettings.settingsHierarchicalNavigation.collectAsStateWithLifecycle()
     val mainNavigationTabsPopup by AppSettings.mainNavigationTabsPopup.collectAsStateWithLifecycle()
     val settingsTopBarUsesMoreIcon by AppSettings.settingsTopBarUsesMoreIcon.collectAsStateWithLifecycle()
     val hideNavBarLabels by AppSettings.hideNavigationBarLabels.collectAsStateWithLifecycle()
@@ -905,6 +1068,7 @@ fun SettingsScreen(
         currentDisplay.resolvePerformanceRefreshRate(performanceRefreshRate)
     }
     var settingsSearchQuery by rememberSaveable { mutableStateOf("") }
+    var selectedSettingsCategory by rememberSaveable { mutableStateOf<String?>(null) }
     var showArtistSignatureEditor by rememberSaveable { mutableStateOf(false) }
     var showSpotifyCanvasEditor by rememberSaveable { mutableStateOf(false) }
     var showLauncherIconPicker by rememberSaveable { mutableStateOf(false) }
@@ -1763,6 +1927,7 @@ fun SettingsScreen(
             MainNavigationTab.ALBUM_ARTISTS -> R.string.album_artists
             MainNavigationTab.FOLDERS -> R.string.folders
             MainNavigationTab.RADIO -> R.string.radio
+            MainNavigationTab.HOME -> R.string.listen_now
         })
         SettingsSearchEntry(
             title = stringResource(R.string.show_tab_setting, tabTitle),
@@ -1885,6 +2050,25 @@ fun SettingsScreen(
         )
     }
     val settingsSearchEntries = buildSettingsSearchEntries() +
+        supplementalSettingsSearchEntries(
+            hierarchicalNavigation = settingsHierarchicalNavigation,
+            autoFetchYoutubeLyrics = autoFetchLyricsOnYoutubePlayback,
+            lyricsWebSearchQuery = lyricsWebSearchQuery,
+            removeNeteaseCredits = removeNeteaseLyricCredits,
+            lyricsDebugLogs = showLyricsLogs,
+            bitPerfectMode = bitPerfectMode,
+            convertForLimitedDac = convertForLimitedDac,
+            usbAllowFixedVolume = usbAllowFixedVolume,
+            retroPlayerBackgroundLabel = stringResource(
+                if (retroPlayerBackground == RetroPlayerBackground.BLACK) {
+                    R.string.retro_player_background_black
+                } else R.string.retro_player_background_artwork,
+            ),
+            onEditLyricsSearchQuery = { showLyricsWebSearchQueryDialog = true },
+            onOpenEqualizer = { showEqualizerSheet = true },
+            onOpenRetroPlayerBackground = { showRetroPlayerBackgroundPicker = true },
+            onConfirmUsbFixedVolume = { showFixedVolumeConfirmation = true },
+        ) +
         additionalArtworkSettingsSearchEntries(
             playerPopupsUseArtworkColor = playerPopupsUseArtworkColor,
             queueHeadingMusicNoteIcon = queueHeadingMusicNoteIcon,
@@ -2278,6 +2462,80 @@ fun SettingsScreen(
             keywords = listOf("backup", "restore", "import", "バックアップ", "復元"),
             activate = { confirmImport = true },
         ),
+        SettingsSearchEntry(
+            title = stringResource(R.string.replay),
+            subtitle = stringResource(R.string.replay_subtitle),
+            keywords = listOf("replay", "yearly summary", "再生まとめ", "年間まとめ", "リプレイ"),
+            activate = onOpenReplay,
+        ),
+        SettingsSearchEntry(
+            title = stringResource(R.string.app_language),
+            subtitle = stringResource(R.string.language),
+            keywords = listOf("language", "locale", "言語", "アプリの言語"),
+            activate = onAppLanguage,
+        ),
+        SettingsSearchEntry(
+            title = stringResource(R.string.clear_image_cache),
+            subtitle = stringResource(R.string.clear_image_cache_subtitle),
+            keywords = listOf("image cache", "artwork cache", "clear cache", "画像キャッシュ", "アルバムアート", "キャッシュ削除"),
+            activate = {
+                val loader = SingletonImageLoader.get(context)
+                loader.memoryCache?.clear()
+                loader.diskCache?.clear()
+                Toast.makeText(context, context.getString(R.string.image_cache_cleared), Toast.LENGTH_SHORT).show()
+            },
+        ),
+        SettingsSearchEntry(
+            title = stringResource(R.string.music_folders),
+            subtitle = stringResource(R.string.music_folders_subtitle),
+            keywords = listOf("music folders", "folder management", "フォルダ管理", "音楽フォルダ"),
+            activate = { showManageFoldersSheet = true },
+        ),
+        SettingsSearchEntry(
+            title = stringResource(R.string.all_files_access),
+            subtitle = stringResource(R.string.all_files_access),
+            keywords = listOf("all files access", "manage external storage", "file permission", "すべてのファイル", "全ファイルアクセス", "タグ編集権限"),
+            valueLabel = if (hasAllFiles) stringResource(R.string.all_files_access_granted) else null,
+            enabled = Build.VERSION.SDK_INT >= Build.VERSION_CODES.R,
+            activate = {
+                runCatching {
+                    allFilesSettingsLauncher.launch(LocalMediaRepository.createAllFilesAccessIntent(context))
+                }.onFailure {
+                    LocalMediaRepository.requestAllFilesAccess(context)
+                }
+            },
+        ),
+        SettingsSearchEntry(
+            title = stringResource(R.string.refresh_rate),
+            subtitle = stringResource(R.string.high_performance_subtitle),
+            keywords = listOf("refresh rate", "display hz", "リフレッシュレート", "画面更新"),
+            valueLabel = "${selectedPerformanceRefreshRate} Hz",
+            enabled = highPerformanceMode && supportedRefreshRates.size > 1,
+            activate = {
+                if (supportedRefreshRates.isNotEmpty()) {
+                    val current = supportedRefreshRates.indexOf(selectedPerformanceRefreshRate).coerceAtLeast(0)
+                    AppSettings.setPerformanceRefreshRate(supportedRefreshRates[(current + 1) % supportedRefreshRates.size])
+                }
+            },
+        ),
+        SettingsSearchEntry(
+            title = stringResource(R.string.clear_theme_image),
+            subtitle = stringResource(R.string.choose_theme_image_subtitle),
+            keywords = listOf("theme image", "wallpaper", "background", "remove", "テーマ画像", "壁紙", "背景画像", "削除"),
+            enabled = !customThemeImageUri.isNullOrBlank(),
+            activate = {
+                customThemeImageUri?.let { value ->
+                    runCatching {
+                        context.contentResolver.releasePersistableUriPermission(
+                            Uri.parse(value),
+                            Intent.FLAG_GRANT_READ_URI_PERMISSION,
+                        )
+                    }
+                }
+                AppSettings.setCustomThemeImageUri(null)
+                if (theme == ThemeMode.CUSTOM_IMAGE) AppSettings.setThemeMode(ThemeMode.DARK)
+            },
+        ),
     ).let { entries ->
         if (context.packageName.endsWith(".nointernet")) entries else entries +
             musicServerSearchEntry { showMusicServersSheet = true }
@@ -2298,6 +2556,25 @@ fun SettingsScreen(
             modifier = Modifier.padding(start = 20.dp, end = 20.dp, top = 8.dp, bottom = 14.dp),
         )
 
+        SettingsGroup(header = stringResource(R.string.settings_categories)) {
+            SettingsRow(
+                icon = Icons.Rounded.Tune,
+                title = stringResource(R.string.settings_hierarchical_navigation),
+                subtitle = stringResource(R.string.settings_hierarchical_navigation_subtitle),
+                trailing = {
+                    Switch(
+                        checked = settingsHierarchicalNavigation,
+                        onCheckedChange = AppSettings::setSettingsHierarchicalNavigation,
+                        colors = SwitchDefaults.colors(
+                            checkedTrackColor = MaterialTheme.colorScheme.primary,
+                            checkedBorderColor = MaterialTheme.colorScheme.primary,
+                        ),
+                    )
+                },
+                onClick = { AppSettings.setSettingsHierarchicalNavigation(!settingsHierarchicalNavigation) },
+            )
+        }
+
         OutlinedTextField(
             value = settingsSearchQuery,
             onValueChange = { settingsSearchQuery = it },
@@ -2316,8 +2593,7 @@ fun SettingsScreen(
             },
         )
 
-        if (settingsSearchQuery.isNotBlank()) {
-            val wearSearchEntry = if (WatchInstaller.available(context)) {
+        val wearSearchEntry = if (WatchInstaller.available(context)) {
                 listOf(
                     SettingsSearchEntry(
                         title = stringResource(R.string.wear_os_section),
@@ -2329,7 +2605,10 @@ fun SettingsScreen(
             } else {
                 emptyList()
             }
-            val matches = (settingsSearchEntries + settingsActionSearchEntries + wearSearchEntry).filter { entry ->
+        val allSettingsSearchEntries = settingsSearchEntries + settingsActionSearchEntries + wearSearchEntry
+
+        if (settingsSearchQuery.isNotBlank()) {
+            val matches = allSettingsSearchEntries.filter { entry ->
                 (entry.title + " " + entry.subtitle + " " + entry.keywords.joinToString(" "))
                     .contains(settingsSearchQuery.trim(), ignoreCase = true)
             }
@@ -2385,6 +2664,37 @@ fun SettingsScreen(
                             )
                         }
                     }
+                }
+            }
+        } else if (settingsHierarchicalNavigation) {
+            val selectedCategory = SettingsSearchCategory.entries.firstOrNull { it.name == selectedSettingsCategory }
+            if (selectedCategory == null) {
+                val availableCategories = SettingsSearchCategory.entries.filter { category ->
+                    allSettingsSearchEntries.any { it.category == category }
+                }
+                SettingsGroup(header = stringResource(R.string.settings_categories)) {
+                    availableCategories.forEachIndexed { index, category ->
+                        if (index > 0) RowDivider()
+                        SettingsRow(
+                            icon = Icons.Rounded.Tune,
+                            title = stringResource(category.titleRes),
+                            subtitle = stringResource(R.string.settings_category_entry_count, allSettingsSearchEntries.count { it.category == category }),
+                            trailing = { Chevron() },
+                            onClick = { selectedSettingsCategory = category.name },
+                        )
+                    }
+                }
+            } else {
+                SettingsGroup(header = stringResource(R.string.settings_categories)) {
+                    SettingsRow(
+                        icon = Icons.Rounded.Settings,
+                        title = stringResource(R.string.settings_all_categories),
+                        trailing = { Chevron() },
+                        onClick = { selectedSettingsCategory = null },
+                    )
+                }
+                SettingsGroup(header = stringResource(selectedCategory.titleRes)) {
+                    SettingsSearchEntryRows(allSettingsSearchEntries.filter { it.category == selectedCategory })
                 }
             }
         } else {
@@ -4997,6 +5307,7 @@ fun SettingsScreen(
                 MainNavigationTab.ALBUM_ARTISTS -> R.string.album_artists
                 MainNavigationTab.FOLDERS -> R.string.folders
                 MainNavigationTab.RADIO -> R.string.radio
+                MainNavigationTab.HOME -> R.string.listen_now
             })
             SettingsRow(
                 icon = Icons.Rounded.MusicNote,
@@ -5017,6 +5328,7 @@ fun SettingsScreen(
                     MainNavigationTab.ALBUM_ARTISTS -> R.string.album_artists
                     MainNavigationTab.FOLDERS -> R.string.folders
                     MainNavigationTab.RADIO -> R.string.radio
+                    MainNavigationTab.HOME -> R.string.listen_now
                 }
                 val icon = when (tab) {
                     MainNavigationTab.SONGS -> Icons.Rounded.MusicNote
@@ -5027,6 +5339,7 @@ fun SettingsScreen(
                     MainNavigationTab.ALBUM_ARTISTS -> Icons.Rounded.Person
                     MainNavigationTab.FOLDERS -> Icons.Rounded.Folder
                     MainNavigationTab.RADIO -> Icons.Rounded.Radio
+                    MainNavigationTab.HOME -> Icons.Rounded.Home
                 }
                 val checked = if (tab == MainNavigationTab.ALBUM_ARTISTS) {
                     com.music.bitchord.data.settings.LocalLibraryTab.ALBUM_ARTISTS in localTabs
@@ -5882,6 +6195,7 @@ fun SettingsScreen(
                                 MainNavigationTab.ALBUM_ARTISTS -> stringResource(R.string.album_artists)
                                 MainNavigationTab.FOLDERS -> stringResource(R.string.folders)
                                 MainNavigationTab.RADIO -> stringResource(R.string.radio)
+                                MainNavigationTab.HOME -> stringResource(R.string.listen_now)
                             }
                             Row(
                                 modifier = Modifier
