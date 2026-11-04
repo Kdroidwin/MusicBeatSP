@@ -10,6 +10,7 @@ import android.os.Build
 import android.os.Bundle
 import android.os.Process
 import android.provider.MediaStore
+import android.provider.OpenableColumns
 import android.view.View
 import android.view.WindowManager
 import android.widget.Toast
@@ -63,6 +64,8 @@ import androidx.compose.ui.input.nestedscroll.nestedScroll
 import androidx.compose.ui.graphics.drawscope.ContentDrawScope
 import androidx.compose.foundation.layout.windowInsetsTopHeight
 import androidx.compose.foundation.lazy.LazyListState
+import androidx.compose.foundation.lazy.LazyColumn
+import androidx.compose.foundation.lazy.itemsIndexed
 import androidx.compose.foundation.lazy.grid.rememberLazyGridState
 import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.foundation.shape.CircleShape
@@ -110,6 +113,8 @@ import androidx.compose.material.icons.rounded.MusicNote
 import androidx.compose.material.icons.rounded.Person
 import com.music.bitchord.feature.localmusic.ui.components.LocalPermissionCard
 import com.music.bitchord.feature.localmusic.ui.FolderBrowserScreen
+import com.music.bitchord.feature.localmusic.data.ZipAudioArchive
+import com.music.bitchord.feature.localmusic.data.ZipAudioEntry
 import androidx.compose.material.icons.rounded.LibraryMusic
 import com.music.bitchord.feature.library.ui.LibraryScreen
 import com.music.bitchord.feature.library.ui.components.LibraryFilter
@@ -170,6 +175,7 @@ import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.res.pluralStringResource
 import androidx.compose.ui.text.AnnotatedString
 import androidx.compose.ui.text.style.TextAlign
+import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.Density
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.IntOffset
@@ -569,6 +575,12 @@ private data class PendingLocalArtistRename(
     val songs: List<Song>,
 )
 
+private data class ExternalZipSelection(
+    val uri: Uri,
+    val archiveName: String,
+    val entries: List<ZipAudioEntry>,
+)
+
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 private fun BitChordApp(
@@ -760,6 +772,8 @@ private fun BitChordApp(
     }
 
     var showSettings by remember { mutableStateOf(false) }
+    var externalZipSelection by remember { mutableStateOf<ExternalZipSelection?>(null) }
+    var openingExternalZipTrack by remember { mutableStateOf(false) }
     var showWearOs by rememberSaveable { mutableStateOf(false) }
     var showSources by rememberSaveable { mutableStateOf(false) }
     var editingSource by remember { mutableStateOf<SourceConfig?>(null) }
@@ -1649,6 +1663,36 @@ private fun BitChordApp(
                 session.previewExternalAudio(request.uri)
                 openNowPlaying()
             }
+            is LinkRequest.ExternalZip -> {
+                val archiveUri = runCatching { Uri.parse(request.uri) }.getOrNull()
+                if (archiveUri == null) {
+                    Toast.makeText(context, R.string.folder_zip_open_failed, Toast.LENGTH_LONG).show()
+                } else {
+                    runCatching {
+                        withContext(Dispatchers.IO) {
+                            val archiveName = context.contentResolver.query(
+                                archiveUri,
+                                arrayOf(OpenableColumns.DISPLAY_NAME),
+                                null,
+                                null,
+                                null,
+                            )?.use { cursor ->
+                                if (cursor.moveToFirst()) cursor.getString(0) else null
+                            } ?: archiveUri.lastPathSegment.orEmpty()
+                            val entries = ZipAudioArchive.listAudioEntries(context, archiveUri, archiveName)
+                            ExternalZipSelection(archiveUri, archiveName, entries)
+                        }
+                    }.onSuccess { selection ->
+                        if (selection.entries.isEmpty()) {
+                            Toast.makeText(context, R.string.folder_zip_no_tracks, Toast.LENGTH_SHORT).show()
+                        } else {
+                            externalZipSelection = selection
+                        }
+                    }.onFailure {
+                        Toast.makeText(context, R.string.folder_zip_open_failed, Toast.LENGTH_LONG).show()
+                    }
+                }
+            }
             is LinkRequest.Track -> {
                 val song = YtMusicRepository.trackLinks(request.videoId).getOrNull()
                 if (song == null) {
@@ -1693,6 +1737,58 @@ private fun BitChordApp(
             LinkRequest.Resume -> if (session.mediaItemCount > 0) session.play()
         }
         MusicLink.handled()
+    }
+
+    externalZipSelection?.let { selection ->
+        AlertDialog(
+            onDismissRequest = { if (!openingExternalZipTrack) externalZipSelection = null },
+            title = { Text(stringResource(R.string.folder_zip_tracks, selection.archiveName)) },
+            text = {
+                LazyColumn(modifier = Modifier.heightIn(max = 460.dp)) {
+                    itemsIndexed(selection.entries, key = { index, entry -> "$index:${entry.path}" }) { _, entry ->
+                        TextButton(
+                            modifier = Modifier.fillMaxWidth(),
+                            enabled = !openingExternalZipTrack,
+                            onClick = {
+                                scope.launch {
+                                    openingExternalZipTrack = true
+                                    val song = runCatching {
+                                        withContext(Dispatchers.IO) {
+                                            ZipAudioArchive.extract(context, selection.uri, entry)
+                                        }
+                                    }.getOrNull()
+                                    openingExternalZipTrack = false
+                                    val audioUri = song?.localUri
+                                    if (audioUri.isNullOrBlank()) {
+                                        Toast.makeText(context, R.string.folder_zip_extract_failed, Toast.LENGTH_LONG).show()
+                                    } else {
+                                        externalZipSelection = null
+                                        controller?.previewExternalAudio(audioUri)
+                                        openNowPlaying()
+                                    }
+                                }
+                            },
+                        ) {
+                            Column(modifier = Modifier.fillMaxWidth()) {
+                                Text(entry.title, maxLines = 1, overflow = TextOverflow.Ellipsis)
+                                Text(
+                                    entry.path,
+                                    style = MaterialTheme.typography.bodySmall,
+                                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                                    maxLines = 1,
+                                    overflow = TextOverflow.Ellipsis,
+                                )
+                            }
+                        }
+                    }
+                }
+            },
+            confirmButton = {
+                TextButton(onClick = { externalZipSelection = null }, enabled = !openingExternalZipTrack) {
+                    Text(stringResource(R.string.close))
+                }
+            },
+        )
     }
 
     // ---- Album / playlist menu ----

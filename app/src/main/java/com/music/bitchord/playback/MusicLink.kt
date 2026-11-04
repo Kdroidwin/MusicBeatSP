@@ -30,6 +30,9 @@ sealed interface LinkRequest {
     /** An audio file handed to the app by a file manager or document provider. */
     data class ExternalAudio(val uri: String) : LinkRequest
 
+    /** A ZIP archive handed to the app by a file manager such as MiXplorer. */
+    data class ExternalZip(val uri: String) : LinkRequest
+
     /** "Play music", with nothing said about what. */
     data object Resume : LinkRequest
 }
@@ -71,17 +74,26 @@ object MusicLink {
         val request = when (intent.action) {
             Intent.ACTION_VIEW -> {
                 val uri = intent.data
-                if (uri != null && uri.scheme in setOf("content", "file") &&
-                    isAudioFileIntent(intent.type, uri)
-                ) {
-                    LinkRequest.ExternalAudio(uri.toString())
-                } else {
-                    uri?.let(::parse)
+                when {
+                    uri != null && uri.scheme in setOf("content", "file") && isZipArchiveIntent(intent.type, uri) ->
+                        LinkRequest.ExternalZip(uri.toString())
+                    uri != null && uri.scheme in setOf("content", "file") && isAudioFileIntent(intent.type, uri) ->
+                        LinkRequest.ExternalAudio(uri.toString())
+                    else -> uri?.let(::parse)
                 }
             }
-            Intent.ACTION_SEND -> intent.getStringExtra(Intent.EXTRA_TEXT)
-                ?.let(::firstUrl)
-                ?.let { parse(Uri.parse(it)) }
+            Intent.ACTION_SEND -> {
+                @Suppress("DEPRECATION")
+                val sharedUri = (intent.getParcelableExtra(Intent.EXTRA_STREAM) as? Uri)
+                    ?: intent.clipData?.getItemAt(0)?.uri
+                if (sharedUri != null && isZipArchiveIntent(intent.type, sharedUri)) {
+                    LinkRequest.ExternalZip(sharedUri.toString())
+                } else {
+                    intent.getStringExtra(Intent.EXTRA_TEXT)
+                        ?.let(::firstUrl)
+                        ?.let { parse(Uri.parse(it)) }
+                }
+            }
             // The assistant's "play <something>". An empty query is the whole
             // point of the Resume case: "play music" names nothing, and the
             // useful answer is to carry on with what was already on.
@@ -110,8 +122,14 @@ object MusicLink {
 
     /** Keep SAF grants across process death when the sender offered persistence. */
     fun retainPersistableAudioPermission(context: Context, intent: Intent?) {
-        val uri = intent?.data ?: return
-        if (!isAudioFileIntent(intent.type, uri) || uri.scheme != "content") return
+        intent ?: return
+        @Suppress("DEPRECATION")
+        val uri = intent.data
+            ?: (intent.getParcelableExtra(Intent.EXTRA_STREAM) as? Uri)
+            ?: intent.clipData?.getItemAt(0)?.uri
+            ?: return
+        val supported = isAudioFileIntent(intent.type, uri) || isZipArchiveIntent(intent.type, uri)
+        if (!supported || uri.scheme != "content") return
         val persistable = intent.flags and Intent.FLAG_GRANT_PERSISTABLE_URI_PERMISSION != 0
         val readable = intent.flags and Intent.FLAG_GRANT_READ_URI_PERMISSION != 0
         if (persistable && readable) {
@@ -181,6 +199,12 @@ object MusicLink {
         return AUDIO_EXTENSIONS.any(name::endsWith)
     }
 
+    private fun isZipArchiveIntent(mimeType: String?, uri: Uri): Boolean {
+        val type = mimeType?.substringBefore(';')?.trim()?.lowercase()
+        if (type in ZIP_MIME_TYPES) return true
+        return uri.lastPathSegment.orEmpty().substringBefore('?').endsWith(".zip", ignoreCase = true)
+    }
+
     private fun track(videoId: String): LinkRequest.Track? =
         videoId.trim().takeIf(::isSafeRemoteId)?.let(LinkRequest::Track)
 
@@ -208,6 +232,8 @@ object MusicLink {
         ".mp3", ".m4a", ".flac", ".ogg", ".opus", ".aac", ".webm",
         ".wav", ".aiff", ".aif", ".alac", ".ape", ".wma", ".wv", ".3gp",
     )
+
+    private val ZIP_MIME_TYPES = setOf("application/zip", "application/x-zip-compressed")
 
     /**
      * The first http(s) URL in shared text.
