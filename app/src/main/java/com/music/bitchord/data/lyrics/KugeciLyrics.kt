@@ -41,14 +41,21 @@ internal object KugeciLyrics {
                     val searchUrl = "$BASE/search".toHttpUrl().newBuilder()
                         .addQueryParameter("q", query)
                         .build()
-                    val searchHtml = get(searchUrl.toString()) ?: continue
-                    val search = Jsoup.parse(searchHtml)
+                    val searchUrlString = searchUrl.toString()
+                    val searchHtml = get(searchUrlString) ?: continue
+                    val search = Jsoup.parse(searchHtml, searchUrlString)
                     search.select("a[href]").forEach { link ->
-                        val rawUrl = link.absUrl("href").ifBlank { link.attr("href") }
-                        val parsedUri = Uri.parse(rawUrl)
-                        if (!parsedUri.host.equals("www.kugeci.com", ignoreCase = true)) return@forEach
-                        if (!parsedUri.path.orEmpty().matches(Regex("""/song/[A-Za-z0-9_-]+/?"""))) return@forEach
-                        pages += parsedUri.buildUpon().clearQuery().fragment(null).build().toString()
+                        // Search cards commonly use root-relative links such as
+                        // /song/<id>. Resolve against the search URL before
+                        // checking the host; parsing the raw href directly
+                        // gives relative links a null host and silently drops
+                        // every result.
+                        val target = searchUrl.resolve(link.attr("href")) ?: return@forEach
+                        if (target.host !in KUGECI_HOSTS) return@forEach
+                        if (!target.encodedPath.matches(Regex("""/song/[A-Za-z0-9_-]+/?"""))) return@forEach
+                        // Canonicalize to the supported HTTPS origin so the
+                        // detail page also uses the WebView clearance cookie.
+                        pages += "$BASE${target.encodedPath}"
                     }
                     if (pages.size >= 12) break
                 }
@@ -165,6 +172,8 @@ internal object KugeciLyrics {
     }
 
     private data class DirectResponse(val code: Int, val body: String?)
+
+    private val KUGECI_HOSTS = setOf("www.kugeci.com", "kugeci.com")
 
     private fun matchesTitle(candidate: String, query: String): Boolean {
         val a = candidate.normalizeMatch()
