@@ -37,6 +37,8 @@ object YtMusicRepository {
     private const val TAG = "BitChord"
     private val VIDEO_INCLUSIVE_FILTERS = setOf(SearchFilter.ALL, SearchFilter.SONGS)
     private val moodGenreShelfCache = ConcurrentHashMap<String, List<HomeShelf>>()
+    /** Podcast continuations omit the show header, so retain it by token. */
+    private val podcastShowByToken = ConcurrentHashMap<String, String>()
 
     class FeatureDisabledException : IllegalStateException("YouTube Music is disabled in settings")
 
@@ -584,7 +586,7 @@ object YtMusicRepository {
 
     /** The page [SongPage.continuation] points at. */
     suspend fun moreSongs(token: String): Result<SongPage> = call("browse:more") {
-        pageOf(Innertube.browseContinuation(token))
+        pageOf(Innertube.browseContinuation(token), podcastShowByToken[token])
     }
 
     /**
@@ -601,7 +603,7 @@ object YtMusicRepository {
         InnertubeParser.parsePlaylistOwned(Innertube.browse(browseId))
     }
 
-    private fun pageOf(response: JsonObject): SongPage {
+    private fun pageOf(response: JsonObject, previousPodcastShow: String? = null): SongPage {
         val library = InnertubeParser.parseLibraryState(response)
         val header = InnertubeParser.parseBrowseHeader(response)
         // A playlist page is scoped to its own shelf so its "Suggested
@@ -611,12 +613,15 @@ object YtMusicRepository {
         InnertubeParser.parsePlaylistShelf(response)?.let { shelf ->
             return SongPage(shelf.songs, shelf.continuation, shelf.suggested, library, header = header)
         }
+        val podcastShow = InnertubeParser.podcastShow(response) ?: previousPodcastShow
+        val continuation = InnertubeParser.continuationToken(response)
+        if (podcastShow != null && continuation != null) podcastShowByToken[continuation] = podcastShow
         return SongPage(
             // One response can name the same track twice — an album page that
             // also carries a "you might also like" shelf, say. Collecting into a
             // map used to take care of that; paging by hand means saying so.
-            songs = InnertubeParser.collectSongsDeep(response).distinctBy { it.videoId },
-            continuation = InnertubeParser.continuationToken(response),
+            songs = InnertubeParser.collectSongsDeep(response, podcastShow).distinctBy { it.videoId },
+            continuation = continuation,
             library = library,
             header = header,
             description = InnertubeParser.parseDescription(response),
@@ -654,12 +659,13 @@ object YtMusicRepository {
         val out = LinkedHashMap<String, Song>()
         var response = Innertube.browse(browseId)
         var page = 1
+        val podcastShow = InnertubeParser.podcastShow(response)
         while (true) {
             // Same shelf-scoping as pageOf: a playlist (Liked Music and the
             // Library Songs auto-playlist included) is read from its own
             // shelf so a trailing "Suggested tracks" shelf never joins in.
             val shelf = InnertubeParser.parsePlaylistShelf(response)
-            (shelf?.songs ?: InnertubeParser.collectSongsDeep(response)).forEach { out[it.videoId] = it }
+            (shelf?.songs ?: InnertubeParser.collectSongsDeep(response, podcastShow)).forEach { out[it.videoId] = it }
             val token = shelf?.continuation ?: InnertubeParser.continuationToken(response)
             if (token == null || page++ >= MAX_PAGES) break
             response = runCatching { Innertube.browseContinuation(token) }.getOrNull() ?: break

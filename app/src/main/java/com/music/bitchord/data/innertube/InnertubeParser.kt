@@ -488,7 +488,7 @@ object InnertubeParser {
      * that carries a videoId. Layout-agnostic, so it survives the differences
      * between playlist, album, library and history pages.
      */
-    fun collectSongsDeep(root: JsonElement): List<Song> {
+    fun collectSongsDeep(root: JsonElement, show: String? = null): List<Song> {
         val out = LinkedHashMap<String, Song>()
         // A release's own rows are credited by its header, not one by one.
         val pageCredit = pageCredit(root)
@@ -497,6 +497,10 @@ object InnertubeParser {
                 is JsonObject -> {
                     node["musicResponsiveListItemRenderer"]?.let { renderer ->
                         parseResponsiveListItem(renderer as? JsonObject, pageCredit)
+                            ?.let { out[it.videoId] = it }
+                    }
+                    node["musicMultiRowListItemRenderer"]?.let { renderer ->
+                        parseMultiRowListItem(renderer as? JsonObject, show)
                             ?.let { out[it.videoId] = it }
                     }
                     // Ordinary YouTube channel and podcast pages can expose
@@ -517,6 +521,11 @@ object InnertubeParser {
         walk(root)
         return out.values.toList()
     }
+
+    /** The show name is only on the first podcast page; carry it across continuations. */
+    fun podcastShow(root: JsonElement): String? =
+        if (collectRenderers(root, "musicMultiRowListItemRenderer").isEmpty()) null
+        else parseBrowseHeader(root)?.title
 
     private fun parseYoutubeVideo(renderer: JsonObject): Song? {
         val videoId = renderer.s("videoId")?.takeIf(String::isNotBlank) ?: return null
@@ -670,8 +679,9 @@ object InnertubeParser {
             .o("musicResponsiveListItemFlexColumnRenderer").o("text").runs()
         if (title.isBlank()) return null
 
-        val subtitle = columns.getOrNull(1)
-            .o("musicResponsiveListItemFlexColumnRenderer").o("text").runs()
+        val subtitleRuns = columns.getOrNull(1)
+            .o("musicResponsiveListItemFlexColumnRenderer").o("text").a("runs").orEmpty()
+        val subtitle = subtitleRuns.joinToString("") { it.s("text").orEmpty() }
         val parts = subtitle.split(" • ").filter { it.isNotBlank() }
         // A search row states its runtime in the subtitle; an album's own rows
         // do not — the release is billed once in the header and the per-track
@@ -690,6 +700,8 @@ object InnertubeParser {
         // On the "All" tab the first segment is the row type ("Song", "Video"),
         // not the artist — skip those so the subtitle reads like a credit.
         val rowType = parts.firstOrNull { it.lowercase(Locale.ROOT) in TYPE_WORDS }?.lowercase(Locale.ROOT)
+        val episode = rowType == "episode" || renderer.isPodcastEpisode()
+        val showName = if (episode) podcastShowNameFromRuns(subtitleRuns) else null
         // A track row on an album lists its play count where a search row
         // lists the artist, so a segment that reads as a tally is no credit.
         val artist = parts.firstOrNull {
@@ -715,6 +727,7 @@ object InnertubeParser {
             // and an album's own rows carry no credit at all — the release is
             // billed once, in the header the row hangs under.
             artist = credits.artistName?.takeIf { it.isNotBlank() }
+                ?: showName
                 ?: artist
                 ?: fallback.artistName
                 ?: "Unknown artist",
@@ -730,10 +743,61 @@ object InnertubeParser {
             // The row type word is the clean signal when present ("All" tab);
             // otherwise a music-video upload gives itself away with widescreen
             // art where a catalogue track has square album cover art.
-            isVideo = rowType == "video" || thumbnails.isNotSquare(),
+            // Podcast episode artwork is usually widescreen, but episodes are
+            // played through YouTube's audio stream just like a track.
+            isVideo = !episode && (rowType == "video" || thumbnails.isNotSquare()),
             isExplicit = renderer.hasExplicitBadge(),
         )
     }
+
+    /** A show page's episode row (`musicMultiRowListItemRenderer`). */
+    private fun parseMultiRowListItem(renderer: JsonObject?, show: String?): Song? {
+        if (renderer == null) return null
+        val videoId = renderer.o("onTap").o("watchEndpoint").s("videoId")
+            ?: renderer.o("overlay").o("musicItemThumbnailOverlayRenderer").o("content")
+                .o("musicPlayButtonRenderer").o("playNavigationEndpoint").o("watchEndpoint").s("videoId")
+            ?: return null
+        val title = renderer.o("title").runs().trim().takeIf(String::isNotBlank) ?: return null
+        return Song(
+            videoId = videoId,
+            title = title,
+            artist = renderer.o("secondTitle").runs().trim().takeIf(String::isNotBlank)
+                ?: show ?: "Unknown artist",
+            thumbnailUrl = renderer.o("thumbnail").o("musicThumbnailRenderer")
+                .o("thumbnail").a("thumbnails").best(),
+            durationText = episodeRuntime(
+                renderer.o("playbackProgress").o("musicPlaybackProgressRenderer")
+                    .o("durationText").runs(),
+            ),
+            isVideo = false,
+            isExplicit = renderer.hasExplicitBadge(),
+        )
+    }
+
+    /** Convert YouTube's "2 hr 43 min" duration to the player-friendly clock format. */
+    private fun episodeRuntime(text: String): String? {
+        var seconds = 0L
+        RUNTIME_PART.findAll(text).forEach { part ->
+            val count = part.groupValues[1].toLongOrNull() ?: return@forEach
+            seconds += when (part.groupValues[2].lowercase(Locale.ROOT).first()) {
+                'h' -> count * 3_600
+                'm' -> count * 60
+                else -> count
+            }
+        }
+        if (seconds == 0L) return null
+        val hours = seconds / 3_600
+        val minutes = seconds % 3_600 / 60
+        val remainder = seconds % 60
+        return if (hours > 0) String.format(Locale.ROOT, "%d:%02d:%02d", hours, minutes, remainder)
+        else String.format(Locale.ROOT, "%d:%02d", minutes, remainder)
+    }
+
+    private fun podcastShowNameFromRuns(runs: List<JsonElement>): String? = runs.firstOrNull { run ->
+        run.o("navigationEndpoint").o("browseEndpoint")
+            .o("browseEndpointContextSupportedConfigs").o("browseEndpointContextMusicConfig")
+            .s("pageType").orEmpty().contains("PODCAST_SHOW")
+    }?.s("text")?.trim()?.takeIf(String::isNotBlank)
 
     /**
      * The promoted result at the top of an unfiltered search is a
@@ -1340,6 +1404,7 @@ object InnertubeParser {
         }
 
     private val DURATION = Regex("""\d+:\d{2}""")
+    private val RUNTIME_PART = Regex("""(\d+)\s*(hours?|hrs?|hr|min|mins|minutes?|sec|secs|seconds?)""", RegexOption.IGNORE_CASE)
     private val YEAR = Regex("""\d{4}""")
     /**
      * A counted quantity rather than a name — "12.4M plays", "13 songs",
@@ -1395,6 +1460,9 @@ private fun JsonElement?.findString(key: String): String? = when (this) {
     is JsonArray -> firstNotNullOfOrNull { it.findString(key) }
     else -> null
 }
+
+private fun JsonObject.isPodcastEpisode(): Boolean =
+    findString("musicVideoType") == "MUSIC_VIDEO_TYPE_PODCAST_EPISODE"
 
 private fun JsonElement?.runs(): String =
     this.a("runs")?.joinToString("") { it.s("text").orEmpty() }.orEmpty()
