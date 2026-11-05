@@ -30,6 +30,10 @@ internal object BuiltinLyricsSources {
         LyricsSource("netease", "NetEase Cloud Music", "Line- and word-synced lyrics", wordSynced = true),
         LyricsSource("lrclib", "LRCLIB", "Open, line-synced lyrics database"),
         LyricsSource("musixmatch", "Musixmatch", "Line-synced lyrics from Musixmatch"),
+        LyricsSource("jlyric", "J-Lyric", "Japanese plain-text lyrics from J-Lyric"),
+        LyricsSource("utaten", "UtaTen", "Japanese lyrics with native furigana support"),
+        LyricsSource("utanet", "歌ネット (Uta-Net)", "Japanese lyrics from Uta-Net"),
+        LyricsSource("ctc_align", "CTC AI 自動同期", "Automatic timing generated from plain lyrics"),
         LyricsSource("genius", "Genius", "Plain-text fallback from Genius"),
     )
 
@@ -63,7 +67,35 @@ internal object BuiltinLyricsSources {
         "netease" -> NetEaseLyrics.lyrics(title, artist, durationMs, album)
         "lrclib" -> LrcLib.lyrics(title, artist, durationMs)
         "musixmatch" -> Musixmatch.lyrics(title, artist, durationMs)
+        "jlyric", "utaten", "utanet", "ctc_align" ->
+            com.music.bitchord.data.lyrics.providers.NativeLyricsProviders
+                .getLyrics(id, title, artist, album, durationMs)
+                ?.let(ProviderLyrics::parse)
         "genius" -> Genius.lyrics(title, artist)
         else -> null
+    }
+
+    /** Search routes ported from Tinque. Playback keeps the existing provider implementations. */
+    fun nativeSearchId(id: String): String? = when (id) {
+        "netease", "kugou", "musixmatch", "jlyric", "utaten", "utanet", "ctc_align" -> id
+        "petit_lyrics" -> "petitlyrics"
+        else -> null
+    }
+
+    suspend fun search(
+        id: String,
+        title: String,
+        artist: String,
+        album: String?,
+        durationMs: Long,
+    ): List<com.music.bitchord.data.lyrics.providers.NativeSearchCandidate>? {
+        val nativeId = nativeSearchId(id) ?: return null
+        return com.music.bitchord.data.lyrics.providers.NativeLyricsProviders.searchLyrics(
+            providerId = nativeId,
+            title = title,
+            artist = artist,
+            album = album,
+            durationMs = durationMs,
+        )
     }
 }

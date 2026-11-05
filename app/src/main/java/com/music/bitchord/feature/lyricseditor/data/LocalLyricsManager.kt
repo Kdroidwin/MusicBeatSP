@@ -219,31 +219,62 @@ object LocalLyricsManager {
                     }
                 } else {
                     jobs += async {
-                        // Try searchLyrics first (multi-result) for extensions that support it
-                        val ext = com.music.bitchord.feature.lyrics.manager.LyricsExtensionManager.getExtension(source.id)
-                        if (ext != null && ext.scriptFile.exists()) {
-                            val searchJson = runCatching {
-                                com.music.bitchord.feature.lyrics.engine.LyricsExtensionExecutor.searchLyrics(
-                                    extensionId = ext.id,
-                                    scriptFile = ext.scriptFile,
+                        // Tinque exposes native, multi-candidate searches for these providers.
+                        // MusicBeatSP previously fell straight back to LyricsRepository.fetch,
+                        // which only returns the first usable lyric and hides alternate matches.
+                        val nativeSearchId = com.music.bitchord.data.lyrics.BuiltinLyricsSources.nativeSearchId(source.id)
+                        if (nativeSearchId != null) {
+                            val candidates = runCatching {
+                                com.music.bitchord.data.lyrics.BuiltinLyricsSources.search(
+                                    id = source.id,
                                     title = title,
                                     artist = primaryArtist.ifBlank { normalizedArtist },
                                     album = album,
+                                    durationMs = durationMs,
+                                ).orEmpty()
+                            }.getOrDefault(emptyList())
+                            val parsedCandidates = candidates.mapNotNull { candidate ->
+                                if (candidate.bestRaw.isNullOrBlank()) return@mapNotNull null
+                                LyricsSearchResultItem(
+                                    id = candidate.id,
+                                    title = candidate.title.ifBlank { title },
+                                    artist = candidate.artist.ifBlank { artist },
+                                    album = candidate.album ?: album,
+                                    durationSeconds = candidate.durationSeconds,
+                                    provider = candidate.provider.ifBlank { source.label },
+                                    syncedLyrics = candidate.syncedLyrics,
+                                    plainLyrics = candidate.plainLyrics,
                                 )
-                            }.getOrNull()
+                            }
+                            if (parsedCandidates.isNotEmpty()) parsedCandidates
+                            else fetchSingleResult(source, title, artist, primaryArtist, normalizedArtist, durationMs, album)
+                        } else {
+                            // Try searchLyrics first (multi-result) for extensions that support it.
+                            val ext = com.music.bitchord.feature.lyrics.manager.LyricsExtensionManager.getExtension(source.id)
+                            if (ext != null && ext.scriptFile.exists()) {
+                                val searchJson = runCatching {
+                                    com.music.bitchord.feature.lyrics.engine.LyricsExtensionExecutor.searchLyrics(
+                                        extensionId = ext.id,
+                                        scriptFile = ext.scriptFile,
+                                        title = title,
+                                        artist = primaryArtist.ifBlank { normalizedArtist },
+                                        album = album,
+                                    )
+                                }.getOrNull()
 
-                            val parsed = if (!searchJson.isNullOrBlank()) {
-                                parseExtensionSearchResults(searchJson, source.label)
-                            } else emptyList()
+                                val parsed = if (!searchJson.isNullOrBlank()) {
+                                    parseExtensionSearchResults(searchJson, source.label)
+                                } else emptyList()
 
-                            if (parsed.isNotEmpty()) {
-                                parsed
+                                if (parsed.isNotEmpty()) {
+                                    parsed
+                                } else {
+                                    // Fallback: use getLyrics for a single result
+                                    fetchSingleResult(source, title, artist, primaryArtist, normalizedArtist, durationMs, album)
+                                }
                             } else {
-                                // Fallback: use getLyrics for a single result
                                 fetchSingleResult(source, title, artist, primaryArtist, normalizedArtist, durationMs, album)
                             }
-                        } else {
-                            fetchSingleResult(source, title, artist, primaryArtist, normalizedArtist, durationMs, album)
                         }
                     }
                 }

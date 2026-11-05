@@ -6,7 +6,9 @@ import androidx.compose.animation.core.infiniteRepeatable
 import androidx.compose.animation.core.rememberInfiniteTransition
 import androidx.compose.animation.core.tween
 import androidx.compose.foundation.BorderStroke
+import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.gestures.detectVerticalDragGestures
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -43,19 +45,27 @@ import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.ModalBottomSheet
 import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.Surface
+import androidx.compose.material3.SheetValue
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.material3.rememberModalBottomSheetState
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.remember
+import androidx.compose.runtime.rememberCoroutineScope
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.draw.rotate
+import androidx.compose.ui.input.pointer.pointerInput
+import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import kotlinx.coroutines.launch
 import androidx.compose.ui.res.stringResource
 import com.music.bitchord.R
 import com.music.bitchord.feature.lyricseditor.domain.model.LyricsSearchResultItem
@@ -71,7 +81,14 @@ fun LyricsSearchResultsSheet(
     onResearchClick: () -> Unit,
     modifier: Modifier = Modifier,
 ) {
-    val sheetState = rememberModalBottomSheetState(skipPartiallyExpanded = true)
+    var allowHandleDismiss by remember { mutableStateOf(false) }
+    val sheetState = rememberModalBottomSheetState(
+        skipPartiallyExpanded = true,
+        confirmValueChange = { target -> target != SheetValue.Hidden || allowHandleDismiss },
+    )
+    val scope = rememberCoroutineScope()
+    val dismissThresholdPx = with(LocalDensity.current) { 64.dp.toPx() }
+    var handleDragDistance by remember { mutableStateOf(0f) }
 
     val infiniteTransition = rememberInfiniteTransition(label = "refresh_rotation")
     val rotation by infiniteTransition.animateFloat(
@@ -86,6 +103,49 @@ fun LyricsSearchResultsSheet(
     ModalBottomSheet(
         onDismissRequest = onDismissRequest,
         sheetState = sheetState,
+        // A swipe on the results list/header should scroll its content instead
+        // of dismissing the whole sheet. The state confirms Hidden only while
+        // the explicit grab handle is being dragged.
+        dragHandle = {
+            Box(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .height(36.dp)
+                    .pointerInput(onDismissRequest, dismissThresholdPx) {
+                        detectVerticalDragGestures(
+                            onDragStart = { _ -> handleDragDistance = 0f },
+                            onDragEnd = {
+                                if (handleDragDistance > dismissThresholdPx) {
+                                    scope.launch {
+                                        allowHandleDismiss = true
+                                        try {
+                                            sheetState.hide()
+                                            onDismissRequest()
+                                        } finally {
+                                            allowHandleDismiss = false
+                                        }
+                                    }
+                                }
+                                handleDragDistance = 0f
+                            },
+                            onDragCancel = { handleDragDistance = 0f },
+                            onVerticalDrag = { change, dragAmount ->
+                                change.consume()
+                                handleDragDistance = (handleDragDistance + dragAmount).coerceAtLeast(0f)
+                            },
+                        )
+                    },
+                contentAlignment = Alignment.Center,
+            ) {
+                Box(
+                    Modifier
+                        .width(32.dp)
+                        .height(4.dp)
+                        .clip(CircleShape)
+                        .background(MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.42f)),
+                )
+            }
+        },
         shape = RoundedCornerShape(topStart = 28.dp, topEnd = 28.dp),
         containerColor = MaterialTheme.colorScheme.surfaceContainerLow,
         modifier = modifier,
