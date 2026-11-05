@@ -11,6 +11,9 @@ import com.music.bitchord.data.model.durationMillis
 import com.music.bitchord.playback.smart.AudioDecoder
 import com.music.bitchord.playback.smart.LocalAudioSource
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.currentCoroutineContext
+import kotlinx.coroutines.ensureActive
+import kotlinx.coroutines.isActive
 import kotlinx.coroutines.withContext
 import java.io.File
 import java.nio.FloatBuffer
@@ -60,17 +63,29 @@ internal object CtcForcedLyricsAligner {
         }
 
         onProgress(Stage.DecodingAudio, null)
-        val source = LocalAudioSource.open(context.contentResolver, audioUri)
-            ?: throw IllegalStateException("端末の音源ファイルを開けませんでした。")
-        val pcmAndStart = source.use { dataSource ->
-            val fileDuration = AudioDecoder.containerDurationSeconds(dataSource)
-                ?: (song.durationMillis().takeIf { it > 0L }?.div(1000.0))
-                ?: throw IllegalStateException("音源の長さを読み取れませんでした。")
-            val start = (song.localStartMs ?: 0L).coerceAtLeast(0L) / 1000.0
-            val end = (song.localEndMs?.div(1000.0) ?: fileDuration).coerceIn(start, fileDuration)
-            require(end > start) { "音源の再生範囲を読み取れませんでした。" }
-            AudioDecoder.decodeRegion(dataSource, start, end)
-                ?: throw IllegalStateException("この音源形式をデコードできませんでした。")
+        val operationContext = currentCoroutineContext()
+        val pcmAndStart = withContext(Dispatchers.IO) {
+            val source = LocalAudioSource.open(context.contentResolver, audioUri)
+            if (source != null) source.use { dataSource ->
+                val fileDuration = AudioDecoder.containerDurationSeconds(dataSource)
+                    ?: (song.durationMillis().takeIf { it > 0L }?.div(1000.0))
+                    ?: throw IllegalStateException("音源の長さを読み取れませんでした。")
+                val start = (song.localStartMs ?: 0L).coerceAtLeast(0L) / 1000.0
+                val end = (song.localEndMs?.div(1000.0) ?: fileDuration).coerceIn(start, fileDuration)
+                require(end > start) { "音源の再生範囲を読み取れませんでした。" }
+                val platformDecoded = AudioDecoder.decodeRegion(dataSource, start, end) {
+                    !operationContext.isActive
+                }
+                operationContext.ensureActive()
+                platformDecoded ?: CtcFfmpegDecoder.decode(context, song, audioUri, start, end)
+            } else {
+                val fileDuration = song.durationMillis().takeIf { it > 0L }?.div(1000.0)
+                    ?: throw IllegalStateException("音源の長さを読み取れませんでした。")
+                val start = (song.localStartMs ?: 0L).coerceAtLeast(0L) / 1000.0
+                val end = (song.localEndMs?.div(1000.0) ?: fileDuration).coerceIn(start, fileDuration)
+                require(end > start) { "音源の再生範囲を読み取れませんでした。" }
+                CtcFfmpegDecoder.decode(context, song, audioUri, start, end)
+            }
         }
         val pcm = resample(pcmAndStart.first.samples, pcmAndStart.first.sampleRate)
         require(pcm.isNotEmpty()) { "音源のデコード結果が空でした。" }

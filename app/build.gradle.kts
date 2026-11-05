@@ -357,6 +357,11 @@ dependencies {
     implementation("com.hierynomus:smbj:0.15.0")
     // BitChord Automix beat/downbeat and vocal analysis models.
     implementation("com.microsoft.onnxruntime:onnxruntime-android:1.28.0")
+    // CTC alignment only: keep MediaCodec as the first path and use FFmpeg
+    // as a local-file fallback for formats a device decoder cannot read.
+    // This maintained prebuilt includes arm64-v8a and x86_64; other ABIs retain MediaCodec.
+    implementation("dev.ffmpegkit-maintained:ffmpeg-kit-full:8.1.7")
+    implementation("com.arthenica:smart-exception-java:0.2.1")
     implementation("org.mozilla:rhino:1.8.1")
     implementation("org.mozilla:rhino-engine:1.8.1")
 
