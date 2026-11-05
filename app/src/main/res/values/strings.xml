@@ -1789,6 +1789,14 @@
     <string name="lyrics_editor_insert_timestamp">Insert timestamp [00:00.00]</string>
     <string name="lyrics_editor_select_all">Select all</string>
     <string name="lyrics_editor_clear_all">Clear all</string>
+    <string name="lyrics_editor_generate_synced_lyrics">Generate synchronized lyrics automatically</string>
+    <string name="lyrics_auto_sync_title">Generating synchronized lyrics</string>
+    <string name="lyrics_auto_sync_model_info">First use downloads about 1.26 GB: the romara-labs ONNX distribution of MahmoudAshraf’s MMS-300M aligner (CC BY-NC 4.0). 8 GB RAM is recommended. Audio stays on this device.</string>
+    <string name="lyrics_auto_sync_downloading">Downloading alignment model… %1$d%%</string>
+    <string name="lyrics_auto_sync_decoding">Reading and decoding the local audio…</string>
+    <string name="lyrics_auto_sync_aligning">Aligning lyrics to the audio…</string>
+    <string name="lyrics_auto_sync_complete">Synchronized lyrics were generated. Review and save them.</string>
+    <string name="lyrics_auto_sync_failed">Could not generate synchronized lyrics.</string>
     <string name="lyrics_shift_all_timestamps">Shift all timestamps</string>
     <string name="lyrics_shift_all_timestamps_help">Enter an offset for every timestamp, then move the timestamp values forward or back.</string>
     <string name="lyrics_set_first_timestamp">Set the first timestamp</string>

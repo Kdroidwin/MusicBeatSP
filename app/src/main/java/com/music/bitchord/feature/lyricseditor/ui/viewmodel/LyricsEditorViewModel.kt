@@ -5,6 +5,7 @@ import androidx.lifecycle.AndroidViewModel
 import androidx.lifecycle.viewModelScope
 import com.music.bitchord.R
 import com.music.bitchord.data.lyrics.LyricsSource
+import com.music.bitchord.data.lyrics.CtcForcedLyricsAligner
 import com.music.bitchord.data.model.Song
 import com.music.bitchord.data.model.durationMillis
 import com.music.bitchord.data.settings.AppSettings
@@ -18,7 +19,12 @@ import kotlinx.coroutines.flow.SharedFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asSharedFlow
 import kotlinx.coroutines.flow.asStateFlow
+import kotlinx.coroutines.Job
+import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.launch
+
+enum class AutoSyncStage { DownloadingModel, DecodingAudio, Aligning }
+data class AutoSyncProgress(val stage: AutoSyncStage, val percent: Int? = null)
 
 class LyricsEditorViewModel(app: Application) : AndroidViewModel(app) {
 
@@ -43,6 +49,9 @@ class LyricsEditorViewModel(app: Application) : AndroidViewModel(app) {
     private val _isSearchingResults = MutableStateFlow(false)
     val isSearchingResults: StateFlow<Boolean> = _isSearchingResults.asStateFlow()
 
+    private val _autoSyncProgress = MutableStateFlow<AutoSyncProgress?>(null)
+    val autoSyncProgress: StateFlow<AutoSyncProgress?> = _autoSyncProgress.asStateFlow()
+
     private val _saveResult = MutableSharedFlow<Boolean>()
     val saveResult: SharedFlow<Boolean> = _saveResult.asSharedFlow()
 
@@ -52,6 +61,8 @@ class LyricsEditorViewModel(app: Application) : AndroidViewModel(app) {
     private val originalLyricsMap = mutableMapOf<LyricsEditorSource, String>()
     private val editedLyricsMap = mutableMapOf<LyricsEditorSource, String>()
     private var activeSong: Song? = null
+    private var autoSyncJob: Job? = null
+    private var autoSyncToken: Any? = null
 
     var lastSearchTitle: String? = null
         private set
@@ -183,6 +194,49 @@ class LyricsEditorViewModel(app: Application) : AndroidViewModel(app) {
     fun clearSearchResults() {
         _searchResults.value = emptyList()
         _isSearchingResults.value = false
+    }
+
+    /** Generate timestamps for the untimed lyrics currently entered in the editor. */
+    fun generateSyncedLyrics(song: Song, plainLyrics: String) {
+        if (autoSyncJob?.isActive == true) return
+        val generationToken = Any()
+        autoSyncToken = generationToken
+        autoSyncJob = viewModelScope.launch {
+            try {
+                val synchronized = CtcForcedLyricsAligner.generate(
+                    context = getApplication(),
+                    song = song,
+                    plainLyrics = plainLyrics,
+                ) { stage, percent ->
+                    val uiStage = when (stage) {
+                        CtcForcedLyricsAligner.Stage.DownloadingModel -> AutoSyncStage.DownloadingModel
+                        CtcForcedLyricsAligner.Stage.DecodingAudio -> AutoSyncStage.DecodingAudio
+                        CtcForcedLyricsAligner.Stage.Aligning -> AutoSyncStage.Aligning
+                    }
+                    _autoSyncProgress.value = AutoSyncProgress(uiStage, percent)
+                }
+                updateText(synchronized)
+                _toastMessage.emit(getApplication<Application>().getString(R.string.lyrics_auto_sync_complete))
+            } catch (cancelled: CancellationException) {
+                throw cancelled
+            } catch (error: Exception) {
+                _toastMessage.emit(
+                    error.message?.takeIf(String::isNotBlank)
+                        ?: getApplication<Application>().getString(R.string.lyrics_auto_sync_failed),
+                )
+            } finally {
+                if (autoSyncToken === generationToken) {
+                    _autoSyncProgress.value = null
+                    autoSyncJob = null
+                    autoSyncToken = null
+                }
+            }
+        }
+    }
+
+    fun cancelAutoSync() {
+        autoSyncJob?.cancel()
+        _autoSyncProgress.value = null
     }
 
     fun applySearchResult(item: LyricsSearchResultItem) {

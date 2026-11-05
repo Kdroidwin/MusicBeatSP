@@ -24,6 +24,7 @@ import androidx.compose.material.icons.rounded.RestartAlt
 import androidx.compose.material.icons.rounded.Save
 import androidx.compose.material.icons.rounded.Search
 import androidx.compose.material.icons.rounded.SelectAll
+import androidx.compose.material.icons.rounded.Sync
 import androidx.compose.material3.Button
 import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.DropdownMenu
@@ -63,6 +64,7 @@ fun LyricsEditorBottomBar(
     onShiftTimestampsClick: (() -> Unit)? = null,
     onSetFirstTimestampClick: (() -> Unit)? = null,
     onSearchEngineClick: (() -> Unit)? = null,
+    onGenerateSyncedLyricsClick: (() -> Unit)? = null,
     modifier: Modifier = Modifier,
 ) {
     var menuExpanded by remember { mutableStateOf(false) }
@@ -240,6 +242,23 @@ fun LyricsEditorBottomBar(
                                 onClick = {
                                     menuExpanded = false
                                     onClearAllClick()
+                                },
+                            )
+                        }
+
+                        if (onGenerateSyncedLyricsClick != null) {
+                            DropdownMenuItem(
+                                text = { Text(stringResource(R.string.lyrics_editor_generate_synced_lyrics)) },
+                                leadingIcon = {
+                                    Icon(
+                                        imageVector = Icons.Rounded.Sync,
+                                        contentDescription = null,
+                                        modifier = Modifier.size(20.dp),
+                                    )
+                                },
+                                onClick = {
+                                    menuExpanded = false
+                                    onGenerateSyncedLyricsClick()
                                 },
                             )
                         }

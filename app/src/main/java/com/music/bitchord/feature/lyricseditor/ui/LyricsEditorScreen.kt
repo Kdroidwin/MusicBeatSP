@@ -47,6 +47,7 @@ import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
+import androidx.compose.material3.LinearProgressIndicator
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Scaffold
@@ -90,6 +91,7 @@ import com.music.bitchord.feature.lyricseditor.ui.components.LyricsSearchResults
 import com.music.bitchord.feature.lyricseditor.ui.components.LyricsSearchResultsSheet
 import com.music.bitchord.feature.lyricseditor.ui.components.LyricsSelectorDialog
 import com.music.bitchord.feature.lyricseditor.ui.components.LyricsSourcePillSelector
+import com.music.bitchord.feature.lyricseditor.ui.viewmodel.AutoSyncStage
 import com.music.bitchord.feature.lyricseditor.ui.viewmodel.LyricsEditorViewModel
 import androidx.compose.ui.graphics.luminance
 import com.music.bitchord.ui.theme.SystemBarIcons
@@ -125,6 +127,7 @@ fun LyricsEditorScreen(
     val candidateResult by viewModel.candidateResult.collectAsState()
     val searchResults by viewModel.searchResults.collectAsState()
     val isSearchingResults by viewModel.isSearchingResults.collectAsState()
+    val autoSyncProgress by viewModel.autoSyncProgress.collectAsState()
 
     var showDownloadDialog by remember { mutableStateOf(false) }
     var showSearchResultsDialog by remember { mutableStateOf(false) }
@@ -297,7 +300,7 @@ fun LyricsEditorScreen(
                     onSeek = { onSyncSeek?.invoke(it) },
                 )
             } else LyricsEditorBottomBar(
-                enabled = !isLoading && !isSaving,
+                enabled = !isLoading && !isSaving && autoSyncProgress == null,
                 onSearchClick = ::searchLyricsOnWeb,
                 onDownloadClick = {
                     if (searchResults.isNotEmpty()) {
@@ -354,6 +357,9 @@ fun LyricsEditorScreen(
                     showSetFirstTimestampDialog = true
                 },
                 onSearchEngineClick = ::searchLyricsOnWeb,
+                onGenerateSyncedLyricsClick = {
+                    viewModel.generateSyncedLyrics(song, textFieldValue.text)
+                },
             )
         },
         containerColor = MaterialTheme.colorScheme.background,
@@ -576,6 +582,38 @@ fun LyricsEditorScreen(
                 }
             }
         }
+    }
+
+    autoSyncProgress?.let { progress ->
+        AlertDialog(
+            onDismissRequest = viewModel::cancelAutoSync,
+            title = { Text(stringResource(R.string.lyrics_auto_sync_title)) },
+            text = {
+                Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
+                    val statusId = when (progress.stage) {
+                        AutoSyncStage.DownloadingModel -> R.string.lyrics_auto_sync_downloading
+                        AutoSyncStage.DecodingAudio -> R.string.lyrics_auto_sync_decoding
+                        AutoSyncStage.Aligning -> R.string.lyrics_auto_sync_aligning
+                    }
+                    if (progress.stage == AutoSyncStage.DownloadingModel) {
+                        Text(stringResource(statusId, progress.percent ?: 0))
+                        Text(stringResource(R.string.lyrics_auto_sync_model_info))
+                        LinearProgressIndicator(
+                            progress = { (progress.percent ?: 0).coerceIn(0, 100) / 100f },
+                            modifier = Modifier.fillMaxWidth(),
+                        )
+                    } else {
+                        Text(stringResource(statusId))
+                        LinearProgressIndicator(modifier = Modifier.fillMaxWidth())
+                    }
+                }
+            },
+            confirmButton = {
+                TextButton(onClick = viewModel::cancelAutoSync) {
+                    Text(stringResource(R.string.cancel))
+                }
+            },
+        )
     }
 
     if (showShiftTimestampsDialog) {

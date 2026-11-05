@@ -1762,6 +1762,14 @@
     <string name="lyrics_editor_insert_timestamp">タイムスタンプを挿入 [00:00.00]</string>
     <string name="lyrics_editor_select_all">すべて選択</string>
     <string name="lyrics_editor_clear_all">すべて消去</string>
+    <string name="lyrics_editor_generate_synced_lyrics">同期歌詞を自動生成</string>
+    <string name="lyrics_auto_sync_title">同期歌詞を生成中</string>
+    <string name="lyrics_auto_sync_model_info">初回はMahmoudAshrafのMMS-300Mアライナーをromara-labsが配布するONNXモデル（CC BY-NC 4.0）を約1.26 GBダウンロードします。RAM 8 GB以上を推奨します。音源は端末内で処理します。</string>
+    <string name="lyrics_auto_sync_downloading">位置合わせモデルをダウンロード中… %1$d%%</string>
+    <string name="lyrics_auto_sync_decoding">端末内の音源を読み込んでいます…</string>
+    <string name="lyrics_auto_sync_aligning">歌詞を音源に合わせています…</string>
+    <string name="lyrics_auto_sync_complete">同期歌詞を生成しました。内容を確認して保存してください。</string>
+    <string name="lyrics_auto_sync_failed">同期歌詞を生成できませんでした。</string>
     <string name="lyrics_shift_all_timestamps">全行のtimestampをずらす</string>
     <string name="lyrics_shift_all_timestamps_help">全timestampに加える時間を入力し、timestampを進めるか戻すか選択してください。</string>
     <string name="lyrics_set_first_timestamp">最初の行のtimestampを設定</string>
