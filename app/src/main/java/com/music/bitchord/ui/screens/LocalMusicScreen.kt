@@ -166,9 +166,16 @@ import com.music.bitchord.data.settings.LibraryViewType
 import com.music.bitchord.ui.theme.ArtworkPalette
 import com.music.bitchord.data.settings.LocalMusicSort
 import com.music.bitchord.data.settings.LocalLibraryTab
+import com.music.bitchord.data.settings.GridKind
 import com.music.bitchord.download.DownloadedCollection
 import com.music.bitchord.ui.components.MessageState
 import com.music.bitchord.ui.components.PAGE_GUTTER
+import com.music.bitchord.ui.components.GridTitleOnArt
+import com.music.bitchord.ui.components.ScaledGridCells
+import com.music.bitchord.ui.components.pinchToResizeGrid
+import com.music.bitchord.ui.components.rememberCardCompact
+import com.music.bitchord.ui.components.rememberGridColumns
+import com.music.bitchord.ui.components.rememberGridTitleOverlay
 import com.music.bitchord.ui.components.ROW_DIVIDER_INSET
 import com.music.bitchord.ui.components.SongRow
 import com.music.bitchord.ui.components.thumbnailBorder
@@ -1143,6 +1150,7 @@ fun LocalMusicScreen(
                     }
                     ArtistsTab(
                         artists = albumArtists,
+                        gridKind = GridKind.ALBUM_ARTISTS,
                         allowRemoteArtwork = artistDeezerArtworkEnabled && onlineAlbumArtistArtwork && !offlineMode,
                         viewType = artistsViewType,
                         onViewTypeToggle = {
@@ -1534,11 +1542,12 @@ private fun SongsTab(
 ) {
     if (viewType == LibraryViewType.GRID) {
         val gridState = rememberLazyGridState()
+        val gridColumns = rememberGridColumns(GridKind.SONGS)
         Box(modifier = Modifier.fillMaxSize()) {
             LazyVerticalGrid(
-                columns = GridCells.Adaptive(minSize = 140.dp),
+                columns = ScaledGridCells(gridColumns),
                 state = gridState,
-                modifier = Modifier.fillMaxSize(),
+                modifier = Modifier.fillMaxSize().pinchToResizeGrid(GridKind.SONGS, gridColumns),
                 contentPadding = PaddingValues(
                     start = PAGE_GUTTER,
                     end = PAGE_GUTTER,
@@ -1649,6 +1658,7 @@ private fun SongsTab(
 @Composable
 private fun ArtistsTab(
     artists: List<ArtistEntry>,
+    gridKind: GridKind = GridKind.ARTISTS,
     allowRemoteArtwork: Boolean = true,
     viewType: LibraryViewType,
     onViewTypeToggle: () -> Unit,
@@ -1661,11 +1671,12 @@ private fun ArtistsTab(
     val artistArtworkUris by ArtistArtworkStore.imageUris.collectAsStateWithLifecycle()
     if (viewType == LibraryViewType.GRID) {
         val gridState = rememberLazyGridState()
+        val gridColumns = rememberGridColumns(gridKind)
         Box(modifier = Modifier.fillMaxSize()) {
             LazyVerticalGrid(
-                columns = GridCells.Adaptive(minSize = 130.dp),
+                columns = ScaledGridCells(gridColumns),
                 state = gridState,
-                modifier = Modifier.fillMaxSize(),
+                modifier = Modifier.fillMaxSize().pinchToResizeGrid(gridKind, gridColumns),
                 contentPadding = PaddingValues(
                     start = PAGE_GUTTER,
                     end = PAGE_GUTTER,
@@ -1848,8 +1859,12 @@ private fun ArtistGridCard(
     onLongPress: (() -> Unit)? = null,
     modifier: Modifier = Modifier,
 ) {
+    val cardCompact = rememberCardCompact()
+    val titleOverlay = rememberGridTitleOverlay()
+    val countLabel = pluralStringResource(R.plurals.song_count_plural, songCount, songCount)
     Column(
         modifier = modifier
+            .then(cardCompact.measure)
             .clip(RoundedCornerShape(12.dp))
             .combinedClickable(onClick = onClick, onLongClick = onLongPress)
             .padding(4.dp),
@@ -1887,24 +1902,33 @@ private fun ArtistGridCard(
                     .clip(CircleShape)
                     .thumbnailBorder(CircleShape),
             )
+            if (titleOverlay) {
+                GridTitleOnArt(
+                    title = name,
+                    subtitle = countLabel,
+                    tileWidth = cardCompact.width,
+                )
+            }
         }
-        Spacer(Modifier.height(8.dp))
-        Text(
-            text = name,
-            style = MaterialTheme.typography.titleMedium,
-            color = MaterialTheme.colorScheme.onBackground,
-            maxLines = 1,
-            overflow = TextOverflow.Ellipsis,
-            textAlign = androidx.compose.ui.text.style.TextAlign.Center,
-        )
-        Text(
-            text = pluralStringResource(R.plurals.song_count_plural, songCount, songCount),
-            style = MaterialTheme.typography.bodySmall,
-            color = MaterialTheme.colorScheme.onSurfaceVariant,
-            maxLines = 1,
-            overflow = TextOverflow.Ellipsis,
-            textAlign = androidx.compose.ui.text.style.TextAlign.Center,
-        )
+        if (!titleOverlay) {
+            Spacer(Modifier.height(if (cardCompact.compact) 4.dp else 8.dp))
+            Text(
+                text = name,
+                style = if (cardCompact.compact) MaterialTheme.typography.labelLarge else MaterialTheme.typography.titleMedium,
+                color = MaterialTheme.colorScheme.onBackground,
+                maxLines = 1,
+                overflow = TextOverflow.Ellipsis,
+                textAlign = androidx.compose.ui.text.style.TextAlign.Center,
+            )
+            if (!cardCompact.compact) Text(
+                text = countLabel,
+                style = MaterialTheme.typography.bodySmall,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                maxLines = 1,
+                overflow = TextOverflow.Ellipsis,
+                textAlign = androidx.compose.ui.text.style.TextAlign.Center,
+            )
+        }
     }
 }
 
@@ -2006,11 +2030,12 @@ private fun AlbumsTab(
 ) {
     if (viewType == LibraryViewType.GRID) {
         val gridState = rememberLazyGridState()
+        val gridColumns = rememberGridColumns(GridKind.ALBUMS)
         Box(modifier = Modifier.fillMaxSize()) {
             LazyVerticalGrid(
-                columns = GridCells.Adaptive(minSize = 140.dp),
+                columns = ScaledGridCells(gridColumns),
                 state = gridState,
-                modifier = Modifier.fillMaxSize(),
+                modifier = Modifier.fillMaxSize().pinchToResizeGrid(GridKind.ALBUMS, gridColumns),
                 contentPadding = PaddingValues(
                     start = PAGE_GUTTER,
                     end = PAGE_GUTTER,
@@ -2128,14 +2153,32 @@ private fun AlbumGridCard(
     onLongPress: (() -> Unit)? = null,
     modifier: Modifier = Modifier,
 ) {
+    val cardCompact = rememberCardCompact()
+    val titleOverlay = rememberGridTitleOverlay()
     Column(
         modifier = modifier
+            .then(cardCompact.measure)
             .clip(RoundedCornerShape(12.dp))
             .background(if (selected) MaterialTheme.colorScheme.primary.copy(alpha = 0.14f) else Color.Transparent)
             .combinedClickable(onClick = onClick, onLongClick = onLongPress)
             .padding(4.dp),
     ) {
         val shape = RoundedCornerShape(12.dp)
+        val songCount = pluralStringResource(
+            R.plurals.song_count_plural,
+            entry.songs.size,
+            entry.songs.size,
+        )
+        val playlistLabel = stringResource(R.string.playlist)
+        val subtitle = buildString {
+            if (entry.playlist) {
+                append(playlistLabel)
+                append(" · ")
+            } else if (entry.artist.isNotBlank() && entry.artist != entry.title) {
+                append("${entry.artist} · ")
+            }
+            append(songCount)
+        }
         Box(
             modifier = Modifier
                 .fillMaxWidth()
@@ -2159,36 +2202,32 @@ private fun AlbumGridCard(
                     modifier = Modifier.fillMaxSize(),
                 )
             }
+            if (titleOverlay) {
+                GridTitleOnArt(
+                    title = entry.title,
+                    subtitle = subtitle,
+                    tileWidth = cardCompact.width,
+                    highlight = selected,
+                )
+            }
         }
-        Spacer(Modifier.height(8.dp))
-        Text(
-            text = entry.title,
-            style = MaterialTheme.typography.titleMedium,
-            color = MaterialTheme.colorScheme.onBackground,
-            maxLines = 1,
-            overflow = TextOverflow.Ellipsis,
-        )
-        val songCount = pluralStringResource(
-            R.plurals.song_count_plural,
-            entry.songs.size,
-            entry.songs.size,
-        )
-        val playlistLabel = stringResource(R.string.playlist)
-        Text(
-            text = buildString {
-                if (entry.playlist) {
-                    append(playlistLabel)
-                    append(" · ")
-                } else if (entry.artist.isNotBlank() && entry.artist != entry.title) {
-                    append("${entry.artist} · ")
-                }
-                append(songCount)
-            },
-            style = MaterialTheme.typography.bodySmall,
-            color = MaterialTheme.colorScheme.onSurfaceVariant,
-            maxLines = 1,
-            overflow = TextOverflow.Ellipsis,
-        )
+        if (!titleOverlay) {
+            Spacer(Modifier.height(if (cardCompact.compact) 4.dp else 8.dp))
+            Text(
+                text = entry.title,
+                style = if (cardCompact.compact) MaterialTheme.typography.labelLarge else MaterialTheme.typography.titleMedium,
+                color = if (selected) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onBackground,
+                maxLines = 1,
+                overflow = TextOverflow.Ellipsis,
+            )
+            if (!cardCompact.compact) Text(
+                text = subtitle,
+                style = MaterialTheme.typography.bodySmall,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                maxLines = 1,
+                overflow = TextOverflow.Ellipsis,
+            )
+        }
     }
 }
 

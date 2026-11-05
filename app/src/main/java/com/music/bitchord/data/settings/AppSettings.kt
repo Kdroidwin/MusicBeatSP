@@ -29,6 +29,9 @@ const val MAX_PLAYER_ARTWORK_BLUR_DP = 128f
 /** Maximum manually requested gap between player controls, in dp. */
 const val MAX_PLAYER_BUTTON_SPACING_DP = 160f
 
+/** The catalogue AutoPlay uses, or no automatic suggestions. */
+enum class AutoplaySource { OFF, YOUTUBE_MUSIC, DEVICE }
+
 /**
  * Stream bitrate ceiling on the YouTube fallback path — MEDIUM, HIGH and
  * LOSSLESS all mean "whatever the best available Opus format is" there; what
@@ -582,6 +585,9 @@ object AppSettings {
     val playbackSpeed = MutableStateFlow(1.0f)
     val playbackPitch = MutableStateFlow(1.0f)
     val themeMode = MutableStateFlow(ThemeMode.DARK)
+    /** User-imported .ttf/.otf font copied to app-private storage. */
+    val customFontPath = MutableStateFlow("")
+    val customFontName = MutableStateFlow("")
     /** Persisted SAF URI used by the optional user-selected image theme. */
     val customThemeImageUri = MutableStateFlow<String?>(null)
     /** Uses the current track artwork for Material accents without recolouring app surfaces. */
@@ -602,6 +608,12 @@ object AppSettings {
     val miniPlayerSwipeChangesTrack = MutableStateFlow(false)
     /** Lets an upward swipe on the mini-player open the expanded player. */
     val miniPlayerSwipeUpExpands = MutableStateFlow(true)
+    /** Keeps the bottom navigation and mini player expanded while scrolling. */
+    val lockBottomBarExpanded = MutableStateFlow(false)
+    /** Grid column counts per page, keyed by [GridKind.key]. */
+    val gridColumns = MutableStateFlow<Map<String, Int>>(emptyMap())
+    /** Draws grid item titles over the artwork instead of below it. */
+    val gridTitleOverlay = MutableStateFlow(false)
     /** Uses the playlist page artwork palette for track menus opened inside it. */
     val playlistTrackMenuUsesArtworkColor = MutableStateFlow(true)
     /** Optional typography overrides on the expanded player header, in scaled-independent units. */
@@ -659,8 +671,15 @@ object AppSettings {
     /** Draws speed and pitch controls with the player's hairline seek/volume bars. */
     val playbackTuningThinSliders = MutableStateFlow(true)
 
+    /** How closely automatic lyric lookups must match the current track. */
+    val lyricsAutoStrictness = MutableStateFlow("STANDARD")
+
+    /** Keep a media volume for this app apart from other apps (off by default). */
+    val volumeHandoff = MutableStateFlow(false)
+
     /** Keep playing similar music once the queue runs out. */
     val autoplay = MutableStateFlow(true)
+    val autoplaySource = MutableStateFlow(AutoplaySource.YOUTUBE_MUSIC)
 
     /** Whether the queue is held in shuffled order (Mix button). */
     val shuffleEnabled = MutableStateFlow(false)
@@ -1481,6 +1500,14 @@ object AppSettings {
         miniPlayerPreviousButton.value = prefs.getBoolean(KEY_MINI_PLAYER_PREVIOUS_BUTTON, true)
         miniPlayerSwipeChangesTrack.value = prefs.getBoolean(KEY_MINI_PLAYER_SWIPE_CHANGES_TRACK, false)
         miniPlayerSwipeUpExpands.value = prefs.getBoolean(KEY_MINI_PLAYER_SWIPE_UP_EXPANDS, true)
+        lockBottomBarExpanded.value = prefs.getBoolean(KEY_LOCK_BOTTOM_BAR_EXPANDED, false)
+        gridColumns.value = GridKind.entries.mapNotNull { kind ->
+            prefs.getInt(KEY_GRID_COLUMNS_PREFIX + kind.key, -1)
+                .takeIf { it > 0 }?.let { kind.key to it.coerceIn(GridKind.MIN_COLUMNS, GridKind.MAX_COLUMNS) }
+        }.toMap()
+        gridTitleOverlay.value = prefs.getBoolean(KEY_GRID_TITLE_OVERLAY, false)
+        customFontPath.value = prefs.getString(KEY_CUSTOM_FONT_PATH, "").orEmpty()
+        customFontName.value = prefs.getString(KEY_CUSTOM_FONT_NAME, "").orEmpty()
         playlistTrackMenuUsesArtworkColor.value = prefs.getBoolean(KEY_PLAYLIST_TRACK_MENU_ARTWORK_COLOR, true)
         playerTitleFontSizeSp.value = prefs.getFloat(KEY_PLAYER_TITLE_FONT_SIZE_SP, 20f).coerceIn(12f, 36f)
         playerArtistFontSizeSp.value = prefs.getFloat(KEY_PLAYER_ARTIST_FONT_SIZE_SP, 20f).coerceIn(12f, 36f)
@@ -1514,7 +1541,14 @@ object AppSettings {
         queueClearTrashIcon.value = prefs.getBoolean(KEY_QUEUE_CLEAR_TRASH_ICON, false)
         hidePlaybackTuningTitle.value = prefs.getBoolean(KEY_HIDE_PLAYBACK_TUNING_TITLE, true)
         playbackTuningThinSliders.value = prefs.getBoolean(KEY_PLAYBACK_TUNING_THIN_SLIDERS, true)
-        autoplay.value = prefs.getBoolean(KEY_AUTOPLAY, true)
+        val legacyAutoplay = prefs.getBoolean(KEY_AUTOPLAY, true)
+        autoplaySource.value = runCatching {
+            prefs.getString(KEY_AUTOPLAY_SOURCE, null)?.let(AutoplaySource::valueOf)
+                ?: if (legacyAutoplay) AutoplaySource.YOUTUBE_MUSIC else AutoplaySource.OFF
+        }.getOrDefault(if (legacyAutoplay) AutoplaySource.YOUTUBE_MUSIC else AutoplaySource.OFF)
+        autoplay.value = autoplaySource.value != AutoplaySource.OFF
+        volumeHandoff.value = prefs.getBoolean(KEY_VOLUME_HANDOFF, false)
+        lyricsAutoStrictness.value = prefs.getString(KEY_LYRICS_AUTO_STRICTNESS, "STANDARD") ?: "STANDARD"
         shuffleEnabled.value = prefs.getBoolean(KEY_SHUFFLE_ENABLED, false)
         audioFocusLevel.value = prefs.getInt(KEY_AUDIO_FOCUS_LEVEL, 1).coerceIn(0, 4)
         repeatMode.value = prefs.getInt(KEY_REPEAT_MODE, Player.REPEAT_MODE_OFF)
@@ -1933,8 +1967,53 @@ object AppSettings {
     }
 
     fun setAutoplay(value: Boolean) {
-        autoplay.value = value
-        prefs.edit().putBoolean(KEY_AUTOPLAY, value).apply()
+        val remembered = runCatching {
+            AutoplaySource.valueOf(prefs.getString(KEY_AUTOPLAY_LAST_SOURCE, AutoplaySource.YOUTUBE_MUSIC.name)!!)
+        }.getOrDefault(AutoplaySource.YOUTUBE_MUSIC)
+        setAutoplaySource(if (value) remembered else AutoplaySource.OFF)
+    }
+
+    fun setAutoplaySource(value: AutoplaySource) {
+        autoplaySource.value = value
+        autoplay.value = value != AutoplaySource.OFF
+        prefs.edit().apply {
+            putString(KEY_AUTOPLAY_SOURCE, value.name)
+            putBoolean(KEY_AUTOPLAY, value != AutoplaySource.OFF)
+            if (value != AutoplaySource.OFF) putString(KEY_AUTOPLAY_LAST_SOURCE, value.name)
+        }.apply()
+    }
+
+    fun setLyricsAutoStrictness(value: String) {
+        val safeValue = value.takeIf { it in setOf("STRICT", "STANDARD", "LOOSE", "TITLE_ONLY") } ?: "STANDARD"
+        lyricsAutoStrictness.value = safeValue
+        prefs.edit().putString(KEY_LYRICS_AUTO_STRICTNESS, safeValue).apply()
+    }
+
+    fun setVolumeHandoff(value: Boolean) {
+        volumeHandoff.value = value
+        prefs.edit().putBoolean(KEY_VOLUME_HANDOFF, value).apply()
+    }
+
+    fun setGridColumns(kind: GridKind, columns: Int) {
+        val safeColumns = columns.coerceIn(GridKind.MIN_COLUMNS, GridKind.MAX_COLUMNS)
+        gridColumns.value = gridColumns.value + (kind.key to safeColumns)
+        prefs.edit().putInt(KEY_GRID_COLUMNS_PREFIX + kind.key, safeColumns).apply()
+    }
+
+    fun setGridTitleOverlay(value: Boolean) {
+        gridTitleOverlay.value = value
+        prefs.edit().putBoolean(KEY_GRID_TITLE_OVERLAY, value).apply()
+    }
+
+    fun setLockBottomBarExpanded(value: Boolean) {
+        lockBottomBarExpanded.value = value
+        prefs.edit().putBoolean(KEY_LOCK_BOTTOM_BAR_EXPANDED, value).apply()
+    }
+
+    fun setCustomFont(path: String, displayName: String) {
+        customFontPath.value = path
+        customFontName.value = displayName
+        prefs.edit().putString(KEY_CUSTOM_FONT_PATH, path).putString(KEY_CUSTOM_FONT_NAME, displayName).apply()
     }
 
     fun setShuffleEnabled(value: Boolean) {
@@ -4396,6 +4475,11 @@ object AppSettings {
     private const val KEY_MINI_PLAYER_PREVIOUS_BUTTON = "mini_player_previous_button"
     private const val KEY_MINI_PLAYER_SWIPE_CHANGES_TRACK = "mini_player_swipe_changes_track"
     private const val KEY_MINI_PLAYER_SWIPE_UP_EXPANDS = "mini_player_swipe_up_expands"
+    private const val KEY_LOCK_BOTTOM_BAR_EXPANDED = "lock_bottom_bar_expanded"
+    private const val KEY_GRID_COLUMNS_PREFIX = "grid_columns_"
+    private const val KEY_GRID_TITLE_OVERLAY = "grid_title_overlay"
+    private const val KEY_CUSTOM_FONT_PATH = "custom_font_path"
+    private const val KEY_CUSTOM_FONT_NAME = "custom_font_name"
     private const val KEY_PLAYLIST_TRACK_MENU_ARTWORK_COLOR = "playlist_track_menu_artwork_color"
     private const val KEY_PLAYER_TITLE_FONT_SIZE_SP = "player_title_font_size_sp"
     private const val KEY_PLAYER_ARTIST_FONT_SIZE_SP = "player_artist_font_size_sp"
@@ -4443,6 +4527,10 @@ object AppSettings {
     private const val KEY_PAXSENIX_API_KEY = "paxsenix_api_key"
     private const val KEY_PLAYBACK_TUNING_THIN_SLIDERS = "playback_tuning_thin_sliders"
     private const val KEY_AUTOPLAY = "autoplay"
+    private const val KEY_AUTOPLAY_SOURCE = "autoplay_source"
+    private const val KEY_AUTOPLAY_LAST_SOURCE = "autoplay_last_source"
+    private const val KEY_LYRICS_AUTO_STRICTNESS = "lyrics_auto_strictness"
+    private const val KEY_VOLUME_HANDOFF = "volume_handoff"
     private const val KEY_SHUFFLE_ENABLED = "shuffle_enabled"
     private const val KEY_AUDIO_FOCUS_LEVEL = "audio_focus_level"
     private const val KEY_REPEAT_MODE = "repeat_mode"

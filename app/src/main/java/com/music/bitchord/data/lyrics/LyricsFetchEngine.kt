@@ -54,6 +54,8 @@ object LyricsFetchEngine {
     ): LyricsRepository.Result? {
         val cacheVariant = buildString {
             append("syllable=").append(prioritizeSyllableSync)
+            append(";strictness=")
+                .append(com.music.bitchord.data.settings.AppSettings.lyricsAutoStrictness.value)
             append(";sources=").append(sources.map { it.id }.sorted().joinToString(","))
             append(";order=").append(order.map { it.id }.joinToString(","))
             if (sources.any { it.id == "netease" }) {

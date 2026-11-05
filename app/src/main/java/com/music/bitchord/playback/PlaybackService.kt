@@ -438,8 +438,21 @@ class PlaybackService : MediaLibraryService() {
             !extras?.getString(EXTRA_LOCAL_PATH).isNullOrBlank() ||
             scheme == "content" || scheme == "file"
     }
+    private val volumeNoisyReceiver = object : android.content.BroadcastReceiver() {
+        override fun onReceive(context: Context, intent: Intent) {
+            if (intent.action == AudioManager.ACTION_AUDIO_BECOMING_NOISY) {
+                VolumeHandoff.onBecomingNoisy(this@PlaybackService)
+            }
+        }
+    }
     private val outputDeviceCallback = object : AudioDeviceCallback() {
-        override fun onAudioDevicesAdded(addedDevices: Array<AudioDeviceInfo>) = requestOutputReconfiguration()
+        override fun onAudioDevicesAdded(addedDevices: Array<AudioDeviceInfo>) {
+            requestOutputReconfiguration()
+            Handler(Looper.getMainLooper()).postDelayed(
+                { VolumeHandoff.onOutputConnected(this@PlaybackService) },
+                1_200L,
+            )
+        }
         override fun onAudioDevicesRemoved(removedDevices: Array<AudioDeviceInfo>) = requestOutputReconfiguration()
     }
     private val systemVolumeObserver = object : ContentObserver(Handler(Looper.getMainLooper())) {
@@ -842,6 +855,13 @@ class PlaybackService : MediaLibraryService() {
                 return
             }
             handleAudioFocusPlaybackChange(playWhenReady)
+            var anyAudible = false
+            eachPlayer {
+                if (it.playWhenReady && it.playbackSuppressionReason == Player.PLAYBACK_SUPPRESSION_REASON_NONE) {
+                    anyAudible = true
+                }
+            }
+            VolumeHandoff.update(this@PlaybackService, anyAudible)
             publishWidgetState(playing = playWhenReady)
             QuickPlayTileState.setActive(this@PlaybackService, playWhenReady)
             if (playWhenReady) player?.let(speakers::onLocalStartedPlaying)
@@ -1308,6 +1328,22 @@ class PlaybackService : MediaLibraryService() {
         // Observe the shared state here so the notification's Shuffle icon and
         // label follow that toggle immediately as well.
         scope.launch {
+            AppSettings.autoplaySource.drop(1).distinctUntilChanged().collect {
+                applyAutoplaySource()
+            }
+        }
+        scope.launch {
+            AppSettings.volumeHandoff.drop(1).distinctUntilChanged().collect {
+                var anyAudible = false
+                eachPlayer {
+                    if (it.playWhenReady && it.playbackSuppressionReason == Player.PLAYBACK_SUPPRESSION_REASON_NONE) {
+                        anyAudible = true
+                    }
+                }
+                VolumeHandoff.update(this@PlaybackService, anyAudible)
+            }
+        }
+        scope.launch {
             QueueShuffle.enabled
                 .collectLatest {
                     mediaSession?.setCustomLayout(notificationButtons())
@@ -1550,6 +1586,12 @@ class PlaybackService : MediaLibraryService() {
         player = exoPlayer
         spare = sparePlayer
         audioManager?.registerAudioDeviceCallback(outputDeviceCallback, null)
+        androidx.core.content.ContextCompat.registerReceiver(
+            this,
+            volumeNoisyReceiver,
+            android.content.IntentFilter(AudioManager.ACTION_AUDIO_BECOMING_NOISY),
+            androidx.core.content.ContextCompat.RECEIVER_NOT_EXPORTED,
+        )
         applyOutputRoute()
 
         AppSettings.audioSessionId.value = exoPlayer.audioSessionId
@@ -1773,24 +1815,18 @@ class PlaybackService : MediaLibraryService() {
     }
 
     private fun toggleAutoplayFromNotification() {
-        val enabled = !AppSettings.autoplay.value
-        AppSettings.setAutoplay(enabled)
-        if (enabled) {
-            autoplayLoadJob?.cancel()
-            autoplayLoadJob = null
-            autoplaySeed = null
-            loadAutoplayForCurrentTrack()
-        } else {
-            autoplayLoadJob?.cancel()
-            autoplayLoadJob = null
-            autoplaySeed = null
-            dropAutoplayTracksFromQueue()
-            // Switching AutoPlay off is the listener saying they don't want
-            // those tracks; leaving a stash behind would put them back the next
-            // time repeat-all ended.
-            repeatAllStash = emptyList()
-            repeatAllStashSeed = null
-        }
+        AppSettings.setAutoplay(!AppSettings.autoplay.value)
+    }
+
+    /** Replaces suggestions queued by the prior source, then loads the chosen one. */
+    private fun applyAutoplaySource() {
+        autoplayLoadJob?.cancel()
+        autoplayLoadJob = null
+        autoplaySeed = null
+        dropAutoplayTracksFromQueue()
+        repeatAllStash = emptyList()
+        repeatAllStashSeed = null
+        if (AppSettings.autoplay.value) loadAutoplayForCurrentTrack()
         mediaSession?.setCustomLayout(notificationButtons())
     }
 
@@ -1818,6 +1854,7 @@ class PlaybackService : MediaLibraryService() {
         if (needed <= 0) return
         if (autoplaySeed == current.videoId) return
         autoplaySeed = current.videoId
+        val source = AppSettings.autoplaySource.value
         autoplayLoadJob = scope.launch {
             val queueSongs = (0 until exoPlayer.mediaItemCount)
                 .map { exoPlayer.getMediaItemAt(it).toSong() }
@@ -1826,10 +1863,10 @@ class PlaybackService : MediaLibraryService() {
             } else {
                 queueSongs
             }
-            loadAutoplayTracks(existing, current, needed)
+            loadAutoplayTracks(existing, current, needed, source, this@PlaybackService)
                 .onSuccess { resolved ->
                     val activePlayer = player ?: return@onSuccess
-                    if (!AppSettings.autoplay.value ||
+                    if (AppSettings.autoplaySource.value != source ||
                         activePlayer.currentMediaItem?.mediaId != current.videoId
                     ) {
                         return@onSuccess
@@ -5433,6 +5470,8 @@ class PlaybackService : MediaLibraryService() {
 
 
     override fun onDestroy() {
+        VolumeHandoff.update(this, false)
+        runCatching { unregisterReceiver(volumeNoisyReceiver) }
         // Close the current audible segment before the service scope/player is
         // torn down. This captures a track that crossed the configured history
         // threshold since the last five-second sampler tick.

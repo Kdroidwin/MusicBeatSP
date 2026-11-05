@@ -14,6 +14,10 @@ import androidx.compose.ui.unit.dp
 import com.music.bitchord.feature.localmusic.domain.model.LocalPlaylist
 import com.music.bitchord.data.model.Song
 import com.music.bitchord.data.settings.LibraryCategory
+import com.music.bitchord.data.settings.GridKind
+import com.music.bitchord.ui.components.ScaledGridCells
+import com.music.bitchord.ui.components.pinchToResizeGrid
+import com.music.bitchord.ui.components.rememberGridColumns
 
 /**
  * Grid layout presentation of the Library featuring Favorites and Playlists.
@@ -42,10 +46,11 @@ fun LibraryGridContent(
     modifier: Modifier = Modifier,
     state: LazyGridState = rememberLazyGridState(),
 ) {
+    val gridColumns = rememberGridColumns(GridKind.LIBRARY)
     LazyVerticalGrid(
-        columns = GridCells.Fixed(2),
+        columns = ScaledGridCells(gridColumns),
         state = state,
-        modifier = modifier.fillMaxSize(),
+        modifier = modifier.fillMaxSize().pinchToResizeGrid(GridKind.LIBRARY, gridColumns),
         contentPadding = PaddingValues(
             start = 16.dp,
             end = 16.dp,

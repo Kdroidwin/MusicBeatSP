@@ -98,6 +98,7 @@ import com.music.bitchord.data.model.durationMillis
 import com.music.bitchord.data.model.isSameTrackAs
 import com.music.bitchord.data.settings.LibraryViewType
 import com.music.bitchord.data.settings.AppSettings
+import com.music.bitchord.data.settings.GridKind
 import com.music.bitchord.data.canvas.ArtistSignature
 import com.music.bitchord.data.canvas.ArtistSignatureRepository
 import com.music.bitchord.data.canvas.SignatureInkTransformation
@@ -108,6 +109,12 @@ import com.music.bitchord.feature.artistimage.model.ArtistImage
 import com.music.bitchord.feature.artistimage.data.ArtistArtworkStore
 import com.music.bitchord.ui.components.ExplicitSongTitle
 import com.music.bitchord.ui.components.PAGE_GUTTER
+import com.music.bitchord.ui.components.GridTitleOnArt
+import com.music.bitchord.ui.components.ScaledGridCells
+import com.music.bitchord.ui.components.pinchToResizeGrid
+import com.music.bitchord.ui.components.rememberCardCompact
+import com.music.bitchord.ui.components.rememberGridColumns
+import com.music.bitchord.ui.components.rememberGridTitleOverlay
 import com.music.bitchord.ui.components.ROW_DIVIDER_INSET
 import com.music.bitchord.ui.components.SongRow
 import com.music.bitchord.ui.components.thumbnailBorder
@@ -611,8 +618,13 @@ fun SongGridCard(
     onLongPress: (() -> Unit)? = null,
     modifier: Modifier = Modifier,
 ) {
+    val cardCompact = rememberCardCompact()
+    val titleOverlay = rememberGridTitleOverlay()
+    val artistLabel = song.artist.ifBlank { stringResource(R.string.unknown_artist) }
+    val showArtist = !(hideUnknownArtistLine && song.artist.trim().equals("<unknown>", ignoreCase = true))
     Column(
         modifier = modifier
+            .then(cardCompact.measure)
             .clip(RoundedCornerShape(12.dp))
             .background(if (selected) MaterialTheme.colorScheme.primary.copy(alpha = 0.14f) else Color.Transparent)
             .debouncedCombinedClickable(onClick = onClick, onLongClick = onLongPress)
@@ -651,21 +663,31 @@ fun SongGridCard(
                     modifier = Modifier.size(28.dp),
                 )
             }
+            if (titleOverlay) {
+                GridTitleOnArt(
+                    title = song.title,
+                    subtitle = artistLabel.takeIf { showArtist },
+                    tileWidth = cardCompact.width,
+                    explicit = song.isExplicit == true,
+                )
+            }
         }
-        Spacer(Modifier.height(8.dp))
-        ExplicitSongTitle(
-            song = song,
-            style = MaterialTheme.typography.titleMedium,
-            color = MaterialTheme.colorScheme.onBackground,
-        )
-        if (!(hideUnknownArtistLine && song.artist.trim().equals("<unknown>", ignoreCase = true))) {
-            Text(
-                text = song.artist.ifBlank { stringResource(R.string.unknown_artist) },
-                style = MaterialTheme.typography.bodySmall,
-                color = MaterialTheme.colorScheme.onSurfaceVariant,
-                maxLines = 1,
-                overflow = TextOverflow.Ellipsis,
+        if (!titleOverlay) {
+            Spacer(Modifier.height(if (cardCompact.compact) 4.dp else 8.dp))
+            ExplicitSongTitle(
+                song = song,
+                style = if (cardCompact.compact) MaterialTheme.typography.labelLarge else MaterialTheme.typography.titleMedium,
+                color = MaterialTheme.colorScheme.onBackground,
             )
+            if (showArtist && !cardCompact.compact) {
+                Text(
+                    text = artistLabel,
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    maxLines = 1,
+                    overflow = TextOverflow.Ellipsis,
+                )
+            }
         }
     }
 }
@@ -779,10 +801,11 @@ fun DrillDownSongList(
                     },
                 )
             }
+            val gridColumns = rememberGridColumns(GridKind.COLLECTION_SONGS)
             LazyVerticalGrid(
-                columns = GridCells.Adaptive(minSize = 140.dp),
+                columns = ScaledGridCells(gridColumns),
                 state = gridState,
-                modifier = Modifier.fillMaxSize(),
+                modifier = Modifier.fillMaxSize().pinchToResizeGrid(GridKind.COLLECTION_SONGS, gridColumns),
                 contentPadding = PaddingValues(
                     start = PAGE_GUTTER,
                     end = PAGE_GUTTER,

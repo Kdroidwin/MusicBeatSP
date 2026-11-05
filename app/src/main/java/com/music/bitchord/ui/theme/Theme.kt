@@ -127,13 +127,20 @@ fun BitChordTheme(
     matchButtonAccentToArtwork: Boolean = false,
     content: @Composable () -> Unit,
 ) {
+    val customFontPath by AppSettings.customFontPath.collectAsStateWithLifecycle()
+    val typography = remember(customFontPath) {
+        customFontPath.takeIf { it.isNotEmpty() }
+            ?.let(CustomFont::familyFor)
+            ?.let { BitChordTypography.withFamily(it) }
+            ?: BitChordTypography
+    }
     MaterialTheme(
         colorScheme = when {
             amoledBlack -> AmoledColors
             darkTheme -> DarkColors
             else -> LightColors
         },
-        typography = BitChordTypography,
+        typography = typography,
     ) {
         // Resolve the playing sleeve through the existing palette/cache path.
         val base = MaterialTheme.colorScheme
@@ -197,7 +204,7 @@ fun BitChordTheme(
                 surfaceTint = accent,
             )
         } else base
-        MaterialTheme(colorScheme = colors, typography = BitChordTypography, content = content)
+        MaterialTheme(colorScheme = colors, typography = typography, content = content)
     }
 }
 

@@ -354,7 +354,7 @@ private fun settingsSearchCategory(text: String): SettingsSearchCategory {
         listOf("lyrics", "歌詞", "lrc", "歌詞ソース").any(value::contains) -> SettingsSearchCategory.LYRICS
         listOf("radio", "radiko", "onsen", "音泉", "ラジオ", "録音").any(value::contains) -> SettingsSearchCategory.RADIO
         listOf("appearance", "theme", "color", "colour", "font", "artwork", "blur", "icon", "animation", "外観", "テーマ", "色", "フォント", "アートワーク", "ぼかし", "アイコン").any(value::contains) -> SettingsSearchCategory.APPEARANCE
-        listOf("library", "folder", "playlist", "album", "artist", "collection", "download", "history", "replay", "tab", "local", "ライブラリ", "フォルダ", "プレイリスト", "アルバム", "アーティスト", "コレクション", "ダウンロード", "履歴", "再生まとめ", "タブ", "ローカル").any(value::contains) -> SettingsSearchCategory.LIBRARY
+        listOf("library", "folder", "playlist", "album", "artist", "collection", "download", "history", "replay", "tab", "local", "grid", "columns", "ライブラリ", "フォルダ", "プレイリスト", "アルバム", "アーティスト", "コレクション", "ダウンロード", "履歴", "再生まとめ", "タブ", "ローカル", "グリッド", "列").any(value::contains) -> SettingsSearchCategory.LIBRARY
         listOf("server", "youtube", "spotify", "canvas", "deezer", "source", "online", "network", "webdav", "smb", "last.fm", "listenbrainz", "discord", "signature", "サーバー", "音源", "ソース", "オンライン", "通信", "署名").any(value::contains) -> SettingsSearchCategory.CONNECTIONS
         listOf("playback", "audio", "sound", "volume", "quality", "equalizer", "dac", "crossfade", "reverb", "spatial", "seek", "speed", "pitch", "再生", "音質", "音量", "イコライザー", "音声", "速度", "ピッチ", "シーク").any(value::contains) -> SettingsSearchCategory.PLAYBACK
         listOf("player", "queue", "timer", "control", "chromecast", "favorite", "media", "プレイヤー", "キュー", "タイマー", "操作", "お気に入り", "キャスト").any(value::contains) -> SettingsSearchCategory.PLAYER
@@ -979,6 +979,14 @@ fun SettingsScreen(
     val lyricsSourceOrder by AppSettings.lyricsSourceOrder.collectAsStateWithLifecycle()
     val showLyricsLogs by AppSettings.showLyricsLogs.collectAsStateWithLifecycle()
     val theme by AppSettings.themeMode.collectAsStateWithLifecycle()
+    val customFontPath by AppSettings.customFontPath.collectAsStateWithLifecycle()
+    val customFontName by AppSettings.customFontName.collectAsStateWithLifecycle()
+    val gridColumns by AppSettings.gridColumns.collectAsStateWithLifecycle()
+    val gridTitleOverlay by AppSettings.gridTitleOverlay.collectAsStateWithLifecycle()
+    val lockBottomBarExpanded by AppSettings.lockBottomBarExpanded.collectAsStateWithLifecycle()
+    val volumeHandoff by AppSettings.volumeHandoff.collectAsStateWithLifecycle()
+    val autoplaySource by AppSettings.autoplaySource.collectAsStateWithLifecycle()
+    val lyricsAutoStrictness by AppSettings.lyricsAutoStrictness.collectAsStateWithLifecycle()
     val customThemeImageUri by AppSettings.customThemeImageUri.collectAsStateWithLifecycle()
     val matchButtonAccentToArtwork by AppSettings.matchButtonAccentToArtwork.collectAsStateWithLifecycle()
     val miniPlayerArtworkColor by AppSettings.miniPlayerArtworkColor.collectAsStateWithLifecycle()
@@ -1128,6 +1136,19 @@ fun SettingsScreen(
         }
     }
     val chooseThemeImage: () -> Unit = { themeImagePicker.launch(arrayOf("image/*")) }
+    val customFontPicker = rememberLauncherForActivityResult(ActivityResultContracts.OpenDocument()) { selected ->
+        if (selected == null) return@rememberLauncherForActivityResult
+        com.music.bitchord.ui.theme.CustomFont.import(context, selected)
+            .onSuccess { name ->
+                Toast.makeText(context, context.getString(R.string.font_applied, name), Toast.LENGTH_SHORT).show()
+            }
+            .onFailure { error ->
+                Toast.makeText(context, context.getString(R.string.font_load_error, error.message.orEmpty()), Toast.LENGTH_LONG).show()
+            }
+    }
+    val chooseCustomFont: () -> Unit = {
+        customFontPicker.launch(arrayOf("font/ttf", "font/otf", "font/sfnt", "application/x-font-ttf", "application/octet-stream", "*/*"))
+    }
 
     @Composable
     fun buildSettingsSearchEntries(): List<SettingsSearchEntry> {
@@ -2123,7 +2144,96 @@ fun SettingsScreen(
             checked = prioritizeSpotifyCanvas,
             activate = { AppSettings.setPrioritizeSpotifyCanvas(!prioritizeSpotifyCanvas) },
         ),
-    )
+    ) + listOf(
+        SettingsSearchEntry(
+            title = stringResource(R.string.autoplay),
+            subtitle = stringResource(R.string.autoplay_settings_subtitle),
+            keywords = listOf("AutoPlay", "autoplay", "radio", "YouTube Music", "device", "自動再生", "端末内"),
+            checked = autoplaySource != com.music.bitchord.data.settings.AutoplaySource.OFF,
+            valueLabel = stringResource(
+                when (autoplaySource) {
+                    com.music.bitchord.data.settings.AutoplaySource.OFF -> R.string.autoplay_source_off
+                    com.music.bitchord.data.settings.AutoplaySource.YOUTUBE_MUSIC -> R.string.autoplay_source_youtube_music
+                    com.music.bitchord.data.settings.AutoplaySource.DEVICE -> R.string.autoplay_source_device
+                },
+            ),
+            activate = {
+                val next = (com.music.bitchord.data.settings.AutoplaySource.entries.indexOf(autoplaySource) + 1) %
+                    com.music.bitchord.data.settings.AutoplaySource.entries.size
+                AppSettings.setAutoplaySource(com.music.bitchord.data.settings.AutoplaySource.entries[next])
+            },
+        ),
+        SettingsSearchEntry(
+            title = stringResource(R.string.lyrics_auto_strictness_title),
+            subtitle = stringResource(R.string.lyrics_auto_strictness_subtitle),
+            keywords = listOf("lyrics", "match", "strictness", "歌詞", "検索", "厳密さ"),
+            valueLabel = stringResource(
+                when (com.music.bitchord.data.lyrics.LyricsStrictness.fromPreference(lyricsAutoStrictness)) {
+                    com.music.bitchord.data.lyrics.LyricsStrictness.STRICT -> R.string.lyrics_strict_strict
+                    com.music.bitchord.data.lyrics.LyricsStrictness.STANDARD -> R.string.lyrics_strict_standard
+                    com.music.bitchord.data.lyrics.LyricsStrictness.LOOSE -> R.string.lyrics_strict_loose
+                    com.music.bitchord.data.lyrics.LyricsStrictness.TITLE_ONLY -> R.string.lyrics_strict_title_only
+                },
+            ),
+            activate = {
+                val levels = com.music.bitchord.data.lyrics.LyricsStrictness.entries
+                val current = com.music.bitchord.data.lyrics.LyricsStrictness.fromPreference(lyricsAutoStrictness)
+                AppSettings.setLyricsAutoStrictness(levels[(current.ordinal + 1) % levels.size].name)
+            },
+        ),
+        SettingsSearchEntry(
+            title = stringResource(R.string.volume_handoff),
+            subtitle = stringResource(R.string.volume_handoff_subtitle),
+            keywords = listOf("volume", "sound", "audio", "音量", "アプリ別", "分ける"),
+            checked = volumeHandoff,
+            activate = { AppSettings.setVolumeHandoff(!volumeHandoff) },
+        ),
+        SettingsSearchEntry(
+            title = stringResource(R.string.lock_bottom_bar_expanded),
+            subtitle = stringResource(R.string.lock_bottom_bar_expanded_subtitle),
+            keywords = listOf("mini player", "bottom bar", "fixed", "ミニプレイヤー", "固定", "ボトムバー"),
+            checked = lockBottomBarExpanded,
+            activate = { AppSettings.setLockBottomBarExpanded(!lockBottomBarExpanded) },
+        ),
+        SettingsSearchEntry(
+            title = stringResource(R.string.font_title),
+            subtitle = stringResource(R.string.font_subtitle),
+            keywords = listOf("font", "typeface", "ttf", "otf", "フォント", "書体"),
+            valueLabel = if (customFontPath.isNotEmpty()) customFontName.ifBlank { stringResource(R.string.font_custom) }
+                else stringResource(R.string.font_default),
+            activate = chooseCustomFont,
+        ),
+        SettingsSearchEntry(
+            title = stringResource(R.string.grid_titles),
+            subtitle = stringResource(R.string.grid_titles_subtitle),
+            keywords = listOf("grid", "title", "artwork", "グリッド", "タイトル", "ジャケット"),
+            checked = gridTitleOverlay,
+            valueLabel = stringResource(if (gridTitleOverlay) R.string.grid_titles_on_art else R.string.grid_titles_below),
+            activate = { AppSettings.setGridTitleOverlay(!gridTitleOverlay) },
+        ),
+    ) + com.music.bitchord.data.settings.GridKind.entries.map { kind ->
+        val label = when (kind) {
+            com.music.bitchord.data.settings.GridKind.SONGS -> R.string.grid_size_songs
+            com.music.bitchord.data.settings.GridKind.ALBUMS -> R.string.grid_size_albums
+            com.music.bitchord.data.settings.GridKind.ARTISTS -> R.string.grid_size_artists
+            com.music.bitchord.data.settings.GridKind.ALBUM_ARTISTS -> R.string.grid_size_album_artists
+            com.music.bitchord.data.settings.GridKind.LIBRARY -> R.string.grid_size_library
+            com.music.bitchord.data.settings.GridKind.COLLECTION_SONGS -> R.string.grid_size_collection
+        }
+        val current = gridColumns[kind.key] ?: kind.defaultColumns
+        SettingsSearchEntry(
+            title = stringResource(label),
+            subtitle = stringResource(R.string.grid_size_subtitle),
+            keywords = listOf("grid", "columns", "グリッド", "列", "表示数"),
+            valueLabel = stringResource(R.string.grid_columns_value, current),
+            activate = {
+                val next = if (current >= com.music.bitchord.data.settings.GridKind.MAX_COLUMNS) {
+                    com.music.bitchord.data.settings.GridKind.MIN_COLUMNS
+                } else current + 1
+                AppSettings.setGridColumns(kind, next)
+            },
+        )
+    }
 
 
     LaunchedEffect(selectedPerformanceRefreshRate, performanceRefreshRate) {
@@ -3463,6 +3573,31 @@ fun SettingsScreen(
                     AppSettings.setAdvanceQueueWhenRepeatOff(!advanceQueueWhenRepeatOff)
                 },
             )
+            RowDivider()
+            SettingsRow(
+                icon = com.music.bitchord.ui.icons.BitChordIcons.Infinity,
+                title = stringResource(R.string.autoplay),
+                subtitle = stringResource(R.string.autoplay_settings_subtitle),
+                value = stringResource(
+                    when (autoplaySource) {
+                        com.music.bitchord.data.settings.AutoplaySource.OFF -> R.string.autoplay_source_off
+                        com.music.bitchord.data.settings.AutoplaySource.YOUTUBE_MUSIC -> R.string.autoplay_source_youtube_music
+                        com.music.bitchord.data.settings.AutoplaySource.DEVICE -> R.string.autoplay_source_device
+                    },
+                ),
+            )
+            SegmentedControl(
+                options = listOf(
+                    stringResource(R.string.autoplay_source_off),
+                    stringResource(R.string.autoplay_source_youtube_music),
+                    stringResource(R.string.autoplay_source_device),
+                ),
+                selectedIndex = com.music.bitchord.data.settings.AutoplaySource.entries.indexOf(autoplaySource),
+                onSelect = { AppSettings.setAutoplaySource(com.music.bitchord.data.settings.AutoplaySource.entries[it]) },
+                modifier = Modifier.padding(start = ROW_INSET, end = ROW_INSET, bottom = 14.dp),
+            )
+            RowDivider()
+            VolumeHandoffRows()
         }
 
         SettingsGroup(header = stringResource(R.string.media_controls)) {
@@ -4036,6 +4171,25 @@ fun SettingsScreen(
                 onClick = { AppSettings.setAutoFitOneLineLyrics(!autoFitOneLineLyrics) },
             )
             RowDivider()
+            val strictness = com.music.bitchord.data.lyrics.LyricsStrictness.fromPreference(lyricsAutoStrictness)
+            SettingsRow(
+                icon = Icons.Rounded.Language,
+                title = stringResource(R.string.lyrics_auto_strictness_title),
+                subtitle = stringResource(R.string.lyrics_auto_strictness_subtitle),
+                value = stringResource(
+                    when (strictness) {
+                        com.music.bitchord.data.lyrics.LyricsStrictness.STRICT -> R.string.lyrics_strict_strict
+                        com.music.bitchord.data.lyrics.LyricsStrictness.STANDARD -> R.string.lyrics_strict_standard
+                        com.music.bitchord.data.lyrics.LyricsStrictness.LOOSE -> R.string.lyrics_strict_loose
+                        com.music.bitchord.data.lyrics.LyricsStrictness.TITLE_ONLY -> R.string.lyrics_strict_title_only
+                    },
+                ),
+                onClick = {
+                    val levels = com.music.bitchord.data.lyrics.LyricsStrictness.entries
+                    AppSettings.setLyricsAutoStrictness(levels[(strictness.ordinal + 1) % levels.size].name)
+                },
+            )
+            RowDivider()
             SettingsRow(
                 icon = Icons.Rounded.DeleteSweep,
                 title = stringResource(R.string.lyrics_ctc_model_delete),
@@ -4060,6 +4214,10 @@ fun SettingsScreen(
                 value = stringResource(if (customThemeImageUri.isNullOrBlank()) R.string.choose_image else R.string.theme_image_selected),
                 onClick = chooseThemeImage,
             )
+            RowDivider()
+            CustomFontSettingsRows(onPickFont = chooseCustomFont)
+            RowDivider()
+            GridSizeSettingsRows()
             RowDivider()
             SettingsRow(
                 icon = Icons.Rounded.ViewStream,
@@ -4248,6 +4406,23 @@ fun SettingsScreen(
                     )
                 },
                 onClick = { AppSettings.setMiniPlayerSwipeUpExpands(!miniPlayerSwipeUpExpands) },
+            )
+            RowDivider()
+            SettingsRow(
+                icon = Icons.Rounded.ViewStream,
+                title = stringResource(R.string.lock_bottom_bar_expanded),
+                subtitle = stringResource(R.string.lock_bottom_bar_expanded_subtitle),
+                trailing = {
+                    Switch(
+                        checked = lockBottomBarExpanded,
+                        onCheckedChange = AppSettings::setLockBottomBarExpanded,
+                        colors = SwitchDefaults.colors(
+                            checkedTrackColor = MaterialTheme.colorScheme.primary,
+                            checkedBorderColor = MaterialTheme.colorScheme.primary,
+                        ),
+                    )
+                },
+                onClick = { AppSettings.setLockBottomBarExpanded(!lockBottomBarExpanded) },
             )
             RowDivider()
             SettingsRow(
@@ -7670,6 +7845,124 @@ private fun SourcesSettingsGroup(onClick: () -> Unit) {
 @Composable
 private fun MusicServerManagerSheetHost(visible: Boolean, onDismiss: () -> Unit) {
     if (visible) MusicServerManagerSheet(onDismiss = onDismiss)
+}
+
+/** Grid columns are shared with the grid's pinch gesture and saved per page. */
+@Composable
+private fun GridSizeSettingsRows() {
+    SettingsRow(
+        icon = Icons.Rounded.ViewStream,
+        title = stringResource(R.string.grid_size),
+        subtitle = stringResource(R.string.grid_size_subtitle),
+    )
+    val kinds = listOf(
+        com.music.bitchord.data.settings.GridKind.SONGS to R.string.grid_size_songs,
+        com.music.bitchord.data.settings.GridKind.ALBUMS to R.string.grid_size_albums,
+        com.music.bitchord.data.settings.GridKind.ARTISTS to R.string.grid_size_artists,
+        com.music.bitchord.data.settings.GridKind.ALBUM_ARTISTS to R.string.grid_size_album_artists,
+        com.music.bitchord.data.settings.GridKind.LIBRARY to R.string.grid_size_library,
+        com.music.bitchord.data.settings.GridKind.COLLECTION_SONGS to R.string.grid_size_collection,
+    )
+    kinds.forEach { (kind, labelRes) ->
+        val columns = com.music.bitchord.ui.components.rememberGridColumns(kind)
+        Column(modifier = Modifier.padding(start = ROW_INSET, end = ROW_INSET, bottom = 6.dp)) {
+            Row(verticalAlignment = Alignment.CenterVertically) {
+                Text(
+                    text = stringResource(labelRes),
+                    style = MaterialTheme.typography.bodyMedium,
+                    color = MaterialTheme.colorScheme.onSurface,
+                    modifier = Modifier.weight(1f),
+                )
+                Text(
+                    text = stringResource(R.string.grid_columns_value, columns),
+                    style = MaterialTheme.typography.labelLarge,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                )
+            }
+            Slider(
+                value = columns.toFloat(),
+                onValueChange = { AppSettings.setGridColumns(kind, it.roundToInt()) },
+                valueRange = com.music.bitchord.data.settings.GridKind.MIN_COLUMNS.toFloat()..
+                    com.music.bitchord.data.settings.GridKind.MAX_COLUMNS.toFloat(),
+                steps = com.music.bitchord.data.settings.GridKind.MAX_COLUMNS -
+                    com.music.bitchord.data.settings.GridKind.MIN_COLUMNS - 1,
+            )
+        }
+    }
+    val titleOverlay by AppSettings.gridTitleOverlay.collectAsStateWithLifecycle()
+    SettingsRow(
+        icon = Icons.Rounded.ViewStream,
+        title = stringResource(R.string.grid_titles),
+        subtitle = stringResource(R.string.grid_titles_subtitle),
+    )
+    SegmentedControl(
+        options = listOf(
+            stringResource(R.string.grid_titles_below),
+            stringResource(R.string.grid_titles_on_art),
+        ),
+        selectedIndex = if (titleOverlay) 1 else 0,
+        onSelect = { AppSettings.setGridTitleOverlay(it == 1) },
+        modifier = Modifier.padding(start = ROW_INSET, end = ROW_INSET, bottom = 14.dp),
+    )
+}
+
+@Composable
+private fun CustomFontSettingsRows(onPickFont: () -> Unit) {
+    val context = androidx.compose.ui.platform.LocalContext.current
+    val fontName by AppSettings.customFontName.collectAsStateWithLifecycle()
+    val fontPath by AppSettings.customFontPath.collectAsStateWithLifecycle()
+    SettingsRow(
+        icon = Icons.Rounded.Language,
+        title = stringResource(R.string.font_title),
+        subtitle = stringResource(R.string.font_subtitle),
+        value = if (fontPath.isNotEmpty()) fontName.ifBlank { stringResource(R.string.font_custom) }
+            else stringResource(R.string.font_default),
+        onClick = onPickFont,
+    )
+    if (fontPath.isNotEmpty()) {
+        RowDivider()
+        SettingsRow(
+            icon = Icons.Rounded.DeleteSweep,
+            title = stringResource(R.string.font_reset),
+            onClick = { com.music.bitchord.ui.theme.CustomFont.reset(context) },
+        )
+    }
+}
+
+@Composable
+private fun VolumeHandoffRows() {
+    val context = androidx.compose.ui.platform.LocalContext.current
+    val enabled by AppSettings.volumeHandoff.collectAsStateWithLifecycle()
+    var canHearConnections by remember(context) {
+        mutableStateOf(com.music.bitchord.playback.VolumeHandoff.canHearConnections(context))
+    }
+    val permission = rememberLauncherForActivityResult(ActivityResultContracts.RequestPermission()) { granted ->
+        canHearConnections = granted
+    }
+    SettingsRow(
+        icon = Icons.AutoMirrored.Rounded.VolumeUp,
+        title = stringResource(R.string.volume_handoff),
+        subtitle = stringResource(R.string.volume_handoff_subtitle),
+        trailing = {
+            Switch(
+                checked = enabled,
+                onCheckedChange = AppSettings::setVolumeHandoff,
+                colors = SwitchDefaults.colors(
+                    checkedTrackColor = MaterialTheme.colorScheme.primary,
+                    checkedBorderColor = MaterialTheme.colorScheme.primary,
+                ),
+            )
+        },
+        onClick = { AppSettings.setVolumeHandoff(!enabled) },
+    )
+    if (enabled && !canHearConnections && Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) {
+        SettingsRow(
+            icon = Icons.Rounded.Headphones,
+            title = stringResource(R.string.volume_handoff_bluetooth),
+            subtitle = stringResource(R.string.volume_handoff_bluetooth_subtitle),
+            onClick = { permission.launch(Manifest.permission.BLUETOOTH_CONNECT) },
+        )
+    }
 }
 
 /** "3 months of listening" — the unit a backup is actually measured in. */

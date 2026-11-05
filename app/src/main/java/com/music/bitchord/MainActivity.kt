@@ -979,8 +979,13 @@ private fun BitChordApp(
     }
 
     val hasMusicBar = player.song != null && !playerDocked
+    val lockBottomBarExpanded by AppSettings.lockBottomBarExpanded.collectAsStateWithLifecycle()
     val navBarScroll = rememberFloatingTabBarScrollConnection(
-        inlineBehavior = if (hasMusicBar) FloatingTabBarInlineBehavior.OnScrollDown else FloatingTabBarInlineBehavior.Never,
+        inlineBehavior = if (hasMusicBar && !lockBottomBarExpanded) {
+            FloatingTabBarInlineBehavior.OnScrollDown
+        } else {
+            FloatingTabBarInlineBehavior.Never
+        },
     )
     val onDismissMusicBar: () -> Unit = {
         controller?.stop()

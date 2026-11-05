@@ -2,6 +2,10 @@ package com.music.bitchord.data.settings
 
 import android.content.Context
 import android.content.SharedPreferences
+import android.media.AudioAttributes
+import android.media.AudioDeviceInfo
+import android.media.AudioManager
+import android.os.Build
 import com.music.bitchord.playback.equalizer.EqualizerPreset
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.asStateFlow
@@ -120,6 +124,46 @@ object EqualizerSettings {
         prefs.edit().putString(KEY_ACTIVE_DEVICE, key).apply()
         if (!loadProfile(key)) persistCurrentProfile()
     }
+
+    /** Output currently carrying media audio, using the same route key as the EQ profiles. */
+    fun currentOutputDevice(context: Context): AudioDeviceInfo? {
+        val manager = context.getSystemService(AudioManager::class.java) ?: return null
+        return runCatching {
+            val outputs = manager.getDevices(AudioManager.GET_DEVICES_OUTPUTS)
+            val routed = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
+                val attributes = AudioAttributes.Builder()
+                    .setUsage(AudioAttributes.USAGE_MEDIA)
+                    .setContentType(AudioAttributes.CONTENT_TYPE_MUSIC)
+                    .build()
+                runCatching { manager.getAudioDevicesForAttributes(attributes).firstOrNull() }.getOrNull()
+            } else null
+            if (routed != null) return@runCatching routed
+            val preferredTypes = buildSet {
+                add(AudioDeviceInfo.TYPE_BLUETOOTH_A2DP)
+                add(AudioDeviceInfo.TYPE_WIRED_HEADPHONES)
+                add(AudioDeviceInfo.TYPE_WIRED_HEADSET)
+                add(AudioDeviceInfo.TYPE_USB_DEVICE)
+                add(AudioDeviceInfo.TYPE_USB_HEADSET)
+                add(AudioDeviceInfo.TYPE_USB_ACCESSORY)
+                add(AudioDeviceInfo.TYPE_LINE_ANALOG)
+                add(AudioDeviceInfo.TYPE_LINE_DIGITAL)
+                add(AudioDeviceInfo.TYPE_HDMI)
+                if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) {
+                    add(AudioDeviceInfo.TYPE_BLE_HEADSET)
+                    add(AudioDeviceInfo.TYPE_BLE_SPEAKER)
+                }
+            }
+            outputs.firstOrNull { it.isSink && it.type in preferredTypes }
+                ?: outputs.firstOrNull { it.type == AudioDeviceInfo.TYPE_BUILTIN_SPEAKER }
+                ?: outputs.firstOrNull()
+        }.getOrNull()
+    }
+
+    fun currentOutputKey(context: Context): String =
+        currentOutputDevice(context)?.let(::deviceKeyFor) ?: "default"
+
+    private fun deviceKeyFor(device: AudioDeviceInfo): String =
+        "out-${(device.type.toString() + ":" + device.productName.toString().lowercase()).hashCode().toUInt().toString(16)}"
 
     private fun loadProfile(key: String): Boolean {
         if (!this::prefs.isInitialized) return false

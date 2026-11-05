@@ -69,17 +69,32 @@ object LyricsRepository {
         LyricsLog.clear()
         LyricsLog.i("Repository", "Looking up lyrics for \"$title\" by \"$artist\" (${durationMs / 1000}s)")
 
+        val strictness = LyricsStrictness.fromPreference(
+            com.music.bitchord.data.settings.AppSettings.lyricsAutoStrictness.value,
+        )
+        val queryArtist = if (strictness.useArtist) artist else ""
+        val queryAlbum = album.takeIf { strictness.useAlbum }
+        val queryDurationMs = if (strictness.useDuration) durationMs else 0L
+
         return LyricsFetchEngine.fetchLyrics(
             videoId = videoId,
             title = title,
-            artist = artist,
-            durationMs = durationMs,
-            album = album,
+            artist = queryArtist,
+            durationMs = queryDurationMs,
+            album = queryAlbum,
             sources = sources,
             order = order,
             prioritizeSyllableSync = prioritizeSyllableSync,
             fetcher = { source, vId, t, a, dMs, alb ->
                 fetch(source, vId, t, a, dMs, alb)
+                    ?.takeIf { lines ->
+                        // Do not accept lyrics whose timestamps continue far
+                        // past this song just because duration matching was
+                        // omitted from the provider query.
+                        val realDuration = durationMs
+                        val lastTimestamp = lines.maxOfOrNull { it.timeMs }
+                        realDuration <= 0L || lastTimestamp == null || lastTimestamp <= realDuration + 20_000L
+                    }
             }
         )
     }
