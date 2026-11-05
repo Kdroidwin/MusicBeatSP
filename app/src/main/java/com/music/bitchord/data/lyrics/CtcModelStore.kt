@@ -4,6 +4,7 @@ import android.content.Context
 import com.music.bitchord.data.Http
 import com.music.bitchord.data.settings.AppSettings
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.sync.Mutex
 import kotlinx.coroutines.suspendCancellableCoroutine
 import kotlinx.coroutines.withContext
 import okhttp3.Request
@@ -26,19 +27,52 @@ internal object CtcModelStore {
     const val LICENSE = "CC-BY-NC-4.0"
     private const val SHA256 = "26b2c0ba8f11ed045424ae1a70bc0b76f080952fb62fab5a37b3b39d82f08391"
     private const val MODEL_URL = "https://huggingface.co/romara-labs/mms-300m-1130-forced-aligner-ONNX/resolve/main/model.fp32.onnx?download=true"
+    private val modelMutex = Mutex()
 
     fun file(context: Context): File = File(
         File(context.filesDir, "models").apply { mkdirs() },
         "mms-300m-align-fp32.onnx",
     )
 
+    fun hasAnyFiles(context: Context): Boolean {
+        val model = File(File(context.filesDir, "models"), "mms-300m-align-fp32.onnx")
+        return model.exists() || File(model.parentFile, model.name + ".part").exists()
+    }
+
     suspend fun ready(context: Context): Boolean = withContext(Dispatchers.IO) {
         val model = file(context)
         model.length() == MODEL_BYTES && sha256(model) == SHA256
     }
 
+    /** Keeps the model available for the full inference so Settings cannot delete it mid-run. */
+    suspend fun <T> withModel(
+        context: Context,
+        progress: (Int) -> Unit,
+        action: suspend (File) -> T,
+    ): T {
+        modelMutex.lock()
+        try {
+            return action(ensureUnlocked(context, progress))
+        } finally {
+            modelMutex.unlock()
+        }
+    }
+
+    /** Deletes the model and any resumable partial download after active alignment has finished. */
+    suspend fun deleteModel(context: Context) = withContext(Dispatchers.IO) {
+        modelMutex.lock()
+        try {
+            val model = File(File(context.filesDir, "models"), "mms-300m-align-fp32.onnx")
+            val files = listOf(model, File(model.parentFile, model.name + ".part"))
+            val failures = files.filter { it.exists() && !it.delete() }
+            if (failures.isNotEmpty()) throw IOException("モデルファイルを削除できませんでした。")
+        } finally {
+            modelMutex.unlock()
+        }
+    }
+
     /** Resumes a partial download, verifies the complete SHA-256, then atomically promotes it. */
-    suspend fun ensure(context: Context, progress: (Int) -> Unit): File {
+    private suspend fun ensureUnlocked(context: Context, progress: (Int) -> Unit): File {
         if (ready(context)) {
             progress(100)
             return file(context)

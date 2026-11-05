@@ -1795,8 +1795,16 @@
     <string name="lyrics_auto_sync_downloading">Downloading alignment model… %1$d%%</string>
     <string name="lyrics_auto_sync_decoding">Reading and decoding the local audio…</string>
     <string name="lyrics_auto_sync_aligning">Aligning lyrics to the audio…</string>
-    <string name="lyrics_auto_sync_complete">Synchronized lyrics were generated. Review and save them.</string>
     <string name="lyrics_auto_sync_failed">Could not generate synchronized lyrics.</string>
+    <string name="lyrics_auto_sync_complete">Synchronized lyrics were generated. Embedded lyrics are selected; review the result and tap Save to write it to the audio file.</string>
+    <string name="lyrics_ctc_model_delete">Delete CTC model</string>
+    <string name="lyrics_ctc_model_delete_subtitle">Remove the downloaded alignment model (about 1.26 GB) and any partial download.</string>
+    <string name="lyrics_ctc_model_delete_confirm_title">Delete the CTC model?</string>
+    <string name="lyrics_ctc_model_delete_confirm_message">This removes the downloaded alignment model and any partial download. If alignment is running, deletion waits until it finishes. The model must be downloaded again next time.</string>
+    <string name="lyrics_ctc_model_delete_success">CTC model deleted.</string>
+    <string name="lyrics_ctc_model_delete_failed">Could not delete the CTC model.</string>
+    <string name="lyrics_ctc_model_deleting">Deleting…</string>
+    <string name="lyrics_ctc_model_search_keywords">CTC model alignment lyrics storage delete</string>
     <string name="lyrics_shift_all_timestamps">Shift all timestamps</string>
     <string name="lyrics_shift_all_timestamps_help">Enter an offset for every timestamp, then move the timestamp values forward or back.</string>
     <string name="lyrics_set_first_timestamp">Set the first timestamp</string>

@@ -201,6 +201,7 @@ import com.music.bitchord.data.settings.OutputPcmMode
 import com.music.bitchord.data.settings.BitPerfectMode
 import com.music.bitchord.data.canvas.ArtistSignatureRepository
 import com.music.bitchord.data.settings.LyricsTextAlignment
+import com.music.bitchord.data.lyrics.CtcModelStore
 import com.music.bitchord.playback.AudioOutputStatus
 import com.music.bitchord.R
 import com.music.bitchord.data.settings.ThemeMode
@@ -220,6 +221,7 @@ import com.music.bitchord.feature.localmusic.data.PreparedMusicoletBackup
 import com.music.bitchord.ui.screens.WearOsSettingsRow
 import com.music.bitchord.wear.WatchInstaller
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.CancellationException
 import java.util.Locale
 import kotlin.math.roundToInt
 
@@ -967,6 +969,9 @@ fun SettingsScreen(
     val autoShowLyricsOnPlayback by AppSettings.autoShowLyricsOnPlayback.collectAsStateWithLifecycle()
     val autoFetchLyricsOnYoutubePlayback by AppSettings.autoFetchLyricsOnYoutubePlayback.collectAsStateWithLifecycle()
     val lyricsWebSearchQuery by AppSettings.lyricsWebSearchQuery.collectAsStateWithLifecycle()
+    var ctcModelFilesPresent by remember(context) { mutableStateOf(CtcModelStore.hasAnyFiles(context)) }
+    var showDeleteCtcModelDialog by remember { mutableStateOf(false) }
+    var deletingCtcModel by remember { mutableStateOf(false) }
     var showLyricsWebSearchQueryDialog by remember { mutableStateOf(false) }
     var lyricsWebSearchQueryDraft by remember(lyricsWebSearchQuery) { mutableStateOf(lyricsWebSearchQuery) }
     val lyricsExtensionsEnabled by AppSettings.lyricsExtensionsEnabled.collectAsStateWithLifecycle()
@@ -2386,6 +2391,7 @@ fun SettingsScreen(
     var showListenBrainzTokenDialog by remember { mutableStateOf(false) }
     var showLastfmLoginDialog by remember { mutableStateOf(false) }
     val scrobbleScope = rememberCoroutineScope()
+    val settingsScope = rememberCoroutineScope()
 
     val version = remember(context) {
         runCatching {
@@ -2418,6 +2424,13 @@ fun SettingsScreen(
                     ),
                 )
             },
+        ),
+        SettingsSearchEntry(
+            title = stringResource(R.string.lyrics_ctc_model_delete),
+            subtitle = stringResource(R.string.lyrics_ctc_model_delete_subtitle),
+            keywords = stringResource(R.string.lyrics_ctc_model_search_keywords).split(' '),
+            enabled = ctcModelFilesPresent,
+            activate = { showDeleteCtcModelDialog = true },
         ),
         SettingsSearchEntry(
             title = stringResource(R.string.import_musicolet_backup),
@@ -4021,6 +4034,14 @@ fun SettingsScreen(
                 subtitle = stringResource(R.string.lyrics_auto_fit_subtitle),
                 trailing = { Switch(checked = autoFitOneLineLyrics, onCheckedChange = AppSettings::setAutoFitOneLineLyrics) },
                 onClick = { AppSettings.setAutoFitOneLineLyrics(!autoFitOneLineLyrics) },
+            )
+            RowDivider()
+            SettingsRow(
+                icon = Icons.Rounded.DeleteSweep,
+                title = stringResource(R.string.lyrics_ctc_model_delete),
+                subtitle = stringResource(R.string.lyrics_ctc_model_delete_subtitle),
+                enabled = ctcModelFilesPresent,
+                onClick = { showDeleteCtcModelDialog = true },
             )
         }
 
@@ -6806,6 +6827,50 @@ fun SettingsScreen(
                 TextButton(onClick = { transportActionSlot = "" }) {
                     Text(stringResource(R.string.cancel))
                 }
+            },
+        )
+    }
+
+    if (showDeleteCtcModelDialog) {
+        AlertDialog(
+            onDismissRequest = { if (!deletingCtcModel) showDeleteCtcModelDialog = false },
+            title = { Text(stringResource(R.string.lyrics_ctc_model_delete_confirm_title)) },
+            text = { Text(stringResource(R.string.lyrics_ctc_model_delete_confirm_message)) },
+            confirmButton = {
+                TextButton(
+                    enabled = !deletingCtcModel,
+                    onClick = {
+                        deletingCtcModel = true
+                        settingsScope.launch {
+                            try {
+                                CtcModelStore.deleteModel(context)
+                                ctcModelFilesPresent = CtcModelStore.hasAnyFiles(context)
+                                showDeleteCtcModelDialog = false
+                                Toast.makeText(context, R.string.lyrics_ctc_model_delete_success, Toast.LENGTH_SHORT).show()
+                            } catch (cancelled: CancellationException) {
+                                throw cancelled
+                            } catch (_: Exception) {
+                                ctcModelFilesPresent = CtcModelStore.hasAnyFiles(context)
+                                Toast.makeText(context, R.string.lyrics_ctc_model_delete_failed, Toast.LENGTH_SHORT).show()
+                            } finally {
+                                deletingCtcModel = false
+                            }
+                        }
+                    },
+                ) {
+                    Text(
+                        stringResource(
+                            if (deletingCtcModel) R.string.lyrics_ctc_model_deleting
+                            else R.string.delete,
+                        ),
+                    )
+                }
+            },
+            dismissButton = {
+                TextButton(
+                    enabled = !deletingCtcModel,
+                    onClick = { showDeleteCtcModelDialog = false },
+                ) { Text(stringResource(R.string.cancel)) }
             },
         )
     }

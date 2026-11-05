@@ -215,6 +215,10 @@ class LyricsEditorViewModel(app: Application) : AndroidViewModel(app) {
                     }
                     _autoSyncProgress.value = AutoSyncProgress(uiStage, percent)
                 }
+                // CTC output is intended to be saved in the audio file's embedded lyrics.
+                // Select that destination, but keep the existing explicit Save action so a
+                // generated result never overwrites tags without the user's confirmation.
+                selectSource(LyricsEditorSource.Embedded)
                 updateText(synchronized)
                 _toastMessage.emit(getApplication<Application>().getString(R.string.lyrics_auto_sync_complete))
             } catch (cancelled: CancellationException) {

@@ -91,11 +91,11 @@ internal object CtcForcedLyricsAligner {
         require(pcm.isNotEmpty()) { "音源のデコード結果が空でした。" }
 
         onProgress(Stage.DownloadingModel, 0)
-        val model = CtcModelStore.ensure(context.applicationContext) { onProgress(Stage.DownloadingModel, it) }
-        onProgress(Stage.Aligning, null)
-        val raw = infer(model, pcm)
         val romanized = lines.map { romanize(it.text) }
-        val timeByLine = align(romanized, raw)
+        val timeByLine = CtcModelStore.withModel(context.applicationContext, { onProgress(Stage.DownloadingModel, it) }) { model ->
+            onProgress(Stage.Aligning, null)
+            align(romanized, infer(model, pcm))
+        }
         var synchronizedLines = 0
         return buildString {
             lines.forEachIndexed { index, line ->
@@ -237,7 +237,14 @@ internal object CtcForcedLyricsAligner {
             val logZ = max + ln(sum).toFloat()
             FloatArray(row.size) { row[it] - logZ }
         }
-        require(logp.all { it.size > STAR }) { "CTCモデルの出力形式が不正です。" }
+        // STAR is a virtual edge sentinel handled by logProbability(), not a model vocabulary ID.
+        // The model's actual labels end at the highest vocabulary ID (30); demanding STAR=31
+        // here rejects valid 31-column emissions before alignment can begin.
+        val requiredOutputSize = (vocab.values.maxOrNull() ?: BLANK) + 1
+        val outputSize = logp.firstOrNull()?.size ?: 0
+        require(outputSize >= requiredOutputSize && logp.all { it.size == outputSize }) {
+            "CTCモデルの出力形式が不正です（必要な出力数: $requiredOutputSize、実際: $outputSize）。"
+        }
         val back = Array(logp.size) { ShortArray(states.size) { -1 } }
         var previous = FloatArray(states.size) { Float.NEGATIVE_INFINITY }
         previous[0] = logProbability(logp[0], BLANK)

@@ -1768,8 +1768,16 @@
     <string name="lyrics_auto_sync_downloading">位置合わせモデルをダウンロード中… %1$d%%</string>
     <string name="lyrics_auto_sync_decoding">端末内の音源を読み込んでいます…</string>
     <string name="lyrics_auto_sync_aligning">歌詞を音源に合わせています…</string>
-    <string name="lyrics_auto_sync_complete">同期歌詞を生成しました。内容を確認して保存してください。</string>
+    <string name="lyrics_auto_sync_complete">同期歌詞を生成しました。埋め込み歌詞を選択しました。内容を確認して保存ボタンを押すと音源ファイルに書き込まれます。</string>
     <string name="lyrics_auto_sync_failed">同期歌詞を生成できませんでした。</string>
+    <string name="lyrics_ctc_model_delete">CTCモデルを削除</string>
+    <string name="lyrics_ctc_model_delete_subtitle">同期歌詞用にダウンロードしたモデル（約1.26 GB）と未完了のダウンロードを削除します。</string>
+    <string name="lyrics_ctc_model_delete_confirm_title">CTCモデルを削除しますか？</string>
+    <string name="lyrics_ctc_model_delete_confirm_message">ダウンロード済みのモデルと未完了のファイルを削除します。位置合わせ中の場合は完了後に削除します。次回の利用時に再ダウンロードが必要です。</string>
+    <string name="lyrics_ctc_model_delete_success">CTCモデルを削除しました。</string>
+    <string name="lyrics_ctc_model_delete_failed">CTCモデルを削除できませんでした。</string>
+    <string name="lyrics_ctc_model_deleting">削除中…</string>
+    <string name="lyrics_ctc_model_search_keywords">CTC モデル 同期歌詞 容量 削除</string>
     <string name="lyrics_shift_all_timestamps">全行のtimestampをずらす</string>
     <string name="lyrics_shift_all_timestamps_help">全timestampに加える時間を入力し、timestampを進めるか戻すか選択してください。</string>
     <string name="lyrics_set_first_timestamp">最初の行のtimestampを設定</string>
