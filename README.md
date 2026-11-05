@@ -112,6 +112,7 @@ The standard Android package is `io.pockets.musicbestsp`. Because this differs f
 - Use high-resolution local artwork in the player and customize playlist cover images.
 - Use the optional audio cutter from local track details to export a trimmed AAC copy; the original file remains unchanged.
 - CTC Forced Alignment
+- Lyrics are supported from Apple Music, KuGou, LyricsPlus, LRCLIB, Irc.red, PaxSenix, BiniLyrics, BetterLyrics, BetterLyrics Portato, PaxSenix: Spotify, PaxSenix: Musixmatch, Unison, YouTube captions, YouTube Music, Musixmatch, Genius, PetitLyrics, QQ Music, Followlyrics, and NetEase Cloud Music.
 
 ### Widgets and appearance
 
