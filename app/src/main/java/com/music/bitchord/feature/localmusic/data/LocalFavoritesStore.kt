@@ -46,22 +46,44 @@ object LocalFavoritesStore {
     private fun load() {
         if (!storageFile.exists()) {
             _favoriteIds.value = emptySet()
+            _favoriteSongs.value = emptyMap()
             return
         }
-        _favoriteIds.value = runCatching {
+        val loadedIds = runCatching {
             val content = storageFile.readText()
             json.decodeFromString(serializer, content)
         }.getOrDefault(emptySet())
-        _favoriteSongs.value = if (songsFile.exists()) {
+        val loadedSongs = if (songsFile.exists()) {
             runCatching {
                 songsFile.readText()
                     .let { json.decodeFromString(songsSerializer, it) }
                     .songs
-                    .filterKeys { it in _favoriteIds.value }
                     .mapValues { (_, song) -> song.toSong() }
             }.getOrDefault(emptyMap())
         } else {
             emptyMap()
+        }
+
+        // Previous releases keyed a downloaded YouTube favorite by its local
+        // MediaStore URI. Android can issue a different URI after a rescan,
+        // which severed both playback and delete-download lookup. Canonicalize
+        // those records using the durable video ID already stored with each
+        // favorite; local files and source-backed tracks retain their own IDs.
+        val migratedIds = loadedIds.toMutableSet()
+        val migratedSongs = linkedMapOf<String, Song>()
+        loadedSongs.forEach { (savedId, song) ->
+            if (savedId !in loadedIds) return@forEach
+            val canonicalId = song.videoId.takeIf { it.isYouTubeVideoId() } ?: savedId
+            if (canonicalId != savedId) {
+                migratedIds.remove(savedId)
+                migratedIds.add(canonicalId)
+            }
+            migratedSongs[canonicalId] = song.forFavoriteStorage()
+        }
+        _favoriteIds.value = migratedIds
+        _favoriteSongs.value = migratedSongs
+        if (migratedIds != loadedIds || migratedSongs != loadedSongs.filterKeys { it in loadedIds }) {
+            persist()
         }
     }
 
@@ -86,24 +108,26 @@ object LocalFavoritesStore {
     }
 
     fun toggleFavorite(songId: String, song: Song? = null): Boolean {
+        val canonicalId = canonicalFavoriteId(songId, song)
         val current = _favoriteIds.value
-        val isFav = songId in current
+        val isFav = canonicalId in current
         if (isFav) {
-            _favoriteIds.value = current - songId
-            _favoriteSongs.value = _favoriteSongs.value - songId
+            _favoriteIds.value = current - canonicalId
+            _favoriteSongs.value = _favoriteSongs.value - canonicalId
         } else {
-            _favoriteIds.value = current + songId
-            song?.let { _favoriteSongs.value = _favoriteSongs.value + (songId to it.forFavoriteStorage()) }
+            _favoriteIds.value = current + canonicalId
+            song?.let { _favoriteSongs.value = _favoriteSongs.value + (canonicalId to it.forFavoriteStorage()) }
         }
         persist()
         return !isFav
     }
 
     fun addFavorite(songId: String, song: Song? = null) {
-        if (songId !in _favoriteIds.value) {
-            _favoriteIds.value = _favoriteIds.value + songId
+        val canonicalId = canonicalFavoriteId(songId, song)
+        if (canonicalId !in _favoriteIds.value) {
+            _favoriteIds.value = _favoriteIds.value + canonicalId
         }
-        song?.let { _favoriteSongs.value = _favoriteSongs.value + (songId to it.forFavoriteStorage()) }
+        song?.let { _favoriteSongs.value = _favoriteSongs.value + (canonicalId to it.forFavoriteStorage()) }
         persist()
     }
 
@@ -132,12 +156,26 @@ object LocalFavoritesStore {
         persist()
     }
 
-    private fun Song.forFavoriteStorage(): Song = copy(
+    private fun canonicalFavoriteId(songId: String, song: Song?): String =
+        song?.videoId?.takeIf { it.isYouTubeVideoId() } ?: songId
+
+    private fun Song.forFavoriteStorage(): Song {
+        val isYoutubeTrack = videoId.isYouTubeVideoId()
+        return copy(
         // Online stream URLs expire. Keep the durable track ID so the source
-        // can resolve a fresh URL when a saved favorite is played later.
-        localUri = localUri?.takeIf { it.startsWith("content://") || it.startsWith("file://") },
-        localPath = localPath?.takeIf { localUri != null },
-    )
+        // can resolve a fresh URL when a saved favorite is played later. For a
+        // downloaded YouTube track, the saved-download index restores its
+        // current local URI from the stable video ID instead of trusting an
+        // old MediaStore URI captured by the favorite.
+            localUri = localUri?.takeIf {
+                !isYoutubeTrack && (it.startsWith("content://") || it.startsWith("file://"))
+            },
+            localPath = localPath?.takeIf { !isYoutubeTrack && localUri != null },
+        )
+    }
+
+    private fun String.isYouTubeVideoId(): Boolean = length == 11 &&
+        all { it.isLetterOrDigit() || it == '_' || it == '-' }
 
     @Serializable
     private data class StoredFavoriteSongs(val songs: Map<String, StoredFavoriteSong> = emptyMap())

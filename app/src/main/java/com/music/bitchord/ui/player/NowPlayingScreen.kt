@@ -1231,8 +1231,16 @@ fun NowPlayingScreen(
     // their local favorite key; for every online song, the track ID is stable
     // while localUri may be a short-lived stream URL.
     val isSourceBackedTrack = SourceRegistry.parseTrackKey(song.videoId) != null
+    val isYoutubeTrack = song.videoId.length == 11 &&
+        song.videoId.all { it.isLetterOrDigit() || it == '_' || it == '-' } &&
+        !song.isLiveRadio && !song.isOnsenAudio && !song.isRssAudio
     val favoriteId = when {
         isSourceBackedTrack -> song.videoId
+        // A downloaded YouTube track carries a local content/file URI in the
+        // Media3 metadata. That URI can change when Android rescans MediaStore;
+        // key its favorite by the stable YouTube ID so it stays joined to the
+        // saved-download record after a restart.
+        isYoutubeTrack -> song.videoId
         !localUri.isNullOrBlank() -> localUri
         else -> song.videoId
     }
@@ -1273,7 +1281,13 @@ fun NowPlayingScreen(
     val likeDescription = stringResource(if (liked) R.string.remove_from_liked else R.string.like)
     val toggleLike: () -> Unit = {
         if (!accountLikeAvailable) {
-            LocalFavoritesStore.toggleFavorite(favoriteId, song)
+            if (hasAppFavorite) {
+                LocalFavoritesStore.removeFavorite(favoriteId)
+                LocalFavoritesStore.removeFavorite(song.videoId)
+                legacyFavoriteId?.let(LocalFavoritesStore::removeFavorite)
+            } else {
+                LocalFavoritesStore.addFavorite(favoriteId, song)
+            }
         } else if (hasAppFavorite) {
             LocalFavoritesStore.removeFavorite(favoriteId)
             if (song.videoId != favoriteId) LocalFavoritesStore.removeFavorite(song.videoId)
@@ -1388,6 +1402,11 @@ fun NowPlayingScreen(
             queueOpen = false
         }
     }
+    // The state flow is shared across tracks. During the frame before the new
+    // lookup starts, never render the previous song's result or treat the new
+    // song as a miss; the lyrics panel below shows its loading copy instead.
+    val currentSongLyrics = lyrics.takeIf { lyricsReadyForCurrentSong }
+    val currentSongLyricsSource = lyricsSource.takeIf { lyricsReadyForCurrentSong }
     val showLyricsLogsEnabled by AppSettings.showLyricsLogs.collectAsStateWithLifecycle()
     LaunchedEffect(song.videoId) {
         // Keep the full lyrics view open as playback advances. The lyrics
@@ -3149,12 +3168,13 @@ fun NowPlayingScreen(
                             LyricsLogConsole(Modifier.fillMaxSize())
                         } else {
                             LyricsPanel(
-                                lines = lyrics.orEmpty(),
+                                lines = currentSongLyrics.orEmpty(),
                                 trackKey = song.videoId,
                                 positionMs = positionMs,
                                 isPlaying = isPlaying,
                                 onSeekToLine = onSeek,
                                 modifier = Modifier.fillMaxSize(),
+                                isLoading = !lyricsReadyForCurrentSong,
                             )
                         }
                         if (showLyricsLogsEnabled || showLyricsCloseButton) Row(
@@ -3219,7 +3239,7 @@ fun NowPlayingScreen(
                         )
                 } else if (lyricsOpen) {
                         LyricsPanel(
-                            lines = lyrics.orEmpty(),
+                            lines = currentSongLyrics.orEmpty(),
                             trackKey = song.videoId,
                             positionMs = positionMs,
                             isPlaying = isPlaying,
@@ -3236,6 +3256,7 @@ fun NowPlayingScreen(
                                     alpha = ((p - 0.45f) / 0.55f).coerceIn(0f, 1f)
                                     translationY = (1f - p) * 26.dp.toPx()
                                 },
+                            isLoading = !lyricsReadyForCurrentSong,
                         )
                 }
 
@@ -3289,7 +3310,7 @@ fun NowPlayingScreen(
             // there saying no lyrics were found: none were looked for. It is
             // also the only way into the full lyrics panel, so with it gone
             // the feature is properly gone.
-            if (showPlayerLyricsStrip && !lyricsOpen && (syncedLyricsEnabled || !lyrics.isNullOrEmpty())) {
+            if (showPlayerLyricsStrip && !lyricsOpen && (syncedLyricsEnabled || !currentSongLyrics.isNullOrEmpty())) {
                 Box(
                     modifier = Modifier
                         .fillMaxWidth()
@@ -3299,9 +3320,9 @@ fun NowPlayingScreen(
                         // the timestamps below are pulled back up into it.
                         .offset(y = 6.dp),
                 ) {
-                    if (!lyrics.isNullOrEmpty()) {
+                    if (!currentSongLyrics.isNullOrEmpty()) {
                         CurrentLyricLine(
-                            lines = lyrics,
+                            lines = currentSongLyrics,
                             trackKey = song.videoId,
                             positionMs = positionMs,
                             isPlaying = isPlaying,
@@ -3421,9 +3442,9 @@ fun NowPlayingScreen(
                 // source credit pill in the middle, close circle on the right.
                 // The row stretches edge-to-edge so there is no dangling gap
                 // on either side — the pill just sits between the two icons.
-                val headerLabelVisible = lyricsSource != null ||
-                    (lyrics.isNullOrEmpty() && !hideLyricsUnavailableLabel) ||
-                    (!lyrics.isNullOrEmpty() && !hideLyricsSavedMessage)
+                val headerLabelVisible = currentSongLyricsSource != null ||
+                    (lyricsReadyForCurrentSong && currentSongLyrics.isNullOrEmpty() && !hideLyricsUnavailableLabel) ||
+                    (!currentSongLyrics.isNullOrEmpty() && !hideLyricsSavedMessage)
                 Box(
                     modifier = Modifier
                         .fillMaxWidth()
@@ -3475,8 +3496,8 @@ fun NowPlayingScreen(
                             ) {
                                 Text(
                                     text = when {
-                                        lyricsSource != null -> stringResource(R.string.lyrics_by, lyricsSource.label)
-                                        lyrics.isNullOrEmpty() -> stringResource(R.string.no_lyrics_found)
+                                        currentSongLyricsSource != null -> stringResource(R.string.lyrics_by, currentSongLyricsSource.label)
+                                        currentSongLyrics.isNullOrEmpty() -> stringResource(R.string.no_lyrics_found)
                                         else -> stringResource(R.string.lyrics_saved_with_download)
                                     },
                                     style = MaterialTheme.typography.labelLarge,
@@ -4378,6 +4399,7 @@ private fun LyricsPanel(
     isPlaying: Boolean,
     onSeekToLine: (Long) -> Unit,
     modifier: Modifier = Modifier,
+    isLoading: Boolean = false,
 ) {
     val clock = rememberLyricClock(positionMs, isPlaying)
 
@@ -4461,7 +4483,9 @@ private fun LyricsPanel(
 
     if (lines.isEmpty()) {
         Box(modifier, contentAlignment = Alignment.Center) {
-            if (!hideLyricsUnavailableLabel) {
+            if (isLoading) {
+                LyricsLoadingLine(trackKey = trackKey)
+            } else if (!hideLyricsUnavailableLabel) {
                 Text(
                     text = stringResource(R.string.no_lyrics_for_track),
                     style = MaterialTheme.typography.titleMedium,

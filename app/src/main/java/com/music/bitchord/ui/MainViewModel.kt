@@ -313,6 +313,7 @@ class MainViewModel(app: Application) : AndroidViewModel(app) {
 
     private var lyricsFor: LyricsLoadKey? = null
     private var lastSong: Song? = null
+    private var lyricsRequestGeneration = 0L
 
     /**
      * Called as the playing track changes; cheap no-op when already loaded.
@@ -366,6 +367,7 @@ class MainViewModel(app: Application) : AndroidViewModel(app) {
             preferEmbeddedLocalLyrics = preferEmbeddedLocalLyrics,
         )
         if (!force && lyricsFor == key) return
+        val requestGeneration = ++lyricsRequestGeneration
         lyricsFor = key
         _lyrics.value = null
         _lyricsSource.value = null
@@ -394,6 +396,7 @@ class MainViewModel(app: Application) : AndroidViewModel(app) {
                     null
                 }
                 embedded?.let {
+                    if (requestGeneration != lyricsRequestGeneration) return@launch
                     _lyrics.value = embedded
                     // No source to name: what the file records is the lyrics,
                     // not which of the eight services they came from months ago.
@@ -424,6 +427,7 @@ class MainViewModel(app: Application) : AndroidViewModel(app) {
                     }
                     val existing = EmbeddedLyrics.parseLyrics(raw)
                     if (existing.any { !it.isGap && it.text.isNotBlank() }) {
+                        if (requestGeneration != lyricsRequestGeneration) return@launch
                         _lyrics.value = existing.withBackgroundVocals()
                         _lyricsSource.value = null
                         _lyricsChecked.value = true
@@ -434,13 +438,14 @@ class MainViewModel(app: Application) : AndroidViewModel(app) {
 
             if (sources.isEmpty()) {
                 // Switched off, or every source unticked. Nothing to look up.
+                if (requestGeneration != lyricsRequestGeneration) return@launch
                 _lyricsChecked.value = true
                 return@launch
             }
 
             if (durationMs <= 0L) {
                 // Duration arrives a beat after the track does; wait for it.
-                lyricsFor = null
+                if (requestGeneration == lyricsRequestGeneration) lyricsFor = null
                 return@launch
             }
 
@@ -455,6 +460,10 @@ class MainViewModel(app: Application) : AndroidViewModel(app) {
                 TrackLog.w("Lyrics", "lyrics lookup failed; keeping the player available", error)
                 null
             }
+            // A provider may finish just as playback or lyric-source settings
+            // change. Never let that stale answer mark the new track complete
+            // with an empty result (or overwrite its lyrics).
+            if (requestGeneration != lyricsRequestGeneration) return@launch
             _lyrics.value = found?.lines
             _lyricsSource.value = found?.source
             _lyricsChecked.value = true

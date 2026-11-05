@@ -2529,7 +2529,7 @@ private fun BitChordApp(
             },
             lyrics = lyrics,
             lyricsSource = lyricsSource,
-            lyricsUnavailable = lyricsChecked && lyrics.isNullOrEmpty(),
+            lyricsUnavailable = lyricsChecked && lyricsVideoId == player.song?.videoId && lyrics.isNullOrEmpty(),
             lyricsReadyForCurrentSong = lyricsChecked && lyricsVideoId == player.song?.videoId,
             docked = docked,
             artworkGesturesEnabled = true,
