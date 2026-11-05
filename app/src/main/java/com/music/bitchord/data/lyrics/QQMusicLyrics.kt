@@ -62,7 +62,11 @@ object QQMusicLyrics {
                     LyricsLog.w("QQ Music", "QQ lyric endpoint returned no response for song ${selected.id}")
                     return@withContext null
                 }
-            parsePaxResponse(response)?.takeIf { lines -> lines.any { it.text.isNotBlank() } }
+            val parsed = parsePaxResponse(response)
+            val cleaned = if (com.music.bitchord.data.settings.AppSettings.removeQqMusicLyricMetadata.value) {
+                parsed?.withoutQqMetadata(selected.title, selected.artists)
+            } else parsed
+            cleaned?.takeIf { lines -> lines.any { it.text.isNotBlank() } }
                 ?.also { LyricsLog.s("QQ Music", "Returned ${it.size} lines") }
                 ?: run {
                     LyricsLog.w("QQ Music", "QQ lyric response could not be parsed (${response.length} chars)")
@@ -231,6 +235,24 @@ object QQMusicLyrics {
             }
         }
         return ProviderLyrics.parse(raw)
+    }
+
+    private fun List<LyricLine>.withoutQqMetadata(songTitle: String, artists: List<String>): List<LyricLine> {
+        val title = songTitle.normalized()
+        val artistNames = artists.map { it.normalized() }.filter { it.length >= 2 }
+        var firstLyricSeen = false
+        return filter { line ->
+            val text = line.text.trim()
+            if (QQ_CREDIT_LINE.matches(text)) return@filter false
+            if (text.isBlank() || firstLyricSeen) return@filter true
+            firstLyricSeen = true
+            val normalized = text.normalized()
+            val titleHeader = title.isNotBlank() && (
+                normalized == title ||
+                    (normalized.contains(title) && artistNames.any(normalized::contains))
+                )
+            !titleHeader
+        }
     }
 
     /** QQ sometimes emits a timed run for every kana/kanji character. Keep each
@@ -425,6 +447,11 @@ object QQMusicLyrics {
         val timestampMs: Long?,
         val endMs: Long?,
         val part: Boolean?,
+    )
+
+    private val QQ_CREDIT_LINE = Regex(
+        """^\s*(?:作词|作詞|作曲|作曲者|编曲|编曲者|編曲|編曲者|詞曲|词曲|作詞作曲|作词作曲|词|曲)\s*[:：]?\s*.+$""",
+        RegexOption.IGNORE_CASE,
     )
 
     private fun JsonElement.obj(key: String): JsonObject? = (this as? JsonObject)?.get(key) as? JsonObject

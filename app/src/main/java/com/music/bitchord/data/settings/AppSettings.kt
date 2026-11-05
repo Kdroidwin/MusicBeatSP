@@ -776,6 +776,9 @@ object AppSettings {
     /** Removes timestamped songwriter/composer/arranger metadata from NetEase lyrics. */
     val removeNeteaseLyricCredits = MutableStateFlow(true)
 
+    /** Removes QQ Music's opening title row and Chinese composer/arranger credits. */
+    val removeQqMusicLyricMetadata = MutableStateFlow(true)
+
     /** Optional close control for the lyrics panel; hidden by default. */
     val showLyricsCloseButton = MutableStateFlow(false)
 
@@ -1593,6 +1596,7 @@ object AppSettings {
         lyricsBlur.value = prefs.getBoolean(KEY_LYRICS_BLUR, true)
         preferEmbeddedLocalLyrics.value = prefs.getBoolean(KEY_PREFER_EMBEDDED_LOCAL_LYRICS, false)
         removeNeteaseLyricCredits.value = prefs.getBoolean(KEY_REMOVE_NETEASE_LYRIC_CREDITS, true)
+        removeQqMusicLyricMetadata.value = prefs.getBoolean(KEY_REMOVE_QQ_MUSIC_LYRIC_METADATA, true)
         showLyricsCloseButton.value = prefs.getBoolean(KEY_SHOW_LYRICS_CLOSE_BUTTON, false)
         hideLyricsStatusText.value = prefs.getBoolean(KEY_HIDE_LYRICS_STATUS_TEXT, false)
         hideLyricsSavedMessage.value = prefs.getBoolean(KEY_HIDE_LYRICS_SAVED_MESSAGE, false)
@@ -2975,6 +2979,11 @@ object AppSettings {
     fun setRemoveNeteaseLyricCredits(value: Boolean) {
         removeNeteaseLyricCredits.value = value
         prefs.edit().putBoolean(KEY_REMOVE_NETEASE_LYRIC_CREDITS, value).apply()
+    }
+
+    fun setRemoveQqMusicLyricMetadata(value: Boolean) {
+        removeQqMusicLyricMetadata.value = value
+        prefs.edit().putBoolean(KEY_REMOVE_QQ_MUSIC_LYRIC_METADATA, value).apply()
     }
 
     fun setShowLyricsCloseButton(value: Boolean) {
@@ -4488,6 +4497,7 @@ object AppSettings {
     private const val KEY_LYRICS_BLUR = "lyrics_blur"
     private const val KEY_PREFER_EMBEDDED_LOCAL_LYRICS = "prefer_embedded_local_lyrics"
     private const val KEY_REMOVE_NETEASE_LYRIC_CREDITS = "remove_netease_lyric_credits"
+    private const val KEY_REMOVE_QQ_MUSIC_LYRIC_METADATA = "remove_qq_music_lyric_metadata"
     private const val KEY_SHOW_LYRICS_CLOSE_BUTTON = "show_lyrics_close_button"
     private const val KEY_HIDE_LYRICS_STATUS_TEXT = "hide_lyrics_status_text"
     private const val KEY_HIDE_LYRICS_SAVED_MESSAGE = "hide_lyrics_saved_message"

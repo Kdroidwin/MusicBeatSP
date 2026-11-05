@@ -246,6 +246,7 @@ private fun supplementalSettingsSearchEntries(
     autoFetchYoutubeLyrics: Boolean,
     lyricsWebSearchQuery: String,
     removeNeteaseCredits: Boolean,
+    removeQqMusicMetadata: Boolean,
     lyricsDebugLogs: Boolean,
     bitPerfectMode: BitPerfectMode,
     convertForLimitedDac: Boolean,
@@ -281,6 +282,12 @@ private fun supplementalSettingsSearchEntries(
         keywords = listOf("lyrics", "netease", "credits", "composer", "歌詞", "NetEase", "作詞", "作曲", "編曲"),
         checked = removeNeteaseCredits,
     ) { AppSettings.setRemoveNeteaseLyricCredits(!removeNeteaseCredits) },
+    SettingsSearchEntry(
+        title = stringResource(R.string.remove_qq_music_lyric_metadata),
+        subtitle = stringResource(R.string.remove_qq_music_lyric_metadata_subtitle),
+        keywords = listOf("lyrics", "QQ Music", "credits", "composer", "arranger", "歌詞", "QQ", "作曲", "編曲", "曲名"),
+        checked = removeQqMusicMetadata,
+    ) { AppSettings.setRemoveQqMusicLyricMetadata(!removeQqMusicMetadata) },
     SettingsSearchEntry(
         title = stringResource(R.string.lyrics_debug_logs),
         subtitle = stringResource(R.string.lyrics_debug_logs_subtitle),
@@ -913,6 +920,7 @@ fun SettingsScreen(
     val autoFitOneLineLyrics by AppSettings.autoFitOneLineLyrics.collectAsStateWithLifecycle()
     val preferEmbeddedLocalLyrics by AppSettings.preferEmbeddedLocalLyrics.collectAsStateWithLifecycle()
     val removeNeteaseLyricCredits by AppSettings.removeNeteaseLyricCredits.collectAsStateWithLifecycle()
+    val removeQqMusicLyricMetadata by AppSettings.removeQqMusicLyricMetadata.collectAsStateWithLifecycle()
     val showLyricsCloseButton by AppSettings.showLyricsCloseButton.collectAsStateWithLifecycle()
     val hideLyricsStatusText by AppSettings.hideLyricsStatusText.collectAsStateWithLifecycle()
     val hideLyricsSavedMessage by AppSettings.hideLyricsSavedMessage.collectAsStateWithLifecycle()
@@ -2055,6 +2063,7 @@ fun SettingsScreen(
             autoFetchYoutubeLyrics = autoFetchLyricsOnYoutubePlayback,
             lyricsWebSearchQuery = lyricsWebSearchQuery,
             removeNeteaseCredits = removeNeteaseLyricCredits,
+            removeQqMusicMetadata = removeQqMusicLyricMetadata,
             lyricsDebugLogs = showLyricsLogs,
             bitPerfectMode = bitPerfectMode,
             convertForLimitedDac = convertForLimitedDac,
@@ -5293,6 +5302,23 @@ fun SettingsScreen(
                         )
                     },
                     onClick = { AppSettings.setRemoveNeteaseLyricCredits(!removeNeteaseLyricCredits) },
+                )
+                RowDivider()
+                SettingsRow(
+                    icon = Icons.Rounded.DeleteSweep,
+                    title = stringResource(R.string.remove_qq_music_lyric_metadata),
+                    subtitle = stringResource(R.string.remove_qq_music_lyric_metadata_subtitle),
+                    trailing = {
+                        Switch(
+                            checked = removeQqMusicLyricMetadata,
+                            onCheckedChange = AppSettings::setRemoveQqMusicLyricMetadata,
+                            colors = SwitchDefaults.colors(
+                                checkedTrackColor = MaterialTheme.colorScheme.primary,
+                                checkedBorderColor = MaterialTheme.colorScheme.primary,
+                            ),
+                        )
+                    },
+                    onClick = { AppSettings.setRemoveQqMusicLyricMetadata(!removeQqMusicLyricMetadata) },
                 )
             }
         }
