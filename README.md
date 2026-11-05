@@ -111,6 +111,7 @@ The standard Android package is `io.pockets.musicbestsp`. Because this differs f
 - Cache and prefetch local album artwork to speed up track changes; optionally load the local artwork library at startup.
 - Use high-resolution local artwork in the player and customize playlist cover images.
 - Use the optional audio cutter from local track details to export a trimmed AAC copy; the original file remains unchanged.
+- CTC Forced Alignment
 
 ### Widgets and appearance
 
@@ -126,6 +127,7 @@ The standard Android package is `io.pockets.musicbestsp`. Because this differs f
 - BitChord addon(Navidrome)
 - webDAB
 - SMB
+- Podcast
 
 ### Lyrics and metadata tools
 
@@ -203,7 +205,7 @@ The Linux edition is a dedicated offline fork of BitChord's Compose Desktop app,
 - **Google Cast SDK** — Cast sender integration.
 - **[Uyatame-CD-Ripping-Tool-UCRT](https://github.com/uyatame/Uyatame-CD-Ripping-Tool-UCRT)** — Android app to rip and play audio CDs with a USB optical drive (FLAC, AAC, MP3, MusicBrainz).
 - **[Radikall](https://github.com/baudmusic/radikall)** — Android radio client for Japanese stations — listen to every Radiko station from anywhere in the world.
-
+- **[AntennaPod](https://github.com/AntennaPod/AntennaPod)** - A podcast manager for Android
 
 
 <div align="center">
