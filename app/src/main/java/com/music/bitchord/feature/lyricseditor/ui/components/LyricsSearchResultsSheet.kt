@@ -9,6 +9,7 @@ import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.gestures.detectVerticalDragGestures
+import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -23,7 +24,8 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyColumn
-import androidx.compose.foundation.lazy.items
+import androidx.compose.foundation.lazy.itemsIndexed
+import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
@@ -39,6 +41,7 @@ import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.FilledTonalButton
 import androidx.compose.material3.FilledTonalIconButton
+import androidx.compose.material3.FilterChip
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
@@ -68,6 +71,7 @@ import androidx.compose.ui.unit.sp
 import kotlinx.coroutines.launch
 import androidx.compose.ui.res.stringResource
 import com.music.bitchord.R
+import com.music.bitchord.data.lyrics.LyricsStrictness
 import com.music.bitchord.feature.lyricseditor.domain.model.LyricsSearchResultItem
 
 @OptIn(ExperimentalMaterial3Api::class)
@@ -75,6 +79,8 @@ import com.music.bitchord.feature.lyricseditor.domain.model.LyricsSearchResultIt
 fun LyricsSearchResultsSheet(
     results: List<LyricsSearchResultItem>,
     isSearching: Boolean,
+    strictness: LyricsStrictness,
+    onStrictnessChange: (LyricsStrictness) -> Unit,
     onDismissRequest: () -> Unit,
     onResultSelected: (LyricsSearchResultItem) -> Unit,
     onRefineSearchClick: () -> Unit,
@@ -247,6 +253,32 @@ fun LyricsSearchResultsSheet(
                 }
             }
 
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                verticalAlignment = Alignment.CenterVertically,
+                horizontalArrangement = Arrangement.spacedBy(8.dp),
+            ) {
+                Text(
+                    text = stringResource(R.string.lyrics_search_strictness),
+                    style = MaterialTheme.typography.labelLarge,
+                    maxLines = 1,
+                )
+                Row(
+                    modifier = Modifier.weight(1f).horizontalScroll(rememberScrollState()),
+                    horizontalArrangement = Arrangement.spacedBy(6.dp),
+                    verticalAlignment = Alignment.CenterVertically,
+                ) {
+                    LyricsStrictness.entries.forEach { level ->
+                        FilterChip(
+                            selected = strictness == level,
+                            enabled = !isSearching,
+                            onClick = { if (strictness != level) onStrictnessChange(level) },
+                            label = { Text(stringResource(level.labelResource())) },
+                        )
+                    }
+                }
+            }
+
             // Body Content
             Box(
                 modifier = Modifier
@@ -344,7 +376,7 @@ fun LyricsSearchResultsSheet(
                         verticalArrangement = Arrangement.spacedBy(10.dp),
                         contentPadding = PaddingValues(vertical = 4.dp),
                     ) {
-                        items(results, key = { it.id }) { item ->
+                        itemsIndexed(results, key = { index, item -> "${index}:${item.provider}:${item.id}" }) { _, item ->
                             ModernSearchResultCard(
                                 item = item,
                                 onClick = { onResultSelected(item) },
@@ -423,15 +455,31 @@ private fun ModernSearchResultCard(
             modifier = Modifier.padding(horizontal = 16.dp, vertical = 12.dp),
             verticalArrangement = Arrangement.spacedBy(6.dp),
         ) {
-            Text(
-                text = item.title,
-                style = MaterialTheme.typography.titleMedium.copy(
-                    fontWeight = FontWeight.SemiBold,
-                    letterSpacing = (-0.2).sp,
-                ),
-                maxLines = 1,
-                overflow = TextOverflow.Ellipsis,
-            )
+            Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                Text(
+                    text = item.title,
+                    style = MaterialTheme.typography.titleMedium.copy(
+                        fontWeight = FontWeight.SemiBold,
+                        letterSpacing = (-0.2).sp,
+                    ),
+                    maxLines = 1,
+                    overflow = TextOverflow.Ellipsis,
+                    modifier = Modifier.weight(1f),
+                )
+                item.matchScorePercent?.let { score ->
+                    Surface(
+                        shape = RoundedCornerShape(8.dp),
+                        color = MaterialTheme.colorScheme.tertiaryContainer,
+                    ) {
+                        Text(
+                            text = stringResource(R.string.lyrics_search_match_percent, score),
+                            style = MaterialTheme.typography.labelSmall.copy(fontWeight = FontWeight.Bold),
+                            color = MaterialTheme.colorScheme.onTertiaryContainer,
+                            modifier = Modifier.padding(horizontal = 8.dp, vertical = 4.dp),
+                        )
+                    }
+                }
+            }
 
             val subtitle = buildString {
                 append(item.artist)
@@ -536,4 +584,11 @@ private fun ModernSearchResultCard(
             }
         }
     }
+}
+
+private fun LyricsStrictness.labelResource(): Int = when (this) {
+    LyricsStrictness.STRICT -> R.string.lyrics_strict_strict
+    LyricsStrictness.STANDARD -> R.string.lyrics_strict_standard
+    LyricsStrictness.LOOSE -> R.string.lyrics_strict_loose
+    LyricsStrictness.TITLE_ONLY -> R.string.lyrics_strict_title_only
 }

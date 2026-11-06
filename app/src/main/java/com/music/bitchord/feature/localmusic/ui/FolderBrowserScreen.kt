@@ -42,10 +42,13 @@ import androidx.compose.material.icons.rounded.PlayArrow
 import androidx.compose.material.icons.rounded.PlaylistAdd
 import androidx.compose.material.icons.rounded.Shuffle
 import androidx.compose.material.icons.rounded.Edit
+import androidx.compose.material.icons.rounded.MoreVert
 import androidx.compose.material3.FilledTonalButton
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Checkbox
 import androidx.compose.material3.CircularProgressIndicator
+import androidx.compose.material3.DropdownMenu
+import androidx.compose.material3.DropdownMenuItem
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
@@ -140,6 +143,7 @@ fun FolderBrowserScreen(
     onArtworkPaletteChanged: ((com.music.bitchord.ui.theme.ArtworkPalette?) -> Unit)? = null,
     onNavigationChanged: ((Boolean, (() -> Unit)?) -> Unit)? = null,
     onLocalFilesChanged: (() -> Unit)? = null,
+    onBatchTagEditor: ((List<Song>, List<Song>) -> Unit)? = null,
     modifier: Modifier = Modifier,
 ) {
     val context = LocalContext.current
@@ -385,6 +389,12 @@ fun FolderBrowserScreen(
                     }
                 },
                 onLongPress = { toggleFolderSelection(folder) },
+                onBatchTagEditor = if (!selectingSongs && onBatchTagEditor != null && folder.allSongs.isNotEmpty()) {
+                    {
+                        val ownSongs = folder.directSongs.ifEmpty { folder.allSongs }
+                        onBatchTagEditor(ownSongs, folder.allSongs)
+                    }
+                } else null,
             )
         }
 
@@ -729,6 +739,7 @@ private fun FolderEntry(
     selected: Boolean,
     onClick: () -> Unit,
     onLongPress: () -> Unit,
+    onBatchTagEditor: (() -> Unit)? = null,
 ) {
     val trackCount = pluralStringResource(R.plurals.track_count_plural, folder.totalSongCount, folder.totalSongCount)
     val subfolderCount = if (folder.subfolders.isNotEmpty()) {
@@ -790,6 +801,31 @@ private fun FolderEntry(
                     maxLines = 1,
                     overflow = TextOverflow.Ellipsis,
                 )
+            }
+            if (onBatchTagEditor != null) {
+                var menuExpanded by remember(folder.path) { mutableStateOf(false) }
+                Box {
+                    IconButton(onClick = { menuExpanded = true }) {
+                        Icon(
+                            imageVector = Icons.Rounded.MoreVert,
+                            contentDescription = stringResource(R.string.folder_options),
+                            tint = MaterialTheme.colorScheme.onSurfaceVariant,
+                        )
+                    }
+                    DropdownMenu(
+                        expanded = menuExpanded,
+                        onDismissRequest = { menuExpanded = false },
+                    ) {
+                        DropdownMenuItem(
+                            text = { Text(stringResource(R.string.folder_batch_tags)) },
+                            leadingIcon = { Icon(Icons.Rounded.Edit, contentDescription = null) },
+                            onClick = {
+                                menuExpanded = false
+                                onBatchTagEditor()
+                            },
+                        )
+                    }
+                }
             }
             Icon(
                 Icons.Rounded.ChevronRight,

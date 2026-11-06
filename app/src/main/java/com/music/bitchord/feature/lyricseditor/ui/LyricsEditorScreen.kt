@@ -79,6 +79,7 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.lifecycle.viewmodel.compose.viewModel
 import com.music.bitchord.data.model.Song
+import com.music.bitchord.data.lyrics.LyricsStrictness
 import com.music.bitchord.data.settings.AppSettings
 import com.music.bitchord.R
 import com.music.bitchord.feature.lyricseditor.domain.model.LyricsEditorSource
@@ -131,6 +132,9 @@ fun LyricsEditorScreen(
 
     var showDownloadDialog by remember { mutableStateOf(false) }
     var showSearchResultsDialog by remember { mutableStateOf(false) }
+    var searchStrictness by remember(song.videoId) {
+        mutableStateOf(LyricsStrictness.fromPreference(AppSettings.lyricsAutoStrictness.value))
+    }
     var showShiftTimestampsDialog by remember { mutableStateOf(false) }
     var showSetFirstTimestampDialog by remember { mutableStateOf(false) }
     var timestampInput by remember { mutableStateOf("[00:00.0]") }
@@ -720,7 +724,7 @@ fun LyricsEditorScreen(
             onSearchAllClick = { title, artist, album, providers ->
                 showDownloadDialog = false
                 showSearchResultsDialog = true
-                viewModel.searchAllProviders(title, artist, album, providers)
+                viewModel.searchAllProviders(title, artist, album, providers, searchStrictness)
             },
         )
     }
@@ -729,6 +733,11 @@ fun LyricsEditorScreen(
         LyricsSearchResultsSheet(
             results = searchResults,
             isSearching = isSearchingResults,
+            strictness = searchStrictness,
+            onStrictnessChange = { strictness ->
+                searchStrictness = strictness
+                viewModel.research(strictness)
+            },
             onDismissRequest = {
                 showSearchResultsDialog = false
             },
@@ -741,7 +750,7 @@ fun LyricsEditorScreen(
                 showDownloadDialog = true
             },
             onResearchClick = {
-                viewModel.research()
+                viewModel.research(searchStrictness)
             },
         )
     }

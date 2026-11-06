@@ -9,8 +9,10 @@ import com.music.bitchord.data.lyrics.CtcForcedLyricsAligner
 import com.music.bitchord.data.model.Song
 import com.music.bitchord.data.model.durationMillis
 import com.music.bitchord.data.settings.AppSettings
+import com.music.bitchord.data.lyrics.LyricsStrictness
 import com.music.bitchord.feature.lyricseditor.data.LocalLyricsManager
 import com.music.bitchord.feature.lyricseditor.domain.model.LyricsEditorSource
+import com.music.bitchord.feature.lyricseditor.domain.model.LyricsMatchScorer
 import com.music.bitchord.feature.lyricseditor.domain.model.LyricsSearchResultItem
 import com.music.bitchord.feature.lyricseditor.ui.components.LyricsSelectionMode
 import kotlinx.coroutines.flow.MutableSharedFlow
@@ -72,6 +74,11 @@ class LyricsEditorViewModel(app: Application) : AndroidViewModel(app) {
         private set
     var lastSearchProviders: Set<LyricsSource>? = null
         private set
+    var lastSearchStrictness: LyricsStrictness? = null
+        private set
+
+    private var lyricsSearchJob: Job? = null
+    private var lyricsSearchGeneration = 0
 
     fun loadSong(song: Song) {
         if (activeSong?.videoId != song.videoId) {
@@ -80,6 +87,7 @@ class LyricsEditorViewModel(app: Application) : AndroidViewModel(app) {
             lastSearchArtist = null
             lastSearchAlbum = null
             lastSearchProviders = null
+            lastSearchStrictness = null
         }
         activeSong = song
         viewModelScope.launch {
@@ -159,39 +167,74 @@ class LyricsEditorViewModel(app: Application) : AndroidViewModel(app) {
         artist: String,
         album: String? = null,
         providers: Set<LyricsSource>,
+        strictness: LyricsStrictness = LyricsStrictness.fromPreference(AppSettings.lyricsAutoStrictness.value),
     ) {
         lastSearchTitle = title
         lastSearchArtist = artist
         lastSearchAlbum = album
         lastSearchProviders = providers
+        lastSearchStrictness = strictness
 
-        viewModelScope.launch {
-            _isSearchingResults.value = true
-            val durationMs = activeSong?.durationMillis() ?: 0L
-            val items = LocalLyricsManager.searchAllProviders(
-                title = title,
-                artist = artist,
-                album = album,
-                durationMs = durationMs,
-                providers = providers,
-            )
-            _searchResults.value = items
-            _isSearchingResults.value = false
+        lyricsSearchJob?.cancel()
+        val generation = ++lyricsSearchGeneration
+        _searchResults.value = emptyList()
+        _isSearchingResults.value = true
+        lyricsSearchJob = viewModelScope.launch {
+            try {
+                val durationMs = activeSong?.durationMillis() ?: 0L
+                val items = LocalLyricsManager.searchAllProviders(
+                    title = title,
+                    artist = artist.takeIf { strictness.useArtist }.orEmpty(),
+                    album = album.takeIf { strictness.useAlbum },
+                    durationMs = durationMs.takeIf { strictness.useDuration } ?: 0L,
+                    providers = providers,
+                )
+                if (generation == lyricsSearchGeneration) {
+                    _searchResults.value = items.asSequence()
+                        .map { item ->
+                            item.copy(
+                                matchScorePercent = item.matchScorePercent ?: LyricsMatchScorer.percent(
+                                    queryTitle = title,
+                                    queryArtist = artist.takeIf { strictness.useArtist }.orEmpty(),
+                                    queryAlbum = album.takeIf { strictness.useAlbum },
+                                    queryDurationMs = durationMs.takeIf { strictness.useDuration } ?: 0L,
+                                    result = item,
+                                ),
+                            )
+                        }
+                        .sortedByDescending { it.matchScorePercent ?: 0 }
+                        .take(MAX_LYRICS_SEARCH_RESULTS)
+                        .toList()
+                }
+            } catch (cancelled: CancellationException) {
+                throw cancelled
+            } catch (_: Exception) {
+                if (generation == lyricsSearchGeneration) _searchResults.value = emptyList()
+            } finally {
+                if (generation == lyricsSearchGeneration) {
+                    _isSearchingResults.value = false
+                    lyricsSearchJob = null
+                }
+            }
         }
     }
 
-    fun research() {
+    fun research(strictness: LyricsStrictness? = null) {
         val song = activeSong
         val title = lastSearchTitle ?: song?.title.orEmpty()
         val artist = lastSearchArtist ?: song?.artist.orEmpty()
         val album = lastSearchAlbum ?: song?.albumName
         val providers = lastSearchProviders ?: AppSettings.lyricsSources.value
         if (title.isNotBlank() || artist.isNotBlank()) {
-            searchAllProviders(title, artist, album, providers)
+            searchAllProviders(title, artist, album, providers, strictness ?: lastSearchStrictness
+                ?: LyricsStrictness.fromPreference(AppSettings.lyricsAutoStrictness.value))
         }
     }
 
     fun clearSearchResults() {
+        lyricsSearchGeneration++
+        lyricsSearchJob?.cancel()
+        lyricsSearchJob = null
         _searchResults.value = emptyList()
         _isSearchingResults.value = false
     }
@@ -304,5 +347,9 @@ class LyricsEditorViewModel(app: Application) : AndroidViewModel(app) {
             _isSaving.value = false
             _saveResult.emit(success)
         }
+    }
+
+    private companion object {
+        const val MAX_LYRICS_SEARCH_RESULTS = 300
     }
 }

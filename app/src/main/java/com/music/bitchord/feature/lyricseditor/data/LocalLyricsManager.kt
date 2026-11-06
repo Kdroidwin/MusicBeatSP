@@ -16,6 +16,7 @@ import com.music.bitchord.data.model.Song
 import com.music.bitchord.data.settings.AppSettings
 import com.music.bitchord.feature.lyricseditor.domain.model.LyricsEditorSource
 import com.music.bitchord.feature.lyricseditor.domain.model.LyricsSearchResultItem
+import com.music.bitchord.feature.lyricseditor.domain.model.LyricsMatchScorer
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
 import kotlinx.serialization.json.Json
@@ -36,6 +37,11 @@ object LocalLyricsManager {
 
     private const val TAG = "LocalLyricsManager"
     private const val MAX_LOCAL_LYRICS_BYTES = 1024 * 1024
+    private const val MAX_SEARCH_QUERY_CHARS = 256
+    private const val MAX_SEARCH_RESULTS_PER_PROVIDER = 80
+    private const val MAX_EXTENSION_SEARCH_RESPONSE_CHARS = 2 * 1024 * 1024
+    private const val MAX_SEARCH_LYRICS_CHARS = 500_000
+    private const val MAX_SEARCH_METADATA_CHARS = 512
     private val json = Json { ignoreUnknownKeys = true }
     private val downloadedCache = mutableMapOf<String, String>()
 
@@ -205,17 +211,21 @@ object LocalLyricsManager {
         durationMs: Long = 0L,
         providers: Set<LyricsSource> = AppSettings.lyricsSources.value,
     ): List<LyricsSearchResultItem> = withContext(Dispatchers.IO) {
+        val safeTitle = title.trim().take(MAX_SEARCH_QUERY_CHARS)
+        val safeArtist = artist.trim().take(MAX_SEARCH_QUERY_CHARS)
+        val safeAlbum = album?.trim()?.take(MAX_SEARCH_QUERY_CHARS)?.takeIf(String::isNotBlank)
+        val enabledProviders = providers.take(64)
         val results = mutableListOf<LyricsSearchResultItem>()
-        val primaryArtist = cleanArtistForSearch(artist)
-        val normalizedArtist = if (artist.contains(";")) artist.replace(";", ",").trim() else artist.trim()
+        val primaryArtist = cleanArtistForSearch(safeArtist)
+        val normalizedArtist = if (safeArtist.contains(";")) safeArtist.replace(";", ",").trim() else safeArtist
 
         coroutineScope {
             val jobs = mutableListOf<Deferred<List<LyricsSearchResultItem>>>()
 
-            for (source in providers) {
+            for (source in enabledProviders) {
                 if (source.id == "lrclib") {
                     jobs += async {
-                        searchLrcLib(title, artist, album)
+                        searchLrcLib(safeTitle, safeArtist, safeAlbum)
                     }
                 } else {
                     jobs += async {
@@ -227,27 +237,41 @@ object LocalLyricsManager {
                             val candidates = runCatching {
                                 com.music.bitchord.data.lyrics.BuiltinLyricsSources.search(
                                     id = source.id,
-                                    title = title,
+                                    title = safeTitle,
                                     artist = primaryArtist.ifBlank { normalizedArtist },
-                                    album = album,
+                                    album = safeAlbum,
                                     durationMs = durationMs,
                                 ).orEmpty()
                             }.getOrDefault(emptyList())
-                            val parsedCandidates = candidates.mapNotNull { candidate ->
-                                if (candidate.bestRaw.isNullOrBlank()) return@mapNotNull null
-                                LyricsSearchResultItem(
-                                    id = candidate.id,
-                                    title = candidate.title.ifBlank { title },
-                                    artist = candidate.artist.ifBlank { artist },
-                                    album = candidate.album ?: album,
+                            val parsedCandidates = candidates.take(MAX_SEARCH_RESULTS_PER_PROVIDER).mapNotNull { candidate ->
+                                val bestRaw = candidate.bestRaw
+                                if (bestRaw.isNullOrBlank()) return@mapNotNull null
+                                if (bestRaw.length > MAX_SEARCH_LYRICS_CHARS) return@mapNotNull null
+                                val rawResult = LyricsSearchResultItem(
+                                    id = candidate.id.take(MAX_SEARCH_METADATA_CHARS),
+                                    title = candidate.title.take(MAX_SEARCH_METADATA_CHARS),
+                                    artist = candidate.artist.take(MAX_SEARCH_METADATA_CHARS),
+                                    album = candidate.album?.take(MAX_SEARCH_METADATA_CHARS),
                                     durationSeconds = candidate.durationSeconds,
-                                    provider = candidate.provider.ifBlank { source.label },
-                                    syncedLyrics = candidate.syncedLyrics,
-                                    plainLyrics = candidate.plainLyrics,
+                                    provider = candidate.provider.ifBlank { source.label }.take(MAX_SEARCH_METADATA_CHARS),
+                                    syncedLyrics = candidate.syncedLyrics?.takeIf { it.length <= MAX_SEARCH_LYRICS_CHARS },
+                                    plainLyrics = candidate.plainLyrics?.takeIf { it.length <= MAX_SEARCH_LYRICS_CHARS },
+                                )
+                                rawResult.copy(
+                                    title = rawResult.title.ifBlank { safeTitle }.take(MAX_SEARCH_METADATA_CHARS),
+                                    artist = rawResult.artist.ifBlank { safeArtist }.take(MAX_SEARCH_METADATA_CHARS),
+                                    album = rawResult.album ?: safeAlbum?.take(MAX_SEARCH_METADATA_CHARS),
+                                    matchScorePercent = LyricsMatchScorer.percent(
+                                        queryTitle = safeTitle,
+                                        queryArtist = safeArtist,
+                                        queryAlbum = safeAlbum,
+                                        queryDurationMs = durationMs,
+                                        result = rawResult,
+                                    ),
                                 )
                             }
                             if (parsedCandidates.isNotEmpty()) parsedCandidates
-                            else fetchSingleResult(source, title, artist, primaryArtist, normalizedArtist, durationMs, album)
+                            else fetchSingleResult(source, safeTitle, safeArtist, primaryArtist, normalizedArtist, durationMs, safeAlbum)
                         } else {
                             // Try searchLyrics first (multi-result) for extensions that support it.
                             val ext = com.music.bitchord.feature.lyrics.manager.LyricsExtensionManager.getExtension(source.id)
@@ -256,9 +280,9 @@ object LocalLyricsManager {
                                     com.music.bitchord.feature.lyrics.engine.LyricsExtensionExecutor.searchLyrics(
                                         extensionId = ext.id,
                                         scriptFile = ext.scriptFile,
-                                        title = title,
+                                        title = safeTitle,
                                         artist = primaryArtist.ifBlank { normalizedArtist },
-                                        album = album,
+                                        album = safeAlbum,
                                     )
                                 }.getOrNull()
 
@@ -270,10 +294,10 @@ object LocalLyricsManager {
                                     parsed
                                 } else {
                                     // Fallback: use getLyrics for a single result
-                                    fetchSingleResult(source, title, artist, primaryArtist, normalizedArtist, durationMs, album)
+                                    fetchSingleResult(source, safeTitle, safeArtist, primaryArtist, normalizedArtist, durationMs, safeAlbum)
                                 }
                             } else {
-                                fetchSingleResult(source, title, artist, primaryArtist, normalizedArtist, durationMs, album)
+                                fetchSingleResult(source, safeTitle, safeArtist, primaryArtist, normalizedArtist, durationMs, safeAlbum)
                             }
                         }
                     }
@@ -282,7 +306,7 @@ object LocalLyricsManager {
 
             jobs.forEach { job ->
                 val items = runCatching { job.await() }.getOrDefault(emptyList())
-                results.addAll(items)
+                results.addAll(items.take(MAX_SEARCH_RESULTS_PER_PROVIDER))
             }
         }
 
@@ -313,16 +337,19 @@ object LocalLyricsManager {
             )
         }.getOrNull()
         return if (!lines.isNullOrEmpty()) {
+            val syncedLyrics = lines.toLrc().takeIf { it.length <= MAX_SEARCH_LYRICS_CHARS } ?: return emptyList()
+            val plainLyrics = lines.joinToString("\n") { it.text }
+                .takeIf { it.length <= MAX_SEARCH_LYRICS_CHARS }
             listOf(
                 LyricsSearchResultItem(
                     id = "${source.id}_${System.currentTimeMillis()}",
-                    title = title,
-                    artist = artist,
-                    album = album,
+                    title = title.take(MAX_SEARCH_METADATA_CHARS),
+                    artist = artist.take(MAX_SEARCH_METADATA_CHARS),
+                    album = album?.take(MAX_SEARCH_METADATA_CHARS),
                     durationSeconds = (durationMs / 1000).toInt(),
                     provider = source.label,
-                    syncedLyrics = lines.toLrc(),
-                    plainLyrics = lines.joinToString("\n") { it.text },
+                    syncedLyrics = syncedLyrics,
+                    plainLyrics = plainLyrics,
                 )
             )
         } else emptyList()
@@ -339,24 +366,29 @@ object LocalLyricsManager {
         jsonString: String,
         fallbackProvider: String,
     ): List<LyricsSearchResultItem> = runCatching {
+        if (jsonString.length > MAX_EXTENSION_SEARCH_RESPONSE_CHARS) return emptyList()
         val array = json.parseToJsonElement(jsonString) as? JsonArray ?: return emptyList()
-        array.mapNotNull { element ->
+        array.take(MAX_SEARCH_RESULTS_PER_PROVIDER).mapNotNull { element ->
             val obj = element as? JsonObject ?: return@mapNotNull null
             val id = obj["id"]?.jsonPrimitive?.contentOrNull ?: return@mapNotNull null
             val synced = obj["syncedLyrics"]?.jsonPrimitive?.contentOrNull?.takeIf { it.isNotBlank() }
             val plain = obj["plainLyrics"]?.jsonPrimitive?.contentOrNull?.takeIf { it.isNotBlank() }
             if (synced == null && plain == null) return@mapNotNull null
+            if (synced?.length?.let { it > MAX_SEARCH_LYRICS_CHARS } == true ||
+                plain?.length?.let { it > MAX_SEARCH_LYRICS_CHARS } == true
+            ) return@mapNotNull null
             if (synced?.contains("Wob gopini", ignoreCase = true) == true || plain?.contains("Wob gopini", ignoreCase = true) == true) {
                 return@mapNotNull null
             }
 
             LyricsSearchResultItem(
-                id = id,
-                title = obj["title"]?.jsonPrimitive?.contentOrNull ?: "",
-                artist = obj["artist"]?.jsonPrimitive?.contentOrNull ?: "",
-                album = obj["album"]?.jsonPrimitive?.contentOrNull,
+                id = id.take(MAX_SEARCH_METADATA_CHARS),
+                title = obj["title"]?.jsonPrimitive?.contentOrNull.orEmpty().take(MAX_SEARCH_METADATA_CHARS),
+                artist = obj["artist"]?.jsonPrimitive?.contentOrNull.orEmpty().take(MAX_SEARCH_METADATA_CHARS),
+                album = obj["album"]?.jsonPrimitive?.contentOrNull?.take(MAX_SEARCH_METADATA_CHARS),
                 durationSeconds = obj["durationSeconds"]?.jsonPrimitive?.contentOrNull?.toIntOrNull() ?: 0,
-                provider = obj["provider"]?.jsonPrimitive?.contentOrNull ?: fallbackProvider,
+                provider = obj["provider"]?.jsonPrimitive?.contentOrNull?.take(MAX_SEARCH_METADATA_CHARS)
+                    ?: fallbackProvider.take(MAX_SEARCH_METADATA_CHARS),
                 syncedLyrics = synced,
                 plainLyrics = plain,
             )
@@ -393,7 +425,7 @@ object LocalLyricsManager {
                 val body = Http.readBoundedUtf8(response.body, 2 * 1024 * 1024) ?: return emptyList()
                 val hits = json.parseToJsonElement(body) as? JsonArray ?: return emptyList()
 
-                hits.mapNotNull { element ->
+                hits.take(MAX_SEARCH_RESULTS_PER_PROVIDER).mapNotNull { element ->
                     val obj = element as? JsonObject ?: return@mapNotNull null
                     val id = obj["id"]?.jsonPrimitive?.contentOrNull ?: return@mapNotNull null
                     val track = obj["trackName"]?.jsonPrimitive?.contentOrNull ?: title
@@ -404,12 +436,15 @@ object LocalLyricsManager {
                     val plain = obj["plainLyrics"]?.jsonPrimitive?.contentOrNull?.takeIf { it.isNotBlank() }
 
                     if (synced == null && plain == null) return@mapNotNull null
+                    if (synced?.length?.let { it > MAX_SEARCH_LYRICS_CHARS } == true ||
+                        plain?.length?.let { it > MAX_SEARCH_LYRICS_CHARS } == true
+                    ) return@mapNotNull null
 
                     LyricsSearchResultItem(
-                        id = "lrclib_$id",
-                        title = track,
-                        artist = art,
-                        album = alb,
+                        id = "lrclib_${id.take(MAX_SEARCH_METADATA_CHARS)}",
+                        title = track.take(MAX_SEARCH_METADATA_CHARS),
+                        artist = art.take(MAX_SEARCH_METADATA_CHARS),
+                        album = alb?.take(MAX_SEARCH_METADATA_CHARS),
                         durationSeconds = duration,
                         provider = "LRCLIB",
                         syncedLyrics = synced,

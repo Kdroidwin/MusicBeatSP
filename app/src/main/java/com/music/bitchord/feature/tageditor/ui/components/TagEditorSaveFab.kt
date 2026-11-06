@@ -19,12 +19,13 @@ fun TagEditorSaveFab(
     isSaving: Boolean,
     onSaveClick: () -> Unit,
     modifier: Modifier = Modifier,
+    enabled: Boolean = true,
 ) {
     FloatingActionButton(
-        onClick = { if (!isSaving) onSaveClick() },
+        onClick = { if (!isSaving && enabled) onSaveClick() },
         shape = RoundedCornerShape(18.dp),
-        containerColor = MaterialTheme.colorScheme.primaryContainer,
-        contentColor = MaterialTheme.colorScheme.onPrimaryContainer,
+        containerColor = if (enabled) MaterialTheme.colorScheme.primaryContainer else MaterialTheme.colorScheme.surfaceVariant,
+        contentColor = if (enabled) MaterialTheme.colorScheme.onPrimaryContainer else MaterialTheme.colorScheme.onSurfaceVariant,
         modifier = modifier,
     ) {
         if (isSaving) {

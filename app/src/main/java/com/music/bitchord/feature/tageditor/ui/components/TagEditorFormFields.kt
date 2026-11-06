@@ -22,6 +22,7 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.res.stringResource
 import com.music.bitchord.R
 import com.music.bitchord.feature.tageditor.domain.model.SongTagData
+import com.music.bitchord.feature.tageditor.domain.model.TagField
 
 @Composable
 fun TagEditorFormFields(
@@ -29,6 +30,7 @@ fun TagEditorFormFields(
     onTagsChange: (SongTagData) -> Unit,
     onOpenGenrePicker: () -> Unit,
     modifier: Modifier = Modifier,
+    mixed: Set<TagField> = emptySet(),
 ) {
     val fieldShape = RoundedCornerShape(12.dp)
 
@@ -41,6 +43,7 @@ fun TagEditorFormFields(
             value = tags.title,
             onValueChange = { onTagsChange(tags.copy(title = it)) },
             label = { Text(stringResource(R.string.tag_field_title)) },
+            supportingText = mixedNote(TagField.TITLE, tags, mixed),
             shape = fieldShape,
             singleLine = true,
             modifier = Modifier.fillMaxWidth(),
@@ -51,6 +54,7 @@ fun TagEditorFormFields(
             value = tags.album,
             onValueChange = { onTagsChange(tags.copy(album = it)) },
             label = { Text(stringResource(R.string.tag_field_album)) },
+            supportingText = mixedNote(TagField.ALBUM, tags, mixed),
             shape = fieldShape,
             singleLine = true,
             modifier = Modifier.fillMaxWidth(),
@@ -61,6 +65,7 @@ fun TagEditorFormFields(
             value = tags.artist,
             onValueChange = { onTagsChange(tags.copy(artist = it)) },
             label = { Text(stringResource(R.string.tag_field_artist)) },
+            supportingText = mixedNote(TagField.ARTIST, tags, mixed),
             shape = fieldShape,
             singleLine = true,
             modifier = Modifier.fillMaxWidth(),
@@ -71,6 +76,7 @@ fun TagEditorFormFields(
             value = tags.albumArtist,
             onValueChange = { onTagsChange(tags.copy(albumArtist = it)) },
             label = { Text(stringResource(R.string.tag_field_album_artist)) },
+            supportingText = mixedNote(TagField.ALBUM_ARTIST, tags, mixed),
             shape = fieldShape,
             singleLine = true,
             modifier = Modifier.fillMaxWidth(),
@@ -81,6 +87,7 @@ fun TagEditorFormFields(
             value = tags.composer,
             onValueChange = { onTagsChange(tags.copy(composer = it)) },
             label = { Text(stringResource(R.string.tag_field_composer)) },
+            supportingText = mixedNote(TagField.COMPOSER, tags, mixed),
             shape = fieldShape,
             singleLine = true,
             modifier = Modifier.fillMaxWidth(),
@@ -91,6 +98,7 @@ fun TagEditorFormFields(
             value = tags.conductor,
             onValueChange = { onTagsChange(tags.copy(conductor = it)) },
             label = { Text(stringResource(R.string.tag_field_producer)) },
+            supportingText = mixedNote(TagField.PRODUCER, tags, mixed),
             shape = fieldShape,
             singleLine = true,
             modifier = Modifier.fillMaxWidth(),
@@ -101,6 +109,7 @@ fun TagEditorFormFields(
             value = tags.publisher,
             onValueChange = { onTagsChange(tags.copy(publisher = it)) },
             label = { Text(stringResource(R.string.tag_field_publisher)) },
+            supportingText = mixedNote(TagField.PUBLISHER, tags, mixed),
             shape = fieldShape,
             singleLine = true,
             modifier = Modifier.fillMaxWidth(),
@@ -111,6 +120,7 @@ fun TagEditorFormFields(
             value = tags.genre,
             onValueChange = { onTagsChange(tags.copy(genre = it)) },
             label = { Text(stringResource(R.string.tag_field_genre)) },
+            supportingText = mixedNote(TagField.GENRE, tags, mixed),
             trailingIcon = {
                 IconButton(onClick = onOpenGenrePicker) {
                     Icon(
@@ -129,6 +139,7 @@ fun TagEditorFormFields(
             value = tags.year,
             onValueChange = { onTagsChange(tags.copy(year = it)) },
             label = { Text(stringResource(R.string.tag_field_year)) },
+            supportingText = mixedNote(TagField.YEAR, tags, mixed),
             keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),
             shape = fieldShape,
             singleLine = true,
@@ -144,6 +155,7 @@ fun TagEditorFormFields(
                 value = tags.trackNumber,
                 onValueChange = { onTagsChange(tags.copy(trackNumber = it)) },
                 label = { Text(stringResource(R.string.tag_field_track)) },
+                supportingText = mixedNote(TagField.TRACK, tags, mixed),
                 keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),
                 shape = fieldShape,
                 singleLine = true,
@@ -153,6 +165,7 @@ fun TagEditorFormFields(
                 value = tags.trackTotal,
                 onValueChange = { onTagsChange(tags.copy(trackTotal = it)) },
                 label = { Text(stringResource(R.string.tag_field_track_total)) },
+                supportingText = mixedNote(TagField.TRACK_TOTAL, tags, mixed),
                 keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),
                 shape = fieldShape,
                 singleLine = true,
@@ -169,6 +182,7 @@ fun TagEditorFormFields(
                 value = tags.discNumber,
                 onValueChange = { onTagsChange(tags.copy(discNumber = it)) },
                 label = { Text(stringResource(R.string.tag_field_disc)) },
+                supportingText = mixedNote(TagField.DISC, tags, mixed),
                 keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),
                 shape = fieldShape,
                 singleLine = true,
@@ -178,6 +192,7 @@ fun TagEditorFormFields(
                 value = tags.discTotal,
                 onValueChange = { onTagsChange(tags.copy(discTotal = it)) },
                 label = { Text(stringResource(R.string.tag_field_disc_total)) },
+                supportingText = mixedNote(TagField.DISC_TOTAL, tags, mixed),
                 keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),
                 shape = fieldShape,
                 singleLine = true,
@@ -190,6 +205,7 @@ fun TagEditorFormFields(
             value = tags.lyrics,
             onValueChange = { onTagsChange(tags.copy(lyrics = it)) },
             label = { Text(stringResource(R.string.tag_field_lyrics)) },
+            supportingText = mixedNote(TagField.LYRICS, tags, mixed),
             shape = fieldShape,
             modifier = Modifier
                 .fillMaxWidth()
@@ -201,6 +217,7 @@ fun TagEditorFormFields(
             value = tags.lyricist,
             onValueChange = { onTagsChange(tags.copy(lyricist = it)) },
             label = { Text(stringResource(R.string.tag_field_lyricist)) },
+            supportingText = mixedNote(TagField.LYRICIST, tags, mixed),
             shape = fieldShape,
             singleLine = true,
             modifier = Modifier.fillMaxWidth(),
@@ -211,6 +228,7 @@ fun TagEditorFormFields(
             value = tags.arranger,
             onValueChange = { onTagsChange(tags.copy(arranger = it)) },
             label = { Text(stringResource(R.string.tag_field_arranger)) },
+            supportingText = mixedNote(TagField.ARRANGER, tags, mixed),
             shape = fieldShape,
             singleLine = true,
             modifier = Modifier.fillMaxWidth(),
@@ -221,9 +239,19 @@ fun TagEditorFormFields(
             value = tags.comment,
             onValueChange = { onTagsChange(tags.copy(comment = it)) },
             label = { Text(stringResource(R.string.tag_field_comment)) },
+            supportingText = mixedNote(TagField.COMMENT, tags, mixed),
             shape = fieldShape,
             singleLine = true,
             modifier = Modifier.fillMaxWidth(),
         )
     }
 }
+
+@Composable
+private fun mixedNote(
+    field: TagField,
+    tags: SongTagData,
+    mixed: Set<TagField>,
+): (@Composable () -> Unit)? = if (field in mixed && field.get(tags).isEmpty()) {
+    { Text(stringResource(R.string.tag_mixed)) }
+} else null

@@ -300,6 +300,8 @@ import com.music.bitchord.feature.localsongactions.ui.components.LocalSongAction
 import com.music.bitchord.feature.localsongactions.ui.components.LocalSongDetailsSheet
 import com.music.bitchord.feature.localsongactions.ui.components.AudioCutterSheet
 import com.music.bitchord.feature.tageditor.ui.TagEditorScreen
+import com.music.bitchord.feature.tageditor.ui.viewmodel.TagEditorViewModel
+import com.music.bitchord.feature.tageditor.domain.model.TagField
 import com.music.bitchord.ui.screens.equalizer.EqualizerSheet
 import androidx.compose.ui.window.Dialog
 import androidx.compose.ui.window.DialogProperties
@@ -801,6 +803,7 @@ private fun BitChordApp(
     var targetAlbumDrillDown by remember { mutableStateOf<String?>(null) }
     var targetArtistDrillDown by remember { mutableStateOf<String?>(null) }
     var songActions by remember { mutableStateOf<Song?>(null) }
+    var folderTagEditorSongs by remember { mutableStateOf<Pair<List<Song>, List<Song>>?>(null) }
     /**
      * Whether the track menu that is up was opened from the player.
      *
@@ -3336,6 +3339,9 @@ private fun BitChordApp(
                                 onArtworkPaletteChanged = onLocalArtworkPaletteChanged,
                                 onNavigationChanged = onCollectionNavigationChanged,
                                 onLocalFilesChanged = { viewModel.loadLocalMusic() },
+                                onBatchTagEditor = { directSongs, songsWithSubfolders ->
+                                    folderTagEditorSongs = directSongs to songsWithSubfolders
+                                },
                             )
                         }
                         TAB_RADIO -> RadioScreen(
@@ -4244,6 +4250,48 @@ private fun BitChordApp(
                         LocalSongActionsHelper.shareSong(context, song)
                     },
                 )
+                }
+            }
+        }
+
+        folderTagEditorSongs?.let { (directSongs, songsWithSubfolders) ->
+            if (directSongs.isNotEmpty()) {
+                Dialog(
+                    onDismissRequest = { folderTagEditorSongs = null },
+                    properties = DialogProperties(
+                        usePlatformDefaultWidth = false,
+                        decorFitsSystemWindows = false,
+                    ),
+                ) {
+                    TagEditorScreen(
+                        song = directSongs.first(),
+                        batchSongs = directSongs,
+                        batchSongsWithSubfolders = songsWithSubfolders,
+                        viewModel = androidx.lifecycle.viewmodel.compose.viewModel<TagEditorViewModel>(
+                            key = "folder_tag_editor",
+                        ),
+                        onNavigateBack = { folderTagEditorSongs = null },
+                        onBatchTagsSaved = { targets, updatedTags, fields ->
+                            targets.forEach { target ->
+                                val updatedSong = target.copy(
+                                    title = if (TagField.TITLE in fields) updatedTags.title.trim().ifBlank { target.title } else target.title,
+                                    artist = if (TagField.ARTIST in fields) updatedTags.artist.trim().ifBlank { "Unknown Artist" } else target.artist,
+                                    albumName = if (TagField.ALBUM in fields) updatedTags.album.trim().takeIf(String::isNotBlank) else target.albumName,
+                                    albumArtist = if (TagField.ALBUM_ARTIST in fields) updatedTags.albumArtist.trim().takeIf(String::isNotBlank) else target.albumArtist,
+                                )
+                                LocalPlaylistStore.updateEditedSongMetadata(
+                                    song = updatedSong,
+                                    title = updatedSong.title,
+                                    artist = updatedSong.artist,
+                                    albumName = updatedSong.albumName.orEmpty(),
+                                    albumArtist = updatedSong.albumArtist.orEmpty(),
+                                )
+                                viewModel.updateLocalSongMetadata(updatedSong)
+                                if (TagField.LYRICS in fields) viewModel.reloadLyrics(updatedSong)
+                            }
+                            viewModel.loadLocalMusic()
+                        },
+                    )
                 }
             }
         }

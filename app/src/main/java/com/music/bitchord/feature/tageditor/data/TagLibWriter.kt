@@ -19,9 +19,11 @@ import com.kyant.taglib.Picture
 import com.kyant.taglib.TagLib
 import com.music.bitchord.data.model.Song
 import com.music.bitchord.feature.tageditor.domain.model.SongTagData
+import com.music.bitchord.feature.tageditor.domain.model.TagField
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.withContext
+import java.io.IOException
 import java.io.ByteArrayOutputStream
 import java.io.File
 import kotlin.math.max
@@ -32,6 +34,10 @@ object TagLibWriter {
 
     private const val TAG = "TagLibWriter"
     private const val BULK_ARTWORK_MAX_DIMENSION = 1600
+    private const val MAX_EDITOR_ARTWORK_DIMENSION = 2048
+    private const val MAX_BATCH_TAG_PROPERTIES = 256
+    private const val MAX_BATCH_TAG_VALUE_CHARS = 500_000
+    private const val MAX_BATCH_TAG_TOTAL_CHARS = 2_000_000L
 
     data class PreparedArtwork(val bytes: ByteArray, val mimeType: String)
 
@@ -148,21 +154,28 @@ object TagLibWriter {
         }.getOrNull()
     }
 
-    suspend fun readTags(context: Context, song: Song): SongTagData = withContext(Dispatchers.IO) {
+    suspend fun readTags(
+        context: Context,
+        song: Song,
+        readArtwork: Boolean = true,
+        strict: Boolean = false,
+    ): SongTagData = withContext(Dispatchers.IO) {
         try {
-            val pfd = openFileDescriptor(context, song, "r") ?: return@withContext fallbackSongTagData(song)
+            val pfd = openFileDescriptor(context, song, "r")
+                ?: if (strict) throw IOException("Could not open audio file for tag reading")
+                else return@withContext fallbackSongTagData(song)
 
             pfd.use { descriptor ->
                 val metadata = TagLib.getMetadata(descriptor.dup().detachFd(), readPictures = false)
+                if (strict && metadata == null) throw IOException("Could not read audio tags")
                 val propMap = metadata?.propertyMap.orEmpty()
+                if (strict && !isBoundedBatchTagMap(propMap)) throw IOException("Audio tags exceed safe batch-edit limits")
                 val audioProps = TagLib.getAudioProperties(descriptor.dup().detachFd())
 
                 fun get(key: String): String = propMap[key]?.firstOrNull()?.trim() ?: propMap[key.uppercase()]?.firstOrNull()?.trim() ?: ""
 
-                val coverPicture = TagLib.getFrontCover(descriptor.dup().detachFd())
-                val coverBitmap = coverPicture?.data?.let { bytes ->
-                    BitmapFactory.decodeByteArray(bytes, 0, bytes.size)
-                }
+                val coverPicture = if (readArtwork) TagLib.getFrontCover(descriptor.dup().detachFd()) else null
+                val coverBitmap = coverPicture?.data?.let(::decodeArtworkBitmap)
 
                 SongTagData(
                     title = get("TITLE").ifEmpty { song.title },
@@ -188,6 +201,7 @@ object TagLibWriter {
         } catch (cancelled: CancellationException) {
             throw cancelled
         } catch (t: Throwable) {
+            if (strict) throw t
             Log.e(TAG, "Failed reading tags via TagLib for ${song.videoId}", t)
             fallbackSongTagData(song)
         }
@@ -198,15 +212,20 @@ object TagLibWriter {
         song: Song,
         data: SongTagData,
         writeMetadata: Boolean = true,
+        fields: Set<TagField>? = null,
     ): Boolean = withContext(Dispatchers.IO) {
         try {
             val pfd = openFileDescriptor(context, song, "rw") ?: return@withContext false
 
             pfd.use { descriptor ->
-                val currentProps = if (writeMetadata) {
-                    TagLib.getMetadata(descriptor.dup().detachFd(), false)?.propertyMap ?: hashMapOf()
-                } else {
-                    hashMapOf()
+                val writeTextFields = fields == null || fields.any { it.propertyKey != null }
+                val shouldWriteMetadata = writeMetadata && writeTextFields
+                val currentMetadata = if (shouldWriteMetadata) {
+                    TagLib.getMetadata(descriptor.dup().detachFd(), false) ?: return@withContext false
+                } else null
+                val currentProps = currentMetadata?.propertyMap.orEmpty()
+                if (fields != null && shouldWriteMetadata && !isBoundedBatchTagMap(currentProps)) {
+                    return@withContext false
                 }
 
                 val newMap = hashMapOf<String, Array<String>>()
@@ -222,23 +241,12 @@ object TagLibWriter {
                     }
                 }
 
-                put("TITLE", data.title)
-                put("ALBUM", data.album)
-                put("ARTIST", data.artist)
-                put("ALBUMARTIST", data.albumArtist)
-                put("COMPOSER", data.composer)
-                put("PRODUCER", data.conductor)
-                put("COPYRIGHT", data.publisher)
-                put("GENRE", data.genre)
-                put("DATE", data.year)
-                put("TRACKNUMBER", data.trackNumber)
-                put("TRACKTOTAL", data.trackTotal)
-                put("DISCNUMBER", data.discNumber)
-                put("DISCTOTAL", data.discTotal)
-                put("LYRICS", data.lyrics)
-                put("LYRICIST", data.lyricist)
-                put("ARRANGER", data.arranger)
-                put("COMMENT", data.comment)
+                if (shouldWriteMetadata) {
+                    for (field in TagField.entries) {
+                        val key = field.propertyKey ?: continue
+                        if (fields == null || field in fields) put(key, field.get(data))
+                    }
+                }
 
                 // Editing descriptive tags or lyrics does not change the PCM
                 // samples, so ReplayGain values remain valid and must survive
@@ -250,10 +258,11 @@ object TagLibWriter {
                 // Besides avoiding needless container churn, this lets formats
                 // that support pictures but have limited text-tag support save
                 // their cover independently.
-                val propsOk = !writeMetadata ||
+                val propsOk = !shouldWriteMetadata ||
                     TagLib.savePropertyMap(descriptor.dup().detachFd(), cleanedMap)
 
-                val artworkOk = if (data.artworkChanged) {
+                val writeArtwork = fields == null || TagField.ARTWORK in fields
+                val artworkOk = if (data.artworkChanged && writeArtwork) {
                     if (data.artworkDeleted || data.artworkBitmap == null) {
                         TagLib.savePictures(descriptor.dup().detachFd(), arrayOf())
                     } else {
@@ -423,4 +432,37 @@ object TagLibWriter {
             artist = song.artist,
             album = song.albumName ?: "",
         )
+
+    private fun decodeArtworkBitmap(bytes: ByteArray): Bitmap? {
+        val bounds = BitmapFactory.Options().apply { inJustDecodeBounds = true }
+        BitmapFactory.decodeByteArray(bytes, 0, bytes.size, bounds)
+        if (bounds.outWidth <= 0 || bounds.outHeight <= 0) return null
+
+        var sampleSize = 1
+        while (max(bounds.outWidth / sampleSize, bounds.outHeight / sampleSize) > MAX_EDITOR_ARTWORK_DIMENSION) {
+            sampleSize *= 2
+        }
+        return BitmapFactory.decodeByteArray(
+            bytes,
+            0,
+            bytes.size,
+            BitmapFactory.Options().apply {
+                inSampleSize = sampleSize
+                inPreferredConfig = Bitmap.Config.ARGB_8888
+            },
+        )
+    }
+
+    private fun isBoundedBatchTagMap(properties: Map<String, Array<String>>): Boolean {
+        if (properties.size > MAX_BATCH_TAG_PROPERTIES) return false
+        var totalChars = 0L
+        for (values in properties.values) {
+            for (value in values) {
+                if (value.length > MAX_BATCH_TAG_VALUE_CHARS) return false
+                totalChars += value.length
+                if (totalChars > MAX_BATCH_TAG_TOTAL_CHARS) return false
+            }
+        }
+        return true
+    }
 }

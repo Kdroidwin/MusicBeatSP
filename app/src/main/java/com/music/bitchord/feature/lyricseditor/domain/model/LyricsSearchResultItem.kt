@@ -9,6 +9,7 @@ data class LyricsSearchResultItem(
     val provider: String,
     val plainLyrics: String? = null,
     val syncedLyrics: String? = null,
+    val matchScorePercent: Int? = null,
 ) {
     val hasSynced: Boolean get() = !syncedLyrics.isNullOrBlank()
     val hasPlain: Boolean get() = !plainLyrics.isNullOrBlank()
