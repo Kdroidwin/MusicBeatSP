@@ -438,7 +438,19 @@ internal object JoysoundLyricsClient {
             val lyricArea = document.selectFirst("#lyrics .overflow-hidden")
                 ?: document.selectFirst("#lyrics > div.bg-white")
                 ?: return null
-            val lyrics = WebScrapeHtmlUtils.htmlToCleanLyrics(lyricArea.html())
+            val lineSeparatedHtml = lyricArea.html()
+                .replace(Regex("""(?i)<br\s*/?>"""), "\n")
+                .replace(Regex("""(?i)</(?:p|div|li|tr)>"""), "\n")
+            val lyrics = Jsoup.parseBodyFragment(lineSeparatedHtml)
+                .body()
+                .wholeText()
+                .replace("\r\n", "\n")
+                .replace('\r', '\n')
+                .lineSequence()
+                .map(String::trim)
+                .joinToString("\n")
+                .replace(Regex("\\n{3,}"), "\n\n")
+                .trim()
             if (lyrics.isBlank()) return null
             JoysoundTrack(songId, title, artist, lyrics)
         }
