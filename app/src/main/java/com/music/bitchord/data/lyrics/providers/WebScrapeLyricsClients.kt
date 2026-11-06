@@ -7,6 +7,9 @@ import kotlinx.coroutines.coroutineScope
 import kotlinx.coroutines.withContext
 import okhttp3.Request
 import org.jsoup.Jsoup
+import org.jsoup.nodes.Element
+import org.jsoup.nodes.Node
+import org.jsoup.nodes.TextNode
 import org.json.JSONObject
 
 internal object WebScrapeHtmlUtils {
@@ -438,23 +441,45 @@ internal object JoysoundLyricsClient {
             val lyricArea = document.selectFirst("#lyrics .overflow-hidden")
                 ?: document.selectFirst("#lyrics > div.bg-white")
                 ?: return null
-            val lineSeparatedHtml = lyricArea.html()
-                .replace(Regex("""(?i)<br\s*/?>"""), "\n")
-                .replace(Regex("""(?i)</(?:p|div|li|tr)>"""), "\n")
-            val lyrics = Jsoup.parseBodyFragment(lineSeparatedHtml)
-                .body()
-                .wholeText()
-                .replace("\r\n", "\n")
-                .replace('\r', '\n')
-                .lineSequence()
-                .map(String::trim)
-                .joinToString("\n")
-                .replace(Regex("\\n{3,}"), "\n\n")
-                .trim()
+            val lyrics = extractLyrics(lyricArea)
             if (lyrics.isBlank()) return null
             JoysoundTrack(songId, title, artist, lyrics)
         }
     }.getOrNull()
+
+    /** Reads text nodes directly; Element.html() serializes JOYSOUND's pre-line text on one line. */
+    private fun extractLyrics(root: Element): String {
+        val result = StringBuilder()
+
+        fun appendNode(node: Node) {
+            when (node) {
+                is TextNode -> result.append(node.wholeText)
+                is Element -> {
+                    val tag = node.normalName()
+                    if (tag == "br") {
+                        result.append('\n')
+                    } else {
+                        val isBlock = tag in BLOCK_TAGS
+                        if (isBlock && result.isNotEmpty() && result.last() != '\n') result.append('\n')
+                        node.childNodes().forEach(::appendNode)
+                        if (isBlock && result.isNotEmpty() && result.last() != '\n') result.append('\n')
+                    }
+                }
+            }
+        }
+
+        root.childNodes().forEach(::appendNode)
+        return result.toString()
+            .replace("\r\n", "\n")
+            .replace('\r', '\n')
+            .lineSequence()
+            .map(String::trim)
+            .joinToString("\n")
+            .replace(Regex("\\n{3,}"), "\n\n")
+            .trim()
+    }
+
+    private val BLOCK_TAGS = setOf("div", "p", "li", "tr", "section", "article")
 
     private fun normalize(value: String): String = value
         .lowercase()

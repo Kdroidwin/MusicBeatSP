@@ -103,18 +103,20 @@ object NativeLyricsProviders {
         val joysoundJob = async(Dispatchers.IO) { JoysoundLyricsClient.getLyrics(title, artist) }
         val geniusJob = async(Dispatchers.IO) { GeniusLyricsClient.getLyrics(title, artist) }
 
-        val plain = utatenJob.await()?.takeIf { it.isNotBlank() }
-            ?: utanetJob.await()?.takeIf { it.isNotBlank() }
-            ?: jlyricJob.await()?.takeIf { it.isNotBlank() }
-            ?: joysoundJob.await()?.takeIf { it.isNotBlank() }
-            ?: geniusJob.await()?.takeIf { it.isNotBlank() }
-            ?: return@coroutineScope null
-
-        utatenJob.cancel()
-        utanetJob.cancel()
-        jlyricJob.cancel()
-        joysoundJob.cancel()
-        geniusJob.cancel()
+        val candidates = listOf(
+            utatenJob.await(),
+            utanetJob.await(),
+            jlyricJob.await(),
+            joysoundJob.await(),
+            geniusJob.await(),
+        ).filterNotNull().filter(String::isNotBlank)
+        val plain = candidates.reduceOrNull { best, candidate ->
+            val bestLineCount = best.lineSequence().count(String::isNotBlank)
+            val candidateLineCount = candidate.lineSequence().count(String::isNotBlank)
+            if (candidateLineCount > bestLineCount ||
+                candidateLineCount == bestLineCount && candidate.length > best.length
+            ) candidate else best
+        } ?: return@coroutineScope null
 
         CtcLrcGenerator.generateAutoSyncedLrc(plain, durationSec)
     }
