@@ -777,6 +777,14 @@ private fun appleMusicStyleMenusSearchEntry(enabled: Boolean) = SettingsSearchEn
 )
 
 @Composable
+private fun hideSettingsIconOnScrollSearchEntry(enabled: Boolean) = SettingsSearchEntry(
+    title = stringResource(R.string.hide_settings_icon_on_scroll),
+    subtitle = stringResource(R.string.hide_settings_icon_on_scroll_subtitle),
+    keywords = listOf("settings", "gear", "scroll", "sticky", "follow", "歯車", "スクロール", "固定", "追従"),
+    checked = enabled,
+) { AppSettings.setHideSettingsIconOnScroll(!enabled) }
+
+@Composable
 private fun PlayerActionButtonStyleRow(
     icon: ImageVector,
     titleRes: Int,
@@ -881,6 +889,7 @@ fun SettingsScreen(
     val settingsHierarchicalNavigation by AppSettings.settingsHierarchicalNavigation.collectAsStateWithLifecycle()
     val mainNavigationTabsPopup by AppSettings.mainNavigationTabsPopup.collectAsStateWithLifecycle()
     val settingsTopBarUsesMoreIcon by AppSettings.settingsTopBarUsesMoreIcon.collectAsStateWithLifecycle()
+    val hideSettingsIconOnScroll by AppSettings.hideSettingsIconOnScroll.collectAsStateWithLifecycle()
     val hideNavBarLabels by AppSettings.hideNavigationBarLabels.collectAsStateWithLifecycle()
     val hideRadioTopLabels by AppSettings.hideRadioTopLabels.collectAsStateWithLifecycle()
     val navigationBarMatchesMiniPlayerColor by AppSettings.navigationBarMatchesMiniPlayerColor.collectAsStateWithLifecycle()
@@ -1585,6 +1594,7 @@ fun SettingsScreen(
         SettingsSearchEntry(stringResource(R.string.navigation_bar_matches_mini_player_color), stringResource(R.string.navigation_bar_matches_mini_player_color_subtitle), listOf("navigation", "tab bar", "mini player", "artwork", "color", "タブバー", "ミニプレイヤー", "アルバムアート", "色"), navigationBarMatchesMiniPlayerColor) { AppSettings.setNavigationBarMatchesMiniPlayerColor(!navigationBarMatchesMiniPlayerColor) },
         SettingsSearchEntry(stringResource(R.string.main_navigation_popup), stringResource(R.string.main_navigation_popup_subtitle), listOf("navigation", "tabs", "popup", "menu", "bottom bar", "ナビゲーション", "タブ", "ポップアップ", "メニュー"), mainNavigationTabsPopup) { AppSettings.setMainNavigationTabsPopup(!mainNavigationTabsPopup) },
         SettingsSearchEntry(stringResource(R.string.settings_top_bar_more_icon), stringResource(R.string.settings_top_bar_more_icon_subtitle), listOf("settings", "gear", "ellipsis", "more", "歯車", "設定", "三点", "︙"), settingsTopBarUsesMoreIcon) { AppSettings.setSettingsTopBarUsesMoreIcon(!settingsTopBarUsesMoreIcon) },
+        hideSettingsIconOnScrollSearchEntry(hideSettingsIconOnScroll),
         SettingsSearchEntry(stringResource(R.string.hide_nav_bar_labels), stringResource(R.string.hide_nav_bar_labels_subtitle), listOf("navigation", "nav bar", "label", "ラベル", "ナビゲーション"), hideNavBarLabels) { AppSettings.setHideNavigationBarLabels(!hideNavBarLabels) },
         SettingsSearchEntry(stringResource(R.string.legacy_mesh_gradient), stringResource(R.string.legacy_mesh_gradient_subtitle), listOf("theme", "gradient", "テーマ", "グラデーション"), legacyMeshGradient) { AppSettings.setLegacyMeshGradient(!legacyMeshGradient) },
         SettingsSearchEntry(
@@ -4394,6 +4404,19 @@ fun SettingsScreen(
                     )
                 },
                 onClick = { AppSettings.setSettingsTopBarUsesMoreIcon(!settingsTopBarUsesMoreIcon) },
+            )
+            RowDivider()
+            SettingsRow(
+                icon = Icons.Rounded.Settings,
+                title = stringResource(R.string.hide_settings_icon_on_scroll),
+                subtitle = stringResource(R.string.hide_settings_icon_on_scroll_subtitle),
+                trailing = {
+                    Switch(
+                        checked = hideSettingsIconOnScroll,
+                        onCheckedChange = AppSettings::setHideSettingsIconOnScroll,
+                    )
+                },
+                onClick = { AppSettings.setHideSettingsIconOnScroll(!hideSettingsIconOnScroll) },
             )
             RowDivider()
             SettingsRow(

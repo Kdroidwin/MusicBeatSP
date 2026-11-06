@@ -348,14 +348,17 @@ fun LocalSearchScreen(
                     .fillMaxSize()
                     .padding(top = contentPadding.calculateTopPadding()),
             ) {
-                // Search Input Header
-                LocalSearchField(
-                    query = query,
-                    onQueryChange = { query = it },
-                    onSearch = { submitSearchTerm(query) },
-                    focusTrigger = focusTrigger,
-                    modifier = Modifier.padding(horizontal = PAGE_GUTTER, vertical = 6.dp),
-                )
+                // Keep the search field with the source chips so the whole
+                // search header scrolls away above the results.
+                if (!rootResultsScrolled) {
+                    LocalSearchField(
+                        query = query,
+                        onQueryChange = { query = it },
+                        onSearch = { submitSearchTerm(query) },
+                        focusTrigger = focusTrigger,
+                        modifier = Modifier.padding(horizontal = PAGE_GUTTER, vertical = 6.dp),
+                    )
+                }
 
                 if (!rootResultsScrolled && (canSearchYoutubeMusic || canSearchMusicServers || configuredSearchSources.isNotEmpty())) {
                     Row(

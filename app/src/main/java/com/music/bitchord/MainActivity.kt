@@ -937,6 +937,7 @@ private fun BitChordApp(
     val lyricsVideoId by viewModel.lyricsVideoId.collectAsStateWithLifecycle()
     val savedYoutubeCollections by AppSettings.savedYoutubeCollections.collectAsStateWithLifecycle()
     val settingsTopBarUsesMoreIcon by AppSettings.settingsTopBarUsesMoreIcon.collectAsStateWithLifecycle()
+    val hideSettingsIconOnScroll by AppSettings.hideSettingsIconOnScroll.collectAsStateWithLifecycle()
     val searchHistory by viewModel.searchHistory.collectAsStateWithLifecycle()
 
     // Settings has no tab of its own — it sits on top of whatever tab was
@@ -3496,7 +3497,10 @@ private fun BitChordApp(
                                         )
                                     }
                                 }
-                                if (!hideFloatingCollectionControlsNow) {
+                                if (
+                                    !hideFloatingCollectionControlsNow &&
+                                    !(rootTabFloatingSettingsOnly && hideSettingsIconOnScroll)
+                                ) {
                                     IconButton(onClick = { showSettings = true }) {
                                         Icon(
                                             if (settingsTopBarUsesMoreIcon) Icons.Rounded.MoreVert else Icons.Rounded.Settings,

@@ -1751,6 +1751,8 @@
     <string name="white_collection_play_button_subtitle">Use a white background with a black play icon on album, album-artist, artist, and playlist pages. On by default.</string>
     <string name="settings_top_bar_more_icon">Use an overflow icon for Settings</string>
     <string name="settings_top_bar_more_icon_subtitle">Show a three-dot icon instead of the gear in the main top bar.</string>
+    <string name="hide_settings_icon_on_scroll">Hide the Settings icon while scrolling</string>
+    <string name="hide_settings_icon_on_scroll_subtitle">Do not keep the Settings action pinned while scrolling through tabs. On by default.</string>
     <string name="tablet_lyrics_beside_player">Tablet full-screen player</string>
     <string name="tablet_lyrics_beside_player_subtitle">On wide screens, expand the bottom player across the full window, with playback controls on the left and synced lyrics on the right. Swipe down from the top handle to return.</string>
     <string name="youtube_music_saved">YouTube Music</string>

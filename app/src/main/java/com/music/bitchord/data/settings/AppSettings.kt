@@ -643,6 +643,8 @@ object AppSettings {
     val whiteCollectionActionButtons = MutableStateFlow(false)
     /** Replaces the settings gear on the main top bar with an overflow glyph. */
     val settingsTopBarUsesMoreIcon = MutableStateFlow(false)
+    /** Hides the floating root-tab Settings action after the page scrolls. */
+    val hideSettingsIconOnScroll = MutableStateFlow(true)
     val launcherIcon = MutableStateFlow(LauncherIcon.PINK)
     val frostedQueueManager = MutableStateFlow(true)
     val frostedPlayerDetails = MutableStateFlow(true)
@@ -1533,6 +1535,7 @@ object AppSettings {
         cleartextHttpAllowed.value = prefs.getBoolean(KEY_CLEARTEXT_HTTP_ALLOWED, false)
         whiteCollectionActionButtons.value = prefs.getBoolean(KEY_WHITE_COLLECTION_ACTION_BUTTONS, false)
         settingsTopBarUsesMoreIcon.value = prefs.getBoolean(KEY_SETTINGS_TOP_BAR_MORE_ICON, false)
+        hideSettingsIconOnScroll.value = prefs.getBoolean(KEY_HIDE_SETTINGS_ICON_ON_SCROLL, true)
         launcherIcon.value = runCatching {
             LauncherIcon.valueOf(prefs.getString(KEY_LAUNCHER_ICON, LauncherIcon.PINK.name) ?: LauncherIcon.PINK.name)
         }.getOrDefault(LauncherIcon.PINK)
@@ -2323,6 +2326,11 @@ object AppSettings {
     fun setSettingsTopBarUsesMoreIcon(value: Boolean) {
         settingsTopBarUsesMoreIcon.value = value
         prefs.edit().putBoolean(KEY_SETTINGS_TOP_BAR_MORE_ICON, value).apply()
+    }
+
+    fun setHideSettingsIconOnScroll(value: Boolean) {
+        hideSettingsIconOnScroll.value = value
+        prefs.edit().putBoolean(KEY_HIDE_SETTINGS_ICON_ON_SCROLL, value).apply()
     }
 
     fun setTabletFullscreenPlayer(value: Boolean) {
@@ -4536,6 +4544,7 @@ object AppSettings {
     private const val KEY_CLEARTEXT_HTTP_ALLOWED = "cleartext_http_allowed"
     private const val KEY_WHITE_COLLECTION_ACTION_BUTTONS = "white_collection_action_buttons"
     private const val KEY_SETTINGS_TOP_BAR_MORE_ICON = "settings_top_bar_more_icon"
+    private const val KEY_HIDE_SETTINGS_ICON_ON_SCROLL = "hide_settings_icon_on_scroll"
     private const val KEY_TABLET_LYRICS_BESIDE_PLAYER = "tablet_lyrics_beside_player"
     private const val KEY_SAVED_YOUTUBE_COLLECTIONS = "saved_youtube_music_collections"
     private const val MAX_SAVED_YOUTUBE_COLLECTIONS = 500

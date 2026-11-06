@@ -1724,6 +1724,8 @@
     <string name="white_collection_play_button_subtitle">アルバム、アルバムアーティスト、アーティスト、プレイリスト画面の再生ボタンを白背景・黒い再生アイコンにします。初期設定はオンです。</string>
     <string name="settings_top_bar_more_icon">設定に三点アイコンを使う</string>
     <string name="settings_top_bar_more_icon_subtitle">メイン画面上部の歯車を三点メニューのアイコンに変更します。</string>
+    <string name="hide_settings_icon_on_scroll">設定アイコンをスクロール時に隠す</string>
+    <string name="hide_settings_icon_on_scroll_subtitle">どのタブでも、スクロール中は設定アイコンを固定表示しません。初期設定はオンです。</string>
     <string name="tablet_lyrics_beside_player">タブレットでプレイヤーを全画面表示</string>
     <string name="tablet_lyrics_beside_player_subtitle">横長画面ではプレイヤーを下部バーから全画面に広げ、左に再生操作、右に同期歌詞を表示します。上端を下へスワイプすると戻ります。</string>
     <string name="youtube_music_saved">YouTube Music</string>
