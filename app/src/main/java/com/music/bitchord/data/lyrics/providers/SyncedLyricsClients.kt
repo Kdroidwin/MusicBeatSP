@@ -41,6 +41,7 @@ data class NativeSearchCandidate(
 }
 
 internal object NativeLyricsHttp {
+    private const val MAX_PROVIDER_RESPONSE_BYTES = 4 * 1024 * 1024
     const val USER_AGENT =
         "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/131.0.0.0 Safari/537.36"
 
@@ -64,6 +65,9 @@ internal object NativeLyricsHttp {
 
     fun urlEncode(value: String): String =
         URLEncoder.encode(value.trim(), "UTF-8")
+
+    fun readBoundedBody(body: okhttp3.ResponseBody?): String? =
+        Http.readBoundedUtf8(body, MAX_PROVIDER_RESPONSE_BYTES)
 
     fun cleanQueryText(text: String): String =
         text.replace(Regex("""(?i)\s*[\(\[（【](?:feat\.?|ft\.?|official|video|audio|mv|lyric|remaster|live|ver\.?|version|inst)[^)\]）】]*[\)\]）】]"""), "")
@@ -212,7 +216,7 @@ internal object AppleMusicPaxClient {
         val req = Request.Builder().url(url).header("User-Agent", NativeLyricsHttp.USER_AGENT).build()
         NativeLyricsHttp.paxClient.newCall(req).execute().use { resp ->
             if (!resp.isSuccessful) return emptyList()
-            val body = resp.body?.string() ?: return emptyList()
+            val body = NativeLyricsHttp.readBoundedBody(resp.body) ?: return emptyList()
             val arr = JSONArray(body)
             val list = ArrayList<AppleTrack>(arr.length())
             for (i in 0 until arr.length()) {
@@ -236,7 +240,7 @@ internal object AppleMusicPaxClient {
         val req = Request.Builder().url(url).header("User-Agent", NativeLyricsHttp.USER_AGENT).build()
         NativeLyricsHttp.fastClient.newCall(req).execute().use { resp ->
             if (!resp.isSuccessful) return emptyList()
-            val body = resp.body?.string() ?: return emptyList()
+            val body = NativeLyricsHttp.readBoundedBody(resp.body) ?: return emptyList()
             val results = JSONObject(body).optJSONArray("results") ?: return emptyList()
             val list = ArrayList<AppleTrack>(results.length())
             for (i in 0 until results.length()) {
@@ -260,7 +264,7 @@ internal object AppleMusicPaxClient {
         val req = Request.Builder().url(url).header("User-Agent", NativeLyricsHttp.USER_AGENT).build()
         NativeLyricsHttp.paxClient.newCall(req).execute().use { resp ->
             if (!resp.isSuccessful) return null
-            val body = resp.body?.string()?.trim() ?: return null
+            val body = NativeLyricsHttp.readBoundedBody(resp.body)?.trim() ?: return null
             if (body.isBlank()) return null
             if (body.contains("<tt", ignoreCase = true)) return body
             parsePaxAppleJson(body)
@@ -395,7 +399,7 @@ internal object LyricsPlusClient {
 
         NativeLyricsHttp.fastClient.newCall(req).execute().use { resp ->
             if (!resp.isSuccessful) return null
-            val body = resp.body?.string() ?: return null
+            val body = NativeLyricsHttp.readBoundedBody(resp.body) ?: return null
             parseKpoeJson(body)
         }
     }.getOrNull()
@@ -522,7 +526,7 @@ internal object BetterLyricsClient {
 
         NativeLyricsHttp.fastClient.newCall(req).execute().use { resp ->
             if (!resp.isSuccessful) return null
-            val body = resp.body?.string()?.trim() ?: return null
+            val body = NativeLyricsHttp.readBoundedBody(resp.body)?.trim() ?: return null
             if (body.isBlank()) return null
             if (body.startsWith("<tt", ignoreCase = true) || body.startsWith("<?xml", ignoreCase = true)) {
                 return body
@@ -600,7 +604,7 @@ internal object BiniAndLrcRedClient {
         val req = Request.Builder().url(urlBuilder.build()).header("User-Agent", NativeLyricsHttp.USER_AGENT).build()
         NativeLyricsHttp.fastClient.newCall(req).execute().use { resp ->
             if (!resp.isSuccessful) return null
-            val body = resp.body?.string()?.trim() ?: return null
+            val body = NativeLyricsHttp.readBoundedBody(resp.body)?.trim() ?: return null
             if (body.startsWith("<tt", ignoreCase = true) || body.startsWith("<?xml", ignoreCase = true)) return body
             val json = JSONObject(body)
             val ttmlUrl = json.optString("ttmlUrl").ifBlank { json.optString("url") }
@@ -608,7 +612,7 @@ internal object BiniAndLrcRedClient {
                 val ttmlReq = Request.Builder().url(ttmlUrl).header("User-Agent", NativeLyricsHttp.USER_AGENT).build()
                 NativeLyricsHttp.fastClient.newCall(ttmlReq).execute().use { ttmlResp ->
                     if (ttmlResp.isSuccessful) {
-                        val ttmlBody = ttmlResp.body?.string()?.trim()
+                        val ttmlBody = NativeLyricsHttp.readBoundedBody(ttmlResp.body)?.trim()
                         if (!ttmlBody.isNullOrBlank()) return ttmlBody
                     }
                 }
@@ -630,7 +634,7 @@ internal object BiniAndLrcRedClient {
         val req = Request.Builder().url(searchUrl).header("User-Agent", NativeLyricsHttp.USER_AGENT).build()
         val isrc = NativeLyricsHttp.fastClient.newCall(req).execute().use { resp ->
             if (!resp.isSuccessful) return null
-            val body = resp.body?.string() ?: return null
+            val body = NativeLyricsHttp.readBoundedBody(resp.body) ?: return null
             val arr = if (body.trim().startsWith("[")) JSONArray(body) else JSONObject(body).optJSONArray("results")
             arr?.optJSONObject(0)?.let { first ->
                 first.optString("isrc").ifBlank { first.optString("id") }
@@ -650,7 +654,7 @@ internal object BiniAndLrcRedClient {
             val res = runCatching {
                 val req = Request.Builder().url(url).header("User-Agent", NativeLyricsHttp.USER_AGENT).build()
                 NativeLyricsHttp.fastClient.newCall(req).execute().use { resp ->
-                    if (resp.isSuccessful) resp.body?.string()?.trim() else null
+                    if (resp.isSuccessful) NativeLyricsHttp.readBoundedBody(resp.body)?.trim() else null
                 }
             }.getOrNull()
             if (!res.isNullOrBlank() && (res.contains("<tt", ignoreCase = true) || res.contains("[0"))) {
@@ -730,7 +734,7 @@ internal object NetEaseLyricsClient {
 
         val songs = NativeLyricsHttp.fastClient.newCall(req).execute().use { resp ->
             if (!resp.isSuccessful) return emptyList()
-            val text = resp.body?.string() ?: return emptyList()
+            val text = NativeLyricsHttp.readBoundedBody(resp.body) ?: return emptyList()
             val songsArr = JSONObject(text).optJSONObject("result")?.optJSONArray("songs") ?: return emptyList()
             val list = ArrayList<NetEaseSong>(songsArr.length())
             for (i in 0 until songsArr.length()) {
@@ -776,7 +780,7 @@ internal object NetEaseLyricsClient {
 
         NativeLyricsHttp.fastClient.newCall(req).execute().use { resp ->
             if (!resp.isSuccessful) return null
-            val body = resp.body?.string() ?: return null
+            val body = NativeLyricsHttp.readBoundedBody(resp.body) ?: return null
             val json = JSONObject(body)
             val yrcRaw = json.optJSONObject("yrc")?.optString("lyric")?.takeIf { it.isNotBlank() }
             val lrcRaw = json.optJSONObject("lrc")?.optString("lyric")?.takeIf { it.isNotBlank() }
@@ -896,7 +900,7 @@ internal object QqMusicLyricsClient {
 
         NativeLyricsHttp.fastClient.newCall(req).execute().use { resp ->
             if (!resp.isSuccessful) return emptyList()
-            val body = resp.body?.string() ?: return emptyList()
+            val body = NativeLyricsHttp.readBoundedBody(resp.body) ?: return emptyList()
             val itemlist = JSONObject(body)
                 .optJSONObject("data")
                 ?.optJSONObject("song")
@@ -927,7 +931,7 @@ internal object QqMusicLyricsClient {
 
         NativeLyricsHttp.fastClient.newCall(req).execute().use { resp ->
             if (!resp.isSuccessful) return null
-            var body = resp.body?.string()?.trim() ?: return null
+            var body = NativeLyricsHttp.readBoundedBody(resp.body)?.trim() ?: return null
             if (body.startsWith("MusicJsonCallback(") && body.endsWith(")")) {
                 body = body.removePrefix("MusicJsonCallback(").removeSuffix(")")
             }
@@ -1010,7 +1014,7 @@ internal object KugouLyricsClient {
 
         NativeLyricsHttp.fastClient.newCall(req).execute().use { resp ->
             if (!resp.isSuccessful) return emptyList()
-            val body = resp.body?.string() ?: return emptyList()
+            val body = NativeLyricsHttp.readBoundedBody(resp.body) ?: return emptyList()
             val arr = JSONObject(body).optJSONArray("candidates") ?: return emptyList()
             val list = ArrayList<KugouCandidate>(arr.length())
             for (i in 0 until arr.length()) {
@@ -1037,7 +1041,7 @@ internal object KugouLyricsClient {
             val req = Request.Builder().url(url).header("User-Agent", NativeLyricsHttp.USER_AGENT).build()
             NativeLyricsHttp.fastClient.newCall(req).execute().use { resp ->
                 if (!resp.isSuccessful) return@runCatching null
-                val body = resp.body?.string() ?: return@runCatching null
+                val body = NativeLyricsHttp.readBoundedBody(resp.body) ?: return@runCatching null
                 val b64 = JSONObject(body).optString("content")
                 if (b64.isBlank()) return@runCatching null
                 val rawBytes = Base64.decode(b64, Base64.DEFAULT)
@@ -1054,7 +1058,7 @@ internal object KugouLyricsClient {
             val req = Request.Builder().url(url).header("User-Agent", NativeLyricsHttp.USER_AGENT).build()
             NativeLyricsHttp.fastClient.newCall(req).execute().use { resp ->
                 if (!resp.isSuccessful) return@runCatching null
-                val body = resp.body?.string() ?: return@runCatching null
+                val body = NativeLyricsHttp.readBoundedBody(resp.body) ?: return@runCatching null
                 val b64 = JSONObject(body).optString("content")
                 if (b64.isBlank()) return@runCatching null
                 String(Base64.decode(b64, Base64.DEFAULT), Charsets.UTF_8).trim().takeIf { it.isNotEmpty() }
@@ -1194,7 +1198,7 @@ internal object PetitLyricsClient {
 
         NativeLyricsHttp.fastClient.newCall(req).execute().use { resp ->
             if (!resp.isSuccessful) return emptyList()
-            val xml = resp.body?.string() ?: return emptyList()
+            val xml = NativeLyricsHttp.readBoundedBody(resp.body) ?: return emptyList()
             parsePetitXml(xml, cleanTitle, cleanArtist)
         }
     }.getOrDefault(emptyList())
@@ -1240,7 +1244,7 @@ internal object PetitLyricsClient {
         val searchReq = Request.Builder().url(searchUrl).header("User-Agent", NativeLyricsHttp.USER_AGENT).build()
         val lyricId = NativeLyricsHttp.fastClient.newCall(searchReq).execute().use { resp ->
             if (!resp.isSuccessful) return null
-            val html = resp.body?.string() ?: return null
+            val html = NativeLyricsHttp.readBoundedBody(resp.body) ?: return null
             Regex("""href="/lyrics/(\d+)"""").find(html)?.groupValues?.get(1)
         } ?: return null
 
@@ -1248,7 +1252,7 @@ internal object PetitLyricsClient {
         val pageReq = Request.Builder().url(pageUrl).header("User-Agent", NativeLyricsHttp.USER_AGENT).build()
         NativeLyricsHttp.fastClient.newCall(pageReq).execute().use { resp ->
             if (!resp.isSuccessful) return null
-            val html = resp.body?.string() ?: return null
+            val html = NativeLyricsHttp.readBoundedBody(resp.body) ?: return null
             val canvasMatch = Regex("""<canvas[^>]*id="lyrics"[^>]*>([\s\S]*?)</canvas>""", RegexOption.IGNORE_CASE)
                 .find(html)?.groupValues?.get(1)
             val raw = canvasMatch ?: Regex("""<div[^>]*id="lyrics_list"[^>]*>([\s\S]*?)</div>""", RegexOption.IGNORE_CASE)
@@ -1319,7 +1323,7 @@ internal object MusixmatchLyricsClient {
         val req = Request.Builder().url(urlBuilder.build()).header("User-Agent", NativeLyricsHttp.USER_AGENT).build()
         NativeLyricsHttp.paxClient.newCall(req).execute().use { resp ->
             if (!resp.isSuccessful) return null
-            val body = resp.body?.string()?.trim() ?: return null
+            val body = NativeLyricsHttp.readBoundedBody(resp.body)?.trim() ?: return null
             if (body.startsWith("[0")) return body
             val json = JSONObject(body)
             json.optString("synced").takeIf { it.isNotBlank() }
@@ -1352,7 +1356,7 @@ internal object MusixmatchLyricsClient {
 
             NativeLyricsHttp.fastClient.newCall(req).execute().use { resp ->
                 if (!resp.isSuccessful) return null
-                val body = resp.body?.string() ?: return null
+                val body = NativeLyricsHttp.readBoundedBody(resp.body) ?: return null
                 val calls = JSONObject(body)
                     .optJSONObject("message")
                     ?.optJSONObject("body")
@@ -1438,7 +1442,7 @@ internal object MusixmatchLyricsClient {
                 .build()
             NativeLyricsHttp.fastClient.newCall(req).execute().use { resp ->
                 if (!resp.isSuccessful) return@runCatching null
-                val body = resp.body?.string() ?: return@runCatching null
+                val body = NativeLyricsHttp.readBoundedBody(resp.body) ?: return@runCatching null
                 JSONObject(body)
                     .optJSONObject("message")
                     ?.optJSONObject("body")
@@ -1488,7 +1492,7 @@ internal object LrcLibClient {
 
             NativeLyricsHttp.fastClient.newCall(req).execute().use { resp ->
                 if (!resp.isSuccessful) return@withContext emptyList()
-                val body = resp.body?.string() ?: return@withContext emptyList()
+                val body = NativeLyricsHttp.readBoundedBody(resp.body) ?: return@withContext emptyList()
                 val arr = JSONArray(body)
                 val out = ArrayList<NativeSearchCandidate>(arr.length())
                 for (i in 0 until arr.length()) {

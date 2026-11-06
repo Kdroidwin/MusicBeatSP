@@ -236,7 +236,7 @@ object ArtistFacts {
         val request = Request.Builder().url(url).header("User-Agent", USER_AGENT).build()
         val body = Http.client.newCall(request).execute().use { response ->
             if (!response.isSuccessful) return
-            response.body?.string()
+            Http.readBoundedUtf8(response.body, 2 * 1024 * 1024)
         } ?: return
 
         val tags = runCatching {

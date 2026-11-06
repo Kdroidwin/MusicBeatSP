@@ -211,7 +211,7 @@ object RadioRepository {
         ensureNetworkAllowed()
         val request = Request.Builder().url(url).apply(configure).get().build()
         return Http.client.newCall(request).execute().use { response ->
-            val body = response.body?.string().orEmpty()
+            val body = Http.readBoundedUtf8(response.body, 4 * 1024 * 1024).orEmpty()
             if (!response.isSuccessful) throw IOException("Radio service returned HTTP ${response.code}")
             Response(body, response.headers.toMultimap().mapValues { (_, values) -> values.firstOrNull().orEmpty() })
         }

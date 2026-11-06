@@ -86,7 +86,7 @@ internal object OfflineDash {
             }.build()
             val manifest = Http.client.newCall(request(url)).execute().use { response ->
                 if (!response.isSuccessful) error("DASH manifest failed (HTTP ${response.code})")
-                response.body?.string() ?: error("Empty DASH manifest")
+                Http.readBoundedUtf8(response.body, 4 * 1024 * 1024) ?: error("Empty DASH manifest")
             }
             val plan = parse(manifest)
             val base = url.toHttpUrlOrNull() ?: error("Invalid DASH URL")

@@ -78,7 +78,7 @@ object DeezerArtistService {
 
             Http.client.newCall(request).execute().use { response ->
                 if (!response.isSuccessful) return null
-                val body = response.body?.string() ?: return null
+                val body = Http.readBoundedUtf8(response.body, 2 * 1024 * 1024) ?: return null
                 parseBestImageUrl(body, query, isLarge)
             }
         } catch (_: Exception) {

@@ -364,7 +364,8 @@ class RadioAutoRecordingService : Service() {
         val request = radioRequest(url, headers)
         return Http.client.newCall(request).execute().use { response ->
             if (!response.isSuccessful) throw IOException("Radio playlist returned HTTP ${response.code}")
-            response.body.string().takeIf(String::isNotBlank) ?: throw IOException("Radio playlist was empty")
+            Http.readBoundedUtf8(response.body, 4 * 1024 * 1024)
+                ?.takeIf(String::isNotBlank) ?: throw IOException("Radio playlist was empty")
         }
     }
 

@@ -86,14 +86,16 @@ object DownloadStore {
      * that puts an album back together in the listing.
      */
     fun fileNameFor(song: Song, extension: String): String {
+        val safeExtension = extension.lowercase(Locale.ROOT)
+        require(SAFE_EXTENSION.matches(safeExtension)) { "Unsupported download file extension" }
         val artist = sanitise(song.artist)
         val title = sanitise(song.title)
         val stem = when {
             artist.isEmpty() -> title
             title.isEmpty() -> artist
             else -> "$artist - $title"
-        }.ifEmpty { song.videoId }
-        return "${stem.take(MAX_STEM_CHARS).trimEnd()}.$extension"
+        }.ifEmpty { sanitise(song.videoId) }.ifEmpty { "audio" }
+        return "${stem.take(MAX_STEM_CHARS).trimEnd()}.$safeExtension"
     }
 
     /**
@@ -266,6 +268,7 @@ object DownloadStore {
 
     /** Create a fresh destination only after the selected-folder export is ready to copy. */
     fun beginInTree(context: Context, treeUri: Uri, name: String, mimeType: String): Pending {
+        requireSafeFileName(name)
         val tree = DocumentFile.fromTreeUri(context, treeUri)
             ?: error("Could not open the selected download folder")
         if (!tree.isDirectory) error("The selected download location is not a folder")
@@ -290,6 +293,7 @@ object DownloadStore {
      *   download cannot start rather than that it might not finish.
      */
     fun begin(context: Context, name: String, mimeType: String): Pending {
+        requireSafeFileName(name)
         if (!AppSettings.exportDownloads.value) {
             val target = privateFile(context, name)
             val folder = target.parentFile ?: error("No download folder")
@@ -337,4 +341,15 @@ object DownloadStore {
 
     private fun privateFile(context: Context, name: String) =
         File(File(context.filesDir, "downloads"), name)
+
+    private fun requireSafeFileName(name: String) {
+        require(
+            name.isNotBlank() &&
+                name != "." && name != ".." &&
+                '/' !in name && '\\' !in name &&
+                name.none { it.code < 0x20 || it.code == 0x7f },
+        ) { "Invalid download file name" }
+    }
+
+    private val SAFE_EXTENSION = Regex("[a-z0-9]{1,12}")
 }

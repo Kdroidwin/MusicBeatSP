@@ -399,7 +399,7 @@ object AppleMusicCanvas {
         return runCatching {
             Http.client.newCall(request).execute().use { response ->
                 when {
-                    response.isSuccessful -> response.body?.string()
+                    response.isSuccessful -> Http.readBoundedUtf8(response.body, 4 * 1024 * 1024)
                     response.code == 401 -> {
                         Log.w(TAG, "token rejected by the catalog API; will re-scrape")
                         synchronized(this) {

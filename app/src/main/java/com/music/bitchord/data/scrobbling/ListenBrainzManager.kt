@@ -47,7 +47,7 @@ object ListenBrainzManager {
                         Log.d(TAG, "playing_now submitted for ${song.title}")
                         true
                     } else {
-                        val bodyText = try { resp.body?.string() ?: "" } catch (_: Exception) { "" }
+                        val bodyText = try { Http.readBoundedUtf8(resp.body, 16 * 1024) ?: "" } catch (_: Exception) { "" }
                         Log.w(TAG, "playing_now submit failed: ${resp.code} - $bodyText")
                         false
                     }
@@ -97,7 +97,7 @@ object ListenBrainzManager {
                         Log.d(TAG, "finished listen submitted for ${song.title}")
                         true
                     } else {
-                        val bodyText = try { resp.body?.string() ?: "" } catch (_: Exception) { "" }
+                        val bodyText = try { Http.readBoundedUtf8(resp.body, 16 * 1024) ?: "" } catch (_: Exception) { "" }
                         Log.w(TAG, "finished listen submit failed: ${resp.code} - $bodyText")
                         false
                     }

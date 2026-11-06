@@ -135,7 +135,7 @@ internal object UtaNetLyricsClient {
             val req = Request.Builder().url(url).header("User-Agent", NativeLyricsHttp.USER_AGENT).build()
             NativeLyricsHttp.fastClient.newCall(req).execute().use { resp ->
                 if (!resp.isSuccessful) return@use
-                val html = resp.body?.string() ?: return@use
+                val html = NativeLyricsHttp.readBoundedBody(resp.body) ?: return@use
                 for (m in SONG_ROW_REGEX.findAll(html)) {
                     val id = m.groupValues[1]
                     if (!seen.add(id)) continue
@@ -154,7 +154,7 @@ internal object UtaNetLyricsClient {
         val req = Request.Builder().url(url).header("User-Agent", NativeLyricsHttp.USER_AGENT).build()
         NativeLyricsHttp.fastClient.newCall(req).execute().use { resp ->
             if (!resp.isSuccessful) return null
-            val html = resp.body?.string() ?: return null
+            val html = NativeLyricsHttp.readBoundedBody(resp.body) ?: return null
             val kashiHtml = KASHI_AREA_REGEX.find(html)?.groupValues?.get(1) ?: return null
             WebScrapeHtmlUtils.htmlToCleanLyrics(kashiHtml).takeIf { it.isNotBlank() }
         }
@@ -212,7 +212,7 @@ internal object UtaTenLyricsClient {
         val req = Request.Builder().url(url).header("User-Agent", NativeLyricsHttp.USER_AGENT).build()
         NativeLyricsHttp.fastClient.newCall(req).execute().use { resp ->
             if (!resp.isSuccessful) return emptyList()
-            val html = resp.body?.string() ?: return emptyList()
+            val html = NativeLyricsHttp.readBoundedBody(resp.body) ?: return emptyList()
             LYRIC_LINK_REGEX.findAll(html)
                 .map { it.groupValues[1] }
                 .filterNot { it.contains("=") }
@@ -227,7 +227,7 @@ internal object UtaTenLyricsClient {
         val req = Request.Builder().url(url).header("User-Agent", NativeLyricsHttp.USER_AGENT).build()
         NativeLyricsHttp.fastClient.newCall(req).execute().use { resp ->
             if (!resp.isSuccessful) return null
-            val html = resp.body?.string() ?: return null
+            val html = NativeLyricsHttp.readBoundedBody(resp.body) ?: return null
             extractUtatenMediumBlock(html)?.let { block ->
                 WebScrapeHtmlUtils.convertUtatenRubyToFurigana(block).takeIf { it.isNotBlank() }
             }
@@ -320,7 +320,7 @@ internal object JLyricClient {
         val req = Request.Builder().url(url).header("User-Agent", NativeLyricsHttp.USER_AGENT).build()
         NativeLyricsHttp.fastClient.newCall(req).execute().use { resp ->
             if (!resp.isSuccessful) return emptyList()
-            val html = resp.body?.string() ?: return emptyList()
+            val html = NativeLyricsHttp.readBoundedBody(resp.body) ?: return emptyList()
             SONG_URL_REGEX.findAll(html)
                 .map { it.groupValues[1] }
                 .distinct()
@@ -333,7 +333,7 @@ internal object JLyricClient {
         val req = Request.Builder().url(url).header("User-Agent", NativeLyricsHttp.USER_AGENT).build()
         NativeLyricsHttp.fastClient.newCall(req).execute().use { resp ->
             if (!resp.isSuccessful) return null
-            val html = resp.body?.string() ?: return null
+            val html = NativeLyricsHttp.readBoundedBody(resp.body) ?: return null
             val rawLyric = LYRIC_P_REGEX.find(html)?.groupValues?.get(1) ?: return null
             WebScrapeHtmlUtils.htmlToCleanLyrics(rawLyric).takeIf { it.isNotBlank() }
         }
@@ -399,7 +399,7 @@ internal object GeniusLyricsClient {
 
         NativeLyricsHttp.fastClient.newCall(req).execute().use { resp ->
             if (!resp.isSuccessful) return emptyList()
-            val body = resp.body?.string() ?: return emptyList()
+            val body = NativeLyricsHttp.readBoundedBody(resp.body) ?: return emptyList()
             val hitsArr = JSONObject(body)
                 .optJSONObject("response")
                 ?.optJSONArray("hits") ?: return emptyList()
@@ -429,7 +429,7 @@ internal object GeniusLyricsClient {
             .build()
         NativeLyricsHttp.fastClient.newCall(req).execute().use { resp ->
             if (!resp.isSuccessful) return null
-            val html = resp.body?.string() ?: return null
+            val html = NativeLyricsHttp.readBoundedBody(resp.body) ?: return null
             extractGeniusContainers(html)
         }
     }.getOrNull()

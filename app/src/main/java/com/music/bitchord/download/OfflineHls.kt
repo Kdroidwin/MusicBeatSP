@@ -36,7 +36,7 @@ internal object OfflineHls {
             }.build()
             val playlist = Http.client.newCall(request(url)).execute().use { response ->
                 if (!response.isSuccessful) error("HLS playlist failed (HTTP ${response.code})")
-                response.body?.string() ?: error("Empty HLS playlist")
+                Http.readBoundedUtf8(response.body, 4 * 1024 * 1024) ?: error("Empty HLS playlist")
             }
             if (!playlist.startsWith("#EXTM3U")) error("Invalid HLS playlist")
             if (playlist.contains("#EXT-X-KEY:") && !playlist.contains("METHOD=NONE")) {

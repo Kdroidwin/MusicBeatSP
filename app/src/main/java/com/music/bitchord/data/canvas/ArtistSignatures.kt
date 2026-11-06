@@ -230,7 +230,7 @@ object ArtistSignatureRepository {
         val request = Request.Builder().url(url).get().build()
         Http.client.newCall(request).execute().use { response ->
             if (!response.isSuccessful) return null
-            return response.body?.string()
+            return Http.readBoundedUtf8(response.body, 4 * 1024 * 1024)
         }
     }
 

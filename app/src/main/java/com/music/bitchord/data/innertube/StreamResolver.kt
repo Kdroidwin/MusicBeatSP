@@ -172,7 +172,7 @@ object StreamResolver {
                 response.code,
                 response.message,
                 response.headers.toMultimap(),
-                response.body?.string(),
+                Http.readBoundedUtf8(response.body, 32 * 1024 * 1024),
                 response.request.url.toString(),
             )
         }

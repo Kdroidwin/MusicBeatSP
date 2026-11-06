@@ -326,7 +326,7 @@ object SpotifyCanvas {
             .build()
         val (code, body) = runCatching {
             Http.client.newCall(request).execute().use { response ->
-                response.code to if (response.isSuccessful) response.body?.string() else null
+                response.code to if (response.isSuccessful) Http.readBoundedUtf8(response.body, 2 * 1024 * 1024) else null
             }
         }.getOrElse { return SpotifyCanvasQuery.Answer.Failed("request threw: ${it.message}") }
         if (body == null) return SpotifyCanvasQuery.Answer.Failed("http $code")
