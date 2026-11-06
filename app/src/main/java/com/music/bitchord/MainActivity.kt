@@ -1219,6 +1219,7 @@ private fun BitChordApp(
     }
 
     val rootTabTopBarScrollEnabled = detail == null && !showSettings && !showReplay && !showSources && !showWearOs
+    val rootTabUsesListScrollState = selectedTab == TAB_LIBRARY || selectedTab == TAB_SEARCH
     var rootTabTopBarCollapsed by remember(selectedTab) { mutableStateOf(false) }
     val onRootLibraryOrSearchScrolled: (Boolean) -> Unit = { contentScrolled ->
         if (
@@ -1231,9 +1232,17 @@ private fun BitChordApp(
     // Collapse the root bar on the first real content movement so a brief
     // scroll does not leave its Settings action pinned at the top.
     val rootTabTopBarScrollThreshold = 0f
-    val rootTabTopBarScroll = remember(selectedTab, rootTabTopBarScrollEnabled, rootTabTopBarScrollThreshold) {
+    val rootTabTopBarScroll = remember(
+        selectedTab,
+        rootTabTopBarScrollEnabled,
+        rootTabUsesListScrollState,
+        rootTabTopBarScrollThreshold,
+    ) {
         RootTabTopBarScrollConnection(
-            enabled = rootTabTopBarScrollEnabled,
+            // Library and Search report their actual scroll position below.
+            // The direction-based parent connection would expand the bar as
+            // soon as a user scrolls back toward the top, even mid-list.
+            enabled = rootTabTopBarScrollEnabled && !rootTabUsesListScrollState,
             initiallyCollapsed = rootTabTopBarCollapsed,
             thresholdPx = rootTabTopBarScrollThreshold,
             onCollapsedChange = { rootTabTopBarCollapsed = it },
