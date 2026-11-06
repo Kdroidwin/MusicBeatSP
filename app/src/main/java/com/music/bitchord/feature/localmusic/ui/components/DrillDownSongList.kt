@@ -60,6 +60,7 @@ import androidx.compose.runtime.setValue
 import androidx.compose.runtime.mutableFloatStateOf
 import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.rememberUpdatedState
+import androidx.compose.runtime.snapshotFlow
 import androidx.compose.runtime.withFrameNanos
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -89,6 +90,7 @@ import coil3.compose.AsyncImage
 import coil3.request.ImageRequest
 import coil3.request.transformations
 import androidx.compose.ui.platform.LocalContext
+import kotlinx.coroutines.flow.distinctUntilChanged
 import com.music.bitchord.R
 import com.music.bitchord.data.model.CARD_ART_PX
 import com.music.bitchord.data.model.HEADER_ART_PX
@@ -728,6 +730,7 @@ fun DrillDownSongList(
     contentPadding: PaddingValues = PaddingValues(0.dp),
     songDropdownMenu: (@Composable (Song) -> Unit)? = null,
     onArtworkPaletteChanged: ((ArtworkPalette?) -> Unit)? = null,
+    onRootListScrollChanged: ((Boolean) -> Unit)? = null,
     modifier: Modifier = Modifier,
 ) {
     val hideUnknownPlaylistArtist by AppSettings.hideUnknownPlaylistArtist.collectAsStateWithLifecycle()
@@ -776,9 +779,19 @@ fun DrillDownSongList(
     }
     val selectionToolbarBackground = artworkPalette.wash
     val selectionToolbarContentColor = selectionToolbarBackground.highContrastBlackOrWhite()
+    val rootListScrollCallback = rememberUpdatedState(onRootListScrollChanged)
+    val rootListScrollThresholdPx = with(LocalDensity.current) { 32.dp.toPx() }
 
     if (viewType == LibraryViewType.GRID) {
         val gridState = rememberLazyGridState()
+        LaunchedEffect(gridState, rootListScrollThresholdPx) {
+            snapshotFlow {
+                gridState.firstVisibleItemIndex > 0 ||
+                    gridState.firstVisibleItemScrollOffset > rootListScrollThresholdPx
+            }
+                .distinctUntilChanged()
+                .collect { rootListScrollCallback.value?.invoke(it) }
+        }
         BoxWithConstraints(
             modifier = modifier
                 .fillMaxSize()
@@ -885,6 +898,14 @@ fun DrillDownSongList(
         }
     } else {
         val listState = rememberLazyListState()
+        LaunchedEffect(listState, rootListScrollThresholdPx) {
+            snapshotFlow {
+                listState.firstVisibleItemIndex > 0 ||
+                    listState.firstVisibleItemScrollOffset > rootListScrollThresholdPx
+            }
+                .distinctUntilChanged()
+                .collect { rootListScrollCallback.value?.invoke(it) }
+        }
         var displayedSongs by remember(songs) { mutableStateOf(songs) }
         val dragState = rememberPlaylistSongDragState(listState, displayedSongs.size) { from, to, draggedKey, insertAfter, groupedKeys ->
             val current = displayedSongs

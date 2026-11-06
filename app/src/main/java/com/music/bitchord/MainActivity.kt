@@ -1217,9 +1217,16 @@ private fun BitChordApp(
         }
     }
 
-    val rootTabTopBarScrollEnabled = detail == null && !showSettings && !showReplay && !showSources && !showWearOs &&
-        collectionBackHandlers["$TAB_KEY$selectedTab"] == null
+    val rootTabTopBarScrollEnabled = detail == null && !showSettings && !showReplay && !showSources && !showWearOs
     var rootTabTopBarCollapsed by remember(selectedTab) { mutableStateOf(false) }
+    val onRootLibraryOrSearchScrolled: (Boolean) -> Unit = { contentScrolled ->
+        if (
+            detail == null && !showSettings && !showReplay && !showSources && !showWearOs &&
+            (selectedTab == TAB_LIBRARY || selectedTab == TAB_SEARCH)
+        ) {
+            rootTabTopBarCollapsed = contentScrolled
+        }
+    }
     val rootTabTopBarScrollThreshold = with(LocalDensity.current) { 32.dp.toPx() }
     val rootTabTopBarScroll = remember(selectedTab, rootTabTopBarScrollEnabled, rootTabTopBarScrollThreshold) {
         RootTabTopBarScrollConnection(
@@ -3266,6 +3273,7 @@ private fun BitChordApp(
                                 onInitialFilterApplied = { libraryFilterRequest = null },
                                 onArtworkPaletteChanged = onLocalArtworkPaletteChanged,
                                 onCollectionNavigationChanged = onCollectionNavigationChanged,
+                                onRootListScrollChanged = onRootLibraryOrSearchScrolled,
                                 onOpenYoutubeCollection = { collection ->
                                     val type = runCatching { BrowseType.valueOf(collection.type) }
                                         .getOrDefault(BrowseType.OTHER)
@@ -3327,6 +3335,7 @@ private fun BitChordApp(
                                         type = item.type,
                                     )
                                 },
+                                    onRootListScrollChanged = onRootLibraryOrSearchScrolled,
                                     contentPadding = listPadding,
                                 )
                             }

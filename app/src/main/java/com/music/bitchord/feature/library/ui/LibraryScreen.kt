@@ -74,16 +74,19 @@ import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberUpdatedState
 import androidx.compose.runtime.saveable.rememberSaveable
+import androidx.compose.runtime.snapshotFlow
 import androidx.compose.runtime.setValue
 import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.Alignment
+import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
+import kotlinx.coroutines.flow.distinctUntilChanged
 import com.music.bitchord.R
 import com.music.bitchord.data.model.Song
 import com.music.bitchord.data.model.CARD_ART_PX
@@ -250,6 +253,7 @@ fun LibraryScreen(
     onInitialFilterApplied: () -> Unit = {},
     onArtworkPaletteChanged: ((ArtworkPalette?) -> Unit)? = null,
     onCollectionNavigationChanged: ((Boolean, (() -> Unit)?) -> Unit)? = null,
+    onRootListScrollChanged: ((Boolean) -> Unit)? = null,
     onOpenYoutubeCollection: (SavedYoutubeCollection) -> Unit = {},
     onOpenReplay: (() -> Unit)? = null,
 ) {
@@ -412,6 +416,7 @@ fun LibraryScreen(
     }
     val collectionListState = rememberLazyListState()
     val collectionGridState = rememberLazyGridState()
+    val youtubeCollectionsListState = rememberLazyListState()
     var showCreateDialog by remember { mutableStateOf(false) }
     var showCreateSmartPlaylistDialog by remember { mutableStateOf(false) }
     var playlistToRename by remember { mutableStateOf<LocalPlaylist?>(null) }
@@ -576,6 +581,29 @@ fun LibraryScreen(
     }
     val inHistoryView = selectedFilter == LibraryFilter.RECENTLY_PLAYED ||
         selectedFilter == LibraryFilter.MOST_PLAYED
+    val rootListScrollCallback = rememberUpdatedState(onRootListScrollChanged)
+    val rootListScrollThresholdPx = with(LocalDensity.current) { 32.dp.toPx() }
+    LaunchedEffect(selectedFilter, libraryViewType, inDrillDown, rootListScrollThresholdPx) {
+        if (inDrillDown || inHistoryView || selectedFilter == LibraryFilter.YOUTUBE_DOWNLOADS) {
+            rootListScrollCallback.value?.invoke(false)
+            return@LaunchedEffect
+        }
+        val rootListScrollFlow = when {
+            selectedFilter == LibraryFilter.YOUTUBE_MUSIC -> snapshotFlow {
+                youtubeCollectionsListState.firstVisibleItemIndex > 0 ||
+                    youtubeCollectionsListState.firstVisibleItemScrollOffset > rootListScrollThresholdPx
+            }
+            libraryViewType == LibraryViewType.GRID -> snapshotFlow {
+                collectionGridState.firstVisibleItemIndex > 0 ||
+                    collectionGridState.firstVisibleItemScrollOffset > rootListScrollThresholdPx
+            }
+            else -> snapshotFlow {
+                collectionListState.firstVisibleItemIndex > 0 ||
+                    collectionListState.firstVisibleItemScrollOffset > rootListScrollThresholdPx
+            }
+        }
+        rootListScrollFlow.distinctUntilChanged().collect { rootListScrollCallback.value?.invoke(it) }
+    }
     val selectedPlaylistSongs = remember(drillDownSongs, selectedPlaylistSongIds) {
         drillDownSongs.filter { (it.localUri ?: it.videoId) in selectedPlaylistSongIds }
     }
@@ -994,6 +1022,7 @@ fun LibraryScreen(
                     contentPadding = contentPadding,
                     songDropdownMenu = if (drillDownPlaylistId != null) playlistSongDropdownMenu else songDropdownMenu,
                     onArtworkPaletteChanged = onArtworkPaletteChanged,
+                    onRootListScrollChanged = onRootListScrollChanged,
                 )
             } else if (key == "library:youtube") {
                 Column(
@@ -1024,6 +1053,7 @@ fun LibraryScreen(
                         }
                     } else {
                         LazyColumn(
+                            state = youtubeCollectionsListState,
                             modifier = Modifier.fillMaxSize(),
                             contentPadding = PaddingValues(
                                 start = 16.dp,
@@ -1153,6 +1183,7 @@ fun LibraryScreen(
                             onBack = { selectedFilter = LibraryFilter.ALL },
                             contentPadding = PaddingValues(bottom = contentPadding.calculateBottomPadding()),
                             songDropdownMenu = songDropdownMenu,
+                            onRootListScrollChanged = onRootListScrollChanged,
                             modifier = Modifier.weight(1f),
                         )
                     }
@@ -1210,6 +1241,7 @@ fun LibraryScreen(
                             onBack = { selectedFilter = LibraryFilter.ALL },
                             contentPadding = PaddingValues(bottom = contentPadding.calculateBottomPadding()),
                             songDropdownMenu = songDropdownMenu,
+                            onRootListScrollChanged = onRootListScrollChanged,
                             modifier = Modifier.weight(1f),
                         )
                     }

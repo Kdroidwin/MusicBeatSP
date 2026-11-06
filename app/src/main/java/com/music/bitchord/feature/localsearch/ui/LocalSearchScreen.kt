@@ -48,6 +48,7 @@ import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.rememberUpdatedState
 import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.runtime.snapshotFlow
@@ -82,6 +83,7 @@ import com.music.bitchord.ui.components.SongRow
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.withContext
+import kotlinx.coroutines.flow.distinctUntilChanged
 
 @Composable
 fun LocalSearchScreen(
@@ -116,6 +118,7 @@ fun LocalSearchScreen(
     onConfiguredSourceSearch: ((String, String) -> Unit)? = null,
     onConfiguredSourceTrackClick: ((Song) -> Unit)? = null,
     contentPadding: PaddingValues = PaddingValues(0.dp),
+    onRootListScrollChanged: ((Boolean) -> Unit)? = null,
     modifier: Modifier = Modifier,
 ) {
     val context = LocalContext.current
@@ -133,6 +136,8 @@ fun LocalSearchScreen(
     var submittedConfiguredSourceQuery by rememberSaveable { mutableStateOf<String?>(null) }
     var selectedFilter by rememberSaveable { mutableStateOf(LocalSearchFilter.ALL) }
     val listState = rememberLazyListState()
+    val rootListScrollCallback = rememberUpdatedState(onRootListScrollChanged)
+    val rootListScrollThresholdPx = with(androidx.compose.ui.platform.LocalDensity.current) { 32.dp.toPx() }
 
     LaunchedEffect(canSearchYoutubeMusic) {
         if (!canSearchYoutubeMusic) {
@@ -252,6 +257,16 @@ fun LocalSearchScreen(
         }
     }
 
+    LaunchedEffect(listState, rootListScrollThresholdPx, inDrillDown) {
+        if (inDrillDown) return@LaunchedEffect
+        snapshotFlow {
+            listState.firstVisibleItemIndex > 0 ||
+                listState.firstVisibleItemScrollOffset > rootListScrollThresholdPx
+        }
+            .distinctUntilChanged()
+            .collect { rootListScrollCallback.value?.invoke(it) }
+    }
+
     val matchedSongs = remember(searchResults) {
         searchResults.filterIsInstance<LocalSearchResult.Track>().map { it.song }
     }
@@ -314,6 +329,7 @@ fun LocalSearchScreen(
                 },
                 onBack = leaveDrillDown,
                 contentPadding = contentPadding,
+                    onRootListScrollChanged = onRootListScrollChanged,
                     modifier = Modifier.weight(1f),
                 )
             }
@@ -587,6 +603,7 @@ fun LocalSearchScreen(
                         onTrackLongPress = onSongLongPress,
                         onTrackSwipe = onSongSwipe,
                         contentPadding = contentPadding,
+                        listState = listState,
                         modifier = Modifier.weight(1f),
                     )
                 } else if (selectedConfiguredSource != null) {
@@ -604,6 +621,7 @@ fun LocalSearchScreen(
                         onTrackSwipe = onSongSwipe,
                         contentPadding = contentPadding,
                         sourceLabel = selectedConfiguredSourceLabel,
+                        listState = listState,
                         modifier = Modifier.weight(1f),
                     )
                 } else if (searchResults.isEmpty()) {
@@ -916,6 +934,7 @@ private fun MusicServerSearchResults(
     onTrackLongPress: (Song) -> Unit,
     onTrackSwipe: (Song) -> Unit,
     contentPadding: PaddingValues,
+    listState: androidx.compose.foundation.lazy.LazyListState,
     sourceLabel: String? = null,
     modifier: Modifier = Modifier,
 ) {
@@ -941,6 +960,7 @@ private fun MusicServerSearchResults(
             Text(stringResource(R.string.no_results), color = MaterialTheme.colorScheme.onSurfaceVariant)
         }
         else -> LazyColumn(
+            state = listState,
             modifier = modifier.fillMaxWidth(),
             contentPadding = PaddingValues(bottom = contentPadding.calculateBottomPadding() + 16.dp),
         ) {
