@@ -60,6 +60,11 @@
     <string name="tap_to_create">Tap to create</string>
     <string name="localize_library_collection_count">Localize the Library collection count</string>
     <string name="localize_library_collection_count_subtitle">Use the app language for the Collections label in the Library. On by default.</string>
+    <string name="localize_library_all_label">Localize the Library “All” filter</string>
+    <string name="localize_library_all_label_subtitle">Show “すべて” for the All filter in Japanese. On by default.</string>
+    <string name="library_all_label">All</string>
+    <string name="playlist_order_drag_hint">Long-press a playlist row and drag it to reorder.</string>
+    <string name="playlist_options">Playlist options</string>
     <plurals name="library_collection_count">
         <item quantity="one">%1$d Collection</item>
         <item quantity="other">%1$d Collections</item>

@@ -54,6 +54,11 @@
     <string name="tap_to_create">タップして作成</string>
     <string name="localize_library_collection_count">ライブラリのコレクション数を日本語表示</string>
     <string name="localize_library_collection_count_subtitle">ライブラリの「Collections」をアプリの言語に合わせて表示します。初期設定はオンです。</string>
+    <string name="localize_library_all_label">コレクションの「All」を「すべて」にする</string>
+    <string name="localize_library_all_label_subtitle">ライブラリの「All」フィルターを日本語で「すべて」と表示します。初期設定はオンです。</string>
+    <string name="library_all_label">すべて</string>
+    <string name="playlist_order_drag_hint">プレイリストを長押ししてドラッグすると、並び替えできます。</string>
+    <string name="playlist_options">プレイリストのオプション</string>
     <plurals name="library_collection_count">
         <item quantity="other">%1$d コレクション</item>
     </plurals>

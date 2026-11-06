@@ -175,6 +175,7 @@ fun LibraryPlaylistCard(
                     DropdownMenu(
                         expanded = menuOpen,
                         onDismissRequest = { menuOpen = false },
+                        shape = RoundedCornerShape(16.dp),
                     ) {
                         DropdownMenuItem(
                             text = { Text(stringResource(R.string.change_playlist_cover)) },
@@ -235,7 +236,7 @@ fun LibraryPlaylistCard(
                             },
                         )
                         DropdownMenuItem(
-                            text = { Text("Delete", color = MaterialTheme.colorScheme.error) },
+                            text = { Text(stringResource(R.string.delete), color = MaterialTheme.colorScheme.error) },
                             leadingIcon = {
                                 Icon(
                                     Icons.Rounded.Delete,

@@ -149,7 +149,7 @@ fun LocalPlaylistItem(
                 IconButton(onClick = { menuOpen = true }) {
                     Icon(
                         imageVector = Icons.Rounded.MoreVert,
-                        contentDescription = "Playlist options",
+                        contentDescription = stringResource(R.string.playlist_options),
                         tint = MaterialTheme.colorScheme.onSurfaceVariant,
                     )
                 }
@@ -160,6 +160,7 @@ fun LocalPlaylistItem(
                     DropdownMenu(
                         expanded = menuOpen,
                         onDismissRequest = { menuOpen = false },
+                        shape = RoundedCornerShape(16.dp),
                         containerColor = menuPalette?.background ?: MaterialTheme.colorScheme.surfaceContainerHigh,
                     ) {
                     DropdownMenuItem(
@@ -204,7 +205,7 @@ fun LocalPlaylistItem(
                         },
                     )
                     DropdownMenuItem(
-                        text = { Text("Play") },
+                        text = { Text(stringResource(R.string.play)) },
                         enabled = resolvedTrackCount > 0,
                         leadingIcon = {
                             Icon(imageVector = Icons.Rounded.PlayArrow, contentDescription = null)
@@ -230,7 +231,7 @@ fun LocalPlaylistItem(
                         },
                     )
                     DropdownMenuItem(
-                        text = { Text("Delete") },
+                        text = { Text(stringResource(R.string.delete)) },
                         leadingIcon = {
                             Icon(
                                 imageVector = Icons.Rounded.Delete,

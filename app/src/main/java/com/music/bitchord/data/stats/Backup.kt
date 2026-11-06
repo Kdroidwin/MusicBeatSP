@@ -66,6 +66,8 @@ object Backup {
     suspend fun exportTo(context: Context, target: Uri): Result<ExportSummary> = withContext(Dispatchers.IO) {
         runCatching {
             val buckets = ListeningStats.exportAll()
+            // The list order is the user's playlist order; BackupFile stores it as
+            // an ordered JSON array, and importPlaylists restores it unchanged.
             val playlists = LocalPlaylistStore.exportPlaylists()
             val favorites = LocalFavoritesStore.exportFavorites()
             val favoriteSongs = LocalFavoritesStore.exportFavoriteSongs().map { (id, song) ->

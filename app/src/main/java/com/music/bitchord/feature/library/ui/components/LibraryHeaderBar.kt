@@ -78,6 +78,7 @@ fun LibraryHeaderBar(
     onCreatePlaylist: () -> Unit,
     smartPlaylistsEnabled: Boolean = false,
     onCreateSmartPlaylist: (() -> Unit)? = null,
+    localizeAllLabel: Boolean = true,
     visibleCategories: Set<LibraryCategory> = LibraryCategory.entries.toSet(),
     categoryOrder: List<LibraryCategory> = LibraryCategory.entries.toList(),
     youtubeDownloadsSort: LibrarySort = LibrarySort.DEFAULT,
@@ -108,7 +109,9 @@ fun LibraryHeaderBar(
                     haptics.play(Haptic.Select)
                     onFilterSelect(LibraryFilter.ALL)
                 },
-                label = { Text("All") },
+                label = {
+                    Text(if (localizeAllLabel) stringResource(R.string.library_all_label) else "All")
+                },
                 shape = RoundedCornerShape(12.dp),
                 colors = FilterChipDefaults.filterChipColors(
                     selectedContainerColor = MaterialTheme.colorScheme.primaryContainer,

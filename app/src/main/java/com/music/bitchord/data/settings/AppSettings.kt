@@ -981,6 +981,9 @@ object AppSettings {
     /** Uses the active language for the Library's collection count label. */
     val localizeLibraryCollectionCount = MutableStateFlow(true)
 
+    /** Shows the Library's All filter using the active language. */
+    val localizeLibraryAllLabel = MutableStateFlow(true)
+
     /** Fits preserved non-square covers into square mini-player and lyrics transition frames. */
     val preserveArtworkShapeInCompactTransitions = MutableStateFlow(false)
 
@@ -1738,6 +1741,7 @@ object AppSettings {
         keepOriginalArtworkAspectRatio.value = artworkMode == PlayerArtworkMode.STANDARD_ORIGINAL_ASPECT
         keepCollectionArtworkAspectRatio.value = prefs.getBoolean(KEY_KEEP_COLLECTION_ARTWORK_ASPECT_RATIO, false)
         localizeLibraryCollectionCount.value = prefs.getBoolean(KEY_LOCALIZE_LIBRARY_COLLECTION_COUNT, true)
+        localizeLibraryAllLabel.value = prefs.getBoolean(KEY_LOCALIZE_LIBRARY_ALL_LABEL, true)
         preserveArtworkShapeInCompactTransitions.value =
             prefs.getBoolean(KEY_PRESERVE_ARTWORK_SHAPE_IN_COMPACT_TRANSITIONS, false)
         keepArtworkFullSizeWhenPaused.value = prefs.getBoolean(KEY_KEEP_ARTWORK_FULL_SIZE_PAUSED, false)
@@ -3656,6 +3660,11 @@ object AppSettings {
         prefs.edit().putBoolean(KEY_LOCALIZE_LIBRARY_COLLECTION_COUNT, value).apply()
     }
 
+    fun setLocalizeLibraryAllLabel(value: Boolean) {
+        localizeLibraryAllLabel.value = value
+        prefs.edit().putBoolean(KEY_LOCALIZE_LIBRARY_ALL_LABEL, value).apply()
+    }
+
     fun setPreserveArtworkShapeInCompactTransitions(value: Boolean) {
         preserveArtworkShapeInCompactTransitions.value = value
         prefs.edit().putBoolean(KEY_PRESERVE_ARTWORK_SHAPE_IN_COMPACT_TRANSITIONS, value).apply()
@@ -4685,6 +4694,7 @@ object AppSettings {
     private const val KEY_KEEP_ORIGINAL_ARTWORK_ASPECT_RATIO = "keep_original_artwork_aspect_ratio"
     private const val KEY_KEEP_COLLECTION_ARTWORK_ASPECT_RATIO = "keep_collection_artwork_aspect_ratio"
     private const val KEY_LOCALIZE_LIBRARY_COLLECTION_COUNT = "localize_library_collection_count"
+    private const val KEY_LOCALIZE_LIBRARY_ALL_LABEL = "localize_library_all_label"
     private const val KEY_PRESERVE_ARTWORK_SHAPE_IN_COMPACT_TRANSITIONS = "preserve_artwork_shape_in_compact_transitions"
     private const val KEY_KEEP_ARTWORK_FULL_SIZE_PAUSED = "keep_artwork_full_size_when_paused"
     private const val KEY_DOUBLE_TAP_TO_SEEK = "double_tap_to_seek"

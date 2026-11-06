@@ -270,6 +270,7 @@ fun LibraryScreen(
     val songsViewType by AppSettings.librarySongsViewType.collectAsStateWithLifecycle()
     val favoriteUsesStar by AppSettings.favoriteUsesStar.collectAsStateWithLifecycle()
     val localizeCollectionCount by AppSettings.localizeLibraryCollectionCount.collectAsStateWithLifecycle()
+    val localizeAllLabel by AppSettings.localizeLibraryAllLabel.collectAsStateWithLifecycle()
     val showPlaylistSongArtwork by AppSettings.showPlaylistSongArtwork.collectAsStateWithLifecycle()
     val showCollectionSongArtwork by AppSettings.showCollectionSongArtwork.collectAsStateWithLifecycle()
     val showPlayHistorySongArtwork by AppSettings.showPlayHistorySongArtwork.collectAsStateWithLifecycle()
@@ -1046,6 +1047,7 @@ fun LibraryScreen(
                         onCreatePlaylist = { showCreateDialog = true },
                         smartPlaylistsEnabled = smartPlaylistsEnabled,
                         onCreateSmartPlaylist = { showCreateSmartPlaylistDialog = true },
+                        localizeAllLabel = localizeAllLabel,
                         visibleCategories = visibleLibraryCategories,
                         categoryOrder = libraryCategoryOrder,
                     )
@@ -1152,6 +1154,7 @@ fun LibraryScreen(
                         onCreatePlaylist = { showCreateDialog = true },
                         smartPlaylistsEnabled = smartPlaylistsEnabled,
                         onCreateSmartPlaylist = { showCreateSmartPlaylistDialog = true },
+                        localizeAllLabel = localizeAllLabel,
                         visibleCategories = visibleLibraryCategories,
                         categoryOrder = libraryCategoryOrder,
                         youtubeDownloadsSort = youtubeDownloadsSort,
@@ -1212,6 +1215,7 @@ fun LibraryScreen(
                         onCreatePlaylist = { showCreateDialog = true },
                         smartPlaylistsEnabled = smartPlaylistsEnabled,
                         onCreateSmartPlaylist = { showCreateSmartPlaylistDialog = true },
+                        localizeAllLabel = localizeAllLabel,
                         visibleCategories = visibleLibraryCategories,
                         categoryOrder = libraryCategoryOrder,
                     )
@@ -1268,6 +1272,7 @@ fun LibraryScreen(
                         onCreatePlaylist = { showCreateDialog = true },
                         smartPlaylistsEnabled = smartPlaylistsEnabled,
                         onCreateSmartPlaylist = { showCreateSmartPlaylistDialog = true },
+                        localizeAllLabel = localizeAllLabel,
                         visibleCategories = visibleLibraryCategories,
                         categoryOrder = libraryCategoryOrder,
                     )

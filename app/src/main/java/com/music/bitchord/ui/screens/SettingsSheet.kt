@@ -210,6 +210,7 @@ import com.music.bitchord.playback.audio.bitperfect.BitPerfectOutput
 import com.music.bitchord.data.settings.PillMotionStyle
 import com.music.bitchord.data.stats.Backup
 import com.music.bitchord.feature.localmusic.data.LocalPlaylistStore
+import com.music.bitchord.ui.components.PlaylistOrderDialog
 import com.music.bitchord.feature.localmusic.data.M3uImportException
 import com.music.bitchord.feature.localmusic.data.M3uImportFailure
 import com.music.bitchord.feature.localmusic.data.M3uPlaylistImporter
@@ -513,6 +514,14 @@ private fun libraryCategorySettingsSearchEntries(
     }
     return listOf(historyArtwork) + categoryVisibility
 }
+
+@Composable
+private fun localizeLibraryAllLabelSearchEntry(enabled: Boolean) = SettingsSearchEntry(
+    title = stringResource(R.string.localize_library_all_label),
+    subtitle = stringResource(R.string.localize_library_all_label_subtitle),
+    keywords = listOf("library", "all", "collection", "language", "ライブラリ", "すべて", "日本語"),
+    checked = enabled,
+) { AppSettings.setLocalizeLibraryAllLabel(!enabled) }
 
 @Composable
 private fun hideQueueManagerTitleSearchEntry(hidden: Boolean) = SettingsSearchEntry(
@@ -1112,6 +1121,7 @@ fun SettingsScreen(
     val showPlayHistorySongArtwork by AppSettings.showPlayHistorySongArtwork.collectAsStateWithLifecycle()
     val keepCollectionArtworkAspectRatio by AppSettings.keepCollectionArtworkAspectRatio.collectAsStateWithLifecycle()
     val localizeLibraryCollectionCount by AppSettings.localizeLibraryCollectionCount.collectAsStateWithLifecycle()
+    val localizeLibraryAllLabel by AppSettings.localizeLibraryAllLabel.collectAsStateWithLifecycle()
     val highPerformanceMode by AppSettings.highPerformanceMode.collectAsStateWithLifecycle()
     val performanceRefreshRate by AppSettings.performanceRefreshRate.collectAsStateWithLifecycle()
     val currentDisplay = LocalView.current.display
@@ -1683,6 +1693,7 @@ fun SettingsScreen(
         ) { AppSettings.setShowCollectionSongArtwork(!showCollectionSongArtwork) },
         SettingsSearchEntry(stringResource(R.string.keep_collection_artwork_aspect_ratio), stringResource(R.string.keep_collection_artwork_aspect_ratio_subtitle), listOf("playlist", "album", "artwork", "aspect ratio", "cover", "プレイリスト", "アルバム", "アート", "縦横比"), keepCollectionArtworkAspectRatio) { AppSettings.setKeepCollectionArtworkAspectRatio(!keepCollectionArtworkAspectRatio) },
         SettingsSearchEntry(stringResource(R.string.localize_library_collection_count), stringResource(R.string.localize_library_collection_count_subtitle), listOf("library", "collections", "count", "language", "ライブラリ", "コレクション", "件数", "日本語"), localizeLibraryCollectionCount) { AppSettings.setLocalizeLibraryCollectionCount(!localizeLibraryCollectionCount) },
+        localizeLibraryAllLabelSearchEntry(localizeLibraryAllLabel),
     ) + libraryCategorySettingsSearchEntries(libraryCategories, showPlayHistorySongArtwork) + listOf(
         SettingsSearchEntry(
             stringResource(R.string.artwork_tap_opens_lyrics),
@@ -5794,6 +5805,7 @@ fun SettingsScreen(
             showPlayHistorySongArtwork = showPlayHistorySongArtwork,
             keepCollectionArtworkAspectRatio = keepCollectionArtworkAspectRatio,
             localizeLibraryCollectionCount = localizeLibraryCollectionCount,
+            localizeLibraryAllLabel = localizeLibraryAllLabel,
             whiteCollectionActionButtons = whiteCollectionActionButtons,
             whiteCollectionPlayButton = whiteCollectionPlayButton,
             hidePlaylistPlayButtonLabel = hidePlaylistPlayButtonLabel,
@@ -6783,52 +6795,10 @@ fun SettingsScreen(
     }
 
     if (showPlaylistOrderDialog) {
-        AlertDialog(
-            onDismissRequest = { showPlaylistOrderDialog = false },
-            title = { Text(stringResource(R.string.playlist_order_title)) },
-            text = {
-                if (localPlaylists.isEmpty()) {
-                    Text(stringResource(R.string.no_playlists_to_reorder))
-                } else {
-                    Column(
-                        modifier = Modifier
-                            .heightIn(max = 420.dp)
-                            .verticalScroll(rememberScrollState()),
-                    ) {
-                        localPlaylists.forEachIndexed { index, playlist ->
-                            if (index > 0) HorizontalDivider()
-                            Row(
-                                modifier = Modifier
-                                    .fillMaxWidth()
-                                    .padding(vertical = 6.dp),
-                                verticalAlignment = Alignment.CenterVertically,
-                            ) {
-                                Text(
-                                    text = playlist.name,
-                                    modifier = Modifier.weight(1f),
-                                    maxLines = 2,
-                                    style = MaterialTheme.typography.bodyMedium,
-                                )
-                                Column(horizontalAlignment = Alignment.End) {
-                                    TextButton(
-                                        enabled = index > 0,
-                                        onClick = { LocalPlaylistStore.movePlaylist(playlist.id, -1) },
-                                    ) { Text(stringResource(R.string.move_playlist_up)) }
-                                    TextButton(
-                                        enabled = index < localPlaylists.lastIndex,
-                                        onClick = { LocalPlaylistStore.movePlaylist(playlist.id, 1) },
-                                    ) { Text(stringResource(R.string.move_playlist_down)) }
-                                }
-                            }
-                        }
-                    }
-                }
-            },
-            confirmButton = {
-                TextButton(onClick = { showPlaylistOrderDialog = false }) {
-                    Text(stringResource(R.string.close))
-                }
-            },
+        PlaylistOrderDialog(
+            playlists = localPlaylists,
+            onDismiss = { showPlaylistOrderDialog = false },
+            onReorder = LocalPlaylistStore::importPlaylists,
         )
     }
 
@@ -7272,6 +7242,7 @@ private fun LocalMusicSettingsGroup(
     showPlayHistorySongArtwork: Boolean,
     keepCollectionArtworkAspectRatio: Boolean,
     localizeLibraryCollectionCount: Boolean,
+    localizeLibraryAllLabel: Boolean,
     whiteCollectionActionButtons: Boolean,
     whiteCollectionPlayButton: Boolean,
     hidePlaylistPlayButtonLabel: Boolean,
@@ -7700,6 +7671,23 @@ SettingsGroup(header = stringResource(R.string.local_music)) {
             )
         },
         onClick = { AppSettings.setLocalizeLibraryCollectionCount(!localizeLibraryCollectionCount) },
+    )
+    RowDivider()
+    SettingsRow(
+        icon = Icons.Rounded.Language,
+        title = stringResource(R.string.localize_library_all_label),
+        subtitle = stringResource(R.string.localize_library_all_label_subtitle),
+        trailing = {
+            Switch(
+                checked = localizeLibraryAllLabel,
+                onCheckedChange = AppSettings::setLocalizeLibraryAllLabel,
+                colors = SwitchDefaults.colors(
+                    checkedTrackColor = MaterialTheme.colorScheme.primary,
+                    checkedBorderColor = MaterialTheme.colorScheme.primary,
+                ),
+            )
+        },
+        onClick = { AppSettings.setLocalizeLibraryAllLabel(!localizeLibraryAllLabel) },
     )
     RowDivider()
     SettingsRow(
