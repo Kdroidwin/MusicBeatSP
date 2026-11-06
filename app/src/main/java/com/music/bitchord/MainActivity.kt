@@ -61,6 +61,8 @@ import androidx.compose.foundation.layout.statusBarsPadding
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.layout.widthIn
 import androidx.compose.ui.input.nestedscroll.nestedScroll
+import androidx.compose.ui.input.nestedscroll.NestedScrollConnection
+import androidx.compose.ui.input.nestedscroll.NestedScrollSource
 import androidx.compose.ui.graphics.drawscope.ContentDrawScope
 import androidx.compose.foundation.layout.windowInsetsTopHeight
 import androidx.compose.foundation.lazy.LazyListState
@@ -332,6 +334,7 @@ import dev.chrisbanes.haze.hazeSource
 import dev.chrisbanes.haze.materials.ExperimentalHazeMaterialsApi
 import dev.chrisbanes.haze.materials.HazeMaterials
 import kotlinx.coroutines.launch
+import kotlin.math.abs
 import kotlinx.coroutines.async
 import kotlinx.coroutines.withContext
 import java.util.Locale
@@ -1213,6 +1216,20 @@ private fun BitChordApp(
                 detailListState.firstVisibleItemScrollOffset > detailTitleDrop
         }
     }
+
+    val rootTabTopBarScrollEnabled = detail == null && !showSettings && !showReplay && !showSources && !showWearOs &&
+        collectionBackHandlers["$TAB_KEY$selectedTab"] == null
+    var rootTabTopBarCollapsed by remember(selectedTab) { mutableStateOf(false) }
+    val rootTabTopBarScrollThreshold = with(LocalDensity.current) { 32.dp.toPx() }
+    val rootTabTopBarScroll = remember(selectedTab, rootTabTopBarScrollEnabled, rootTabTopBarScrollThreshold) {
+        RootTabTopBarScrollConnection(
+            enabled = rootTabTopBarScrollEnabled,
+            initiallyCollapsed = rootTabTopBarCollapsed,
+            thresholdPx = rootTabTopBarScrollThreshold,
+            onCollapsedChange = { rootTabTopBarCollapsed = it },
+        )
+    }
+    val rootTabFloatingSettingsOnly = rootTabTopBarScrollEnabled && rootTabTopBarCollapsed
 
     // Held, not rebuilt. `listOf` hands back a new instance on every pass, and a
     // List is not a type the compiler can call stable, so under strong skipping
@@ -2618,6 +2635,7 @@ private fun BitChordApp(
                     },
                     modifier = Modifier
                         .hazeSource(hazeState)
+                        .nestedScroll(rootTabTopBarScroll)
                         .then(
                             if (useCollapsibleNavBar) {
                                 Modifier
@@ -3400,7 +3418,7 @@ private fun BitChordApp(
                     (detail != null && !isLocalDetail && detail.type in setOf(BrowseType.ALBUM, BrowseType.PLAYLIST))
                 val hideFloatingCollectionControlsNow =
                     hideFloatingCollectionControls && hideCollectionHeaderNow && isAlbumOrPlaylistArtworkDetail
-                if (!hideCollectionHeaderNow && !isRadioScreenVisible) {
+                if (!hideCollectionHeaderNow && !isRadioScreenVisible && !rootTabFloatingSettingsOnly) {
                     TopFadeBlur(
                         hazeState = hazeState,
                         // Replay paints its own full-bleed black backdrop up under the
@@ -3446,7 +3464,7 @@ private fun BitChordApp(
                             isDetailVisible -> detailPalette.wash
                             else -> null
                         },
-                        floatingOnly = hideCollectionHeaderNow,
+                        floatingOnly = hideCollectionHeaderNow || rootTabFloatingSettingsOnly,
                         solidBackground = isRadioScreenVisible,
                         onBack = if (hideFloatingCollectionControlsNow) null else when {
                             showSources -> ({ showSources = false })
@@ -5356,6 +5374,54 @@ private const val TAB_FOLDERS = 6
 private const val TAB_RADIO = 7
 private const val TAB_HOME = 8
 
+
+/** Keep only the floating settings action visible while a root tab scrolls. */
+private class RootTabTopBarScrollConnection(
+    private val enabled: Boolean,
+    initiallyCollapsed: Boolean,
+    private val thresholdPx: Float,
+    private val onCollapsedChange: (Boolean) -> Unit,
+) : NestedScrollConnection {
+    private var collapsed = initiallyCollapsed
+    private var lastDirection = 0
+    private var accumulatedDistance = 0f
+
+    override fun onPostScroll(
+        consumed: Offset,
+        available: Offset,
+        source: NestedScrollSource,
+    ): Offset {
+        if (!enabled) return Offset.Zero
+
+        // Collapse only on motion consumed by the list. At its top, leftover
+        // upward motion can restore the bar; a downward overscroll cannot hide it.
+        val delta = when {
+            consumed.y != 0f -> consumed.y
+            available.y > 0f -> available.y
+            else -> 0f
+        }
+        if (delta == 0f) return Offset.Zero
+
+        val direction = if (delta < 0f) -1 else 1
+        val shouldCollapse = direction < 0
+        if (shouldCollapse == collapsed) {
+            accumulatedDistance = 0f
+            lastDirection = 0
+            return Offset.Zero
+        }
+        if (direction != lastDirection) accumulatedDistance = 0f
+        accumulatedDistance += abs(delta)
+        lastDirection = direction
+
+        if (accumulatedDistance >= thresholdPx) {
+            collapsed = shouldCollapse
+            accumulatedDistance = 0f
+            lastDirection = 0
+            onCollapsedChange(collapsed)
+        }
+        return Offset.Zero
+    }
+}
 
 
 /**
