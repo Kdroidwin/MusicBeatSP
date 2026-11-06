@@ -287,6 +287,7 @@ import com.music.bitchord.playback.SavedQueue
 import com.music.bitchord.playback.SavedQueueStore
 import com.music.bitchord.playback.cast.CastQuickActionButton
 import com.music.bitchord.feature.localsongactions.ui.components.LocalSleepTimerPicker
+import com.music.bitchord.ui.components.AppleMusicSleepTimerPicker
 import com.music.bitchord.playback.toMediaItem
 import com.music.bitchord.data.model.durationMillis
 import com.music.bitchord.playback.BACK_RESTARTS_AFTER_MS
@@ -1209,6 +1210,7 @@ fun NowPlayingScreen(
     val appleMusicLyricsButtonStyle by AppSettings.appleMusicLyricsButtonStyle.collectAsStateWithLifecycle()
     val appleMusicChromecastButtonStyle by AppSettings.appleMusicChromecastButtonStyle.collectAsStateWithLifecycle()
     val appleMusicQueueButtonStyle by AppSettings.appleMusicQueueButtonStyle.collectAsStateWithLifecycle()
+    val appleMusicStyleMenus by AppSettings.appleMusicStyleMenus.collectAsStateWithLifecycle()
     val hidePlayerArtist by AppSettings.hidePlayerArtist.collectAsStateWithLifecycle()
     val hideUnknownPlayerArtist by AppSettings.hideUnknownPlayerArtist.collectAsStateWithLifecycle()
     val centerPlayerTrackInfo by AppSettings.centerPlayerTrackInfo.collectAsStateWithLifecycle()
@@ -1493,11 +1495,15 @@ fun NowPlayingScreen(
                                 ),
                         )
                     }
-                    LocalSleepTimerPicker(
-                        onBack = { quickSleepTimerOpen = false },
-                        artworkPalette = artworkPalette,
-                        useArtworkColor = playerPopupsUseArtworkColor,
-                    )
+                    if (appleMusicStyleMenus) {
+                        AppleMusicSleepTimerPicker(onDismiss = { quickSleepTimerOpen = false })
+                    } else {
+                        LocalSleepTimerPicker(
+                            onBack = { quickSleepTimerOpen = false },
+                            artworkPalette = artworkPalette,
+                            useArtworkColor = playerPopupsUseArtworkColor,
+                        )
+                    }
                 }
             }
         }

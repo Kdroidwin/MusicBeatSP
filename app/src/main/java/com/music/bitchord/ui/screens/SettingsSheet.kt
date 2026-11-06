@@ -76,6 +76,7 @@ import androidx.compose.material.icons.rounded.LocalOffer
 import androidx.compose.material.icons.rounded.MusicOff
 import androidx.compose.material.icons.rounded.MusicNote
 import androidx.compose.material.icons.rounded.MoreVert
+import androidx.compose.material.icons.rounded.MoreHoriz
 import androidx.compose.material.icons.rounded.MotionPhotosOff
 import androidx.compose.material.icons.rounded.Person
 import androidx.compose.material.icons.rounded.PlaylistPlay
@@ -738,6 +739,15 @@ private fun appleMusicQueueButtonStyleSearchEntry(enabled: Boolean) = SettingsSe
 )
 
 @Composable
+private fun appleMusicStyleMenusSearchEntry(enabled: Boolean) = SettingsSearchEntry(
+    title = stringResource(R.string.apple_music_style_menus),
+    subtitle = stringResource(R.string.apple_music_style_menus_subtitle),
+    keywords = listOf("menu", "popover", "sleep timer", "Apple Music", "メニュー", "ポップアップ", "スリープタイマー", "Apple Music風"),
+    checked = enabled,
+    activate = { AppSettings.setAppleMusicStyleMenus(!enabled) },
+)
+
+@Composable
 private fun PlayerActionButtonStyleRow(
     icon: ImageVector,
     titleRes: Int,
@@ -953,6 +963,7 @@ fun SettingsScreen(
     val appleMusicLyricsButtonStyle by AppSettings.appleMusicLyricsButtonStyle.collectAsStateWithLifecycle()
     val appleMusicChromecastButtonStyle by AppSettings.appleMusicChromecastButtonStyle.collectAsStateWithLifecycle()
     val appleMusicQueueButtonStyle by AppSettings.appleMusicQueueButtonStyle.collectAsStateWithLifecycle()
+    val appleMusicStyleMenus by AppSettings.appleMusicStyleMenus.collectAsStateWithLifecycle()
     val hidePlayerArtist by AppSettings.hidePlayerArtist.collectAsStateWithLifecycle()
     val hideUnknownPlayerArtist by AppSettings.hideUnknownPlayerArtist.collectAsStateWithLifecycle()
     val hideUnknownPlaylistArtist by AppSettings.hideUnknownPlaylistArtist.collectAsStateWithLifecycle()
@@ -1502,6 +1513,7 @@ fun SettingsScreen(
         appleMusicLyricsButtonStyleSearchEntry(appleMusicLyricsButtonStyle),
         appleMusicChromecastButtonStyleSearchEntry(appleMusicChromecastButtonStyle),
         appleMusicQueueButtonStyleSearchEntry(appleMusicQueueButtonStyle),
+        appleMusicStyleMenusSearchEntry(appleMusicStyleMenus),
         SettingsSearchEntry(stringResource(R.string.prevent_play_at_zero_volume), stringResource(R.string.prevent_play_at_zero_volume_subtitle), listOf("volume", "音量", "zero", "0"), preventPlayAtZeroVolume) { AppSettings.setPreventPlayAtZeroVolume(!preventPlayAtZeroVolume) },
         SettingsSearchEntry(stringResource(R.string.pause_playback_at_zero_volume), stringResource(R.string.pause_playback_at_zero_volume_subtitle), listOf("volume", "音量", "zero", "0", "pause", "一時停止"), pausePlaybackAtZeroVolume) { AppSettings.setPausePlaybackAtZeroVolume(!pausePlaybackAtZeroVolume) },
         bitPerfectPlaybackSearchEntry(bitPerfectMode != BitPerfectMode.OFF) { showBitPerfectModeDialog = true },
@@ -3720,6 +3732,23 @@ fun SettingsScreen(
                 titleRes = R.string.apple_music_queue_button_style,
                 checked = appleMusicQueueButtonStyle,
                 onCheckedChange = AppSettings::setAppleMusicQueueButtonStyle,
+            )
+            RowDivider()
+            SettingsRow(
+                icon = Icons.Rounded.MoreHoriz,
+                title = stringResource(R.string.apple_music_style_menus),
+                subtitle = stringResource(R.string.apple_music_style_menus_subtitle),
+                trailing = {
+                    Switch(
+                        checked = appleMusicStyleMenus,
+                        onCheckedChange = AppSettings::setAppleMusicStyleMenus,
+                        colors = SwitchDefaults.colors(
+                            checkedTrackColor = MaterialTheme.colorScheme.primary,
+                            checkedBorderColor = MaterialTheme.colorScheme.primary,
+                        ),
+                    )
+                },
+                onClick = { AppSettings.setAppleMusicStyleMenus(!appleMusicStyleMenus) },
             )
             RowDivider()
             SettingsRow(

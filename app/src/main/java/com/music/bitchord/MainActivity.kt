@@ -237,6 +237,8 @@ import com.music.bitchord.download.DownloadStore
 import com.music.bitchord.download.DownloadTarget
 import com.music.bitchord.download.Downloads
 import com.music.bitchord.ui.components.BrowseActionsSheet
+import com.music.bitchord.ui.components.AppleMusicBrowseActionsMenu
+import com.music.bitchord.ui.components.AppleMusicTrackActionsMenu
 import com.music.bitchord.ui.components.BrowseTarget
 import com.music.bitchord.ui.components.ArtworkBackdrop
 import com.music.bitchord.ui.components.DownloadManagerSheet
@@ -600,6 +602,7 @@ private fun BitChordApp(
 ) {
     val context = LocalContext.current
     val clipboard = LocalClipboardManager.current
+    val appleMusicStyleMenus by AppSettings.appleMusicStyleMenus.collectAsStateWithLifecycle()
     val showStatusBar by AppSettings.showStatusBar.collectAsStateWithLifecycle()
     val showPlayerStatusBar by AppSettings.showPlayerStatusBar.collectAsStateWithLifecycle()
     val instantStatusBarOnPlayerClose by AppSettings.instantStatusBarOnPlayerClose.collectAsStateWithLifecycle()
@@ -4024,9 +4027,115 @@ private fun BitChordApp(
                             song.localPath.isNullOrBlank() &&
                             song.sourceQuality.isNullOrBlank()
                         ))
+                var showAppleMenu by remember(songIdentityKey, appleMusicStyleMenus) {
+                    mutableStateOf(appleMusicStyleMenus)
+                }
+                var showLegacyActions by remember(songIdentityKey, appleMusicStyleMenus) {
+                    mutableStateOf(!appleMusicStyleMenus)
+                }
+                if (appleMusicStyleMenus) {
+                    AppleMusicTrackActionsMenu(
+                        song = song,
+                        open = showAppleMenu,
+                        showPlayerActions = menuFromPlayer,
+                        onDismiss = {
+                            showAppleMenu = false
+                            songActions = null
+                        },
+                        onCloseMenu = { showAppleMenu = false },
+                        onOpenAlbum = {
+                            songActions = null
+                            dismissNowPlaying()
+                            val albumName = song.albumName?.trim().orEmpty()
+                            if (albumName.isNotBlank()) {
+                                openByName(song.albumId, albumName, song.artist, BrowseType.ALBUM, song.thumbnailUrl)
+                            } else {
+                                Toast.makeText(context, "No album information", Toast.LENGTH_SHORT).show()
+                            }
+                        },
+                        onOpenArtist = {
+                            val artists = com.music.bitchord.feature.artistimage.util.ArtistSplitter.split(song.artist)
+                            if (!song.artistId.isNullOrBlank() && !song.artistId.startsWith("local:")) {
+                                songActions = null
+                                dismissNowPlaying()
+                                openByName(song.artistId, song.artist, null, BrowseType.ARTIST, song.thumbnailUrl)
+                            } else if (artists.size > 1) {
+                                showArtistPicker = true
+                            } else {
+                                songActions = null
+                                dismissNowPlaying()
+                                val artistName = (artists.firstOrNull() ?: song.artist).trim()
+                                if (artistName.isNotBlank()) {
+                                    openByName(song.artistId, artistName, null, BrowseType.ARTIST, null)
+                                } else {
+                                    Toast.makeText(context, "No artist information", Toast.LENGTH_SHORT).show()
+                                }
+                            }
+                        },
+                        onAddToPlaylist = {
+                            val isDeviceSong = song.isExternalPreview ||
+                                !song.localUri.isNullOrBlank() || !song.localPath.isNullOrBlank()
+                            if (isDeviceSong || !signedIn) {
+                                showAddToPlaylist = true
+                            } else {
+                                songActions = null
+                                playlistTarget = song
+                                playlistTargetFromPlayer = menuFromPlayer
+                                viewModel.loadPlaylists()
+                            }
+                        },
+                        onChangeArtistImage = if (menuFromPlayer && song.artist.isNotBlank()) {
+                            {
+                                val artists = com.music.bitchord.feature.artistimage.util.ArtistSplitter.split(song.artist)
+                                    .ifEmpty { listOf(song.artist) }
+                                if (artists.size > 1) {
+                                    showArtistPickerForArtwork = true
+                                    showArtistPicker = true
+                                } else {
+                                    songActions = null
+                                    chooseArtistImage(artists.first().trim())
+                                }
+                            }
+                        } else null,
+                        onDownload = if (menuFromPlayer && youtubeAudio) {
+                            { songActions = null; startHighestYoutubeOpusDownload(song) }
+                        } else null,
+                        onDeleteDownload = if (savedYoutubeDownload) {
+                            {
+                                songActions = null
+                                scope.launch {
+                                    val deleted = Downloads.delete(context, song.videoId)
+                                    Toast.makeText(
+                                        context,
+                                        if (deleted) R.string.youtube_download_deleted
+                                        else R.string.youtube_download_delete_failed,
+                                        Toast.LENGTH_SHORT,
+                                    ).show()
+                                }
+                            }
+                        } else null,
+                        onEqualizer = { songActions = null; showEqualizerSheet = true },
+                        onPlaybackTuning = { songActions = null; showPlaybackTuning = true },
+                        onTagEditor = { showTagEditor = true },
+                        onEditLyrics = { showLyricsEditor = true },
+                        onDetails = { showDetailsSheet = true },
+                        onShare = {
+                            songActions = null
+                            LocalSongActionsHelper.shareSong(context, song)
+                        },
+                        onMore = {
+                            showLegacyActions = true
+                            showAppleMenu = false
+                        },
+                    )
+                }
+                if (!appleMusicStyleMenus || showLegacyActions) {
                 LocalSongActionsSheet(
                     song = song,
-                    onDismissRequest = { songActions = null },
+                    onDismissRequest = {
+                        songActions = null
+                        showLegacyActions = false
+                    },
                     onDownloadYoutubeOpus = if (menuFromPlayer && youtubeAudio) {
                         {
                             songActions = null
@@ -4135,6 +4244,7 @@ private fun BitChordApp(
                         LocalSongActionsHelper.shareSong(context, song)
                     },
                 )
+                }
             }
         }
 
@@ -4312,6 +4422,82 @@ private fun BitChordApp(
             val artistArtworkUris by ArtistArtworkStore.imageUris.collectAsStateWithLifecycle()
             val hasCustomArtistArtwork = target.type == BrowseType.ARTIST &&
                 ArtistArtworkStore.imageUriFor(target.title, artistArtworkUris) != null
+            val onAddCollectionToPlaylist = savableCollectionId?.let {
+                act { songs ->
+                    if (songs.isEmpty()) {
+                        Toast.makeText(context, R.string.no_tracks_here, Toast.LENGTH_SHORT).show()
+                    } else if (signedIn) {
+                        playlistCollectionTarget = target.title to songs
+                        viewModel.loadPlaylists()
+                    } else {
+                        localPlaylistCollectionTarget = songs
+                    }
+                }
+            }
+            val onPlayBrowseCollection = act { songs -> play(songs, 0) }.takeIf { target.fromCard }
+            val onShuffleBrowseCollection = act { songs ->
+                QueueShuffle.enableForNextQueue()
+                play(songs, songs.indices.random())
+            }.takeIf { target.fromCard }
+            val onDownloadBrowseCollection = act { songs ->
+                startDownload(
+                    songs,
+                    target.browseId
+                        ?.takeIf { target.type != BrowseType.ARTIST }
+                        ?.let { id ->
+                            DownloadTarget(
+                                id = id,
+                                title = target.title,
+                                subtitle = target.subtitle,
+                                thumbnailUrl = target.thumbnailUrl,
+                                playlist = target.type == BrowseType.PLAYLIST,
+                            )
+                        },
+                )
+            }.takeIf { remote }
+            val onOpenBrowseTarget = target.browseId
+                ?.takeIf { target.fromCard }
+                ?.let { id ->
+                    {
+                        browseActions = null
+                        viewModel.openDetail(
+                            browseId = id,
+                            title = target.title,
+                            subtitle = target.subtitle,
+                            thumbnailUrl = target.thumbnailUrl,
+                            type = target.type,
+                        )
+                    }
+                }
+            var openAppleBrowseMenu by remember(target.browseId, target.title, appleMusicStyleMenus) {
+                mutableStateOf(appleMusicStyleMenus)
+            }
+            var showLegacyBrowseActions by remember(target.browseId, target.title, appleMusicStyleMenus) {
+                mutableStateOf(!appleMusicStyleMenus)
+            }
+            if (appleMusicStyleMenus) {
+                AppleMusicBrowseActionsMenu(
+                    target = target.copy(playlist = playlist),
+                    open = openAppleBrowseMenu,
+                    onDismiss = {
+                        openAppleBrowseMenu = false
+                        browseActions = null
+                    },
+                    onCloseMenu = { openAppleBrowseMenu = false },
+                    onPlay = onPlayBrowseCollection,
+                    onShuffle = onShuffleBrowseCollection,
+                    onPlayNext = act(playSongsNext),
+                    onAddToQueue = act(addSongsToQueue),
+                    onDownloadAll = onDownloadBrowseCollection,
+                    onAddToPlaylist = onAddCollectionToPlaylist,
+                    onOpen = onOpenBrowseTarget,
+                    onMore = {
+                        openAppleBrowseMenu = false
+                        showLegacyBrowseActions = true
+                    },
+                )
+            }
+            if (!appleMusicStyleMenus || showLegacyBrowseActions) {
             ModalBottomSheet(
                 onDismissRequest = { browseActions = null },
                 containerColor = Color.Transparent,
@@ -4321,21 +4507,7 @@ private fun BitChordApp(
                     target = target.copy(playlist = playlist),
                     onPlayNext = act(playSongsNext),
                     onAddToQueue = act(addSongsToQueue),
-                    onAddToPlaylist = savableCollectionId?.let {
-                        act { songs ->
-                            if (songs.isEmpty()) {
-                                Toast.makeText(context, R.string.no_tracks_here, Toast.LENGTH_SHORT).show()
-                            } else if (signedIn) {
-                                playlistCollectionTarget = target.title to songs
-                                viewModel.loadPlaylists()
-                            } else {
-                                // The local playlist store accepts catalogue IDs;
-                                // signing in to YouTube is not required to keep a
-                                // collection in this app's own playlists.
-                                localPlaylistCollectionTarget = songs
-                            }
-                        }
-                    },
+                    onAddToPlaylist = onAddCollectionToPlaylist,
                     isSavedToLibrary = savedToLibrary,
                     onToggleLibrary = savableCollectionId?.let { id ->
                         {
@@ -4357,28 +4529,9 @@ private fun BitChordApp(
                             browseActions = null
                         }
                     },
-                    onPlay = act { songs -> play(songs, 0) }.takeIf { target.fromCard },
-                    onShuffle = act { songs ->
-                        // As on a release page: shuffle goes on before the queue
-                        // is built, so it is built shuffled rather than played
-                        // out of order.
-                        QueueShuffle.enableForNextQueue()
-                        play(songs, songs.indices.random())
-                    }.takeIf { target.fromCard },
-                    onOpen = target.browseId
-                        ?.takeIf { target.fromCard }
-                        ?.let { id ->
-                            {
-                                browseActions = null
-                                viewModel.openDetail(
-                                    browseId = id,
-                                    title = target.title,
-                                    subtitle = target.subtitle,
-                                    thumbnailUrl = target.thumbnailUrl,
-                                    type = target.type,
-                                )
-                            }
-                        },
+                    onPlay = onPlayBrowseCollection,
+                    onShuffle = onShuffleBrowseCollection,
+                    onOpen = onOpenBrowseTarget,
                     // The one place a whole release is asked for, from a card and
                     // from the release's own page alike — its header spends that
                     // spot on the search now. Nothing on this device needs
@@ -4386,22 +4539,7 @@ private fun BitChordApp(
                     // What the target carries that the tracks don't is the
                     // release's own name and cover, which is exactly what the
                     // record wants.
-                    onDownloadAll = act { songs ->
-                        startDownload(
-                            songs,
-                            target.browseId
-                                ?.takeIf { target.type != BrowseType.ARTIST }
-                                ?.let { id ->
-                                    DownloadTarget(
-                                        id = id,
-                                        title = target.title,
-                                        subtitle = target.subtitle,
-                                        thumbnailUrl = target.thumbnailUrl,
-                                        playlist = target.type == BrowseType.PLAYLIST,
-                                    )
-                                },
-                        )
-                    }.takeIf { remote },
+                    onDownloadAll = onDownloadBrowseCollection,
                     isPinned = pinnableId != null && pinnableId in pinnedPlaylists,
                     onTogglePin = pinnableId?.let { id ->
                         {
@@ -4450,6 +4588,7 @@ private fun BitChordApp(
                         }
                     } else null,
                 )
+            }
             }
         }
 

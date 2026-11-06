@@ -903,6 +903,10 @@
     <string name="apple_music_lyrics_button_style">Apple Music風の歌詞ボタン</string>
     <string name="apple_music_chromecast_button_style">Apple Music風のChromecastボタン</string>
     <string name="apple_music_queue_button_style">Apple Music風のキューボタン</string>
+    <string name="apple_music_style_menus">メニューをApple Music風に</string>
+    <string name="apple_music_style_menus_subtitle">詳細メニューやスリープタイマーをApple Music風のポップアップで表示します（初期設定ではオフ）</string>
+    <string name="sleep_timer_custom">カスタム</string>
+    <string name="start_sleep_timer">タイマーを開始</string>
     <string name="apple_music_button_style_subtitle">このボタンだけにApple Musicを参考にしたアイコンを使います。初期設定はオフです。</string>
     <string name="player_control_like">お気に入りボタン</string>
     <string name="player_control_playlist">プレイリストボタン</string>

@@ -908,6 +908,8 @@ object AppSettings {
     val appleMusicLyricsButtonStyle = MutableStateFlow(false)
     val appleMusicChromecastButtonStyle = MutableStateFlow(false)
     val appleMusicQueueButtonStyle = MutableStateFlow(false)
+    /** Uses BitChord's Apple Music-style popover menus instead of the legacy sheets. */
+    val appleMusicStyleMenus = MutableStateFlow(false)
 
     /** Uses the library glyph for the player shortcut that opens playlists. */
     val useLibraryIconForPlaylistControl = MutableStateFlow(false)
@@ -1699,6 +1701,7 @@ object AppSettings {
         appleMusicLyricsButtonStyle.value = prefs.getBoolean(KEY_APPLE_MUSIC_LYRICS_BUTTON_STYLE, legacyStyleDefault)
         appleMusicChromecastButtonStyle.value = prefs.getBoolean(KEY_APPLE_MUSIC_CHROMECAST_BUTTON_STYLE, legacyStyleDefault)
         appleMusicQueueButtonStyle.value = prefs.getBoolean(KEY_APPLE_MUSIC_QUEUE_BUTTON_STYLE, legacyStyleDefault)
+        appleMusicStyleMenus.value = prefs.getBoolean(KEY_APPLE_MUSIC_STYLE_MENUS, false)
         useLibraryIconForPlaylistControl.value = prefs.getBoolean(KEY_LIBRARY_ICON_FOR_PLAYLIST_CONTROL, false)
         hidePlayerArtist.value = prefs.getBoolean(KEY_HIDE_PLAYER_ARTIST, false)
         hideUnknownPlayerArtist.value = prefs.getBoolean(KEY_HIDE_UNKNOWN_PLAYER_ARTIST, false)
@@ -3357,6 +3360,11 @@ object AppSettings {
         prefs.edit().putBoolean(KEY_APPLE_MUSIC_QUEUE_BUTTON_STYLE, value).apply()
     }
 
+    fun setAppleMusicStyleMenus(value: Boolean) {
+        appleMusicStyleMenus.value = value
+        prefs.edit().putBoolean(KEY_APPLE_MUSIC_STYLE_MENUS, value).apply()
+    }
+
     private fun readVisiblePlayerControls(): Set<PlayerControl> =
         prefs.getStringSet(KEY_VISIBLE_PLAYER_CONTROLS, null)
             ?.mapNotNullTo(mutableSetOf()) { saved -> PlayerControl.entries.firstOrNull { it.name == saved } }
@@ -4631,6 +4639,7 @@ object AppSettings {
     private const val KEY_APPLE_MUSIC_LYRICS_BUTTON_STYLE = "apple_music_lyrics_button_style"
     private const val KEY_APPLE_MUSIC_CHROMECAST_BUTTON_STYLE = "apple_music_chromecast_button_style"
     private const val KEY_APPLE_MUSIC_QUEUE_BUTTON_STYLE = "apple_music_queue_button_style"
+    private const val KEY_APPLE_MUSIC_STYLE_MENUS = "apple_music_style_menus"
     private const val KEY_LIBRARY_ICON_FOR_PLAYLIST_CONTROL = "library_icon_for_playlist_control"
     private const val KEY_HIDE_PLAYER_ARTIST = "hide_player_artist"
     private const val KEY_HIDE_UNKNOWN_PLAYER_ARTIST = "hide_unknown_player_artist"
