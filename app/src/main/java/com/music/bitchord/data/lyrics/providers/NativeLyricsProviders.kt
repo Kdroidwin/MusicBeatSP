@@ -26,6 +26,7 @@ object NativeLyricsProviders {
         "utanet",
         "utaten",
         "jlyric",
+        "joysound",
         "genius",
         "ctc_align",
     )
@@ -55,6 +56,7 @@ object NativeLyricsProviders {
             "utanet" -> UtaNetLyricsClient.getLyrics(title, artist)
             "utaten" -> UtaTenLyricsClient.getLyrics(title, artist)
             "jlyric" -> JLyricClient.getLyrics(title, artist)
+            "joysound" -> JoysoundLyricsClient.getLyrics(title, artist)
             "genius" -> GeniusLyricsClient.getLyrics(title, artist)
             "ctc_align" -> fetchCtcAlignedLyrics(title, artist, durationSec)
             else -> null
@@ -83,6 +85,7 @@ object NativeLyricsProviders {
             "utanet" -> UtaNetLyricsClient.searchLyrics(title, artist, album, durationSec)
             "utaten" -> UtaTenLyricsClient.searchLyrics(title, artist, album, durationSec)
             "jlyric" -> JLyricClient.searchLyrics(title, artist, album, durationSec)
+            "joysound" -> JoysoundLyricsClient.searchLyrics(title, artist, album, durationSec)
             "genius" -> GeniusLyricsClient.searchLyrics(title, artist, album, durationSec)
             "ctc_align" -> searchCtcAlignedLyrics(title, artist, album, durationSec)
             else -> emptyList()
@@ -97,17 +100,20 @@ object NativeLyricsProviders {
         val utatenJob = async(Dispatchers.IO) { UtaTenLyricsClient.getLyrics(title, artist) }
         val utanetJob = async(Dispatchers.IO) { UtaNetLyricsClient.getLyrics(title, artist) }
         val jlyricJob = async(Dispatchers.IO) { JLyricClient.getLyrics(title, artist) }
+        val joysoundJob = async(Dispatchers.IO) { JoysoundLyricsClient.getLyrics(title, artist) }
         val geniusJob = async(Dispatchers.IO) { GeniusLyricsClient.getLyrics(title, artist) }
 
         val plain = utatenJob.await()?.takeIf { it.isNotBlank() }
             ?: utanetJob.await()?.takeIf { it.isNotBlank() }
             ?: jlyricJob.await()?.takeIf { it.isNotBlank() }
+            ?: joysoundJob.await()?.takeIf { it.isNotBlank() }
             ?: geniusJob.await()?.takeIf { it.isNotBlank() }
             ?: return@coroutineScope null
 
         utatenJob.cancel()
         utanetJob.cancel()
         jlyricJob.cancel()
+        joysoundJob.cancel()
         geniusJob.cancel()
 
         CtcLrcGenerator.generateAutoSyncedLrc(plain, durationSec)

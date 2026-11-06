@@ -6,6 +6,7 @@ import kotlinx.coroutines.awaitAll
 import kotlinx.coroutines.coroutineScope
 import kotlinx.coroutines.withContext
 import okhttp3.Request
+import org.jsoup.Jsoup
 import org.json.JSONObject
 
 internal object WebScrapeHtmlUtils {
@@ -341,7 +342,142 @@ internal object JLyricClient {
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
-// 14. Genius (genius.com API Search + Lyrics Container Extraction)
+// 14. JOYSOUND (SSR song pages with embedded lyrics)
+// ─────────────────────────────────────────────────────────────────────────────
+internal object JoysoundLyricsClient {
+    private const val BASE_URL = "https://www.joysound.com"
+    private val SONG_PATH_REGEX = Regex("""^/web/search/song/(\d+)(?:#.*)?$""")
+
+    suspend fun getLyrics(title: String, artist: String): String? = withContext(Dispatchers.IO) {
+        val queryTitle = NativeLyricsHttp.cleanQueryText(title)
+        val queryArtist = NativeLyricsHttp.primaryArtist(artist)
+        val songIds = searchSongIds(queryTitle, queryArtist)
+        val tracks = songIds.take(5).map { songId ->
+            async(Dispatchers.IO) { fetchSong(songId) }
+        }.awaitAll().filterNotNull()
+        tracks
+            .filter { titleSimilarity(queryTitle, it.title) >= MIN_TITLE_SIMILARITY }
+            .maxWithOrNull(compareBy<JoysoundTrack> { titleSimilarity(queryTitle, it.title) }
+                .thenBy { artistSimilarity(queryArtist, it.artist) })
+            ?.lyrics
+    }
+
+    suspend fun searchLyrics(
+        title: String,
+        artist: String,
+        album: String?,
+        durationSec: Int,
+    ): List<NativeSearchCandidate> = coroutineScope {
+        val queryTitle = NativeLyricsHttp.cleanQueryText(title)
+        val queryArtist = NativeLyricsHttp.primaryArtist(artist)
+        val songIds = withContext(Dispatchers.IO) { searchSongIds(queryTitle, queryArtist) }
+        songIds.take(5).mapIndexed { index, songId ->
+            async(Dispatchers.IO) {
+                val track = fetchSong(songId) ?: return@async null
+                if (titleSimilarity(queryTitle, track.title) < MIN_TITLE_SIMILARITY) return@async null
+                NativeSearchCandidate(
+                    id = "joysound_${track.id}_$index",
+                    title = track.title,
+                    artist = track.artist.ifBlank { artist },
+                    album = album,
+                    durationSeconds = durationSec,
+                    provider = "JOYSOUND",
+                    plainLyrics = track.lyrics,
+                )
+            }
+        }.awaitAll().filterNotNull()
+            .sortedWith(compareByDescending<NativeSearchCandidate> { titleSimilarity(queryTitle, it.title) }
+                .thenByDescending { artistSimilarity(queryArtist, it.artist) })
+    }
+
+    private data class JoysoundTrack(
+        val id: String,
+        val title: String,
+        val artist: String,
+        val lyrics: String,
+    )
+
+    private fun searchSongIds(title: String, artist: String): List<String> = runCatching {
+        if (title.isBlank()) return emptyList()
+        // JOYSOUND's title-search tab uses searchType=1 (the lyric-snippet tab is 4).
+        // Searching title and artist together narrows common Japanese title collisions.
+        val keyword = listOf(title, artist).filter(String::isNotBlank).joinToString(" ")
+        val url = "$BASE_URL/web/search/song?match=1&keyword=${NativeLyricsHttp.urlEncode(keyword)}&searchType=1"
+        val request = Request.Builder()
+            .url(url)
+            .header("User-Agent", NativeLyricsHttp.USER_AGENT)
+            .header("Referer", "$BASE_URL/web/search")
+            .build()
+        NativeLyricsHttp.fastClient.newCall(request).execute().use { response ->
+            if (!response.isSuccessful) return emptyList()
+            val html = NativeLyricsHttp.readBoundedBody(response.body) ?: return emptyList()
+            val document = Jsoup.parse(html, BASE_URL)
+            document.select("a[href]")
+                .mapNotNull { anchor ->
+                    val path = anchor.attr("href").substringBefore('#')
+                    SONG_PATH_REGEX.matchEntire(path)?.groupValues?.get(1)
+                }
+                .distinct()
+                .take(12)
+        }
+    }.getOrDefault(emptyList())
+
+    private fun fetchSong(songId: String): JoysoundTrack? = runCatching {
+        val request = Request.Builder()
+            .url("$BASE_URL/web/search/song/$songId#lyrics")
+            .header("User-Agent", NativeLyricsHttp.USER_AGENT)
+            .header("Referer", "$BASE_URL/web/search")
+            .build()
+        NativeLyricsHttp.fastClient.newCall(request).execute().use { response ->
+            if (!response.isSuccessful) return null
+            val html = NativeLyricsHttp.readBoundedBody(response.body) ?: return null
+            val document = Jsoup.parse(html, BASE_URL)
+            val title = document.selectFirst("main h1")?.text()?.trim().orEmpty()
+            if (title.isBlank()) return null
+            val artist = document.selectFirst("main a[href^=/web/search/artist/]")?.text()?.trim().orEmpty()
+            val lyricArea = document.selectFirst("#lyrics .overflow-hidden")
+                ?: document.selectFirst("#lyrics > div.bg-white")
+                ?: return null
+            val lyrics = WebScrapeHtmlUtils.htmlToCleanLyrics(lyricArea.html())
+            if (lyrics.isBlank()) return null
+            JoysoundTrack(songId, title, artist, lyrics)
+        }
+    }.getOrNull()
+
+    private fun normalize(value: String): String = value
+        .lowercase()
+        .filter(Char::isLetterOrDigit)
+
+    private fun titleSimilarity(expected: String, actual: String): Int {
+        val lhs = normalize(expected)
+        val rhs = normalize(actual)
+        if (lhs.isBlank() || rhs.isBlank()) return 0
+        if (lhs == rhs) return 100
+        val shorter = if (lhs.length <= rhs.length) lhs else rhs
+        val longer = if (lhs.length > rhs.length) lhs else rhs
+        if (shorter.length >= 4 && longer.contains(shorter)) return 85
+        if (lhs.length < 2 || rhs.length < 2) return 0
+        val lhsBigrams = lhs.windowed(2).toSet()
+        val rhsBigrams = rhs.windowed(2).toSet()
+        val shared = lhsBigrams.intersect(rhsBigrams).size
+        val diceScore = 200 * shared / (lhsBigrams.size + rhsBigrams.size).coerceAtLeast(1)
+        return diceScore.coerceAtMost(79)
+    }
+
+    private fun artistSimilarity(expected: String, actual: String): Int {
+        val lhs = normalize(expected)
+        val rhs = normalize(actual)
+        if (lhs.isBlank() || rhs.isBlank()) return 0
+        if (lhs == rhs) return 100
+        if (lhs.contains(rhs) || rhs.contains(lhs)) return 80
+        return 0
+    }
+
+    private const val MIN_TITLE_SIMILARITY = 65
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// 15. Genius (genius.com API Search + Lyrics Container Extraction)
 // ─────────────────────────────────────────────────────────────────────────────
 internal object GeniusLyricsClient {
     suspend fun getLyrics(
