@@ -1,10 +1,12 @@
 package com.music.bitchord.ui.components
 
 import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
@@ -58,6 +60,8 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.sp
+import androidx.compose.ui.window.Dialog
+import androidx.compose.ui.window.DialogProperties
 import coil3.compose.AsyncImage
 import com.music.bitchord.R
 import com.music.bitchord.data.model.Song
@@ -91,11 +95,12 @@ fun AppleMusicTrackActionsMenu(
     onShare: () -> Unit,
     onMore: () -> Unit,
 ) {
-    IosMenuPopover(
-        item = song.takeIf { open },
-        anchor = null,
-        onDismiss = onDismiss,
-    ) { selectedSong ->
+    val menu: @Composable () -> Unit = {
+        IosMenuPopover(
+            item = song.takeIf { open },
+            anchor = null,
+            onDismiss = onDismiss,
+        ) { selectedSong ->
         var showingSleepTimer by remember(selectedSong.videoId) { mutableStateOf(false) }
         Column(
             modifier = Modifier
@@ -140,7 +145,24 @@ fun AppleMusicTrackActionsMenu(
                 IosMenuSeparator()
                 MenuRow(R.string.more, Icons.Rounded.MoreHoriz, onCloseMenu, onMore)
             }
+            }
         }
+    }
+    if (showPlayerActions && open) {
+        // MainActivity owns player actions above the page tree, while the
+        // player itself is a ModalBottomSheet dialog window. Put this overlay
+        // in its own window too, so it is always above the visible player.
+        Dialog(
+            onDismissRequest = onDismiss,
+            properties = DialogProperties(
+                usePlatformDefaultWidth = false,
+                decorFitsSystemWindows = false,
+            ),
+        ) {
+            Box(Modifier.fillMaxSize()) { menu() }
+        }
+    } else if (!showPlayerActions) {
+        menu()
     }
 }
 

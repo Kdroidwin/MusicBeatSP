@@ -1030,6 +1030,9 @@
     <string name="radio_recording_cancelled">ラジオ録音をキャンセルしました</string>
     <string name="radio_recording_background_limit">Androidのバックグラウンド実行時間制限により、録音を停止しました。</string>
     <string name="album_artists">アルバムアーティスト</string>
+    <string name="genres">ジャンル</string>
+    <string name="genre_tags_loading">音楽ファイルのジャンルタグを読み込み中…</string>
+    <string name="genre_tags_empty">音楽ファイルにジャンルタグがありません</string>
     <string name="local_library_tabs">ローカルライブラリのタブ</string>
     <string name="local_library_tabs_subtitle">ローカルライブラリのタブを表示・非表示・並び替え</string>
     <string name="local_folder_hierarchy">フォルダー階層表示</string>
@@ -1182,6 +1185,8 @@
     <string name="mini_player_swipe_changes_track_subtitle">左スワイプで次の曲、右スワイプで前の曲に移動します。初期設定はオフです</string>
     <string name="mini_player_swipe_up_expands">ミニプレイヤーの上スワイプでプレイヤーを開く</string>
     <string name="mini_player_swipe_up_expands_subtitle">上にスワイプすると、ミニプレイヤーをタップしたときと同じように全画面プレイヤーを開きます。初期設定はオンです</string>
+    <string name="mini_player_swipe_down_dismisses">下スワイプでミニプレイヤーを閉じる</string>
+    <string name="mini_player_swipe_down_dismisses_subtitle">オフにすると、下にスワイプしてもミニプレイヤーを閉じません。初期設定はオンです</string>
     <string name="main_navigation_popup">下部タブをポップアップメニューにする</string>
     <string name="main_navigation_popup_subtitle">下部のタブバーを1つのボタンにまとめ、メニューから画面を選びます。初期設定はオフです</string>
     <string name="playlist_track_menu_artwork_color">プレイリスト内の曲メニューとタグ編集をアートワークの色に合わせる</string>

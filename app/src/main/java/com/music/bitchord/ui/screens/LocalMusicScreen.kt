@@ -76,6 +76,7 @@ import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
+import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.ModalBottomSheet
 import androidx.compose.material3.OutlinedTextField
@@ -109,6 +110,7 @@ import androidx.compose.runtime.setValue
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
+import kotlinx.coroutines.CancellationException
 import com.music.bitchord.data.LocalMediaRepository
 import com.music.bitchord.data.model.durationMillis
 import com.music.bitchord.data.model.artworkAt
@@ -186,6 +188,7 @@ import com.music.bitchord.feature.localsongactions.ui.components.LocalAddToPlayl
 import com.music.bitchord.feature.localsongactions.ui.components.LocalDeleteConfirmDialog
 import com.music.bitchord.feature.localsongactions.ui.components.LocalSongDetailsSheet
 import com.music.bitchord.feature.localsongactions.ui.components.LocalSongDropdownMenu
+import com.music.bitchord.feature.localsongactions.data.LocalSongMetadataRetriever
 import com.music.bitchord.feature.lyricseditor.ui.LyricsEditorScreen
 import com.music.bitchord.feature.tageditor.ui.TagEditorScreen
 import com.music.bitchord.feature.tageditor.data.TagLibWriter
@@ -204,6 +207,7 @@ const val LOCAL_TAB_ARTISTS = 2
 const val LOCAL_TAB_FOLDERS = 3
 const val LOCAL_TAB_PLAYLISTS = 4
 const val LOCAL_TAB_ALBUM_ARTISTS = 5
+const val LOCAL_TAB_GENRES = 6
 
 private fun shuffleAlbumGroupsKeepTrackOrder(songs: List<Song>): List<Song> {
     val indexed = songs.withIndex()
@@ -320,6 +324,47 @@ fun LocalMusicScreen(
             .filter { it in allowedTabs }
             .filterNot { isDownloads && it in setOf(LocalLibraryTab.FOLDERS, LocalLibraryTab.PLAYLISTS) }
             .map(LocalLibraryTab::ordinal)
+    }
+    var genreGroups by remember { mutableStateOf<Map<String, List<Song>>>(emptyMap()) }
+    var genresLoaded by remember { mutableStateOf(false) }
+    var genresLoading by remember { mutableStateOf(false) }
+    val genreSourceKey = remember(songs) {
+        songs.map { it.localUri?.takeIf(String::isNotBlank) ?: it.localPath?.takeIf(String::isNotBlank) ?: it.videoId }
+    }
+    var loadedGenreSourceKey by remember { mutableStateOf<List<String>?>(null) }
+    LaunchedEffect(selectedTab, genreSourceKey) {
+        if (selectedTab != LOCAL_TAB_GENRES || loadedGenreSourceKey == genreSourceKey) return@LaunchedEffect
+        genresLoaded = false
+        genresLoading = true
+        try {
+            val grouped = withContext(Dispatchers.IO) {
+                val genres = linkedMapOf<String, MutableList<Song>>()
+                songs.forEach { song ->
+                    if (song.localUri.isNullOrBlank() && song.localPath.isNullOrBlank()) return@forEach
+                    val rawGenre = try {
+                        LocalSongMetadataRetriever.retrieve(context, song).genre
+                    } catch (cancelled: CancellationException) {
+                        throw cancelled
+                    } catch (_: Exception) {
+                        null
+                    }
+                    splitLocalGenres(rawGenre).forEach { genre ->
+                        val tracks = genres.getOrPut(genre) { mutableListOf() }
+                        if (tracks.none { (it.localUri ?: it.localPath ?: it.videoId) == (song.localUri ?: song.localPath ?: song.videoId) }) {
+                            tracks += song
+                        }
+                    }
+                }
+                genres.entries
+                    .sortedBy { it.key.lowercase(Locale.ROOT) }
+                    .associate { (name, tracks) -> name to tracks.toList() }
+            }
+            genreGroups = grouped
+            loadedGenreSourceKey = genreSourceKey
+            genresLoaded = true
+        } finally {
+            genresLoading = false
+        }
     }
 
     LaunchedEffect(initialTab) {
@@ -894,6 +939,7 @@ fun LocalMusicScreen(
                         LOCAL_TAB_FOLDERS -> Icons.Rounded.Folder to stringResource(R.string.folders)
                         LOCAL_TAB_PLAYLISTS -> Icons.AutoMirrored.Rounded.QueueMusic to stringResource(R.string.playlists)
                         LOCAL_TAB_ALBUM_ARTISTS -> Icons.Rounded.Person to stringResource(R.string.album_artists)
+                        LOCAL_TAB_GENRES -> Icons.Rounded.LibraryMusic to stringResource(R.string.genres)
                         else -> Icons.Rounded.MusicNote to stringResource(R.string.songs)
                     }
                     LocalTab(
@@ -1078,6 +1124,24 @@ fun LocalMusicScreen(
                         onSongSwipe = onSongSwipe,
                         contentPadding = bodyContentPadding,
                         songDropdownMenu = if (isDownloads) null else songDropdownMenu,
+                    )
+                }
+
+                key == "tab:$LOCAL_TAB_GENRES" -> {
+                    GenresTab(
+                        groups = genreGroups,
+                        loading = genresLoading || !genresLoaded,
+                        contentPadding = bodyContentPadding,
+                        onGenreClick = { genre, tracks ->
+                            drillDownPlaylistId = null
+                            drillDownLabel = genre
+                            drillDownSongs = tracks
+                            drillDownArt = tracks.firstNotNullOfOrNull { it.thumbnailUrl?.takeIf(String::isNotBlank) }
+                            drillDownIsArtist = false
+                            drillDownShowsAlbums = false
+                            drillDownFullScreenArtwork = false
+                            parentArtistAlbums = null
+                        },
                     )
                 }
 
@@ -1521,6 +1585,94 @@ fun LocalMusicScreen(
 }
 
 // ── Songs tab ─────────────────────────────────────────────────────────────────
+
+private fun splitLocalGenres(raw: String?): List<String> = raw.orEmpty()
+    .split(Regex("\\s*[;|\\n\\r]+\\s*|\\s+/\\s+"))
+    .map(String::trim)
+    .filter(String::isNotBlank)
+    .distinctBy { it.lowercase(Locale.ROOT) }
+
+@Composable
+private fun GenresTab(
+    groups: Map<String, List<Song>>,
+    loading: Boolean,
+    contentPadding: PaddingValues,
+    onGenreClick: (String, List<Song>) -> Unit,
+) {
+    when {
+        loading -> Column(
+            modifier = Modifier.fillMaxSize().padding(contentPadding),
+            horizontalAlignment = Alignment.CenterHorizontally,
+            verticalArrangement = Arrangement.Center,
+        ) {
+            CircularProgressIndicator()
+            Text(
+                text = stringResource(R.string.genre_tags_loading),
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                modifier = Modifier.padding(top = 16.dp),
+            )
+        }
+        groups.isEmpty() -> Box(
+            modifier = Modifier.fillMaxSize().padding(contentPadding),
+            contentAlignment = Alignment.Center,
+        ) {
+            MessageState(
+                message = stringResource(R.string.genre_tags_empty),
+                modifier = Modifier.fillMaxWidth(),
+            )
+        }
+        else -> LazyColumn(
+            contentPadding = contentPadding,
+            verticalArrangement = Arrangement.spacedBy(4.dp),
+        ) {
+            items(groups.entries.toList(), key = { it.key }) { (genre, tracks) ->
+                val preview = tracks.firstOrNull()
+                Row(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .clip(RoundedCornerShape(18.dp))
+                        .clickable { onGenreClick(genre, tracks) }
+                        .padding(horizontal = PAGE_GUTTER, vertical = 10.dp),
+                    verticalAlignment = Alignment.CenterVertically,
+                ) {
+                    if (preview?.thumbnailUrl != null) {
+                        AsyncImage(
+                            model = preview.artworkAt(ROW_ART_PX),
+                            contentDescription = null,
+                            contentScale = ContentScale.Crop,
+                            modifier = Modifier.size(54.dp).clip(RoundedCornerShape(12.dp)),
+                        )
+                    } else {
+                        Box(
+                            modifier = Modifier
+                                .size(54.dp)
+                                .clip(RoundedCornerShape(12.dp))
+                                .background(MaterialTheme.colorScheme.surfaceContainerHighest),
+                            contentAlignment = Alignment.Center,
+                        ) {
+                            Icon(
+                                imageVector = Icons.Rounded.LibraryMusic,
+                                contentDescription = null,
+                                tint = MaterialTheme.colorScheme.onSurfaceVariant,
+                            )
+                        }
+                    }
+                    Column(
+                        modifier = Modifier.weight(1f).padding(start = 14.dp),
+                        verticalArrangement = Arrangement.spacedBy(3.dp),
+                    ) {
+                        Text(genre, style = MaterialTheme.typography.titleMedium, maxLines = 1, overflow = TextOverflow.Ellipsis)
+                        Text(
+                            text = pluralStringResource(R.plurals.replay_song_count, tracks.size, tracks.size.toString()),
+                            style = MaterialTheme.typography.bodySmall,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant,
+                        )
+                    }
+                }
+            }
+        }
+    }
+}
 
 @Composable
 private fun SongsTab(

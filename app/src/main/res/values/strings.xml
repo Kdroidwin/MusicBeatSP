@@ -1130,6 +1130,9 @@
     <string name="radio_recording_cancelled">Radio recording cancelled</string>
     <string name="radio_recording_background_limit">Radio recording stopped by the Android background time limit.</string>
     <string name="album_artists">Album artists</string>
+    <string name="genres">Genres</string>
+    <string name="genre_tags_loading">Reading genre tags from your music files…</string>
+    <string name="genre_tags_empty">No genre tags were found in these music files.</string>
     <string name="local_library_tabs">Local library tabs</string>
     <string name="local_library_tabs_subtitle">Show, hide, and reorder the tabs in the local library</string>
     <string name="local_folder_hierarchy">Folder hierarchy</string>
@@ -1282,6 +1285,8 @@
     <string name="mini_player_swipe_changes_track_subtitle">Swipe left for the next track or right for the previous track. Off by default.</string>
     <string name="mini_player_swipe_up_expands">Swipe up on mini player to open player</string>
     <string name="mini_player_swipe_up_expands_subtitle">Swipe up to open the expanded player, the same as tapping the mini player. On by default.</string>
+    <string name="mini_player_swipe_down_dismisses">Close mini player with a downward swipe</string>
+    <string name="mini_player_swipe_down_dismisses_subtitle">When off, swiping down will no longer close the mini player. On by default.</string>
     <string name="playlist_track_menu_artwork_color">Match playlist song menus and tag editor to artwork</string>
     <string name="playlist_track_menu_artwork_color_subtitle">Use the playlist cover for track menus and selected-song artwork for the bulk tag editor. On by default.</string>
     <string name="preload_album_art">Preload local album art on startup</string>

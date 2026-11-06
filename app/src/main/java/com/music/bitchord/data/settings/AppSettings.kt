@@ -167,7 +167,7 @@ enum class TransportSideAction {
 }
 
 /** Destinations within the device-local music library. */
-enum class LocalLibraryTab { SONGS, ALBUMS, ARTISTS, FOLDERS, PLAYLISTS, ALBUM_ARTISTS }
+enum class LocalLibraryTab { SONGS, ALBUMS, ARTISTS, FOLDERS, PLAYLISTS, ALBUM_ARTISTS, GENRES }
 
 /** Filter destinations shown in the Library header, independent of the always-visible All destination. */
 enum class LibraryCategory { FAVORITES, PLAYLISTS, YOUTUBE_MUSIC, YOUTUBE_DOWNLOADS, MOST_PLAYED, RECENTLY_PLAYED, REPLAY }
@@ -608,6 +608,8 @@ object AppSettings {
     val miniPlayerSwipeChangesTrack = MutableStateFlow(false)
     /** Lets an upward swipe on the mini-player open the expanded player. */
     val miniPlayerSwipeUpExpands = MutableStateFlow(true)
+    /** Lets a downward swipe dismiss the mini-player. */
+    val miniPlayerSwipeDownDismisses = MutableStateFlow(true)
     /** Keeps the bottom navigation and mini player expanded while scrolling. */
     val lockBottomBarExpanded = MutableStateFlow(false)
     /** Grid column counts per page, keyed by [GridKind.key]. */
@@ -1101,7 +1103,7 @@ object AppSettings {
     val localSongsViewType = MutableStateFlow(LibraryViewType.LIST)
     val localAlbumsViewType = MutableStateFlow(LibraryViewType.GRID)
     val localArtistsViewType = MutableStateFlow(LibraryViewType.GRID)
-    val visibleLocalLibraryTabs = MutableStateFlow(LocalLibraryTab.entries.toSet())
+    val visibleLocalLibraryTabs = MutableStateFlow(LocalLibraryTab.entries.filterNot { it == LocalLibraryTab.GENRES }.toSet())
     val localLibraryTabOrder = MutableStateFlow<List<LocalLibraryTab>>(LocalLibraryTab.entries.toList())
     val localFolderHierarchy = MutableStateFlow(false)
     /** Reopens the folder browser at its last visited folder; enabled for new installs. */
@@ -1502,6 +1504,7 @@ object AppSettings {
         miniPlayerPreviousButton.value = prefs.getBoolean(KEY_MINI_PLAYER_PREVIOUS_BUTTON, true)
         miniPlayerSwipeChangesTrack.value = prefs.getBoolean(KEY_MINI_PLAYER_SWIPE_CHANGES_TRACK, false)
         miniPlayerSwipeUpExpands.value = prefs.getBoolean(KEY_MINI_PLAYER_SWIPE_UP_EXPANDS, true)
+        miniPlayerSwipeDownDismisses.value = prefs.getBoolean(KEY_MINI_PLAYER_SWIPE_DOWN_DISMISSES, true)
         lockBottomBarExpanded.value = prefs.getBoolean(KEY_LOCK_BOTTOM_BAR_EXPANDED, false)
         gridColumns.value = GridKind.entries.mapNotNull { kind ->
             prefs.getInt(KEY_GRID_COLUMNS_PREFIX + kind.key, -1)
@@ -2238,6 +2241,11 @@ object AppSettings {
         prefs.edit().putBoolean(KEY_MINI_PLAYER_SWIPE_UP_EXPANDS, value).apply()
     }
 
+    fun setMiniPlayerSwipeDownDismisses(value: Boolean) {
+        miniPlayerSwipeDownDismisses.value = value
+        prefs.edit().putBoolean(KEY_MINI_PLAYER_SWIPE_DOWN_DISMISSES, value).apply()
+    }
+
     fun setPlaylistTrackMenuUsesArtworkColor(value: Boolean) {
         playlistTrackMenuUsesArtworkColor.value = value
         prefs.edit().putBoolean(KEY_PLAYLIST_TRACK_MENU_ARTWORK_COLOR, value).apply()
@@ -2827,7 +2835,8 @@ object AppSettings {
         val stored = storedNames
             ?.mapNotNull { name -> LocalLibraryTab.entries.firstOrNull { it.name == name } }
             ?.toSet()
-        return stored?.takeIf { it.isNotEmpty() } ?: LocalLibraryTab.entries.toSet()
+        return stored?.takeIf { it.isNotEmpty() }
+            ?: LocalLibraryTab.entries.filterNot { it == LocalLibraryTab.GENRES }.toSet()
     }
 
     private fun readLocalLibraryTabOrder(): List<LocalLibraryTab> {
@@ -4483,6 +4492,7 @@ object AppSettings {
     private const val KEY_MINI_PLAYER_PREVIOUS_BUTTON = "mini_player_previous_button"
     private const val KEY_MINI_PLAYER_SWIPE_CHANGES_TRACK = "mini_player_swipe_changes_track"
     private const val KEY_MINI_PLAYER_SWIPE_UP_EXPANDS = "mini_player_swipe_up_expands"
+    private const val KEY_MINI_PLAYER_SWIPE_DOWN_DISMISSES = "mini_player_swipe_down_dismisses"
     private const val KEY_LOCK_BOTTOM_BAR_EXPANDED = "lock_bottom_bar_expanded"
     private const val KEY_GRID_COLUMNS_PREFIX = "grid_columns_"
     private const val KEY_GRID_TITLE_OVERLAY = "grid_title_overlay"

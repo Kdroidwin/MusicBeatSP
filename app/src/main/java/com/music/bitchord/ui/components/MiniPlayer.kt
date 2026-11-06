@@ -146,6 +146,7 @@ fun MiniPlayer(
     val showPreviousButton by AppSettings.miniPlayerPreviousButton.collectAsStateWithLifecycle()
     val swipeChangesTrack by AppSettings.miniPlayerSwipeChangesTrack.collectAsStateWithLifecycle()
     val swipeUpExpands by AppSettings.miniPlayerSwipeUpExpands.collectAsStateWithLifecycle()
+    val swipeDownDismisses by AppSettings.miniPlayerSwipeDownDismisses.collectAsStateWithLifecycle()
     val artworkPalette = rememberArtworkPalette(
         imageUrl = song.thumbnailUrl.takeIf { useArtworkColor },
         artPx = ROW_ART_PX,
@@ -174,13 +175,13 @@ fun MiniPlayer(
                 translationY = offsetY.value
                 alpha = (1f - (offsetY.value / (dismissThresholdPx * 1.5f))).coerceIn(0f, 1f)
             }
-            .pointerInput(swipeUpExpands, dismissThresholdPx) {
+            .pointerInput(swipeUpExpands, swipeDownDismisses, dismissThresholdPx) {
                 var upwardDistance = 0f
                 detectVerticalDragGestures(
                     onDragStart = { upwardDistance = 0f },
                     onDragEnd = {
                         when {
-                            offsetY.value >= dismissThresholdPx -> {
+                            swipeDownDismisses && offsetY.value >= dismissThresholdPx -> {
                                 scope.launch {
                                     offsetY.animateTo(dismissThresholdPx * 2f, tween(120))
                                     currentOnDismiss()
@@ -201,7 +202,7 @@ fun MiniPlayer(
                         }
                     },
                     onVerticalDrag = { change, dragAmount ->
-                        if (dragAmount > 0 || offsetY.value > 0) {
+                        if ((dragAmount > 0 && swipeDownDismisses) || offsetY.value > 0) {
                             upwardDistance = 0f
                             change.consume()
                             val next = (offsetY.value + dragAmount).coerceAtLeast(0f)

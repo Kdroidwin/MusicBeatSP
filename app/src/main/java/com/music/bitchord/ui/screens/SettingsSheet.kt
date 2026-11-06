@@ -365,6 +365,17 @@ private fun settingsSearchCategory(text: String): SettingsSearchCategory {
 }
 
 @Composable
+private fun miniPlayerSwipeDownDismissSearchEntry(): SettingsSearchEntry {
+    val checked by AppSettings.miniPlayerSwipeDownDismisses.collectAsStateWithLifecycle()
+    return SettingsSearchEntry(
+        stringResource(R.string.mini_player_swipe_down_dismisses),
+        stringResource(R.string.mini_player_swipe_down_dismisses_subtitle),
+        listOf("mini player", "swipe down", "dismiss", "close", "ミニプレイヤー", "下スワイプ", "閉じる"),
+        checked,
+    ) { AppSettings.setMiniPlayerSwipeDownDismisses(!checked) }
+}
+
+@Composable
 private fun SettingsSearchEntryRows(entries: List<SettingsSearchEntry>) {
     entries.forEachIndexed { index, entry ->
         if (index > 0) RowDivider()
@@ -1005,6 +1016,7 @@ fun SettingsScreen(
     val miniPlayerPreviousButton by AppSettings.miniPlayerPreviousButton.collectAsStateWithLifecycle()
     val miniPlayerSwipeChangesTrack by AppSettings.miniPlayerSwipeChangesTrack.collectAsStateWithLifecycle()
     val miniPlayerSwipeUpExpands by AppSettings.miniPlayerSwipeUpExpands.collectAsStateWithLifecycle()
+    val miniPlayerSwipeDownDismisses by AppSettings.miniPlayerSwipeDownDismisses.collectAsStateWithLifecycle()
     val playlistTrackMenuUsesArtworkColor by AppSettings.playlistTrackMenuUsesArtworkColor.collectAsStateWithLifecycle()
     val playerTitleFontSizeSp by AppSettings.playerTitleFontSizeSp.collectAsStateWithLifecycle()
     val playerArtistFontSizeSp by AppSettings.playerArtistFontSizeSp.collectAsStateWithLifecycle()
@@ -1600,6 +1612,7 @@ fun SettingsScreen(
             listOf("mini player", "swipe up", "expand", "open player", "ミニプレイヤー", "上スワイプ", "プレイヤーを開く"),
             miniPlayerSwipeUpExpands,
         ) { AppSettings.setMiniPlayerSwipeUpExpands(!miniPlayerSwipeUpExpands) },
+        miniPlayerSwipeDownDismissSearchEntry(),
         SettingsSearchEntry(
             stringResource(R.string.playlist_track_menu_artwork_color),
             stringResource(R.string.playlist_track_menu_artwork_color_subtitle),
@@ -1996,6 +2009,7 @@ fun SettingsScreen(
             LocalLibraryTab.FOLDERS -> R.string.folders
             LocalLibraryTab.PLAYLISTS -> R.string.playlists
             LocalLibraryTab.ALBUM_ARTISTS -> R.string.album_artists
+            LocalLibraryTab.GENRES -> R.string.genres
         })
         SettingsSearchEntry(
             title = stringResource(R.string.show_tab_setting, tabTitle),
@@ -4435,6 +4449,23 @@ fun SettingsScreen(
                     )
                 },
                 onClick = { AppSettings.setMiniPlayerSwipeUpExpands(!miniPlayerSwipeUpExpands) },
+            )
+            RowDivider()
+            SettingsRow(
+                icon = Icons.Rounded.ArrowDownward,
+                title = stringResource(R.string.mini_player_swipe_down_dismisses),
+                subtitle = stringResource(R.string.mini_player_swipe_down_dismisses_subtitle),
+                trailing = {
+                    Switch(
+                        checked = miniPlayerSwipeDownDismisses,
+                        onCheckedChange = AppSettings::setMiniPlayerSwipeDownDismisses,
+                        colors = SwitchDefaults.colors(
+                            checkedTrackColor = MaterialTheme.colorScheme.primary,
+                            checkedBorderColor = MaterialTheme.colorScheme.primary,
+                        ),
+                    )
+                },
+                onClick = { AppSettings.setMiniPlayerSwipeDownDismisses(!miniPlayerSwipeDownDismisses) },
             )
             RowDivider()
             SettingsRow(
@@ -7318,6 +7349,7 @@ SettingsGroup(header = stringResource(R.string.local_music)) {
             LocalLibraryTab.FOLDERS -> R.string.folders
             LocalLibraryTab.PLAYLISTS -> R.string.playlists
             LocalLibraryTab.ALBUM_ARTISTS -> R.string.album_artists
+            LocalLibraryTab.GENRES -> R.string.genres
         }
         val tabIcon = when (tab) {
             LocalLibraryTab.SONGS -> Icons.Rounded.MusicNote
@@ -7325,6 +7357,7 @@ SettingsGroup(header = stringResource(R.string.local_music)) {
             LocalLibraryTab.ARTISTS, LocalLibraryTab.ALBUM_ARTISTS -> Icons.Rounded.Person
             LocalLibraryTab.FOLDERS -> Icons.Rounded.Folder
             LocalLibraryTab.PLAYLISTS -> Icons.Rounded.PlaylistPlay
+            LocalLibraryTab.GENRES -> Icons.Rounded.LibraryMusic
         }
         val visible = tab in localTabs
         SettingsRow(
