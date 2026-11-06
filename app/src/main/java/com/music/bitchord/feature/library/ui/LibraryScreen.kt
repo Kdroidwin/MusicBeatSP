@@ -582,10 +582,15 @@ fun LibraryScreen(
     val inHistoryView = selectedFilter == LibraryFilter.RECENTLY_PLAYED ||
         selectedFilter == LibraryFilter.MOST_PLAYED
     val rootListScrollCallback = rememberUpdatedState(onRootListScrollChanged)
+    var rootLibraryContentScrolled by remember { mutableStateOf(false) }
+    val reportRootLibraryScroll: (Boolean) -> Unit = { isScrolled ->
+        rootLibraryContentScrolled = isScrolled
+        rootListScrollCallback.value?.invoke(isScrolled)
+    }
     val rootListScrollThresholdPx = with(LocalDensity.current) { 32.dp.toPx() }
     LaunchedEffect(selectedFilter, libraryViewType, inDrillDown, rootListScrollThresholdPx) {
         if (inDrillDown || inHistoryView || selectedFilter == LibraryFilter.YOUTUBE_DOWNLOADS) {
-            rootListScrollCallback.value?.invoke(false)
+            reportRootLibraryScroll(false)
             return@LaunchedEffect
         }
         val rootListScrollFlow = when {
@@ -602,7 +607,7 @@ fun LibraryScreen(
                     collectionListState.firstVisibleItemScrollOffset > rootListScrollThresholdPx
             }
         }
-        rootListScrollFlow.distinctUntilChanged().collect { rootListScrollCallback.value?.invoke(it) }
+        rootListScrollFlow.distinctUntilChanged().collect { reportRootLibraryScroll(it) }
     }
     val selectedPlaylistSongs = remember(drillDownSongs, selectedPlaylistSongIds) {
         drillDownSongs.filter { (it.localUri ?: it.videoId) in selectedPlaylistSongIds }
@@ -1022,7 +1027,7 @@ fun LibraryScreen(
                     contentPadding = contentPadding,
                     songDropdownMenu = if (drillDownPlaylistId != null) playlistSongDropdownMenu else songDropdownMenu,
                     onArtworkPaletteChanged = onArtworkPaletteChanged,
-                    onRootListScrollChanged = onRootListScrollChanged,
+                    onRootListScrollChanged = reportRootLibraryScroll,
                 )
             } else if (key == "library:youtube") {
                 Column(
@@ -1030,7 +1035,7 @@ fun LibraryScreen(
                         .fillMaxSize()
                         .padding(top = contentPadding.calculateTopPadding()),
                 ) {
-                    LibraryHeaderBar(
+                    if (!rootLibraryContentScrolled) LibraryHeaderBar(
                         selectedFilter = selectedFilter,
                         onFilterSelect = selectLibraryFilter,
                         viewType = libraryViewType,
@@ -1136,7 +1141,7 @@ fun LibraryScreen(
                         .fillMaxSize()
                         .padding(top = contentPadding.calculateTopPadding()),
                 ) {
-                    LibraryHeaderBar(
+                    if (!rootLibraryContentScrolled) LibraryHeaderBar(
                         selectedFilter = selectedFilter,
                         onFilterSelect = selectLibraryFilter,
                         viewType = downloadedSongsViewType,
@@ -1183,7 +1188,7 @@ fun LibraryScreen(
                             onBack = { selectedFilter = LibraryFilter.ALL },
                             contentPadding = PaddingValues(bottom = contentPadding.calculateBottomPadding()),
                             songDropdownMenu = songDropdownMenu,
-                            onRootListScrollChanged = onRootListScrollChanged,
+                            onRootListScrollChanged = reportRootLibraryScroll,
                             modifier = Modifier.weight(1f),
                         )
                     }
@@ -1196,7 +1201,7 @@ fun LibraryScreen(
                         .fillMaxSize()
                         .padding(top = contentPadding.calculateTopPadding()),
                 ) {
-                    LibraryHeaderBar(
+                    if (!rootLibraryContentScrolled) LibraryHeaderBar(
                         selectedFilter = selectedFilter,
                         onFilterSelect = selectLibraryFilter,
                         viewType = libraryViewType,
@@ -1241,7 +1246,7 @@ fun LibraryScreen(
                             onBack = { selectedFilter = LibraryFilter.ALL },
                             contentPadding = PaddingValues(bottom = contentPadding.calculateBottomPadding()),
                             songDropdownMenu = songDropdownMenu,
-                            onRootListScrollChanged = onRootListScrollChanged,
+                            onRootListScrollChanged = reportRootLibraryScroll,
                             modifier = Modifier.weight(1f),
                         )
                     }
@@ -1252,7 +1257,7 @@ fun LibraryScreen(
                         .fillMaxSize()
                         .padding(top = contentPadding.calculateTopPadding()),
                 ) {
-                    LibraryHeaderBar(
+                    if (!rootLibraryContentScrolled) LibraryHeaderBar(
                         selectedFilter = selectedFilter,
                         onFilterSelect = selectLibraryFilter,
                         viewType = libraryViewType,

@@ -45,6 +45,7 @@ import androidx.compose.material3.FilterChip
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.derivedStateOf
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
@@ -177,6 +178,14 @@ fun LocalSearchScreen(
     var songsForPlaylist by remember { mutableStateOf<List<Song>?>(null) }
 
     val inDrillDown = drillDownLabel != null
+    val rootResultsScrolled by remember(listState, rootListScrollThresholdPx, inDrillDown) {
+        derivedStateOf {
+            !inDrillDown && (
+                listState.firstVisibleItemIndex > 0 ||
+                    listState.firstVisibleItemScrollOffset > rootListScrollThresholdPx
+                )
+        }
+    }
     val selectedConfiguredSourceLabel = configuredSearchSources
         .firstOrNull { it.id == selectedConfiguredSource }
         ?.displayName
@@ -348,7 +357,7 @@ fun LocalSearchScreen(
                     modifier = Modifier.padding(horizontal = PAGE_GUTTER, vertical = 6.dp),
                 )
 
-                if (canSearchYoutubeMusic || canSearchMusicServers || configuredSearchSources.isNotEmpty()) {
+                if (!rootResultsScrolled && (canSearchYoutubeMusic || canSearchMusicServers || configuredSearchSources.isNotEmpty())) {
                     Row(
                         modifier = Modifier.fillMaxWidth().horizontalScroll(rememberScrollState())
                             .padding(horizontal = PAGE_GUTTER, vertical = 2.dp),
@@ -417,7 +426,7 @@ fun LocalSearchScreen(
                     }
                 }
 
-                if (!useYoutubeMusic && !useMusicServers && selectedConfiguredSource == null) {
+                if (!rootResultsScrolled && !useYoutubeMusic && !useMusicServers && selectedConfiguredSource == null) {
                     LocalSearchFilterChips(
                         selectedFilter = selectedFilter,
                         onFilterSelect = { selectedFilter = it },
