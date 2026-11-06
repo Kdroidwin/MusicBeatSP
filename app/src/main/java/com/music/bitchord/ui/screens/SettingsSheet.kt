@@ -598,6 +598,15 @@ private fun autoShowLyricsSearchEntry(enabled: Boolean) = SettingsSearchEntry(
 )
 
 @Composable
+private fun compactLyricsSearchSourcesSearchEntry(enabled: Boolean) = SettingsSearchEntry(
+    title = stringResource(R.string.compact_lyrics_search_sources),
+    subtitle = stringResource(R.string.compact_lyrics_search_sources_subtitle),
+    keywords = listOf("lyrics", "source", "search", "compact", "half height", "歌詞", "ソース", "検索", "コンパクト", "半分", "高さ"),
+    checked = enabled,
+    activate = { AppSettings.setCompactLyricsSearchSources(!enabled) },
+)
+
+@Composable
 private fun playerTransportSpacingSearchEntry(spacingDp: Float) = SettingsSearchEntry(
     title = stringResource(R.string.player_transport_button_spacing),
     subtitle = stringResource(R.string.player_transport_button_spacing_subtitle),
@@ -941,6 +950,7 @@ fun SettingsScreen(
     val lyricsTextAlignment by AppSettings.lyricsTextAlignment.collectAsStateWithLifecycle()
     val showLyricsFurigana by AppSettings.showLyricsFurigana.collectAsStateWithLifecycle()
     val autoFitOneLineLyrics by AppSettings.autoFitOneLineLyrics.collectAsStateWithLifecycle()
+    val compactLyricsSearchSources by AppSettings.compactLyricsSearchSources.collectAsStateWithLifecycle()
     val preferEmbeddedLocalLyrics by AppSettings.preferEmbeddedLocalLyrics.collectAsStateWithLifecycle()
     val removeNeteaseLyricCredits by AppSettings.removeNeteaseLyricCredits.collectAsStateWithLifecycle()
     val removeQqMusicLyricMetadata by AppSettings.removeQqMusicLyricMetadata.collectAsStateWithLifecycle()
@@ -1512,6 +1522,7 @@ fun SettingsScreen(
         ) { AppSettings.setSpeakerPlaybackAllowed(!speakerPlaybackAllowed) },
         SettingsSearchEntry(stringResource(R.string.lyrics_furigana), stringResource(R.string.lyrics_furigana_subtitle), listOf("lyrics", "furigana", "ruby", "ふりがな", "ルビ"), showLyricsFurigana) { AppSettings.setShowLyricsFurigana(!showLyricsFurigana) },
         SettingsSearchEntry(stringResource(R.string.lyrics_auto_fit), stringResource(R.string.lyrics_auto_fit_subtitle), listOf("lyrics", "one line", "fit", "歌詞", "一行", "文字サイズ"), autoFitOneLineLyrics) { AppSettings.setAutoFitOneLineLyrics(!autoFitOneLineLyrics) },
+        compactLyricsSearchSourcesSearchEntry(compactLyricsSearchSources),
         SettingsSearchEntry(stringResource(R.string.spatial_audio), stringResource(R.string.spatial_audio_subtitle), listOf("spatial", "空間オーディオ"), spatialAudio) { AppSettings.setSpatialAudio(!spatialAudio) },
         SettingsSearchEntry(stringResource(R.string.parametric_eq), stringResource(R.string.parametric_eq_subtitle), listOf("parametric", "equalizer", "frequency", "Q", "gain", "パラメトリック", "イコライザー", "周波数"), parametricEqEnabled) { AppSettings.setParametricEqEnabled(!parametricEqEnabled) },
         SettingsSearchEntry(stringResource(R.string.tpdf_dither), stringResource(R.string.tpdf_dither_subtitle), listOf("dither", "TPDF", "quantization", "PCM", "ディザー", "量子化", "音質"), tpdfDitherEnabled) { AppSettings.setTpdfDitherEnabled(!tpdfDitherEnabled) },
@@ -4212,6 +4223,14 @@ fun SettingsScreen(
                 subtitle = stringResource(R.string.lyrics_auto_fit_subtitle),
                 trailing = { Switch(checked = autoFitOneLineLyrics, onCheckedChange = AppSettings::setAutoFitOneLineLyrics) },
                 onClick = { AppSettings.setAutoFitOneLineLyrics(!autoFitOneLineLyrics) },
+            )
+            RowDivider()
+            SettingsRow(
+                icon = Icons.AutoMirrored.Rounded.Notes,
+                title = stringResource(R.string.compact_lyrics_search_sources),
+                subtitle = stringResource(R.string.compact_lyrics_search_sources_subtitle),
+                trailing = { Switch(checked = compactLyricsSearchSources, onCheckedChange = AppSettings::setCompactLyricsSearchSources) },
+                onClick = { AppSettings.setCompactLyricsSearchSources(!compactLyricsSearchSources) },
             )
             RowDivider()
             val strictness = com.music.bitchord.data.lyrics.LyricsStrictness.fromPreference(lyricsAutoStrictness)

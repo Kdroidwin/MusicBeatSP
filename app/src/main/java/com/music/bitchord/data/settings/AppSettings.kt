@@ -830,6 +830,8 @@ object AppSettings {
     val showLyricsFurigana = MutableStateFlow(false)
     /** Shrinks one-line lyric text to fit the available width without truncation. */
     val autoFitOneLineLyrics = MutableStateFlow(false)
+    /** Shows compact source chips and caps the lyric-search provider list at roughly half a screen. */
+    val compactLyricsSearchSources = MutableStateFlow(true)
 
     val lyricsTextAlignment = MutableStateFlow(LyricsTextAlignment.CENTER)
 
@@ -1765,6 +1767,7 @@ object AppSettings {
         syncedLyrics.value = prefs.getBoolean(KEY_SYNCED_LYRICS, true)
         showLyricsFurigana.value = prefs.getBoolean(KEY_SHOW_LYRICS_FURIGANA, false)
         autoFitOneLineLyrics.value = prefs.getBoolean(KEY_AUTO_FIT_ONE_LINE_LYRICS, false)
+        compactLyricsSearchSources.value = prefs.getBoolean(KEY_COMPACT_LYRICS_SEARCH_SOURCES, true)
         prioritizeSyllableSync.value = prefs.getBoolean(KEY_PRIORITIZE_SYLLABLE_SYNC, false)
         showLyricsLogs.value = prefs.getBoolean(KEY_SHOW_LYRICS_LOGS, false)
         autoEmbedLyrics.value = prefs.getBoolean(KEY_AUTO_EMBED_LYRICS, true)
@@ -3395,6 +3398,11 @@ object AppSettings {
         prefs.edit().putBoolean(KEY_AUTO_FIT_ONE_LINE_LYRICS, value).apply()
     }
 
+    fun setCompactLyricsSearchSources(value: Boolean) {
+        compactLyricsSearchSources.value = value
+        prefs.edit().putBoolean(KEY_COMPACT_LYRICS_SEARCH_SOURCES, value).apply()
+    }
+
     fun setLyricsSources(value: Set<LyricsSource>) {
         lyricsSources.value = value
         prefs.edit().putString(KEY_LYRICS_SOURCES, value.joinToString(",") { it.id }).apply()
@@ -4690,6 +4698,7 @@ object AppSettings {
     private const val KEY_SYNCED_LYRICS = "synced_lyrics"
     private const val KEY_SHOW_LYRICS_FURIGANA = "show_lyrics_furigana"
     private const val KEY_AUTO_FIT_ONE_LINE_LYRICS = "auto_fit_one_line_lyrics"
+    private const val KEY_COMPACT_LYRICS_SEARCH_SOURCES = "compact_lyrics_search_sources"
     private const val KEY_LYRICS_SOURCES = "lyrics_sources"
     private const val KEY_LYRICS_SOURCE_ORDER = "lyrics_source_order"
     private const val KEY_NETEASE_LYRICS_SOURCE_MIGRATED = "netease_lyrics_source_migrated"

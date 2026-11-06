@@ -1280,6 +1280,8 @@
     <string name="lyrics_furigana_subtitle">漢字((かんじ))や、漢字(かんじ)のようなひらがなの読みを漢字の上に表示します</string>
     <string name="lyrics_auto_fit">歌詞を一行に収める</string>
     <string name="lyrics_auto_fit_subtitle">長い歌詞の文字を縮小し、折り返さずに表示します</string>
+    <string name="compact_lyrics_search_sources">歌詞検索ソース欄をコンパクトにする</string>
+    <string name="compact_lyrics_search_sources_subtitle">ソースの表示を小さくし、一覧の高さを画面の半分程度にします</string>
     <string name="lyrics_sync_editor">再生しながら歌詞を同期</string>
     <string name="lyrics_sync_simple">シンプル</string>
     <string name="lyrics_sync_mode">同期</string>

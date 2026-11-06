@@ -1378,6 +1378,8 @@
     <string name="lyrics_furigana_subtitle">Render 漢字((かんじ)) and hiragana readings such as 漢字(かんじ) above Japanese text</string>
     <string name="lyrics_auto_fit">Fit each lyric line to one line</string>
     <string name="lyrics_auto_fit_subtitle">Reduce text size so long lyric lines fit without wrapping</string>
+    <string name="compact_lyrics_search_sources">Compact lyric search sources</string>
+    <string name="compact_lyrics_search_sources_subtitle">Use smaller source chips and limit the source list to about half the screen height</string>
     <string name="lyrics_sync_editor">Sync lyrics while playing</string>
     <string name="lyrics_sync_simple">Simple</string>
     <string name="lyrics_sync_mode">Sync</string>

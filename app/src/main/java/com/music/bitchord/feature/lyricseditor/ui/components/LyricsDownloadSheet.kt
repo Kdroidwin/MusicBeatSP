@@ -4,8 +4,6 @@ import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
-import androidx.compose.foundation.layout.ExperimentalLayoutApi
-import androidx.compose.foundation.layout.FlowRow
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxWidth
@@ -25,7 +23,6 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.rounded.ArrowForward
 import androidx.compose.material.icons.rounded.Album
 import androidx.compose.material.icons.rounded.AutoAwesome
-import androidx.compose.material.icons.rounded.Check
 import androidx.compose.material.icons.rounded.Clear
 import androidx.compose.material.icons.rounded.CloudDownload
 import androidx.compose.material.icons.rounded.History
@@ -36,8 +33,6 @@ import androidx.compose.material3.Button
 import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.FilledTonalButton
-import androidx.compose.material3.FilterChip
-import androidx.compose.material3.FilterChipDefaults
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
@@ -57,6 +52,7 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.platform.LocalConfiguration
 import androidx.compose.ui.platform.LocalFocusManager
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.font.FontWeight
@@ -70,7 +66,7 @@ import com.music.bitchord.data.lyrics.LyricsSource
 import com.music.bitchord.data.settings.AppSettings
 import com.music.bitchord.feature.lyrics.manager.LyricsExtensionManager
 
-@OptIn(ExperimentalMaterial3Api::class, ExperimentalLayoutApi::class)
+@OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun LyricsDownloadSheet(
     initialTitle: String,
@@ -93,6 +89,8 @@ fun LyricsDownloadSheet(
 
     val orderedSources by AppSettings.lyricsSourceOrder.collectAsStateWithLifecycle()
     val enabledSources by AppSettings.lyricsSources.collectAsStateWithLifecycle()
+    val compactLyricsSearchSources by AppSettings.compactLyricsSearchSources.collectAsStateWithLifecycle()
+    val sourceChipsMaxHeight = (LocalConfiguration.current.screenHeightDp.dp * 0.5f - 80.dp).coerceAtLeast(80.dp)
 
     val availableProviders = remember(orderedSources) {
         orderedSources.ifEmpty { LyricsExtensionManager.dynamicSources.value }
@@ -398,50 +396,19 @@ fun LyricsDownloadSheet(
                         }
                     }
 
-                    FlowRow(
-                        horizontalArrangement = Arrangement.spacedBy(8.dp),
-                        verticalArrangement = Arrangement.spacedBy(6.dp),
-                        modifier = Modifier.fillMaxWidth(),
-                    ) {
-                        availableProviders.forEach { provider ->
-                            val isChecked = provider in selectedProviders
-                            FilterChip(
-                                selected = isChecked,
-                                onClick = {
-                                    if (isChecked) {
-                                        if (selectedProviders.size > 1) {
-                                            selectedProviders.remove(provider)
-                                        }
-                                    } else {
-                                        selectedProviders.add(provider)
-                                    }
-                                },
-                                label = {
-                                    Text(
-                                        text = provider.label,
-                                        style = MaterialTheme.typography.bodySmall.copy(
-                                            fontWeight = if (isChecked) FontWeight.SemiBold else FontWeight.Normal,
-                                        ),
-                                    )
-                                },
-                                leadingIcon = if (isChecked) {
-                                    {
-                                        Icon(
-                                            imageVector = Icons.Rounded.Check,
-                                            contentDescription = null,
-                                            modifier = Modifier.size(16.dp),
-                                        )
-                                    }
-                                } else null,
-                                shape = RoundedCornerShape(12.dp),
-                                colors = FilterChipDefaults.filterChipColors(
-                                    selectedContainerColor = MaterialTheme.colorScheme.primaryContainer,
-                                    selectedLabelColor = MaterialTheme.colorScheme.onPrimaryContainer,
-                                    selectedLeadingIconColor = MaterialTheme.colorScheme.onPrimaryContainer,
-                                ),
-                            )
-                        }
-                    }
+                    LyricsSearchProviderChips(
+                        providers = availableProviders,
+                        selectedProviders = selectedProviders,
+                        compact = compactLyricsSearchSources,
+                        maxHeight = sourceChipsMaxHeight,
+                        onToggle = { provider, isChecked ->
+                            if (isChecked) {
+                                if (selectedProviders.size > 1) selectedProviders.remove(provider)
+                            } else {
+                                selectedProviders.add(provider)
+                            }
+                        },
+                    )
                 }
             }
 

@@ -2,10 +2,7 @@ package com.music.bitchord.feature.lyricseditor.ui.components
 
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
-import androidx.compose.foundation.layout.ExperimentalLayoutApi
-import androidx.compose.foundation.layout.FlowRow
 import androidx.compose.foundation.layout.Row
-import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
@@ -15,10 +12,10 @@ import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Button
-import androidx.compose.material3.FilterChip
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.OutlinedTextField
+import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
@@ -28,6 +25,7 @@ import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.platform.LocalConfiguration
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.input.KeyboardCapitalization
 import androidx.compose.ui.unit.dp
@@ -37,7 +35,6 @@ import com.music.bitchord.R
 import com.music.bitchord.data.lyrics.LyricsSource
 import com.music.bitchord.data.settings.AppSettings
 
-@OptIn(ExperimentalLayoutApi::class)
 @Composable
 fun LyricsDownloadDialog(
     initialTitle: String,
@@ -54,6 +51,8 @@ fun LyricsDownloadDialog(
 
     val orderedSources by AppSettings.lyricsSourceOrder.collectAsStateWithLifecycle()
     val enabledSources by AppSettings.lyricsSources.collectAsStateWithLifecycle()
+    val compactLyricsSearchSources by AppSettings.compactLyricsSearchSources.collectAsStateWithLifecycle()
+    val sourceChipsMaxHeight = (LocalConfiguration.current.screenHeightDp.dp * 0.5f - 40.dp).coerceAtLeast(80.dp)
 
     val availableProviders = remember(orderedSources) {
         orderedSources.ifEmpty { com.music.bitchord.feature.lyrics.manager.LyricsExtensionManager.dynamicSources.value }
@@ -123,28 +122,25 @@ fun LyricsDownloadDialog(
                     modifier = Modifier.padding(top = 4.dp),
                 )
 
-                FlowRow(
-                    horizontalArrangement = Arrangement.spacedBy(8.dp),
-                    verticalArrangement = Arrangement.spacedBy(4.dp),
+                Surface(
+                    shape = RoundedCornerShape(14.dp),
+                    color = MaterialTheme.colorScheme.surfaceContainer,
                     modifier = Modifier.fillMaxWidth(),
                 ) {
-                    availableProviders.forEach { provider ->
-                        val isChecked = provider in selectedProviders
-                        FilterChip(
-                            selected = isChecked,
-                            onClick = {
-                                if (isChecked) {
-                                    if (selectedProviders.size > 1) {
-                                        selectedProviders.remove(provider)
-                                    }
-                                } else {
-                                    selectedProviders.add(provider)
-                                }
-                            },
-                            label = { Text(provider.label) },
-                            shape = RoundedCornerShape(8.dp),
-                        )
-                    }
+                    LyricsSearchProviderChips(
+                        providers = availableProviders,
+                        selectedProviders = selectedProviders,
+                        compact = compactLyricsSearchSources,
+                        maxHeight = sourceChipsMaxHeight,
+                        modifier = Modifier.padding(8.dp),
+                        onToggle = { provider, isChecked ->
+                            if (isChecked) {
+                                if (selectedProviders.size > 1) selectedProviders.remove(provider)
+                            } else {
+                                selectedProviders.add(provider)
+                            }
+                        },
+                    )
                 }
             }
         },
