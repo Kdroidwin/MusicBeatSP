@@ -138,7 +138,7 @@ fun LocalSearchScreen(
     var selectedFilter by rememberSaveable { mutableStateOf(LocalSearchFilter.ALL) }
     val listState = rememberLazyListState()
     val rootListScrollCallback = rememberUpdatedState(onRootListScrollChanged)
-    val rootListScrollThresholdPx = with(androidx.compose.ui.platform.LocalDensity.current) { 32.dp.toPx() }
+    val rootListScrollThresholdPx = 0f
 
     LaunchedEffect(canSearchYoutubeMusic) {
         if (!canSearchYoutubeMusic) {

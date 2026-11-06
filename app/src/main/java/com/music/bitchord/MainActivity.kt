@@ -1228,7 +1228,9 @@ private fun BitChordApp(
             rootTabTopBarCollapsed = contentScrolled
         }
     }
-    val rootTabTopBarScrollThreshold = with(LocalDensity.current) { 32.dp.toPx() }
+    // Collapse the root bar on the first real content movement so a brief
+    // scroll does not leave its Settings action pinned at the top.
+    val rootTabTopBarScrollThreshold = 0f
     val rootTabTopBarScroll = remember(selectedTab, rootTabTopBarScrollEnabled, rootTabTopBarScrollThreshold) {
         RootTabTopBarScrollConnection(
             enabled = rootTabTopBarScrollEnabled,

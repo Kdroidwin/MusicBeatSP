@@ -607,7 +607,7 @@ fun LibraryScreen(
         rootLibraryContentScrolled = isScrolled
         rootListScrollCallback.value?.invoke(isScrolled)
     }
-    val rootListScrollThresholdPx = with(LocalDensity.current) { 32.dp.toPx() }
+    val rootListScrollThresholdPx = 0f
     LaunchedEffect(selectedFilter, libraryViewType, inDrillDown, rootListScrollThresholdPx) {
         if (inDrillDown || inHistoryView || selectedFilter == LibraryFilter.YOUTUBE_DOWNLOADS) {
             reportRootLibraryScroll(false)
