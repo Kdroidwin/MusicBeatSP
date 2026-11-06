@@ -40,6 +40,7 @@ import androidx.compose.foundation.lazy.grid.rememberLazyGridState
 import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
+import androidx.compose.foundation.gestures.detectHorizontalDragGestures
 import androidx.compose.foundation.layout.heightIn
 import androidx.compose.material3.Text
 import androidx.compose.material3.AlertDialog
@@ -78,6 +79,7 @@ import androidx.compose.runtime.snapshotFlow
 import androidx.compose.runtime.setValue
 import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.platform.LocalContext
@@ -126,6 +128,7 @@ import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.withContext
 import java.util.Locale
+import kotlin.math.abs
 
 private data class PendingBulkArtworkWrite(
     val songs: List<Song>,
@@ -415,6 +418,22 @@ fun LibraryScreen(
             selectedFilter = filter
         }
     }
+    val orderedSwipeFilters = remember(libraryCategoryOrder, visibleLibraryCategories) {
+        listOf(LibraryFilter.ALL) + libraryCategoryOrder
+            .filter { it in visibleLibraryCategories }
+            .map { category ->
+                when (category) {
+                    LibraryCategory.FAVORITES -> LibraryFilter.FAVORITES
+                    LibraryCategory.PLAYLISTS -> LibraryFilter.PLAYLISTS
+                    LibraryCategory.YOUTUBE_MUSIC -> LibraryFilter.YOUTUBE_MUSIC
+                    LibraryCategory.YOUTUBE_DOWNLOADS -> LibraryFilter.YOUTUBE_DOWNLOADS
+                    LibraryCategory.MOST_PLAYED -> LibraryFilter.MOST_PLAYED
+                    LibraryCategory.RECENTLY_PLAYED -> LibraryFilter.RECENTLY_PLAYED
+                    LibraryCategory.REPLAY -> LibraryFilter.REPLAY
+                }
+            }
+    }
+    val librarySwipeThresholdPx = with(LocalDensity.current) { 72.dp.toPx() }
     val collectionListState = rememberLazyListState()
     val collectionGridState = rememberLazyGridState()
     val youtubeCollectionsListState = rememberLazyListState()
@@ -885,7 +904,33 @@ fun LibraryScreen(
         (catalogFavorites + savedOnlineFavorites).distinctBy { it.localUri ?: it.videoId }
     }
 
-    Box(modifier = modifier.fillMaxSize()) {
+    Box(
+        modifier = modifier
+            .fillMaxSize()
+            .pointerInput(inDrillDown, playlistSelectionMode, selectedFilter, orderedSwipeFilters, librarySwipeThresholdPx) {
+                if (!inDrillDown && !playlistSelectionMode) {
+                    var horizontalDrag = 0f
+                    detectHorizontalDragGestures(
+                        onDragStart = { horizontalDrag = 0f },
+                        onHorizontalDrag = { change, dragAmount ->
+                            horizontalDrag += dragAmount
+                            change.consume()
+                        },
+                        onDragEnd = {
+                            if (abs(horizontalDrag) >= librarySwipeThresholdPx) {
+                                val currentIndex = orderedSwipeFilters.indexOf(selectedFilter)
+                                if (currentIndex >= 0) {
+                                    val direction = if (horizontalDrag < 0f) 1 else -1
+                                    val nextIndex = (currentIndex + direction).coerceIn(orderedSwipeFilters.indices)
+                                    if (nextIndex != currentIndex) selectLibraryFilter(orderedSwipeFilters[nextIndex])
+                                }
+                            }
+                        },
+                        onDragCancel = { horizontalDrag = 0f },
+                    )
+                }
+            },
+    ) {
         AnimatedContent(
             targetState = if (inDrillDown) "drill:$drillDownLabel" else when (selectedFilter) {
                 LibraryFilter.RECENTLY_PLAYED -> "history:recent"
