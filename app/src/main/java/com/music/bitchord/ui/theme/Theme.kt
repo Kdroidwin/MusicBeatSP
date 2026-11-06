@@ -71,6 +71,13 @@ private val AmoledColors = darkColorScheme(
     surfaceVariant = Color(0xFF080808),
     onSurfaceVariant = Color(0xFFB0B0B0),
     outline = Color(0xFF242424),
+    surfaceDim = Color.Black,
+    surfaceBright = Color.Black,
+    surfaceContainerLowest = Color.Black,
+    surfaceContainerLow = Color.Black,
+    surfaceContainer = Color.Black,
+    surfaceContainerHigh = Color.Black,
+    surfaceContainerHighest = Color.Black,
 )
 
 /**
