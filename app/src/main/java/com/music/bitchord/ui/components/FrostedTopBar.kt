@@ -235,7 +235,6 @@ fun FrostedTopBar(
                     .then(
                         if (floatingOnly) {
                             Modifier.background(Color.Black.copy(alpha = 0.42f), CircleShape)
-                                .padding(horizontal = 2.dp)
                         } else Modifier,
                     ),
                 verticalAlignment = Alignment.CenterVertically,

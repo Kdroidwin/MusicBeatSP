@@ -5386,20 +5386,16 @@ private class RootTabTopBarScrollConnection(
     private var lastDirection = 0
     private var accumulatedDistance = 0f
 
-    override fun onPostScroll(
-        consumed: Offset,
+    override fun onPreScroll(
         available: Offset,
         source: NestedScrollSource,
     ): Offset {
         if (!enabled) return Offset.Zero
 
-        // Collapse only on motion consumed by the list. At its top, leftover
-        // upward motion can restore the bar; a downward overscroll cannot hide it.
-        val delta = when {
-            consumed.y != 0f -> consumed.y
-            available.y > 0f -> available.y
-            else -> 0f
-        }
+        // Observe the gesture before the child consumes it. Some tab screens
+        // have nested result/category lists that report no post-scroll delta to
+        // this outer connection, leaving their full bar visible indefinitely.
+        val delta = available.y
         if (delta == 0f) return Offset.Zero
 
         val direction = if (delta < 0f) -1 else 1
