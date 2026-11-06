@@ -33,7 +33,7 @@ internal object BuiltinLyricsSources {
         LyricsSource("jlyric", "J-Lyric", "Japanese plain-text lyrics from J-Lyric"),
         LyricsSource("utaten", "UtaTen", "Japanese lyrics with native furigana support"),
         LyricsSource("utanet", "歌ネット (Uta-Net)", "Japanese lyrics from Uta-Net"),
-        LyricsSource("ctc_align", "CTC AI 自動同期", "Automatic timing generated from plain lyrics"),
+        LyricsSource("ctc_align", "Heuristic Sync", "Estimated timing generated from plain lyrics"),
         LyricsSource("genius", "Genius", "Plain-text fallback from Genius"),
     )
 

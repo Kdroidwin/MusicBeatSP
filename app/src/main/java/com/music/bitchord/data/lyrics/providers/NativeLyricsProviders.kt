@@ -127,7 +127,7 @@ object NativeLyricsProviders {
                 artist = artist,
                 album = album,
                 durationSeconds = durationSec,
-                provider = "CTC AI 自動同期",
+                provider = "Heuristic Sync",
                 syncedLyrics = aligned,
             )
         )
