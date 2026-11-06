@@ -56,7 +56,7 @@ internal object KugeciWebViewFetcher {
 
     suspend fun fetchHtml(url: String): String? {
         if (AppSettings.offlineMode.value) return null
-        if (!Uri.parse(url).host.equals("www.kugeci.com", ignoreCase = true)) return null
+        if (!isAllowedKugeciPage(Uri.parse(url))) return null
         if (isCoolingDown) return null
         val context = appContext ?: return null
         val html = withTimeoutOrNull(TIMEOUT_MS) {
@@ -119,7 +119,37 @@ internal object KugeciWebViewFetcher {
                                 settings.javaScriptEnabled = true
                                 settings.domStorageEnabled = true
                                 settings.cacheMode = WebSettings.LOAD_DEFAULT
+                                settings.allowFileAccess = false
+                                settings.allowContentAccess = false
+                                settings.mixedContentMode = WebSettings.MIXED_CONTENT_NEVER_ALLOW
+                                settings.safeBrowsingEnabled = true
                                 webViewClient = object : WebViewClient() {
+                                    override fun shouldOverrideUrlLoading(
+                                        view: WebView,
+                                        request: android.webkit.WebResourceRequest,
+                                    ): Boolean {
+                                        // The page needs HTTPS subresources for its challenge,
+                                        // but it must never be able to navigate the WebView to
+                                        // cleartext, a local address, or an unrelated origin.
+                                        return if (request.isForMainFrame) {
+                                            !isAllowedKugeciPage(request.url)
+                                        } else {
+                                            !request.url.scheme.equals("https", ignoreCase = true)
+                                        }
+                                    }
+
+                                    @Suppress("DEPRECATION")
+                                    override fun shouldOverrideUrlLoading(view: WebView, url: String): Boolean =
+                                        !isAllowedKugeciPage(Uri.parse(url))
+
+                                    override fun onPageStarted(view: WebView, url: String?, favicon: android.graphics.Bitmap?) {
+                                        super.onPageStarted(view, url, favicon)
+                                        if (!isAllowedKugeciPage(Uri.parse(url.orEmpty()))) {
+                                            finish(null)
+                                            view.stopLoading()
+                                        }
+                                    }
+
                                     override fun onPageFinished(view: WebView, finishedUrl: String?) {
                                         if (!finished && !cancelled.get()) {
                                             // Cloudflare's clearance cookie is
@@ -151,6 +181,12 @@ internal object KugeciWebViewFetcher {
         val encoded = value ?: return null
         return runCatching { JSONTokener(encoded).nextValue() as? String }.getOrNull()
     }
+
+    private fun isAllowedKugeciPage(uri: Uri): Boolean =
+        uri.scheme.equals("https", ignoreCase = true) &&
+            (uri.port == -1 || uri.port == 443) &&
+            (uri.host?.equals("www.kugeci.com", ignoreCase = true) == true ||
+                uri.host?.equals("kugeci.com", ignoreCase = true) == true)
 
     internal fun isCloudflareChallenge(html: String): Boolean {
         val title = Jsoup.parse(html).title().trim()
