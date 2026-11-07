@@ -6,6 +6,7 @@ import android.net.Uri
 import android.os.Build
 import android.os.Process
 import android.provider.MediaStore
+import android.util.Log
 import androidx.activity.compose.BackHandler
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.IntentSenderRequest
@@ -111,6 +112,11 @@ import kotlinx.coroutines.launch
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
 import kotlinx.coroutines.CancellationException
+import kotlinx.coroutines.async
+import kotlinx.coroutines.awaitAll
+import kotlinx.coroutines.coroutineScope
+import kotlinx.coroutines.sync.Semaphore
+import kotlinx.coroutines.sync.withPermit
 import com.music.bitchord.data.LocalMediaRepository
 import com.music.bitchord.data.model.durationMillis
 import com.music.bitchord.data.model.artworkAt
@@ -329,30 +335,46 @@ fun LocalMusicScreen(
     var genreGroups by remember { mutableStateOf<Map<String, List<Song>>>(emptyMap()) }
     var genresLoaded by remember { mutableStateOf(false) }
     var genresLoading by remember { mutableStateOf(false) }
-    val genreSourceKey = remember(songs) {
-        songs.map { it.localUri?.takeIf(String::isNotBlank) ?: it.localPath?.takeIf(String::isNotBlank) ?: it.videoId }
+    val genreCandidates = remember(songs) {
+        songs.filter { !it.localUri.isNullOrBlank() || !it.localPath.isNullOrBlank() }
+    }
+    val genreSourceKey = remember(genreCandidates) {
+        genreCandidates.map { it.localUri?.takeIf(String::isNotBlank) ?: it.localPath?.takeIf(String::isNotBlank) ?: it.videoId }
     }
     var loadedGenreSourceKey by remember { mutableStateOf<List<String>?>(null) }
+    var activeGenreLoadKey by remember { mutableStateOf<List<String>?>(null) }
     LaunchedEffect(selectedTab, genreSourceKey) {
         if (selectedTab != LOCAL_TAB_GENRES || loadedGenreSourceKey == genreSourceKey) return@LaunchedEffect
+        val requestedKey = genreSourceKey
         genresLoaded = false
         genresLoading = true
+        activeGenreLoadKey = requestedKey
         try {
             val grouped = withContext(Dispatchers.IO) {
                 val genres = linkedMapOf<String, MutableList<Song>>()
-                songs.forEach { song ->
-                    if (song.localUri.isNullOrBlank() && song.localPath.isNullOrBlank()) return@forEach
-                    val rawGenre = try {
-                        LocalSongMetadataRetriever.retrieve(context, song).genre
-                    } catch (cancelled: CancellationException) {
-                        throw cancelled
-                    } catch (_: Exception) {
-                        null
+                val readLimit = Semaphore(4)
+                genreCandidates.chunked(32).forEach { batch ->
+                    val rawGenres = coroutineScope {
+                        batch.map { song ->
+                            async(Dispatchers.IO) {
+                                readLimit.withPermit {
+                                    try {
+                                        LocalSongMetadataRetriever.retrieve(context, song).genre
+                                    } catch (cancelled: CancellationException) {
+                                        throw cancelled
+                                    } catch (_: Exception) {
+                                        null
+                                    }
+                                }
+                            }
+                        }.awaitAll()
                     }
-                    splitLocalGenres(rawGenre).forEach { genre ->
-                        val tracks = genres.getOrPut(genre) { mutableListOf() }
-                        if (tracks.none { (it.localUri ?: it.localPath ?: it.videoId) == (song.localUri ?: song.localPath ?: song.videoId) }) {
-                            tracks += song
+                    batch.forEachIndexed { index, song ->
+                        splitLocalGenres(rawGenres[index]).forEach { genre ->
+                            val tracks = genres.getOrPut(genre) { mutableListOf() }
+                            if (tracks.none { (it.localUri ?: it.localPath ?: it.videoId) == (song.localUri ?: song.localPath ?: song.videoId) }) {
+                                tracks += song
+                            }
                         }
                     }
                 }
@@ -363,8 +385,18 @@ fun LocalMusicScreen(
             genreGroups = grouped
             loadedGenreSourceKey = genreSourceKey
             genresLoaded = true
+        } catch (cancelled: CancellationException) {
+            throw cancelled
+        } catch (error: Exception) {
+            Log.w("LocalMusicScreen", "Could not finish reading local genre tags", error)
+            genreGroups = emptyMap()
+            loadedGenreSourceKey = requestedKey
+            genresLoaded = true
         } finally {
-            genresLoading = false
+            if (activeGenreLoadKey == requestedKey) {
+                activeGenreLoadKey = null
+                genresLoading = false
+            }
         }
     }
 
