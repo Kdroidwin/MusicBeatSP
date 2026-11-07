@@ -364,6 +364,9 @@ fun LyricsEditorScreen(
                 onGenerateSyncedLyricsClick = {
                     viewModel.generateSyncedLyrics(song, textFieldValue.text)
                 },
+                onGenerateCharacterSyncedLyricsClick = {
+                    viewModel.generateSyncedLyrics(song, textFieldValue.text, characterByCharacter = true)
+                },
             )
         },
         containerColor = MaterialTheme.colorScheme.background,

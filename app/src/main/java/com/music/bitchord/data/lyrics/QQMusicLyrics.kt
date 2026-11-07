@@ -240,18 +240,29 @@ object QQMusicLyrics {
     private fun List<LyricLine>.withoutQqMetadata(songTitle: String, artists: List<String>): List<LyricLine> {
         val title = songTitle.normalized()
         val artistNames = artists.map { it.normalized() }.filter { it.length >= 2 }
+        fun isOpeningTitleRow(text: String): Boolean {
+            val normalized = text.normalized()
+            return title.isNotBlank() && normalized.contains(title) &&
+                artistNames.any(normalized::contains)
+        }
+
+        val openingTitle = firstOrNull { it.text.isNotBlank() && isOpeningTitleRow(it.text) }
+        val openingTitleTime = openingTitle?.timeMs
         var firstLyricSeen = false
         return filter { line ->
             val text = line.text.trim()
             if (QQ_CREDIT_LINE.matches(text)) return@filter false
-            if (text.isBlank() || firstLyricSeen) return@filter true
+            if (text.isNotBlank() && isOpeningTitleRow(text)) return@filter false
+            if (text.isBlank()) {
+                // QQ responses sometimes put a bare timestamp immediately
+                // after the title/artist header. Remove that leading empty
+                // row, while retaining later instrumental gaps.
+                val isHeaderGap = !firstLyricSeen && openingTitleTime != null &&
+                    line.timeMs <= openingTitleTime + 5_000L
+                return@filter !isHeaderGap
+            }
             firstLyricSeen = true
-            val normalized = text.normalized()
-            val titleHeader = title.isNotBlank() && (
-                normalized == title ||
-                    (normalized.contains(title) && artistNames.any(normalized::contains))
-                )
-            !titleHeader
+            true
         }
     }
 

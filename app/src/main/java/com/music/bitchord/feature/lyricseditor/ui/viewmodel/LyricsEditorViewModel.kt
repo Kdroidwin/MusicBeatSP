@@ -240,7 +240,7 @@ class LyricsEditorViewModel(app: Application) : AndroidViewModel(app) {
     }
 
     /** Generate timestamps for the untimed lyrics currently entered in the editor. */
-    fun generateSyncedLyrics(song: Song, plainLyrics: String) {
+    fun generateSyncedLyrics(song: Song, plainLyrics: String, characterByCharacter: Boolean = false) {
         if (autoSyncJob?.isActive == true) return
         val generationToken = Any()
         autoSyncToken = generationToken
@@ -250,6 +250,7 @@ class LyricsEditorViewModel(app: Application) : AndroidViewModel(app) {
                     context = getApplication(),
                     song = song,
                     plainLyrics = plainLyrics,
+                    characterByCharacter = characterByCharacter,
                 ) { stage, percent ->
                     val uiStage = when (stage) {
                         CtcForcedLyricsAligner.Stage.DownloadingModel -> AutoSyncStage.DownloadingModel

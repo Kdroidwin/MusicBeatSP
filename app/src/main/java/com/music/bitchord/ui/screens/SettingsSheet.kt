@@ -250,7 +250,10 @@ private fun supplementalSettingsSearchEntries(
     autoFetchYoutubeLyrics: Boolean,
     lyricsWebSearchQuery: String,
     removeNeteaseCredits: Boolean,
+    keepJapaneseNeteaseLines: Boolean,
+    removeNeteaseBraceCredits: Boolean,
     removeQqMusicMetadata: Boolean,
+    convertFollowLyricsToJapaneseKanji: Boolean,
     lyricsDebugLogs: Boolean,
     bitPerfectMode: BitPerfectMode,
     convertForLimitedDac: Boolean,
@@ -287,11 +290,29 @@ private fun supplementalSettingsSearchEntries(
         checked = removeNeteaseCredits,
     ) { AppSettings.setRemoveNeteaseLyricCredits(!removeNeteaseCredits) },
     SettingsSearchEntry(
+        title = stringResource(R.string.keep_japanese_netease_lyrics),
+        subtitle = stringResource(R.string.keep_japanese_netease_lyrics_subtitle),
+        keywords = listOf("lyrics", "netease", "japanese", "chinese", "歌詞", "日本語", "中国語", "NetEase"),
+        checked = keepJapaneseNeteaseLines,
+    ) { AppSettings.setKeepJapaneseNeteaseLyricLines(!keepJapaneseNeteaseLines) },
+    SettingsSearchEntry(
+        title = stringResource(R.string.remove_netease_brace_credits),
+        subtitle = stringResource(R.string.remove_netease_brace_credits_subtitle),
+        keywords = listOf("lyrics", "netease", "credits", "braces", "composer", "歌詞", "NetEase", "作曲", "括弧"),
+        checked = removeNeteaseBraceCredits,
+    ) { AppSettings.setRemoveNeteaseLeadingBraceCredits(!removeNeteaseBraceCredits) },
+    SettingsSearchEntry(
         title = stringResource(R.string.remove_qq_music_lyric_metadata),
         subtitle = stringResource(R.string.remove_qq_music_lyric_metadata_subtitle),
         keywords = listOf("lyrics", "QQ Music", "credits", "composer", "arranger", "歌詞", "QQ", "作曲", "編曲", "曲名"),
         checked = removeQqMusicMetadata,
     ) { AppSettings.setRemoveQqMusicLyricMetadata(!removeQqMusicMetadata) },
+    SettingsSearchEntry(
+        title = stringResource(R.string.followlyrics_japanese_kanji),
+        subtitle = stringResource(R.string.followlyrics_japanese_kanji_subtitle),
+        keywords = listOf("lyrics", "followlyrics", "traditional chinese", "japanese", "繁体字", "日本語漢字", "歌詞"),
+        checked = convertFollowLyricsToJapaneseKanji,
+    ) { AppSettings.setConvertFollowLyricsToJapaneseKanji(!convertFollowLyricsToJapaneseKanji) },
     SettingsSearchEntry(
         title = stringResource(R.string.lyrics_debug_logs),
         subtitle = stringResource(R.string.lyrics_debug_logs_subtitle),
@@ -971,7 +992,10 @@ fun SettingsScreen(
     val compactLyricsSearchSources by AppSettings.compactLyricsSearchSources.collectAsStateWithLifecycle()
     val preferEmbeddedLocalLyrics by AppSettings.preferEmbeddedLocalLyrics.collectAsStateWithLifecycle()
     val removeNeteaseLyricCredits by AppSettings.removeNeteaseLyricCredits.collectAsStateWithLifecycle()
+    val keepJapaneseNeteaseLyricLines by AppSettings.keepJapaneseNeteaseLyricLines.collectAsStateWithLifecycle()
+    val removeNeteaseLeadingBraceCredits by AppSettings.removeNeteaseLeadingBraceCredits.collectAsStateWithLifecycle()
     val removeQqMusicLyricMetadata by AppSettings.removeQqMusicLyricMetadata.collectAsStateWithLifecycle()
+    val convertFollowLyricsToJapaneseKanji by AppSettings.convertFollowLyricsToJapaneseKanji.collectAsStateWithLifecycle()
     val showLyricsCloseButton by AppSettings.showLyricsCloseButton.collectAsStateWithLifecycle()
     val hideLyricsStatusText by AppSettings.hideLyricsStatusText.collectAsStateWithLifecycle()
     val hideLyricsSavedMessage by AppSettings.hideLyricsSavedMessage.collectAsStateWithLifecycle()
@@ -2147,7 +2171,10 @@ fun SettingsScreen(
             autoFetchYoutubeLyrics = autoFetchLyricsOnYoutubePlayback,
             lyricsWebSearchQuery = lyricsWebSearchQuery,
             removeNeteaseCredits = removeNeteaseLyricCredits,
+            keepJapaneseNeteaseLines = keepJapaneseNeteaseLyricLines,
+            removeNeteaseBraceCredits = removeNeteaseLeadingBraceCredits,
             removeQqMusicMetadata = removeQqMusicLyricMetadata,
+            convertFollowLyricsToJapaneseKanji = convertFollowLyricsToJapaneseKanji,
             lyricsDebugLogs = showLyricsLogs,
             bitPerfectMode = bitPerfectMode,
             convertForLimitedDac = convertForLimitedDac,
@@ -5614,6 +5641,40 @@ fun SettingsScreen(
                 )
                 RowDivider()
                 SettingsRow(
+                    icon = Icons.Rounded.Language,
+                    title = stringResource(R.string.keep_japanese_netease_lyrics),
+                    subtitle = stringResource(R.string.keep_japanese_netease_lyrics_subtitle),
+                    trailing = {
+                        Switch(
+                            checked = keepJapaneseNeteaseLyricLines,
+                            onCheckedChange = AppSettings::setKeepJapaneseNeteaseLyricLines,
+                            colors = SwitchDefaults.colors(
+                                checkedTrackColor = MaterialTheme.colorScheme.primary,
+                                checkedBorderColor = MaterialTheme.colorScheme.primary,
+                            ),
+                        )
+                    },
+                    onClick = { AppSettings.setKeepJapaneseNeteaseLyricLines(!keepJapaneseNeteaseLyricLines) },
+                )
+                RowDivider()
+                SettingsRow(
+                    icon = Icons.Rounded.DeleteSweep,
+                    title = stringResource(R.string.remove_netease_brace_credits),
+                    subtitle = stringResource(R.string.remove_netease_brace_credits_subtitle),
+                    trailing = {
+                        Switch(
+                            checked = removeNeteaseLeadingBraceCredits,
+                            onCheckedChange = AppSettings::setRemoveNeteaseLeadingBraceCredits,
+                            colors = SwitchDefaults.colors(
+                                checkedTrackColor = MaterialTheme.colorScheme.primary,
+                                checkedBorderColor = MaterialTheme.colorScheme.primary,
+                            ),
+                        )
+                    },
+                    onClick = { AppSettings.setRemoveNeteaseLeadingBraceCredits(!removeNeteaseLeadingBraceCredits) },
+                )
+                RowDivider()
+                SettingsRow(
                     icon = Icons.Rounded.DeleteSweep,
                     title = stringResource(R.string.remove_qq_music_lyric_metadata),
                     subtitle = stringResource(R.string.remove_qq_music_lyric_metadata_subtitle),
@@ -5628,6 +5689,25 @@ fun SettingsScreen(
                         )
                     },
                     onClick = { AppSettings.setRemoveQqMusicLyricMetadata(!removeQqMusicLyricMetadata) },
+                )
+                RowDivider()
+                SettingsRow(
+                    icon = Icons.Rounded.Language,
+                    title = stringResource(R.string.followlyrics_japanese_kanji),
+                    subtitle = stringResource(R.string.followlyrics_japanese_kanji_subtitle),
+                    trailing = {
+                        Switch(
+                            checked = convertFollowLyricsToJapaneseKanji,
+                            onCheckedChange = AppSettings::setConvertFollowLyricsToJapaneseKanji,
+                            colors = SwitchDefaults.colors(
+                                checkedTrackColor = MaterialTheme.colorScheme.primary,
+                                checkedBorderColor = MaterialTheme.colorScheme.primary,
+                            ),
+                        )
+                    },
+                    onClick = {
+                        AppSettings.setConvertFollowLyricsToJapaneseKanji(!convertFollowLyricsToJapaneseKanji)
+                    },
                 )
             }
         }

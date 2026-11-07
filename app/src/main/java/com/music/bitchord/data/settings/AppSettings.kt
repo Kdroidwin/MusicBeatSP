@@ -799,8 +799,17 @@ object AppSettings {
     /** Removes timestamped songwriter/composer/arranger metadata from NetEase lyrics. */
     val removeNeteaseLyricCredits = MutableStateFlow(true)
 
+    /** Keeps Japanese-script lines when NetEase returns Japanese and Chinese translations together. */
+    val keepJapaneseNeteaseLyricLines = MutableStateFlow(true)
+
+    /** Removes the leading brace-wrapped credit block found in some NetEase lyric responses. */
+    val removeNeteaseLeadingBraceCredits = MutableStateFlow(true)
+
     /** Removes QQ Music's opening title row and Chinese composer/arranger credits. */
     val removeQqMusicLyricMetadata = MutableStateFlow(true)
+
+    /** Converts common Traditional Chinese forms in FollowLyrics to Japanese shinjitai. */
+    val convertFollowLyricsToJapaneseKanji = MutableStateFlow(true)
 
     /** Optional close control for the lyrics panel; hidden by default. */
     val showLyricsCloseButton = MutableStateFlow(false)
@@ -1643,7 +1652,10 @@ object AppSettings {
         lyricsBlur.value = prefs.getBoolean(KEY_LYRICS_BLUR, true)
         preferEmbeddedLocalLyrics.value = prefs.getBoolean(KEY_PREFER_EMBEDDED_LOCAL_LYRICS, false)
         removeNeteaseLyricCredits.value = prefs.getBoolean(KEY_REMOVE_NETEASE_LYRIC_CREDITS, true)
+        keepJapaneseNeteaseLyricLines.value = prefs.getBoolean(KEY_KEEP_JAPANESE_NETEASE_LYRIC_LINES, true)
+        removeNeteaseLeadingBraceCredits.value = prefs.getBoolean(KEY_REMOVE_NETEASE_LEADING_BRACE_CREDITS, true)
         removeQqMusicLyricMetadata.value = prefs.getBoolean(KEY_REMOVE_QQ_MUSIC_LYRIC_METADATA, true)
+        convertFollowLyricsToJapaneseKanji.value = prefs.getBoolean(KEY_CONVERT_FOLLOWLYRICS_TO_JAPANESE_KANJI, true)
         showLyricsCloseButton.value = prefs.getBoolean(KEY_SHOW_LYRICS_CLOSE_BUTTON, false)
         hideLyricsStatusText.value = prefs.getBoolean(KEY_HIDE_LYRICS_STATUS_TEXT, false)
         hideLyricsSavedMessage.value = prefs.getBoolean(KEY_HIDE_LYRICS_SAVED_MESSAGE, false)
@@ -3087,9 +3099,24 @@ object AppSettings {
         prefs.edit().putBoolean(KEY_REMOVE_NETEASE_LYRIC_CREDITS, value).apply()
     }
 
+    fun setKeepJapaneseNeteaseLyricLines(value: Boolean) {
+        keepJapaneseNeteaseLyricLines.value = value
+        prefs.edit().putBoolean(KEY_KEEP_JAPANESE_NETEASE_LYRIC_LINES, value).apply()
+    }
+
+    fun setRemoveNeteaseLeadingBraceCredits(value: Boolean) {
+        removeNeteaseLeadingBraceCredits.value = value
+        prefs.edit().putBoolean(KEY_REMOVE_NETEASE_LEADING_BRACE_CREDITS, value).apply()
+    }
+
     fun setRemoveQqMusicLyricMetadata(value: Boolean) {
         removeQqMusicLyricMetadata.value = value
         prefs.edit().putBoolean(KEY_REMOVE_QQ_MUSIC_LYRIC_METADATA, value).apply()
+    }
+
+    fun setConvertFollowLyricsToJapaneseKanji(value: Boolean) {
+        convertFollowLyricsToJapaneseKanji.value = value
+        prefs.edit().putBoolean(KEY_CONVERT_FOLLOWLYRICS_TO_JAPANESE_KANJI, value).apply()
     }
 
     fun setShowLyricsCloseButton(value: Boolean) {
@@ -3443,6 +3470,7 @@ object AppSettings {
                 .putBoolean(KEY_QQ_MUSIC_LYRICS_SOURCE_MIGRATED, true)
                 .putBoolean(KEY_KUGECI_FOLLOWLYRICS_SOURCE_MIGRATED, true)
                 .putBoolean(KEY_JOYSOUND_LYRICS_SOURCE_MIGRATED, true)
+                .putBoolean(KEY_HEURISTIC_CHARACTER_SYNC_SOURCE_MIGRATED, true)
                 .apply()
             return allSources.toSet()
         }
@@ -3480,11 +3508,18 @@ object AppSettings {
             changed = ids.add("joysound") || changed
             edit.putBoolean(KEY_JOYSOUND_LYRICS_SOURCE_MIGRATED, true)
         }
+        if (allSources.any { it.id == "ctc_align_character" } &&
+            !prefs.getBoolean(KEY_HEURISTIC_CHARACTER_SYNC_SOURCE_MIGRATED, false)
+        ) {
+            if ("ctc_align" in ids) changed = ids.add("ctc_align_character") || changed
+            edit.putBoolean(KEY_HEURISTIC_CHARACTER_SYNC_SOURCE_MIGRATED, true)
+        }
         if (changed || !prefs.getBoolean(KEY_NETEASE_LYRICS_SOURCE_MIGRATED, false) ||
             !prefs.getBoolean(KEY_PETIT_LYRICS_SOURCE_MIGRATED, false) ||
             !prefs.getBoolean(KEY_QQ_MUSIC_LYRICS_SOURCE_MIGRATED, false) ||
             !prefs.getBoolean(KEY_KUGECI_FOLLOWLYRICS_SOURCE_MIGRATED, false) ||
-            !prefs.getBoolean(KEY_JOYSOUND_LYRICS_SOURCE_MIGRATED, false)
+            !prefs.getBoolean(KEY_JOYSOUND_LYRICS_SOURCE_MIGRATED, false) ||
+            !prefs.getBoolean(KEY_HEURISTIC_CHARACTER_SYNC_SOURCE_MIGRATED, false)
         ) {
             if (changed) edit.putString(KEY_LYRICS_SOURCES, ids.joinToString(","))
             edit.apply()
@@ -4637,7 +4672,10 @@ object AppSettings {
     private const val KEY_LYRICS_BLUR = "lyrics_blur"
     private const val KEY_PREFER_EMBEDDED_LOCAL_LYRICS = "prefer_embedded_local_lyrics"
     private const val KEY_REMOVE_NETEASE_LYRIC_CREDITS = "remove_netease_lyric_credits"
+    private const val KEY_KEEP_JAPANESE_NETEASE_LYRIC_LINES = "keep_japanese_netease_lyric_lines"
+    private const val KEY_REMOVE_NETEASE_LEADING_BRACE_CREDITS = "remove_netease_leading_brace_credits"
     private const val KEY_REMOVE_QQ_MUSIC_LYRIC_METADATA = "remove_qq_music_lyric_metadata"
+    private const val KEY_CONVERT_FOLLOWLYRICS_TO_JAPANESE_KANJI = "convert_followlyrics_to_japanese_kanji"
     private const val KEY_SHOW_LYRICS_CLOSE_BUTTON = "show_lyrics_close_button"
     private const val KEY_HIDE_LYRICS_STATUS_TEXT = "hide_lyrics_status_text"
     private const val KEY_HIDE_LYRICS_SAVED_MESSAGE = "hide_lyrics_saved_message"
@@ -4725,6 +4763,7 @@ object AppSettings {
     private const val KEY_QQ_MUSIC_LYRICS_SOURCE_MIGRATED = "qq_music_lyrics_source_migrated"
     private const val KEY_KUGECI_FOLLOWLYRICS_SOURCE_MIGRATED = "kugeci_followlyrics_source_migrated"
     private const val KEY_JOYSOUND_LYRICS_SOURCE_MIGRATED = "joysound_lyrics_source_migrated"
+    private const val KEY_HEURISTIC_CHARACTER_SYNC_SOURCE_MIGRATED = "heuristic_character_sync_source_migrated"
     private const val KEY_PRIORITIZE_SYLLABLE_SYNC = "prioritize_syllable_sync"
     private const val KEY_SHOW_LYRICS_LOGS = "show_lyrics_logs"
     private const val KEY_AUTO_EMBED_LYRICS = "auto_embed_lyrics"

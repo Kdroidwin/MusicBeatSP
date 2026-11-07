@@ -65,6 +65,7 @@ fun LyricsEditorBottomBar(
     onSetFirstTimestampClick: (() -> Unit)? = null,
     onSearchEngineClick: (() -> Unit)? = null,
     onGenerateSyncedLyricsClick: (() -> Unit)? = null,
+    onGenerateCharacterSyncedLyricsClick: (() -> Unit)? = null,
     modifier: Modifier = Modifier,
 ) {
     var menuExpanded by remember { mutableStateOf(false) }
@@ -259,6 +260,23 @@ fun LyricsEditorBottomBar(
                                 onClick = {
                                     menuExpanded = false
                                     onGenerateSyncedLyricsClick()
+                                },
+                            )
+                        }
+
+                        if (onGenerateCharacterSyncedLyricsClick != null) {
+                            DropdownMenuItem(
+                                text = { Text(stringResource(R.string.lyrics_editor_generate_character_synced_lyrics)) },
+                                leadingIcon = {
+                                    Icon(
+                                        imageVector = Icons.Rounded.Sync,
+                                        contentDescription = null,
+                                        modifier = Modifier.size(20.dp),
+                                    )
+                                },
+                                onClick = {
+                                    menuExpanded = false
+                                    onGenerateCharacterSyncedLyricsClick()
                                 },
                             )
                         }

@@ -67,8 +67,14 @@ internal object FollowLyrics {
                         "$timeStamp$body"
                     }.joinToString("\n")
                     if (stamp.findAll(lrcText).count() < 2) continue
-                    LrcLib.parseLrc(lrcText).takeIf { it.any { line -> line.text.isNotBlank() } }
-                        ?.let { return@runCatching it }
+                    val parsed = LrcLib.parseLrc(lrcText)
+                        .takeIf { it.any { line -> line.text.isNotBlank() } }
+                    val result = if (com.music.bitchord.data.settings.AppSettings
+                            .convertFollowLyricsToJapaneseKanji.value
+                    ) {
+                        parsed?.map { line -> line.copy(text = JapaneseKanji.convert(line.text)) }
+                    } else parsed
+                    result?.let { return@runCatching it }
                 }
                 null
             }.getOrNull()?.takeIf { it.isNotEmpty() }

@@ -14,6 +14,7 @@ package com.music.bitchord.data.lyrics
 object EnhancedLrc {
 
     private val LINE = Regex("""^\[(\d{1,3}):(\d{2})[.:](\d{1,3})](.*)$""")
+    private val WORD_STAMP = Regex("""<\d{1,3}:\d{2}[.:]\d{1,3}>""")
     private val WORD = Regex("""<(\d{1,3}):(\d{2})[.:](\d{1,3})>([^<]*)""")
 
     /** Empty when [lrc] carries no word stamps — the caller can then fall back. */
@@ -54,7 +55,10 @@ object EnhancedLrc {
             if (words.isEmpty()) return@mapIndexedNotNull null
             LyricLine(
                 timeMs = minOf(row.timeMs, words.first().startMs),
-                text = words.joinToString(" ") { it.text },
+                // Preserve the source spacing between timestamps. Rebuilding
+                // from timed runs inserts spaces between every Japanese
+                // character in character-sync A2 lyrics.
+                text = decodeEntities(WORD_STAMP.replace(row.plain, "")).trim(),
                 words = words,
             )
         }.withInstrumentalGaps()

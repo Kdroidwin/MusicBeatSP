@@ -1394,8 +1394,14 @@
     <string name="lyrics_sync_next">Next track</string>
     <string name="remove_netease_lyric_credits">Remove NetEase lyric credits</string>
     <string name="remove_netease_lyric_credits_subtitle">Remove timestamped songwriter, composer, and arranger lines from NetEase lyrics</string>
+    <string name="keep_japanese_netease_lyrics">Keep Japanese NetEase lyric lines</string>
+    <string name="keep_japanese_netease_lyrics_subtitle">When Japanese and Chinese translation rows appear together, keep the Japanese-script rows</string>
+    <string name="remove_netease_brace_credits">Remove NetEase brace-wrapped credits</string>
+    <string name="remove_netease_brace_credits_subtitle">Remove the leading brace-wrapped credit block from NetEase lyrics</string>
     <string name="remove_qq_music_lyric_metadata">Clean QQ Music lyric headers and credits</string>
-    <string name="remove_qq_music_lyric_metadata_subtitle">Remove the opening song-title row and Chinese composer/arranger credits from QQ Music lyrics</string>
+    <string name="remove_qq_music_lyric_metadata_subtitle">Remove the opening title and empty timestamp rows, plus Chinese composer/arranger credits</string>
+    <string name="followlyrics_japanese_kanji">Convert FollowLyrics to Japanese kanji</string>
+    <string name="followlyrics_japanese_kanji_subtitle">Convert common Traditional Chinese characters to Japanese shinjitai forms. On by default.</string>
     <string name="lyrics_sync_seek_back_5">Seek back 5 seconds</string>
     <string name="lyrics_sync_seek_forward_5">Seek forward 5 seconds</string>
     <string name="lyrics_sync_five_second_seek">Use 5-second skip buttons in lyrics sync editor</string>
@@ -1583,10 +1589,10 @@
     <string name="blur_unfocused_lyrics_subtitle">Keeps the spotlight on the current line</string>
     <string name="auto_embed_lyrics">Auto-embed lyrics into audio files</string>
     <string name="auto_embed_lyrics_subtitle">Automatically writes online lyrics into local music files when played</string>
-    <string name="auto_show_lyrics_on_playback">Automatically fetch and show lyrics</string>
-    <string name="auto_show_lyrics_on_playback_subtitle">Fetch lyrics from your enabled sources and open the lyrics panel when a match is found. Off by default.</string>
+    <string name="auto_show_lyrics_on_playback">Open the lyrics panel automatically</string>
+    <string name="auto_show_lyrics_on_playback_subtitle">Open the lyrics panel when lyrics are found. Lyrics are fetched during playback independently of this option. Off by default.</string>
     <string name="auto_fetch_lyrics_on_youtube_playback">Automatically fetch lyrics for YouTube playback</string>
-    <string name="auto_fetch_lyrics_on_youtube_playback_subtitle">Allows automatic lyric lookup for YouTube tracks when the main automatic lyrics setting is on. On by default.</string>
+    <string name="auto_fetch_lyrics_on_youtube_playback_subtitle">Allows automatic lyric lookup while a YouTube track is playing. On by default.</string>
     <string name="lyrics_web_search_query">Lyrics web search query</string>
     <string name="lyrics_web_search_query_subtitle">Use {title} and {artist} as placeholders. Example: {title} {artist} lyrics LRC.</string>
     <string name="lyrics_search_engine">Search with the default search engine</string>
@@ -1822,6 +1828,7 @@
     <string name="lyrics_editor_select_all">Select all</string>
     <string name="lyrics_editor_clear_all">Clear all</string>
     <string name="lyrics_editor_generate_synced_lyrics">Generate synchronized lyrics automatically</string>
+    <string name="lyrics_editor_generate_character_synced_lyrics">Generate character-synchronized lyrics</string>
     <string name="lyrics_auto_sync_title">Generating synchronized lyrics</string>
     <string name="lyrics_auto_sync_model_info">First use downloads about 1.26 GB: the romara-labs ONNX distribution of MahmoudAshraf’s MMS-300M aligner (CC BY-NC 4.0). 8 GB RAM is recommended. Audio stays on this device.</string>
     <string name="lyrics_auto_sync_downloading">Downloading alignment model… %1$d%%</string>

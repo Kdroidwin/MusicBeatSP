@@ -1296,8 +1296,14 @@
     <string name="lyrics_sync_next">次の曲</string>
     <string name="remove_netease_lyric_credits">NetEaseの歌詞からクレジット行を削除</string>
     <string name="remove_netease_lyric_credits_subtitle">NetEaseの歌詞に含まれる作詞・作曲・編曲のタイムスタンプ行を削除します</string>
+    <string name="keep_japanese_netease_lyrics">NetEaseの日本語歌詞行を残す</string>
+    <string name="keep_japanese_netease_lyrics_subtitle">日本語と中国語の対訳行がある場合、日本語の文字を含む行を優先して残します。初期設定はオンです。</string>
+    <string name="remove_netease_brace_credits">NetEaseの先頭の波括弧内クレジットを削除</string>
+    <string name="remove_netease_brace_credits_subtitle">歌詞の先頭にある作曲者などの｛｝内情報を削除します。初期設定はオンです。</string>
     <string name="remove_qq_music_lyric_metadata">QQ Music歌詞の見出し・クレジット行を削除</string>
-    <string name="remove_qq_music_lyric_metadata_subtitle">先頭の曲名行と中国語の作曲・編曲クレジット行を削除します</string>
+    <string name="remove_qq_music_lyric_metadata_subtitle">先頭の曲名行・歌詞のないタイムスタンプ行・中国語の作曲／編曲クレジットを削除します</string>
+    <string name="followlyrics_japanese_kanji">FollowLyricsを日本語の漢字に変換</string>
+    <string name="followlyrics_japanese_kanji_subtitle">繁体字の一部を日本語の新字体に変換します。初期設定はオンです。</string>
     <string name="lyrics_sync_seek_back_5">5秒戻る</string>
     <string name="lyrics_sync_seek_forward_5">5秒進む</string>
     <string name="lyrics_sync_five_second_seek">歌詞同期編集で5秒スキップを使う</string>
@@ -1492,10 +1498,10 @@
     <string name="blur_unfocused_lyrics_subtitle">再生中の行に注目しやすくします</string>
     <string name="auto_embed_lyrics">歌詞を音声ファイルに自動保存</string>
     <string name="auto_embed_lyrics_subtitle">オンライン歌詞を再生時にローカル音楽ファイルへ書き込みます</string>
-    <string name="auto_show_lyrics_on_playback">歌詞を自動取得して表示</string>
-    <string name="auto_show_lyrics_on_playback_subtitle">有効な歌詞ソースから再生中の曲の歌詞を取得し、見つかったら歌詞パネルを開きます。初期設定はオフです。</string>
+    <string name="auto_show_lyrics_on_playback">歌詞パネルを自動表示</string>
+    <string name="auto_show_lyrics_on_playback_subtitle">歌詞が見つかったときに歌詞パネルを開きます。歌詞の取得自体はこの設定に関係なく行います。初期設定はオフです。</string>
     <string name="auto_fetch_lyrics_on_youtube_playback">YouTube再生時に歌詞を自動取得</string>
-    <string name="auto_fetch_lyrics_on_youtube_playback_subtitle">全体の歌詞自動取得がオンのとき、YouTubeの曲も自動検索します。初期設定はオンです。</string>
+    <string name="auto_fetch_lyrics_on_youtube_playback_subtitle">YouTube再生中に歌詞を自動検索します。初期設定はオンです。</string>
     <string name="lyrics_web_search_query">歌詞の検索クエリ</string>
     <string name="lyrics_web_search_query_subtitle">{title} は曲名、{artist} はアーティスト名に置き換わります。例：{title} {artist} 歌詞 LRC</string>
     <string name="lyrics_search_engine">既定の検索エンジンで検索</string>
@@ -1795,6 +1801,7 @@
     <string name="lyrics_editor_select_all">すべて選択</string>
     <string name="lyrics_editor_clear_all">すべて消去</string>
     <string name="lyrics_editor_generate_synced_lyrics">同期歌詞を自動生成</string>
+    <string name="lyrics_editor_generate_character_synced_lyrics">同期歌詞を1文字単位で自動生成</string>
     <string name="lyrics_auto_sync_title">同期歌詞を生成中</string>
     <string name="lyrics_auto_sync_model_info">初回はMahmoudAshrafのMMS-300Mアライナーをromara-labsが配布するONNXモデル（CC BY-NC 4.0）を約1.26 GBダウンロードします。RAM 8 GB以上を推奨します。音源は端末内で処理します。</string>
     <string name="lyrics_auto_sync_downloading">位置合わせモデルをダウンロード中… %1$d%%</string>

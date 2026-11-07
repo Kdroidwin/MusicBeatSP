@@ -62,11 +62,19 @@ object NetEaseLyrics {
             )
             val response = getLyrics(song.id) ?: return@withContext null
 
-            val removeCredits = com.music.bitchord.data.settings.AppSettings.removeNeteaseLyricCredits.value
+            val settings = com.music.bitchord.data.settings.AppSettings
+            val removeCredits = settings.removeNeteaseLyricCredits.value
+            val removeBraceCredits = settings.removeNeteaseLeadingBraceCredits.value
             val yrc = response.lyric("yrc")
-                ?.let { if (removeCredits) it.withoutCreditLines() else it }
+                ?.let { raw ->
+                    raw
+                        .let { if (removeCredits) it.withoutCreditLines() else it }
+                        .let { if (removeBraceCredits) it.withoutLeadingBraceCredits() else it }
+                }
             val timed = yrc?.let { raw ->
-                KaraokeLrc.parse(raw).takeIf { lines -> lines.any { it.isWordSynced } }
+                KaraokeLrc.parse(raw)
+                    .let { if (settings.keepJapaneseNeteaseLyricLines.value) it.keepJapaneseTranslationRows() else it }
+                    .takeIf { lines -> lines.any { it.isWordSynced } }
             }
             if (!timed.isNullOrEmpty()) {
                 LyricsLog.s("NetEase", "Returned ${timed.size} word-synced lines")
@@ -74,12 +82,18 @@ object NetEaseLyrics {
             }
 
             val lrc = response.lyric("lrc")
-                ?.let { if (removeCredits) it.withoutCreditLines() else it }
+                ?.let { raw ->
+                    raw
+                        .let { if (removeCredits) it.withoutCreditLines() else it }
+                        .let { if (removeBraceCredits) it.withoutLeadingBraceCredits() else it }
+                }
             if (lrc == null) {
                 LyricsLog.w("NetEase", "Song ${song.id} has no LRC lyrics")
                 return@withContext null
             }
-            LrcLib.parseLrc(lrc).takeIf { it.isNotEmpty() }
+            LrcLib.parseLrc(lrc)
+                .let { if (settings.keepJapaneseNeteaseLyricLines.value) it.keepJapaneseTranslationRows() else it }
+                .takeIf { it.isNotEmpty() }
                 ?.also { LyricsLog.s("NetEase", "Returned ${it.size} line-synced lines") }
                 ?: run {
                     LyricsLog.w("NetEase", "NetEase returned lyrics that could not be parsed")
@@ -233,6 +247,37 @@ object NetEaseLyrics {
         .filterNot { NETEASE_CREDIT_LINE.matches(it) }
         .joinToString("\n")
 
+    /** Removes only a brace block at the start of a lyric row, preserving any row timestamp. */
+    private fun String.withoutLeadingBraceCredits(): String = lineSequence()
+        .map { line ->
+            val match = NETEASE_LEADING_BRACE_BLOCK.find(line) ?: return@map line
+            val tail = line.substring(match.range.last + 1).trimStart()
+            if (tail.isBlank()) "" else match.groupValues[1] + tail
+        }
+        .filter(String::isNotBlank)
+        .joinToString("\n")
+
+    /**
+     * NetEase may return a Chinese original and a Japanese translation as
+     * neighbouring rows. Only drop Han-only rows when a Japanese-script row
+     * is present at the same point in the song, so Chinese-only songs remain.
+     */
+    private fun List<LyricLine>.keepJapaneseTranslationRows(): List<LyricLine> {
+        val japaneseRows = filter { line -> line.text.any { it.isKana() } }
+        if (japaneseRows.isEmpty()) return this
+        val japaneseTimes = japaneseRows.map(LyricLine::timeMs)
+        val kept = filterNot { line ->
+            val hasHan = line.text.any { it.isHan() }
+            val hasKana = line.text.any { it.isKana() }
+            hasHan && !hasKana && japaneseTimes.any { time -> kotlin.math.abs(time - line.timeMs) <= 2_000L }
+        }
+        return kept.takeIf { it.isNotEmpty() } ?: this
+    }
+
+    private fun Char.isKana(): Boolean = this in '\u3040'..'\u30FF' || this in '\u31F0'..'\u31FF'
+
+    private fun Char.isHan(): Boolean = Character.UnicodeScript.of(code) == Character.UnicodeScript.HAN
+
     private fun String.normalizedForMatch(): String =
         Normalizer.normalize(this, Normalizer.Form.NFKC)
             .lowercase(Locale.ROOT)
@@ -323,5 +368,8 @@ object NetEaseLyrics {
         """^\s*(?:(?:\[\d{1,3}:\d{2}(?:[.:]\d{1,3})?])|(?:\[\d{1,8},\d{1,8}]))+\s*""" +
             """(?:作词|作曲|编曲|作詞|編曲|詞曲|词曲|作詞作曲|词|曲|lyrics?\s+by|written\s+by|composed\s+by|arranged\s+by)\s*[:：].*$""",
         RegexOption.IGNORE_CASE,
+    )
+    private val NETEASE_LEADING_BRACE_BLOCK = Regex(
+        """^((?:(?:\[\d{1,3}:\d{2}(?:[.:]\d{1,3})?])|(?:\[\d{1,8},\d{1,8}]))*)\s*[{｛][^{}｛｝]*[}｝]\s*""",
     )
 }

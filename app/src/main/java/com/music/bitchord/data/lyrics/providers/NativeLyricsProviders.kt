@@ -29,6 +29,7 @@ object NativeLyricsProviders {
         "joysound",
         "genius",
         "ctc_align",
+        "ctc_align_character",
     )
 
     fun isNativeProvider(id: String): Boolean =
@@ -58,7 +59,8 @@ object NativeLyricsProviders {
             "jlyric" -> JLyricClient.getLyrics(title, artist)
             "joysound" -> JoysoundLyricsClient.getLyrics(title, artist)
             "genius" -> GeniusLyricsClient.getLyrics(title, artist)
-            "ctc_align" -> fetchCtcAlignedLyrics(title, artist, durationSec)
+            "ctc_align" -> fetchCtcAlignedLyrics(title, artist, durationSec, characterByCharacter = false)
+            "ctc_align_character" -> fetchCtcAlignedLyrics(title, artist, durationSec, characterByCharacter = true)
             else -> null
         }
     }
@@ -87,7 +89,8 @@ object NativeLyricsProviders {
             "jlyric" -> JLyricClient.searchLyrics(title, artist, album, durationSec)
             "joysound" -> JoysoundLyricsClient.searchLyrics(title, artist, album, durationSec)
             "genius" -> GeniusLyricsClient.searchLyrics(title, artist, album, durationSec)
-            "ctc_align" -> searchCtcAlignedLyrics(title, artist, album, durationSec)
+            "ctc_align" -> searchCtcAlignedLyrics(title, artist, album, durationSec, characterByCharacter = false)
+            "ctc_align_character" -> searchCtcAlignedLyrics(title, artist, album, durationSec, characterByCharacter = true)
             else -> emptyList()
         }
     }
@@ -96,6 +99,7 @@ object NativeLyricsProviders {
         title: String,
         artist: String,
         durationSec: Int,
+        characterByCharacter: Boolean,
     ): String? = coroutineScope {
         val utatenJob = async(Dispatchers.IO) { UtaTenLyricsClient.getLyrics(title, artist) }
         val utanetJob = async(Dispatchers.IO) { UtaNetLyricsClient.getLyrics(title, artist) }
@@ -118,7 +122,11 @@ object NativeLyricsProviders {
             ) candidate else best
         } ?: return@coroutineScope null
 
-        CtcLrcGenerator.generateAutoSyncedLrc(plain, durationSec)
+        if (characterByCharacter) {
+            CtcLrcGenerator.generateCharacterSyncedLrc(plain, durationSec)
+        } else {
+            CtcLrcGenerator.generateAutoSyncedLrc(plain, durationSec)
+        }
     }
 
     private suspend fun searchCtcAlignedLyrics(
@@ -126,8 +134,9 @@ object NativeLyricsProviders {
         artist: String,
         album: String?,
         durationSec: Int,
+        characterByCharacter: Boolean,
     ): List<NativeSearchCandidate> {
-        val aligned = fetchCtcAlignedLyrics(title, artist, durationSec) ?: return emptyList()
+        val aligned = fetchCtcAlignedLyrics(title, artist, durationSec, characterByCharacter) ?: return emptyList()
         return listOf(
             NativeSearchCandidate(
                 id = "ctc_align_${title.hashCode()}",
@@ -135,7 +144,7 @@ object NativeLyricsProviders {
                 artist = artist,
                 album = album,
                 durationSeconds = durationSec,
-                provider = "Heuristic Sync",
+                provider = if (characterByCharacter) "Heuristic Sync · 1文字" else "Heuristic Sync",
                 syncedLyrics = aligned,
             )
         )

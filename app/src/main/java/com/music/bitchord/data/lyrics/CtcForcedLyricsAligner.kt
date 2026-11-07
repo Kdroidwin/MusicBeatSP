@@ -18,6 +18,7 @@ import kotlinx.coroutines.withContext
 import java.io.File
 import java.nio.FloatBuffer
 import java.nio.LongBuffer
+import java.text.BreakIterator
 import java.util.Locale
 import kotlin.math.ceil
 import kotlin.math.exp
@@ -49,6 +50,7 @@ internal object CtcForcedLyricsAligner {
         context: Context,
         song: Song,
         plainLyrics: String,
+        characterByCharacter: Boolean = false,
         onProgress: (Stage, Int?) -> Unit,
     ): String {
         require(!timestampPattern.containsMatchIn(plainLyrics)) {
@@ -91,23 +93,84 @@ internal object CtcForcedLyricsAligner {
         require(pcm.isNotEmpty()) { "音源のデコード結果が空でした。" }
 
         onProgress(Stage.DownloadingModel, 0)
-        val romanized = lines.map { romanize(it.text) }
-        val timeByLine = CtcModelStore.withModel(context.applicationContext, { onProgress(Stage.DownloadingModel, it) }) { model ->
+        val alignment = CtcModelStore.withModel(context.applicationContext, { onProgress(Stage.DownloadingModel, it) }) { model ->
             onProgress(Stage.Aligning, null)
-            align(romanized, infer(model, pcm))
+            align(lines, infer(model, pcm))
         }
         var synchronizedLines = 0
         return buildString {
             lines.forEachIndexed { index, line ->
                 if (index > 0 && line.sectionBefore) append('\n')
-                val frame = timeByLine[index]
-                if (frame != null) {
-                    val milliseconds = (pcmAndStart.second * 1000.0 + frame * 20.0 - LEAD_IN_MS)
-                        .toLong().coerceAtLeast(0L)
-                    append(formatTimestamp(milliseconds))
-                    synchronizedLines++
+                val row = alignment[index]
+                if (characterByCharacter) {
+                    val audioStartMs = (pcmAndStart.second * 1000.0 - LEAD_IN_MS).toLong().coerceAtLeast(0L)
+                    val audioEndMs = (pcmAndStart.second * 1000.0 + pcm.size * 1000.0 / SAMPLE_RATE - LEAD_IN_MS)
+                        .toLong().coerceAtLeast(audioStartMs + 100L)
+                    val nextLineStartMs = alignment.drop(index + 1).firstNotNullOfOrNull { next ->
+                        next.lineFrame?.let { frame -> audioStartMs + frame * 20L }
+                    }
+                    val mapped = row.glyphs.mapNotNull { glyph ->
+                        glyph.frame?.let { frame ->
+                            glyph.text to (audioStartMs + frame * 20L).coerceIn(audioStartMs, audioEndMs)
+                        }
+                    }
+                    if (mapped.isNotEmpty()) {
+                        val lineStartMs = mapped.first().second
+                        val upperBound = nextLineStartMs?.let { (it - 10L).coerceAtLeast(lineStartMs + 10L) }
+                            ?: audioEndMs
+                        val timedRuns = mutableListOf<Pair<Long, String>>()
+                        var pendingPrefix = StringBuilder()
+                        var previousTimeMs = lineStartMs - 10L
+                        row.glyphs.forEach { glyph ->
+                            val frame = glyph.frame
+                            if (frame == null) {
+                                if (timedRuns.isEmpty()) pendingPrefix.append(glyph.text)
+                                else timedRuns[timedRuns.lastIndex] = timedRuns.last().let {
+                                    it.first to (it.second + glyph.text)
+                                }
+                            } else {
+                                val rawTimeMs = (audioStartMs + frame * 20L).coerceIn(lineStartMs, upperBound)
+                                val timeMs = maxOf(rawTimeMs, previousTimeMs + 10L).coerceAtMost(upperBound)
+                                val text = pendingPrefix.append(glyph.text).toString()
+                                pendingPrefix = StringBuilder()
+                                timedRuns += timeMs to text
+                                previousTimeMs = timeMs
+                            }
+                        }
+                        if (pendingPrefix.isNotEmpty() && timedRuns.isNotEmpty()) {
+                            timedRuns[timedRuns.lastIndex] = timedRuns.last().let {
+                                it.first to (it.second + pendingPrefix)
+                            }
+                        }
+                        if (timedRuns.isNotEmpty()) {
+                            val lineTimestamp = timedRuns.first().first
+                            append(formatTimestamp(lineTimestamp))
+                            timedRuns.forEach { (timeMs, text) ->
+                                append('<').append(formatTimestamp(timeMs).removePrefix("[").removeSuffix("]"))
+                                    .append('>').append(text)
+                            }
+                            val closeMs = maxOf(timedRuns.last().first + 10L, nextLineStartMs ?: audioEndMs)
+                                .coerceAtMost(audioEndMs)
+                            append('<').append(formatTimestamp(closeMs).removePrefix("[").removeSuffix("]"))
+                                .append('>')
+                            synchronizedLines++
+                        } else {
+                            append(line.text)
+                        }
+                    } else {
+                        append(line.text)
+                    }
+                } else {
+                    val frame = row.lineFrame
+                    if (frame != null) {
+                        val milliseconds = (pcmAndStart.second * 1000.0 + frame * 20.0 - LEAD_IN_MS)
+                            .toLong().coerceAtLeast(0L)
+                        append(formatTimestamp(milliseconds))
+                        synchronizedLines++
+                    }
+                    append(line.text)
                 }
-                append(line.text).append('\n')
+                append('\n')
             }
         }.trimEnd().also {
             check(synchronizedLines > 0) { "歌詞を音源に合わせられませんでした。曲の歌詞を確認してください。" }
@@ -205,26 +268,78 @@ internal object CtcForcedLyricsAligner {
         }
     }
 
-    private fun align(romanizedLines: List<String>, raw: Array<FloatArray>): List<Int?> {
+    private data class AlignedGlyph(val text: String, val frame: Int?)
+    private data class AlignedLine(val lineFrame: Int?, val glyphs: List<AlignedGlyph>)
+    private data class PendingLine(val glyphs: List<String>, val glyphRanges: List<IntRange?>)
+
+    private fun align(lines: List<LyricLine>, raw: Array<FloatArray>): List<AlignedLine> {
         require(raw.isNotEmpty()) { "音源から音声特徴を取得できませんでした。" }
         val target = ArrayList<Int>().apply { add(STAR) }
-        val ranges = ArrayList<IntRange>()
-        romanizedLines.forEach { line ->
-            val first = target.size
-            line.forEach { char -> vocab[char]?.let(target::add) }
-            ranges += first until target.size
+        val pending = lines.map { line ->
+            val glyphs = graphemes(line.text)
+            val romanized = romanize(line.text)
+            val weights = glyphs.map { glyph ->
+                romanize(glyph).length.toDouble().takeIf { it > 0.0 }
+                    ?: if (glyph.any(Char::isLetterOrDigit)) 1.0 else 0.0
+            }
+            val offsets = tokenOffsets(weights, romanized.length)
+            val firstToken = target.size
+            romanized.forEach { char -> vocab[char]?.let(target::add) }
+            PendingLine(
+                glyphs = glyphs,
+                glyphRanges = offsets.map { range ->
+                    range?.takeUnless { it.isEmpty() }?.let {
+                        (firstToken + it.first) until (firstToken + it.last + 1)
+                    }
+                },
+            )
         }
         target += STAR
         require(target.size > 2) { "歌詞をローマ字に変換できませんでした。" }
         val path = force(raw, target.toIntArray())
-        return ranges.map { range ->
-            val frame = path.indexOfFirst { state -> state % 2 == 1 && state / 2 in range }
-            if (frame < 0) null else {
-                var firstBlank = frame
-                while (firstBlank > 0 && path[firstBlank - 1] % 2 == 0) firstBlank--
-                if (firstBlank == frame) frame else (firstBlank + frame - 1) / 2
+        return pending.map { line ->
+            val glyphs = line.glyphRanges.mapIndexed { index, range ->
+                AlignedGlyph(line.glyphs.getOrNull(index).orEmpty(), range?.let { tokenFrame(path, it) })
             }
+            val firstFrame = glyphs.firstNotNullOfOrNull(AlignedGlyph::frame)
+            AlignedLine(firstFrame, glyphs)
         }
+    }
+
+    /** Maps transliterated letters back onto graphemes without changing the text or its spacing. */
+    private fun tokenOffsets(weights: List<Double>, tokenCount: Int): List<IntRange?> {
+        if (tokenCount == 0 || weights.isEmpty()) return weights.map { null }
+        val totalWeight = weights.sum()
+        if (totalWeight <= 0.0) return weights.map { null }
+        var cumulative = 0.0
+        return weights.map { weight ->
+            val start = (cumulative / totalWeight * tokenCount).toInt().coerceIn(0, tokenCount)
+            cumulative += weight
+            val end = (cumulative / totalWeight * tokenCount).toInt().coerceIn(start, tokenCount)
+            if (weight <= 0.0 || start == end) null else start until end
+        }
+    }
+
+    private fun tokenFrame(path: IntArray, targetRange: IntRange): Int? {
+        val frame = path.indexOfFirst { state -> state % 2 == 1 && state / 2 in targetRange }
+        if (frame < 0) return null
+        var firstBlank = frame
+        while (firstBlank > 0 && path[firstBlank - 1] % 2 == 0) firstBlank--
+        return if (firstBlank == frame) frame else (firstBlank + frame - 1) / 2
+    }
+
+    private fun graphemes(text: String): List<String> {
+        val iterator = BreakIterator.getCharacterInstance(Locale.ROOT)
+        iterator.setText(text)
+        val result = mutableListOf<String>()
+        var start = iterator.first()
+        var end = iterator.next()
+        while (end != BreakIterator.DONE) {
+            result += text.substring(start, end)
+            start = end
+            end = iterator.next()
+        }
+        return result
     }
 
     private fun force(raw: Array<FloatArray>, target: IntArray): IntArray {
