@@ -6272,7 +6272,52 @@ fun SettingsScreen(
             )
         }
 
-        SettingsPopupLayer {
+        Text(
+            text = buildAnnotatedString {
+                append("MusicBeatSP $version  ")
+                val linkStyles = TextLinkStyles(
+                    style = SpanStyle(
+                        color = MaterialTheme.colorScheme.primary,
+                        textDecoration = TextDecoration.Underline,
+                    ),
+                )
+                withLink(LinkAnnotation.Url("https://github.com/Kdroidwin/MusicBeatSP", linkStyles)) {
+                    append("GitHub")
+                }
+                append("  ")
+                withLink(LinkAnnotation.Url("https://github.com/kushagrasinghx", linkStyles)) {
+                    append(originalDeveloperLabel)
+                }
+                append("  ")
+                withLink(LinkAnnotation.Url("https://discord.gg/pDdKfrdHY6", linkStyles)) {
+                    append("Discord")
+                }
+            },
+            style = MaterialTheme.typography.labelSmall,
+            color = MaterialTheme.colorScheme.onSurfaceVariant,
+            textAlign = TextAlign.Center,
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(top = 24.dp, bottom = 8.dp),
+        )
+        }
+    }
+    FastScroller(
+        scrollState = settingsScrollState,
+        modifier = Modifier
+            .align(Alignment.CenterEnd)
+            .fillMaxHeight()
+            .padding(
+                top = contentPadding.calculateTopPadding(),
+                bottom = contentPadding.calculateBottomPadding(),
+            ),
+    )
+    }
+
+
+
+
+    SettingsPopupLayer {
         ThemeModePickerDialog(
             expanded = showThemePicker,
             theme = theme,
@@ -6741,53 +6786,6 @@ fun SettingsScreen(
             )
         }
 
-        }
-        Text(
-            text = buildAnnotatedString {
-                append("MusicBeatSP $version  ")
-                val linkStyles = TextLinkStyles(
-                    style = SpanStyle(
-                        color = MaterialTheme.colorScheme.primary,
-                        textDecoration = TextDecoration.Underline,
-                    ),
-                )
-                withLink(LinkAnnotation.Url("https://github.com/Kdroidwin/MusicBeatSP", linkStyles)) {
-                    append("GitHub")
-                }
-                append("  ")
-                withLink(LinkAnnotation.Url("https://github.com/kushagrasinghx", linkStyles)) {
-                    append(originalDeveloperLabel)
-                }
-                append("  ")
-                withLink(LinkAnnotation.Url("https://discord.gg/pDdKfrdHY6", linkStyles)) {
-                    append("Discord")
-                }
-            },
-            style = MaterialTheme.typography.labelSmall,
-            color = MaterialTheme.colorScheme.onSurfaceVariant,
-            textAlign = TextAlign.Center,
-            modifier = Modifier
-                .fillMaxWidth()
-                .padding(top = 24.dp, bottom = 8.dp),
-        )
-        }
-    }
-    FastScroller(
-        scrollState = settingsScrollState,
-        modifier = Modifier
-            .align(Alignment.CenterEnd)
-            .fillMaxHeight()
-            .padding(
-                top = contentPadding.calculateTopPadding(),
-                bottom = contentPadding.calculateBottomPadding(),
-            ),
-    )
-    }
-
-
-
-
-    SettingsPopupLayer {
     ArtistSignatureApiSettingsDialog(
         show = showArtistSignatureEditor,
         onDismiss = { showArtistSignatureEditor = false },
