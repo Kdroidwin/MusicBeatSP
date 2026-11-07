@@ -24,7 +24,6 @@ import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.update
-import kotlinx.coroutines.flow.updateAndGet
 import kotlinx.coroutines.withContext
 import kotlinx.coroutines.withTimeoutOrNull
 import kotlinx.serialization.builtins.MapSerializer
@@ -586,20 +585,24 @@ object Downloads {
      * Apply [saved] and [meta] to the two records and write the result down.
      *
      * Takes transforms rather than finished maps because several downloads
-     * finish at once now, and "read the map, add my track, store it back" run
-     * from two threads loses one of the two tracks — silently, and permanently,
-     * since this is the only record that a file was written. Both flows are
-     * updated compare-and-set, and the persist is serialised so the copy that
-     * reaches disk is never older than one already written.
+     * finish at once now. Both maps and their shared-preference snapshot are
+     * updated under one lock so no finish can persist a stale copy over a
+     * newer download record.
      */
     private fun record(
         saved: (Map<String, String>) -> Map<String, String>,
         meta: (Map<String, SavedSongMetadata>) -> Map<String, SavedSongMetadata>,
     ) {
-        val savedMap = _saved.updateAndGet(saved)
-        val metaMap = _savedMetadata.updateAndGet(meta)
-        if (!::prefs.isInitialized) return
         synchronized(recordLock) {
+            // Both maps describe the same completed file. Compute them while
+            // holding the persistence lock so a later-finishing download
+            // cannot write an older snapshot over a newer one (which left a
+            // favorite pointing at a file that the delete/play index forgot).
+            val savedMap = saved(_saved.value)
+            val metaMap = meta(_savedMetadata.value)
+            _saved.value = savedMap
+            _savedMetadata.value = metaMap
+            if (!::prefs.isInitialized) return
             prefs.edit()
                 .putString(KEY_SAVED, json.encodeToString(serializer, savedMap))
                 .putString(KEY_SAVED_METADATA, json.encodeToString(metadataSerializer, metaMap))

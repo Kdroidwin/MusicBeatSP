@@ -1,15 +1,11 @@
 package com.music.bitchord.feature.localmusic.data
 
 import android.content.Context
+import android.util.AtomicFile
 import com.music.bitchord.data.model.Song
-import kotlinx.coroutines.CoroutineScope
-import kotlinx.coroutines.Dispatchers
-import kotlinx.coroutines.sync.Mutex
-import kotlinx.coroutines.sync.withLock
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
-import kotlinx.coroutines.launch
 import kotlinx.serialization.Serializable
 import kotlinx.serialization.builtins.SetSerializer
 import kotlinx.serialization.builtins.serializer
@@ -23,14 +19,16 @@ object LocalFavoritesStore {
 
     private const val FILE_NAME = "local_favorites.json"
     private const val SONGS_FILE_NAME = "local_favorite_songs.json"
+    private const val STORE_FILE_NAME = "local_favorites_store.json"
     private val json = Json { ignoreUnknownKeys = true; prettyPrint = true }
     private val serializer = SetSerializer(String.serializer())
     private val songsSerializer = StoredFavoriteSongs.serializer()
-    private val scope = CoroutineScope(Dispatchers.IO)
-    private val persistMutex = Mutex()
+    private val storeSerializer = StoredFavoritesSnapshot.serializer()
+    private val persistLock = Any()
 
     private lateinit var storageFile: File
     private lateinit var songsFile: File
+    private lateinit var atomicStore: AtomicFile
     private val _favoriteIds = MutableStateFlow<Set<String>>(emptySet())
     val favoriteIds: StateFlow<Set<String>> = _favoriteIds.asStateFlow()
     private val _favoriteSongs = MutableStateFlow<Map<String, Song>>(emptyMap())
@@ -40,29 +38,34 @@ object LocalFavoritesStore {
     fun init(context: Context) {
         storageFile = File(context.filesDir, FILE_NAME)
         songsFile = File(context.filesDir, SONGS_FILE_NAME)
+        atomicStore = AtomicFile(File(context.filesDir, STORE_FILE_NAME))
         load()
     }
 
     private fun load() {
-        if (!storageFile.exists()) {
-            _favoriteIds.value = emptySet()
-            _favoriteSongs.value = emptyMap()
-            return
-        }
-        val loadedIds = runCatching {
-            val content = storageFile.readText()
-            json.decodeFromString(serializer, content)
-        }.getOrDefault(emptySet())
-        val loadedSongs = if (songsFile.exists()) {
+        val snapshot = runCatching {
+            atomicStore.openRead().bufferedReader(Charsets.UTF_8).use {
+                json.decodeFromString(storeSerializer, it.readText())
+            }
+        }.getOrNull()
+        val loadedIds = snapshot?.ids ?: if (storageFile.exists()) {
             runCatching {
-                songsFile.readText()
-                    .let { json.decodeFromString(songsSerializer, it) }
-                    .songs
-                    .mapValues { (_, song) -> song.toSong() }
-            }.getOrDefault(emptyMap())
+                json.decodeFromString(serializer, storageFile.readText())
+            }.getOrDefault(emptySet())
         } else {
-            emptyMap()
+            emptySet()
         }
+        val loadedSongs = snapshot?.songs?.mapValues { (_, song) -> song.toSong() }
+            ?: if (songsFile.exists()) {
+                runCatching {
+                    songsFile.readText()
+                        .let { json.decodeFromString(songsSerializer, it) }
+                        .songs
+                        .mapValues { (_, song) -> song.toSong() }
+                }.getOrDefault(emptyMap())
+            } else {
+                emptyMap()
+            }
 
         // Previous releases keyed a downloaded YouTube favorite by its local
         // MediaStore URI. Android can issue a different URI after a rescan,
@@ -82,23 +85,30 @@ object LocalFavoritesStore {
         }
         _favoriteIds.value = migratedIds
         _favoriteSongs.value = migratedSongs
-        if (migratedIds != loadedIds || migratedSongs != loadedSongs.filterKeys { it in loadedIds }) {
+        if (snapshot == null || migratedIds != loadedIds ||
+            migratedSongs != loadedSongs.filterKeys { it in loadedIds }
+        ) {
             persist()
         }
     }
 
     private fun persist() {
-        scope.launch {
-            persistMutex.withLock {
-                runCatching {
-                    storageFile.writeText(json.encodeToString(serializer, _favoriteIds.value))
-                    songsFile.writeText(
-                        json.encodeToString(
-                            songsSerializer,
-                            StoredFavoriteSongs(_favoriteSongs.value.mapValues { (_, song) -> StoredFavoriteSong.from(song) }),
-                        ),
-                    )
-                }
+        if (!::atomicStore.isInitialized) return
+        synchronized(persistLock) {
+            val snapshot = StoredFavoritesSnapshot(
+                ids = _favoriteIds.value,
+                songs = _favoriteSongs.value.mapValues { (_, song) -> StoredFavoriteSong.from(song) },
+            )
+            var output: java.io.FileOutputStream? = null
+            try {
+                val stream = atomicStore.startWrite()
+                output = stream
+                stream.write(json.encodeToString(storeSerializer, snapshot).toByteArray(Charsets.UTF_8))
+                atomicStore.finishWrite(stream)
+                output = null
+            } catch (error: Exception) {
+                output?.let { atomicStore.failWrite(it) }
+                android.util.Log.w("LocalFavorites", "Could not persist favorites", error)
             }
         }
     }
@@ -109,33 +119,40 @@ object LocalFavoritesStore {
 
     fun toggleFavorite(songId: String, song: Song? = null): Boolean {
         val canonicalId = canonicalFavoriteId(songId, song)
-        val current = _favoriteIds.value
-        val isFav = canonicalId in current
-        if (isFav) {
-            _favoriteIds.value = current - canonicalId
-            _favoriteSongs.value = _favoriteSongs.value - canonicalId
-        } else {
-            _favoriteIds.value = current + canonicalId
-            song?.let { _favoriteSongs.value = _favoriteSongs.value + (canonicalId to it.forFavoriteStorage()) }
+        val isFav = synchronized(persistLock) {
+            val current = _favoriteIds.value
+            val wasFavorite = canonicalId in current
+            if (wasFavorite) {
+                _favoriteIds.value = current - canonicalId
+                _favoriteSongs.value = _favoriteSongs.value - canonicalId
+            } else {
+                _favoriteIds.value = current + canonicalId
+                song?.let { _favoriteSongs.value = _favoriteSongs.value + (canonicalId to it.forFavoriteStorage()) }
+            }
+            persist()
+            wasFavorite
         }
-        persist()
         return !isFav
     }
 
     fun addFavorite(songId: String, song: Song? = null) {
         val canonicalId = canonicalFavoriteId(songId, song)
-        if (canonicalId !in _favoriteIds.value) {
-            _favoriteIds.value = _favoriteIds.value + canonicalId
+        synchronized(persistLock) {
+            if (canonicalId !in _favoriteIds.value) {
+                _favoriteIds.value = _favoriteIds.value + canonicalId
+            }
+            song?.let { _favoriteSongs.value = _favoriteSongs.value + (canonicalId to it.forFavoriteStorage()) }
+            persist()
         }
-        song?.let { _favoriteSongs.value = _favoriteSongs.value + (canonicalId to it.forFavoriteStorage()) }
-        persist()
     }
 
     fun removeFavorite(songId: String) {
-        if (songId in _favoriteIds.value || songId in _favoriteSongs.value) {
-            _favoriteIds.value = _favoriteIds.value - songId
-            _favoriteSongs.value = _favoriteSongs.value - songId
-            persist()
+        synchronized(persistLock) {
+            if (songId in _favoriteIds.value || songId in _favoriteSongs.value) {
+                _favoriteIds.value = _favoriteIds.value - songId
+                _favoriteSongs.value = _favoriteSongs.value - songId
+                persist()
+            }
         }
     }
 
@@ -144,16 +161,20 @@ object LocalFavoritesStore {
     fun exportFavoriteSongs(): Map<String, Song> = _favoriteSongs.value
 
     fun importFavorites(incoming: Set<String>) {
-        _favoriteIds.value = incoming
-        _favoriteSongs.value = _favoriteSongs.value.filterKeys { it in incoming }
-        persist()
+        synchronized(persistLock) {
+            _favoriteIds.value = incoming
+            _favoriteSongs.value = _favoriteSongs.value.filterKeys { it in incoming }
+            persist()
+        }
     }
 
     fun importFavoriteSongs(incoming: Map<String, Song>) {
-        _favoriteSongs.value = incoming
-            .filterKeys { it in _favoriteIds.value }
-            .mapValues { (_, song) -> song.forFavoriteStorage() }
-        persist()
+        synchronized(persistLock) {
+            _favoriteSongs.value = incoming
+                .filterKeys { it in _favoriteIds.value }
+                .mapValues { (_, song) -> song.forFavoriteStorage() }
+            persist()
+        }
     }
 
     private fun canonicalFavoriteId(songId: String, song: Song?): String =
@@ -179,6 +200,12 @@ object LocalFavoritesStore {
 
     @Serializable
     private data class StoredFavoriteSongs(val songs: Map<String, StoredFavoriteSong> = emptyMap())
+
+    @Serializable
+    private data class StoredFavoritesSnapshot(
+        val ids: Set<String> = emptySet(),
+        val songs: Map<String, StoredFavoriteSong> = emptyMap(),
+    )
 
     @Serializable
     private data class StoredFavoriteSong(

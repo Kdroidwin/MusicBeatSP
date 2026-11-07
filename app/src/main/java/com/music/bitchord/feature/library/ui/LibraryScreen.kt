@@ -890,7 +890,13 @@ fun LibraryScreen(
     }
 
     // Filter favorite songs matching persisted favorite IDs
-    val favoriteSongs = remember(songs, favoriteIds, savedFavoriteSongs, downloadedYoutubeSongs) {
+    val favoriteSongs = remember(
+        songs,
+        favoriteIds,
+        savedFavoriteSongs,
+        downloadedYoutubeSongs,
+        savedDownloadRecords,
+    ) {
         val downloadedFavorites = downloadedYoutubeSongs
             .filter { it.videoId in favoriteIds }
             .map { downloaded ->
@@ -905,7 +911,23 @@ fun LibraryScreen(
                     durationText = downloaded.durationText?.takeIf(String::isNotBlank) ?: saved.durationText,
                 )
             }
-        val downloadedIds = downloadedFavorites.mapTo(HashSet()) { it.videoId }
+        // A valid download URI can survive in the download index even if an
+        // older or interrupted metadata write omitted the corresponding row.
+        // Favorites intentionally do not persist a YouTube MediaStore URI, so
+        // reattach the index URI here to keep the saved track playable and
+        // deletable after restart.
+        val downloadedFavoriteIds = downloadedFavorites.mapTo(HashSet()) { it.videoId }
+        val indexedDownloadFavorites = savedFavoriteSongs
+            .filter { (id, _) -> id in favoriteIds && id !in downloadedFavoriteIds }
+            .mapNotNull { (id, saved) ->
+                savedDownloadRecords[id]?.let { uri ->
+                    saved.copy(localUri = uri, localPath = null)
+                }
+            }
+            .filter { it.videoId.isYoutubeVideoId() }
+        val recoveredDownloadIds = (downloadedFavorites + indexedDownloadFavorites)
+            .mapTo(HashSet()) { it.videoId }
+        val downloadedIds = recoveredDownloadIds
         val catalogFavorites = songs.filter { s ->
             val localKey = s.localUri ?: s.videoId
             localKey in favoriteIds || s.videoId in favoriteIds
@@ -920,7 +942,7 @@ fun LibraryScreen(
                 song.videoId !in catalogFavoriteIds && song.videoId !in downloadedIds &&
                     song.localUri !in catalogFavoriteIds
             }
-        (downloadedFavorites + catalogFavorites + savedOnlineFavorites)
+        (downloadedFavorites + indexedDownloadFavorites + catalogFavorites + savedOnlineFavorites)
             .distinctBy { if (it.videoId.isYoutubeVideoId()) it.videoId else it.localUri ?: it.videoId }
     }
 
