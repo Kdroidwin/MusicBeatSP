@@ -318,6 +318,7 @@ import androidx.compose.ui.window.DialogProperties
 import androidx.compose.ui.window.DialogWindowProvider
 import com.music.bitchord.feature.localmusic.ui.components.DrillDownSongList
 import com.music.bitchord.feature.localmusic.data.LocalPlaylistStore
+import com.music.bitchord.feature.localmusic.data.LocalFavoritesStore
 import com.music.bitchord.feature.artistimage.data.ArtistArtworkStore
 import com.music.bitchord.feature.tageditor.data.TagLibWriter
 import com.music.bitchord.widget.QuickPlayTileState
@@ -943,6 +944,7 @@ private fun BitChordApp(
     val songSort = detail?.browseId?.let { detailSongSorts[it] } ?: SongSort.DEFAULT
     var songSortMenuOpen by remember { mutableStateOf(false) }
     val likeStatuses by viewModel.likeStatuses.collectAsStateWithLifecycle()
+    val favoriteIds by LocalFavoritesStore.favoriteIds.collectAsStateWithLifecycle()
     // Which tracks are being held on YouTube's own upload, so the player's menu
     // offers the way back out of a revert rather than the revert again.
     val pinnedToOriginal by OriginalVersion.pinned.collectAsStateWithLifecycle()
@@ -2498,8 +2500,10 @@ private fun BitChordApp(
             shuffleEnabled = shuffleEnabled,
             autoplayEnabled = autoplay,
             signedIn = signedIn,
-            likeStatus = likeStatuses[song.videoId] ?: LikeStatus.INDIFFERENT,
-            onToggleLike = { viewModel.toggleLike(song.videoId) },
+            likeStatus = likeStatuses[song.videoId]
+                ?.takeIf { it != LikeStatus.INDIFFERENT }
+                ?: if (song.videoId in favoriteIds) LikeStatus.LIKE else LikeStatus.INDIFFERENT,
+            onToggleLike = { viewModel.toggleLike(song.videoId, song) },
             onToggleShuffle = { controller?.let { it2 -> QueueShuffle.toggle(it2); AppSettings.setShuffleEnabled(QueueShuffle.enabled.value) } },
             onCycleRepeat = {
                 controller?.let {

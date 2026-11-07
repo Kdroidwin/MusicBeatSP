@@ -668,6 +668,8 @@ object InnertubeParser {
     ): Song? {
         if (renderer == null) return null
         val videoId = renderer.o("playlistItemData").s("videoId")
+            ?: renderer.o("navigationEndpoint").o("watchEndpoint").s("videoId")
+            ?: renderer.o("onTap").o("innertubeCommand").o("watchEndpoint").s("videoId")
             ?: renderer.o("overlay")
                 .o("musicItemThumbnailOverlayRenderer").o("content")
                 .o("musicPlayButtonRenderer").o("playNavigationEndpoint")

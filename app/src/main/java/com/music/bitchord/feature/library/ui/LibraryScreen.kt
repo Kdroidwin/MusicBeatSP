@@ -890,11 +890,26 @@ fun LibraryScreen(
     }
 
     // Filter favorite songs matching persisted favorite IDs
-    val favoriteSongs = remember(songs, favoriteIds, savedFavoriteSongs) {
+    val favoriteSongs = remember(songs, favoriteIds, savedFavoriteSongs, downloadedYoutubeSongs) {
+        val downloadedFavorites = downloadedYoutubeSongs
+            .filter { it.videoId in favoriteIds }
+            .map { downloaded ->
+                val saved = savedFavoriteSongs[downloaded.videoId]
+                if (saved == null) downloaded else downloaded.copy(
+                    title = downloaded.title.takeIf(String::isNotBlank) ?: saved.title,
+                    artist = downloaded.artist.takeIf { it.isNotBlank() && !it.equals("Unknown artist", true) }
+                        ?: saved.artist,
+                    thumbnailUrl = downloaded.thumbnailUrl?.takeIf(String::isNotBlank)
+                        ?: saved.thumbnailUrl,
+                    albumName = downloaded.albumName?.takeIf(String::isNotBlank) ?: saved.albumName,
+                    durationText = downloaded.durationText?.takeIf(String::isNotBlank) ?: saved.durationText,
+                )
+            }
+        val downloadedIds = downloadedFavorites.mapTo(HashSet()) { it.videoId }
         val catalogFavorites = songs.filter { s ->
             val localKey = s.localUri ?: s.videoId
             localKey in favoriteIds || s.videoId in favoriteIds
-        }
+        }.filterNot { it.videoId in downloadedIds }
         val catalogFavoriteIds = catalogFavorites.flatMap { song ->
             listOfNotNull(song.videoId, song.localUri)
         }.toSet()
@@ -902,9 +917,11 @@ fun LibraryScreen(
             .filterKeys { it in favoriteIds }
             .values
             .filter { song ->
-                song.videoId !in catalogFavoriteIds && song.localUri !in catalogFavoriteIds
+                song.videoId !in catalogFavoriteIds && song.videoId !in downloadedIds &&
+                    song.localUri !in catalogFavoriteIds
             }
-        (catalogFavorites + savedOnlineFavorites).distinctBy { it.localUri ?: it.videoId }
+        (downloadedFavorites + catalogFavorites + savedOnlineFavorites)
+            .distinctBy { if (it.videoId.isYoutubeVideoId()) it.videoId else it.localUri ?: it.videoId }
     }
 
     Box(

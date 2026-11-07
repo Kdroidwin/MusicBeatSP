@@ -344,13 +344,11 @@ class MainViewModel(app: Application) : AndroidViewModel(app) {
             localUri = localUri,
         )
         _lyricsVideoId.value = videoId
-        val autoShowLyricsOnPlayback = AppSettings.autoShowLyricsOnPlayback.value
         val actualVideoId = song?.videoId ?: videoId
         val isYoutubePlayback = actualVideoId.length == 11 &&
             actualVideoId.all { it.isLetterOrDigit() || it == '_' || it == '-' } &&
             song?.isLiveRadio != true && song?.isOnsenAudio != true && song?.isExternalPreview != true
-        val autoFetchAllowed = autoShowLyricsOnPlayback &&
-            (!isYoutubePlayback || AppSettings.autoFetchLyricsOnYoutubePlayback.value)
+        val autoFetchAllowed = !isYoutubePlayback || AppSettings.autoFetchLyricsOnYoutubePlayback.value
         val sources = if (force || autoFetchAllowed) {
             AppSettings.lyricsSources.value
         } else {
@@ -693,11 +691,15 @@ class MainViewModel(app: Application) : AndroidViewModel(app) {
     }
 
     /** The heart: liked becomes neutral, anything else becomes liked. */
-    fun toggleLike(videoId: String) {
+    fun toggleLike(videoId: String, song: Song? = null) {
         val isLiked = likeStatusOf(videoId) == LikeStatus.LIKE || LocalFavoritesStore.isFavorite(videoId)
         val target = if (isLiked) LikeStatus.INDIFFERENT else LikeStatus.LIKE
-        if (target != LikeStatus.LIKE) LocalFavoritesStore.removeFavorite(videoId)
-        setLike(videoId, target)
+        if (target == LikeStatus.LIKE) {
+            LocalFavoritesStore.addFavorite(videoId, song)
+        } else {
+            LocalFavoritesStore.removeFavorite(videoId)
+        }
+        if (_signedIn.value) setLike(videoId, target) else LikeState.set(videoId, target)
     }
 
     /** As [toggleLike], for the thumb-down. */
