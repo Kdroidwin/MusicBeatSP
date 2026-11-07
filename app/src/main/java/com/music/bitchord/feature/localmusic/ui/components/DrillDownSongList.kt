@@ -733,9 +733,10 @@ fun DrillDownSongList(
     onRootListScrollChanged: ((Boolean) -> Unit)? = null,
     modifier: Modifier = Modifier,
 ) {
+    val folderArtworkFallbackMode by AppSettings.folderArtworkFallbackMode.collectAsStateWithLifecycle()
     val hideUnknownPlaylistArtist by AppSettings.hideUnknownPlaylistArtist.collectAsStateWithLifecycle()
     val artworkRequestPx = if (fullScreenArtwork) FULL_SCREEN_COLLECTION_ART_PX else HEADER_ART_PX
-    val selectionArtworkUrl = remember(artworkUrl, songs, artworkRequestPx) {
+    val selectionArtworkUrl = remember(artworkUrl, songs, artworkRequestPx, folderArtworkFallbackMode) {
         artworkUrl
             ?.takeIf { it.isNotBlank() && it != "favorites" }
             ?.artworkAt(artworkRequestPx)

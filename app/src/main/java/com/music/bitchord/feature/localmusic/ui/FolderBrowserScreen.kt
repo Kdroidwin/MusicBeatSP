@@ -741,6 +741,10 @@ private fun FolderEntry(
     onLongPress: () -> Unit,
     onBatchTagEditor: (() -> Unit)? = null,
 ) {
+    val folderArtworkFallbackMode by AppSettings.folderArtworkFallbackMode.collectAsStateWithLifecycle()
+    val coverArtworkModel = remember(folder.coverSongs, folderArtworkFallbackMode) {
+        folder.coverSongs.firstOrNull()?.thumbnailUrl?.artworkAt(ROW_ART_PX)
+    }
     val trackCount = pluralStringResource(R.plurals.track_count_plural, folder.totalSongCount, folder.totalSongCount)
     val subfolderCount = if (folder.subfolders.isNotEmpty()) {
         stringResource(R.string.folder_subfolder_count, folder.subfolders.size)
@@ -763,9 +767,9 @@ private fun FolderEntry(
                 contentAlignment = Alignment.Center,
             ) {
                 Icon(Icons.Rounded.Folder, contentDescription = null, tint = MaterialTheme.colorScheme.primary)
-                folder.coverSongs.firstOrNull()?.thumbnailUrl?.let { artwork ->
+                coverArtworkModel?.let { artwork ->
                     AsyncImage(
-                        model = artwork.artworkAt(ROW_ART_PX),
+                        model = artwork,
                         contentDescription = null,
                         contentScale = ContentScale.Crop,
                         modifier = Modifier.fillMaxSize().clip(RoundedCornerShape(12.dp)),

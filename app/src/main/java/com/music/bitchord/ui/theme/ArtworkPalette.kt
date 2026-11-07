@@ -94,15 +94,19 @@ fun rememberArtworkPalette(
     val context = LocalContext.current
     val scheme = MaterialTheme.colorScheme
     val reduceAnimation by AppSettings.reduceAnimation.collectAsStateWithLifecycle()
+    val folderArtworkFallbackMode by AppSettings.folderArtworkFallbackMode.collectAsStateWithLifecycle()
+    val artworkCacheKey = remember(imageUrl, folderArtworkFallbackMode) {
+        "$imageUrl|folder-art-mode=${folderArtworkFallbackMode.persistedValue}"
+    }
 
     // The two swatches everything else is derived from, or null until read.
-    var seed by remember(imageUrl) { mutableStateOf(imageUrl?.let(seedCache::get)) }
+    var seed by remember(artworkCacheKey) { mutableStateOf(artworkCacheKey.takeIf { imageUrl != null }?.let(seedCache::get)) }
     // Whether the colours were there from the first frame. If they were, there
     // is nothing to crossfade *from* and animating would only put a delay in
     // front of a surface that could already be right.
-    val knownUpFront = remember(imageUrl) { seed != null }
+    val knownUpFront = remember(artworkCacheKey) { seed != null }
 
-    LaunchedEffect(imageUrl, artPx) {
+    LaunchedEffect(imageUrl, artPx, folderArtworkFallbackMode) {
         if (imageUrl == null || seed != null) return@LaunchedEffect
         val request = ImageRequest.Builder(context)
             // The size the artwork is *displayed* at, deliberately: the fetch
@@ -119,7 +123,7 @@ fun rememberArtworkPalette(
         // Quantising 128² pixels is not free, and this coroutine is on the main
         // dispatcher — left there it stutters whatever is animating the surface in.
         val found = withContext(Dispatchers.Default) { seedOf(bitmap) } ?: return@LaunchedEffect
-        seedCache[imageUrl] = found
+        seedCache[artworkCacheKey] = found
         seed = found
     }
 

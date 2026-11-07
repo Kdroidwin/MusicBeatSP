@@ -365,16 +365,24 @@ fun String?.artworkAt(px: Int): String? {
     if (!source.isLocalAudioArtworkUri()) return source
     val uri = runCatching { Uri.parse(source) }.getOrNull() ?: return source
     val sizeParameter = LOCAL_ARTWORK_SIZE_PARAMETER
-    if (uri.getQueryParameter(sizeParameter) == px.toString()) return source
+    val folderFallbackParameter = LOCAL_ARTWORK_FALLBACK_MODE_PARAMETER
+    val folderFallbackMode = AppSettings.folderArtworkFallbackMode.value.persistedValue.toString()
+    if (uri.getQueryParameter(sizeParameter) == px.toString() &&
+        uri.getQueryParameter(folderFallbackParameter) == folderFallbackMode
+    ) return source
     val builder = uri.buildUpon().clearQuery()
     uri.queryParameterNames.forEach { key ->
-        if (key != sizeParameter) {
+        if (key != sizeParameter && key != folderFallbackParameter) {
             uri.getQueryParameters(key).forEach { value ->
                 builder.appendQueryParameter(key, value)
             }
         }
     }
-    return builder.appendQueryParameter(sizeParameter, px.toString()).build().toString()
+    return builder
+        .appendQueryParameter(sizeParameter, px.toString())
+        .appendQueryParameter(folderFallbackParameter, folderFallbackMode)
+        .build()
+        .toString()
 }
 
 private val SIZE_HINT = Regex("""w\d+-h\d+""")

@@ -140,6 +140,8 @@ fun MiniPlayer(
     onDismiss: () -> Unit = {},
     modifier: Modifier = Modifier,
 ) {
+    val folderArtworkFallbackMode by AppSettings.folderArtworkFallbackMode.collectAsStateWithLifecycle()
+    val artworkModel = remember(song, folderArtworkFallbackMode) { song.artworkAt(ROW_ART_PX) }
     val reduceDynamicBlur by AppSettings.reduceDynamicBlur.collectAsStateWithLifecycle()
     val useArtworkColor by AppSettings.miniPlayerArtworkColor.collectAsStateWithLifecycle()
     val showArtworkOutline by AppSettings.miniPlayerArtworkOutline.collectAsStateWithLifecycle()
@@ -274,7 +276,7 @@ fun MiniPlayer(
             verticalAlignment = Alignment.CenterVertically,
         ) {
             AsyncImage(
-                model = song.artworkAt(ROW_ART_PX),
+                model = artworkModel,
                 contentDescription = null,
                 // The mini-player has a fixed square thumbnail. Keep it square
                 // even when the full player is configured to preserve a sleeve's

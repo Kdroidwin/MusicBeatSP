@@ -299,6 +299,7 @@ fun LocalMusicScreen(
     onCollectionNavigationChanged: ((Boolean, (() -> Unit)?) -> Unit)? = null,
 ) {
     val context = LocalContext.current
+    val folderArtworkFallbackMode by AppSettings.folderArtworkFallbackMode.collectAsStateWithLifecycle()
     val choosePlaylistCover = rememberPlaylistCoverPicker { playlistId, uri ->
         LocalPlaylistStore.setPlaylistCover(playlistId, uri)
     }
@@ -1935,6 +1936,7 @@ private fun ArtistRow(
     onClick: () -> Unit,
     onLongPress: (() -> Unit)? = null,
 ) {
+    val folderArtworkFallbackMode by AppSettings.folderArtworkFallbackMode.collectAsStateWithLifecycle()
     Row(
         modifier = Modifier
             .fillMaxWidth()
@@ -1956,7 +1958,7 @@ private fun ArtistRow(
                 tint = MaterialTheme.colorScheme.onPrimaryContainer,
                 modifier = Modifier.size(26.dp),
             )
-            val imageModel = remember(name, thumbnailUrl, allowRemoteArtwork, customArtworkUrl) {
+            val imageModel = remember(name, thumbnailUrl, allowRemoteArtwork, customArtworkUrl, folderArtworkFallbackMode) {
                 ArtistImage(
                     name = name,
                     fallbackUrl = thumbnailUrl?.artworkAt(ROW_ART_PX),
@@ -2011,6 +2013,7 @@ private fun ArtistGridCard(
     onLongPress: (() -> Unit)? = null,
     modifier: Modifier = Modifier,
 ) {
+    val folderArtworkFallbackMode by AppSettings.folderArtworkFallbackMode.collectAsStateWithLifecycle()
     val cardCompact = rememberCardCompact()
     val titleOverlay = rememberGridTitleOverlay()
     val countLabel = pluralStringResource(R.plurals.song_count_plural, songCount, songCount)
@@ -2036,7 +2039,7 @@ private fun ArtistGridCard(
                 tint = MaterialTheme.colorScheme.onPrimaryContainer,
                 modifier = Modifier.size(44.dp),
             )
-            val imageModel = remember(name, thumbnailUrl, allowRemoteArtwork, customArtworkUrl) {
+            val imageModel = remember(name, thumbnailUrl, allowRemoteArtwork, customArtworkUrl, folderArtworkFallbackMode) {
                 ArtistImage(
                     name = name,
                     fallbackUrl = thumbnailUrl?.artworkAt(CARD_ART_PX),
@@ -2305,6 +2308,10 @@ private fun AlbumGridCard(
     onLongPress: (() -> Unit)? = null,
     modifier: Modifier = Modifier,
 ) {
+    val folderArtworkFallbackMode by AppSettings.folderArtworkFallbackMode.collectAsStateWithLifecycle()
+    val artworkModel = remember(entry.thumbnailUrl, folderArtworkFallbackMode) {
+        entry.thumbnailUrl?.artworkAt(CARD_ART_PX)
+    }
     val cardCompact = rememberCardCompact()
     val titleOverlay = rememberGridTitleOverlay()
     Column(
@@ -2348,7 +2355,7 @@ private fun AlbumGridCard(
             )
             if (entry.thumbnailUrl != null) {
                 AsyncImage(
-                    model = entry.thumbnailUrl.artworkAt(CARD_ART_PX),
+                    model = artworkModel,
                     contentDescription = null,
                     contentScale = if (keepArtworkAspectRatio) ContentScale.Fit else ContentScale.Crop,
                     modifier = Modifier.fillMaxSize(),
@@ -2465,6 +2472,8 @@ private fun CollectionArtwork(
     size: Dp,
     keepArtworkAspectRatio: Boolean,
 ) {
+    val folderArtworkFallbackMode by AppSettings.folderArtworkFallbackMode.collectAsStateWithLifecycle()
+    val artworkModel = remember(url, folderArtworkFallbackMode) { url?.artworkAt(ROW_ART_PX) }
     val shape = RoundedCornerShape(8.dp)
     Box(
         modifier = Modifier
@@ -2481,7 +2490,7 @@ private fun CollectionArtwork(
         )
         if (url != null) {
             AsyncImage(
-                model = url.artworkAt(ROW_ART_PX),
+                model = artworkModel,
                 contentDescription = null,
                 contentScale = if (keepArtworkAspectRatio) ContentScale.Fit else ContentScale.Crop,
                 modifier = Modifier

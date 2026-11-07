@@ -9,6 +9,7 @@ import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.remember
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.BlurredEdgeTreatment
 import androidx.compose.ui.draw.blur
@@ -34,12 +35,16 @@ fun ArtworkBackdrop(
     artPx: Int = CARD_ART_PX,
 ) {
     val reduceDynamicBlur by AppSettings.reduceDynamicBlur.collectAsStateWithLifecycle()
+    val folderArtworkFallbackMode by AppSettings.folderArtworkFallbackMode.collectAsStateWithLifecycle()
+    val artworkModel = remember(imageUrl, artPx, folderArtworkFallbackMode) {
+        imageUrl?.artworkAt(artPx)
+    }
     val canBlur = !reduceDynamicBlur && Build.VERSION.SDK_INT >= Build.VERSION_CODES.S
 
     Box(modifier.background(palette.background)) {
         if (canBlur && imageUrl != null) {
             AsyncImage(
-                model = imageUrl.artworkAt(artPx),
+                model = artworkModel,
                 contentDescription = null,
                 contentScale = ContentScale.Crop,
                 modifier = Modifier

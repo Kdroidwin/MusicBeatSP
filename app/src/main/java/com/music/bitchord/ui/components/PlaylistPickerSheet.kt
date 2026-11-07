@@ -56,6 +56,7 @@ import androidx.compose.ui.platform.LocalFocusManager
 import androidx.compose.ui.text.input.ImeAction
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
+import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import coil3.compose.AsyncImage
 import androidx.compose.ui.res.pluralStringResource
 import com.music.bitchord.R
@@ -64,6 +65,7 @@ import com.music.bitchord.data.model.ROW_ART_PX
 import com.music.bitchord.data.model.Song
 import com.music.bitchord.data.model.UserPlaylist
 import com.music.bitchord.data.model.artworkAt
+import com.music.bitchord.data.settings.AppSettings
 import com.music.bitchord.ui.components.thumbnailBorder
 import com.music.bitchord.ui.theme.ArtworkPalette
 import com.music.bitchord.ui.icons.BitChordIcons
@@ -97,6 +99,7 @@ fun PlaylistPickerSheet(
     artworkUrl: String? = null,
     useArtworkColor: Boolean = false,
 ) {
+    val folderArtworkFallbackMode by AppSettings.folderArtworkFallbackMode.collectAsStateWithLifecycle()
     var creating by remember { mutableStateOf(startCreating) }
     val palette = artworkPalette.takeIf { useArtworkColor }
     val baseColors = MaterialTheme.colorScheme
@@ -154,7 +157,9 @@ fun PlaylistPickerSheet(
                             verticalAlignment = Alignment.CenterVertically,
                         ) {
                             AsyncImage(
-                                model = songs.firstOrNull()?.thumbnailUrl.artworkAt(ROW_ART_PX),
+                                model = remember(songs, folderArtworkFallbackMode) {
+                                    songs.firstOrNull()?.thumbnailUrl.artworkAt(ROW_ART_PX)
+                                },
                                 contentDescription = null,
                                 contentScale = ContentScale.Crop,
                                 modifier = Modifier
@@ -236,6 +241,10 @@ fun PlaylistPickerSheet(
 
 @Composable
 private fun PlaylistRow(playlist: UserPlaylist, onClick: () -> Unit) {
+    val folderArtworkFallbackMode by AppSettings.folderArtworkFallbackMode.collectAsStateWithLifecycle()
+    val artworkModel = remember(playlist.thumbnailUrl, folderArtworkFallbackMode) {
+        playlist.thumbnailUrl.artworkAt(ROW_ART_PX)
+    }
     Row(
         modifier = Modifier
             .fillMaxWidth()
@@ -244,7 +253,7 @@ private fun PlaylistRow(playlist: UserPlaylist, onClick: () -> Unit) {
         verticalAlignment = Alignment.CenterVertically,
     ) {
         AsyncImage(
-            model = playlist.thumbnailUrl.artworkAt(ROW_ART_PX),
+            model = artworkModel,
             contentDescription = null,
             modifier = Modifier
                 .size(44.dp)

@@ -374,12 +374,21 @@ class MainActivity : AppCompatActivity() {
             val theme by AppSettings.themeMode.collectAsStateWithLifecycle()
             val customThemeImageUri by AppSettings.customThemeImageUri.collectAsStateWithLifecycle()
             val matchButtonAccentToArtwork by AppSettings.matchButtonAccentToArtwork.collectAsStateWithLifecycle()
+            val folderArtworkFallbackMode by AppSettings.folderArtworkFallbackMode.collectAsStateWithLifecycle()
             val controller = rememberMediaController()
             val player = rememberPlayerState(controller)
-            val currentArtwork = when {
-                theme == ThemeMode.CUSTOM_IMAGE -> customThemeImageUri
-                theme == ThemeMode.ARTWORK || matchButtonAccentToArtwork -> player.song?.artworkAt(PLAYER_ART_PX)
-                else -> null
+            val currentArtwork = remember(
+                theme,
+                customThemeImageUri,
+                matchButtonAccentToArtwork,
+                player.song,
+                folderArtworkFallbackMode,
+            ) {
+                when {
+                    theme == ThemeMode.CUSTOM_IMAGE -> customThemeImageUri
+                    theme == ThemeMode.ARTWORK || matchButtonAccentToArtwork -> player.song?.artworkAt(PLAYER_ART_PX)
+                    else -> null
+                }
             }
             val highPerformance by AppSettings.highPerformanceMode.collectAsStateWithLifecycle()
             val liquidGlassEnabled by AppSettings.liquidGlass.collectAsStateWithLifecycle()

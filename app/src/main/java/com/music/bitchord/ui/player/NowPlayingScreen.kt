@@ -978,7 +978,8 @@ fun NowPlayingScreen(
     val context = LocalContext.current
     val density = LocalDensity.current
     val haptics = rememberHaptics()
-    val artUrl = song.artworkAt(ART_PX)
+    val folderArtworkFallbackMode by AppSettings.folderArtworkFallbackMode.collectAsStateWithLifecycle()
+    val artUrl = remember(song, folderArtworkFallbackMode) { song.artworkAt(ART_PX) }
     val sharedPlayerBackdrop = LocalSharedPlayerBackdrop.current
     val artworkPalette = rememberArtworkPalette(artUrl, dark = true, artPx = ART_PX)
     val playerInkOverrides by AppSettings.playerInkColors.collectAsStateWithLifecycle()
@@ -4373,8 +4374,9 @@ fun TabletPlayerBackdrop(
     song: Song,
     modifier: Modifier = Modifier,
 ) {
-    val artUrl = song.artworkAt(ART_PX)
-    val localPreviewArtUrl = remember(song, artUrl) {
+    val folderArtworkFallbackMode by AppSettings.folderArtworkFallbackMode.collectAsStateWithLifecycle()
+    val artUrl = remember(song, folderArtworkFallbackMode) { song.artworkAt(ART_PX) }
+    val localPreviewArtUrl = remember(song, artUrl, folderArtworkFallbackMode) {
         artUrl?.takeIf { LocalAudioArtworkFetcher.isLocalAudioUri(Uri.parse(it)) }
             ?.let { song.artworkAt(480) }
     }

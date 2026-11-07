@@ -460,6 +460,8 @@ private fun SongRowContent(
     hideUnknownArtistLine: Boolean = false,
     dropdownMenu: (@Composable () -> Unit)? = null,
 ) {
+    val folderArtworkFallbackMode by AppSettings.folderArtworkFallbackMode.collectAsStateWithLifecycle()
+    val artworkModel = remember(song, folderArtworkFallbackMode) { song.artworkAt(ROW_ART_PX) }
     val titleColor by animateColorAsState(
         targetValue = if (isCurrent) activeTint else MaterialTheme.colorScheme.onBackground,
         label = "song row title",
@@ -497,7 +499,7 @@ private fun SongRowContent(
             }
         } else {
             AsyncImage(
-                model = song.artworkAt(ROW_ART_PX),
+                model = artworkModel,
                 contentDescription = null,
                 contentScale = artworkContentScale,
                 modifier = Modifier

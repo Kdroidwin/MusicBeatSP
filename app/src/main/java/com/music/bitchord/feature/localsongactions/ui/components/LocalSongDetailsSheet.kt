@@ -89,7 +89,7 @@ fun LocalSongDetailsSheet(
     val artworkBackdropEnabled by AppSettings.detailsSheetArtworkBackdrop.collectAsStateWithLifecycle()
     val useArtworkBackdrop = artworkBackdropEnabled && allowArtworkColor
     val showEmbeddedComment by AppSettings.showEmbeddedComment.collectAsStateWithLifecycle()
-    val palette = rememberArtworkPalette(song.thumbnailUrl, dark = true, artPx = ROW_ART_PX)
+    val palette = rememberArtworkPalette(song.artworkAt(ROW_ART_PX), dark = true, artPx = ROW_ART_PX)
     val baseColors = MaterialTheme.colorScheme
     val sheetColors = if (useArtworkBackdrop) {
         baseColors.copy(
@@ -245,12 +245,14 @@ private fun DetailsHeader(
     isLoading: Boolean,
     modifier: Modifier = Modifier,
 ) {
+    val folderArtworkFallbackMode by AppSettings.folderArtworkFallbackMode.collectAsStateWithLifecycle()
+    val artworkModel = remember(song, folderArtworkFallbackMode) { song.artworkAt(256) }
     Row(
         modifier = modifier.fillMaxWidth(),
         verticalAlignment = Alignment.CenterVertically,
     ) {
         AsyncImage(
-            model = song.artworkAt(256),
+            model = artworkModel,
             contentDescription = null,
             contentScale = ContentScale.Crop,
             modifier = Modifier

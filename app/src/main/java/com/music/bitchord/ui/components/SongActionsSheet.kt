@@ -75,6 +75,7 @@ import com.music.bitchord.data.model.CARD_ART_PX
 import com.music.bitchord.data.model.LikeStatus
 import com.music.bitchord.data.model.Song
 import com.music.bitchord.data.model.artworkAt
+import com.music.bitchord.data.settings.AppSettings
 import com.music.bitchord.download.DownloadState
 import com.music.bitchord.download.Downloads
 import com.music.bitchord.playback.SleepTimer
@@ -702,6 +703,8 @@ internal fun SheetTrackHeader(
     modifier: Modifier = Modifier,
     subtitleColor: Color = MaterialTheme.colorScheme.onSurfaceVariant,
 ) {
+    val folderArtworkFallbackMode by AppSettings.folderArtworkFallbackMode.collectAsStateWithLifecycle()
+    val artworkModel = remember(song, folderArtworkFallbackMode) { song.artworkAt(CARD_ART_PX) }
     Row(
         modifier = modifier
             .fillMaxWidth()
@@ -709,7 +712,7 @@ internal fun SheetTrackHeader(
         verticalAlignment = Alignment.CenterVertically,
     ) {
         AsyncImage(
-            model = song.artworkAt(CARD_ART_PX),
+            model = artworkModel,
             contentDescription = null,
             modifier = Modifier
                 .size(52.dp)

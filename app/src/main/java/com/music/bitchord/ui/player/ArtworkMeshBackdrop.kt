@@ -100,11 +100,15 @@ fun rememberArtworkMesh(
     artPx: Int = CARD_ART_PX,
 ): ArtworkMesh? {
     val context = LocalContext.current
+    val folderArtworkFallbackMode by AppSettings.folderArtworkFallbackMode.collectAsStateWithLifecycle()
+    val artworkCacheKey = remember(imageUrl, folderArtworkFallbackMode) {
+        "$imageUrl|folder-art-mode=${folderArtworkFallbackMode.persistedValue}"
+    }
     // Seeded from the cache so a cover that has been seen before is on colour
     // in its first frame, with nothing to fade in from.
-    var mesh by remember(imageUrl) { mutableStateOf(imageUrl?.let(meshCache::get)) }
+    var mesh by remember(artworkCacheKey) { mutableStateOf(artworkCacheKey.takeIf { imageUrl != null }?.let(meshCache::get)) }
 
-    LaunchedEffect(imageUrl, artPx) {
+    LaunchedEffect(imageUrl, artPx, folderArtworkFallbackMode) {
         if (imageUrl == null || mesh != null) return@LaunchedEffect
         val request = ImageRequest.Builder(context)
             .data(imageUrl.artworkAt(artPx))
@@ -124,7 +128,7 @@ fun rememberArtworkMesh(
             if (bitmap != null) {
                 val found = withContext(Dispatchers.Default) { meshOf(bitmap, imageUrl.hashCode()) }
                 if (found != null) {
-                    meshCache[imageUrl] = found
+                    meshCache[artworkCacheKey] = found
                     mesh = found
                 }
                 // A cover that decoded but had no mesh in it — see [meshOf] —
