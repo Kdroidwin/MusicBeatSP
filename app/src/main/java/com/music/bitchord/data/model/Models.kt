@@ -1,6 +1,7 @@
 package com.music.bitchord.data.model
 
 import android.net.Uri
+import com.music.bitchord.data.settings.AppSettings
 import java.io.File
 import kotlin.math.abs
 
@@ -206,16 +207,24 @@ fun Song.artworkAt(px: Int): String? {
     }
 
     val sizeParameter = LOCAL_ARTWORK_SIZE_PARAMETER
-    if (artworkUri.getQueryParameter(sizeParameter) == px.toString()) return artwork
+    val folderFallbackParameter = LOCAL_ARTWORK_FALLBACK_MODE_PARAMETER
+    val folderFallbackMode = AppSettings.folderArtworkFallbackMode.value.persistedValue.toString()
+    if (artworkUri.getQueryParameter(sizeParameter) == px.toString() &&
+        artworkUri.getQueryParameter(folderFallbackParameter) == folderFallbackMode
+    ) return artwork
     val builder = artworkUri.buildUpon().clearQuery()
     artworkUri.queryParameterNames.forEach { key ->
-        if (key != sizeParameter) {
+        if (key != sizeParameter && key != folderFallbackParameter) {
             artworkUri.getQueryParameters(key).forEach { value ->
                 builder.appendQueryParameter(key, value)
             }
         }
     }
-    return builder.appendQueryParameter(sizeParameter, px.toString()).build().toString()
+    return builder
+        .appendQueryParameter(sizeParameter, px.toString())
+        .appendQueryParameter(folderFallbackParameter, folderFallbackMode)
+        .build()
+        .toString()
 }
 
 private fun String.isLocalAudioArtworkUri(): Boolean {
@@ -230,6 +239,8 @@ private fun String.isLocalAudioArtworkUri(): Boolean {
 internal const val LOCAL_ARTWORK_SIZE_PARAMETER = "bitchordArtworkPx"
 /** Marks an image request whose content URI is known to be an audio file. */
 internal const val LOCAL_AUDIO_ARTWORK_PARAMETER = "bitchordAudioArtwork"
+/** Varies local artwork cache entries when the folder image fallback mode changes. */
+internal const val LOCAL_ARTWORK_FALLBACK_MODE_PARAMETER = "bitchordFolderArtworkMode"
 
 /**
  * Whether a row is the track the player is on, for the now-playing highlight.

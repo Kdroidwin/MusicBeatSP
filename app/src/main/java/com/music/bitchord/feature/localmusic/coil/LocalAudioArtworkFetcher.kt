@@ -25,6 +25,7 @@ import com.kyant.taglib.TagLib
 import com.music.bitchord.data.settings.AppSettings
 import com.music.bitchord.data.settings.FolderArtworkFallbackMode
 import com.music.bitchord.data.model.LOCAL_AUDIO_ARTWORK_PARAMETER
+import com.music.bitchord.data.model.LOCAL_ARTWORK_FALLBACK_MODE_PARAMETER
 import com.music.bitchord.data.model.LOCAL_ARTWORK_SIZE_PARAMETER
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.Dispatchers
@@ -596,7 +597,11 @@ class LocalAudioArtworkFetcher(
 
 /** Removes only Coil hints, preserving query parameters a document provider needs. */
 private fun Uri.withoutArtworkRequestParameters(): Uri {
-    val ownParameters = setOf(LOCAL_ARTWORK_SIZE_PARAMETER, LOCAL_AUDIO_ARTWORK_PARAMETER)
+    val ownParameters = setOf(
+        LOCAL_ARTWORK_SIZE_PARAMETER,
+        LOCAL_AUDIO_ARTWORK_PARAMETER,
+        LOCAL_ARTWORK_FALLBACK_MODE_PARAMETER,
+    )
     val existing = queryParameterNames
     if (existing.none(ownParameters::contains)) return this
 
