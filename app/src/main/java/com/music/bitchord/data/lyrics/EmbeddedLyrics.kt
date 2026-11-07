@@ -155,6 +155,15 @@ object EmbeddedLyrics {
     }
 
     private fun readEmbeddedLyrics(context: Context, uri: Uri, path: String?): String? {
+        if (path?.endsWith(".wav", ignoreCase = true) == true ||
+            uri.lastPathSegment?.endsWith(".wav", ignoreCase = true) == true
+        ) {
+            val wavLyrics = openFileDescriptor(context, uri, path)?.use { descriptor ->
+                WavId3Lyrics.read(descriptor.fileDescriptor)
+            }
+            if (!wavLyrics.isNullOrBlank()) return wavLyrics
+        }
+
         // 2. Direct binary container scan (fast for FLAC, MP4, WebM with BITCHORD_LYRICS word sync)
         val fromContainer = open(context, uri)?.use { fromBytes(it.readAtMost(MAX_TAG_BYTES)) }
         if (!fromContainer.isNullOrBlank()) {

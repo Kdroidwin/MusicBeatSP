@@ -12,6 +12,7 @@ import com.music.bitchord.data.lyrics.EmbeddedLyrics
 import com.music.bitchord.data.lyrics.LyricsRepository
 import com.music.bitchord.data.lyrics.LyricsSource
 import com.music.bitchord.data.lyrics.WORD_LYRICS_FIELD
+import com.music.bitchord.data.lyrics.WavId3Lyrics
 import com.music.bitchord.data.lyrics.cleanArtistForSearch
 import com.music.bitchord.data.lyrics.toLrc
 import com.music.bitchord.data.model.Song
@@ -20,6 +21,7 @@ import com.music.bitchord.feature.lyricseditor.domain.model.LyricsEditorSource
 import com.music.bitchord.feature.lyricseditor.domain.model.LyricsSearchResultItem
 import com.music.bitchord.feature.lyricseditor.domain.model.LyricsMatchScorer
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.withContext
 import kotlinx.serialization.json.Json
 import kotlinx.serialization.json.JsonArray
@@ -461,6 +463,9 @@ object LocalLyricsManager {
         return runCatching {
             val pfd = openFileDescriptor(context, song, "r") ?: return ""
             pfd.use { desc ->
+                if (isWaveSong(song)) {
+                    WavId3Lyrics.read(desc.fileDescriptor)?.let { return it }
+                }
                 val metadata = TagLib.getMetadata(desc.dup().detachFd(), false)
                 val props = metadata?.propertyMap.orEmpty()
                 props[WORD_LYRICS_FIELD]?.firstOrNull()
@@ -472,46 +477,192 @@ object LocalLyricsManager {
     }
 
     private fun saveEmbeddedLyrics(context: Context, song: Song, lyricsText: String): Boolean {
-        return runCatching {
+        val trimmedLyrics = lyricsText.trim()
+        val enhancedLines = EnhancedLrc.parse(trimmedLyrics)
+            .takeIf { lines -> lines.any { it.isWordSynced || it.background?.isWordSynced == true } }
+        val plainLyrics = enhancedLines?.toLrc() ?: trimmedLyrics
+
+        // WAV has no RIFF INFO lyrics property. TagLib's generic property map
+        // can report a successful write while dropping LYRICS, so store WAV
+        // lyrics in the format's standard ID3 RIFF chunk instead.
+        if (isWaveSong(song)) {
+            return saveWaveEmbeddedLyrics(
+                context = context,
+                song = song,
+                original = trimmedLyrics,
+                standard = plainLyrics.takeIf(String::isNotBlank),
+                enhanced = trimmedLyrics.takeIf { enhancedLines != null },
+            )
+        }
+
+        return try {
+            // TagLib can report success while a container silently drops an
+            // unknown user field. Verify both fields after closing the writer;
+            // when that format cannot retain BITCHORD_LYRICS, put the original
+            // A2 text in its supported LYRICS field as a lossless fallback.
+            val wrotePreferred = writeEmbeddedLyricsProperties(
+                context = context,
+                song = song,
+                lyrics = trimmedLyrics.takeIf(String::isNotBlank)?.let { plainLyrics },
+                enhancedLyrics = trimmedLyrics.takeIf { enhancedLines != null },
+            )
+            val savedProperties = if (wrotePreferred) readEmbeddedProperties(context, song) else null
+            val standardLyrics = savedProperties?.propertyValue("LYRICS")
+                ?: savedProperties?.propertyValue("UNSYNCEDLYRICS")
+            val preferredVerified = when {
+                trimmedLyrics.isBlank() -> wrotePreferred &&
+                    savedProperties?.propertyValue("LYRICS").isNullOrBlank() &&
+                    savedProperties?.propertyValue("UNSYNCEDLYRICS").isNullOrBlank() &&
+                    savedProperties?.propertyValue(WORD_LYRICS_FIELD).isNullOrBlank()
+                enhancedLines != null -> wrotePreferred &&
+                    standardLyrics == plainLyrics &&
+                    savedProperties?.propertyValue(WORD_LYRICS_FIELD) == trimmedLyrics
+                else -> wrotePreferred && standardLyrics == trimmedLyrics
+            }
+
+            if (preferredVerified) {
+                scanLyricsFile(context, song)
+                true
+            } else if (enhancedLines != null) {
+                Log.w(TAG, "Enhanced lyrics did not round-trip in the custom tag; retrying in the standard lyrics field")
+                val wroteFallback = writeEmbeddedLyricsProperties(
+                    context = context,
+                    song = song,
+                    lyrics = trimmedLyrics,
+                    enhancedLyrics = null,
+                )
+                val fallbackLyrics = if (wroteFallback) {
+                    readEmbeddedProperties(context, song)?.propertyValue("LYRICS")
+                } else null
+                val fallbackVerified = fallbackLyrics == trimmedLyrics &&
+                    EnhancedLrc.parse(fallbackLyrics.orEmpty()).any {
+                        it.isWordSynced || it.background?.isWordSynced == true
+                    }
+                if (fallbackVerified) {
+                    scanLyricsFile(context, song)
+                    true
+                } else {
+                    Log.e(TAG, "Enhanced lyrics could not be verified after embedded save")
+                    false
+                }
+            } else {
+                Log.e(TAG, "Lyrics could not be verified after embedded save")
+                false
+            }
+        } catch (cancelled: CancellationException) {
+            throw cancelled
+        } catch (error: Exception) {
+            Log.e(TAG, "Failed to save embedded lyrics", error)
+            false
+        }
+    }
+
+    private fun saveWaveEmbeddedLyrics(
+        context: Context,
+        song: Song,
+        original: String,
+        standard: String?,
+        enhanced: String?,
+    ): Boolean = try {
+        val wrote = openFileDescriptor(context, song, "rw")?.use { descriptor ->
+            WavId3Lyrics.write(descriptor.fileDescriptor, standard, enhanced)
+        } ?: false
+        if (!wrote) {
+            Log.e(TAG, "WAV ID3 lyrics could not be written")
+            return false
+        }
+
+        val saved = openFileDescriptor(context, song, "r")?.use { descriptor ->
+            WavId3Lyrics.readFields(descriptor.fileDescriptor)
+        }
+        val verified = when {
+            original.isBlank() -> saved == null
+            enhanced != null -> saved?.let { it.standard == standard && it.enhanced == enhanced } == true
+            else -> saved?.let { it.standard == original && it.enhanced.isNullOrBlank() } == true
+        }
+        if (!verified) {
+            Log.e(TAG, "WAV ID3 lyrics did not round-trip")
+            false
+        } else {
+            scanLyricsFile(context, song)
+            true
+        }
+    } catch (cancelled: CancellationException) {
+        throw cancelled
+    } catch (error: Exception) {
+        Log.e(TAG, "Failed to save embedded lyrics to WAV", error)
+        false
+    }
+
+    private fun isWaveSong(song: Song): Boolean {
+        fun hasWavExtension(value: String?): Boolean {
+            if (value.isNullOrBlank()) return false
+            val withoutQuery = value.substringBefore('?').substringBefore('#')
+            return withoutQuery.endsWith(".wav", ignoreCase = true)
+        }
+        return hasWavExtension(song.localPath) ||
+            hasWavExtension(song.localUri) ||
+            hasWavExtension(song.videoId)
+    }
+
+    private fun writeEmbeddedLyricsProperties(
+        context: Context,
+        song: Song,
+        lyrics: String?,
+        enhancedLyrics: String?,
+    ): Boolean {
+        return try {
             val pfd = openFileDescriptor(context, song, "rw") ?: return false
             pfd.use { desc ->
-                val current = TagLib.getMetadata(desc.dup().detachFd(), false)?.propertyMap ?: hashMapOf()
-                val map = hashMapOf<String, Array<String>>()
-                map.putAll(current)
-                if (lyricsText.isBlank()) {
-                    map.remove("LYRICS")
-                    map.remove("UNSYNCEDLYRICS")
-                    map.remove(WORD_LYRICS_FIELD)
-                } else {
-                    val trimmedLyrics = lyricsText.trim()
-                    val enhancedLines = EnhancedLrc.parse(trimmedLyrics)
-                        .takeIf { lines -> lines.any { it.isWordSynced || it.background?.isWordSynced == true } }
-                    if (enhancedLines != null) {
-                        // Keep the interoperable line-LRC in the standard field and
-                        // store CTC's per-character A2 timestamps in the app's own
-                        // field, matching the download taggers and player reader.
-                        map["LYRICS"] = arrayOf(enhancedLines.toLrc())
-                        map[WORD_LYRICS_FIELD] = arrayOf(trimmedLyrics)
-                    } else {
-                        map["LYRICS"] = arrayOf(trimmedLyrics)
-                        map.remove(WORD_LYRICS_FIELD)
-                    }
-                }
+                val properties = TagLib.getMetadata(desc.dup().detachFd(), false)?.propertyMap.orEmpty()
+                val map = hashMapOf<String, Array<String>>().apply { putAll(properties) }
+                map.removeProperty("LYRICS")
+                map.removeProperty("UNSYNCEDLYRICS")
+                map.removeProperty(WORD_LYRICS_FIELD)
+                if (!lyrics.isNullOrBlank()) map["LYRICS"] = arrayOf(lyrics)
+                if (!enhancedLyrics.isNullOrBlank()) map[WORD_LYRICS_FIELD] = arrayOf(enhancedLyrics)
+
                 val cleanedMap = map
-                    .filterKeys { !it.contains(Regex("(?i)REPLAYGAIN_(TRACK|ALBUM)_[A-Z0-7_]+")) }
                     .filterValues { it.isNotEmpty() }
                     .mapValuesTo(hashMapOf()) { it.value }
-
-                val ok = TagLib.savePropertyMap(desc.dup().detachFd(), cleanedMap)
-                if (ok) {
-                    val path = resolveFilePath(context, song)
-                    if (!path.isNullOrBlank()) {
-                        android.media.MediaScannerConnection.scanFile(context, arrayOf(path), null, null)
-                    }
-                }
-                ok
+                val saved = TagLib.savePropertyMap(desc.dup().detachFd(), cleanedMap)
+                if (!saved) Log.w(TAG, "TagLib rejected embedded lyrics metadata")
+                saved
             }
-        }.getOrDefault(false)
+        } catch (cancelled: CancellationException) {
+            throw cancelled
+        } catch (error: Exception) {
+            Log.e(TAG, "TagLib failed writing embedded lyrics metadata", error)
+            false
+        }
+    }
+
+    private fun readEmbeddedProperties(context: Context, song: Song): Map<String, Array<String>>? {
+        return try {
+            val pfd = openFileDescriptor(context, song, "r") ?: return null
+            pfd.use { desc ->
+                TagLib.getMetadata(desc.dup().detachFd(), false)?.propertyMap
+            }
+        } catch (cancelled: CancellationException) {
+            throw cancelled
+        } catch (error: Exception) {
+            Log.w(TAG, "Could not verify embedded lyrics metadata", error)
+            null
+        }
+    }
+
+    private fun Map<String, Array<String>>.propertyValue(name: String): String? =
+        entries.firstOrNull { it.key.equals(name, ignoreCase = true) }?.value?.firstOrNull()
+
+    private fun MutableMap<String, Array<String>>.removeProperty(name: String) {
+        keys.filter { it.equals(name, ignoreCase = true) }.toList().forEach(::remove)
+    }
+
+    private fun scanLyricsFile(context: Context, song: Song) {
+        val path = resolveFilePath(context, song)
+        if (!path.isNullOrBlank()) {
+            android.media.MediaScannerConnection.scanFile(context, arrayOf(path), null, null)
+        }
     }
 
     private fun readFileLyrics(context: Context, song: Song): String {
