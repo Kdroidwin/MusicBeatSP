@@ -7,9 +7,11 @@ import android.provider.MediaStore
 import android.util.Log
 import com.kyant.taglib.TagLib
 import com.music.bitchord.data.Http
+import com.music.bitchord.data.lyrics.EnhancedLrc
 import com.music.bitchord.data.lyrics.EmbeddedLyrics
 import com.music.bitchord.data.lyrics.LyricsRepository
 import com.music.bitchord.data.lyrics.LyricsSource
+import com.music.bitchord.data.lyrics.WORD_LYRICS_FIELD
 import com.music.bitchord.data.lyrics.cleanArtistForSearch
 import com.music.bitchord.data.lyrics.toLrc
 import com.music.bitchord.data.model.Song
@@ -461,7 +463,10 @@ object LocalLyricsManager {
             pfd.use { desc ->
                 val metadata = TagLib.getMetadata(desc.dup().detachFd(), false)
                 val props = metadata?.propertyMap.orEmpty()
-                props["LYRICS"]?.firstOrNull() ?: props["UNSYNCEDLYRICS"]?.firstOrNull() ?: ""
+                props[WORD_LYRICS_FIELD]?.firstOrNull()
+                    ?: props["LYRICS"]?.firstOrNull()
+                    ?: props["UNSYNCEDLYRICS"]?.firstOrNull()
+                    ?: ""
             }
         }.getOrDefault("")
     }
@@ -476,8 +481,21 @@ object LocalLyricsManager {
                 if (lyricsText.isBlank()) {
                     map.remove("LYRICS")
                     map.remove("UNSYNCEDLYRICS")
+                    map.remove(WORD_LYRICS_FIELD)
                 } else {
-                    map["LYRICS"] = arrayOf(lyricsText.trim())
+                    val trimmedLyrics = lyricsText.trim()
+                    val enhancedLines = EnhancedLrc.parse(trimmedLyrics)
+                        .takeIf { lines -> lines.any { it.isWordSynced || it.background?.isWordSynced == true } }
+                    if (enhancedLines != null) {
+                        // Keep the interoperable line-LRC in the standard field and
+                        // store CTC's per-character A2 timestamps in the app's own
+                        // field, matching the download taggers and player reader.
+                        map["LYRICS"] = arrayOf(enhancedLines.toLrc())
+                        map[WORD_LYRICS_FIELD] = arrayOf(trimmedLyrics)
+                    } else {
+                        map["LYRICS"] = arrayOf(trimmedLyrics)
+                        map.remove(WORD_LYRICS_FIELD)
+                    }
                 }
                 val cleanedMap = map
                     .filterKeys { !it.contains(Regex("(?i)REPLAYGAIN_(TRACK|ALBUM)_[A-Z0-7_]+")) }
