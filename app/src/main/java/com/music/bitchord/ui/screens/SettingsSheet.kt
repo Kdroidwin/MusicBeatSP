@@ -178,6 +178,7 @@ import com.music.bitchord.data.LocalMediaRepository
 import com.music.bitchord.data.NerdStats
 import com.music.bitchord.data.scrobbling.LastFM
 import com.music.bitchord.data.settings.AppSettings
+import com.music.bitchord.data.settings.FolderArtworkFallbackMode
 import com.music.bitchord.data.settings.PlayerArtworkMode
 import com.music.bitchord.data.settings.PlayerInkGroup
 import com.music.bitchord.data.settings.RetroPlayerBackground
@@ -458,6 +459,8 @@ private fun additionalArtworkSettingsSearchEntries(
     queueHeadingItalicPlayQueue: Boolean,
     smartPlaylistsEnabled: Boolean,
     artistDeezerArtworkEnabled: Boolean,
+    folderArtworkFallbackLabel: String,
+    onChooseFolderArtworkFallback: () -> Unit,
     context: Context,
 ): List<SettingsSearchEntry> = listOf(
     SettingsSearchEntry(
@@ -496,6 +499,13 @@ private fun additionalArtworkSettingsSearchEntries(
         subtitle = stringResource(R.string.reset_deezer_artist_artwork_subtitle),
         keywords = listOf("artist", "deezer", "reset", "clear", "default", "アーティスト", "リセット", "初期化", "標準画像"),
         activate = { resetDeezerArtistArtwork(context) },
+    ),
+    SettingsSearchEntry(
+        title = stringResource(R.string.folder_artwork_fallback),
+        subtitle = stringResource(R.string.folder_artwork_fallback_subtitle),
+        keywords = listOf("album art", "folder art", "folder.jpg", "albumart.jpg", "cover.jpg", "アルバムアート", "フォルダー画像", "埋め込み", "ジャケット"),
+        valueLabel = folderArtworkFallbackLabel,
+        activate = onChooseFolderArtworkFallback,
     ),
 )
 
@@ -977,6 +987,8 @@ fun SettingsScreen(
     val restartQueueWhenEnded by AppSettings.restartQueueWhenEnded.collectAsStateWithLifecycle()
     val advanceQueueWhenRepeatOff by AppSettings.advanceQueueWhenRepeatOff.collectAsStateWithLifecycle()
     val persistentLocalArtwork by AppSettings.persistentLocalArtwork.collectAsStateWithLifecycle()
+    val folderArtworkFallbackMode by AppSettings.folderArtworkFallbackMode.collectAsStateWithLifecycle()
+    var showFolderArtworkFallbackModeDialog by remember { mutableStateOf(false) }
     val resamplerCutoffHz by AppSettings.resamplerCutoffHz.collectAsStateWithLifecycle()
     val loudnessNormalization by AppSettings.loudnessNormalization.collectAsStateWithLifecycle()
     val loudnessOffOnSpeaker by AppSettings.loudnessOffOnSpeaker.collectAsStateWithLifecycle()
@@ -2195,6 +2207,14 @@ fun SettingsScreen(
             queueHeadingItalicPlayQueue = queueHeadingItalicPlayQueue,
             smartPlaylistsEnabled = smartPlaylistsEnabled,
             artistDeezerArtworkEnabled = artistDeezerArtworkEnabled,
+            folderArtworkFallbackLabel = stringResource(
+                when (folderArtworkFallbackMode) {
+                    FolderArtworkFallbackMode.DISABLED -> R.string.folder_artwork_fallback_disabled
+                    FolderArtworkFallbackMode.ALWAYS -> R.string.folder_artwork_fallback_always
+                    FolderArtworkFallbackMode.SINGLE_ALBUM -> R.string.folder_artwork_fallback_single_album
+                },
+            ),
+            onChooseFolderArtworkFallback = { showFolderArtworkFallbackModeDialog = true },
             context = context,
         ) + playerInkSearchEntries + SettingsSearchEntry(
         stringResource(R.string.navigation_bar_force_white),
@@ -4903,6 +4923,63 @@ fun SettingsScreen(
                 },
                 onClick = { AppSettings.setPersistentLocalArtwork(!persistentLocalArtwork) },
             )
+            RowDivider()
+            SettingsRow(
+                icon = Icons.Rounded.Album,
+                title = stringResource(R.string.folder_artwork_fallback),
+                subtitle = stringResource(R.string.folder_artwork_fallback_subtitle),
+                value = stringResource(
+                    when (folderArtworkFallbackMode) {
+                        FolderArtworkFallbackMode.DISABLED -> R.string.folder_artwork_fallback_disabled
+                        FolderArtworkFallbackMode.ALWAYS -> R.string.folder_artwork_fallback_always
+                        FolderArtworkFallbackMode.SINGLE_ALBUM -> R.string.folder_artwork_fallback_single_album
+                    },
+                ),
+                onClick = { showFolderArtworkFallbackModeDialog = true },
+            )
+            if (showFolderArtworkFallbackModeDialog) {
+                AlertDialog(
+                    onDismissRequest = { showFolderArtworkFallbackModeDialog = false },
+                    title = { Text(stringResource(R.string.folder_artwork_fallback)) },
+                    text = {
+                        Column {
+                            FolderArtworkFallbackMode.entries.forEach { mode ->
+                                val label = stringResource(
+                                    when (mode) {
+                                        FolderArtworkFallbackMode.DISABLED -> R.string.folder_artwork_fallback_disabled
+                                        FolderArtworkFallbackMode.ALWAYS -> R.string.folder_artwork_fallback_always
+                                        FolderArtworkFallbackMode.SINGLE_ALBUM -> R.string.folder_artwork_fallback_single_album
+                                    },
+                                )
+                                Row(
+                                    modifier = Modifier
+                                        .fillMaxWidth()
+                                        .clickable {
+                                            AppSettings.setFolderArtworkFallbackMode(mode)
+                                            showFolderArtworkFallbackModeDialog = false
+                                        }
+                                        .padding(vertical = 4.dp),
+                                    verticalAlignment = Alignment.CenterVertically,
+                                ) {
+                                    RadioButton(
+                                        selected = folderArtworkFallbackMode == mode,
+                                        onClick = {
+                                            AppSettings.setFolderArtworkFallbackMode(mode)
+                                            showFolderArtworkFallbackModeDialog = false
+                                        },
+                                    )
+                                    Text(label, modifier = Modifier.padding(start = 8.dp))
+                                }
+                            }
+                        }
+                    },
+                    confirmButton = {
+                        TextButton(onClick = { showFolderArtworkFallbackModeDialog = false }) {
+                            Text(stringResource(R.string.cancel))
+                        }
+                    },
+                )
+            }
             RowDivider()
             SettingsRow(
                 icon = Icons.Rounded.Album,

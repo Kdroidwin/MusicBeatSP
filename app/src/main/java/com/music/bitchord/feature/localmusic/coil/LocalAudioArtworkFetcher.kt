@@ -22,6 +22,8 @@ import coil3.request.Options
 import coil3.size.pxOrElse
 import coil3.toAndroidUri
 import com.kyant.taglib.TagLib
+import com.music.bitchord.data.settings.AppSettings
+import com.music.bitchord.data.settings.FolderArtworkFallbackMode
 import com.music.bitchord.data.model.LOCAL_AUDIO_ARTWORK_PARAMETER
 import com.music.bitchord.data.model.LOCAL_ARTWORK_SIZE_PARAMETER
 import kotlinx.coroutines.CancellationException
@@ -194,7 +196,18 @@ class LocalAudioArtworkFetcher(
             }
 
             // 4. Fallback to directory cover image sidecars (cover.jpg, folder.jpg, etc.)
-            val folderBitmap = findFolderCover(context, uri, requestedPx)
+            // only under the mode selected by the listener.
+            val folderFallbackMode = AppSettings.folderArtworkFallbackMode.value
+            val folderFallbackAllowed = when (folderFallbackMode) {
+                FolderArtworkFallbackMode.DISABLED -> false
+                FolderArtworkFallbackMode.ALWAYS -> true
+                FolderArtworkFallbackMode.SINGLE_ALBUM -> folderContainsSingleAlbum(context, uri)
+            }
+            val folderBitmap = if (folderFallbackAllowed) {
+                findFolderCover(context, uri, requestedPx)
+            } else {
+                null
+            }
             if (folderBitmap != null) {
                 return ImageFetchResult(
                     image = folderBitmap.asImage(),
@@ -312,10 +325,10 @@ class LocalAudioArtworkFetcher(
         if (!parent.exists() || !parent.isDirectory) return null
 
         val candidates = listOf(
-            "cover.jpg", "cover.png", "cover.jpeg",
-            "folder.jpg", "folder.png", "folder.jpeg",
-            "front.jpg", "front.png", "front.jpeg",
-            "albumart.jpg", "albumart.png",
+            "cover.jpg", "cover.png", "cover.jpeg", "cover.webp",
+            "folder.jpg", "folder.png", "folder.jpeg", "folder.webp",
+            "front.jpg", "front.png", "front.jpeg", "front.webp",
+            "albumart.jpg", "albumart.png", "albumart.jpeg", "albumart.webp",
         )
         for (name in candidates) {
             val file = File(parent, name)
@@ -333,6 +346,101 @@ class LocalAudioArtworkFetcher(
             }
         }
         return null
+    }
+
+    /**
+     * Returns true only when MediaStore can identify exactly one album among
+     * the audio files directly inside this folder. Unknown album tags fail
+     * closed: without them we cannot know whether one folder image belongs to
+     * multiple releases.
+     */
+    private fun folderContainsSingleAlbum(context: Context, uri: Uri): Boolean {
+        val audioPath = resolveFilePath(context, uri) ?: return false
+        val folder = File(audioPath).parentFile ?: return false
+        val folderPath = runCatching { folder.canonicalPath }.getOrDefault(folder.absolutePath)
+        val now = SystemClock.elapsedRealtime()
+        val directoryModified = folder.lastModified()
+        folderAlbumCache[folderPath]?.let { cached ->
+            if (cached.directoryModified == directoryModified && now - cached.checkedAtMs < FOLDER_ALBUM_CACHE_TTL_MS) {
+                return cached.containsSingleAlbum
+            }
+        }
+
+        val containsSingleAlbum = runCatching {
+            val projection = buildList {
+                add(MediaStore.Audio.Media.DATA)
+                add(MediaStore.Audio.Media.ALBUM_ID)
+                add(MediaStore.Audio.Media.ALBUM)
+                add(MediaStore.Audio.Media.ARTIST)
+                if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) add("album_artist")
+            }.toTypedArray()
+            val identities = mutableSetOf<String>()
+            var sawAudioFile = false
+            var hasUnknownAlbum = false
+            val volumeUris = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
+                runCatching {
+                    MediaStore.getExternalVolumeNames(context)
+                        .filter { it.isNotBlank() && it != MediaStore.VOLUME_EXTERNAL }
+                        .map { volumeName -> MediaStore.Audio.Media.getContentUri(volumeName) }
+                }.getOrDefault(emptyList())
+            } else emptyList()
+            val queryUris = volumeUris.ifEmpty { listOf(MediaStore.Audio.Media.EXTERNAL_CONTENT_URI) }
+            var queriedAnyVolume = false
+            for (collectionUri in queryUris) {
+                val cursor = context.contentResolver.query(
+                    collectionUri,
+                    projection,
+                    "${MediaStore.Audio.Media.DATA} LIKE ?",
+                    arrayOf("${folderPath.trimEnd('/')}/%"),
+                    null,
+                ) ?: continue
+                queriedAnyVolume = true
+                cursor.use {
+                    val dataColumn = it.getColumnIndexOrThrow(MediaStore.Audio.Media.DATA)
+                    val albumIdColumn = it.getColumnIndexOrThrow(MediaStore.Audio.Media.ALBUM_ID)
+                    val albumColumn = it.getColumnIndexOrThrow(MediaStore.Audio.Media.ALBUM)
+                    val artistColumn = it.getColumnIndexOrThrow(MediaStore.Audio.Media.ARTIST)
+                    val albumArtistColumn = it.getColumnIndex("album_artist")
+                    while (it.moveToNext()) {
+                        val candidatePath = it.getString(dataColumn) ?: continue
+                        val candidateFolder = File(candidatePath).parentFile?.let { parent ->
+                            runCatching { parent.canonicalPath }.getOrDefault(parent.absolutePath)
+                        }
+                        if (candidateFolder != folderPath) continue
+                        sawAudioFile = true
+                        val albumId = it.getLong(albumIdColumn)
+                        val identity = if (albumId > 0L) {
+                            "id:$albumId"
+                        } else {
+                            val album = it.getString(albumColumn)?.trim().orEmpty()
+                            if (album.isBlank() || album == "<unknown>") {
+                                hasUnknownAlbum = true
+                                continue
+                            }
+                            val albumArtist = albumArtistColumn.takeIf { it >= 0 }
+                                ?.let(it::getString)
+                                ?.trim()
+                                .orEmpty()
+                                .ifBlank { it.getString(artistColumn)?.trim().orEmpty() }
+                            "tags:${albumArtist.lowercase(Locale.ROOT)}\u0000${album.lowercase(Locale.ROOT)}"
+                        }
+                        identities += identity
+                        if (identities.size > 1) return@runCatching false
+                    }
+                }
+            }
+            queriedAnyVolume && sawAudioFile && identities.size == 1 && !hasUnknownAlbum
+        }.getOrDefault(false)
+
+        folderAlbumCache[folderPath] = CachedFolderAlbumResult(
+            directoryModified = directoryModified,
+            checkedAtMs = now,
+            containsSingleAlbum = containsSingleAlbum,
+        )
+        if (folderAlbumCache.size > MAX_FOLDER_ALBUM_CACHE_ENTRIES) {
+            folderAlbumCache.keys.firstOrNull { it != folderPath }?.let(folderAlbumCache::remove)
+        }
+        return containsSingleAlbum
     }
 
     private fun resolveFilePath(context: Context, uri: Uri): String? {
@@ -425,8 +533,16 @@ class LocalAudioArtworkFetcher(
     companion object {
         private const val MAX_RESOLVED_PATHS = 512
         private const val NEGATIVE_PATH_CACHE_MS = 30_000L
+        private const val MAX_FOLDER_ALBUM_CACHE_ENTRIES = 256
+        private const val FOLDER_ALBUM_CACHE_TTL_MS = 60_000L
         private data class CachedResolvedPath(val path: String?, val cachedAtMs: Long)
         private val resolvedPathCache = ConcurrentHashMap<String, CachedResolvedPath>()
+        private data class CachedFolderAlbumResult(
+            val directoryModified: Long,
+            val checkedAtMs: Long,
+            val containsSingleAlbum: Boolean,
+        )
+        private val folderAlbumCache = ConcurrentHashMap<String, CachedFolderAlbumResult>()
 
         fun isLocalAudioUri(uri: Uri): Boolean {
             val scheme = uri.scheme?.lowercase(Locale.ROOT) ?: return false

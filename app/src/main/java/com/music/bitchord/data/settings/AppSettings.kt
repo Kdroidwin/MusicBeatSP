@@ -108,6 +108,19 @@ enum class PlayerArtworkMode(val persistedValue: Int) {
 /** Solid fill used behind the optional retro player layout. */
 enum class RetroPlayerBackground { BLACK, ARTWORK_COLOR }
 
+/** When an untagged audio file may inherit a cover image from its parent folder. */
+enum class FolderArtworkFallbackMode(val persistedValue: Int) {
+    DISABLED(0),
+    ALWAYS(1),
+    SINGLE_ALBUM(2),
+    ;
+
+    companion object {
+        fun fromPersistedValue(value: Int): FolderArtworkFallbackMode? =
+            entries.firstOrNull { it.persistedValue == value }
+    }
+}
+
 /** Independently customisable ink groups painted over the expanded player. */
 enum class PlayerInkGroup(val preferenceSuffix: String) {
     BUTTONS("buttons"),
@@ -789,6 +802,8 @@ object AppSettings {
     /** Player backdrop blur in dp; zero draws sampled colours sharply. */
     val artworkBackdropBlurDp = MutableStateFlow(32f)
     val persistentLocalArtwork = MutableStateFlow(false)
+    /** Uses cover/folder/albumart sidecars when an audio file has no embedded cover. */
+    val folderArtworkFallbackMode = MutableStateFlow(FolderArtworkFallbackMode.ALWAYS)
 
     /** Blurs unfocused lyric lines, keeping the active line sharp. */
     val lyricsBlur = MutableStateFlow(true)
@@ -1649,6 +1664,9 @@ object AppSettings {
         artworkBackdropBlurDp.value = prefs.getFloat(KEY_ARTWORK_BACKDROP_BLUR_DP, 32f)
             .coerceIn(0f, MAX_PLAYER_ARTWORK_BLUR_DP)
         persistentLocalArtwork.value = prefs.getBoolean(KEY_PERSISTENT_LOCAL_ARTWORK, false)
+        folderArtworkFallbackMode.value = FolderArtworkFallbackMode.fromPersistedValue(
+            prefs.getInt(KEY_FOLDER_ARTWORK_FALLBACK_MODE, FolderArtworkFallbackMode.ALWAYS.persistedValue),
+        ) ?: FolderArtworkFallbackMode.ALWAYS
         lyricsBlur.value = prefs.getBoolean(KEY_LYRICS_BLUR, true)
         preferEmbeddedLocalLyrics.value = prefs.getBoolean(KEY_PREFER_EMBEDDED_LOCAL_LYRICS, false)
         removeNeteaseLyricCredits.value = prefs.getBoolean(KEY_REMOVE_NETEASE_LYRIC_CREDITS, true)
@@ -3025,6 +3043,11 @@ object AppSettings {
     fun setPersistentLocalArtwork(value: Boolean) {
         persistentLocalArtwork.value = value
         prefs.edit().putBoolean(KEY_PERSISTENT_LOCAL_ARTWORK, value).apply()
+    }
+
+    fun setFolderArtworkFallbackMode(value: FolderArtworkFallbackMode) {
+        folderArtworkFallbackMode.value = value
+        prefs.edit().putInt(KEY_FOLDER_ARTWORK_FALLBACK_MODE, value.persistedValue).apply()
     }
 
     private fun readMainNavigationTabOrder(): List<MainNavigationTab> {
@@ -4669,6 +4692,7 @@ object AppSettings {
     private const val KEY_AUDIO_CUTTER_ENABLED = "audio_cutter_enabled"
     private const val KEY_ARTWORK_BACKDROP_BLUR_DP = "artwork_backdrop_blur_dp"
     private const val KEY_PERSISTENT_LOCAL_ARTWORK = "persistent_local_artwork"
+    private const val KEY_FOLDER_ARTWORK_FALLBACK_MODE = "folder_artwork_fallback_mode"
     private const val KEY_LYRICS_BLUR = "lyrics_blur"
     private const val KEY_PREFER_EMBEDDED_LOCAL_LYRICS = "prefer_embedded_local_lyrics"
     private const val KEY_REMOVE_NETEASE_LYRIC_CREDITS = "remove_netease_lyric_credits"

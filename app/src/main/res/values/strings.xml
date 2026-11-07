@@ -1353,6 +1353,11 @@
     <string name="favorite_icon_star_subtitle">Use a star instead of a heart for favorites in the player and Library</string>
     <string name="persistent_local_artwork">Keep local artwork on storage</string>
     <string name="persistent_local_artwork_subtitle">Save extracted covers in app storage so they remain ready after restart</string>
+    <string name="folder_artwork_fallback">Use folder artwork when no cover is embedded</string>
+    <string name="folder_artwork_fallback_subtitle">Use folder.jpg, albumart.jpg, cover.jpg and similar images beside music files</string>
+    <string name="folder_artwork_fallback_disabled">Disabled</string>
+    <string name="folder_artwork_fallback_always">Always</string>
+    <string name="folder_artwork_fallback_single_album">Only when the folder contains one album</string>
     <string name="resampler_cutoff">PCM cutoff frequency</string>
     <string name="resampler_cutoff_subtitle">Optional high-frequency filter before audio output. Off by default.</string>
     <string name="resampler_cutoff_value">%1$d Hz</string>
