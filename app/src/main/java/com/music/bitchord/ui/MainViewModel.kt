@@ -2525,7 +2525,12 @@ class MainViewModel(app: Application) : AndroidViewModel(app) {
                     // Music links) belong to YouTube Music. Matching their
                     // titles against MediaStore made remote releases appear as
                     // empty local albums and prevented their tracks opening.
-                    YtMusicRepository.browseSongs(browseId).fold(
+                    val browseResult = if (resolved == BrowseType.PROFILE) {
+                        YtMusicRepository.profileSongs(browseId, title)
+                    } else {
+                        YtMusicRepository.browseSongs(browseId)
+                    }
+                    browseResult.fold(
                         onSuccess = { page ->
                             sections = emptyList()
                             artwork = page.header?.thumbnailUrl

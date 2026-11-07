@@ -68,6 +68,12 @@ object LyricsFetchEngine {
             if (sources.any { it.id == "qq_music" }) {
                 // Invalidate results cached before the QQ matching and fallback fixes.
                 append(";qqMatch=2")
+                append(";qqHeaderCleanup=")
+                    .append(com.music.bitchord.data.settings.AppSettings.removeQqMusicLyricMetadata.value)
+            }
+            if (sources.any { it.id == "followlyrics" }) {
+                append(";followLyricsJapaneseKanji=")
+                    .append(com.music.bitchord.data.settings.AppSettings.convertFollowLyricsToJapaneseKanji.value)
             }
         }
         val flightKey = "${artist.lowercase().trim()}|${title.lowercase().trim()}|${durationMs / 1000}|$cacheVariant"

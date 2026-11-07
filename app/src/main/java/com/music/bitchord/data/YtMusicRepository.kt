@@ -28,6 +28,10 @@ import kotlinx.coroutines.awaitAll
 import kotlinx.coroutines.coroutineScope
 import kotlinx.coroutines.withContext
 import kotlinx.serialization.json.JsonObject
+import okhttp3.Request
+import org.jsoup.Jsoup
+import org.jsoup.nodes.Element
+import org.jsoup.parser.Parser
 import java.util.Locale
 import java.util.concurrent.ConcurrentHashMap
 
@@ -583,6 +587,71 @@ object YtMusicRepository {
         if (!browseId.startsWith("VL")) page
         else page.copy(owned = InnertubeParser.parsePlaylistOwned(response))
     }
+
+    /**
+     * A YouTube Music `Profile` is a channel, not an Artist shelf. Music browse
+     * returns an empty song list for many channels, so read the channel's
+     * uploads playlist and fall back to its public Atom feed.
+     */
+    suspend fun profileSongs(browseId: String, title: String): Result<SongPage> = call("profile:$browseId") {
+        val channelPage = runCatching { pageOf(Innertube.browse(browseId)) }.getOrNull()
+        channelPage?.takeIf { it.songs.isNotEmpty() }?.let { return@call it }
+
+        val channelId = browseId.takeIf { it.startsWith("UC") }
+            ?: throw IllegalArgumentException("This profile does not include a public channel ID")
+        // YouTube channel uploads playlists use the channel suffix with the
+        // uploads prefix. Use Music's own browse parser first so continuation
+        // and artwork fields retain their normal shape.
+        val uploadsId = "UU${channelId.drop(2)}"
+        val uploadsPage = runCatching { pageOf(Innertube.browse(uploadsId)) }.getOrNull()
+        uploadsPage?.takeIf { it.songs.isNotEmpty() }?.let {
+            return@call it.copy(header = channelPage?.header)
+        }
+
+        val feedUrl = "https://www.youtube.com/feeds/videos.xml?channel_id=$channelId"
+        val request = Request.Builder()
+            .url(feedUrl)
+            .header("User-Agent", "MusicBeat/2.9 YouTube profile reader")
+            .header("Accept", "application/atom+xml, application/xml, text/xml")
+            .build()
+        val feedSongs = com.music.bitchord.data.Http.lyricsClient.newCall(request).execute().use { response ->
+            check(response.isSuccessful) { "YouTube profile feed returned HTTP ${response.code}" }
+            val xml = com.music.bitchord.data.Http.readBoundedUtf8(response.body, 4 * 1024 * 1024)
+                ?: error("YouTube profile feed was empty")
+            parseChannelFeed(xml, title)
+        }
+        if (feedSongs.isNotEmpty()) {
+            SongPage(songs = feedSongs, continuation = null, header = channelPage?.header)
+        } else {
+            channelPage ?: uploadsPage ?: SongPage(emptyList(), continuation = null)
+        }
+    }
+
+    private fun parseChannelFeed(xml: String, fallbackArtist: String): List<Song> {
+        val document = Jsoup.parse(xml, "https://www.youtube.com/", Parser.xmlParser())
+        return document.getElementsByTag("entry").mapNotNull { entry ->
+            val videoId = entry.firstTag("videoId")?.text()?.trim()
+                ?.takeIf { it.matches(Regex("[A-Za-z0-9_-]{11}")) }
+                ?: return@mapNotNull null
+            val title = entry.firstTag("title")?.text()?.trim()?.takeIf(String::isNotBlank)
+                ?: return@mapNotNull null
+            val artist = entry.firstTag("author")?.firstTag("name")?.text()?.trim()
+                ?.takeIf(String::isNotBlank) ?: fallbackArtist
+            val thumbnail = entry.firstTag("thumbnail")?.attr("url")?.takeIf(String::isNotBlank)
+            Song(
+                videoId = videoId,
+                title = title,
+                artist = artist,
+                thumbnailUrl = thumbnail,
+                isVideo = true,
+            )
+        }.distinctBy(Song::videoId)
+    }
+
+    private fun Element.firstTag(localName: String): Element? =
+        getAllElements().firstOrNull { element ->
+            element.tagName().substringAfter(':').equals(localName, ignoreCase = true)
+        }
 
     /** The page [SongPage.continuation] points at. */
     suspend fun moreSongs(token: String): Result<SongPage> = call("browse:more") {

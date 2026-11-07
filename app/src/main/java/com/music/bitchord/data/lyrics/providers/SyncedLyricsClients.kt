@@ -2,6 +2,7 @@ package com.music.bitchord.data.lyrics.providers
 
 import android.util.Base64
 import com.music.bitchord.data.Http
+import com.music.bitchord.data.lyrics.QQMusicLyrics
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.async
 import kotlinx.coroutines.awaitAll
@@ -851,9 +852,11 @@ internal object QqMusicLyricsClient {
         val portato = portatoDeferred.await()
         if (!portato.isNullOrBlank()) {
             directDeferred.cancel()
-            return@coroutineScope portato
+            return@coroutineScope QQMusicLyrics.cleanRawLyrics(portato, title, listOf(artist))
         }
-        directDeferred.await()
+        directDeferred.await()?.let { raw ->
+            QQMusicLyrics.cleanRawLyrics(raw, title, listOf(artist))
+        }
     }
 
     suspend fun searchLyrics(
@@ -865,7 +868,9 @@ internal object QqMusicLyricsClient {
         val tracks = withContext(Dispatchers.IO) { searchSongs(title, artist) }
         val jobs = tracks.take(4).map { track ->
             async(Dispatchers.IO) {
-                val lrc = fetchLyricsByMid(track.songMid) ?: return@async null
+                val raw = fetchLyricsByMid(track.songMid) ?: return@async null
+                val lrc = QQMusicLyrics.cleanRawLyrics(raw, track.title, listOf(track.artist))
+                    .takeIf(String::isNotBlank) ?: return@async null
                 NativeSearchCandidate(
                     id = "qqmusic_${track.songMid}",
                     title = track.title,

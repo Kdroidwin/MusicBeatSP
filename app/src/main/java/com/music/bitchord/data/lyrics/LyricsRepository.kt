@@ -76,7 +76,7 @@ object LyricsRepository {
         val queryAlbum = album.takeIf { strictness.useAlbum }
         val queryDurationMs = if (strictness.useDuration) durationMs else 0L
 
-        return LyricsFetchEngine.fetchLyrics(
+        val result = LyricsFetchEngine.fetchLyrics(
             videoId = videoId,
             title = title,
             artist = queryArtist,
@@ -96,8 +96,26 @@ object LyricsRepository {
                         realDuration <= 0L || lastTimestamp == null || lastTimestamp <= realDuration + 20_000L
                     }
             }
-        )
+        ) ?: return null
+        return when (result.source.id) {
+            "qq_music" -> if (com.music.bitchord.data.settings.AppSettings.removeQqMusicLyricMetadata.value) {
+                result.copy(lines = QQMusicLyrics.cleanLines(result.lines, title, artist.split(Regex("[,，、/&＆]+"))))
+            } else result
+            "followlyrics" -> if (com.music.bitchord.data.settings.AppSettings
+                    .convertFollowLyricsToJapaneseKanji.value
+            ) {
+                result.copy(lines = result.lines.map(::convertFollowLyricsLine))
+            } else result
+            else -> result
+        }
     }
+
+    /** Reapply source-specific display options to entries cached by older releases. */
+    private fun convertFollowLyricsLine(line: LyricLine): LyricLine = line.copy(
+        text = JapaneseKanji.convert(line.text),
+        words = line.words.map { word -> word.copy(text = JapaneseKanji.convert(word.text)) },
+        background = line.background?.let(::convertFollowLyricsLine),
+    )
 
     suspend fun fetch(
         source: LyricsSource,

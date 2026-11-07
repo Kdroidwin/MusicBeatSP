@@ -62,9 +62,10 @@ object QQMusicLyrics {
                     LyricsLog.w("QQ Music", "QQ lyric endpoint returned no response for song ${selected.id}")
                     return@withContext null
                 }
-            val parsed = parsePaxResponse(response)
+            val cleanedResponse = cleanRawLyrics(response, selected.title, selected.artists)
+            val parsed = parsePaxResponse(cleanedResponse)
             val cleaned = if (com.music.bitchord.data.settings.AppSettings.removeQqMusicLyricMetadata.value) {
-                parsed?.withoutQqMetadata(selected.title, selected.artists)
+                parsed?.let { cleanLines(it, selected.title, selected.artists) }
             } else parsed
             cleaned?.takeIf { lines -> lines.any { it.text.isNotBlank() } }
                 ?.also { LyricsLog.s("QQ Music", "Returned ${it.size} lines") }
@@ -235,6 +236,38 @@ object QQMusicLyrics {
             }
         }
         return ProviderLyrics.parse(raw)
+    }
+
+    internal fun cleanLines(lines: List<LyricLine>, songTitle: String, artists: List<String>): List<LyricLine> =
+        lines.withoutQqMetadata(songTitle, artists)
+
+    /** Cleans QQ's raw LRC before any lyric parser can discard blank header rows. */
+    internal fun cleanRawLyrics(raw: String, songTitle: String, artists: List<String>): String {
+        if (!com.music.bitchord.data.settings.AppSettings.removeQqMusicLyricMetadata.value) return raw
+        val title = songTitle.normalized()
+        val artistNames = artists.map { it.normalized() }.filter { it.length >= 2 }
+        fun body(line: String): String = QQ_LRC_TIMESTAMP_PREFIX.replace(line.trim(), "").trim()
+        fun isOpeningTitleRow(text: String): Boolean {
+            val normalized = text.normalized()
+            return title.isNotBlank() && normalized.contains(title) &&
+                artistNames.any(normalized::contains)
+        }
+
+        val lines = raw.lines()
+        val headerIndex = lines.indices.take(8).firstOrNull { index ->
+            isOpeningTitleRow(body(lines[index]))
+        }
+        var firstLyricStarted = headerIndex == null
+        return lines.mapIndexedNotNull { index, line ->
+            val text = body(line)
+            if (QQ_CREDIT_LINE.matches(text)) return@mapIndexedNotNull null
+            if (index == headerIndex) return@mapIndexedNotNull null
+            if (headerIndex != null && index > headerIndex && !firstLyricStarted) {
+                if (text.isBlank()) return@mapIndexedNotNull null
+                firstLyricStarted = true
+            }
+            line
+        }.joinToString("\n")
     }
 
     private fun List<LyricLine>.withoutQqMetadata(songTitle: String, artists: List<String>): List<LyricLine> {
@@ -463,6 +496,9 @@ object QQMusicLyrics {
     private val QQ_CREDIT_LINE = Regex(
         """^\s*(?:作词|作詞|作曲|作曲者|编曲|编曲者|編曲|編曲者|詞曲|词曲|作詞作曲|作词作曲|词|曲)\s*[:：]?\s*.+$""",
         RegexOption.IGNORE_CASE,
+    )
+    private val QQ_LRC_TIMESTAMP_PREFIX = Regex(
+        """^(?:\[\d{1,3}:\d{2}(?:[.:]\d{1,3})?])+\s*""",
     )
 
     private fun JsonElement.obj(key: String): JsonObject? = (this as? JsonObject)?.get(key) as? JsonObject
