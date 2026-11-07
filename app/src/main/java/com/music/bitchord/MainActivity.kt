@@ -30,6 +30,7 @@ import androidx.compose.animation.AnimatedContent
 import androidx.compose.animation.EnterTransition
 import androidx.compose.animation.ExitTransition
 import androidx.compose.animation.fadeIn
+import androidx.compose.animation.core.animateDpAsState
 import androidx.compose.animation.core.animateFloatAsState
 import androidx.compose.animation.core.tween
 import androidx.compose.animation.fadeOut
@@ -41,10 +42,12 @@ import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.BoxWithConstraints
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.ExperimentalLayoutApi
 import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.WindowInsets
+import androidx.compose.foundation.layout.asPaddingValues
 import androidx.compose.foundation.layout.fillMaxHeight
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
@@ -57,6 +60,7 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.layout.statusBars
+import androidx.compose.foundation.layout.statusBarsIgnoringVisibility
 import androidx.compose.foundation.layout.statusBarsPadding
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.layout.widthIn
@@ -109,6 +113,7 @@ import androidx.compose.material3.SliderDefaults
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.flow.first
 import androidx.compose.material.icons.automirrored.rounded.QueueMusic
 import androidx.compose.material.icons.rounded.Album
 import androidx.compose.material.icons.rounded.Folder
@@ -151,6 +156,7 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.saveable.rememberSaveableStateHolder
+import androidx.compose.runtime.snapshotFlow
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -276,6 +282,8 @@ import com.music.bitchord.ui.components.MiniPlayer
 import com.music.bitchord.ui.components.optimizedHazeEffect
 import com.music.bitchord.ui.components.TopFadeBlur
 import com.music.bitchord.ui.components.topBarContentPadding
+import com.music.bitchord.ui.components.TopBarContentHeight
+import com.music.bitchord.ui.components.TopBarContentGap
 import com.music.bitchord.ui.components.AppLanguageDialog
 import com.music.bitchord.ui.components.LyricsSourcesDialog
 import com.music.bitchord.ui.icons.BitChordIcons
@@ -599,7 +607,7 @@ private data class ExternalZipSelection(
     val entries: List<ZipAudioEntry>,
 )
 
-@OptIn(ExperimentalMaterial3Api::class)
+@OptIn(ExperimentalMaterial3Api::class, ExperimentalLayoutApi::class)
 @Composable
 private fun BitChordApp(
     darkTheme: Boolean,
@@ -1259,8 +1267,31 @@ private fun BitChordApp(
         )
     }
     val rootTabFloatingSettingsOnly = rootTabTopBarScrollEnabled && rootTabTopBarCollapsed
-    LaunchedEffect(rootTabTopBarScrollEnabled, rootTabTopBarCollapsed) {
-        onRootScrollStatusBarChanged(rootTabTopBarScrollEnabled && rootTabTopBarCollapsed)
+    val expandedRootTopPadding = if (showStatusBar) {
+        WindowInsets.statusBarsIgnoringVisibility.asPaddingValues().calculateTopPadding() +
+            TopBarContentHeight + TopBarContentGap
+    } else {
+        TopBarContentHeight + TopBarContentGap
+    }
+    val rootTopPaddingTarget = if (rootTabTopBarScrollEnabled && rootTabTopBarCollapsed) {
+        0.dp
+    } else {
+        expandedRootTopPadding
+    }
+    val rootTopPaddingState = animateDpAsState(
+        targetValue = rootTopPaddingTarget,
+        animationSpec = tween(180),
+        label = "rootTopPadding",
+    )
+    LaunchedEffect(rootTabTopBarScrollEnabled, rootTabTopBarCollapsed, rootTopPaddingTarget) {
+        val hideStatusBar = rootTabTopBarScrollEnabled && rootTabTopBarCollapsed
+        // Let the content clear the header space first. Hiding a system bar
+        // while a finger is dragging also changes window insets mid-gesture,
+        // which causes a one-time scroll hitch.
+        snapshotFlow { rootTopPaddingState.value }.first { padding ->
+            kotlin.math.abs(padding.value - rootTopPaddingTarget.value) < 0.5f
+        }
+        onRootScrollStatusBarChanged(hideStatusBar)
     }
 
     // Held, not rebuilt. `listOf` hands back a new instance on every pass, and a
@@ -2244,14 +2275,9 @@ private fun BitChordApp(
     // so a fixed number only ever lines up on the one device it was picked on.
     // See [topBarContentPadding].
     val listPadding = PaddingValues(
-        // Root lists scroll edge-to-edge: when the pinned bar collapses, hide
-        // both its reserved space and the status-bar inset. The activity hides
-        // the system status bar for the same state below.
-        top = if (rootTabTopBarScrollEnabled && rootTabTopBarCollapsed) {
-            0.dp
-        } else {
-            topBarContentPadding()
-        },
+        // Shrink the reserved header space with the same short motion as the
+        // system-bar transition, instead of moving the list in one frame.
+        top = rootTopPaddingState.value,
         bottom = if (player.song != null && !playerDocked) 210.dp else 140.dp,
     )
 

@@ -1,11 +1,14 @@
 package com.music.bitchord.feature.localsearch.ui
 
 import androidx.activity.compose.BackHandler
+import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.animation.AnimatedContent
+import androidx.compose.animation.expandVertically
 import androidx.compose.animation.fadeIn
 import androidx.compose.animation.fadeOut
 import androidx.compose.animation.slideInHorizontally
 import androidx.compose.animation.slideOutHorizontally
+import androidx.compose.animation.shrinkVertically
 import androidx.compose.animation.togetherWith
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.shape.RoundedCornerShape
@@ -350,91 +353,104 @@ fun LocalSearchScreen(
             ) {
                 // Keep the search field with the source chips so the whole
                 // search header scrolls away above the results.
-                if (!rootResultsScrolled) {
-                    LocalSearchField(
-                        query = query,
-                        onQueryChange = { query = it },
-                        onSearch = { submitSearchTerm(query) },
-                        focusTrigger = focusTrigger,
-                        modifier = Modifier.padding(horizontal = PAGE_GUTTER, vertical = 6.dp),
-                    )
-                }
-
-                if (!rootResultsScrolled && (canSearchYoutubeMusic || canSearchMusicServers || configuredSearchSources.isNotEmpty())) {
-                    Row(
-                        modifier = Modifier.fillMaxWidth().horizontalScroll(rememberScrollState())
-                            .padding(horizontal = PAGE_GUTTER, vertical = 2.dp),
-                        horizontalArrangement = Arrangement.spacedBy(8.dp),
-                    ) {
-                        FilterChip(
-                            selected = !useYoutubeMusic && !useMusicServers && selectedConfiguredSource == null,
-                            onClick = {
-                                useYoutubeMusic = false
-                                useMusicServers = false
-                                selectedConfiguredSource = null
-                                submittedYoutubeQuery = null
-                                submittedMusicServerQuery = null
-                                submittedConfiguredSourceQuery = null
-                            },
-                            label = { Text(stringResource(R.string.search_this_device)) },
+                AnimatedVisibility(
+                    visible = !rootResultsScrolled,
+                    enter = expandVertically(
+                        animationSpec = androidx.compose.animation.core.tween(180),
+                        expandFrom = Alignment.Top,
+                    ) + fadeIn(animationSpec = androidx.compose.animation.core.tween(120)),
+                    exit = shrinkVertically(
+                        animationSpec = androidx.compose.animation.core.tween(180),
+                        shrinkTowards = Alignment.Top,
+                    ) + fadeOut(animationSpec = androidx.compose.animation.core.tween(120)),
+                ) {
+                    Column {
+                        LocalSearchField(
+                            query = query,
+                            onQueryChange = { query = it },
+                            onSearch = { submitSearchTerm(query) },
+                            focusTrigger = focusTrigger,
+                            modifier = Modifier.padding(horizontal = PAGE_GUTTER, vertical = 6.dp),
                         )
-                        if (canSearchYoutubeMusic) {
-                            FilterChip(
-                                selected = useYoutubeMusic,
-                                onClick = {
-                                    useYoutubeMusic = true
-                                    useMusicServers = false
-                                    selectedConfiguredSource = null
-                                    submittedYoutubeQuery = null
-                                    submittedMusicServerQuery = null
-                                    submittedConfiguredSourceQuery = null
-                                },
-                                label = { Text(stringResource(R.string.search_youtube_music)) },
-                            )
-                        }
-                        if (canSearchMusicServers) {
-                            FilterChip(
-                                selected = useMusicServers,
-                                onClick = {
-                                    useMusicServers = true
-                                    useYoutubeMusic = false
-                                    selectedConfiguredSource = null
-                                    submittedYoutubeQuery = null
-                                    submittedMusicServerQuery = null
-                                    submittedConfiguredSourceQuery = null
-                                },
-                                label = { Text(stringResource(R.string.search_music_servers)) },
-                            )
-                        }
-                        configuredSearchSources.forEach { source ->
-                            FilterChip(
-                                selected = selectedConfiguredSource == source.id,
-                                onClick = {
-                                    selectedConfiguredSource = source.id
-                                    useYoutubeMusic = false
-                                    useMusicServers = false
-                                    submittedYoutubeQuery = null
-                                    submittedMusicServerQuery = null
-                                    submittedConfiguredSourceQuery = null
-                                },
-                                label = {
-                                    Text(
-                                        source.displayName,
-                                        maxLines = 1,
-                                        overflow = TextOverflow.Ellipsis,
+
+                        if (canSearchYoutubeMusic || canSearchMusicServers || configuredSearchSources.isNotEmpty()) {
+                            Row(
+                                modifier = Modifier.fillMaxWidth()
+                                    .horizontalScroll(rememberScrollState())
+                                    .padding(horizontal = PAGE_GUTTER, vertical = 2.dp),
+                                horizontalArrangement = Arrangement.spacedBy(8.dp),
+                            ) {
+                                FilterChip(
+                                    selected = !useYoutubeMusic && !useMusicServers && selectedConfiguredSource == null,
+                                    onClick = {
+                                        useYoutubeMusic = false
+                                        useMusicServers = false
+                                        selectedConfiguredSource = null
+                                        submittedYoutubeQuery = null
+                                        submittedMusicServerQuery = null
+                                        submittedConfiguredSourceQuery = null
+                                    },
+                                    label = { Text(stringResource(R.string.search_this_device)) },
+                                )
+                                if (canSearchYoutubeMusic) {
+                                    FilterChip(
+                                        selected = useYoutubeMusic,
+                                        onClick = {
+                                            useYoutubeMusic = true
+                                            useMusicServers = false
+                                            selectedConfiguredSource = null
+                                            submittedYoutubeQuery = null
+                                            submittedMusicServerQuery = null
+                                            submittedConfiguredSourceQuery = null
+                                        },
+                                        label = { Text(stringResource(R.string.search_youtube_music)) },
                                     )
-                                },
+                                }
+                                if (canSearchMusicServers) {
+                                    FilterChip(
+                                        selected = useMusicServers,
+                                        onClick = {
+                                            useMusicServers = true
+                                            useYoutubeMusic = false
+                                            selectedConfiguredSource = null
+                                            submittedYoutubeQuery = null
+                                            submittedMusicServerQuery = null
+                                            submittedConfiguredSourceQuery = null
+                                        },
+                                        label = { Text(stringResource(R.string.search_music_servers)) },
+                                    )
+                                }
+                                configuredSearchSources.forEach { source ->
+                                    FilterChip(
+                                        selected = selectedConfiguredSource == source.id,
+                                        onClick = {
+                                            selectedConfiguredSource = source.id
+                                            useYoutubeMusic = false
+                                            useMusicServers = false
+                                            submittedYoutubeQuery = null
+                                            submittedMusicServerQuery = null
+                                            submittedConfiguredSourceQuery = null
+                                        },
+                                        label = {
+                                            Text(
+                                                source.displayName,
+                                                maxLines = 1,
+                                                overflow = TextOverflow.Ellipsis,
+                                            )
+                                        },
+                                    )
+                                }
+                            }
+                        }
+
+                        if (!useYoutubeMusic && !useMusicServers && selectedConfiguredSource == null) {
+                            LocalSearchFilterChips(
+                                selectedFilter = selectedFilter,
+                                onFilterSelect = { selectedFilter = it },
+                                modifier = Modifier.padding(vertical = 4.dp),
                             )
                         }
                     }
-                }
-
-                if (!rootResultsScrolled && !useYoutubeMusic && !useMusicServers && selectedConfiguredSource == null) {
-                    LocalSearchFilterChips(
-                        selectedFilter = selectedFilter,
-                        onFilterSelect = { selectedFilter = it },
-                        modifier = Modifier.padding(vertical = 4.dp),
-                    )
                 }
 
                 if (selectedSongIds.isNotEmpty()) {

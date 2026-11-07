@@ -14,12 +14,15 @@ import androidx.activity.result.PickVisualMediaRequest
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.activity.compose.BackHandler
 import androidx.compose.animation.AnimatedContent
+import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.animation.EnterTransition
 import androidx.compose.animation.ExitTransition
+import androidx.compose.animation.expandVertically
 import androidx.compose.animation.fadeIn
 import androidx.compose.animation.fadeOut
 import androidx.compose.animation.slideInHorizontally
 import androidx.compose.animation.slideOutHorizontally
+import androidx.compose.animation.shrinkVertically
 import androidx.compose.animation.togetherWith
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -1081,21 +1084,33 @@ fun LibraryScreen(
                         .fillMaxSize()
                         .padding(top = contentPadding.calculateTopPadding()),
                 ) {
-                    if (!rootLibraryContentScrolled) LibraryHeaderBar(
-                        selectedFilter = selectedFilter,
-                        onFilterSelect = selectLibraryFilter,
-                        viewType = libraryViewType,
-                        onToggleViewType = {
-                            val next = if (libraryViewType == LibraryViewType.GRID) LibraryViewType.LIST else LibraryViewType.GRID
-                            AppSettings.setLibraryPlaylistsViewType(next)
-                        },
-                        onCreatePlaylist = { showCreateDialog = true },
-                        smartPlaylistsEnabled = smartPlaylistsEnabled,
-                        onCreateSmartPlaylist = { showCreateSmartPlaylistDialog = true },
-                        localizeAllLabel = localizeAllLabel,
-                        visibleCategories = visibleLibraryCategories,
-                        categoryOrder = libraryCategoryOrder,
-                    )
+                    AnimatedVisibility(
+                        visible = !rootLibraryContentScrolled,
+                        enter = expandVertically(
+                            animationSpec = androidx.compose.animation.core.tween(180),
+                            expandFrom = Alignment.Top,
+                        ) + fadeIn(animationSpec = androidx.compose.animation.core.tween(120)),
+                        exit = shrinkVertically(
+                            animationSpec = androidx.compose.animation.core.tween(180),
+                            shrinkTowards = Alignment.Top,
+                        ) + fadeOut(animationSpec = androidx.compose.animation.core.tween(120)),
+                    ) {
+                        LibraryHeaderBar(
+                            selectedFilter = selectedFilter,
+                            onFilterSelect = selectLibraryFilter,
+                            viewType = libraryViewType,
+                            onToggleViewType = {
+                                val next = if (libraryViewType == LibraryViewType.GRID) LibraryViewType.LIST else LibraryViewType.GRID
+                                AppSettings.setLibraryPlaylistsViewType(next)
+                            },
+                            onCreatePlaylist = { showCreateDialog = true },
+                            smartPlaylistsEnabled = smartPlaylistsEnabled,
+                            onCreateSmartPlaylist = { showCreateSmartPlaylistDialog = true },
+                            localizeAllLabel = localizeAllLabel,
+                            visibleCategories = visibleLibraryCategories,
+                            categoryOrder = libraryCategoryOrder,
+                        )
+                    }
                     if (savedYoutubeCollections.isEmpty()) {
                         Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
                             Text(
@@ -1188,23 +1203,35 @@ fun LibraryScreen(
                         .fillMaxSize()
                         .padding(top = contentPadding.calculateTopPadding()),
                 ) {
-                    if (!rootLibraryContentScrolled) LibraryHeaderBar(
-                        selectedFilter = selectedFilter,
-                        onFilterSelect = selectLibraryFilter,
-                        viewType = downloadedSongsViewType,
-                        onToggleViewType = {
-                            val next = if (downloadedSongsViewType == LibraryViewType.GRID) LibraryViewType.LIST else LibraryViewType.GRID
-                            AppSettings.setDownloadedSongsViewType(next)
-                        },
-                        onCreatePlaylist = { showCreateDialog = true },
-                        smartPlaylistsEnabled = smartPlaylistsEnabled,
-                        onCreateSmartPlaylist = { showCreateSmartPlaylistDialog = true },
-                        localizeAllLabel = localizeAllLabel,
-                        visibleCategories = visibleLibraryCategories,
-                        categoryOrder = libraryCategoryOrder,
-                        youtubeDownloadsSort = youtubeDownloadsSort,
-                        onYoutubeDownloadsSort = AppSettings::setYoutubeDownloadsSort,
-                    )
+                    AnimatedVisibility(
+                        visible = !rootLibraryContentScrolled,
+                        enter = expandVertically(
+                            animationSpec = androidx.compose.animation.core.tween(180),
+                            expandFrom = Alignment.Top,
+                        ) + fadeIn(animationSpec = androidx.compose.animation.core.tween(120)),
+                        exit = shrinkVertically(
+                            animationSpec = androidx.compose.animation.core.tween(180),
+                            shrinkTowards = Alignment.Top,
+                        ) + fadeOut(animationSpec = androidx.compose.animation.core.tween(120)),
+                    ) {
+                        LibraryHeaderBar(
+                            selectedFilter = selectedFilter,
+                            onFilterSelect = selectLibraryFilter,
+                            viewType = downloadedSongsViewType,
+                            onToggleViewType = {
+                                val next = if (downloadedSongsViewType == LibraryViewType.GRID) LibraryViewType.LIST else LibraryViewType.GRID
+                                AppSettings.setDownloadedSongsViewType(next)
+                            },
+                            onCreatePlaylist = { showCreateDialog = true },
+                            smartPlaylistsEnabled = smartPlaylistsEnabled,
+                            onCreateSmartPlaylist = { showCreateSmartPlaylistDialog = true },
+                            localizeAllLabel = localizeAllLabel,
+                            visibleCategories = visibleLibraryCategories,
+                            categoryOrder = libraryCategoryOrder,
+                            youtubeDownloadsSort = youtubeDownloadsSort,
+                            onYoutubeDownloadsSort = AppSettings::setYoutubeDownloadsSort,
+                        )
+                    }
                     if (orderedYoutubeDownloads.isEmpty()) {
                         Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
                             Text(
@@ -1249,21 +1276,33 @@ fun LibraryScreen(
                         .fillMaxSize()
                         .padding(top = contentPadding.calculateTopPadding()),
                 ) {
-                    if (!rootLibraryContentScrolled) LibraryHeaderBar(
-                        selectedFilter = selectedFilter,
-                        onFilterSelect = selectLibraryFilter,
-                        viewType = libraryViewType,
-                        onToggleViewType = {
-                            val next = if (libraryViewType == LibraryViewType.GRID) LibraryViewType.LIST else LibraryViewType.GRID
-                            AppSettings.setLibraryPlaylistsViewType(next)
-                        },
-                        onCreatePlaylist = { showCreateDialog = true },
-                        smartPlaylistsEnabled = smartPlaylistsEnabled,
-                        onCreateSmartPlaylist = { showCreateSmartPlaylistDialog = true },
-                        localizeAllLabel = localizeAllLabel,
-                        visibleCategories = visibleLibraryCategories,
-                        categoryOrder = libraryCategoryOrder,
-                    )
+                    AnimatedVisibility(
+                        visible = !rootLibraryContentScrolled,
+                        enter = expandVertically(
+                            animationSpec = androidx.compose.animation.core.tween(180),
+                            expandFrom = Alignment.Top,
+                        ) + fadeIn(animationSpec = androidx.compose.animation.core.tween(120)),
+                        exit = shrinkVertically(
+                            animationSpec = androidx.compose.animation.core.tween(180),
+                            shrinkTowards = Alignment.Top,
+                        ) + fadeOut(animationSpec = androidx.compose.animation.core.tween(120)),
+                    ) {
+                        LibraryHeaderBar(
+                            selectedFilter = selectedFilter,
+                            onFilterSelect = selectLibraryFilter,
+                            viewType = libraryViewType,
+                            onToggleViewType = {
+                                val next = if (libraryViewType == LibraryViewType.GRID) LibraryViewType.LIST else LibraryViewType.GRID
+                                AppSettings.setLibraryPlaylistsViewType(next)
+                            },
+                            onCreatePlaylist = { showCreateDialog = true },
+                            smartPlaylistsEnabled = smartPlaylistsEnabled,
+                            onCreateSmartPlaylist = { showCreateSmartPlaylistDialog = true },
+                            localizeAllLabel = localizeAllLabel,
+                            visibleCategories = visibleLibraryCategories,
+                            categoryOrder = libraryCategoryOrder,
+                        )
+                    }
                     if (historySongs.isEmpty()) {
                         Box(modifier = Modifier.fillMaxSize(), contentAlignment = androidx.compose.ui.Alignment.Center) {
                             Text(
@@ -1306,21 +1345,33 @@ fun LibraryScreen(
                         .fillMaxSize()
                         .padding(top = contentPadding.calculateTopPadding()),
                 ) {
-                    if (!rootLibraryContentScrolled) LibraryHeaderBar(
-                        selectedFilter = selectedFilter,
-                        onFilterSelect = selectLibraryFilter,
-                        viewType = libraryViewType,
-                        onToggleViewType = {
-                            val next = if (libraryViewType == LibraryViewType.GRID) LibraryViewType.LIST else LibraryViewType.GRID
-                            AppSettings.setLibraryPlaylistsViewType(next)
-                        },
-                        onCreatePlaylist = { showCreateDialog = true },
-                        smartPlaylistsEnabled = smartPlaylistsEnabled,
-                        onCreateSmartPlaylist = { showCreateSmartPlaylistDialog = true },
-                        localizeAllLabel = localizeAllLabel,
-                        visibleCategories = visibleLibraryCategories,
-                        categoryOrder = libraryCategoryOrder,
-                    )
+                    AnimatedVisibility(
+                        visible = !rootLibraryContentScrolled,
+                        enter = expandVertically(
+                            animationSpec = androidx.compose.animation.core.tween(180),
+                            expandFrom = Alignment.Top,
+                        ) + fadeIn(animationSpec = androidx.compose.animation.core.tween(120)),
+                        exit = shrinkVertically(
+                            animationSpec = androidx.compose.animation.core.tween(180),
+                            shrinkTowards = Alignment.Top,
+                        ) + fadeOut(animationSpec = androidx.compose.animation.core.tween(120)),
+                    ) {
+                        LibraryHeaderBar(
+                            selectedFilter = selectedFilter,
+                            onFilterSelect = selectLibraryFilter,
+                            viewType = libraryViewType,
+                            onToggleViewType = {
+                                val next = if (libraryViewType == LibraryViewType.GRID) LibraryViewType.LIST else LibraryViewType.GRID
+                                AppSettings.setLibraryPlaylistsViewType(next)
+                            },
+                            onCreatePlaylist = { showCreateDialog = true },
+                            smartPlaylistsEnabled = smartPlaylistsEnabled,
+                            onCreateSmartPlaylist = { showCreateSmartPlaylistDialog = true },
+                            localizeAllLabel = localizeAllLabel,
+                            visibleCategories = visibleLibraryCategories,
+                            categoryOrder = libraryCategoryOrder,
+                        )
+                    }
 
                     val onFavoritesClick = {
                         drillDownPlaylistId = null
