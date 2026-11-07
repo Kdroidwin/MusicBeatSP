@@ -45,7 +45,6 @@ import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.WindowInsets
-import androidx.compose.foundation.layout.asPaddingValues
 import androidx.compose.foundation.layout.fillMaxHeight
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
@@ -347,6 +346,8 @@ private const val PLAYER_SHEET_SCRIM_ALPHA = 0.32f
 class MainActivity : AppCompatActivity() {
     /** The expanded player is a modal surface on compact layouts. */
     private var expandedPlayerSurfaceActive = false
+    /** Root lists use immersive scrolling: hide the status bar while a list is away from its top. */
+    private var rootScrollHidesStatusBar = false
     private var musicOnlyModeLockTaskStarted = false
 
     override fun onCreate(savedInstanceState: Bundle?) {
@@ -498,6 +499,7 @@ class MainActivity : AppCompatActivity() {
                                     applySystemBarPreferences()
                                 }
                             },
+                            onRootScrollStatusBarChanged = ::setRootScrollStatusBarHidden,
                         )
                     }
                 }
@@ -528,7 +530,7 @@ class MainActivity : AppCompatActivity() {
         val showStatusBar = if (expandedPlayerSurfaceActive) {
             AppSettings.showPlayerStatusBar.value
         } else {
-            AppSettings.showStatusBar.value
+            AppSettings.showStatusBar.value && !rootScrollHidesStatusBar
         }
         if (showStatusBar) {
             bars.show(WindowInsetsCompat.Type.statusBars())
@@ -540,6 +542,12 @@ class MainActivity : AppCompatActivity() {
         if (forceWhiteNavigationBar) {
             bars.isAppearanceLightNavigationBars = false
         }
+    }
+
+    private fun setRootScrollStatusBarHidden(hidden: Boolean) {
+        if (rootScrollHidesStatusBar == hidden) return
+        rootScrollHidesStatusBar = hidden
+        applySystemBarPreferences()
     }
 
     /**
@@ -604,6 +612,7 @@ private fun BitChordApp(
     player: PlayerState,
     onPlayerCloseStarted: () -> Unit,
     onPlayerSurfaceVisibilityChanged: (Boolean) -> Unit,
+    onRootScrollStatusBarChanged: (Boolean) -> Unit,
     viewModel: MainViewModel = viewModel(),
 ) {
     val context = LocalContext.current
@@ -1250,6 +1259,9 @@ private fun BitChordApp(
         )
     }
     val rootTabFloatingSettingsOnly = rootTabTopBarScrollEnabled && rootTabTopBarCollapsed
+    LaunchedEffect(rootTabTopBarScrollEnabled, rootTabTopBarCollapsed) {
+        onRootScrollStatusBarChanged(rootTabTopBarScrollEnabled && rootTabTopBarCollapsed)
+    }
 
     // Held, not rebuilt. `listOf` hands back a new instance on every pass, and a
     // List is not a type the compiler can call stable, so under strong skipping
@@ -2232,12 +2244,11 @@ private fun BitChordApp(
     // so a fixed number only ever lines up on the one device it was picked on.
     // See [topBarContentPadding].
     val listPadding = PaddingValues(
-        // Once the pinned app bar has collapsed, keep only the OS status-bar
-        // inset. Several root screens put this padding on a fixed parent
-        // Column, so hiding the bar alone left an empty bar-height band above
-        // the scrolling content.
+        // Root lists scroll edge-to-edge: when the pinned bar collapses, hide
+        // both its reserved space and the status-bar inset. The activity hides
+        // the system status bar for the same state below.
         top = if (rootTabTopBarScrollEnabled && rootTabTopBarCollapsed) {
-            WindowInsets.statusBars.asPaddingValues().calculateTopPadding()
+            0.dp
         } else {
             topBarContentPadding()
         },
