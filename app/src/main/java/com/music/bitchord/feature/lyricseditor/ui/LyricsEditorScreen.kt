@@ -598,6 +598,7 @@ fun LyricsEditorScreen(
             text = {
                 Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
                     val statusId = when (progress.stage) {
+                        AutoSyncStage.FetchingLyrics -> R.string.lyrics_auto_sync_fetching_lyrics
                         AutoSyncStage.DownloadingModel -> R.string.lyrics_auto_sync_downloading
                         AutoSyncStage.DecodingAudio -> R.string.lyrics_auto_sync_decoding
                         AutoSyncStage.Aligning -> R.string.lyrics_auto_sync_aligning

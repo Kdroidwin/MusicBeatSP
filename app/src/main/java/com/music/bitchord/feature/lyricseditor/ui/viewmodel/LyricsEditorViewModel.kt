@@ -10,6 +10,7 @@ import com.music.bitchord.data.model.Song
 import com.music.bitchord.data.model.durationMillis
 import com.music.bitchord.data.settings.AppSettings
 import com.music.bitchord.data.lyrics.LyricsStrictness
+import com.music.bitchord.data.lyrics.providers.NativeLyricsProviders
 import com.music.bitchord.feature.lyricseditor.data.LocalLyricsManager
 import com.music.bitchord.feature.lyricseditor.domain.model.LyricsEditorSource
 import com.music.bitchord.feature.lyricseditor.domain.model.LyricsMatchScorer
@@ -25,7 +26,7 @@ import kotlinx.coroutines.Job
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.launch
 
-enum class AutoSyncStage { DownloadingModel, DecodingAudio, Aligning }
+enum class AutoSyncStage { FetchingLyrics, DownloadingModel, DecodingAudio, Aligning }
 data class AutoSyncProgress(val stage: AutoSyncStage, val percent: Int? = null)
 
 class LyricsEditorViewModel(app: Application) : AndroidViewModel(app) {
@@ -246,10 +247,24 @@ class LyricsEditorViewModel(app: Application) : AndroidViewModel(app) {
         autoSyncToken = generationToken
         autoSyncJob = viewModelScope.launch {
             try {
+                val embeddedLyrics = editedLyricsMap[LyricsEditorSource.Embedded].orEmpty()
+                val inputLyrics = plainLyrics.takeIf(String::isNotBlank)
+                    ?: embeddedLyrics.takeIf(String::isNotBlank)
+                    ?: run {
+                        _autoSyncProgress.value = AutoSyncProgress(AutoSyncStage.FetchingLyrics)
+                        NativeLyricsProviders.fetchHeuristicSyncPlainLyrics(
+                            title = song.title,
+                            artist = song.artist,
+                        )?.takeIf(String::isNotBlank)
+                    }
+                    ?: throw IllegalStateException(
+                        getApplication<Application>().getString(R.string.lyrics_auto_sync_source_lyrics_not_found),
+                    )
+
                 val synchronized = CtcForcedLyricsAligner.generate(
                     context = getApplication(),
                     song = song,
-                    plainLyrics = plainLyrics,
+                    plainLyrics = inputLyrics,
                     characterByCharacter = characterByCharacter,
                 ) { stage, percent ->
                     val uiStage = when (stage) {

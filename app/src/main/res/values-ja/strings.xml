@@ -1808,6 +1808,8 @@
     <string name="lyrics_editor_generate_synced_lyrics">同期歌詞を自動生成</string>
     <string name="lyrics_editor_generate_character_synced_lyrics">同期歌詞を1文字単位で自動生成</string>
     <string name="lyrics_auto_sync_title">同期歌詞を生成中</string>
+    <string name="lyrics_auto_sync_fetching_lyrics">Heuristic Syncの歌詞ソースから歌詞を取得しています…</string>
+    <string name="lyrics_auto_sync_source_lyrics_not_found">埋め込み歌詞にもHeuristic Syncの歌詞ソースにも歌詞が見つかりませんでした。</string>
     <string name="lyrics_auto_sync_model_info">初回はMahmoudAshrafのMMS-300Mアライナーをromara-labsが配布するONNXモデル（CC BY-NC 4.0）を約1.26 GBダウンロードします。RAM 8 GB以上を推奨します。音源は端末内で処理します。</string>
     <string name="lyrics_auto_sync_downloading">位置合わせモデルをダウンロード中… %1$d%%</string>
     <string name="lyrics_auto_sync_decoding">端末内の音源を読み込んでいます…</string>

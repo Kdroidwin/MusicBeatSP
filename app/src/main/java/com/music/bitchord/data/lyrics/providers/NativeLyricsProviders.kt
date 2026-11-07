@@ -100,6 +100,30 @@ object NativeLyricsProviders {
         artist: String,
         durationSec: Int,
         characterByCharacter: Boolean,
+    ): String? {
+        val plain = fetchHeuristicSourceLyrics(title, artist) ?: return null
+
+        return if (characterByCharacter) {
+            CtcLrcGenerator.generateCharacterSyncedLrc(plain, durationSec)
+        } else {
+            CtcLrcGenerator.generateAutoSyncedLrc(plain, durationSec)
+        }
+    }
+
+    /**
+     * The same best plain-lyrics candidate used by the Heuristic Sync sources.
+     * CTC Forced Alignment uses this when its embedded lyric field is empty.
+     */
+    suspend fun fetchHeuristicSyncPlainLyrics(
+        title: String,
+        artist: String,
+    ): String? {
+        return fetchHeuristicSourceLyrics(title, artist)
+    }
+
+    private suspend fun fetchHeuristicSourceLyrics(
+        title: String,
+        artist: String,
     ): String? = coroutineScope {
         val utatenJob = async(Dispatchers.IO) { UtaTenLyricsClient.getLyrics(title, artist) }
         val utanetJob = async(Dispatchers.IO) { UtaNetLyricsClient.getLyrics(title, artist) }
@@ -121,12 +145,7 @@ object NativeLyricsProviders {
                 candidateLineCount == bestLineCount && candidate.length > best.length
             ) candidate else best
         } ?: return@coroutineScope null
-
-        if (characterByCharacter) {
-            CtcLrcGenerator.generateCharacterSyncedLrc(plain, durationSec)
-        } else {
-            CtcLrcGenerator.generateAutoSyncedLrc(plain, durationSec)
-        }
+        plain
     }
 
     private suspend fun searchCtcAlignedLyrics(

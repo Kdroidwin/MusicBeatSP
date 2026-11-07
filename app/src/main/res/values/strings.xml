@@ -1835,6 +1835,8 @@
     <string name="lyrics_editor_generate_synced_lyrics">Generate synchronized lyrics automatically</string>
     <string name="lyrics_editor_generate_character_synced_lyrics">Generate character-synchronized lyrics</string>
     <string name="lyrics_auto_sync_title">Generating synchronized lyrics</string>
+    <string name="lyrics_auto_sync_fetching_lyrics">Fetching plain lyrics from the Heuristic Sync sources…</string>
+    <string name="lyrics_auto_sync_source_lyrics_not_found">No lyrics were found in the embedded field or Heuristic Sync sources.</string>
     <string name="lyrics_auto_sync_model_info">First use downloads about 1.26 GB: the romara-labs ONNX distribution of MahmoudAshraf’s MMS-300M aligner (CC BY-NC 4.0). 8 GB RAM is recommended. Audio stays on this device.</string>
     <string name="lyrics_auto_sync_downloading">Downloading alignment model… %1$d%%</string>
     <string name="lyrics_auto_sync_decoding">Reading and decoding the local audio…</string>
