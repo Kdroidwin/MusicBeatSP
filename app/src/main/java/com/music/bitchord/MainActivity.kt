@@ -45,6 +45,7 @@ import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.WindowInsets
+import androidx.compose.foundation.layout.asPaddingValues
 import androidx.compose.foundation.layout.fillMaxHeight
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
@@ -2231,7 +2232,15 @@ private fun BitChordApp(
     // so a fixed number only ever lines up on the one device it was picked on.
     // See [topBarContentPadding].
     val listPadding = PaddingValues(
-        top = topBarContentPadding(),
+        // Once the pinned app bar has collapsed, keep only the OS status-bar
+        // inset. Several root screens put this padding on a fixed parent
+        // Column, so hiding the bar alone left an empty bar-height band above
+        // the scrolling content.
+        top = if (rootTabTopBarScrollEnabled && rootTabTopBarCollapsed) {
+            WindowInsets.statusBars.asPaddingValues().calculateTopPadding()
+        } else {
+            topBarContentPadding()
+        },
         bottom = if (player.song != null && !playerDocked) 210.dp else 140.dp,
     )
 
