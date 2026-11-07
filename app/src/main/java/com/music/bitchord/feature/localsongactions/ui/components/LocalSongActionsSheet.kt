@@ -144,7 +144,8 @@ fun LocalSongActionsSheet(
                 Box(
                     Modifier
                         .fillMaxWidth()
-                        .height(48.dp),
+                        .height(56.dp)
+                        .padding(top = 12.dp),
                     contentAlignment = androidx.compose.ui.Alignment.Center,
                 ) {
                     Box(
@@ -161,7 +162,7 @@ fun LocalSongActionsSheet(
         } else {
             {
                 Box(
-                    Modifier.fillMaxWidth().height(48.dp),
+                    Modifier.fillMaxWidth().height(56.dp).padding(top = 12.dp),
                     contentAlignment = androidx.compose.ui.Alignment.Center,
                 ) {
                     Box(

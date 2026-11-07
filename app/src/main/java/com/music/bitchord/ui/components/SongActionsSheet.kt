@@ -495,7 +495,7 @@ private fun SleepTimerPicker(palette: ArtworkPalette, onBack: () -> Unit) {
             Column(Modifier.weight(1f)) {
                 Text(
                     text = stringResource(R.string.sleep_timer),
-                    style = MaterialTheme.typography.titleLarge,
+                    style = MaterialTheme.typography.titleMedium,
                     color = MaterialTheme.colorScheme.onBackground,
                 )
                 Text(

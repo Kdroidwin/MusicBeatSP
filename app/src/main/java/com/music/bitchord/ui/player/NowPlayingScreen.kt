@@ -1483,7 +1483,7 @@ fun NowPlayingScreen(
                 }
                 Column(Modifier.fillMaxWidth()) {
                     Box(
-                        Modifier.fillMaxWidth().height(48.dp),
+                        Modifier.fillMaxWidth().height(56.dp).padding(top = 12.dp),
                         contentAlignment = Alignment.Center,
                     ) {
                         Box(
