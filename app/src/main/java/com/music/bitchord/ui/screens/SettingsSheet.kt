@@ -441,6 +441,49 @@ private fun SettingsSearchEntryRows(entries: List<SettingsSearchEntry>) {
     }
 }
 
+@Composable
+private fun ThemeModePickerDialog(
+    expanded: androidx.compose.runtime.State<Boolean>,
+    theme: ThemeMode,
+    onDismiss: () -> Unit,
+    onSelect: (ThemeMode) -> Unit,
+) {
+    if (!expanded.value) return
+    AlertDialog(
+        onDismissRequest = onDismiss,
+        title = { Text(stringResource(R.string.theme)) },
+        text = {
+            Column {
+                ThemeMode.entries.forEach { mode ->
+                    Row(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .clickable { onSelect(mode) }
+                            .padding(vertical = 6.dp),
+                        verticalAlignment = Alignment.CenterVertically,
+                    ) {
+                        RadioButton(
+                            selected = theme == mode,
+                            onClick = { onSelect(mode) },
+                        )
+                        Text(mode.localizedLabel(), modifier = Modifier.padding(start = 8.dp))
+                    }
+                }
+            }
+        },
+        confirmButton = {
+            TextButton(onClick = onDismiss) {
+                Text(stringResource(R.string.done))
+            }
+        },
+    )
+}
+
+@Composable
+private fun SettingsPopupLayer(content: @Composable () -> Unit) {
+    content()
+}
+
 private fun resetDeezerArtistArtwork(context: Context) {
     AppSettings.setArtistDeezerArtworkEnabled(false)
     AppSettings.setOnlineAlbumArtistArtwork(false)
@@ -1181,7 +1224,7 @@ fun SettingsScreen(
     var showArtistSignatureEditor by rememberSaveable { mutableStateOf(false) }
     var showSpotifyCanvasEditor by rememberSaveable { mutableStateOf(false) }
     var showLauncherIconPicker by rememberSaveable { mutableStateOf(false) }
-    var showThemePicker by rememberSaveable { mutableStateOf(false) }
+    val showThemePicker = rememberSaveable { mutableStateOf(false) }
     var showMediaControlActionPicker by rememberSaveable { mutableStateOf(false) }
     var showPlayerArtworkModePicker by rememberSaveable { mutableStateOf(false) }
     var showRetroPlayerBackgroundPicker by rememberSaveable { mutableStateOf(false) }
@@ -1879,7 +1922,7 @@ fun SettingsScreen(
             title = stringResource(R.string.theme),
             subtitle = theme.localizedLabel(),
             keywords = listOf("theme", "appearance", "system", "light", "dark", "AMOLED", "artwork", "image", "画像", "写真", "テーマ", "外観"),
-            activate = { showThemePicker = true },
+            activate = { showThemePicker.value = true },
         ),
         SettingsSearchEntry(
             title = stringResource(R.string.choose_theme_image),
@@ -3053,104 +3096,6 @@ fun SettingsScreen(
                     onClick = {
                         if (usbAllowFixedVolume) AppSettings.setUsbAllowFixedVolume(false)
                         else showFixedVolumeConfirmation = true
-                    },
-                )
-            }
-            if (showBitPerfectModeDialog) {
-                AlertDialog(
-                    onDismissRequest = { showBitPerfectModeDialog = false },
-                    title = { Text(stringResource(R.string.bit_perfect_playback)) },
-                    text = {
-                        Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
-                            BitPerfectMode.entries.forEach { mode ->
-                                val label = stringResource(
-                                    when (mode) {
-                                        BitPerfectMode.OFF -> R.string.off
-                                        BitPerfectMode.USB_ANDROID -> R.string.bit_perfect_mode_usb_android
-                                        BitPerfectMode.DAP_EXCLUSIVE -> R.string.bit_perfect_mode_dap_exclusive
-                                        BitPerfectMode.USB_DIRECT -> R.string.bit_perfect_mode_usb_direct
-                                    },
-                                )
-                                val supported = when (mode) {
-                                    BitPerfectMode.OFF, BitPerfectMode.USB_DIRECT -> true
-                                    BitPerfectMode.USB_ANDROID -> Build.VERSION.SDK_INT >= 34
-                                    BitPerfectMode.DAP_EXCLUSIVE -> Build.VERSION.SDK_INT >= 27
-                                }
-                                val description = stringResource(
-                                    when {
-                                        mode == BitPerfectMode.USB_ANDROID && !supported -> R.string.bit_perfect_requires_android_14
-                                        mode == BitPerfectMode.DAP_EXCLUSIVE && !supported -> R.string.bit_perfect_requires_android_8_1
-                                        mode == BitPerfectMode.OFF -> R.string.bit_perfect_mode_off_subtitle
-                                        mode == BitPerfectMode.USB_ANDROID -> R.string.bit_perfect_mode_usb_android_subtitle
-                                        mode == BitPerfectMode.DAP_EXCLUSIVE -> R.string.bit_perfect_mode_dap_exclusive_subtitle
-                                        else -> R.string.bit_perfect_mode_usb_direct_subtitle
-                                    },
-                                )
-                                Row(
-                                    modifier = Modifier
-                                        .fillMaxWidth()
-                                        .clickable(enabled = supported) {
-                                            showBitPerfectModeDialog = false
-                                            if (mode == BitPerfectMode.OFF) {
-                                                AppSettings.setBitPerfectMode(mode)
-                                            } else if (mode != bitPerfectMode) {
-                                                pendingBitPerfectMode = mode
-                                            }
-                                        }
-                                        .padding(vertical = 4.dp),
-                                    verticalAlignment = Alignment.CenterVertically,
-                                ) {
-                                    RadioButton(
-                                        selected = mode == bitPerfectMode,
-                                        enabled = supported,
-                                        onClick = {
-                                            showBitPerfectModeDialog = false
-                                            if (mode == BitPerfectMode.OFF) AppSettings.setBitPerfectMode(mode)
-                                            else if (mode != bitPerfectMode) pendingBitPerfectMode = mode
-                                        },
-                                    )
-                                    Column(Modifier.padding(start = 8.dp)) {
-                                        Text(label, color = if (supported) MaterialTheme.colorScheme.onSurface else MaterialTheme.colorScheme.onSurfaceVariant)
-                                        Text(description, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
-                                    }
-                                }
-                            }
-                        }
-                    },
-                    confirmButton = {
-                        TextButton(onClick = { showBitPerfectModeDialog = false }) { Text(stringResource(R.string.cancel)) }
-                    },
-                )
-            }
-            pendingBitPerfectMode?.let { requestedMode ->
-                AlertDialog(
-                    onDismissRequest = { pendingBitPerfectMode = null },
-                    title = { Text(stringResource(R.string.bit_perfect_confirm_title)) },
-                    text = { Text(stringResource(R.string.bit_perfect_confirm_message)) },
-                    confirmButton = {
-                        TextButton(onClick = {
-                            AppSettings.setBitPerfectMode(requestedMode)
-                            pendingBitPerfectMode = null
-                        }) { Text(stringResource(R.string.enable)) }
-                    },
-                    dismissButton = {
-                        TextButton(onClick = { pendingBitPerfectMode = null }) { Text(stringResource(R.string.cancel)) }
-                    },
-                )
-            }
-            if (showFixedVolumeConfirmation) {
-                AlertDialog(
-                    onDismissRequest = { showFixedVolumeConfirmation = false },
-                    title = { Text(stringResource(R.string.usb_allow_fixed_volume_confirm_title)) },
-                    text = { Text(stringResource(R.string.usb_allow_fixed_volume_confirm_message)) },
-                    confirmButton = {
-                        TextButton(onClick = {
-                            AppSettings.setUsbAllowFixedVolume(true)
-                            showFixedVolumeConfirmation = false
-                        }) { Text(stringResource(R.string.enable)) }
-                    },
-                    dismissButton = {
-                        TextButton(onClick = { showFixedVolumeConfirmation = false }) { Text(stringResource(R.string.cancel)) }
                     },
                 )
             }
@@ -4335,7 +4280,7 @@ fun SettingsScreen(
                 icon = Icons.Rounded.Brightness4,
                 title = stringResource(R.string.theme),
                 value = theme.localizedLabel(),
-                onClick = { showThemePicker = true },
+                onClick = { showThemePicker.value = true },
             )
             RowDivider()
             SettingsRow(
@@ -4938,49 +4883,6 @@ fun SettingsScreen(
                 ),
                 onClick = { showFolderArtworkFallbackModeDialog = true },
             )
-            if (showFolderArtworkFallbackModeDialog) {
-                AlertDialog(
-                    onDismissRequest = { showFolderArtworkFallbackModeDialog = false },
-                    title = { Text(stringResource(R.string.folder_artwork_fallback)) },
-                    text = {
-                        Column {
-                            FolderArtworkFallbackMode.entries.forEach { mode ->
-                                val label = stringResource(
-                                    when (mode) {
-                                        FolderArtworkFallbackMode.DISABLED -> R.string.folder_artwork_fallback_disabled
-                                        FolderArtworkFallbackMode.ALWAYS -> R.string.folder_artwork_fallback_always
-                                        FolderArtworkFallbackMode.SINGLE_ALBUM -> R.string.folder_artwork_fallback_single_album
-                                    },
-                                )
-                                Row(
-                                    modifier = Modifier
-                                        .fillMaxWidth()
-                                        .clickable {
-                                            AppSettings.setFolderArtworkFallbackMode(mode)
-                                            showFolderArtworkFallbackModeDialog = false
-                                        }
-                                        .padding(vertical = 4.dp),
-                                    verticalAlignment = Alignment.CenterVertically,
-                                ) {
-                                    RadioButton(
-                                        selected = folderArtworkFallbackMode == mode,
-                                        onClick = {
-                                            AppSettings.setFolderArtworkFallbackMode(mode)
-                                            showFolderArtworkFallbackModeDialog = false
-                                        },
-                                    )
-                                    Text(label, modifier = Modifier.padding(start = 8.dp))
-                                }
-                            }
-                        }
-                    },
-                    confirmButton = {
-                        TextButton(onClick = { showFolderArtworkFallbackModeDialog = false }) {
-                            Text(stringResource(R.string.cancel))
-                        }
-                    },
-                )
-            }
             RowDivider()
             SettingsRow(
                 icon = Icons.Rounded.Album,
@@ -6370,46 +6272,160 @@ fun SettingsScreen(
             )
         }
 
-        if (showThemePicker) {
+        SettingsPopupLayer {
+        ThemeModePickerDialog(
+            expanded = showThemePicker,
+            theme = theme,
+            onDismiss = { showThemePicker.value = false },
+            onSelect = { mode ->
+                showThemePicker.value = false
+                if (mode == ThemeMode.CUSTOM_IMAGE && customThemeImageUri.isNullOrBlank()) {
+                    chooseThemeImage()
+                } else {
+                    AppSettings.setThemeMode(mode)
+                }
+            },
+        )
+
+        if (showBitPerfectModeDialog) {
             AlertDialog(
-                onDismissRequest = { showThemePicker = false },
-                title = { Text(stringResource(R.string.theme)) },
+                onDismissRequest = { showBitPerfectModeDialog = false },
+                title = { Text(stringResource(R.string.bit_perfect_playback)) },
                 text = {
-                    Column {
-                        ThemeMode.entries.forEach { mode ->
+                    Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                        BitPerfectMode.entries.forEach { mode ->
+                            val label = stringResource(
+                                when (mode) {
+                                    BitPerfectMode.OFF -> R.string.off
+                                    BitPerfectMode.USB_ANDROID -> R.string.bit_perfect_mode_usb_android
+                                    BitPerfectMode.DAP_EXCLUSIVE -> R.string.bit_perfect_mode_dap_exclusive
+                                    BitPerfectMode.USB_DIRECT -> R.string.bit_perfect_mode_usb_direct
+                                },
+                            )
+                            val supported = when (mode) {
+                                BitPerfectMode.OFF, BitPerfectMode.USB_DIRECT -> true
+                                BitPerfectMode.USB_ANDROID -> Build.VERSION.SDK_INT >= 34
+                                BitPerfectMode.DAP_EXCLUSIVE -> Build.VERSION.SDK_INT >= 27
+                            }
+                            val description = stringResource(
+                                when {
+                                    mode == BitPerfectMode.USB_ANDROID && !supported -> R.string.bit_perfect_requires_android_14
+                                    mode == BitPerfectMode.DAP_EXCLUSIVE && !supported -> R.string.bit_perfect_requires_android_8_1
+                                    mode == BitPerfectMode.OFF -> R.string.bit_perfect_mode_off_subtitle
+                                    mode == BitPerfectMode.USB_ANDROID -> R.string.bit_perfect_mode_usb_android_subtitle
+                                    mode == BitPerfectMode.DAP_EXCLUSIVE -> R.string.bit_perfect_mode_dap_exclusive_subtitle
+                                    else -> R.string.bit_perfect_mode_usb_direct_subtitle
+                                },
+                            )
                             Row(
                                 modifier = Modifier
                                     .fillMaxWidth()
-                                    .clickable {
-                                        showThemePicker = false
-                                        if (mode == ThemeMode.CUSTOM_IMAGE && customThemeImageUri.isNullOrBlank()) {
-                                            chooseThemeImage()
-                                        } else {
-                                            AppSettings.setThemeMode(mode)
+                                    .clickable(enabled = supported) {
+                                        showBitPerfectModeDialog = false
+                                        if (mode == BitPerfectMode.OFF) {
+                                            AppSettings.setBitPerfectMode(mode)
+                                        } else if (mode != bitPerfectMode) {
+                                            pendingBitPerfectMode = mode
                                         }
                                     }
-                                    .padding(vertical = 6.dp),
+                                    .padding(vertical = 4.dp),
                                 verticalAlignment = Alignment.CenterVertically,
                             ) {
                                 RadioButton(
-                                    selected = theme == mode,
+                                    selected = mode == bitPerfectMode,
+                                    enabled = supported,
                                     onClick = {
-                                        showThemePicker = false
-                                        if (mode == ThemeMode.CUSTOM_IMAGE && customThemeImageUri.isNullOrBlank()) {
-                                            chooseThemeImage()
-                                        } else {
-                                            AppSettings.setThemeMode(mode)
-                                        }
+                                        showBitPerfectModeDialog = false
+                                        if (mode == BitPerfectMode.OFF) AppSettings.setBitPerfectMode(mode)
+                                        else if (mode != bitPerfectMode) pendingBitPerfectMode = mode
                                     },
                                 )
-                                Text(mode.localizedLabel(), modifier = Modifier.padding(start = 8.dp))
+                                Column(Modifier.padding(start = 8.dp)) {
+                                    Text(label, color = if (supported) MaterialTheme.colorScheme.onSurface else MaterialTheme.colorScheme.onSurfaceVariant)
+                                    Text(description, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                                }
                             }
                         }
                     }
                 },
                 confirmButton = {
-                    TextButton(onClick = { showThemePicker = false }) {
-                        Text(stringResource(R.string.done))
+                    TextButton(onClick = { showBitPerfectModeDialog = false }) {
+                        Text(stringResource(R.string.cancel))
+                    }
+                },
+            )
+        }
+        pendingBitPerfectMode?.let { requestedMode ->
+            AlertDialog(
+                onDismissRequest = { pendingBitPerfectMode = null },
+                title = { Text(stringResource(R.string.bit_perfect_confirm_title)) },
+                text = { Text(stringResource(R.string.bit_perfect_confirm_message)) },
+                confirmButton = {
+                    TextButton(onClick = {
+                        AppSettings.setBitPerfectMode(requestedMode)
+                        pendingBitPerfectMode = null
+                    }) { Text(stringResource(R.string.enable)) }
+                },
+                dismissButton = {
+                    TextButton(onClick = { pendingBitPerfectMode = null }) { Text(stringResource(R.string.cancel)) }
+                },
+            )
+        }
+        if (showFixedVolumeConfirmation) {
+            AlertDialog(
+                onDismissRequest = { showFixedVolumeConfirmation = false },
+                title = { Text(stringResource(R.string.usb_allow_fixed_volume_confirm_title)) },
+                text = { Text(stringResource(R.string.usb_allow_fixed_volume_confirm_message)) },
+                confirmButton = {
+                    TextButton(onClick = {
+                        AppSettings.setUsbAllowFixedVolume(true)
+                        showFixedVolumeConfirmation = false
+                    }) { Text(stringResource(R.string.enable)) }
+                },
+                dismissButton = {
+                    TextButton(onClick = { showFixedVolumeConfirmation = false }) { Text(stringResource(R.string.cancel)) }
+                },
+            )
+        }
+        if (showFolderArtworkFallbackModeDialog) {
+            AlertDialog(
+                onDismissRequest = { showFolderArtworkFallbackModeDialog = false },
+                title = { Text(stringResource(R.string.folder_artwork_fallback)) },
+                text = {
+                    Column {
+                        FolderArtworkFallbackMode.entries.forEach { mode ->
+                            val label = stringResource(
+                                when (mode) {
+                                    FolderArtworkFallbackMode.DISABLED -> R.string.folder_artwork_fallback_disabled
+                                    FolderArtworkFallbackMode.ALWAYS -> R.string.folder_artwork_fallback_always
+                                    FolderArtworkFallbackMode.SINGLE_ALBUM -> R.string.folder_artwork_fallback_single_album
+                                },
+                            )
+                            Row(
+                                modifier = Modifier
+                                    .fillMaxWidth()
+                                    .clickable {
+                                        AppSettings.setFolderArtworkFallbackMode(mode)
+                                        showFolderArtworkFallbackModeDialog = false
+                                    }
+                                    .padding(vertical = 4.dp),
+                                verticalAlignment = Alignment.CenterVertically,
+                            ) {
+                                RadioButton(
+                                    selected = folderArtworkFallbackMode == mode,
+                                    onClick = {
+                                        AppSettings.setFolderArtworkFallbackMode(mode)
+                                        showFolderArtworkFallbackModeDialog = false
+                                    },
+                                )
+                                Text(label, modifier = Modifier.padding(start = 8.dp))
+                            }
+                        }
+                    }
+                },
+                confirmButton = {
+                    TextButton(onClick = { showFolderArtworkFallbackModeDialog = false }) {
+                        Text(stringResource(R.string.cancel))
                     }
                 },
             )
@@ -6725,6 +6741,7 @@ fun SettingsScreen(
             )
         }
 
+        }
         Text(
             text = buildAnnotatedString {
                 append("MusicBeatSP $version  ")
@@ -6770,6 +6787,7 @@ fun SettingsScreen(
 
 
 
+    SettingsPopupLayer {
     ArtistSignatureApiSettingsDialog(
         show = showArtistSignatureEditor,
         onDismiss = { showArtistSignatureEditor = false },
@@ -7314,6 +7332,7 @@ fun SettingsScreen(
         )
     }
 
+        }
 }
 
 @Composable
