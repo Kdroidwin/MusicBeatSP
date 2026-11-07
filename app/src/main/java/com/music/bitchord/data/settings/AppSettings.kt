@@ -338,6 +338,7 @@ enum class MainNavigationTab(val index: Int) {
     FOLDERS(6),
     RADIO(7),
     HOME(8),
+    GENRES(9),
 }
 
 enum class ScreenOrientationMode { SYSTEM, PORTRAIT, LANDSCAPE }
@@ -381,7 +382,8 @@ enum class PlayerDetailsAction {
 
 object MainNavigationTabs {
     /** Newly introduced destinations stay opt-in unless the user enables them. */
-    fun defaultVisibleTabs(): Set<MainNavigationTab> = MainNavigationTab.entries.toSet() - MainNavigationTab.HOME
+    fun defaultVisibleTabs(): Set<MainNavigationTab> =
+        MainNavigationTab.entries.toSet() - setOf(MainNavigationTab.HOME, MainNavigationTab.GENRES)
 
     fun normalizeOrder(order: List<MainNavigationTab>): List<MainNavigationTab> =
         (order + MainNavigationTab.entries).distinct()

@@ -2055,6 +2055,7 @@ fun SettingsScreen(
             MainNavigationTab.FOLDERS -> R.string.folders
             MainNavigationTab.RADIO -> R.string.radio
             MainNavigationTab.HOME -> R.string.listen_now
+            MainNavigationTab.GENRES -> R.string.genres
         })
         SettingsSearchEntry(
             title = stringResource(R.string.show_tab_setting, tabTitle),
@@ -5800,6 +5801,7 @@ fun SettingsScreen(
                 MainNavigationTab.FOLDERS -> R.string.folders
                 MainNavigationTab.RADIO -> R.string.radio
                 MainNavigationTab.HOME -> R.string.listen_now
+                MainNavigationTab.GENRES -> R.string.genres
             })
             SettingsRow(
                 icon = Icons.Rounded.MusicNote,
@@ -5821,6 +5823,7 @@ fun SettingsScreen(
                     MainNavigationTab.FOLDERS -> R.string.folders
                     MainNavigationTab.RADIO -> R.string.radio
                     MainNavigationTab.HOME -> R.string.listen_now
+                    MainNavigationTab.GENRES -> R.string.genres
                 }
                 val icon = when (tab) {
                     MainNavigationTab.SONGS -> Icons.Rounded.MusicNote
@@ -5832,6 +5835,7 @@ fun SettingsScreen(
                     MainNavigationTab.FOLDERS -> Icons.Rounded.Folder
                     MainNavigationTab.RADIO -> Icons.Rounded.Radio
                     MainNavigationTab.HOME -> Icons.Rounded.Home
+                    MainNavigationTab.GENRES -> Icons.Rounded.LibraryMusic
                 }
                 val checked = if (tab == MainNavigationTab.ALBUM_ARTISTS) {
                     com.music.bitchord.data.settings.LocalLibraryTab.ALBUM_ARTISTS in localTabs
@@ -6689,6 +6693,7 @@ fun SettingsScreen(
                                 MainNavigationTab.FOLDERS -> stringResource(R.string.folders)
                                 MainNavigationTab.RADIO -> stringResource(R.string.radio)
                                 MainNavigationTab.HOME -> stringResource(R.string.listen_now)
+                                MainNavigationTab.GENRES -> stringResource(R.string.genres)
                             }
                             Row(
                                 modifier = Modifier

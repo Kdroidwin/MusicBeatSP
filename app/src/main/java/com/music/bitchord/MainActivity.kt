@@ -127,6 +127,7 @@ import androidx.compose.material.icons.rounded.LibraryMusic
 import com.music.bitchord.feature.library.ui.LibraryScreen
 import com.music.bitchord.feature.library.ui.components.LibraryFilter
 import com.music.bitchord.ui.screens.LOCAL_TAB_SONGS
+import com.music.bitchord.ui.screens.LOCAL_TAB_GENRES
 import com.music.bitchord.ui.screens.LOCAL_TAB_ALBUMS
 import com.music.bitchord.ui.screens.LOCAL_TAB_ALBUM_ARTISTS
 import com.music.bitchord.ui.screens.LOCAL_TAB_ARTISTS
@@ -1321,7 +1322,8 @@ private fun BitChordApp(
     val foldersLabel = stringResource(R.string.folders)
     val radioLabel = stringResource(R.string.radio)
     val homeLabel = stringResource(R.string.listen_now)
-    val allTabs = remember(songsLabel, albumsLabel, artistsLabel, albumArtistsLabel, libraryLabel, searchLabel, foldersLabel, radioLabel, homeLabel) {
+    val genresLabel = stringResource(R.string.genres)
+    val allTabs = remember(songsLabel, albumsLabel, artistsLabel, albumArtistsLabel, libraryLabel, searchLabel, foldersLabel, radioLabel, homeLabel, genresLabel) {
         listOf(
             BottomTab(songsLabel, Icons.Rounded.MusicNote),
             BottomTab(albumsLabel, Icons.Rounded.Album),
@@ -1332,6 +1334,7 @@ private fun BitChordApp(
             BottomTab(foldersLabel, Icons.Rounded.Folder),
             BottomTab(radioLabel, Icons.Rounded.Radio),
             BottomTab(homeLabel, Icons.Rounded.Home),
+            BottomTab(genresLabel, Icons.Rounded.LibraryMusic),
         )
     }
     val tabs = remember(allTabs, visibleTabIndices) {
@@ -3474,6 +3477,51 @@ private fun BitChordApp(
                             onLoadMore = viewModel::loadMoreHome,
                             loadingMore = homeLoadingMore,
                         )
+                        TAB_GENRES -> if (!hasStoragePermission && localSongs.isEmpty()) {
+                            Box(modifier = Modifier.fillMaxSize().padding(listPadding), contentAlignment = Alignment.Center) {
+                                LocalPermissionCard(onRequestPermission = requestDefaultPermission)
+                            }
+                        } else {
+                            LocalMusicScreen(
+                                songs = localSongs,
+                                collections = emptyList(),
+                                isDownloads = false,
+                                currentSong = player.song,
+                                isPlaying = player.isPlaying,
+                                isRefreshing = isRefreshingLocalMusic,
+                                onRefresh = refreshCatalog,
+                                onSongClick = play,
+                                onSongLongPress = openSongMenu,
+                                onSongSwipe = onSongSwipe,
+                                onShuffle = { songs ->
+                                    QueueShuffle.enableForNextQueue()
+                                    play(songs, songs.indices.random())
+                                },
+                                emptyMessage = localEmptyMessage,
+                                onCollectionLongPress = { label, grouped ->
+                                    browseActions = BrowseTarget(
+                                        browseId = null,
+                                        title = label,
+                                        subtitle = grouped.firstOrNull()?.artist.orEmpty()
+                                            .takeUnless { it == label }
+                                            .orEmpty(),
+                                        thumbnailUrl = grouped.firstOrNull()?.thumbnailUrl,
+                                        songs = grouped,
+                                        downloadId = null,
+                                    )
+                                },
+                                contentPadding = listPadding,
+                                initialTab = LOCAL_TAB_GENRES,
+                                showTabRow = false,
+                                onArtworkPaletteChanged = onLocalArtworkPaletteChanged,
+                                onPlayNext = playNext,
+                                onAddToQueue = addToQueue,
+                                onDeleteSong = { viewModel.loadLocalMusic() },
+                                onSongTagsOrLyricsSaved = { viewModel.reloadLyrics(it) },
+                                onSongMetadataUpdated = viewModel::updateLocalSongMetadata,
+                                onCollectionNavigationChanged = onCollectionNavigationChanged,
+                            )
+                        }
                         else -> Box(modifier = Modifier.fillMaxSize())
                     }
                 }
@@ -5456,6 +5504,7 @@ private const val TAB_ALBUM_ARTISTS = 5
 private const val TAB_FOLDERS = 6
 private const val TAB_RADIO = 7
 private const val TAB_HOME = 8
+private const val TAB_GENRES = 9
 
 
 /** Keep only the floating settings action visible while a root tab scrolls. */
