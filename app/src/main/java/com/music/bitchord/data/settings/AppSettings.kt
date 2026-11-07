@@ -805,7 +805,7 @@ object AppSettings {
     val artworkBackdropBlurDp = MutableStateFlow(32f)
     val persistentLocalArtwork = MutableStateFlow(false)
     /** Uses cover/folder/albumart sidecars when an audio file has no embedded cover. */
-    val folderArtworkFallbackMode = MutableStateFlow(FolderArtworkFallbackMode.ALWAYS)
+    val folderArtworkFallbackMode = MutableStateFlow(FolderArtworkFallbackMode.DISABLED)
 
     /** Blurs unfocused lyric lines, keeping the active line sharp. */
     val lyricsBlur = MutableStateFlow(true)
@@ -1667,8 +1667,8 @@ object AppSettings {
             .coerceIn(0f, MAX_PLAYER_ARTWORK_BLUR_DP)
         persistentLocalArtwork.value = prefs.getBoolean(KEY_PERSISTENT_LOCAL_ARTWORK, false)
         folderArtworkFallbackMode.value = FolderArtworkFallbackMode.fromPersistedValue(
-            prefs.getInt(KEY_FOLDER_ARTWORK_FALLBACK_MODE, FolderArtworkFallbackMode.ALWAYS.persistedValue),
-        ) ?: FolderArtworkFallbackMode.ALWAYS
+            prefs.getInt(KEY_FOLDER_ARTWORK_FALLBACK_MODE, FolderArtworkFallbackMode.DISABLED.persistedValue),
+        ) ?: FolderArtworkFallbackMode.DISABLED
         lyricsBlur.value = prefs.getBoolean(KEY_LYRICS_BLUR, true)
         preferEmbeddedLocalLyrics.value = prefs.getBoolean(KEY_PREFER_EMBEDDED_LOCAL_LYRICS, false)
         removeNeteaseLyricCredits.value = prefs.getBoolean(KEY_REMOVE_NETEASE_LYRIC_CREDITS, true)
