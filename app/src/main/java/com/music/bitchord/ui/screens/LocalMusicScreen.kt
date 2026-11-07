@@ -63,6 +63,7 @@ import androidx.compose.material.icons.rounded.Delete
 import androidx.compose.material.icons.rounded.Edit
 import androidx.compose.material.icons.rounded.GraphicEq
 import androidx.compose.material.icons.rounded.LibraryMusic
+import androidx.compose.material.icons.rounded.LocalOffer
 import androidx.compose.material.icons.rounded.MoreHoriz
 import androidx.compose.material.icons.rounded.MusicNote
 import androidx.compose.material.icons.rounded.Person
@@ -957,7 +958,7 @@ fun LocalMusicScreen(
                         LOCAL_TAB_FOLDERS -> Icons.Rounded.Folder to stringResource(R.string.folders)
                         LOCAL_TAB_PLAYLISTS -> Icons.AutoMirrored.Rounded.QueueMusic to stringResource(R.string.playlists)
                         LOCAL_TAB_ALBUM_ARTISTS -> Icons.Rounded.Person to stringResource(R.string.album_artists)
-                        LOCAL_TAB_GENRES -> Icons.Rounded.LibraryMusic to stringResource(R.string.genres)
+                        LOCAL_TAB_GENRES -> Icons.Rounded.LocalOffer to stringResource(R.string.genres)
                         else -> Icons.Rounded.MusicNote to stringResource(R.string.songs)
                     }
                     LocalTab(
@@ -1791,7 +1792,7 @@ private fun GenresTab(
                             contentAlignment = Alignment.Center,
                         ) {
                             Icon(
-                                imageVector = Icons.Rounded.LibraryMusic,
+                                imageVector = Icons.Rounded.LocalOffer,
                                 contentDescription = null,
                                 tint = MaterialTheme.colorScheme.onSurfaceVariant,
                             )
@@ -1801,7 +1802,13 @@ private fun GenresTab(
                         modifier = Modifier.weight(1f).padding(start = 14.dp),
                         verticalArrangement = Arrangement.spacedBy(3.dp),
                     ) {
-                        Text(genre, style = MaterialTheme.typography.titleMedium, maxLines = 1, overflow = TextOverflow.Ellipsis)
+                        Text(
+                            genre,
+                            style = MaterialTheme.typography.titleMedium,
+                            color = MaterialTheme.colorScheme.onSurface,
+                            maxLines = 1,
+                            overflow = TextOverflow.Ellipsis,
+                        )
                         Text(
                             text = pluralStringResource(R.plurals.replay_song_count, tracks.size, tracks.size.toString()),
                             style = MaterialTheme.typography.bodySmall,

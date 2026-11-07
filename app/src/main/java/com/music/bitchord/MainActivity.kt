@@ -124,6 +124,7 @@ import com.music.bitchord.feature.localmusic.ui.FolderBrowserScreen
 import com.music.bitchord.feature.localmusic.data.ZipAudioArchive
 import com.music.bitchord.feature.localmusic.data.ZipAudioEntry
 import androidx.compose.material.icons.rounded.LibraryMusic
+import androidx.compose.material.icons.rounded.LocalOffer
 import com.music.bitchord.feature.library.ui.LibraryScreen
 import com.music.bitchord.feature.library.ui.components.LibraryFilter
 import com.music.bitchord.ui.screens.LOCAL_TAB_SONGS
@@ -1334,7 +1335,7 @@ private fun BitChordApp(
             BottomTab(foldersLabel, Icons.Rounded.Folder),
             BottomTab(radioLabel, Icons.Rounded.Radio),
             BottomTab(homeLabel, Icons.Rounded.Home),
-            BottomTab(genresLabel, Icons.Rounded.LibraryMusic),
+            BottomTab(genresLabel, Icons.Rounded.LocalOffer),
         )
     }
     val tabs = remember(allTabs, visibleTabIndices) {

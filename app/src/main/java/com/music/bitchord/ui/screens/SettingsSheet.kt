@@ -5835,7 +5835,7 @@ fun SettingsScreen(
                     MainNavigationTab.FOLDERS -> Icons.Rounded.Folder
                     MainNavigationTab.RADIO -> Icons.Rounded.Radio
                     MainNavigationTab.HOME -> Icons.Rounded.Home
-                    MainNavigationTab.GENRES -> Icons.Rounded.LibraryMusic
+                    MainNavigationTab.GENRES -> Icons.Rounded.LocalOffer
                 }
                 val checked = if (tab == MainNavigationTab.ALBUM_ARTISTS) {
                     com.music.bitchord.data.settings.LocalLibraryTab.ALBUM_ARTISTS in localTabs
@@ -7532,7 +7532,7 @@ SettingsGroup(header = stringResource(R.string.local_music)) {
             LocalLibraryTab.ARTISTS, LocalLibraryTab.ALBUM_ARTISTS -> Icons.Rounded.Person
             LocalLibraryTab.FOLDERS -> Icons.Rounded.Folder
             LocalLibraryTab.PLAYLISTS -> Icons.Rounded.PlaylistPlay
-            LocalLibraryTab.GENRES -> Icons.Rounded.LibraryMusic
+            LocalLibraryTab.GENRES -> Icons.Rounded.LocalOffer
         }
         val visible = tab in localTabs
         SettingsRow(
