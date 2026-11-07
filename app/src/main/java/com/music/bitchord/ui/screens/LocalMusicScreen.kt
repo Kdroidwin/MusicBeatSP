@@ -112,11 +112,13 @@ import kotlinx.coroutines.launch
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
 import kotlinx.coroutines.CancellationException
+import kotlinx.coroutines.delay
 import kotlinx.coroutines.async
 import kotlinx.coroutines.awaitAll
 import kotlinx.coroutines.coroutineScope
 import kotlinx.coroutines.sync.Semaphore
 import kotlinx.coroutines.sync.withPermit
+import kotlinx.coroutines.withTimeoutOrNull
 import com.music.bitchord.data.LocalMediaRepository
 import com.music.bitchord.data.model.durationMillis
 import com.music.bitchord.data.model.artworkAt
@@ -342,59 +344,42 @@ fun LocalMusicScreen(
         genreCandidates.map { it.localUri?.takeIf(String::isNotBlank) ?: it.localPath?.takeIf(String::isNotBlank) ?: it.videoId }
     }
     var loadedGenreSourceKey by remember { mutableStateOf<List<String>?>(null) }
-    var activeGenreLoadKey by remember { mutableStateOf<List<String>?>(null) }
+    var activeGenreLoadToken by remember { mutableStateOf<Any?>(null) }
     LaunchedEffect(selectedTab, genreSourceKey) {
         if (selectedTab != LOCAL_TAB_GENRES || loadedGenreSourceKey == genreSourceKey) return@LaunchedEffect
         val requestedKey = genreSourceKey
+        val requestToken = Any()
         genresLoaded = false
         genresLoading = true
-        activeGenreLoadKey = requestedKey
-        try {
-            val grouped = withContext(Dispatchers.IO) {
-                val genres = linkedMapOf<String, MutableList<Song>>()
-                val readLimit = Semaphore(4)
-                genreCandidates.chunked(32).forEach { batch ->
-                    val rawGenres = coroutineScope {
-                        batch.map { song ->
-                            async(Dispatchers.IO) {
-                                readLimit.withPermit {
-                                    try {
-                                        LocalSongMetadataRetriever.retrieve(context, song).genre
-                                    } catch (cancelled: CancellationException) {
-                                        throw cancelled
-                                    } catch (_: Exception) {
-                                        null
-                                    }
-                                }
-                            }
-                        }.awaitAll()
-                    }
-                    batch.forEachIndexed { index, song ->
-                        splitLocalGenres(rawGenres[index]).forEach { genre ->
-                            val tracks = genres.getOrPut(genre) { mutableListOf() }
-                            if (tracks.none { (it.localUri ?: it.localPath ?: it.videoId) == (song.localUri ?: song.localPath ?: song.videoId) }) {
-                                tracks += song
-                            }
-                        }
-                    }
-                }
-                genres.entries
-                    .sortedBy { it.key.lowercase(Locale.ROOT) }
-                    .associate { (name, tracks) -> name to tracks.toList() }
+        activeGenreLoadToken = requestToken
+        val timeoutJob = launch {
+            delay(30_000L)
+            if (activeGenreLoadToken === requestToken) {
+                Log.w("LocalMusicScreen", "Genre lookup exceeded the loading limit")
+                genreGroups = emptyMap()
+                genresLoaded = true
+                genresLoading = false
             }
-            genreGroups = grouped
-            loadedGenreSourceKey = genreSourceKey
-            genresLoaded = true
+        }
+        try {
+            val grouped = withContext(Dispatchers.IO) { readMediaStoreGenreGroups(context, genreCandidates) }
+            if (activeGenreLoadToken === requestToken) {
+                genreGroups = grouped
+                loadedGenreSourceKey = requestedKey
+                genresLoaded = true
+            }
         } catch (cancelled: CancellationException) {
             throw cancelled
         } catch (error: Exception) {
             Log.w("LocalMusicScreen", "Could not finish reading local genre tags", error)
-            genreGroups = emptyMap()
-            loadedGenreSourceKey = requestedKey
-            genresLoaded = true
+            if (activeGenreLoadToken === requestToken) {
+                genreGroups = emptyMap()
+                genresLoaded = true
+            }
         } finally {
-            if (activeGenreLoadKey == requestedKey) {
-                activeGenreLoadKey = null
+            timeoutJob.cancel()
+            if (activeGenreLoadToken === requestToken) {
+                activeGenreLoadToken = null
                 genresLoading = false
             }
         }
@@ -1624,6 +1609,128 @@ private fun splitLocalGenres(raw: String?): List<String> = raw.orEmpty()
     .map(String::trim)
     .filter(String::isNotBlank)
     .distinctBy { it.lowercase(Locale.ROOT) }
+
+private data class MediaStoreGenreAudioKey(val volume: String, val audioId: Long)
+
+/** Extract the volume and media row ID from a MediaStore audio item URI. */
+private fun mediaStoreGenreAudioKey(song: Song): MediaStoreGenreAudioKey? {
+    val uri = song.localUri?.takeIf(String::isNotBlank)?.let { runCatching { Uri.parse(it) }.getOrNull() }
+        ?: return null
+    if (!uri.scheme.equals("content", ignoreCase = true)) return null
+    val segments = uri.pathSegments
+    val audioIndex = segments.indexOf("audio")
+    if (audioIndex <= 0 || segments.getOrNull(audioIndex + 1) != "media") return null
+    val volume = segments[audioIndex - 1].takeIf(String::isNotBlank) ?: return null
+    val audioId = segments.getOrNull(audioIndex + 2)?.toLongOrNull() ?: return null
+    return MediaStoreGenreAudioKey(volume, audioId)
+}
+
+/** Read indexed genre membership in batches instead of opening every audio file individually. */
+private suspend fun readMediaStoreGenreGroups(context: android.content.Context, songs: List<Song>): Map<String, List<Song>> {
+    val songsByKey = songs.mapNotNull { song -> mediaStoreGenreAudioKey(song)?.let { it to song } }
+        .groupBy({ it.first }, { it.second })
+    val unindexedSongs = songs.filter { mediaStoreGenreAudioKey(it) == null }
+
+    val genreSongs = linkedMapOf<String, MutableList<Song>>()
+    val seenKeys = linkedMapOf<String, MutableSet<MediaStoreGenreAudioKey>>()
+    for (volume in songsByKey.keys.map { it.volume }.distinct()) {
+        val genreRows = mutableListOf<Pair<Long, String>>()
+        try {
+            context.contentResolver.query(
+                MediaStore.Audio.Genres.getContentUri(volume),
+                arrayOf(MediaStore.Audio.Genres._ID, MediaStore.Audio.Genres.NAME),
+                null,
+                null,
+                MediaStore.Audio.Genres.DEFAULT_SORT_ORDER,
+            )?.use { cursor ->
+                val idColumn = cursor.getColumnIndexOrThrow(MediaStore.Audio.Genres._ID)
+                val nameColumn = cursor.getColumnIndexOrThrow(MediaStore.Audio.Genres.NAME)
+                while (cursor.moveToNext()) {
+                    val name = cursor.getString(nameColumn)?.trim().orEmpty()
+                    if (name.isNotBlank()) genreRows += cursor.getLong(idColumn) to name
+                }
+            }
+        } catch (cancelled: CancellationException) {
+            throw cancelled
+        } catch (error: Exception) {
+            Log.w("LocalMusicScreen", "Could not list indexed genres for $volume", error)
+            continue
+        }
+
+        for ((genreId, rawName) in genreRows) {
+            val memberIds = mutableListOf<Long>()
+            try {
+                context.contentResolver.query(
+                    MediaStore.Audio.Genres.Members.getContentUri(volume, genreId),
+                    arrayOf(MediaStore.Audio.Genres.Members.AUDIO_ID),
+                    null,
+                    null,
+                    null,
+                )?.use { cursor ->
+                    val audioIdColumn = cursor.getColumnIndexOrThrow(MediaStore.Audio.Genres.Members.AUDIO_ID)
+                    while (cursor.moveToNext()) memberIds += cursor.getLong(audioIdColumn)
+                }
+            } catch (cancelled: CancellationException) {
+                throw cancelled
+            } catch (error: Exception) {
+                Log.w("LocalMusicScreen", "Could not list tracks for genre $rawName", error)
+                continue
+            }
+
+            val names = splitLocalGenres(rawName)
+            for (audioId in memberIds) {
+                val key = MediaStoreGenreAudioKey(volume, audioId)
+                val matches = songsByKey[key].orEmpty()
+                for (name in names) {
+                    val seen = seenKeys.getOrPut(name) { linkedSetOf() }
+                    if (key in seen) continue
+                    seen += key
+                    genreSongs.getOrPut(name) { mutableListOf() }.addAll(matches)
+                }
+            }
+        }
+    }
+
+    // Keep support for file-backed rows that do not have a MediaStore audio ID
+    // (for example CUE and archive tracks), while avoiding per-file metadata
+    // reads for the normal MediaStore library.
+    val seenUnindexedSongs = linkedMapOf<String, MutableSet<String>>()
+    unindexedSongs.chunked(32).forEach { batch ->
+        val rawGenres = coroutineScope {
+            val readLimit = Semaphore(4)
+            batch.map { song ->
+                async(Dispatchers.IO) {
+                    readLimit.withPermit {
+                        withTimeoutOrNull(8_000L) {
+                            try {
+                                LocalSongMetadataRetriever.retrieve(context, song).genre
+                            } catch (cancelled: CancellationException) {
+                                throw cancelled
+                            } catch (_: Exception) {
+                                null
+                            }
+                        }
+                    }
+                }
+            }.awaitAll()
+        }
+        batch.forEachIndexed { index, song ->
+            val identity = song.localUri?.takeIf(String::isNotBlank)
+                ?: song.localPath?.takeIf(String::isNotBlank)
+                ?: song.videoId
+            splitLocalGenres(rawGenres[index]).forEach { name ->
+                val seen = seenUnindexedSongs.getOrPut(name) { linkedSetOf() }
+                if (seen.add(identity)) {
+                    genreSongs.getOrPut(name) { mutableListOf() } += song
+                }
+            }
+        }
+    }
+
+    return genreSongs.entries
+        .sortedBy { it.key.lowercase(Locale.ROOT) }
+        .associate { (name, tracks) -> name to tracks.toList() }
+}
 
 @Composable
 private fun GenresTab(
