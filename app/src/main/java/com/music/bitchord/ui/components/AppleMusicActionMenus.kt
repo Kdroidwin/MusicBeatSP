@@ -159,6 +159,7 @@ fun AppleMusicTrackActionsMenu(
                 decorFitsSystemWindows = false,
             ),
         ) {
+            PlayerPopupSystemBars(showPlayerActions)
             Box(Modifier.fillMaxSize()) { menu() }
         }
     } else if (!showPlayerActions) {

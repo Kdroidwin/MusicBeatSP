@@ -19,6 +19,7 @@ import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.rounded.KeyboardArrowRight
 import androidx.compose.material.icons.rounded.Person
+import androidx.compose.material3.BottomSheetDefaults
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
@@ -40,6 +41,7 @@ import com.music.bitchord.data.model.ROW_ART_PX
 import com.music.bitchord.data.model.Song
 import com.music.bitchord.data.settings.AppSettings
 import com.music.bitchord.ui.components.ArtworkBackdrop
+import com.music.bitchord.ui.components.PlayerPopupSystemBars
 import com.music.bitchord.ui.theme.rememberArtworkPalette
 
 /**
@@ -53,11 +55,13 @@ fun LocalArtistPickerSheet(
     onSelectArtist: (String) -> Unit,
     onDismissRequest: () -> Unit,
     allowArtworkColor: Boolean = true,
+    showPlayerActions: Boolean = false,
     modifier: Modifier = Modifier,
 ) {
     val sheetState = rememberModalBottomSheetState(skipPartiallyExpanded = true)
     val palette = rememberArtworkPalette(song.thumbnailUrl, dark = true, artPx = ROW_ART_PX)
     val frostedPlayerDetails by AppSettings.frostedPlayerDetails.collectAsStateWithLifecycle()
+    val hidePlayerPopupHandles by AppSettings.hidePlayerPopupHandles.collectAsStateWithLifecycle()
     val useArtworkBackdrop = frostedPlayerDetails && allowArtworkColor
     val sheetShape = RoundedCornerShape(topStart = 24.dp, topEnd = 24.dp)
     val foreground = if (useArtworkBackdrop) palette.onBackground else MaterialTheme.colorScheme.onSurface
@@ -69,9 +73,13 @@ fun LocalArtistPickerSheet(
         sheetState = sheetState,
         shape = sheetShape,
         containerColor = container,
+        dragHandle = if (showPlayerActions && hidePlayerPopupHandles) null else {
+            { BottomSheetDefaults.DragHandle() }
+        },
         contentWindowInsets = { WindowInsets(0, 0, 0, 0) },
         modifier = modifier,
     ) {
+        PlayerPopupSystemBars(showPlayerActions)
         Box(Modifier.fillMaxWidth().clip(sheetShape)) {
             if (useArtworkBackdrop) {
                 ArtworkBackdrop(

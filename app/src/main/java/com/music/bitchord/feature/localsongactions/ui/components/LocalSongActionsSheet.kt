@@ -63,6 +63,7 @@ import com.music.bitchord.playback.SleepTimer
 import kotlinx.coroutines.delay
 import com.music.bitchord.feature.artistimage.util.ArtistSplitter
 import com.music.bitchord.ui.components.ArtworkBackdrop
+import com.music.bitchord.ui.components.PlayerPopupSystemBars
 import com.music.bitchord.ui.theme.rememberArtworkPalette
 import java.util.Locale
 
@@ -165,6 +166,7 @@ fun LocalSongActionsSheet(
         modifier = modifier,
         contentWindowInsets = { WindowInsets(0, 0, 0, 0) },
     ) {
+        PlayerPopupSystemBars(showPlayerActions)
         Box(
             Modifier
                 .fillMaxWidth()

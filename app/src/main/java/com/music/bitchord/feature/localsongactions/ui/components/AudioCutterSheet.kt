@@ -43,6 +43,7 @@ import com.music.bitchord.R
 import com.music.bitchord.data.model.Song
 import com.music.bitchord.data.model.durationMillis
 import com.music.bitchord.feature.localsongactions.data.AudioCutterExporter
+import com.music.bitchord.ui.components.PlayerPopupSystemBars
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
@@ -57,6 +58,7 @@ private enum class CutterState { EDITING, EXPORTING, COMPLETE, ERROR }
 fun AudioCutterSheet(
     song: Song,
     onDismissRequest: () -> Unit,
+    showPlayerActions: Boolean = false,
 ) {
     val context = LocalContext.current
     val scope = rememberCoroutineScope()
@@ -118,6 +120,7 @@ fun AudioCutterSheet(
         containerColor = MaterialTheme.colorScheme.surface,
         contentWindowInsets = { WindowInsets(0, 0, 0, 0) },
     ) {
+        PlayerPopupSystemBars(showPlayerActions)
         Column(
             modifier = Modifier
                 .fillMaxWidth()

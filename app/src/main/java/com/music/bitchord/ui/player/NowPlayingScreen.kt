@@ -251,6 +251,7 @@ import com.music.bitchord.ui.theme.SystemBarVisibility
 import com.music.bitchord.ui.rememberIsForeground
 import com.music.bitchord.ui.theme.rememberArtworkPalette
 import com.music.bitchord.ui.components.ArtworkBackdrop
+import com.music.bitchord.ui.components.PlayerPopupSystemBars
 import com.music.bitchord.ui.components.thumbnailBorder
 import com.music.bitchord.ui.components.optimizedHazeEffect
 import com.music.bitchord.ui.haptics.Haptic
@@ -1471,6 +1472,7 @@ fun NowPlayingScreen(
             dragHandle = null,
             contentWindowInsets = { WindowInsets(0, 0, 0, 0) },
         ) {
+            PlayerPopupSystemBars(true)
             Box(Modifier.fillMaxWidth().clip(sleepTimerShape)) {
                 if (playerPopupsUseArtworkColor) {
                     ArtworkBackdrop(

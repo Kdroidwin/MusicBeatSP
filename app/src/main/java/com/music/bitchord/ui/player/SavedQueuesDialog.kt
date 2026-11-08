@@ -20,7 +20,6 @@ import androidx.compose.foundation.background
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.rounded.DeleteOutline
-import androidx.compose.material.icons.rounded.Close
 import androidx.compose.material.icons.rounded.FolderOpen
 import androidx.compose.material.icons.rounded.MusicNote
 import androidx.compose.material.icons.rounded.Save
@@ -58,6 +57,7 @@ import com.music.bitchord.data.model.artworkAt
 import com.music.bitchord.playback.SavedQueue
 import com.music.bitchord.ui.theme.ArtworkPalette
 import com.music.bitchord.ui.components.ArtworkBackdrop
+import com.music.bitchord.ui.components.PlayerPopupSystemBars
 import com.music.bitchord.data.model.ROW_ART_PX
 import com.music.bitchord.data.settings.AppSettings
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
@@ -159,6 +159,7 @@ private fun LegacySavedQueuesDialog(
         dragHandle = null,
         contentWindowInsets = { WindowInsets(0, 0, 0, 0) },
     ) {
+        PlayerPopupSystemBars(true)
         Box(Modifier.fillMaxWidth().clip(sheetShape)) {
             if (useFrostedGlass) {
                 ArtworkBackdrop(
@@ -350,6 +351,7 @@ private fun ModernSavedQueuesDialog(
         dragHandle = null,
         contentWindowInsets = { WindowInsets(0, 0, 0, 0) },
     ) {
+        PlayerPopupSystemBars(true)
         Box(Modifier.fillMaxWidth().clip(sheetShape)) {
             if (useFrostedGlass) {
                 ArtworkBackdrop(
@@ -371,42 +373,32 @@ private fun ModernSavedQueuesDialog(
                     .padding(horizontal = 22.dp)
                     .padding(bottom = 10.dp),
             ) {
-                Box(Modifier.fillMaxWidth().height(48.dp), contentAlignment = Alignment.Center) {
-                    if (!hidePlayerPopupHandles) {
-                        Box(
-                            Modifier.fillMaxWidth().height(48.dp),
-                            contentAlignment = Alignment.Center,
-                        ) {
+                if (!hideManageQueueTitle || !hidePlayerPopupHandles) {
+                    Box(Modifier.fillMaxWidth().height(48.dp), contentAlignment = Alignment.Center) {
+                        if (!hidePlayerPopupHandles) {
                             Box(
-                                Modifier
-                                    .size(width = 48.dp, height = 6.dp)
-                                    .clip(RoundedCornerShape(50))
-                                    .background(foreground.copy(alpha = 0.34f)),
-                            )
+                                Modifier.fillMaxWidth().height(48.dp),
+                                contentAlignment = Alignment.Center,
+                            ) {
+                                Box(
+                                    Modifier
+                                        .size(width = 48.dp, height = 6.dp)
+                                        .clip(RoundedCornerShape(50))
+                                        .background(foreground.copy(alpha = 0.34f)),
+                                )
+                            }
                         }
-                    }
-                    Row(
-                        Modifier.fillMaxWidth(),
-                        verticalAlignment = Alignment.CenterVertically,
-                        horizontalArrangement = if (hideManageQueueTitle) Arrangement.End else Arrangement.SpaceBetween,
-                    ) {
                         if (!hideManageQueueTitle) {
                             Text(
                                 text = stringResource(R.string.manage_queues),
                                 style = MaterialTheme.typography.titleLarge,
                                 color = foreground,
-                            )
-                        }
-                        IconButton(onClick = onDismiss) {
-                            Icon(
-                                imageVector = Icons.Rounded.Close,
-                                contentDescription = stringResource(R.string.close),
-                                tint = foreground,
+                                modifier = Modifier.align(Alignment.CenterStart),
                             )
                         }
                     }
+                    Spacer(Modifier.height(8.dp))
                 }
-                Spacer(Modifier.height(8.dp))
 
                 if (!hideSaveCurrentQueueHeading) {
                     Text(

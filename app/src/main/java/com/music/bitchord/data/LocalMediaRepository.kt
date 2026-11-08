@@ -18,6 +18,7 @@ import com.music.bitchord.data.settings.AppSettings
 import com.music.bitchord.download.DownloadStore
 import com.music.bitchord.download.Downloads
 import com.music.bitchord.feature.localmusic.domain.model.LocalFolder
+import com.music.bitchord.feature.tageditor.data.TagLibWriter
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
 import java.io.File
@@ -250,12 +251,25 @@ object LocalMediaRepository {
     private fun String?.cleanTag(): String? =
         takeUnless { it.isNullOrBlank() || it == "<unknown>" }
 
+    private fun isUnknownArtist(artist: String?): Boolean =
+        artist.isNullOrBlank() || artist.equals("<unknown>", ignoreCase = true) ||
+            artist.equals("unknown artist", ignoreCase = true)
+
+    private suspend fun readWavArtist(context: Context, song: Song): String? =
+        runCatching {
+            TagLibWriter.readTags(context, song, readArtwork = false)
+                .artist
+                .trim()
+                .takeUnless(::isUnknownArtist)
+        }.getOrNull()
+
     /**
      * Queries MediaStore for all audio files available on the device.
      */
     suspend fun getLocalMusic(context: Context): List<Song> = withContext(Dispatchers.IO) {
         if (!hasStoragePermission(context)) return@withContext emptyList()
         val songs = mutableListOf<Song>()
+        val wavSongsWithoutMediaStoreArtist = mutableListOf<Pair<Int, Song>>()
         // This scan runs over every audio file on the device, which includes
         // whatever this app has downloaded into Music/BitChord alongside
         // everything else — but by content URI, the only thing MediaStore
@@ -416,23 +430,25 @@ object LocalMediaRepository {
                                 null
                             }
 
-                        songs.add(
-                            Song(
-                                videoId = savedVideoId ?: contentUri,
-                                title = title,
-                                artist = artist,
-                                thumbnailUrl = artworkUrl,
-                                durationText = durationText,
-                                albumName = albumName,
-                                albumArtist = albumArtist,
-                                trackNumber = cursor.getInt(trackCol).takeIf { it > 0 },
-                                localUri = contentUri,
-                                localPath = path,
-                                localFolderPath = folderPath,
-                                localDateAddedSeconds = cursor.getLong(dateAddedCol),
-                                localDateModifiedSeconds = cursor.getLong(dateModifiedCol),
-                            )
+                        val song = Song(
+                            videoId = savedVideoId ?: contentUri,
+                            title = title,
+                            artist = artist,
+                            thumbnailUrl = artworkUrl,
+                            durationText = durationText,
+                            albumName = albumName,
+                            albumArtist = albumArtist,
+                            trackNumber = cursor.getInt(trackCol).takeIf { it > 0 },
+                            localUri = contentUri,
+                            localPath = path,
+                            localFolderPath = folderPath,
+                            localDateAddedSeconds = cursor.getLong(dateAddedCol),
+                            localDateModifiedSeconds = cursor.getLong(dateModifiedCol),
                         )
+                        songs.add(song)
+                        if (displayName.endsWith(".wav", ignoreCase = true) && isUnknownArtist(artist)) {
+                            wavSongsWithoutMediaStoreArtist += (songs.lastIndex to song)
+                        }
                     }
                 }
             }.onFailure {
@@ -451,6 +467,15 @@ object LocalMediaRepository {
         // on providers that support per-volume access.
         if (!anyVolumeQueryReturned && queryTargets.size > 1) {
             queryVolume(null, MediaStore.Audio.Media.EXTERNAL_CONTENT_URI)
+        }
+
+        // MediaStore commonly leaves the artist column empty for WAV files,
+        // even when the RIFF INFO/ID3 tags contain IART/ARTIST. Read tags only
+        // for those specific rows so the regular library scan stays cheap.
+        wavSongsWithoutMediaStoreArtist.forEach { (index, song) ->
+            readWavArtist(context, song)?.let { artist ->
+                songs[index] = song.copy(artist = artist)
+            }
         }
 
         songs
@@ -673,7 +698,7 @@ object LocalMediaRepository {
      * fills in what the retriever couldn't read, since the media scanner and
      * `MediaMetadataRetriever` do not agree on every container.
      */
-    private fun buildSongFromUri(
+    private suspend fun buildSongFromUri(
         context: Context,
         uriStr: String,
         fileName: String,
@@ -722,7 +747,7 @@ object LocalMediaRepository {
             }
         }
 
-        return Song(
+        val song = Song(
             videoId = uriStr,
             title = title,
             artist = artist,
@@ -736,6 +761,11 @@ object LocalMediaRepository {
             albumArtist = albumArtist ?: scanned?.albumArtist,
             trackNumber = trackNumber,
         )
+        return if (fileName.endsWith(".wav", ignoreCase = true) && isUnknownArtist(song.artist)) {
+            song.copy(artist = readWavArtist(context, song) ?: song.artist)
+        } else {
+            song
+        }
     }
 
     private fun formatDuration(ms: Long): String {

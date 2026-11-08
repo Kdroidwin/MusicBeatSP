@@ -252,6 +252,7 @@ import com.music.bitchord.download.Downloads
 import com.music.bitchord.ui.components.BrowseActionsSheet
 import com.music.bitchord.ui.components.AppleMusicBrowseActionsMenu
 import com.music.bitchord.ui.components.AppleMusicTrackActionsMenu
+import com.music.bitchord.ui.components.PlayerPopupSystemBars
 import com.music.bitchord.ui.components.BrowseTarget
 import com.music.bitchord.ui.components.ArtworkBackdrop
 import com.music.bitchord.ui.components.DownloadManagerSheet
@@ -4134,6 +4135,7 @@ private fun BitChordApp(
                 LocalSongDetailsSheet(
                     song = song,
                     allowArtworkColor = !menuFromPlayer || playerPopupsUseArtworkColor,
+                    showPlayerActions = menuFromPlayer,
                     onDismissRequest = {
                         showDetailsSheet = false
                         songActions = null
@@ -4154,6 +4156,7 @@ private fun BitChordApp(
             } else if (showAudioCutterSheet) {
                 AudioCutterSheet(
                     song = song,
+                    showPlayerActions = menuFromPlayer,
                     onDismissRequest = {
                         showAudioCutterSheet = false
                         songActions = null
@@ -4167,6 +4170,7 @@ private fun BitChordApp(
                     } else null,
                     artworkUrl = song.thumbnailUrl,
                     useArtworkColor = menuFromPlayer && playerPopupsUseArtworkColor,
+                    showPlayerActions = menuFromPlayer,
                     onDismissRequest = {
                         showAddToPlaylist = false
                         songActions = null
@@ -4181,6 +4185,7 @@ private fun BitChordApp(
                     song = song,
                     artists = artists,
                     allowArtworkColor = !menuFromPlayer || playerPopupsUseArtworkColor,
+                    showPlayerActions = menuFromPlayer,
                     onDismissRequest = {
                         showArtistPicker = false
                         showArtistPickerForArtwork = false
@@ -4546,6 +4551,7 @@ private fun BitChordApp(
                 } else null,
                 artworkUrl = targetSong.thumbnailUrl,
                 useArtworkColor = localPlaylistSongFromPlayer && playerPopupsUseArtworkColor,
+                showPlayerActions = localPlaylistSongFromPlayer,
                 onDismissRequest = {
                     localPlaylistSongTarget = null
                     localPlaylistSongFromPlayer = false
@@ -5394,6 +5400,7 @@ private fun PlaybackTuningDialog(
         dragHandle = null,
         contentWindowInsets = { WindowInsets(0, 0, 0, 0) },
     ) {
+        PlayerPopupSystemBars(true)
         Box(Modifier.fillMaxWidth().clip(sheetShape)) {
             if (useArtworkBackdrop) {
                 ArtworkBackdrop(

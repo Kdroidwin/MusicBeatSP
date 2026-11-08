@@ -13,6 +13,7 @@ import androidx.compose.foundation.layout.WindowInsets
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.navigationBarsPadding
+import androidx.compose.foundation.layout.offset
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
@@ -64,6 +65,7 @@ import com.music.bitchord.data.model.artworkAt
 import com.music.bitchord.data.settings.AppSettings
 import com.music.bitchord.data.model.ROW_ART_PX
 import com.music.bitchord.ui.components.ArtworkBackdrop
+import com.music.bitchord.ui.components.PlayerPopupSystemBars
 import com.music.bitchord.ui.theme.rememberArtworkPalette
 import com.music.bitchord.feature.localsongactions.data.LocalSongMetadataRetriever
 import com.music.bitchord.feature.localsongactions.domain.model.LocalSongFullMetadata
@@ -81,6 +83,7 @@ fun LocalSongDetailsSheet(
     onTagEditorClick: () -> Unit,
     onAudioCutterClick: (() -> Unit)? = null,
     allowArtworkColor: Boolean = true,
+    showPlayerActions: Boolean = false,
     modifier: Modifier = Modifier,
 ) {
     val context = LocalContext.current
@@ -89,6 +92,8 @@ fun LocalSongDetailsSheet(
     val artworkBackdropEnabled by AppSettings.detailsSheetArtworkBackdrop.collectAsStateWithLifecycle()
     val useArtworkBackdrop = artworkBackdropEnabled && allowArtworkColor
     val showEmbeddedComment by AppSettings.showEmbeddedComment.collectAsStateWithLifecycle()
+    val hidePlayerPopupHandles by AppSettings.hidePlayerPopupHandles.collectAsStateWithLifecycle()
+    val hideDetailsHandle = showPlayerActions && hidePlayerPopupHandles
     val palette = rememberArtworkPalette(song.artworkAt(ROW_ART_PX), dark = true, artPx = ROW_ART_PX)
     val baseColors = MaterialTheme.colorScheme
     val sheetColors = if (useArtworkBackdrop) {
@@ -126,21 +131,24 @@ fun LocalSongDetailsSheet(
         shape = RoundedCornerShape(topStart = 28.dp, topEnd = 28.dp),
         containerColor = if (useArtworkBackdrop) Color.Transparent else MaterialTheme.colorScheme.surface,
         contentWindowInsets = { WindowInsets(0, 0, 0, 0) },
-        dragHandle = {
-            Box(
-                Modifier.fillMaxWidth().padding(top = 8.dp, bottom = 4.dp),
-                contentAlignment = Alignment.Center,
-            ) {
+        dragHandle = if (hideDetailsHandle) null else {
+            {
                 Box(
-                    Modifier
-                        .size(width = 34.dp, height = 4.dp)
-                        .clip(CircleShape)
-                        .background((if (useArtworkBackdrop) palette.onBackground else MaterialTheme.colorScheme.onSurface).copy(alpha = 0.38f)),
-                )
+                    Modifier.fillMaxWidth().padding(top = 8.dp, bottom = 4.dp),
+                    contentAlignment = Alignment.Center,
+                ) {
+                    Box(
+                        Modifier
+                            .size(width = 34.dp, height = 4.dp)
+                            .clip(CircleShape)
+                            .background((if (useArtworkBackdrop) palette.onBackground else MaterialTheme.colorScheme.onSurface).copy(alpha = 0.38f)),
+                    )
+                }
             }
         },
-        modifier = modifier,
+        modifier = if (showPlayerActions) modifier.offset(y = 8.dp) else modifier,
     ) {
+        PlayerPopupSystemBars(showPlayerActions)
         MaterialTheme(colorScheme = sheetColors) {
             Box(Modifier.fillMaxWidth().clip(RoundedCornerShape(topStart = 28.dp, topEnd = 28.dp))) {
                 if (useArtworkBackdrop) {

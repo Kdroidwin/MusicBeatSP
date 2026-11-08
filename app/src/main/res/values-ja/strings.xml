@@ -1109,7 +1109,7 @@
     <string name="player_popups_artwork_color">プレーヤーのポップアップをアルバムアートの色に合わせる</string>
     <string name="player_popups_artwork_color_subtitle">詳細、スリープタイマー、速度とピッチ、キュー管理、プレイリストの各画面に再生中の曲の色を使います。初期設定はオンです。</string>
     <string name="hide_player_popup_handles">プレーヤーポップアップのハンドルと枠を削除</string>
-    <string name="hide_player_popup_handles_subtitle">詳細、スリープタイマー、キュー管理、再生速度とピッチの各シートから、ハンドルと専用スペースを取り除きます。初期設定はオンです。</string>
+    <string name="hide_player_popup_handles_subtitle">詳細、アーティスト選択、スリープタイマー、キュー管理、再生速度とピッチの各シートから、ハンドルと専用スペースを取り除きます。初期設定はオンです。</string>
     <string name="app_icon">アプリアイコン</string>
     <string name="app_icon_subtitle">ホーム画面に表示するアイコンを選択します</string>
     <string name="app_icon_pink">ピンク</string>

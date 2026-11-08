@@ -49,6 +49,7 @@ import com.music.bitchord.R
 import com.music.bitchord.data.model.Song
 import com.music.bitchord.data.model.ROW_ART_PX
 import com.music.bitchord.ui.components.ArtworkBackdrop
+import com.music.bitchord.ui.components.PlayerPopupSystemBars
 import com.music.bitchord.ui.theme.ArtworkPalette
 import com.music.bitchord.feature.localmusic.data.LocalPlaylistStore
 import com.music.bitchord.feature.localmusic.domain.model.LocalPlaylistSongMetadata
@@ -63,6 +64,7 @@ fun LocalAddToPlaylistSheet(
     artworkPalette: ArtworkPalette? = null,
     artworkUrl: String? = null,
     useArtworkColor: Boolean = false,
+    showPlayerActions: Boolean = false,
     modifier: Modifier = Modifier,
 ) {
     val context = LocalContext.current
@@ -146,6 +148,7 @@ fun LocalAddToPlaylistSheet(
         contentWindowInsets = { WindowInsets(0, 0, 0, 0) },
         modifier = modifier,
     ) {
+        PlayerPopupSystemBars(showPlayerActions)
         Box(
             modifier = Modifier
                 .fillMaxWidth()
