@@ -54,6 +54,7 @@ fun LocalPlaylistsTab(
     onMovePlaylist: (LocalPlaylist, Int) -> Unit,
     librarySongs: List<Song> = emptyList(),
     contentPadding: PaddingValues,
+    quickSearch: (@Composable (Modifier) -> Unit)? = null,
     modifier: Modifier = Modifier,
 ) {
     if (playlists.isEmpty()) {
@@ -107,6 +108,12 @@ fun LocalPlaylistsTab(
                     }
                 }
             }
+            quickSearch?.invoke(
+                Modifier
+                    .fillMaxWidth()
+                    .align(Alignment.TopCenter)
+                    .padding(horizontal = 16.dp, vertical = 4.dp),
+            )
         }
         return
     }
@@ -121,6 +128,11 @@ fun LocalPlaylistsTab(
         ),
         verticalArrangement = Arrangement.spacedBy(8.dp),
     ) {
+        quickSearch?.let { search ->
+            item {
+                search(Modifier.fillMaxWidth().padding(vertical = 4.dp))
+            }
+        }
         item {
             Column(
                 modifier = Modifier

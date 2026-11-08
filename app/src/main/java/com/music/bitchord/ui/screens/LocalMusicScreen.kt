@@ -990,20 +990,23 @@ fun LocalMusicScreen(
             LOCAL_TAB_PLAYLISTS -> stringResource(R.string.quick_search_playlist_names)
             else -> null
         }
-        if (!inDrillDown && !selectingSongs && quickSearchHint != null) {
-            LocalCollectionQuickSearch(
-                active = quickSearchActive,
-                query = quickSearchQuery,
-                hint = quickSearchHint,
-                onActivate = { quickSearchActive = true },
-                onQueryChange = { quickSearchQuery = it },
-                onClose = {
-                    quickSearchActive = false
-                    quickSearchQuery = ""
-                },
-                modifier = Modifier.padding(horizontal = PAGE_GUTTER, vertical = 4.dp),
-            )
-        }
+        val quickSearchContent: (@Composable (Modifier) -> Unit)? =
+            if (!inDrillDown && !selectingSongs && quickSearchHint != null) {
+                { searchModifier ->
+                    LocalCollectionQuickSearch(
+                        active = quickSearchActive,
+                        query = quickSearchQuery,
+                        hint = quickSearchHint,
+                        onActivate = { quickSearchActive = true },
+                        onQueryChange = { quickSearchQuery = it },
+                        onClose = {
+                            quickSearchActive = false
+                            quickSearchQuery = ""
+                        },
+                        modifier = searchModifier,
+                    )
+                }
+            } else null
 
         // ── Content ──────────────────────────────────────────────────────────
         val pullToRefreshState = rememberPullToRefreshState()
@@ -1179,6 +1182,7 @@ fun LocalMusicScreen(
                         onSongSwipe = onSongSwipe,
                         contentPadding = bodyContentPadding,
                         songDropdownMenu = if (isDownloads) null else songDropdownMenu,
+                        quickSearch = quickSearchContent,
                     )
                 }
 
@@ -1246,6 +1250,7 @@ fun LocalMusicScreen(
                         },
                         onArtistLongPress = onArtistLongPress ?: onCollectionLongPress,
                         contentPadding = bodyContentPadding,
+                        quickSearch = quickSearchContent,
                     )
                 }
 
@@ -1306,6 +1311,7 @@ fun LocalMusicScreen(
                         },
                         onArtistLongPress = onArtistLongPress ?: onCollectionLongPress,
                         contentPadding = bodyContentPadding,
+                        quickSearch = quickSearchContent,
                     )
                 }
 
@@ -1346,6 +1352,7 @@ fun LocalMusicScreen(
                             } else onCollectionLongPress?.invoke(entry.title, entry.songs)
                         },
                         contentPadding = bodyContentPadding,
+                        quickSearch = quickSearchContent,
                     )
                 }
 
@@ -1427,6 +1434,7 @@ fun LocalMusicScreen(
                         onMovePlaylist = { playlist, offset -> LocalPlaylistStore.movePlaylist(playlist.id, offset) },
                         librarySongs = songs,
                         contentPadding = bodyContentPadding,
+                        quickSearch = quickSearchContent,
                     )
                 }
             }
@@ -1966,6 +1974,7 @@ private fun SongsTab(
     onSongSwipe: (Song) -> Unit,
     contentPadding: PaddingValues,
     songDropdownMenu: (@Composable (Song) -> Unit)? = null,
+    quickSearch: (@Composable (Modifier) -> Unit)? = null,
 ) {
     if (viewType == LibraryViewType.GRID) {
         val gridState = rememberLazyGridState()
@@ -1984,6 +1993,11 @@ private fun SongsTab(
                 horizontalArrangement = Arrangement.spacedBy(12.dp),
                 verticalArrangement = Arrangement.spacedBy(16.dp),
             ) {
+                quickSearch?.let { search ->
+                    item(span = { GridItemSpan(maxLineSpan) }) {
+                        search(Modifier.fillMaxWidth().padding(vertical = 4.dp))
+                    }
+                }
                 item(span = { GridItemSpan(maxLineSpan) }) {
                     SectionHeader(
                         icon = Icons.Rounded.LibraryMusic,
@@ -2021,6 +2035,7 @@ private fun SongsTab(
                     top = contentPadding.calculateTopPadding() + 6.dp,
                     bottom = contentPadding.calculateBottomPadding() + 8.dp,
                 ),
+                headerCount = if (quickSearch != null) 2 else 1,
             )
         }
     } else {
@@ -2031,6 +2046,11 @@ private fun SongsTab(
                 modifier = Modifier.fillMaxSize(),
                 contentPadding = contentPadding,
             ) {
+                quickSearch?.let { search ->
+                    item {
+                        search(Modifier.fillMaxWidth().padding(horizontal = PAGE_GUTTER, vertical = 4.dp))
+                    }
+                }
                 item {
                     SectionHeader(
                         icon = Icons.Rounded.LibraryMusic,
@@ -2075,6 +2095,7 @@ private fun SongsTab(
                     else SectionIndexer.getSectionName(song.title)
                 },
                 contentPadding = contentPadding,
+                headerCount = if (quickSearch != null) 2 else 1,
             )
         }
     }
@@ -2094,6 +2115,7 @@ private fun ArtistsTab(
     onArtistClick: (String, List<Song>) -> Unit,
     onArtistLongPress: ((String, List<Song>) -> Unit)?,
     contentPadding: PaddingValues,
+    quickSearch: (@Composable (Modifier) -> Unit)? = null,
 ) {
     val artistArtworkUris by ArtistArtworkStore.imageUris.collectAsStateWithLifecycle()
     if (viewType == LibraryViewType.GRID) {
@@ -2113,6 +2135,11 @@ private fun ArtistsTab(
                 horizontalArrangement = Arrangement.spacedBy(12.dp),
                 verticalArrangement = Arrangement.spacedBy(16.dp),
             ) {
+                quickSearch?.let { search ->
+                    item(span = { GridItemSpan(maxLineSpan) }) {
+                        search(Modifier.fillMaxWidth().padding(vertical = 4.dp))
+                    }
+                }
                 item(span = { GridItemSpan(maxLineSpan) }) {
                     SectionHeader(
                         icon = Icons.Rounded.Person,
@@ -2148,6 +2175,7 @@ private fun ArtistsTab(
                     top = contentPadding.calculateTopPadding() + 6.dp,
                     bottom = contentPadding.calculateBottomPadding() + 8.dp,
                 ),
+                headerCount = if (quickSearch != null) 2 else 1,
             )
         }
     } else {
@@ -2158,6 +2186,11 @@ private fun ArtistsTab(
                 modifier = Modifier.fillMaxSize(),
                 contentPadding = contentPadding,
             ) {
+                quickSearch?.let { search ->
+                    item {
+                        search(Modifier.fillMaxWidth().padding(horizontal = PAGE_GUTTER, vertical = 4.dp))
+                    }
+                }
                 item {
                     SectionHeader(
                         icon = Icons.Rounded.Person,
@@ -2194,6 +2227,7 @@ private fun ArtistsTab(
                 itemCount = artists.size,
                 sectionNameForIndex = { index -> SectionIndexer.getSectionName(artists[index].name) },
                 contentPadding = contentPadding,
+                headerCount = if (quickSearch != null) 2 else 1,
             )
         }
     }
@@ -2456,6 +2490,7 @@ private fun AlbumsTab(
     onAlbumLongPress: ((AlbumEntry) -> Unit)?,
     contentPadding: PaddingValues,
     keepArtworkAspectRatio: Boolean,
+    quickSearch: (@Composable (Modifier) -> Unit)? = null,
 ) {
     if (viewType == LibraryViewType.GRID) {
         val gridState = rememberLazyGridState()
@@ -2474,6 +2509,11 @@ private fun AlbumsTab(
                 horizontalArrangement = Arrangement.spacedBy(12.dp),
                 verticalArrangement = Arrangement.spacedBy(16.dp),
             ) {
+                quickSearch?.let { search ->
+                    item(span = { GridItemSpan(maxLineSpan) }) {
+                        search(Modifier.fillMaxWidth().padding(vertical = 4.dp))
+                    }
+                }
                 item(span = { GridItemSpan(maxLineSpan) }) {
                     SectionHeader(
                         icon = Icons.Rounded.Album,
@@ -2515,6 +2555,7 @@ private fun AlbumsTab(
                     top = contentPadding.calculateTopPadding() + 6.dp,
                     bottom = contentPadding.calculateBottomPadding() + 8.dp,
                 ),
+                headerCount = if (quickSearch != null) 2 else 1,
             )
         }
     } else {
@@ -2525,6 +2566,11 @@ private fun AlbumsTab(
                 modifier = Modifier.fillMaxSize(),
                 contentPadding = contentPadding,
             ) {
+                quickSearch?.let { search ->
+                    item {
+                        search(Modifier.fillMaxWidth().padding(horizontal = PAGE_GUTTER, vertical = 4.dp))
+                    }
+                }
                 item {
                     SectionHeader(
                         icon = Icons.Rounded.Album,
@@ -2567,6 +2613,7 @@ private fun AlbumsTab(
                 itemCount = albums.size,
                 sectionNameForIndex = { index -> SectionIndexer.getSectionName(albums[index].title) },
                 contentPadding = contentPadding,
+                headerCount = if (quickSearch != null) 2 else 1,
             )
         }
     }
