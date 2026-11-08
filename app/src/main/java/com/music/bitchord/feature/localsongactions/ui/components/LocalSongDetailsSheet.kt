@@ -157,7 +157,7 @@ fun LocalSongDetailsSheet(
                     .fillMaxWidth()
                     .then(
                         if (showPlayerActions && configuration.screenHeightDp > configuration.screenWidthDp) {
-                            Modifier.heightIn(max = configuration.screenHeightDp.dp * 0.62f)
+                            Modifier.heightIn(max = configuration.screenHeightDp.dp * 0.84f)
                         } else {
                             Modifier
                         },
