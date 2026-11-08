@@ -247,6 +247,24 @@ private data class SettingsSearchEntry(
         get() = settingsSearchCategory("$title $subtitle ${keywords.joinToString(" ")}")
 }
 
+@Composable
+private fun darPcmUpsamplingSearchEntry(enabled: Boolean): SettingsSearchEntry = SettingsSearchEntry(
+    title = stringResource(R.string.dar_pcm_upsampling),
+    subtitle = stringResource(R.string.dar_pcm_upsampling_subtitle),
+    keywords = listOf("DAR", "DSRE", "PCM", "upsampling", "アップサンプリング", "高音質", "DAC"),
+    checked = enabled,
+    activate = { AppSettings.setDarPcmUpsamplingEnabled(!enabled) },
+)
+
+@Composable
+private fun dsdPlaybackSearchEntry(enabled: Boolean): SettingsSearchEntry = SettingsSearchEntry(
+    title = stringResource(R.string.dsd_playback_pcm),
+    subtitle = stringResource(R.string.dsd_playback_pcm_subtitle),
+    keywords = listOf("DSD", "DSF", "DFF", "PCM", "DoP", "USB DAC", "DSD再生", "ファイル再生"),
+    checked = enabled,
+    activate = { AppSettings.setDsdPlaybackEnabled(!enabled) },
+)
+
 private data class SettingsSearchReorder(
     val moveUpEnabled: Boolean,
     val moveDownEnabled: Boolean,
@@ -660,6 +678,7 @@ private fun navigationTabSettingsSearchEntries(
             MainNavigationTab.RADIO -> R.string.radio
             MainNavigationTab.HOME -> R.string.listen_now
             MainNavigationTab.GENRES -> R.string.genres
+            MainNavigationTab.SERVICES -> R.string.services
         })
         SettingsSearchEntry(
             title = stringResource(R.string.show_tab_setting, tabTitle),
@@ -1143,6 +1162,9 @@ fun SettingsScreen(
     val startupTab by AppSettings.startupTab.collectAsStateWithLifecycle()
     val quickActions by AppSettings.playerQuickActions.collectAsStateWithLifecycle()
     val hidePlayerQuickActionCircles by AppSettings.hidePlayerQuickActionCircles.collectAsStateWithLifecycle()
+    val hidePlayerControlHighlightCircles by AppSettings.hidePlayerControlHighlightCircles.collectAsStateWithLifecycle()
+    val externalMediaControlEnabled by AppSettings.externalMediaControlEnabled.collectAsStateWithLifecycle()
+    val spotifyIntegrationEnabled by AppSettings.spotifyIntegrationEnabled.collectAsStateWithLifecycle()
     val hiddenPlayerDetailsActions by AppSettings.hiddenPlayerDetailsActions.collectAsStateWithLifecycle()
     val audioCutterEnabled by AppSettings.audioCutterEnabled.collectAsStateWithLifecycle()
     val artworkBackdropBlurDp by AppSettings.artworkBackdropBlurDp.collectAsStateWithLifecycle()
@@ -1164,6 +1186,8 @@ fun SettingsScreen(
     val folderArtworkFallbackMode by AppSettings.folderArtworkFallbackMode.collectAsStateWithLifecycle()
     var showFolderArtworkFallbackModeDialog by remember { mutableStateOf(false) }
     val resamplerCutoffHz by AppSettings.resamplerCutoffHz.collectAsStateWithLifecycle()
+    val darPcmUpsamplingEnabled by AppSettings.darPcmUpsamplingEnabled.collectAsStateWithLifecycle()
+    val dsdPlaybackEnabled by AppSettings.dsdPlaybackEnabled.collectAsStateWithLifecycle()
     val loudnessNormalization by AppSettings.loudnessNormalization.collectAsStateWithLifecycle()
     val loudnessOffOnSpeaker by AppSettings.loudnessOffOnSpeaker.collectAsStateWithLifecycle()
     val volumeBoostEnabled by AppSettings.volumeBoostEnabled.collectAsStateWithLifecycle()
@@ -1634,11 +1658,17 @@ fun SettingsScreen(
         ),
         SettingsSearchEntry(
             title = stringResource(R.string.audio_offload),
-            subtitle = stringResource(if (crossfadeSeconds > 0 || smartFade) R.string.audio_offload_disabled_by_transition else R.string.audio_offload_subtitle),
+            subtitle = stringResource(
+                when {
+                    crossfadeSeconds > 0 || smartFade -> R.string.audio_offload_disabled_by_transition
+                    darPcmUpsamplingEnabled -> R.string.audio_offload_disabled_by_dsp
+                    else -> R.string.audio_offload_subtitle
+                },
+            ),
             keywords = listOf("audio offload", "offload", "hardware playback", "省電力", "オフロード再生"),
-            checked = audioOffloadEnabled && crossfadeSeconds == 0 && !smartFade,
-            enabled = crossfadeSeconds == 0 && !smartFade,
-            activate = { if (crossfadeSeconds == 0 && !smartFade) AppSettings.setAudioOffloadEnabled(!audioOffloadEnabled) },
+            checked = audioOffloadEnabled && crossfadeSeconds == 0 && !smartFade && !darPcmUpsamplingEnabled,
+            enabled = crossfadeSeconds == 0 && !smartFade && !darPcmUpsamplingEnabled,
+            activate = { if (crossfadeSeconds == 0 && !smartFade && !darPcmUpsamplingEnabled) AppSettings.setAudioOffloadEnabled(!audioOffloadEnabled) },
         ),
         SettingsSearchEntry(
             stringResource(R.string.dolby_atmos),
@@ -1999,6 +2029,24 @@ fun SettingsScreen(
             hidePlayerQuickActionCircles,
         ) { AppSettings.setHidePlayerQuickActionCircles(!hidePlayerQuickActionCircles) },
         SettingsSearchEntry(
+            stringResource(R.string.hide_player_control_highlight_circles),
+            stringResource(R.string.hide_player_control_highlight_circles_subtitle),
+            listOf("player", "control", "highlight", "circle", "shuffle", "repeat", "queue", "歌詞", "再生", "選択", "円", "丸"),
+            hidePlayerControlHighlightCircles,
+        ) { AppSettings.setHidePlayerControlHighlightCircles(!hidePlayerControlHighlightCircles) },
+        SettingsSearchEntry(
+            stringResource(R.string.external_media_control),
+            stringResource(R.string.external_media_control_subtitle),
+            listOf("notification access", "external player", "other app", "通知アクセス", "他のアプリ", "外部再生"),
+            externalMediaControlEnabled,
+        ) { AppSettings.setExternalMediaControlEnabled(!externalMediaControlEnabled) },
+        SettingsSearchEntry(
+            stringResource(R.string.spotify_integration),
+            stringResource(R.string.spotify_integration_subtitle),
+            listOf("Spotify", "Premium", "Developer Dashboard", "Spotify ライブラリ", "公式アプリ"),
+            spotifyIntegrationEnabled,
+        ) { AppSettings.setSpotifyIntegrationEnabled(!spotifyIntegrationEnabled) },
+        SettingsSearchEntry(
             stringResource(R.string.show_nerd_stats),
             stringResource(R.string.show_nerd_stats_subtitle),
             listOf("stats", "codec", "bitrate", "sample rate", "情報", "ビットレート"),
@@ -2039,6 +2087,8 @@ fun SettingsScreen(
             onSliderValueChange = { AppSettings.setResamplerCutoffHz(it.roundToInt()) },
             activate = { AppSettings.setResamplerCutoffHz(if (resamplerCutoffHz > 0) 0 else 20_000) },
         ),
+        darPcmUpsamplingSearchEntry(darPcmUpsamplingEnabled),
+        dsdPlaybackSearchEntry(dsdPlaybackEnabled),
         SettingsSearchEntry(
             title = stringResource(R.string.output_precision),
             subtitle = "",
@@ -3065,6 +3115,32 @@ fun SettingsScreen(
 
         SettingsGroup(header = stringResource(R.string.playback)) {
             SettingsRow(
+                icon = Icons.Rounded.Headphones,
+                title = stringResource(R.string.external_media_control),
+                subtitle = stringResource(R.string.external_media_control_subtitle),
+                trailing = {
+                    Switch(
+                        checked = externalMediaControlEnabled,
+                        onCheckedChange = AppSettings::setExternalMediaControlEnabled,
+                    )
+                },
+                onClick = { AppSettings.setExternalMediaControlEnabled(!externalMediaControlEnabled) },
+            )
+            RowDivider()
+            SettingsRow(
+                icon = Icons.Rounded.MusicNote,
+                title = stringResource(R.string.spotify_integration),
+                subtitle = stringResource(R.string.spotify_integration_subtitle),
+                trailing = {
+                    Switch(
+                        checked = spotifyIntegrationEnabled,
+                        onCheckedChange = AppSettings::setSpotifyIntegrationEnabled,
+                    )
+                },
+                onClick = { AppSettings.setSpotifyIntegrationEnabled(!spotifyIntegrationEnabled) },
+            )
+            RowDivider()
+            SettingsRow(
                 icon = Icons.Rounded.GraphicEq,
                 title = stringResource(R.string.output_precision),
                 subtitleContent = {
@@ -3322,17 +3398,20 @@ fun SettingsScreen(
                 icon = Icons.Rounded.GraphicEq,
                 title = stringResource(R.string.audio_offload),
                 subtitle = stringResource(
-                    if (crossfadeSeconds > 0 || smartFade) R.string.audio_offload_disabled_by_transition
-                    else R.string.audio_offload_subtitle,
+                    when {
+                        crossfadeSeconds > 0 || smartFade -> R.string.audio_offload_disabled_by_transition
+                        darPcmUpsamplingEnabled -> R.string.audio_offload_disabled_by_dsp
+                        else -> R.string.audio_offload_subtitle
+                    },
                 ),
-                enabled = crossfadeSeconds == 0 && !smartFade,
+                enabled = crossfadeSeconds == 0 && !smartFade && !darPcmUpsamplingEnabled,
                 trailing = {
                     Switch(
-                        checked = audioOffloadEnabled && crossfadeSeconds == 0 && !smartFade,
+                        checked = audioOffloadEnabled && crossfadeSeconds == 0 && !smartFade && !darPcmUpsamplingEnabled,
                         onCheckedChange = { enabled ->
-                            if (crossfadeSeconds == 0 && !smartFade) AppSettings.setAudioOffloadEnabled(enabled)
+                            if (crossfadeSeconds == 0 && !smartFade && !darPcmUpsamplingEnabled) AppSettings.setAudioOffloadEnabled(enabled)
                         },
-                        enabled = crossfadeSeconds == 0 && !smartFade,
+                        enabled = crossfadeSeconds == 0 && !smartFade && !darPcmUpsamplingEnabled,
                         colors = SwitchDefaults.colors(
                             checkedTrackColor = MaterialTheme.colorScheme.primary,
                             checkedBorderColor = MaterialTheme.colorScheme.primary,
@@ -3340,8 +3419,42 @@ fun SettingsScreen(
                     )
                 },
                 onClick = {
-                    if (crossfadeSeconds == 0 && !smartFade) AppSettings.setAudioOffloadEnabled(!audioOffloadEnabled)
+                    if (crossfadeSeconds == 0 && !smartFade && !darPcmUpsamplingEnabled) AppSettings.setAudioOffloadEnabled(!audioOffloadEnabled)
                 },
+            )
+            RowDivider()
+            SettingsRow(
+                icon = Icons.Rounded.GraphicEq,
+                title = stringResource(R.string.dar_pcm_upsampling),
+                subtitle = stringResource(R.string.dar_pcm_upsampling_subtitle),
+                trailing = {
+                    Switch(
+                        checked = darPcmUpsamplingEnabled,
+                        onCheckedChange = AppSettings::setDarPcmUpsamplingEnabled,
+                        colors = SwitchDefaults.colors(
+                            checkedTrackColor = MaterialTheme.colorScheme.primary,
+                            checkedBorderColor = MaterialTheme.colorScheme.primary,
+                        ),
+                    )
+                },
+                onClick = { AppSettings.setDarPcmUpsamplingEnabled(!darPcmUpsamplingEnabled) },
+            )
+            RowDivider()
+            SettingsRow(
+                icon = Icons.Rounded.GraphicEq,
+                title = stringResource(R.string.dsd_playback_pcm),
+                subtitle = stringResource(R.string.dsd_playback_pcm_subtitle),
+                trailing = {
+                    Switch(
+                        checked = dsdPlaybackEnabled,
+                        onCheckedChange = AppSettings::setDsdPlaybackEnabled,
+                        colors = SwitchDefaults.colors(
+                            checkedTrackColor = MaterialTheme.colorScheme.primary,
+                            checkedBorderColor = MaterialTheme.colorScheme.primary,
+                        ),
+                    )
+                },
+                onClick = { AppSettings.setDsdPlaybackEnabled(!dsdPlaybackEnabled) },
             )
             RowDivider()
             SettingsRow(
@@ -4131,6 +4244,21 @@ fun SettingsScreen(
                     )
                 },
                 onClick = { AppSettings.setHidePlayerQuickActionCircles(!hidePlayerQuickActionCircles) },
+            )
+            RowDivider()
+            SettingsRow(
+                icon = Icons.Rounded.Circle,
+                title = stringResource(R.string.hide_player_control_highlight_circles),
+                subtitle = stringResource(R.string.hide_player_control_highlight_circles_subtitle),
+                trailing = {
+                    Switch(
+                        checked = hidePlayerControlHighlightCircles,
+                        onCheckedChange = AppSettings::setHidePlayerControlHighlightCircles,
+                    )
+                },
+                onClick = {
+                    AppSettings.setHidePlayerControlHighlightCircles(!hidePlayerControlHighlightCircles)
+                },
             )
             RowDivider()
             PlayerQuickAction.entries.forEachIndexed { actionIndex, action ->
@@ -5791,6 +5919,7 @@ fun SettingsScreen(
                 MainNavigationTab.RADIO -> R.string.radio
                 MainNavigationTab.HOME -> R.string.listen_now
                 MainNavigationTab.GENRES -> R.string.genres
+                MainNavigationTab.SERVICES -> R.string.services
             })
             SettingsRow(
                 icon = Icons.Rounded.MusicNote,
@@ -5813,6 +5942,7 @@ fun SettingsScreen(
                     MainNavigationTab.RADIO -> R.string.radio
                     MainNavigationTab.HOME -> R.string.listen_now
                     MainNavigationTab.GENRES -> R.string.genres
+                    MainNavigationTab.SERVICES -> R.string.services
                 }
                 val icon = when (tab) {
                     MainNavigationTab.SONGS -> Icons.Rounded.MusicNote
@@ -5825,6 +5955,7 @@ fun SettingsScreen(
                     MainNavigationTab.RADIO -> Icons.Rounded.Radio
                     MainNavigationTab.HOME -> Icons.Rounded.Home
                     MainNavigationTab.GENRES -> Icons.Rounded.LocalOffer
+                    MainNavigationTab.SERVICES -> Icons.Rounded.Headphones
                 }
                 val checked = if (tab == MainNavigationTab.ALBUM_ARTISTS) {
                     com.music.bitchord.data.settings.LocalLibraryTab.ALBUM_ARTISTS in localTabs
@@ -6842,6 +6973,7 @@ fun SettingsScreen(
                                 MainNavigationTab.RADIO -> stringResource(R.string.radio)
                                 MainNavigationTab.HOME -> stringResource(R.string.listen_now)
                                 MainNavigationTab.GENRES -> stringResource(R.string.genres)
+                                MainNavigationTab.SERVICES -> stringResource(R.string.services)
                             }
                             Row(
                                 modifier = Modifier

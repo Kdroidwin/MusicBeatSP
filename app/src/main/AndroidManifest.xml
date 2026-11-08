@@ -27,6 +27,10 @@
     <!-- USB optical drives are optional; access is granted per-device by Android. -->
     <uses-feature android:name="android.hardware.usb.host" android:required="false" />
 
+    <queries>
+        <package android:name="com.spotify.music" />
+    </queries>
+
 
     <!-- Reading local audio files across the device -->
     <uses-permission android:name="android.permission.READ_MEDIA_AUDIO" />
@@ -313,6 +317,27 @@
                 <action android:name="android.media.browse.MediaBrowserService" />
             </intent-filter>
         </service>
+
+        <service
+            android:name=".external.MediaListenerService"
+            android:label="@string/external_media_listener_label"
+            android:permission="android.permission.BIND_NOTIFICATION_LISTENER_SERVICE"
+            android:exported="true">
+            <intent-filter>
+                <action android:name="android.service.notification.NotificationListenerService" />
+            </intent-filter>
+        </service>
+
+        <activity
+            android:name="com.spotify.sdk.android.auth.browser.RedirectUriReceiverActivity"
+            android:exported="true">
+            <intent-filter>
+                <action android:name="android.intent.action.VIEW" />
+                <category android:name="android.intent.category.DEFAULT" />
+                <category android:name="android.intent.category.BROWSABLE" />
+                <data android:scheme="musicbeatsp-spotify" android:host="callback" />
+            </intent-filter>
+        </activity>
 
         <!-- Commands and streaming channels are delivered by Google Play services
              from the matching, paired MusicBeatSP Wear app. -->

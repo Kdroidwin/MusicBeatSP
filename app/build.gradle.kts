@@ -1,6 +1,7 @@
 import java.util.Properties
 import java.io.FileInputStream
 import java.security.MessageDigest
+import java.net.URL
 import org.gradle.api.DefaultTask
 import org.gradle.api.file.ConfigurableFileCollection
 import org.gradle.api.file.DirectoryProperty
@@ -90,6 +91,30 @@ val youtubePoTokenApiKey: String = (
         ?: System.getenv("YOUTUBE_PO_TOKEN_API_KEY")
         ?: ""
     ).trim()
+
+// Spotify's Android App Remote is distributed as a release AAR rather than
+// from Maven Central. Verify the pinned official artifact before compilation.
+val spotifyAarName = "spotify-app-remote-release-0.8.0.aar"
+val spotifyAarUrl = "https://github.com/spotify/android-sdk/releases/download/v0.8.0-appremote_v2.1.0-auth/$spotifyAarName"
+val spotifyAarSha256 = "b5a6dd880eaf01f63a871cba9ef7af77c341f8a94ffc8fdf2e9021f9a9d4c198"
+val spotifyAar = layout.buildDirectory.file("spotify/$spotifyAarName")
+val fetchSpotifyAar = tasks.register("fetchSpotifyAar") {
+    outputs.file(spotifyAar)
+    doLast {
+        val output = spotifyAar.get().asFile
+        fun digest(bytes: ByteArray) = MessageDigest.getInstance("SHA-256")
+            .digest(bytes).joinToString("") { "%02x".format(it) }
+        if (output.exists() && digest(output.readBytes()) == spotifyAarSha256) return@doLast
+        val connection = URL(spotifyAarUrl).openConnection().apply {
+            connectTimeout = 20_000
+            readTimeout = 60_000
+        }
+        val bytes = connection.getInputStream().use { it.readBytes() }
+        check(digest(bytes) == spotifyAarSha256) { "Spotify App Remote SDK SHA-256 mismatch" }
+        output.parentFile.mkdirs()
+        output.writeBytes(bytes)
+    }
+}
 
 android {
     // Keep the Kotlin/R resource namespace stable; applicationId below is the
@@ -256,6 +281,9 @@ kotlin {
 
 
 dependencies {
+    implementation(files(spotifyAar).builtBy(fetchSpotifyAar))
+    implementation("com.spotify.android:auth:5.0.0")
+    implementation("com.google.code.gson:gson:2.10.1")
     // ---- Compose (Material 3) ----
     val composeBom = platform("androidx.compose:compose-bom:2024.12.01")
     implementation(composeBom)

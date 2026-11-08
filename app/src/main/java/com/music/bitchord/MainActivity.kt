@@ -86,6 +86,7 @@ import androidx.compose.material.icons.rounded.Check
 import androidx.compose.material.icons.rounded.Close
 import androidx.compose.material.icons.rounded.Fullscreen
 import androidx.compose.material.icons.rounded.History
+import androidx.compose.material.icons.rounded.Headphones
 import androidx.compose.material.icons.rounded.Home
 import androidx.compose.material.icons.rounded.Edit
 import androidx.compose.material.icons.rounded.Person
@@ -136,6 +137,8 @@ import com.music.bitchord.ui.screens.LOCAL_TAB_FOLDERS
 import com.music.bitchord.ui.screens.LOCAL_TAB_PLAYLISTS
 import com.music.bitchord.ui.screens.RadioScreen
 import com.music.bitchord.ui.screens.HomeScreen
+import com.music.bitchord.ui.screens.ServicesScreen
+import com.music.bitchord.external.ExternalMedia
 import com.music.bitchord.feature.localsearch.ui.LocalSearchScreen
 import androidx.compose.material3.pulltorefresh.rememberPullToRefreshState
 import androidx.compose.material3.rememberModalBottomSheetState
@@ -636,6 +639,20 @@ private fun BitChordApp(
     viewModel: MainViewModel = viewModel(),
 ) {
     val context = LocalContext.current
+    val externalMediaControlEnabled by AppSettings.externalMediaControlEnabled.collectAsStateWithLifecycle()
+    val externalMediaLifecycleOwner = LocalLifecycleOwner.current
+    LaunchedEffect(externalMediaControlEnabled) {
+        ExternalMedia.setEnabled(context, externalMediaControlEnabled)
+    }
+    DisposableEffect(externalMediaLifecycleOwner, externalMediaControlEnabled) {
+        val observer = LifecycleEventObserver { _, event ->
+            if (event == Lifecycle.Event.ON_RESUME) {
+                ExternalMedia.setEnabled(context, externalMediaControlEnabled)
+            }
+        }
+        externalMediaLifecycleOwner.lifecycle.addObserver(observer)
+        onDispose { externalMediaLifecycleOwner.lifecycle.removeObserver(observer) }
+    }
     val clipboard = LocalClipboardManager.current
     val appleMusicStyleMenus by AppSettings.appleMusicStyleMenus.collectAsStateWithLifecycle()
     val showStatusBar by AppSettings.showStatusBar.collectAsStateWithLifecycle()
@@ -1324,7 +1341,8 @@ private fun BitChordApp(
     val radioLabel = stringResource(R.string.radio)
     val homeLabel = stringResource(R.string.listen_now)
     val genresLabel = stringResource(R.string.genres)
-    val allTabs = remember(songsLabel, albumsLabel, artistsLabel, albumArtistsLabel, libraryLabel, searchLabel, foldersLabel, radioLabel, homeLabel, genresLabel) {
+    val servicesLabel = stringResource(R.string.services)
+    val allTabs = remember(songsLabel, albumsLabel, artistsLabel, albumArtistsLabel, libraryLabel, searchLabel, foldersLabel, radioLabel, homeLabel, genresLabel, servicesLabel) {
         listOf(
             BottomTab(songsLabel, Icons.Rounded.MusicNote),
             BottomTab(albumsLabel, Icons.Rounded.Album),
@@ -1336,6 +1354,7 @@ private fun BitChordApp(
             BottomTab(radioLabel, Icons.Rounded.Radio),
             BottomTab(homeLabel, Icons.Rounded.Home),
             BottomTab(genresLabel, Icons.Rounded.LocalOffer),
+            BottomTab(servicesLabel, Icons.Rounded.Headphones),
         )
     }
     val tabs = remember(allTabs, visibleTabIndices) {
@@ -3523,6 +3542,10 @@ private fun BitChordApp(
                                 onCollectionNavigationChanged = onCollectionNavigationChanged,
                             )
                         }
+                        TAB_SERVICES -> ServicesScreen(
+                            modifier = Modifier.fillMaxSize().padding(listPadding),
+                            allowSpotify = !offlineMode && !context.packageName.endsWith(".nointernet"),
+                        )
                         else -> Box(modifier = Modifier.fillMaxSize())
                     }
                 }
@@ -5506,6 +5529,7 @@ private const val TAB_FOLDERS = 6
 private const val TAB_RADIO = 7
 private const val TAB_HOME = 8
 private const val TAB_GENRES = 9
+private const val TAB_SERVICES = 10
 
 
 /** Keep only the floating settings action visible while a root tab scrolls. */

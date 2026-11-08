@@ -339,6 +339,7 @@ enum class MainNavigationTab(val index: Int) {
     RADIO(7),
     HOME(8),
     GENRES(9),
+    SERVICES(10),
 }
 
 enum class ScreenOrientationMode { SYSTEM, PORTRAIT, LANDSCAPE }
@@ -383,7 +384,7 @@ enum class PlayerDetailsAction {
 object MainNavigationTabs {
     /** Newly introduced destinations stay opt-in unless the user enables them. */
     fun defaultVisibleTabs(): Set<MainNavigationTab> =
-        MainNavigationTab.entries.toSet() - setOf(MainNavigationTab.HOME, MainNavigationTab.GENRES)
+        MainNavigationTab.entries.toSet() - setOf(MainNavigationTab.HOME, MainNavigationTab.GENRES, MainNavigationTab.SERVICES)
 
     fun normalizeOrder(order: List<MainNavigationTab>): List<MainNavigationTab> =
         (order + MainNavigationTab.entries).distinct()
@@ -798,6 +799,16 @@ object AppSettings {
     val playerQuickActions = MutableStateFlow<List<PlayerQuickAction>>(emptyList())
     /** Removes translucent circular discs behind quick action glyphs. */
     val hidePlayerQuickActionCircles = MutableStateFlow(false)
+    /** Removes active-state discs behind the transport and player-action buttons at the bottom. */
+    val hidePlayerControlHighlightCircles = MutableStateFlow(false)
+    /** Integrates other apps' media sessions only after the user enables it. */
+    val externalMediaControlEnabled = MutableStateFlow(false)
+    /** Spotify Web API and official-app playback integration is opt-in. */
+    val spotifyIntegrationEnabled = MutableStateFlow(false)
+    /** UCRT-inspired DAR PCM upsampling; excluded from bit-perfect output. */
+    val darPcmUpsamplingEnabled = MutableStateFlow(false)
+    /** DSD-to-PCM playback path; disabled until explicitly selected. */
+    val dsdPlaybackEnabled = MutableStateFlow(false)
     val hiddenPlayerDetailsActions = MutableStateFlow<Set<PlayerDetailsAction>>(emptySet())
     /** The cutter is opt-in because it exports a re-encoded, edited copy of a track. */
     val audioCutterEnabled = MutableStateFlow(false)
@@ -1661,6 +1672,11 @@ object AppSettings {
         favoriteUsesStar.value = prefs.getBoolean(KEY_FAVORITE_USES_STAR, false)
         playerQuickActions.value = readPlayerQuickActions()
         hidePlayerQuickActionCircles.value = prefs.getBoolean(KEY_HIDE_PLAYER_QUICK_ACTION_CIRCLES, false)
+        hidePlayerControlHighlightCircles.value = prefs.getBoolean(KEY_HIDE_PLAYER_CONTROL_HIGHLIGHT_CIRCLES, false)
+        externalMediaControlEnabled.value = prefs.getBoolean(KEY_EXTERNAL_MEDIA_CONTROL_ENABLED, false)
+        spotifyIntegrationEnabled.value = prefs.getBoolean(KEY_SPOTIFY_INTEGRATION_ENABLED, false)
+        darPcmUpsamplingEnabled.value = prefs.getBoolean(KEY_DAR_PCM_UPSAMPLING_ENABLED, false)
+        dsdPlaybackEnabled.value = prefs.getBoolean(KEY_DSD_PLAYBACK_ENABLED, false)
         hiddenPlayerDetailsActions.value = readHiddenPlayerDetailsActions()
         audioCutterEnabled.value = prefs.getBoolean(KEY_AUDIO_CUTTER_ENABLED, false)
         artworkBackdropBlurDp.value = prefs.getFloat(KEY_ARTWORK_BACKDROP_BLUR_DP, 32f)
@@ -2996,6 +3012,31 @@ object AppSettings {
     fun setHidePlayerQuickActionCircles(value: Boolean) {
         hidePlayerQuickActionCircles.value = value
         prefs.edit().putBoolean(KEY_HIDE_PLAYER_QUICK_ACTION_CIRCLES, value).apply()
+    }
+
+    fun setHidePlayerControlHighlightCircles(value: Boolean) {
+        hidePlayerControlHighlightCircles.value = value
+        prefs.edit().putBoolean(KEY_HIDE_PLAYER_CONTROL_HIGHLIGHT_CIRCLES, value).apply()
+    }
+
+    fun setExternalMediaControlEnabled(value: Boolean) {
+        externalMediaControlEnabled.value = value
+        prefs.edit().putBoolean(KEY_EXTERNAL_MEDIA_CONTROL_ENABLED, value).apply()
+    }
+
+    fun setSpotifyIntegrationEnabled(value: Boolean) {
+        spotifyIntegrationEnabled.value = value
+        prefs.edit().putBoolean(KEY_SPOTIFY_INTEGRATION_ENABLED, value).apply()
+    }
+
+    fun setDarPcmUpsamplingEnabled(value: Boolean) {
+        darPcmUpsamplingEnabled.value = value
+        prefs.edit().putBoolean(KEY_DAR_PCM_UPSAMPLING_ENABLED, value).apply()
+    }
+
+    fun setDsdPlaybackEnabled(value: Boolean) {
+        dsdPlaybackEnabled.value = value
+        prefs.edit().putBoolean(KEY_DSD_PLAYBACK_ENABLED, value).apply()
     }
 
     fun setPlayerDetailsActionVisible(action: PlayerDetailsAction, visible: Boolean) {
@@ -4690,6 +4731,11 @@ object AppSettings {
     private const val KEY_FAVORITE_USES_STAR = "favorite_uses_star"
     private const val KEY_PLAYER_QUICK_ACTIONS = "player_quick_actions"
     private const val KEY_HIDE_PLAYER_QUICK_ACTION_CIRCLES = "hide_player_quick_action_circles"
+    private const val KEY_HIDE_PLAYER_CONTROL_HIGHLIGHT_CIRCLES = "hide_player_control_highlight_circles"
+    private const val KEY_EXTERNAL_MEDIA_CONTROL_ENABLED = "external_media_control_enabled"
+    private const val KEY_SPOTIFY_INTEGRATION_ENABLED = "spotify_integration_enabled"
+    private const val KEY_DAR_PCM_UPSAMPLING_ENABLED = "dar_pcm_upsampling_enabled"
+    private const val KEY_DSD_PLAYBACK_ENABLED = "dsd_playback_enabled"
     private const val KEY_HIDDEN_PLAYER_DETAILS_ACTIONS = "hidden_player_details_actions"
     private const val KEY_AUDIO_CUTTER_ENABLED = "audio_cutter_enabled"
     private const val KEY_ARTWORK_BACKDROP_BLUR_DP = "artwork_backdrop_blur_dp"
