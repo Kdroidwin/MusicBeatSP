@@ -241,9 +241,18 @@ private data class SettingsSearchEntry(
     val enabled: Boolean = true,
     val activate: () -> Unit,
 ) {
+    var reorder: SettingsSearchReorder? = null
+
     val category: SettingsSearchCategory
         get() = settingsSearchCategory("$title $subtitle ${keywords.joinToString(" ")}")
 }
+
+private data class SettingsSearchReorder(
+    val moveUpEnabled: Boolean,
+    val moveDownEnabled: Boolean,
+    val moveUp: () -> Unit,
+    val moveDown: () -> Unit,
+)
 
 @Composable
 private fun supplementalSettingsSearchEntries(
@@ -402,42 +411,77 @@ private fun miniPlayerSwipeDownDismissSearchEntry(): SettingsSearchEntry {
 private fun SettingsSearchEntryRows(entries: List<SettingsSearchEntry>) {
     entries.forEachIndexed { index, entry ->
         if (index > 0) RowDivider()
-        SettingsRow(
-            icon = Icons.Rounded.Tune,
-            title = entry.title,
-            subtitle = entry.subtitle,
-            trailing = entry.checked?.let { checked ->
-                {
-                    Switch(
-                        checked = checked,
-                        enabled = entry.enabled,
-                        onCheckedChange = { entry.activate() },
-                        colors = SwitchDefaults.colors(
-                            checkedTrackColor = MaterialTheme.colorScheme.primary,
-                            checkedBorderColor = MaterialTheme.colorScheme.primary,
-                        ),
-                    )
+        SettingsSearchEntryRow(entry)
+    }
+}
+
+@Composable
+private fun SettingsSearchEntryRow(entry: SettingsSearchEntry) {
+    val hasTrailingContent = entry.reorder != null ||
+        entry.checked != null || entry.valueLabel != null
+    SettingsRow(
+        icon = Icons.Rounded.Tune,
+        title = entry.title,
+        subtitle = entry.subtitle,
+        trailing = if (hasTrailingContent) {
+            {
+                Row(verticalAlignment = Alignment.CenterVertically) {
+                    entry.reorder?.let { reorder ->
+                        IconButton(
+                            enabled = reorder.moveUpEnabled,
+                            onClick = reorder.moveUp,
+                        ) {
+                            Icon(
+                                Icons.Rounded.ArrowUpward,
+                                stringResource(R.string.move_up),
+                                tint = if (reorder.moveUpEnabled) MaterialTheme.colorScheme.onSurfaceVariant
+                                else MaterialTheme.colorScheme.outlineVariant,
+                            )
+                        }
+                    }
+                    entry.checked?.let { checked ->
+                        Switch(
+                            checked = checked,
+                            enabled = entry.enabled,
+                            onCheckedChange = { entry.activate() },
+                            colors = SwitchDefaults.colors(
+                                checkedTrackColor = MaterialTheme.colorScheme.primary,
+                                checkedBorderColor = MaterialTheme.colorScheme.primary,
+                            ),
+                        )
+                    } ?: entry.valueLabel?.let { value ->
+                        Text(value, color = MaterialTheme.colorScheme.primary, style = MaterialTheme.typography.labelLarge)
+                    }
+                    entry.reorder?.let { reorder ->
+                        IconButton(
+                            enabled = reorder.moveDownEnabled,
+                            onClick = reorder.moveDown,
+                        ) {
+                            Icon(
+                                Icons.Rounded.ArrowDownward,
+                                stringResource(R.string.move_down),
+                                tint = if (reorder.moveDownEnabled) MaterialTheme.colorScheme.onSurfaceVariant
+                                else MaterialTheme.colorScheme.outlineVariant,
+                            )
+                        }
+                    }
                 }
-            } ?: entry.valueLabel?.let { value ->
-                {
-                    Text(value, color = MaterialTheme.colorScheme.primary, style = MaterialTheme.typography.labelLarge)
-                }
-            },
-            onClick = if (entry.sliderValue == null) entry.activate else null,
+            }
+        } else null,
+        onClick = if (entry.sliderValue == null) entry.activate else null,
+        enabled = entry.enabled,
+    )
+    val sliderValue = entry.sliderValue
+    val onSliderValueChange = entry.onSliderValueChange
+    if (sliderValue != null && onSliderValueChange != null) {
+        Slider(
+            value = sliderValue,
+            onValueChange = onSliderValueChange,
+            steps = entry.sliderSteps,
+            valueRange = entry.sliderValueRange,
             enabled = entry.enabled,
+            modifier = Modifier.padding(start = ROW_INSET, end = ROW_INSET, bottom = 14.dp),
         )
-        val sliderValue = entry.sliderValue
-        val onSliderValueChange = entry.onSliderValueChange
-        if (sliderValue != null && onSliderValueChange != null) {
-            Slider(
-                value = sliderValue,
-                onValueChange = onSliderValueChange,
-                steps = entry.sliderSteps,
-                valueRange = entry.sliderValueRange,
-                enabled = entry.enabled,
-                modifier = Modifier.padding(start = ROW_INSET, end = ROW_INSET, bottom = 14.dp),
-            )
-        }
     }
 }
 
@@ -556,6 +600,7 @@ private fun additionalArtworkSettingsSearchEntries(
 private fun libraryCategorySettingsSearchEntries(
     visibleCategories: Set<LibraryCategory>,
     showPlayHistorySongArtwork: Boolean,
+    categoryOrder: List<LibraryCategory>,
 ): List<SettingsSearchEntry> {
     val historyArtwork = SettingsSearchEntry(
         title = stringResource(R.string.play_history_song_artwork),
@@ -566,7 +611,7 @@ private fun libraryCategorySettingsSearchEntries(
         ),
         checked = showPlayHistorySongArtwork,
     ) { AppSettings.setShowPlayHistorySongArtwork(!showPlayHistorySongArtwork) }
-    val categoryVisibility = LibraryCategory.entries.map { category ->
+    val categoryVisibility = categoryOrder.mapIndexed { index, category ->
         val title = stringResource(when (category) {
             LibraryCategory.FAVORITES -> R.string.favorites
             LibraryCategory.PLAYLISTS -> R.string.playlists
@@ -580,13 +625,93 @@ private fun libraryCategorySettingsSearchEntries(
             title = stringResource(R.string.show_library_category, title),
             subtitle = stringResource(R.string.show_library_category_subtitle, title),
             keywords = listOf(
-                "library", "collection", "filter", "tab", "show", "hide",
-                "ライブラリ", "コレクション", "表示", "非表示", title,
+                "library", "collection", "filter", "tab", "show", "hide", "order", "sort", "move",
+                "ライブラリ", "コレクション", "表示", "非表示", "順番", "並び替え", title,
             ),
             checked = category in visibleCategories,
-        ) { AppSettings.setLibraryCategoryVisible(category, category !in visibleCategories) }
+        ) { AppSettings.setLibraryCategoryVisible(category, category !in visibleCategories) }.apply {
+            reorder = SettingsSearchReorder(
+                moveUpEnabled = index > 0,
+                moveDownEnabled = index < categoryOrder.lastIndex,
+                moveUp = { AppSettings.moveLibraryCategory(category, -1) },
+                moveDown = { AppSettings.moveLibraryCategory(category, 1) },
+            )
+        }
     }
     return listOf(historyArtwork) + categoryVisibility
+}
+
+@Composable
+private fun navigationTabSettingsSearchEntries(
+    mainTabOrder: List<MainNavigationTab>,
+    visibleMainTabs: Set<MainNavigationTab>,
+    localTabs: Set<LocalLibraryTab>,
+    localTabOrder: List<LocalLibraryTab>,
+): List<SettingsSearchEntry> {
+    val mainTabEntries = mainTabOrder.mapIndexed { index, tab ->
+        val tabTitle = stringResource(when (tab) {
+            MainNavigationTab.SONGS -> R.string.songs
+            MainNavigationTab.ALBUMS -> R.string.albums
+            MainNavigationTab.ARTISTS -> R.string.artists
+            MainNavigationTab.LIBRARY -> R.string.library
+            MainNavigationTab.SEARCH -> R.string.search
+            MainNavigationTab.ALBUM_ARTISTS -> R.string.album_artists
+            MainNavigationTab.FOLDERS -> R.string.folders
+            MainNavigationTab.RADIO -> R.string.radio
+            MainNavigationTab.HOME -> R.string.listen_now
+            MainNavigationTab.GENRES -> R.string.genres
+        })
+        SettingsSearchEntry(
+            title = stringResource(R.string.show_tab_setting, tabTitle),
+            subtitle = stringResource(R.string.show_tab_setting_subtitle, tabTitle),
+            keywords = listOf("tab", "order", "sort", "move", "タブ", "順番", "並び替え", tabTitle),
+            checked = if (tab == MainNavigationTab.ALBUM_ARTISTS) {
+                LocalLibraryTab.ALBUM_ARTISTS in localTabs
+            } else tab in visibleMainTabs,
+        ) {
+            val visible = if (tab == MainNavigationTab.ALBUM_ARTISTS) {
+                LocalLibraryTab.ALBUM_ARTISTS in localTabs
+            } else tab in visibleMainTabs
+            AppSettings.setMainNavigationTabVisible(tab, !visible)
+        }.apply {
+            reorder = SettingsSearchReorder(
+                moveUpEnabled = index > 0,
+                moveDownEnabled = index < mainTabOrder.lastIndex,
+                moveUp = { AppSettings.moveMainNavigationTab(tab, -1) },
+                moveDown = { AppSettings.moveMainNavigationTab(tab, 1) },
+            )
+        }
+    }
+    val localTabEntries = localTabOrder.mapIndexed { index, tab ->
+        val tabTitle = stringResource(when (tab) {
+            LocalLibraryTab.SONGS -> R.string.songs
+            LocalLibraryTab.ALBUMS -> R.string.albums
+            LocalLibraryTab.ARTISTS -> R.string.artists
+            LocalLibraryTab.FOLDERS -> R.string.folders
+            LocalLibraryTab.PLAYLISTS -> R.string.playlists
+            LocalLibraryTab.ALBUM_ARTISTS -> R.string.album_artists
+            LocalLibraryTab.GENRES -> R.string.genres
+        })
+        SettingsSearchEntry(
+            title = stringResource(R.string.show_tab_setting, tabTitle),
+            subtitle = stringResource(R.string.local_library_tabs_subtitle),
+            keywords = listOf(
+                "local", "library", "tab", "order", "sort", "move",
+                "ローカル", "ライブラリ", "タブ", "順番", "並び替え", tabTitle,
+            ),
+            checked = tab in localTabs,
+        ) {
+            AppSettings.setLocalLibraryTabVisible(tab, tab !in localTabs)
+        }.apply {
+            reorder = SettingsSearchReorder(
+                moveUpEnabled = index > 0,
+                moveDownEnabled = index < localTabOrder.lastIndex,
+                moveUp = { AppSettings.moveLocalLibraryTab(tab, -1) },
+                moveDown = { AppSettings.moveLocalLibraryTab(tab, 1) },
+            )
+        }
+    }
+    return mainTabEntries + localTabEntries
 }
 
 @Composable
@@ -909,6 +1034,12 @@ fun SettingsScreen(
     val context = LocalContext.current
     val musicFolderRootPicker = rememberMusicFolderRootPicker(AppSettings::setLocalMusicFolderPath)
     val settingsScrollState = rememberScrollState()
+    var volumeHandoffBluetoothGranted by remember(context) {
+        mutableStateOf(com.music.bitchord.playback.VolumeHandoff.canHearConnections(context))
+    }
+    val volumeHandoffBluetoothPermissionLauncher = rememberLauncherForActivityResult(
+        ActivityResultContracts.RequestPermission(),
+    ) { granted -> volumeHandoffBluetoothGranted = granted }
     val popupOverlayPermissionLauncher = rememberLauncherForActivityResult(
         ActivityResultContracts.StartActivityForResult(),
     ) {
@@ -1783,7 +1914,7 @@ fun SettingsScreen(
         SettingsSearchEntry(stringResource(R.string.keep_collection_artwork_aspect_ratio), stringResource(R.string.keep_collection_artwork_aspect_ratio_subtitle), listOf("playlist", "album", "artwork", "aspect ratio", "cover", "プレイリスト", "アルバム", "アート", "縦横比"), keepCollectionArtworkAspectRatio) { AppSettings.setKeepCollectionArtworkAspectRatio(!keepCollectionArtworkAspectRatio) },
         SettingsSearchEntry(stringResource(R.string.localize_library_collection_count), stringResource(R.string.localize_library_collection_count_subtitle), listOf("library", "collections", "count", "language", "ライブラリ", "コレクション", "件数", "日本語"), localizeLibraryCollectionCount) { AppSettings.setLocalizeLibraryCollectionCount(!localizeLibraryCollectionCount) },
         localizeLibraryAllLabelSearchEntry(localizeLibraryAllLabel),
-    ) + libraryCategorySettingsSearchEntries(libraryCategories, showPlayHistorySongArtwork) + listOf(
+    ) + listOf(
         SettingsSearchEntry(
             stringResource(R.string.artwork_tap_opens_lyrics),
             stringResource(R.string.artwork_tap_opens_lyrics_subtitle),
@@ -2087,50 +2218,6 @@ fun SettingsScreen(
         ) {
             AppSettings.setPlayerDetailsActionVisible(action, action in hiddenPlayerDetailsActions)
         }
-    } + MainNavigationTab.entries.map { tab ->
-        val tabTitle = stringResource(when (tab) {
-            MainNavigationTab.SONGS -> R.string.songs
-            MainNavigationTab.ALBUMS -> R.string.albums
-            MainNavigationTab.ARTISTS -> R.string.artists
-            MainNavigationTab.LIBRARY -> R.string.library
-            MainNavigationTab.SEARCH -> R.string.search
-            MainNavigationTab.ALBUM_ARTISTS -> R.string.album_artists
-            MainNavigationTab.FOLDERS -> R.string.folders
-            MainNavigationTab.RADIO -> R.string.radio
-            MainNavigationTab.HOME -> R.string.listen_now
-            MainNavigationTab.GENRES -> R.string.genres
-        })
-        SettingsSearchEntry(
-            title = stringResource(R.string.show_tab_setting, tabTitle),
-            subtitle = stringResource(R.string.show_tab_setting_subtitle, tabTitle),
-            keywords = listOf("tab", "タブ", tabTitle),
-            checked = if (tab == MainNavigationTab.ALBUM_ARTISTS) {
-                com.music.bitchord.data.settings.LocalLibraryTab.ALBUM_ARTISTS in localTabs
-            } else tab in visibleMainTabs,
-        ) {
-            val visible = if (tab == MainNavigationTab.ALBUM_ARTISTS) {
-                com.music.bitchord.data.settings.LocalLibraryTab.ALBUM_ARTISTS in localTabs
-            } else tab in visibleMainTabs
-            AppSettings.setMainNavigationTabVisible(tab, !visible)
-        }
-    } + LocalLibraryTab.entries.map { tab ->
-        val tabTitle = stringResource(when (tab) {
-            LocalLibraryTab.SONGS -> R.string.songs
-            LocalLibraryTab.ALBUMS -> R.string.albums
-            LocalLibraryTab.ARTISTS -> R.string.artists
-            LocalLibraryTab.FOLDERS -> R.string.folders
-            LocalLibraryTab.PLAYLISTS -> R.string.playlists
-            LocalLibraryTab.ALBUM_ARTISTS -> R.string.album_artists
-            LocalLibraryTab.GENRES -> R.string.genres
-        })
-        SettingsSearchEntry(
-            title = stringResource(R.string.show_tab_setting, tabTitle),
-            subtitle = stringResource(R.string.local_library_tabs_subtitle),
-            keywords = listOf("local", "library", "tab", "ローカル", "ライブラリ", "タブ", tabTitle),
-            checked = tab in localTabs,
-        ) {
-            AppSettings.setLocalLibraryTabVisible(tab, tab !in localTabs)
-        }
     } + listOf(
         SettingsSearchEntry(
             stringResource(R.string.local_folder_hierarchy),
@@ -2222,6 +2309,17 @@ fun SettingsScreen(
         )
     }
     val settingsSearchEntries = buildSettingsSearchEntries() +
+        navigationTabSettingsSearchEntries(
+            mainTabOrder = mainTabOrder,
+            visibleMainTabs = visibleMainTabs,
+            localTabs = localTabs,
+            localTabOrder = localTabOrder,
+        ) +
+        libraryCategorySettingsSearchEntries(
+            visibleCategories = libraryCategories,
+            showPlayHistorySongArtwork = showPlayHistorySongArtwork,
+            categoryOrder = libraryCategoryOrder,
+        ) +
         supplementalSettingsSearchEntries(
             hierarchicalNavigation = settingsHierarchicalNavigation,
             autoFetchYoutubeLyrics = autoFetchLyricsOnYoutubePlayback,
@@ -2373,14 +2471,15 @@ fun SettingsScreen(
         SettingsSearchEntry(
             title = stringResource(label),
             subtitle = stringResource(R.string.grid_size_subtitle),
-            keywords = listOf("grid", "columns", "グリッド", "列", "表示数"),
+            keywords = listOf("grid", "columns", "size", "グリッド", "列", "表示数", "大きさ"),
             valueLabel = stringResource(R.string.grid_columns_value, current),
-            activate = {
-                val next = if (current >= com.music.bitchord.data.settings.GridKind.MAX_COLUMNS) {
-                    com.music.bitchord.data.settings.GridKind.MIN_COLUMNS
-                } else current + 1
-                AppSettings.setGridColumns(kind, next)
-            },
+            sliderValue = current.toFloat(),
+            sliderValueRange = com.music.bitchord.data.settings.GridKind.MIN_COLUMNS.toFloat()..
+                com.music.bitchord.data.settings.GridKind.MAX_COLUMNS.toFloat(),
+            sliderSteps = com.music.bitchord.data.settings.GridKind.MAX_COLUMNS -
+                com.music.bitchord.data.settings.GridKind.MIN_COLUMNS - 1,
+            onSliderValueChange = { AppSettings.setGridColumns(kind, it.roundToInt()) },
+            activate = {},
         )
     }
 
@@ -2886,7 +2985,32 @@ fun SettingsScreen(
             } else {
                 emptyList()
             }
-        val allSettingsSearchEntries = settingsSearchEntries + settingsActionSearchEntries + wearSearchEntry
+        val fontResetSearchEntry = if (customFontPath.isNotEmpty()) {
+            listOf(
+                SettingsSearchEntry(
+                    title = stringResource(R.string.font_reset),
+                    subtitle = "",
+                    keywords = listOf("font", "reset", "restore", "default", "フォント", "標準", "初期化", "戻す"),
+                    activate = { com.music.bitchord.ui.theme.CustomFont.reset(context) },
+                ),
+            )
+        } else emptyList()
+        val volumeHandoffPermissionSearchEntry = if (
+            volumeHandoff && !volumeHandoffBluetoothGranted && Build.VERSION.SDK_INT >= Build.VERSION_CODES.S
+        ) {
+            listOf(
+                SettingsSearchEntry(
+                    title = stringResource(R.string.volume_handoff_bluetooth),
+                    subtitle = stringResource(R.string.volume_handoff_bluetooth_subtitle),
+                    keywords = listOf("volume", "bluetooth", "permission", "nearby devices", "音量", "Bluetooth", "権限", "付近のデバイス"),
+                    activate = {
+                        volumeHandoffBluetoothPermissionLauncher.launch(Manifest.permission.BLUETOOTH_CONNECT)
+                    },
+                ),
+            )
+        } else emptyList()
+        val allSettingsSearchEntries = settingsSearchEntries + fontResetSearchEntry +
+            volumeHandoffPermissionSearchEntry + settingsActionSearchEntries + wearSearchEntry
 
         if (settingsSearchQuery.isNotBlank()) {
             val matches = allSettingsSearchEntries.filter { entry ->
@@ -2902,49 +3026,7 @@ fun SettingsScreen(
                         modifier = Modifier.padding(horizontal = 18.dp, vertical = 16.dp),
                     )
                 } else {
-                    matches.forEachIndexed { index, entry ->
-                        if (index > 0) RowDivider()
-                        SettingsRow(
-                            icon = Icons.Rounded.Tune,
-                            title = entry.title,
-                            subtitle = entry.subtitle,
-                            trailing = entry.checked?.let { checked ->
-                                {
-                                    Switch(
-                                        checked = checked,
-                                        enabled = entry.enabled,
-                                        onCheckedChange = { entry.activate() },
-                                        colors = SwitchDefaults.colors(
-                                            checkedTrackColor = MaterialTheme.colorScheme.primary,
-                                            checkedBorderColor = MaterialTheme.colorScheme.primary,
-                                        ),
-                                    )
-                                }
-                            } ?: entry.valueLabel?.let { valueLabel ->
-                                {
-                                    Text(
-                                        text = valueLabel,
-                                        color = MaterialTheme.colorScheme.primary,
-                                        style = MaterialTheme.typography.labelLarge,
-                                    )
-                                }
-                            },
-                            onClick = if (entry.sliderValue == null) entry.activate else null,
-                            enabled = entry.enabled,
-                        )
-                        val sliderValue = entry.sliderValue
-                        val onSliderValueChange = entry.onSliderValueChange
-                        if (sliderValue != null && onSliderValueChange != null) {
-                            Slider(
-                                value = sliderValue,
-                                onValueChange = onSliderValueChange,
-                                steps = entry.sliderSteps,
-                                valueRange = entry.sliderValueRange,
-                                enabled = entry.enabled,
-                                modifier = Modifier.padding(start = ROW_INSET, end = ROW_INSET, bottom = 14.dp),
-                            )
-                        }
-                    }
+                    SettingsSearchEntryRows(matches)
                 }
             }
         } else if (settingsHierarchicalNavigation) {
@@ -3648,7 +3730,12 @@ fun SettingsScreen(
                 modifier = Modifier.padding(start = ROW_INSET, end = ROW_INSET, bottom = 14.dp),
             )
             RowDivider()
-            VolumeHandoffRows()
+            VolumeHandoffRows(
+                canHearConnections = volumeHandoffBluetoothGranted,
+                onRequestBluetoothPermission = {
+                    volumeHandoffBluetoothPermissionLauncher.launch(Manifest.permission.BLUETOOTH_CONNECT)
+                },
+            )
         }
 
         SettingsGroup(header = stringResource(R.string.media_controls)) {
@@ -8201,15 +8288,11 @@ private fun CustomFontSettingsRows(onPickFont: () -> Unit) {
 }
 
 @Composable
-private fun VolumeHandoffRows() {
-    val context = androidx.compose.ui.platform.LocalContext.current
+private fun VolumeHandoffRows(
+    canHearConnections: Boolean,
+    onRequestBluetoothPermission: () -> Unit,
+) {
     val enabled by AppSettings.volumeHandoff.collectAsStateWithLifecycle()
-    var canHearConnections by remember(context) {
-        mutableStateOf(com.music.bitchord.playback.VolumeHandoff.canHearConnections(context))
-    }
-    val permission = rememberLauncherForActivityResult(ActivityResultContracts.RequestPermission()) { granted ->
-        canHearConnections = granted
-    }
     SettingsRow(
         icon = Icons.AutoMirrored.Rounded.VolumeUp,
         title = stringResource(R.string.volume_handoff),
@@ -8231,7 +8314,7 @@ private fun VolumeHandoffRows() {
             icon = Icons.Rounded.Headphones,
             title = stringResource(R.string.volume_handoff_bluetooth),
             subtitle = stringResource(R.string.volume_handoff_bluetooth_subtitle),
-            onClick = { permission.launch(Manifest.permission.BLUETOOTH_CONNECT) },
+            onClick = onRequestBluetoothPermission,
         )
     }
 }
