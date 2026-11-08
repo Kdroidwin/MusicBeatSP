@@ -669,8 +669,8 @@ object AppSettings {
     val frostedPlayerDetails = MutableStateFlow(true)
     /** Master switch for artwork colours on sheets opened from the player. */
     val playerPopupsUseArtworkColor = MutableStateFlow(true)
-    /** Clips only the drag-handle region on player popup sheets to its own bounds. */
-    val clipPlayerPopupHandles = MutableStateFlow(true)
+    /** Removes player popup drag handles and their dedicated top spacing. */
+    val hidePlayerPopupHandles = MutableStateFlow(true)
     /** Artwork-colored background for local track metadata and file details. */
     val detailsSheetArtworkBackdrop = MutableStateFlow(true)
     /** Shows a non-empty COMMENT tag in the local track details sheet. */
@@ -1586,7 +1586,7 @@ object AppSettings {
         frostedQueueManager.value = prefs.getBoolean(KEY_FROSTED_QUEUE_MANAGER, true)
         frostedPlayerDetails.value = prefs.getBoolean(KEY_FROSTED_PLAYER_DETAILS, true)
         playerPopupsUseArtworkColor.value = prefs.getBoolean(KEY_PLAYER_POPUPS_ARTWORK_COLOR, true)
-        clipPlayerPopupHandles.value = prefs.getBoolean(KEY_CLIP_PLAYER_POPUP_HANDLES, true)
+        hidePlayerPopupHandles.value = prefs.getBoolean(KEY_PLAYER_POPUP_HANDLES_HIDDEN, true)
         detailsSheetArtworkBackdrop.value = prefs.getBoolean(KEY_DETAILS_SHEET_ARTWORK_BACKDROP, true)
         showEmbeddedComment.value = prefs.getBoolean(KEY_SHOW_EMBEDDED_COMMENT, true)
         queueManagerEqualsIcon.value = prefs.getBoolean(KEY_QUEUE_MANAGER_EQUALS_ICON, false)
@@ -2657,9 +2657,9 @@ object AppSettings {
         prefs.edit().putBoolean(KEY_PLAYER_POPUPS_ARTWORK_COLOR, value).apply()
     }
 
-    fun setClipPlayerPopupHandles(value: Boolean) {
-        clipPlayerPopupHandles.value = value
-        prefs.edit().putBoolean(KEY_CLIP_PLAYER_POPUP_HANDLES, value).apply()
+    fun setHidePlayerPopupHandles(value: Boolean) {
+        hidePlayerPopupHandles.value = value
+        prefs.edit().putBoolean(KEY_PLAYER_POPUP_HANDLES_HIDDEN, value).apply()
     }
 
     fun setDetailsSheetArtworkBackdrop(value: Boolean) {
@@ -4688,7 +4688,8 @@ object AppSettings {
     private const val KEY_FROSTED_QUEUE_MANAGER = "frosted_queue_manager"
     private const val KEY_FROSTED_PLAYER_DETAILS = "frosted_player_details"
     private const val KEY_PLAYER_POPUPS_ARTWORK_COLOR = "player_popups_artwork_color"
-    private const val KEY_CLIP_PLAYER_POPUP_HANDLES = "clip_player_popup_handles"
+    // Keep the existing key so the option retains its value across the 2.9.8 correction.
+    private const val KEY_PLAYER_POPUP_HANDLES_HIDDEN = "clip_player_popup_handles"
     private const val KEY_DETAILS_SHEET_ARTWORK_BACKDROP = "details_sheet_artwork_backdrop"
     private const val KEY_SHOW_EMBEDDED_COMMENT = "show_embedded_comment"
     private const val KEY_QUEUE_MANAGER_EQUALS_ICON = "queue_manager_equals_icon"

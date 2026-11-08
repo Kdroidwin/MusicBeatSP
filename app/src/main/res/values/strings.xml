@@ -1208,8 +1208,8 @@
     <string name="frosted_player_details_subtitle">Use BitChord’s blurred artwork and color backdrop</string>
     <string name="player_popups_artwork_color">Match player pop-ups to album artwork</string>
     <string name="player_popups_artwork_color_subtitle">Use current-track colors for player details, sleep timer, speed and pitch, queue management, and playlist sheets. On by default.</string>
-    <string name="clip_player_popup_handles">Clip player pop-up handles</string>
-    <string name="clip_player_popup_handles_subtitle">Clip only the handle area to its bounds in player details, sleep timer, queue management, and speed and pitch. On by default.</string>
+    <string name="hide_player_popup_handles">Hide player pop-up handles and their space</string>
+    <string name="hide_player_popup_handles_subtitle">Remove the handle and its reserved space from player details, sleep timer, queue management, and speed and pitch. On by default.</string>
     <string name="app_icon">App icon</string>
     <string name="app_icon_subtitle">Choose the icon shown on the home screen</string>
     <string name="app_icon_pink">Pink</string>

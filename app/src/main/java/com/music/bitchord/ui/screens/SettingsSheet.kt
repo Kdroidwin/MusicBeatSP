@@ -570,7 +570,7 @@ private fun resetDeezerArtistArtwork(context: Context) {
 @Composable
 private fun additionalArtworkSettingsSearchEntries(
     playerPopupsUseArtworkColor: Boolean,
-    clipPlayerPopupHandles: Boolean,
+    hidePlayerPopupHandles: Boolean,
     queueHeadingMusicNoteIcon: Boolean,
     queueHeadingItalicPlayQueue: Boolean,
     smartPlaylistsEnabled: Boolean,
@@ -586,11 +586,11 @@ private fun additionalArtworkSettingsSearchEntries(
         playerPopupsUseArtworkColor,
     ) { AppSettings.setPlayerPopupsUseArtworkColor(!playerPopupsUseArtworkColor) },
     SettingsSearchEntry(
-        stringResource(R.string.clip_player_popup_handles),
-        stringResource(R.string.clip_player_popup_handles_subtitle),
-        listOf("player", "popup", "drag handle", "clip", "プレーヤー", "ポップアップ", "ドラッグハンドル", "ハンドル", "枠", "クリップ"),
-        clipPlayerPopupHandles,
-    ) { AppSettings.setClipPlayerPopupHandles(!clipPlayerPopupHandles) },
+        stringResource(R.string.hide_player_popup_handles),
+        stringResource(R.string.hide_player_popup_handles_subtitle),
+        listOf("player", "popup", "drag handle", "hide", "remove", "delete", "プレーヤー", "ポップアップ", "ドラッグハンドル", "ハンドル", "枠", "削除", "非表示"),
+        hidePlayerPopupHandles,
+    ) { AppSettings.setHidePlayerPopupHandles(!hidePlayerPopupHandles) },
     SettingsSearchEntry(
         stringResource(R.string.queue_heading_music_note_icon),
         stringResource(R.string.queue_heading_music_note_icon_subtitle),
@@ -1208,7 +1208,7 @@ fun SettingsScreen(
     val hideQueueManagerTitle by AppSettings.hideQueueManagerTitle.collectAsStateWithLifecycle()
     val frostedPlayerDetails by AppSettings.frostedPlayerDetails.collectAsStateWithLifecycle()
     val playerPopupsUseArtworkColor by AppSettings.playerPopupsUseArtworkColor.collectAsStateWithLifecycle()
-    val clipPlayerPopupHandles by AppSettings.clipPlayerPopupHandles.collectAsStateWithLifecycle()
+    val hidePlayerPopupHandles by AppSettings.hidePlayerPopupHandles.collectAsStateWithLifecycle()
     val detailsSheetArtworkBackdrop by AppSettings.detailsSheetArtworkBackdrop.collectAsStateWithLifecycle()
     val showEmbeddedComment by AppSettings.showEmbeddedComment.collectAsStateWithLifecycle()
     val queueManagerEqualsIcon by AppSettings.queueManagerEqualsIcon.collectAsStateWithLifecycle()
@@ -2464,7 +2464,7 @@ fun SettingsScreen(
         ) +
         additionalArtworkSettingsSearchEntries(
             playerPopupsUseArtworkColor = playerPopupsUseArtworkColor,
-            clipPlayerPopupHandles = clipPlayerPopupHandles,
+            hidePlayerPopupHandles = hidePlayerPopupHandles,
             queueHeadingMusicNoteIcon = queueHeadingMusicNoteIcon,
             queueHeadingItalicPlayQueue = queueHeadingItalicPlayQueue,
             smartPlaylistsEnabled = smartPlaylistsEnabled,
@@ -4938,15 +4938,15 @@ fun SettingsScreen(
             RowDivider()
             SettingsRow(
                 icon = Icons.Rounded.BlurOn,
-                title = stringResource(R.string.clip_player_popup_handles),
-                subtitle = stringResource(R.string.clip_player_popup_handles_subtitle),
+                title = stringResource(R.string.hide_player_popup_handles),
+                subtitle = stringResource(R.string.hide_player_popup_handles_subtitle),
                 trailing = {
                     Switch(
-                        checked = clipPlayerPopupHandles,
-                        onCheckedChange = AppSettings::setClipPlayerPopupHandles,
+                        checked = hidePlayerPopupHandles,
+                        onCheckedChange = AppSettings::setHidePlayerPopupHandles,
                     )
                 },
-                onClick = { AppSettings.setClipPlayerPopupHandles(!clipPlayerPopupHandles) },
+                onClick = { AppSettings.setHidePlayerPopupHandles(!hidePlayerPopupHandles) },
             )
             RowDivider()
             SettingsRow(

@@ -63,7 +63,6 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.res.pluralStringResource
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.draw.clip
-import androidx.compose.ui.draw.clipToBounds
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.platform.LocalConfiguration
@@ -337,7 +336,7 @@ private fun TintedSheet(
     content: @Composable ColumnScope.() -> Unit,
 ) {
     val maxHeight = LocalConfiguration.current.screenHeightDp.dp * 0.85f
-    val clipPlayerPopupHandles by AppSettings.clipPlayerPopupHandles.collectAsStateWithLifecycle()
+    val hidePlayerPopupHandles by AppSettings.hidePlayerPopupHandles.collectAsStateWithLifecycle()
     Box(
         modifier
             .fillMaxWidth()
@@ -358,19 +357,20 @@ private fun TintedSheet(
             // nothing between the grip and the track it is about. Kept outside
             // the scrolling rows below so it stays put as a grab target rather
             // than travelling with the list.
-            Box(
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .padding(top = 8.dp, bottom = 4.dp)
-                    .then(if (clipPlayerPopupHandles) Modifier.clipToBounds() else Modifier),
-                contentAlignment = Alignment.Center,
-            ) {
+            if (!hidePlayerPopupHandles) {
                 Box(
-                    Modifier
-                        .size(width = 34.dp, height = 4.dp)
-                        .clip(CircleShape)
-                        .background(palette.onBackground.copy(alpha = 0.35f)),
-                )
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .padding(top = 8.dp, bottom = 4.dp),
+                    contentAlignment = Alignment.Center,
+                ) {
+                    Box(
+                        Modifier
+                            .size(width = 34.dp, height = 4.dp)
+                            .clip(CircleShape)
+                            .background(palette.onBackground.copy(alpha = 0.35f)),
+                    )
+                }
             }
             Column(
                 Modifier

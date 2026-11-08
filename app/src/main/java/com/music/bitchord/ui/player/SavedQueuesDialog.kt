@@ -48,7 +48,6 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.draw.clip
-import androidx.compose.ui.draw.clipToBounds
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.unit.dp
@@ -82,7 +81,7 @@ internal fun SavedQueuesDialog(
     onDelete: (SavedQueue) -> Unit,
     onDismiss: () -> Unit,
 ) {
-    val clipPlayerPopupHandles by AppSettings.clipPlayerPopupHandles.collectAsStateWithLifecycle()
+    val hidePlayerPopupHandles by AppSettings.hidePlayerPopupHandles.collectAsStateWithLifecycle()
     if (redesigned) {
         ModernSavedQueuesDialog(
             hideSaveCurrentQueueHeading = hideSaveCurrentQueueHeading,
@@ -91,7 +90,7 @@ internal fun SavedQueuesDialog(
             artworkPalette = artworkPalette,
             artworkUrl = artworkUrl,
             useFrostedGlass = useFrostedGlass,
-            clipPlayerPopupHandles = clipPlayerPopupHandles,
+            hidePlayerPopupHandles = hidePlayerPopupHandles,
             currentSongs = currentSongs,
             currentIndex = currentIndex,
             positionMs = positionMs,
@@ -108,7 +107,7 @@ internal fun SavedQueuesDialog(
             artworkPalette = artworkPalette,
             artworkUrl = artworkUrl,
             useFrostedGlass = useFrostedGlass,
-            clipPlayerPopupHandles = clipPlayerPopupHandles,
+            hidePlayerPopupHandles = hidePlayerPopupHandles,
             currentSongs = currentSongs,
             currentIndex = currentIndex,
             positionMs = positionMs,
@@ -129,7 +128,7 @@ private fun LegacySavedQueuesDialog(
     artworkPalette: ArtworkPalette,
     artworkUrl: String?,
     useFrostedGlass: Boolean,
-    clipPlayerPopupHandles: Boolean,
+    hidePlayerPopupHandles: Boolean,
     currentSongs: List<Song>,
     currentIndex: Int,
     positionMs: Long,
@@ -172,27 +171,28 @@ private fun LegacySavedQueuesDialog(
             } else {
                 Box(Modifier.matchParentSize().background(container))
             }
-            Box(
-                Modifier
-                    .fillMaxWidth()
-                    .height(32.dp)
-                    .then(if (clipPlayerPopupHandles) Modifier.clipToBounds() else Modifier)
-                    .align(Alignment.TopCenter),
-                contentAlignment = Alignment.Center,
-            ) {
+            if (!hidePlayerPopupHandles) {
                 Box(
                     Modifier
-                        .size(width = 48.dp, height = 6.dp)
-                        .clip(RoundedCornerShape(50))
-                        .background(foreground.copy(alpha = 0.38f)),
-                )
+                        .fillMaxWidth()
+                        .height(32.dp)
+                        .align(Alignment.TopCenter),
+                    contentAlignment = Alignment.Center,
+                ) {
+                    Box(
+                        Modifier
+                            .size(width = 48.dp, height = 6.dp)
+                            .clip(RoundedCornerShape(50))
+                            .background(foreground.copy(alpha = 0.38f)),
+                    )
+                }
             }
             Column(
                 Modifier
                     .fillMaxWidth()
                     .navigationBarsPadding()
                     .heightIn(max = 640.dp)
-                    .padding(top = 32.dp)
+                    .padding(top = if (hidePlayerPopupHandles) 0.dp else 32.dp)
                     .padding(start = 24.dp, end = 24.dp, bottom = 20.dp),
             ) {
                 if (!hideManageQueueTitle) {
@@ -323,7 +323,7 @@ private fun ModernSavedQueuesDialog(
     artworkPalette: ArtworkPalette,
     artworkUrl: String?,
     useFrostedGlass: Boolean,
-    clipPlayerPopupHandles: Boolean,
+    hidePlayerPopupHandles: Boolean,
     currentSongs: List<Song>,
     currentIndex: Int,
     positionMs: Long,
@@ -365,26 +365,25 @@ private fun ModernSavedQueuesDialog(
             Column(
                 Modifier
                     .fillMaxWidth()
-                    .padding(top = 8.dp)
+                    .padding(top = if (hidePlayerPopupHandles) 0.dp else 8.dp)
                     .heightIn(max = 680.dp)
                     .navigationBarsPadding()
                     .padding(horizontal = 22.dp)
                     .padding(bottom = 10.dp),
             ) {
                 Box(Modifier.fillMaxWidth().height(48.dp), contentAlignment = Alignment.Center) {
-                    Box(
-                        Modifier
-                            .fillMaxWidth()
-                            .height(48.dp)
-                            .then(if (clipPlayerPopupHandles) Modifier.clipToBounds() else Modifier),
-                        contentAlignment = Alignment.Center,
-                    ) {
+                    if (!hidePlayerPopupHandles) {
                         Box(
-                            Modifier
-                                .size(width = 48.dp, height = 6.dp)
-                                .clip(RoundedCornerShape(50))
-                                .background(foreground.copy(alpha = 0.34f)),
-                        )
+                            Modifier.fillMaxWidth().height(48.dp),
+                            contentAlignment = Alignment.Center,
+                        ) {
+                            Box(
+                                Modifier
+                                    .size(width = 48.dp, height = 6.dp)
+                                    .clip(RoundedCornerShape(50))
+                                    .background(foreground.copy(alpha = 0.34f)),
+                            )
+                        }
                     }
                     Row(
                         Modifier.fillMaxWidth(),
