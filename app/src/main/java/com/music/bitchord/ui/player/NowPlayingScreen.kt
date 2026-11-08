@@ -3687,15 +3687,6 @@ fun NowPlayingScreen(
                         cornerRadiusPercent = playerPlayPauseCornerRadiusPercent,
                     )
                 }
-                TransportGlyph(
-                    icon = Icons.Rounded.FastForward,
-                    contentDescription = stringResource(R.string.widget_next),
-                    size = 46.dp,
-                    onClick = onNext,
-                    enabled = hasNext,
-                    haptic = Haptic.SkipNext,
-                    outlined = walkmanControlsActive,
-                )
                 if (transportRightAction == TransportSideAction.NONE && seekButtonsVisible && seekButtonsInsideTrackControls) {
                     SeekTransportGlyph(
                         icon = Icons.Rounded.FastForward,
@@ -3708,6 +3699,15 @@ fun NowPlayingScreen(
                         },
                     )
                 }
+                TransportGlyph(
+                    icon = Icons.Rounded.FastForward,
+                    contentDescription = stringResource(R.string.widget_next),
+                    size = 46.dp,
+                    onClick = onNext,
+                    enabled = hasNext,
+                    haptic = Haptic.SkipNext,
+                    outlined = walkmanControlsActive,
+                )
                 if (walkmanControlsActive && PlayerControl.REPEAT in visiblePlayerControls &&
                     transportLeftAction != TransportSideAction.REPEAT &&
                     transportRightAction != TransportSideAction.REPEAT
@@ -4653,13 +4653,14 @@ private fun LyricsPanel(
                     animationSpec = tween(durationMillis = 420),
                     label = "lyricGlow",
                 )
-                val shape = Modifier
+                val lineModifier = Modifier
                     .fillMaxWidth()
-                    // Clip the row before scaling it. Clipping after the
-                    // graphics layer masks the 1.04x active-line enlargement
-                    // at the unscaled right edge, which can cut off the last
-                    // glyph of a long word-synced lyric line.
-                    .clip(RoundedCornerShape(10.dp))
+                    // The active row grows horizontally. Keep room for that
+                    // growth inside the LazyColumn viewport; changing the clip
+                    // order alone still let the viewport crop the last glyph.
+                    // This row has no background, so a rounded clip only risks
+                    // masking glyphs at the line ends and serves no purpose.
+                    .padding(end = 20.dp)
                     .graphicsLayer {
                         scaleX = scale
                         scaleY = scale
@@ -4671,7 +4672,7 @@ private fun LyricsPanel(
                 // Lead and answering vocal are one row: they are one line of
                 // the song, they scale and dim together, and tapping either
                 // seeks to the same place.
-                Column(modifier = shape) {
+                Column(modifier = lineModifier) {
                     val lineWithRubyRestored = line.withTrailingFuriganaMerged()
                     PanelVoice(
                         line = lineWithRubyRestored ?: line,
