@@ -11,6 +11,7 @@ import kotlinx.coroutines.CancellationException
 import okhttp3.OkHttpClient
 import okhttp3.HttpUrl.Companion.toHttpUrl
 import okhttp3.Request
+import org.json.JSONObject
 import java.text.Normalizer
 import java.util.Locale
 import java.util.concurrent.TimeUnit
@@ -119,7 +120,7 @@ object NetEaseLyrics {
             val yrc = response.lyric("yrc")
                 ?.let { raw ->
                     raw
-                        .let { if (removeCredits) it.withoutCreditLines() else it }
+                        .let { if (removeCredits) removeCreditMetadataRows(it) else it }
                         .let { if (removeBraceCredits) it.withoutLeadingBraceCredits() else it }
                 }
             val timed = yrc?.let { raw ->
@@ -135,7 +136,7 @@ object NetEaseLyrics {
             val lrc = response.lyric("lrc")
                 ?.let { raw ->
                     raw
-                        .let { if (removeCredits) it.withoutCreditLines() else it }
+                        .let { if (removeCredits) removeCreditMetadataRows(it) else it }
                         .let { if (removeBraceCredits) it.withoutLeadingBraceCredits() else it }
                 }
             if (lrc == null) {
@@ -294,9 +295,28 @@ object NetEaseLyrics {
     private fun JsonObject.lyric(key: String): String? =
         obj(key)?.string("lyric")?.takeIf(String::isNotBlank)
 
-    private fun String.withoutCreditLines(): String = lineSequence()
-        .filterNot { NETEASE_CREDIT_LINE.matches(it) }
-        .joinToString("\n")
+    /** Removes timestamped credit rows and structured YRC credit metadata. */
+    internal fun removeCreditMetadataRows(rawLyrics: String): String {
+        val filtered = rawLyrics.lineSequence()
+            .filterNot { line -> NETEASE_CREDIT_LINE.matches(line) || line.isYrcCreditMetadata() }
+            .joinToString("\n")
+        return filtered
+    }
+
+    /** NetEase YRC can encode credits as JSON rows instead of timestamped lyric text. */
+    private fun String.isYrcCreditMetadata(): Boolean {
+        val row = trim()
+        if (!row.startsWith('{')) return false
+        return runCatching {
+            val components = JSONObject(row).optJSONArray("c") ?: return@runCatching false
+            val text = buildString {
+                for (index in 0 until components.length()) {
+                    append(components.optJSONObject(index)?.optString("tx").orEmpty())
+                }
+            }.trim()
+            NETEASE_STRUCTURED_CREDIT_PREFIX.containsMatchIn(text)
+        }.getOrDefault(false)
+    }
 
     /** Removes only a brace block at the start of a lyric row, preserving any row timestamp. */
     private fun String.withoutLeadingBraceCredits(): String = lineSequence()
@@ -419,6 +439,10 @@ object NetEaseLyrics {
     private val NETEASE_CREDIT_LINE = Regex(
         """^\s*(?:(?:\[\d{1,3}:\d{2}(?:[.:]\d{1,3})?])|(?:\[\d{1,8},\d{1,8}]))+\s*""" +
             """(?:作词|作曲|编曲|作詞|編曲|詞曲|词曲|作詞作曲|词|曲|lyrics?\s+by|written\s+by|composed\s+by|arranged\s+by)\s*[:：].*$""",
+        RegexOption.IGNORE_CASE,
+    )
+    private val NETEASE_STRUCTURED_CREDIT_PREFIX = Regex(
+        """^(?:作词|作詞|作曲|编曲|編曲|词曲|詞曲|作詞作曲|lyrics?(?:\s+by)?|lyricist|written\s+by|composer|composed\s+by|arranger|arranged\s+by)\s*[:：]""",
         RegexOption.IGNORE_CASE,
     )
     private val NETEASE_LEADING_BRACE_BLOCK = Regex(

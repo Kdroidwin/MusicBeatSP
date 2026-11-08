@@ -4,6 +4,7 @@ import android.util.Base64
 import com.music.bitchord.data.Http
 import com.music.bitchord.data.lyrics.NetEaseLyrics
 import com.music.bitchord.data.lyrics.QQMusicLyrics
+import com.music.bitchord.data.settings.AppSettings
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.async
 import kotlinx.coroutines.awaitAll
@@ -795,6 +796,13 @@ internal object NetEaseLyricsClient {
             } ?: return null
 
             NativeLyricsHttp.mergeLrcWithTranslation(mainLrc, transRaw)
+                .let { merged ->
+                    if (AppSettings.removeNeteaseLyricCredits.value) {
+                        NetEaseLyrics.removeCreditMetadataRows(merged)
+                    } else {
+                        merged
+                    }
+                }
                 .let { NetEaseLyrics.removePairedChineseTranslationRows(it) }
         }
     }.getOrNull()
