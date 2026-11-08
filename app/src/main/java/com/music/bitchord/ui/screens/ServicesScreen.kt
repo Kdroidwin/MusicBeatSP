@@ -4,6 +4,8 @@ import android.app.Activity
 import android.content.Context
 import android.content.ContextWrapper
 import android.content.Intent
+import android.net.Uri
+import android.widget.Toast
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.layout.Arrangement
@@ -88,6 +90,7 @@ fun ServicesScreen(modifier: Modifier = Modifier, allowSpotify: Boolean = true) 
     var searchText by rememberSaveable { mutableStateOf("") }
     var busy by remember { mutableStateOf(false) }
     var message by remember { mutableStateOf<String?>(null) }
+    var pendingExternalEnable by rememberSaveable { mutableStateOf(false) }
     val results = remember { mutableStateListOf<SpItem>() }
     val savedTracks = remember { mutableStateListOf<SpItem>() }
     var remote by remember { mutableStateOf<SpotifyAppRemote?>(null) }
@@ -102,6 +105,45 @@ fun ServicesScreen(modifier: Modifier = Modifier, allowSpotify: Boolean = true) 
             loggedIn = SpotifyAuth.isLoggedIn(context)
             message = error?.message ?: if (loggedIn) context.getString(R.string.spotify_login_succeeded) else null
             busy = false
+        }
+    }
+
+    val notificationSettingsLauncher = rememberLauncherForActivityResult(ActivityResultContracts.StartActivityForResult()) {
+        ExternalMedia.setEnabled(context, AppSettings.externalMediaControlEnabled.value)
+        if (pendingExternalEnable) {
+            if (ExternalMedia.permitted) AppSettings.setExternalMediaControlEnabled(true)
+            pendingExternalEnable = false
+        }
+    }
+    val beginSpotifyLogin: () -> Unit = {
+        val activity = context.findActivity()
+        when {
+            clientId.isBlank() -> message = context.getString(R.string.spotify_enter_client_id)
+            activity == null -> message = context.getString(R.string.spotify_activity_unavailable)
+            else -> runCatching {
+                SpotifyAuth.setClientId(context, clientId)
+                AppSettings.setSpotifyIntegrationEnabled(true)
+                val request = SpotifyAuth.request(context)
+                busy = true
+                loginLauncher.launch(AuthorizationClient.createLoginActivityIntent(activity, request))
+            }.onFailure {
+                busy = false
+                message = it.message ?: context.getString(R.string.spotify_activity_unavailable)
+            }
+        }
+    }
+    val openNotificationSettings: (Boolean) -> Unit = { enableAfterGrant ->
+        pendingExternalEnable = enableAfterGrant
+        var launched = false
+        for (intent in ExternalMedia.permissionSettingsIntents(context)) {
+            if (runCatching { notificationSettingsLauncher.launch(intent) }.isSuccess) {
+                launched = true
+                break
+            }
+        }
+        if (!launched) {
+            pendingExternalEnable = false
+            Toast.makeText(context, R.string.notification_access_open_failed, Toast.LENGTH_LONG).show()
         }
     }
 
@@ -136,7 +178,11 @@ fun ServicesScreen(modifier: Modifier = Modifier, allowSpotify: Boolean = true) 
             ExternalMediaCard(
                 enabled = externalEnabled,
                 onToggle = AppSettings::setExternalMediaControlEnabled,
-                onPermission = { ExternalMedia.openPermissionSettings(context) },
+                onEnable = {
+                    if (ExternalMedia.permitted) AppSettings.setExternalMediaControlEnabled(true)
+                    else openNotificationSettings(true)
+                },
+                onPermission = { openNotificationSettings(false) },
             )
         }
         if (allowSpotify) item {
@@ -150,93 +196,102 @@ fun ServicesScreen(modifier: Modifier = Modifier, allowSpotify: Boolean = true) 
                         }
                         Text(stringResource(if (spotifyEnabled) R.string.service_enabled else R.string.service_disabled))
                     }
-                    if (spotifyEnabled) {
-                        HorizontalDivider()
-                        Text(stringResource(R.string.spotify_dashboard_setup), style = MaterialTheme.typography.titleMedium)
-                        Text(stringResource(R.string.spotify_dashboard_setup_description), style = MaterialTheme.typography.bodySmall)
-                        OutlinedTextField(
-                            value = clientId,
-                            onValueChange = { clientId = it },
-                            modifier = Modifier.fillMaxWidth(),
-                            label = { Text(stringResource(R.string.spotify_client_id)) },
-                            singleLine = true,
-                            keyboardOptions = KeyboardOptions(imeAction = ImeAction.Done),
-                        )
+                    HorizontalDivider()
+                    Text(stringResource(R.string.spotify_dashboard_setup), style = MaterialTheme.typography.titleMedium)
+                    Text(stringResource(R.string.spotify_dashboard_setup_description), style = MaterialTheme.typography.bodySmall)
+                    OutlinedButton(onClick = {
+                        runCatching {
+                            context.startActivity(
+                                Intent(Intent.ACTION_VIEW, Uri.parse("https://developer.spotify.com/dashboard"))
+                                    .addFlags(Intent.FLAG_ACTIVITY_NEW_TASK),
+                            )
+                        }.onFailure { message = context.getString(R.string.spotify_dashboard_open_failed) }
+                    }) { Text(stringResource(R.string.spotify_dashboard_open)) }
+                    OutlinedTextField(
+                        value = clientId,
+                        onValueChange = { clientId = it },
+                        modifier = Modifier.fillMaxWidth(),
+                        label = { Text(stringResource(R.string.spotify_client_id)) },
+                        singleLine = true,
+                        keyboardOptions = KeyboardOptions(imeAction = ImeAction.Done),
+                    )
+                    Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                         TextButton(onClick = {
                             SpotifyAuth.setClientId(context, clientId)
                             loggedIn = SpotifyAuth.isLoggedIn(context)
                             message = context.getString(R.string.spotify_client_id_saved)
-                        }) {
-                            Text(stringResource(R.string.save))
+                        }) { Text(stringResource(R.string.save)) }
+                        Button(enabled = clientId.isNotBlank() && !busy, onClick = beginSpotifyLogin) {
+                            Text(stringResource(if (loggedIn) R.string.spotify_reauthorize else R.string.spotify_login))
                         }
-                        CopyValueRow(stringResource(R.string.spotify_redirect_uri), SpotifyAuth.REDIRECT_URI) {
-                            clipboard.setText(AnnotatedString(SpotifyAuth.REDIRECT_URI))
-                        }
-                        CopyValueRow(stringResource(R.string.spotify_package_name), context.packageName) {
-                            clipboard.setText(AnnotatedString(context.packageName))
-                        }
-                        val signingSha1 = remember(context) { SpotifyAuth.signingSha1(context) }
-                        CopyValueRow(stringResource(R.string.spotify_signing_sha1), signingSha1.ifBlank { stringResource(R.string.service_unavailable) }) {
-                            if (signingSha1.isNotBlank()) clipboard.setText(AnnotatedString(signingSha1))
-                        }
-                        Text(stringResource(R.string.spotify_premium_required), style = MaterialTheme.typography.bodySmall)
+                        if (busy) CircularProgressIndicator()
+                    }
+                    CopyValueRow(stringResource(R.string.spotify_redirect_uri), SpotifyAuth.REDIRECT_URI) {
+                        clipboard.setText(AnnotatedString(SpotifyAuth.REDIRECT_URI))
+                    }
+                    CopyValueRow(stringResource(R.string.spotify_package_name), context.packageName) {
+                        clipboard.setText(AnnotatedString(context.packageName))
+                    }
+                    val signingSha1 = remember(context) { SpotifyAuth.signingSha1(context) }
+                    CopyValueRow(stringResource(R.string.spotify_signing_sha1), signingSha1.ifBlank { stringResource(R.string.service_unavailable) }) {
+                        if (signingSha1.isNotBlank()) clipboard.setText(AnnotatedString(signingSha1))
+                    }
+                    Text(stringResource(R.string.spotify_premium_required), style = MaterialTheme.typography.bodySmall)
+                    message?.let {
+                        val isStatus = it in listOf(
+                            stringResource(R.string.spotify_login_succeeded),
+                            stringResource(R.string.spotify_client_id_saved),
+                            stringResource(R.string.spotify_logged_out),
+                        )
+                        Text(
+                            it,
+                            color = if (isStatus) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.error,
+                            style = MaterialTheme.typography.bodySmall,
+                        )
+                    }
+                    if (loggedIn) {
+                        Text(stringResource(R.string.spotify_account_connected), style = MaterialTheme.typography.labelLarge, color = MaterialTheme.colorScheme.primary)
+                        OutlinedButton(onClick = {
+                            remote?.let(SpotifyAppRemote::disconnect)
+                            remote = null
+                            SpotifyAuth.logout(context)
+                            loggedIn = false
+                            message = context.getString(R.string.spotify_logged_out)
+                        }) { Text(stringResource(R.string.spotify_logout)) }
+                    }
+                    if (spotifyEnabled && loggedIn) {
+                        HorizontalDivider()
+                        Text(stringResource(R.string.spotify_library), style = MaterialTheme.typography.titleMedium)
+                        OutlinedTextField(
+                            value = searchText,
+                            onValueChange = { searchText = it },
+                            modifier = Modifier.fillMaxWidth(),
+                            label = { Text(stringResource(R.string.search_spotify)) },
+                            singleLine = true,
+                            keyboardOptions = KeyboardOptions(imeAction = ImeAction.Search),
+                        )
                         Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                            Button(
-                                enabled = clientId.isNotBlank(),
-                                onClick = {
-                                    val activity = context.findActivity()
-                                    if (activity == null) {
-                                        message = context.getString(R.string.spotify_activity_unavailable)
-                                    } else {
-                                        SpotifyAuth.setClientId(context, clientId)
-                                        val request = SpotifyAuth.request(context)
-                                        loginLauncher.launch(AuthorizationClient.createLoginActivityIntent(activity, request))
-                                    }
-                                },
-                            ) { Text(stringResource(if (loggedIn) R.string.spotify_reauthorize else R.string.spotify_login)) }
-                            if (loggedIn) OutlinedButton(onClick = {
-                                remote?.let(SpotifyAppRemote::disconnect)
-                                remote = null
-                                SpotifyAuth.logout(context)
-                                loggedIn = false
-                                message = context.getString(R.string.spotify_logged_out)
-                            }) { Text(stringResource(R.string.spotify_logout)) }
-                        }
-                        if (loggedIn) {
-                            HorizontalDivider()
-                            Text(stringResource(R.string.spotify_library), style = MaterialTheme.typography.titleMedium)
-                            OutlinedTextField(
-                                value = searchText,
-                                onValueChange = { searchText = it },
-                                modifier = Modifier.fillMaxWidth(),
-                                label = { Text(stringResource(R.string.search_spotify)) },
-                                singleLine = true,
-                                keyboardOptions = KeyboardOptions(imeAction = ImeAction.Search),
-                            )
-                            Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                                Button(enabled = !busy && searchText.isNotBlank(), onClick = {
-                                    busy = true
-                                    scope.launch {
-                                        val result = withContext(Dispatchers.IO) { runCatching { SpotifyApi.search(context, searchText).tracks } }
-                                        results.clear()
-                                        result.getOrNull()?.let(results::addAll)
-                                        message = result.exceptionOrNull()?.message
-                                        busy = false
-                                    }
-                                }) { Text(stringResource(R.string.search)) }
-                                OutlinedButton(enabled = !busy, onClick = {
-                                    busy = true
-                                    scope.launch {
-                                        val result = withContext(Dispatchers.IO) { runCatching { SpotifyApi.savedTracks(context, 0).items } }
-                                        savedTracks.clear()
-                                        result.getOrNull()?.let(savedTracks::addAll)
-                                        message = result.exceptionOrNull()?.message
-                                        busy = false
-                                    }
-                                }) { Text(stringResource(R.string.service_refresh)) }
-                                if (busy) CircularProgressIndicator()
-                            }
-                            message?.let { Text(it, color = MaterialTheme.colorScheme.error, style = MaterialTheme.typography.bodySmall) }
+                            Button(enabled = !busy && searchText.isNotBlank(), onClick = {
+                                busy = true
+                                scope.launch {
+                                    val result = withContext(Dispatchers.IO) { runCatching { SpotifyApi.search(context, searchText).tracks } }
+                                    results.clear()
+                                    result.getOrNull()?.let(results::addAll)
+                                    message = result.exceptionOrNull()?.message
+                                    busy = false
+                                }
+                            }) { Text(stringResource(R.string.search)) }
+                            OutlinedButton(enabled = !busy, onClick = {
+                                busy = true
+                                scope.launch {
+                                    val result = withContext(Dispatchers.IO) { runCatching { SpotifyApi.savedTracks(context, 0).items } }
+                                    savedTracks.clear()
+                                    result.getOrNull()?.let(savedTracks::addAll)
+                                    message = result.exceptionOrNull()?.message
+                                    busy = false
+                                }
+                            }) { Text(stringResource(R.string.service_refresh)) }
+                            if (busy) CircularProgressIndicator()
                         }
                     }
                 }
@@ -257,7 +312,12 @@ fun ServicesScreen(modifier: Modifier = Modifier, allowSpotify: Boolean = true) 
 }
 
 @Composable
-private fun ExternalMediaCard(enabled: Boolean, onToggle: (Boolean) -> Unit, onPermission: () -> Unit) {
+private fun ExternalMediaCard(
+    enabled: Boolean,
+    onToggle: (Boolean) -> Unit,
+    onEnable: () -> Unit,
+    onPermission: () -> Unit,
+) {
     val context = LocalContext.current
     val now = ExternalMedia.now
     Card(shape = RoundedCornerShape(20.dp), colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceContainer)) {
@@ -265,8 +325,12 @@ private fun ExternalMediaCard(enabled: Boolean, onToggle: (Boolean) -> Unit, onP
             Text(stringResource(R.string.external_media_control), style = MaterialTheme.typography.titleLarge)
             Text(stringResource(R.string.external_media_description), style = MaterialTheme.typography.bodyMedium)
             Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                Button(onClick = { onToggle(!enabled) }) { Text(stringResource(if (enabled) R.string.service_disable else R.string.service_enable)) }
-                OutlinedButton(onClick = onPermission) { Text(stringResource(R.string.notification_access_settings)) }
+                Button(onClick = { if (enabled) onToggle(false) else onEnable() }) {
+                    Text(stringResource(if (enabled) R.string.service_disable else R.string.service_enable))
+                }
+                OutlinedButton(onClick = onPermission) {
+                    Text(stringResource(if (ExternalMedia.permitted) R.string.notification_access_settings else R.string.notification_access_grant))
+                }
             }
             Text(
                 stringResource(if (ExternalMedia.permitted) R.string.notification_access_granted else R.string.notification_access_required),

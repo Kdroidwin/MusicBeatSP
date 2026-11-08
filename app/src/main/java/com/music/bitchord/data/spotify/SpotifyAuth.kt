@@ -27,14 +27,8 @@ object SpotifyAuth {
     const val REDIRECT_URI = "musicbeatsp-spotify://callback"
     /** app-remote-control: 公式 Spotify アプリでの再生の操作(App Remote)に必要 */
     const val REMOTE_SCOPE = "app-remote-control"
-    /**
-     * 求める許可。閲覧(ライブラリ・プレイリスト・最近再生した曲・よく聴く曲・フォロー中のアーティスト)、
-     * 保存とフォロー、プレイリストの編集、再生待ちと再生先の操作
-     */
-    private const val SCOPES = "$REMOTE_SCOPE user-library-read user-library-modify " +
-        "playlist-read-private playlist-read-collaborative playlist-modify-private playlist-modify-public " +
-        "user-follow-read user-follow-modify user-read-recently-played user-top-read " +
-        "user-read-playback-state user-modify-playback-state user-read-currently-playing"
+    /** Only request permissions currently used by the Spotify library screen and App Remote playback. */
+    private const val SCOPES = "$REMOTE_SCOPE user-library-read"
     private const val PREFS = "spotify"
     private const val K_CLIENT = "clientId"
     private const val K_REFRESH = "refreshToken"

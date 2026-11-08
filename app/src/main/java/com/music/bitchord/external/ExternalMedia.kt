@@ -81,8 +81,16 @@ object ExternalMedia {
 
     /** 「通知へのアクセス」が許可されているか(許可されたサービスの一覧に、このアプリのものがあるか) */
     private fun hasPermission(ctx: Context): Boolean {
+        val expected = component(ctx)
+        if (android.os.Build.VERSION.SDK_INT >= 27) {
+            val notificationManager = ctx.getSystemService(android.app.NotificationManager::class.java)
+            val granted = runCatching {
+                notificationManager?.isNotificationListenerAccessGranted(expected)
+            }.getOrNull()
+            if (granted != null) return granted
+        }
         val list = android.provider.Settings.Secure.getString(ctx.contentResolver, "enabled_notification_listeners").orEmpty()
-        return list.split(':').any { ComponentName.unflattenFromString(it)?.packageName == ctx.packageName }
+        return list.split(':').any { ComponentName.unflattenFromString(it) == expected }
     }
 
     /**
@@ -324,16 +332,18 @@ object ExternalMedia {
         runCatching { ctx.startActivity(i.addFlags(android.content.Intent.FLAG_ACTIVITY_NEW_TASK)) }
     }
 
-    /** 「通知へのアクセス」の設定画面を開く */
-    fun openPermissionSettings(ctx: Context) {
-        val detail = if (android.os.Build.VERSION.SDK_INT >= 30) {
-            android.content.Intent(android.provider.Settings.ACTION_NOTIFICATION_LISTENER_DETAIL_SETTINGS)
-                .putExtra(android.provider.Settings.EXTRA_NOTIFICATION_LISTENER_COMPONENT_NAME, component(ctx).flattenToString())
-        } else null
-        val list = android.content.Intent(android.provider.Settings.ACTION_NOTIFICATION_LISTENER_SETTINGS)
-        for (i in listOfNotNull(detail, list)) {
-            if (runCatching { ctx.startActivity(i.addFlags(android.content.Intent.FLAG_ACTIVITY_NEW_TASK)) }.isSuccess) return
+    /** Android's special-access screen; the user must switch this listener on there. */
+    fun permissionSettingsIntents(ctx: Context): List<android.content.Intent> = buildList {
+        if (android.os.Build.VERSION.SDK_INT >= 30) {
+            add(
+                android.content.Intent(android.provider.Settings.ACTION_NOTIFICATION_LISTENER_DETAIL_SETTINGS)
+                    .putExtra(
+                        android.provider.Settings.EXTRA_NOTIFICATION_LISTENER_COMPONENT_NAME,
+                        component(ctx).flattenToString(),
+                    ),
+            )
         }
+        add(android.content.Intent(android.provider.Settings.ACTION_NOTIFICATION_LISTENER_SETTINGS))
     }
 }
 
