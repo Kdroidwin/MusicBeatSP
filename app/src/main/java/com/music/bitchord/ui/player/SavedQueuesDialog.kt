@@ -13,6 +13,7 @@ import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.navigationBarsPadding
+import androidx.compose.foundation.layout.offset
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.rememberScrollState
@@ -158,6 +159,7 @@ private fun LegacySavedQueuesDialog(
         containerColor = if (useFrostedGlass) Color.Transparent else container,
         dragHandle = null,
         contentWindowInsets = { WindowInsets(0, 0, 0, 0) },
+        modifier = Modifier.offset(y = 24.dp),
     ) {
         PlayerPopupSystemBars(true)
         Box(Modifier.fillMaxWidth().clip(sheetShape)) {
@@ -350,6 +352,7 @@ private fun ModernSavedQueuesDialog(
         containerColor = if (useFrostedGlass) Color.Transparent else container,
         dragHandle = null,
         contentWindowInsets = { WindowInsets(0, 0, 0, 0) },
+        modifier = Modifier.offset(y = 24.dp),
     ) {
         PlayerPopupSystemBars(true)
         Box(Modifier.fillMaxWidth().clip(sheetShape)) {

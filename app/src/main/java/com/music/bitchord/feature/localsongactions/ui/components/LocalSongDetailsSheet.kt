@@ -146,7 +146,7 @@ fun LocalSongDetailsSheet(
                 }
             }
         },
-        modifier = if (showPlayerActions) modifier.offset(y = 8.dp) else modifier,
+        modifier = if (showPlayerActions) modifier.offset(y = 24.dp) else modifier,
     ) {
         PlayerPopupSystemBars(showPlayerActions)
         MaterialTheme(colorScheme = sheetColors) {
