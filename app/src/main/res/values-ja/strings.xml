@@ -1277,7 +1277,14 @@
     <string name="recent_play_threshold_subtitle">設定した秒数以上再生された曲を、最近再生した曲と再生回数に記録します。0秒なら再生開始時に記録します。</string>
     <string name="recent_play_threshold_value">%1$d秒</string>
     <string name="seek_button_mode">シークボタン</string>
-    <string name="seek_button_mode_subtitle">前後の曲ボタンの外側にシークボタンを表示</string>
+    <string name="seek_button_mode_subtitle">シークボタンを表示する曲の条件を選びます</string>
+    <string name="seek_buttons_inside_track_controls">シークボタンを内側に配置</string>
+    <string name="seek_buttons_inside_track_controls_subtitle">前・次の曲ボタンの内側、再生ボタン側に配置します。オフなら外側に表示します。</string>
+    <string name="quick_search_song_titles">曲名を検索</string>
+    <string name="quick_search_album_names">アルバム名を検索</string>
+    <string name="quick_search_artist_names">アーティスト名を検索</string>
+    <string name="quick_search_album_artist_names">アルバムアーティスト名を検索</string>
+    <string name="quick_search_playlist_names">プレイリスト名を検索</string>
     <string name="hide_seek_button_labels">シーク秒数ラベルを隠す</string>
     <string name="hide_seek_button_labels_subtitle">シークボタンの下に表示される秒数を隠します</string>
     <string name="seek_buttons_off">オフ</string>

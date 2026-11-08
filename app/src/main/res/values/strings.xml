@@ -1375,7 +1375,14 @@
     <string name="recent_play_threshold_subtitle">Only count a track in Recent Plays and play counts after it has played for at least this many seconds.</string>
     <string name="recent_play_threshold_value">%1$d sec</string>
     <string name="seek_button_mode">Seek buttons</string>
-    <string name="seek_button_mode_subtitle">Show seek buttons outside previous and next</string>
+    <string name="seek_button_mode_subtitle">Choose which tracks show optional seek buttons</string>
+    <string name="seek_buttons_inside_track_controls">Place seek buttons inside track controls</string>
+    <string name="seek_buttons_inside_track_controls_subtitle">Put seek buttons between Previous, Play, and Next. Turn off to keep them outside Previous and Next.</string>
+    <string name="quick_search_song_titles">Search song titles</string>
+    <string name="quick_search_album_names">Search album names</string>
+    <string name="quick_search_artist_names">Search artist names</string>
+    <string name="quick_search_album_artist_names">Search album artist names</string>
+    <string name="quick_search_playlist_names">Search playlist names</string>
     <string name="hide_seek_button_labels">Hide seek time labels</string>
     <string name="hide_seek_button_labels_subtitle">Hide the seconds text beneath the optional seek buttons</string>
     <string name="seek_buttons_off">Off</string>

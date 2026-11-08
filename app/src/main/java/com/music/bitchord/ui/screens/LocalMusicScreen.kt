@@ -152,6 +152,8 @@ import androidx.compose.runtime.setValue
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.focus.FocusRequester
+import androidx.compose.ui.focus.focusRequester
 import androidx.compose.ui.res.pluralStringResource
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.draw.clip
@@ -326,6 +328,8 @@ fun LocalMusicScreen(
 
     // Which top-level tab is selected.
     var selectedTab by rememberSaveable { mutableIntStateOf(initialTab) }
+    var quickSearchActive by rememberSaveable(initialTab) { mutableStateOf(false) }
+    var quickSearchQuery by rememberSaveable(initialTab) { mutableStateOf("") }
     val visibleLocalLibraryTabs by AppSettings.visibleLocalLibraryTabs.collectAsStateWithLifecycle()
     val localLibraryTabOrder by AppSettings.localLibraryTabOrder.collectAsStateWithLifecycle()
     val displayedLocalTabs = remember(visibleLocalLibraryTabs, localLibraryTabOrder, isDownloads, showTabRow) {
@@ -698,6 +702,10 @@ fun LocalMusicScreen(
     }
 
     val inDrillDown = drillDownLabel != null
+    LaunchedEffect(selectedTab, inDrillDown) {
+        quickSearchActive = false
+        quickSearchQuery = ""
+    }
     SideEffect {
         if (!inDrillDown || drillDownShowsAlbums || !fullScreenCollectionArtwork || !drillDownFullScreenArtwork) {
             onArtworkPaletteChanged?.invoke(null)
@@ -974,6 +982,29 @@ fun LocalMusicScreen(
             }
         }
 
+        val quickSearchHint = when (selectedTab) {
+            LOCAL_TAB_SONGS -> stringResource(R.string.quick_search_song_titles)
+            LOCAL_TAB_ALBUMS -> stringResource(R.string.quick_search_album_names)
+            LOCAL_TAB_ARTISTS -> stringResource(R.string.quick_search_artist_names)
+            LOCAL_TAB_ALBUM_ARTISTS -> stringResource(R.string.quick_search_album_artist_names)
+            LOCAL_TAB_PLAYLISTS -> stringResource(R.string.quick_search_playlist_names)
+            else -> null
+        }
+        if (!inDrillDown && !selectingSongs && quickSearchHint != null) {
+            LocalCollectionQuickSearch(
+                active = quickSearchActive,
+                query = quickSearchQuery,
+                hint = quickSearchHint,
+                onActivate = { quickSearchActive = true },
+                onQueryChange = { quickSearchQuery = it },
+                onClose = {
+                    quickSearchActive = false
+                    quickSearchQuery = ""
+                },
+                modifier = Modifier.padding(horizontal = PAGE_GUTTER, vertical = 4.dp),
+            )
+        }
+
         // ── Content ──────────────────────────────────────────────────────────
         val pullToRefreshState = rememberPullToRefreshState()
         val topIndicatorPadding = if (showTabRow) 8.dp else contentPadding.calculateTopPadding()
@@ -1114,8 +1145,13 @@ fun LocalMusicScreen(
                 }
 
                 key == "tab:$LOCAL_TAB_SONGS" -> {
+                    val visibleSongs = remember(sortedSongs, quickSearchActive, quickSearchQuery) {
+                        val query = quickSearchQuery.trim()
+                        if (!quickSearchActive || query.isEmpty()) sortedSongs
+                        else sortedSongs.filter { it.title.contains(query, ignoreCase = true) }
+                    }
                     SongsTab(
-                        songs = sortedSongs,
+                        songs = visibleSongs,
                         viewType = songsViewType,
                         sortOrder = sortOrder,
                         onSortOrderChange = {
@@ -1177,8 +1213,13 @@ fun LocalMusicScreen(
                             ArtistSort.NAME_DESC -> grouped.sortedByDescending { it.name.lowercase(Locale.ROOT) }
                         }
                     }
+                    val visibleArtists = remember(artists, quickSearchActive, quickSearchQuery) {
+                        val query = quickSearchQuery.trim()
+                        if (!quickSearchActive || query.isEmpty()) artists
+                        else artists.filter { it.name.contains(query, ignoreCase = true) }
+                    }
                     ArtistsTab(
-                        artists = artists,
+                        artists = visibleArtists,
                         allowRemoteArtwork = artistDeezerArtworkEnabled,
                         viewType = artistsViewType,
                         onViewTypeToggle = {
@@ -1231,8 +1272,13 @@ fun LocalMusicScreen(
                             ArtistSort.NAME_DESC -> grouped.sortedByDescending { it.name.lowercase(Locale.ROOT) }
                         }
                     }
+                    val visibleAlbumArtists = remember(albumArtists, quickSearchActive, quickSearchQuery) {
+                        val query = quickSearchQuery.trim()
+                        if (!quickSearchActive || query.isEmpty()) albumArtists
+                        else albumArtists.filter { it.name.contains(query, ignoreCase = true) }
+                    }
                     ArtistsTab(
-                        artists = albumArtists,
+                        artists = visibleAlbumArtists,
                         gridKind = GridKind.ALBUM_ARTISTS,
                         allowRemoteArtwork = artistDeezerArtworkEnabled && onlineAlbumArtistArtwork && !offlineMode,
                         viewType = artistsViewType,
@@ -1264,8 +1310,13 @@ fun LocalMusicScreen(
                 }
 
                 key == "tab:$LOCAL_TAB_ALBUMS" -> {
-                    val albums = remember(sortedSongs, collections) {
+                    val allAlbums = remember(sortedSongs, collections) {
                         albumEntries(sortedSongs, collections)
+                    }
+                    val albums = remember(allAlbums, quickSearchActive, quickSearchQuery) {
+                        val query = quickSearchQuery.trim()
+                        if (!quickSearchActive || query.isEmpty()) allAlbums
+                        else allAlbums.filter { it.title.contains(query, ignoreCase = true) }
                     }
                     AlbumsTab(
                         albums = albums,
@@ -1328,7 +1379,11 @@ fun LocalMusicScreen(
 
                 key == "tab:$LOCAL_TAB_PLAYLISTS" -> {
                     LocalPlaylistsTab(
-                        playlists = localPlaylists,
+                        playlists = remember(localPlaylists, quickSearchActive, quickSearchQuery) {
+                            val query = quickSearchQuery.trim()
+                            if (!quickSearchActive || query.isEmpty()) localPlaylists
+                            else localPlaylists.filter { it.name.contains(query, ignoreCase = true) }
+                        },
                         onPlaylistClick = { playlist ->
                             drillDownPlaylistId = playlist.id
                             drillDownLabel = playlist.name
@@ -1817,6 +1872,79 @@ private fun GenresTab(
                     }
                 }
             }
+        }
+    }
+}
+
+@Composable
+private fun LocalCollectionQuickSearch(
+    active: Boolean,
+    query: String,
+    hint: String,
+    onActivate: () -> Unit,
+    onQueryChange: (String) -> Unit,
+    onClose: () -> Unit,
+    modifier: Modifier = Modifier,
+) {
+    val focusRequester = remember { FocusRequester() }
+    LaunchedEffect(active) {
+        if (active) focusRequester.requestFocus()
+    }
+
+    Row(
+        modifier = modifier
+            .fillMaxWidth()
+            .height(44.dp)
+            .clip(RoundedCornerShape(16.dp))
+            .background(MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.64f))
+            .then(if (active) Modifier else Modifier.clickable(onClick = onActivate))
+            .padding(horizontal = 14.dp),
+        verticalAlignment = Alignment.CenterVertically,
+        horizontalArrangement = Arrangement.spacedBy(10.dp),
+    ) {
+        Icon(
+            imageVector = Icons.Rounded.Search,
+            contentDescription = null,
+            tint = MaterialTheme.colorScheme.onSurfaceVariant,
+            modifier = Modifier.size(19.dp),
+        )
+        if (active) {
+            Box(modifier = Modifier.weight(1f), contentAlignment = Alignment.CenterStart) {
+                if (query.isEmpty()) {
+                    Text(
+                        text = hint,
+                        style = MaterialTheme.typography.bodyMedium,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.72f),
+                        maxLines = 1,
+                        overflow = TextOverflow.Ellipsis,
+                    )
+                }
+                BasicTextField(
+                    value = query,
+                    onValueChange = onQueryChange,
+                    singleLine = true,
+                    cursorBrush = SolidColor(MaterialTheme.colorScheme.primary),
+                    textStyle = MaterialTheme.typography.bodyMedium.copy(color = MaterialTheme.colorScheme.onSurface),
+                    modifier = Modifier.fillMaxWidth().focusRequester(focusRequester),
+                )
+            }
+            IconButton(onClick = onClose, modifier = Modifier.size(32.dp)) {
+                Icon(
+                    imageVector = Icons.Rounded.Close,
+                    contentDescription = stringResource(R.string.close),
+                    tint = MaterialTheme.colorScheme.onSurfaceVariant,
+                    modifier = Modifier.size(18.dp),
+                )
+            }
+        } else {
+            Text(
+                text = hint,
+                style = MaterialTheme.typography.bodyMedium,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                maxLines = 1,
+                overflow = TextOverflow.Ellipsis,
+                modifier = Modifier.weight(1f),
+            )
         }
     }
 }
