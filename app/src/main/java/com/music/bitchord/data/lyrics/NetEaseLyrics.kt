@@ -258,18 +258,19 @@ object NetEaseLyrics {
         .joinToString("\n")
 
     /**
-     * NetEase may return a Chinese original and a Japanese translation as
-     * neighbouring rows. Only drop Han-only rows when a Japanese-script row
-     * is present at the same point in the song, so Chinese-only songs remain.
+     * NetEase may return Chinese originals and Japanese translations as
+     * separate rows with the same timestamp. Only drop Han-only rows when a
+     * kana-containing Japanese row has that exact timestamp, so Chinese-only
+     * songs and nearby lines remain intact.
      */
     private fun List<LyricLine>.keepJapaneseTranslationRows(): List<LyricLine> {
         val japaneseRows = filter { line -> line.text.any { it.isKana() } }
         if (japaneseRows.isEmpty()) return this
-        val japaneseTimes = japaneseRows.map(LyricLine::timeMs)
+        val japaneseTimes = japaneseRows.mapTo(hashSetOf(), LyricLine::timeMs)
         val kept = filterNot { line ->
             val hasHan = line.text.any { it.isHan() }
             val hasKana = line.text.any { it.isKana() }
-            hasHan && !hasKana && japaneseTimes.any { time -> kotlin.math.abs(time - line.timeMs) <= 2_000L }
+            hasHan && !hasKana && line.timeMs in japaneseTimes
         }
         return kept.takeIf { it.isNotEmpty() } ?: this
     }

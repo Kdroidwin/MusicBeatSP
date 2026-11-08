@@ -1301,8 +1301,8 @@
     <string name="lyrics_sync_next">次の曲</string>
     <string name="remove_netease_lyric_credits">NetEaseの歌詞からクレジット行を削除</string>
     <string name="remove_netease_lyric_credits_subtitle">NetEaseの歌詞に含まれる作詞・作曲・編曲のタイムスタンプ行を削除します</string>
-    <string name="keep_japanese_netease_lyrics">NetEaseの日本語歌詞行を残す</string>
-    <string name="keep_japanese_netease_lyrics_subtitle">日本語と中国語の対訳行がある場合、日本語の文字を含む行を優先して残します。初期設定はオンです。</string>
+    <string name="keep_japanese_netease_lyrics">NetEaseの同一タイムスタンプ中国語行を削除</string>
+    <string name="keep_japanese_netease_lyrics_subtitle">日本語のかなを含む歌詞と時刻が同じ中国語行を削除します。中国語のみの曲は残します。初期設定はオンです。</string>
     <string name="remove_netease_brace_credits">NetEaseの先頭の波括弧内クレジットを削除</string>
     <string name="remove_netease_brace_credits_subtitle">歌詞の先頭にある作曲者などの｛｝内情報を削除します。初期設定はオンです。</string>
     <string name="remove_qq_music_lyric_metadata">QQ Music歌詞の見出し・クレジット行を削除</string>

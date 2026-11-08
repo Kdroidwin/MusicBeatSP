@@ -1399,8 +1399,8 @@
     <string name="lyrics_sync_next">Next track</string>
     <string name="remove_netease_lyric_credits">Remove NetEase lyric credits</string>
     <string name="remove_netease_lyric_credits_subtitle">Remove timestamped songwriter, composer, and arranger lines from NetEase lyrics</string>
-    <string name="keep_japanese_netease_lyrics">Keep Japanese NetEase lyric lines</string>
-    <string name="keep_japanese_netease_lyrics_subtitle">When Japanese and Chinese translation rows appear together, keep the Japanese-script rows</string>
+    <string name="keep_japanese_netease_lyrics">Remove same-timestamp Chinese NetEase lyric rows</string>
+    <string name="keep_japanese_netease_lyrics_subtitle">Remove Chinese rows only when a Japanese lyric row with kana has the same timestamp. Chinese-only songs are kept. On by default.</string>
     <string name="remove_netease_brace_credits">Remove NetEase brace-wrapped credits</string>
     <string name="remove_netease_brace_credits_subtitle">Remove the leading brace-wrapped credit block from NetEase lyrics</string>
     <string name="remove_qq_music_lyric_metadata">Clean QQ Music lyric headers and credits</string>
