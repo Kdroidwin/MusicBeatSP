@@ -109,6 +109,7 @@ fun LocalSongActionsSheet(
     val playerPopupsUseArtworkColor by AppSettings.playerPopupsUseArtworkColor.collectAsStateWithLifecycle()
     val useArtworkBackdrop = frostedPlayerDetails && (showPlayerActions || song.localUri != null) &&
         (!showPlayerActions || playerPopupsUseArtworkColor)
+    val embedDragHandle = showPlayerActions || useArtworkBackdrop
     var pickingSleepTimer by remember { mutableStateOf(false) }
     val hiddenActions by AppSettings.hiddenPlayerDetailsActions.collectAsStateWithLifecycle()
     val savedDownloads by Downloads.saved.collectAsStateWithLifecycle()
@@ -137,34 +138,13 @@ fun LocalSongActionsSheet(
         onDismissRequest = onDismissRequest,
         sheetState = sheetState,
         shape = sheetShape,
-        // The drag-handle slot is part of the sheet surface. Keeping the
-        // container transparent left that top area unpainted while the body
-        // below drew its own clipped background, making the handle appear to
-        // float outside the rounded sheet. Paint the full modal surface with
-        // the matching base tone; the body backdrop below can still add its
-        // artwork blur over it.
-        containerColor = if (useArtworkBackdrop) artworkPalette.background
+        // Player sheets draw their artwork/surface behind both the handle and
+        // the scrollable menu from one clipped layer. A separate Material
+        // drag-handle slot left a flat strip between two different backdrops.
+        containerColor = if (embedDragHandle) Color.Transparent
             else MaterialTheme.colorScheme.surfaceContainerHigh,
-        dragHandle = if (showPlayerActions || useArtworkBackdrop) {
-            {
-                Box(
-                    Modifier
-                        .fillMaxWidth()
-                        .height(56.dp)
-                        .padding(top = 12.dp),
-                    contentAlignment = androidx.compose.ui.Alignment.Center,
-                ) {
-                    Box(
-                        Modifier
-                            .size(width = 48.dp, height = 6.dp)
-                            .clip(RoundedCornerShape(50))
-                            .background(
-                                (if (useArtworkBackdrop) artworkPalette.onBackground else MaterialTheme.colorScheme.onSurface)
-                                    .copy(alpha = 0.38f),
-                            ),
-                    )
-                }
-            }
+        dragHandle = if (embedDragHandle) {
+            null
         } else {
             {
                 Box(
@@ -210,8 +190,29 @@ fun LocalSongActionsSheet(
                 LocalContentColor provides if (useArtworkBackdrop) artworkPalette.onBackground
                 else MaterialTheme.colorScheme.onSurface,
             ) {
+                if (embedDragHandle) {
+                    Box(
+                        Modifier
+                            .align(androidx.compose.ui.Alignment.TopCenter)
+                            .fillMaxWidth()
+                            .height(56.dp)
+                            .padding(top = 12.dp),
+                        contentAlignment = androidx.compose.ui.Alignment.Center,
+                    ) {
+                        Box(
+                            Modifier
+                                .size(width = 48.dp, height = 6.dp)
+                                .clip(RoundedCornerShape(50))
+                                .background(
+                                    (if (useArtworkBackdrop) artworkPalette.onBackground else MaterialTheme.colorScheme.onSurface)
+                                        .copy(alpha = 0.38f),
+                                ),
+                        )
+                    }
+                }
                 AnimatedContent(
                     targetState = pickingSleepTimer,
+                    modifier = Modifier.padding(top = if (embedDragHandle) 56.dp else 0.dp),
                     transitionSpec = { fadeIn() togetherWith fadeOut() },
                     label = "SheetContentTransition",
                 ) { inSleepTimerPicker ->
