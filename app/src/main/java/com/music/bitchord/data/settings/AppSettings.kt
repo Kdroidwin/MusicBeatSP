@@ -1037,6 +1037,8 @@ object AppSettings {
     val recentlyPlayedThresholdSeconds = MutableStateFlow(DEFAULT_RECENT_PLAY_THRESHOLD_SECONDS)
     /** Optional seek-back/forward buttons beside previous/next. */
     val seekButtonMode = MutableStateFlow(SeekButtonMode.LONG_TRACKS_ONLY)
+    /** Places optional seek buttons between previous/next and Play instead of outside the track controls. */
+    val seekButtonsInsideTrackControls = MutableStateFlow(true)
     /** Replaces the short seek button on either side of the transport when selected. */
     val transportLeftAction = MutableStateFlow(TransportSideAction.NONE)
     val transportRightAction = MutableStateFlow(TransportSideAction.NONE)
@@ -1807,6 +1809,7 @@ object AppSettings {
                 prefs.getString(KEY_SEEK_BUTTON_MODE, SeekButtonMode.LONG_TRACKS_ONLY.name).orEmpty(),
             )
         }.getOrDefault(SeekButtonMode.LONG_TRACKS_ONLY)
+        seekButtonsInsideTrackControls.value = prefs.getBoolean(KEY_SEEK_BUTTONS_INSIDE_TRACK_CONTROLS, true)
         transportLeftAction.value = runCatching {
             TransportSideAction.valueOf(
                 prefs.getString(KEY_TRANSPORT_LEFT_ACTION, TransportSideAction.NONE.name).orEmpty(),
@@ -3806,6 +3809,11 @@ object AppSettings {
         prefs.edit().putString(KEY_SEEK_BUTTON_MODE, value.name).apply()
     }
 
+    fun setSeekButtonsInsideTrackControls(value: Boolean) {
+        seekButtonsInsideTrackControls.value = value
+        prefs.edit().putBoolean(KEY_SEEK_BUTTONS_INSIDE_TRACK_CONTROLS, value).apply()
+    }
+
     fun setTransportLeftAction(value: TransportSideAction) {
         transportLeftAction.value = value
         prefs.edit().putString(KEY_TRANSPORT_LEFT_ACTION, value.name).apply()
@@ -4820,6 +4828,7 @@ object AppSettings {
     private const val KEY_SEEK_INTERVAL_SECONDS = "seek_interval_seconds"
     private const val KEY_RECENT_PLAY_THRESHOLD_SECONDS = "recent_play_threshold_seconds"
     private const val KEY_SEEK_BUTTON_MODE = "seek_button_mode"
+    private const val KEY_SEEK_BUTTONS_INSIDE_TRACK_CONTROLS = "seek_buttons_inside_track_controls"
     private const val KEY_TRANSPORT_LEFT_ACTION = "transport_left_action"
     private const val KEY_TRANSPORT_RIGHT_ACTION = "transport_right_action"
     private const val KEY_HIDE_SEEK_BUTTON_LABELS = "hide_seek_button_labels"

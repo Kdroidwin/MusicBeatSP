@@ -265,6 +265,15 @@ private fun dsdPlaybackSearchEntry(enabled: Boolean): SettingsSearchEntry = Sett
     activate = { AppSettings.setDsdPlaybackEnabled(!enabled) },
 )
 
+@Composable
+private fun seekButtonsInsideTrackControlsSearchEntry(enabled: Boolean): SettingsSearchEntry = SettingsSearchEntry(
+    title = stringResource(R.string.seek_buttons_inside_track_controls),
+    subtitle = stringResource(R.string.seek_buttons_inside_track_controls_subtitle),
+    keywords = listOf("seek", "skip", "inside", "outside", "previous", "next", "シーク", "スキップ", "内側", "外側", "前", "次"),
+    checked = enabled,
+    activate = { AppSettings.setSeekButtonsInsideTrackControls(!enabled) },
+)
+
 private data class SettingsSearchReorder(
     val moveUpEnabled: Boolean,
     val moveDownEnabled: Boolean,
@@ -1096,6 +1105,7 @@ fun SettingsScreen(
     val seekIntervalSeconds by AppSettings.seekIntervalSeconds.collectAsStateWithLifecycle()
     val recentlyPlayedThresholdSeconds by AppSettings.recentlyPlayedThresholdSeconds.collectAsStateWithLifecycle()
     val seekButtonMode by AppSettings.seekButtonMode.collectAsStateWithLifecycle()
+    val seekButtonsInsideTrackControls by AppSettings.seekButtonsInsideTrackControls.collectAsStateWithLifecycle()
     val transportLeftAction by AppSettings.transportLeftAction.collectAsStateWithLifecycle()
     val transportRightAction by AppSettings.transportRightAction.collectAsStateWithLifecycle()
     val hideSeekButtonLabels by AppSettings.hideSeekButtonLabels.collectAsStateWithLifecycle()
@@ -1753,6 +1763,7 @@ fun SettingsScreen(
                 )
             },
         ),
+        seekButtonsInsideTrackControlsSearchEntry(seekButtonsInsideTrackControls),
         SettingsSearchEntry(
             title = stringResource(R.string.transport_left_action),
             subtitle = stringResource(R.string.transport_side_action_subtitle),
@@ -3605,6 +3616,25 @@ fun SettingsScreen(
                 selectedIndex = SeekButtonMode.entries.indexOf(seekButtonMode),
                 onSelect = { AppSettings.setSeekButtonMode(SeekButtonMode.entries[it]) },
                 modifier = Modifier.padding(start = ROW_INSET, end = ROW_INSET, bottom = 14.dp),
+            )
+            RowDivider()
+            SettingsRow(
+                icon = Icons.Rounded.SwapHoriz,
+                title = stringResource(R.string.seek_buttons_inside_track_controls),
+                subtitle = stringResource(R.string.seek_buttons_inside_track_controls_subtitle),
+                trailing = {
+                    Switch(
+                        checked = seekButtonsInsideTrackControls,
+                        onCheckedChange = AppSettings::setSeekButtonsInsideTrackControls,
+                        colors = SwitchDefaults.colors(
+                            checkedTrackColor = MaterialTheme.colorScheme.primary,
+                            checkedBorderColor = MaterialTheme.colorScheme.primary,
+                        ),
+                    )
+                },
+                onClick = {
+                    AppSettings.setSeekButtonsInsideTrackControls(!seekButtonsInsideTrackControls)
+                },
             )
             RowDivider()
             SettingsRow(

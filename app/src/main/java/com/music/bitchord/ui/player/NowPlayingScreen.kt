@@ -1715,6 +1715,7 @@ fun NowPlayingScreen(
     val doubleTapToSeek by AppSettings.doubleTapToSeek.collectAsStateWithLifecycle()
     val seekIntervalSeconds by AppSettings.seekIntervalSeconds.collectAsStateWithLifecycle()
     val seekButtonMode by AppSettings.seekButtonMode.collectAsStateWithLifecycle()
+    val seekButtonsInsideTrackControls by AppSettings.seekButtonsInsideTrackControls.collectAsStateWithLifecycle()
     val transportLeftAction by AppSettings.transportLeftAction.collectAsStateWithLifecycle()
     val transportRightAction by AppSettings.transportRightAction.collectAsStateWithLifecycle()
     val hideSeekButtonLabels by AppSettings.hideSeekButtonLabels.collectAsStateWithLifecycle()
@@ -3590,7 +3591,7 @@ fun NowPlayingScreen(
                     SeekButtonMode.ALWAYS -> true
                     SeekButtonMode.LONG_TRACKS_ONLY -> effectiveDurationMs >= 15L * 60L * 1000L
                 }
-                if (transportLeftAction == TransportSideAction.NONE && seekButtonsVisible) {
+                if (transportLeftAction == TransportSideAction.NONE && seekButtonsVisible && !seekButtonsInsideTrackControls) {
                     SeekTransportGlyph(
                         icon = Icons.Rounded.FastRewind,
                         contentDescription = stringResource(R.string.seek_back_seconds, seekIntervalSeconds),
@@ -3639,6 +3640,17 @@ fun NowPlayingScreen(
                     haptic = Haptic.SkipPrevious,
                     outlined = walkmanControlsActive,
                 )
+                if (transportLeftAction == TransportSideAction.NONE && seekButtonsVisible && seekButtonsInsideTrackControls) {
+                    SeekTransportGlyph(
+                        icon = Icons.Rounded.FastRewind,
+                        contentDescription = stringResource(R.string.seek_back_seconds, seekIntervalSeconds),
+                        label = stringResource(R.string.seek_seconds_short, seekIntervalSeconds),
+                        showLabel = !hideSeekButtonLabels,
+                        onClick = {
+                            onSeek((positionMs - seekIntervalSeconds * 1000L).coerceAtLeast(0L))
+                        },
+                    )
+                }
                 // While the stream URL resolves and buffers, the play glyph
                 // would be a lie — show progress instead.
                 if (isLoading) {
@@ -3684,6 +3696,18 @@ fun NowPlayingScreen(
                     haptic = Haptic.SkipNext,
                     outlined = walkmanControlsActive,
                 )
+                if (transportRightAction == TransportSideAction.NONE && seekButtonsVisible && seekButtonsInsideTrackControls) {
+                    SeekTransportGlyph(
+                        icon = Icons.Rounded.FastForward,
+                        contentDescription = stringResource(R.string.seek_forward_seconds, seekIntervalSeconds),
+                        label = stringResource(R.string.seek_seconds_short, seekIntervalSeconds),
+                        showLabel = !hideSeekButtonLabels,
+                        onClick = {
+                            val end = effectiveDurationMs.takeIf { it > 0L } ?: Long.MAX_VALUE
+                            onSeek((positionMs + seekIntervalSeconds * 1000L).coerceAtMost(end))
+                        },
+                    )
+                }
                 if (walkmanControlsActive && PlayerControl.REPEAT in visiblePlayerControls &&
                     transportLeftAction != TransportSideAction.REPEAT &&
                     transportRightAction != TransportSideAction.REPEAT
@@ -3706,7 +3730,7 @@ fun NowPlayingScreen(
                         outlined = true,
                     )
                 }
-                if (transportRightAction == TransportSideAction.NONE && seekButtonsVisible) {
+                if (transportRightAction == TransportSideAction.NONE && seekButtonsVisible && !seekButtonsInsideTrackControls) {
                     SeekTransportGlyph(
                         icon = Icons.Rounded.FastForward,
                         contentDescription = stringResource(R.string.seek_forward_seconds, seekIntervalSeconds),
