@@ -4655,6 +4655,11 @@ private fun LyricsPanel(
                 )
                 val shape = Modifier
                     .fillMaxWidth()
+                    // Clip the row before scaling it. Clipping after the
+                    // graphics layer masks the 1.04x active-line enlargement
+                    // at the unscaled right edge, which can cut off the last
+                    // glyph of a long word-synced lyric line.
+                    .clip(RoundedCornerShape(10.dp))
                     .graphicsLayer {
                         scaleX = scale
                         scaleY = scale
@@ -4662,7 +4667,6 @@ private fun LyricsPanel(
                         alpha = lineAlpha
                     }
                     .blur(blur, BlurredEdgeTreatment.Unbounded)
-                    .clip(RoundedCornerShape(10.dp))
                     .clickable(enabled = isSynced) { onSeekToLine(line.timeMs) }
                 // Lead and answering vocal are one row: they are one line of
                 // the song, they scale and dim together, and tapping either
