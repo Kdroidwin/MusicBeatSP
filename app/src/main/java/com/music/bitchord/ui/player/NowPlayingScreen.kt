@@ -4124,11 +4124,37 @@ private fun SweptLyricLine(
     }
 
     BoxWithConstraints(modifier) {
-        val fittedStyle = remember(line.text, style, constraints.maxWidth, autoFit) {
-            fitLyricTextStyle(line.text, style, constraints.maxWidth, autoFit, textMeasurer)
+        val density = LocalDensity.current
+        // `room` is applied to the Text itself, after this Box has already
+        // measured its constraints. Fitting against the Box width therefore
+        // made long single-line lyrics wider than the actual Text viewport by
+        // 2 * glowRoom; Compose clipped the final glyph even though the row
+        // had spare space outside it. Reserve a small amount inside the Text
+        // as well, so glyph ink that reaches its advance edge is not cropped.
+        val trailingGlyphGuard = if (autoFit) {
+            with(density) {
+                val fontSizePx = style.fontSize.value
+                    .takeIf { it.isFinite() && it > 0f }
+                    ?.sp
+                    ?.toPx()
+                    ?: 0f
+                maxOf(2.dp.toPx(), fontSizePx * 0.15f).toDp()
+            }
+        } else {
+            0.dp
+        }
+        val textInsetsPx = with(density) {
+            (glowRoom * 2 + trailingGlyphGuard).roundToPx()
+        }
+        val availableTextWidth = (constraints.maxWidth - textInsetsPx).coerceAtLeast(0)
+        val fittedStyle = remember(line.text, style, availableTextWidth, autoFit) {
+            fitLyricTextStyle(line.text, style, availableTextWidth, autoFit, textMeasurer)
         }
         val displayedMaxLines = if (autoFit) 1 else maxLines
         val displayedOverflow = if (autoFit) TextOverflow.Clip else overflow
+        val textInsets = Modifier
+            .padding(end = trailingGlyphGuard)
+            .then(room)
         // This line is used both in the full lyrics panel and above the player
         // scrubber. Filling the parent height here lets word-synced lyrics
         // cover the remaining transport controls in the compact strip.
@@ -4141,7 +4167,7 @@ private fun SweptLyricLine(
             maxLines = displayedMaxLines,
             overflow = displayedOverflow,
             onTextLayout = { layout = it },
-            modifier = room.fillMaxWidth(),
+            modifier = textInsets.fillMaxWidth(),
         )
         if (glowAlpha > 0.01f) {
             Text(
@@ -4162,7 +4188,7 @@ private fun SweptLyricLine(
                         alpha = (glowAlpha * intensity).coerceIn(0f, 1f)
                     }
                     .blur(glowRadius, BlurredEdgeTreatment.Unbounded)
-                    .then(room)
+                    .then(textInsets)
                     // The band is masked with a DstIn gradient, which needs a
                     // layer of its own to erase into — against the backdrop it
                     // would take the artwork with it.
@@ -4192,7 +4218,7 @@ private fun SweptLyricLine(
             color = lyricInk,
             maxLines = displayedMaxLines,
             overflow = displayedOverflow,
-            modifier = room.fillMaxWidth().then(sweep),
+            modifier = textInsets.fillMaxWidth().then(sweep),
         )
         }
     }

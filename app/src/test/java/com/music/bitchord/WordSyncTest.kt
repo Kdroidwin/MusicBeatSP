@@ -343,6 +343,24 @@ class WordSyncTest {
         }
     }
 
+    @Test
+    fun `enhanced japanese lyrics preserve and reveal the final character`() {
+        val lines = EnhancedLrc.parse(
+            """
+            [00:27.22]<00:27.22>そ<00:27.58>う<00:27.92>だ<00:28.08>な　<00:28.64>例<00:29.22>え<00:29.36>て<00:29.52>言<00:29.70>う<00:29.82>な<00:29.94>ら　<00:30.54>宇<00:31.16>宙<00:31.66>か<00:32.04>ら<00:32.10>叫<00:33.14>び<00:33.32>た<00:33.58>い<00:33.72>気<00:33.86>分<00:34.68>
+            [00:34.68]<00:34.68>君<00:35.36>を<00:35.70>見<00:36.98>つ<00:37.14>け<00:37.30>た<00:37.48>僕<00:37.72>は　<00:38.30>そ<00:38.76>う<00:38.86>さ<00:40.68>も<00:42.54>う<00:42.72>無<00:42.84>敵<00:45.24>
+            [00:49.80]<00:49.80>予<00:51.00>定<00:51.52>よ<00:51.88>り<00:52.38>早<00:52.98>く<00:53.22>に<00:53.36>到<00:53.54>着<00:54.26>
+            """.trimIndent(),
+        ).sung()
+
+        assertEquals(listOf('分', '敵', '着'), lines.map { it.text.last() })
+        lines.forEach { line ->
+            assertEquals(line.text.last().toString(), line.words.last().text)
+            assertEquals(line.text.length - 1f, line.revealedChars(line.words.last().startMs), 0.01f)
+            assertEquals(line.text.length.toFloat(), line.revealedChars(line.words.last().endMs), 0.01f)
+        }
+    }
+
     // ---- Glow intensity ------------------------------------------------------
 
     /** Peak intensity reached anywhere inside a word of the given length. */
