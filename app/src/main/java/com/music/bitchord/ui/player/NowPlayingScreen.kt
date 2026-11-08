@@ -5822,6 +5822,7 @@ private fun BottomGlyph(
      */
     tapWindowMs: Long = 0L,
 ) {
+    val hideSelectionCircles by AppSettings.hidePlayerControlHighlightCircles.collectAsStateWithLifecycle()
     val ink = LocalPlayerButtonControlInk.current
     val haptics = rememberHaptics()
     // Read only from the click handler, never during composition, so writing it
@@ -5833,10 +5834,10 @@ private fun BottomGlyph(
             .size(44.dp)
             .clip(CircleShape)
             .background(
-                if (highlighted && enabled) ink.copy(alpha = 0.20f) else Color.Transparent,
+                if (highlighted && enabled && !hideSelectionCircles) ink.copy(alpha = 0.20f) else Color.Transparent,
             )
             .then(
-                if (outlined) Modifier.border(1.dp, ink.copy(alpha = 0.72f), CircleShape)
+                if (outlined && !hideSelectionCircles) Modifier.border(1.dp, ink.copy(alpha = 0.72f), CircleShape)
                 else Modifier,
             )
             .clickable(
