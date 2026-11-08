@@ -16,7 +16,6 @@ import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.draw.blur
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.FilterQuality
@@ -24,6 +23,7 @@ import androidx.compose.ui.graphics.ImageBitmap
 import androidx.compose.ui.graphics.asImageBitmap
 import androidx.compose.ui.graphics.drawscope.DrawScope
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.platform.LocalConfiguration
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.IntOffset
 import androidx.compose.ui.unit.IntSize
@@ -75,7 +75,23 @@ import kotlin.random.Random
  * as the old backdrop draws — would be thirty-six full-screen radial gradients.
  */
 @Immutable
-class ArtworkMesh internal constructor(internal val image: ImageBitmap)
+class ArtworkMesh internal constructor(
+    internal val image: ImageBitmap,
+    private val bitmap: Bitmap,
+) {
+    /** Blur the small source texture before it is stretched over the window. */
+    internal fun blurred(sigmaX: Float, sigmaY: Float): ArtworkMesh {
+        if (sigmaX <= 0.05f && sigmaY <= 0.05f) return this
+        val width = bitmap.width
+        val height = bitmap.height
+        val pixels = IntArray(width * height)
+        bitmap.getPixels(pixels, 0, width, 0, 0, width, height)
+        val horizontal = blurPixels(pixels, width, height, sigmaX, horizontal = true)
+        val output = blurPixels(horizontal, width, height, sigmaY, horizontal = false)
+        val blurredBitmap = Bitmap.createBitmap(output, width, height, Bitmap.Config.ARGB_8888)
+        return ArtworkMesh(blurredBitmap.asImageBitmap(), blurredBitmap)
+    }
+}
 
 /**
  * The mesh for the artwork at [imageUrl], or null until one has been read.
@@ -210,20 +226,34 @@ fun ArtworkMeshBackdrop(
 ) {
     val reduceAnimation by AppSettings.reduceAnimation.collectAsStateWithLifecycle()
     val reduceDynamicBlur by AppSettings.reduceDynamicBlur.collectAsStateWithLifecycle()
-    // RenderEffect only; below API 31 `blur` is a no-op. It is not missed here —
-    // the CPU-side interpolation is what carries the smoothness.
-    val canBlur = !reduceDynamicBlur && Build.VERSION.SDK_INT >= Build.VERSION_CODES.S
+    val canBlur = !reduceDynamicBlur && blurRadius > 0.dp && Build.VERSION.SDK_INT >= Build.VERSION_CODES.S
+    val configuration = LocalConfiguration.current
+    // The artwork mesh is only 32x32. Blur it once at that resolution instead
+    // of asking RenderEffect to process the whole 1080x2340 sheet every frame
+    // while it moves. Ratios preserve the user-selected dp radius on screen.
+    val renderMesh = remember(mesh, blurRadius, configuration.screenWidthDp, configuration.screenHeightDp, canBlur) {
+        if (!canBlur || mesh == null) {
+            mesh
+        } else {
+            val widthDp = configuration.screenWidthDp.toFloat().coerceAtLeast(1f)
+            val heightDp = configuration.screenHeightDp.toFloat().coerceAtLeast(1f)
+            mesh.blurred(
+                sigmaX = blurRadius.value * MESH_TEX / widthDp,
+                sigmaY = blurRadius.value * MESH_TEX / heightDp,
+            )
+        }
+    }
 
     // The mesh on screen, and the one fading in over it. Two states rather than
     // one animated value because what crossfades here is a pair of bitmaps, not
     // a pair of colours: the outgoing one has to stay drawable until the fade
     // has finished with it.
-    var shown by remember { mutableStateOf(mesh) }
+    var shown by remember { mutableStateOf(renderMesh) }
     var incoming by remember { mutableStateOf<ArtworkMesh?>(null) }
     val fade = remember { Animatable(0f) }
 
-    LaunchedEffect(mesh) {
-        val next = mesh ?: return@LaunchedEffect
+    LaunchedEffect(renderMesh) {
+        val next = renderMesh ?: return@LaunchedEffect
         // A change arriving mid-fade. Whatever was fading in has been on screen
         // for a while and is what the new one should fade *from*; leaving it in
         // [incoming] would restart the fade from the mesh before it, and a clip
@@ -258,8 +288,7 @@ fun ArtworkMeshBackdrop(
             // and along the bottom. The default treatment clamps instead, which
             // cannot lose alpha — this is only here so nothing downstream can
             // reintroduce the bug.
-            .background(fallback)
-            .then(if (canBlur) Modifier.blur(blurRadius) else Modifier),
+            .background(fallback),
     ) {
         val seamY = seam.toPx().coerceIn(0f, size.height)
         shown?.let { drawMesh(it, seamY, alpha = 1f) }
@@ -462,7 +491,53 @@ private fun meshOf(source: Bitmap, seed: Int): ArtworkMesh? {
     }
     val texels = grid.rotatedBelowSeam(cols, rows, seed).resampled(cols, rows, MESH_TEX)
     val bitmap = Bitmap.createBitmap(texels, MESH_TEX, MESH_TEX, Bitmap.Config.ARGB_8888)
-    return ArtworkMesh(bitmap.asImageBitmap())
+    return ArtworkMesh(bitmap.asImageBitmap(), bitmap)
+}
+
+/** Small separable Gaussian used on the mesh before it reaches the GPU. */
+private fun blurPixels(
+    source: IntArray,
+    width: Int,
+    height: Int,
+    sigma: Float,
+    horizontal: Boolean,
+): IntArray {
+    if (sigma <= 0.05f) return source
+    val radius = (sigma * 3f).roundToInt().coerceIn(1, MESH_TEX)
+    val weights = FloatArray(radius * 2 + 1)
+    var weightSum = 0f
+    for (i in -radius..radius) {
+        val weight = kotlin.math.exp(-(i * i) / (2f * sigma * sigma))
+        weights[i + radius] = weight
+        weightSum += weight
+    }
+    for (i in weights.indices) weights[i] /= weightSum
+
+    val result = IntArray(source.size)
+    for (y in 0 until height) {
+        for (x in 0 until width) {
+            var alpha = 0f
+            var red = 0f
+            var green = 0f
+            var blue = 0f
+            for (offset in -radius..radius) {
+                val sampleX = if (horizontal) (x + offset).coerceIn(0, width - 1) else x
+                val sampleY = if (horizontal) y else (y + offset).coerceIn(0, height - 1)
+                val pixel = source[sampleY * width + sampleX]
+                val weight = weights[offset + radius]
+                alpha += ((pixel ushr 24) and 0xFF) * weight
+                red += ((pixel ushr 16) and 0xFF) * weight
+                green += ((pixel ushr 8) and 0xFF) * weight
+                blue += (pixel and 0xFF) * weight
+            }
+            result[y * width + x] =
+                (alpha.roundToInt().coerceIn(0, 255) shl 24) or
+                    (red.roundToInt().coerceIn(0, 255) shl 16) or
+                    (green.roundToInt().coerceIn(0, 255) shl 8) or
+                    blue.roundToInt().coerceIn(0, 255)
+        }
+    }
+    return result
 }
 
 /**

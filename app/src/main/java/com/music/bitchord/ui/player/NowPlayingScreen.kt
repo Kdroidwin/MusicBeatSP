@@ -1070,81 +1070,80 @@ fun NowPlayingScreen(
         val raw = ((fraction - DOCK_FADE_LEAD) / (1f - DOCK_FADE_LEAD)).coerceIn(0f, 1f)
         return raw * raw
     }
-    val dockHost = Modifier
-        .then(
-            if (dock != null) {
-                Modifier.onGloballyPositioned { coordinates ->
-                    dockFrame.host = coordinates
-                    if (coordinates.size.width < coordinates.size.height) {
-                        val offset = dock.offset() ?: return@onGloballyPositioned
-                        if (dockFrame.anchor == null || dockFrame.anchorFor != coordinates.size) {
-                            dockFrame.anchorFor = coordinates.size
-                            dockFrame.anchor = coordinates.positionOnScreen() - Offset(0f, offset.toInt().toFloat())
-                        }
-                        if (!dock.attached) dock.attached = true
-                    } else {
-                        dock.attached = false
+    val dockCoordinates = Modifier.then(
+        if (dock != null) {
+            Modifier.onGloballyPositioned { coordinates ->
+                dockFrame.host = coordinates
+                if (coordinates.size.width < coordinates.size.height) {
+                    val offset = dock.offset() ?: return@onGloballyPositioned
+                    if (dockFrame.anchor == null || dockFrame.anchorFor != coordinates.size) {
+                        dockFrame.anchorFor = coordinates.size
+                        dockFrame.anchor = coordinates.positionOnScreen() - Offset(0f, offset.toInt().toFloat())
                     }
+                    if (!dock.attached) dock.attached = true
+                } else {
+                    dock.attached = false
                 }
-            } else {
-                Modifier
-            },
-        )
-        .drawWithContent {
-            drawContent()
-            val activeDock = dock
-            val host = dockFrame.host
-            val box = dockFrame.artworkBox
-            val anchor = dockFrame.anchor
-            val offset = activeDock?.offset()
-            val mini = activeDock?.miniArtOnScreen()
-            val layerSize = sleeveLayer.size
-            if (
-                activeDock != null && isDocking() && host != null && box != null && anchor != null &&
-                offset != null && mini != null && layerSize.width > 0 && layerSize.height > 0
-            ) {
-                val fraction = dockFraction()
-                val boxOrigin = host.localPositionOf(box, Offset.Zero)
-                val card = dockFrame.artworkRect.translate(boxOrigin.x, boxOrigin.y)
-                val miniInRoot = mini.translate(-anchor.x, -anchor.y - offset)
-                val sleeve = lerpRect(miniInRoot, card, fraction)
-                if (sleeve.width > 0f && sleeve.height > 0f) {
-                    // The mini-player cover slot is square, while a preserved
-                    // sleeve can be portrait or landscape. Cover-scaling the
-                    // recorded layer into the interpolated rectangle crops the
-                    // artwork as it docks; fit it uniformly inside that square
-                    // travel frame when the opt-in is enabled.
-                    val imageScale = if (preserveTransitionArtworkProportions) {
-                        minOf(
-                            sleeve.width / layerSize.width,
-                            sleeve.height / layerSize.height,
-                        )
-                    } else {
-                        maxOf(
-                            sleeve.width / layerSize.width,
-                            sleeve.height / layerSize.height,
-                        )
-                    }
-                    if (imageScale.isFinite() && imageScale > 0f) {
-                        val drawnWidth = layerSize.width * imageScale
-                        val drawnHeight = layerSize.height * imageScale
-                        clipRect(sleeve.left, sleeve.top, sleeve.right, sleeve.bottom) {
-                            translate(
-                                sleeve.center.x - drawnWidth / 2f,
-                                sleeve.center.y - drawnHeight / 2f,
-                            ) {
-                                scale(imageScale, imageScale, pivot = Offset.Zero) {
-                                    drawLayer(sleeveLayer)
-                                }
+            }
+        } else {
+            Modifier
+        },
+    )
+    val dockArtworkOverlay = Modifier.drawWithContent {
+        drawContent()
+        val activeDock = dock
+        val host = dockFrame.host
+        val box = dockFrame.artworkBox
+        val anchor = dockFrame.anchor
+        val offset = activeDock?.offset()
+        val mini = activeDock?.miniArtOnScreen()
+        val layerSize = sleeveLayer.size
+        if (
+            activeDock != null && isDocking() && host != null && box != null && anchor != null &&
+            offset != null && mini != null && layerSize.width > 0 && layerSize.height > 0
+        ) {
+            val fraction = dockFraction()
+            val boxOrigin = host.localPositionOf(box, Offset.Zero)
+            val card = dockFrame.artworkRect.translate(boxOrigin.x, boxOrigin.y)
+            val miniInRoot = mini.translate(-anchor.x, -anchor.y - offset)
+            val sleeve = lerpRect(miniInRoot, card, fraction)
+            if (sleeve.width > 0f && sleeve.height > 0f) {
+                // The mini-player cover slot is square, while a preserved
+                // sleeve can be portrait or landscape. Cover-scaling the
+                // recorded layer into the interpolated rectangle crops the
+                // artwork as it docks; fit it uniformly inside that square
+                // travel frame when the opt-in is enabled.
+                val imageScale = if (preserveTransitionArtworkProportions) {
+                    minOf(
+                        sleeve.width / layerSize.width,
+                        sleeve.height / layerSize.height,
+                    )
+                } else {
+                    maxOf(
+                        sleeve.width / layerSize.width,
+                        sleeve.height / layerSize.height,
+                    )
+                }
+                if (imageScale.isFinite() && imageScale > 0f) {
+                    val drawnWidth = layerSize.width * imageScale
+                    val drawnHeight = layerSize.height * imageScale
+                    clipRect(sleeve.left, sleeve.top, sleeve.right, sleeve.bottom) {
+                        translate(
+                            sleeve.center.x - drawnWidth / 2f,
+                            sleeve.center.y - drawnHeight / 2f,
+                        ) {
+                            scale(imageScale, imageScale, pivot = Offset.Zero) {
+                                drawLayer(sleeveLayer)
                             }
                         }
                     }
                 }
             }
         }
-        .graphicsLayer {
-            alpha = if (isDocking()) dockFade().coerceAtLeast(DOCK_FADE_FLOOR) else 1f
-        }
+    }
+    val dockSurfaceFade = Modifier.graphicsLayer {
+        alpha = if (isDocking()) dockFade().coerceAtLeast(DOCK_FADE_FLOOR) else 1f
+    }
 
     // A docked pane sits beside the page rather than covering the screen, so
     // the status bar it's under belongs to the page, not this artwork — only
@@ -1957,13 +1956,15 @@ fun NowPlayingScreen(
     // position into the same space as the two edges above.
     var dismissBandSpace by remember { mutableStateOf<LayoutCoordinates?>(null) }
 
-    Box(modifier = modifier.fillMaxSize().then(dockHost)) {
-        CompositionLocalProvider(
-            LocalPlayerButtonControlInk provides buttonControlInk,
-            LocalPlayerSeekVolumeInk provides seekVolumeInk,
-            LocalPlayerSongArtistInk provides songArtistInk,
-            LocalPlayerLyricInk provides lyricInk,
-        ) {
+    val activeBackdropBlur = if (aurisHeroMode) {
+        fullBleedArtworkBottomBlurStrengthDp.dp
+    } else {
+        artworkBackdropBlurDp.dp
+    }
+    Box(modifier = modifier.fillMaxSize().then(dockCoordinates).then(dockSurfaceFade)) {
+        // Keep the configured blur radius constant while fading the entire
+        // moving surface as one cached layer. This also clears the backdrop
+        // with the sheet instead of leaving a colour wash after the cover goes.
         if (retroPlayerMode) {
             Box(
                 Modifier
@@ -1971,40 +1972,16 @@ fun NowPlayingScreen(
                     .background(
                         if (retroPlayerBackground == RetroPlayerBackground.BLACK) {
                             Color.Black
-                        } else artworkPalette.background
+                        } else artworkPalette.background,
                     ),
             )
-        }
-        // Anchored to the sleeve's bottom edge, so the screen carries on in the
-        // colours the artwork ended in rather than in a quantiser's idea of what
-        // the artwork was about. Position ticks recompose this screen twice a
-        // second and must not drag a full-screen blur along with them, which is
-        // why the mesh is passed as one immutable value.
-        //
-        // The seam is the *expanded* banner's bottom edge and is left there as
-        // the player collapses, rather than following the sleeve down: it is
-        // the anchor for a blurred layer, and moving it would re-blur the whole
-        // screen on every frame of the drag. Above it the mesh holds one colour,
-        // so a seam left behind a collapsed sleeve shows nothing at all.
-        val activeBackdropBlur = if (aurisHeroMode) {
-            fullBleedArtworkBottomBlurStrengthDp.dp
-        } else {
-            artworkBackdropBlurDp.dp
-        }
-        if (!retroPlayerMode && !sharedPlayerBackdrop && legacyMesh) {
-            // v1.5's backdrop, restored verbatim: no seam, because the blobs
-            // are not anchored to anything on screen — they fill the player and
-            // the artwork simply sits on top of them. Keyed on the track, so
-            // they drift when the player opens and on every skip, then rest.
-            // Position ticks recompose this screen twice a second and must not
-            // drag a full-screen blur along with them, which is why the palette
-            // is passed as one immutable value.
+        } else if (!sharedPlayerBackdrop && legacyMesh) {
             MeshGradientBackground(
                 palette = rememberArtworkColors(backdropArtworkUrl, canvasFrame),
                 trackKey = song.videoId,
                 blurRadius = activeBackdropBlur,
             )
-        } else if (!retroPlayerMode && !sharedPlayerBackdrop) {
+        } else if (!sharedPlayerBackdrop) {
             ArtworkMeshBackdrop(
                 mesh = artMesh,
                 seam = if (heroMode) heroHeight else 0.dp,
@@ -2012,6 +1989,12 @@ fun NowPlayingScreen(
             )
         }
 
+        CompositionLocalProvider(
+            LocalPlayerButtonControlInk provides buttonControlInk,
+            LocalPlayerSeekVolumeInk provides seekVolumeInk,
+            LocalPlayerSongArtistInk provides songArtistInk,
+            LocalPlayerLyricInk provides lyricInk,
+        ) {
         // Auris grades the area beneath its artwork stage as well as dissolving
         // the cover into the artwork-derived backdrop. This keeps the transport
         // visually grounded without adding a hard dark strip at the stage edge.
@@ -3931,6 +3914,12 @@ fun NowPlayingScreen(
             }
             }
         }
+        }
+        if (dock != null) {
+            // Keep the moving sleeve on its own draw node. Reading the sheet
+            // fraction from a draw modifier wrapped around the full player
+            // re-recorded every control, lyric, and backdrop on every frame.
+            Box(Modifier.matchParentSize().then(dockArtworkOverlay))
         }
     }
 }
