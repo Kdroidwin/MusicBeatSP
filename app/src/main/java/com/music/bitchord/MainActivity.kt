@@ -167,6 +167,7 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.draw.clipToBounds
 import androidx.compose.ui.draw.alpha
 import androidx.compose.ui.draw.drawBehind
 import androidx.compose.ui.draw.rotate
@@ -5378,6 +5379,7 @@ private fun PlaybackTuningDialog(
     val frostedPlayerDetails by AppSettings.frostedPlayerDetails.collectAsStateWithLifecycle()
     val playerPopupsUseArtworkColor by AppSettings.playerPopupsUseArtworkColor.collectAsStateWithLifecycle()
     val useArtworkBackdrop = frostedPlayerDetails && playerPopupsUseArtworkColor
+    val clipPlayerPopupHandles by AppSettings.clipPlayerPopupHandles.collectAsStateWithLifecycle()
     val hideTitle by AppSettings.hidePlaybackTuningTitle.collectAsStateWithLifecycle()
     val useThinSliders by AppSettings.playbackTuningThinSliders.collectAsStateWithLifecycle()
     val foreground = if (useArtworkBackdrop) palette.onBackground else MaterialTheme.colorScheme.onSurface
@@ -5410,6 +5412,7 @@ private fun PlaybackTuningDialog(
                 Modifier
                     .fillMaxWidth()
                     .height(32.dp)
+                    .then(if (clipPlayerPopupHandles) Modifier.clipToBounds() else Modifier)
                     .align(Alignment.TopCenter),
                 contentAlignment = Alignment.Center,
             ) {

@@ -1200,6 +1200,7 @@ fun NowPlayingScreen(
     val reducePlayerAnimations by AppSettings.reduceAnimation.collectAsStateWithLifecycle()
     val frostedQueueManager by AppSettings.frostedQueueManager.collectAsStateWithLifecycle()
     val playerPopupsUseArtworkColor by AppSettings.playerPopupsUseArtworkColor.collectAsStateWithLifecycle()
+    val clipPlayerPopupHandles by AppSettings.clipPlayerPopupHandles.collectAsStateWithLifecycle()
     val redesignedSavedQueueManager by AppSettings.redesignedSavedQueueManager.collectAsStateWithLifecycle()
     val hideSavedQueueHeading by AppSettings.hideSavedQueueHeading.collectAsStateWithLifecycle()
     val hideQueueManagerTitle by AppSettings.hideQueueManagerTitle.collectAsStateWithLifecycle()
@@ -1482,7 +1483,11 @@ fun NowPlayingScreen(
                 }
                 Column(Modifier.fillMaxWidth()) {
                     Box(
-                        Modifier.fillMaxWidth().height(56.dp).padding(top = 12.dp),
+                        Modifier
+                            .fillMaxWidth()
+                            .height(56.dp)
+                            .then(if (clipPlayerPopupHandles) Modifier.clipToBounds() else Modifier)
+                            .padding(top = 12.dp),
                         contentAlignment = Alignment.Center,
                     ) {
                         Box(

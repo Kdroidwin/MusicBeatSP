@@ -48,6 +48,7 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.draw.clipToBounds
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.unit.dp
@@ -59,6 +60,8 @@ import com.music.bitchord.playback.SavedQueue
 import com.music.bitchord.ui.theme.ArtworkPalette
 import com.music.bitchord.ui.components.ArtworkBackdrop
 import com.music.bitchord.data.model.ROW_ART_PX
+import com.music.bitchord.data.settings.AppSettings
+import androidx.lifecycle.compose.collectAsStateWithLifecycle
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -79,6 +82,7 @@ internal fun SavedQueuesDialog(
     onDelete: (SavedQueue) -> Unit,
     onDismiss: () -> Unit,
 ) {
+    val clipPlayerPopupHandles by AppSettings.clipPlayerPopupHandles.collectAsStateWithLifecycle()
     if (redesigned) {
         ModernSavedQueuesDialog(
             hideSaveCurrentQueueHeading = hideSaveCurrentQueueHeading,
@@ -87,6 +91,7 @@ internal fun SavedQueuesDialog(
             artworkPalette = artworkPalette,
             artworkUrl = artworkUrl,
             useFrostedGlass = useFrostedGlass,
+            clipPlayerPopupHandles = clipPlayerPopupHandles,
             currentSongs = currentSongs,
             currentIndex = currentIndex,
             positionMs = positionMs,
@@ -103,6 +108,7 @@ internal fun SavedQueuesDialog(
             artworkPalette = artworkPalette,
             artworkUrl = artworkUrl,
             useFrostedGlass = useFrostedGlass,
+            clipPlayerPopupHandles = clipPlayerPopupHandles,
             currentSongs = currentSongs,
             currentIndex = currentIndex,
             positionMs = positionMs,
@@ -123,6 +129,7 @@ private fun LegacySavedQueuesDialog(
     artworkPalette: ArtworkPalette,
     artworkUrl: String?,
     useFrostedGlass: Boolean,
+    clipPlayerPopupHandles: Boolean,
     currentSongs: List<Song>,
     currentIndex: Int,
     positionMs: Long,
@@ -169,6 +176,7 @@ private fun LegacySavedQueuesDialog(
                 Modifier
                     .fillMaxWidth()
                     .height(32.dp)
+                    .then(if (clipPlayerPopupHandles) Modifier.clipToBounds() else Modifier)
                     .align(Alignment.TopCenter),
                 contentAlignment = Alignment.Center,
             ) {
@@ -315,6 +323,7 @@ private fun ModernSavedQueuesDialog(
     artworkPalette: ArtworkPalette,
     artworkUrl: String?,
     useFrostedGlass: Boolean,
+    clipPlayerPopupHandles: Boolean,
     currentSongs: List<Song>,
     currentIndex: Int,
     positionMs: Long,
@@ -365,10 +374,18 @@ private fun ModernSavedQueuesDialog(
                 Box(Modifier.fillMaxWidth().height(48.dp), contentAlignment = Alignment.Center) {
                     Box(
                         Modifier
-                            .size(width = 48.dp, height = 6.dp)
-                            .clip(RoundedCornerShape(50))
-                            .background(foreground.copy(alpha = 0.34f)),
-                    )
+                            .fillMaxWidth()
+                            .height(48.dp)
+                            .then(if (clipPlayerPopupHandles) Modifier.clipToBounds() else Modifier),
+                        contentAlignment = Alignment.Center,
+                    ) {
+                        Box(
+                            Modifier
+                                .size(width = 48.dp, height = 6.dp)
+                                .clip(RoundedCornerShape(50))
+                                .background(foreground.copy(alpha = 0.34f)),
+                        )
+                    }
                     Row(
                         Modifier.fillMaxWidth(),
                         verticalAlignment = Alignment.CenterVertically,

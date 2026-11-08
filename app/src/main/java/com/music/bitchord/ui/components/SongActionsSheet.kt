@@ -63,6 +63,7 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.res.pluralStringResource
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.draw.clipToBounds
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.platform.LocalConfiguration
@@ -336,6 +337,7 @@ private fun TintedSheet(
     content: @Composable ColumnScope.() -> Unit,
 ) {
     val maxHeight = LocalConfiguration.current.screenHeightDp.dp * 0.85f
+    val clipPlayerPopupHandles by AppSettings.clipPlayerPopupHandles.collectAsStateWithLifecycle()
     Box(
         modifier
             .fillMaxWidth()
@@ -359,7 +361,8 @@ private fun TintedSheet(
             Box(
                 modifier = Modifier
                     .fillMaxWidth()
-                    .padding(top = 8.dp, bottom = 4.dp),
+                    .padding(top = 8.dp, bottom = 4.dp)
+                    .then(if (clipPlayerPopupHandles) Modifier.clipToBounds() else Modifier),
                 contentAlignment = Alignment.Center,
             ) {
                 Box(
