@@ -137,7 +137,13 @@ fun LocalSongActionsSheet(
         onDismissRequest = onDismissRequest,
         sheetState = sheetState,
         shape = sheetShape,
-        containerColor = if (showPlayerActions || useArtworkBackdrop) Color.Transparent
+        // The drag-handle slot is part of the sheet surface. Keeping the
+        // container transparent left that top area unpainted while the body
+        // below drew its own clipped background, making the handle appear to
+        // float outside the rounded sheet. Paint the full modal surface with
+        // the matching base tone; the body backdrop below can still add its
+        // artwork blur over it.
+        containerColor = if (useArtworkBackdrop) artworkPalette.background
             else MaterialTheme.colorScheme.surfaceContainerHigh,
         dragHandle = if (showPlayerActions || useArtworkBackdrop) {
             {
