@@ -12,8 +12,8 @@ import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.WindowInsets
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.navigationBarsPadding
-import androidx.compose.foundation.layout.offset
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
@@ -51,6 +51,7 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.graphics.luminance
+import androidx.compose.ui.platform.LocalConfiguration
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.res.stringResource
 import com.music.bitchord.R
@@ -86,6 +87,7 @@ fun LocalSongDetailsSheet(
     showPlayerActions: Boolean = false,
     modifier: Modifier = Modifier,
 ) {
+    val configuration = LocalConfiguration.current
     val context = LocalContext.current
     val sheetState = rememberModalBottomSheetState(skipPartiallyExpanded = true)
     val audioCutterEnabled by AppSettings.audioCutterEnabled.collectAsStateWithLifecycle()
@@ -146,11 +148,22 @@ fun LocalSongDetailsSheet(
                 }
             }
         },
-        modifier = if (showPlayerActions) modifier.offset(y = 48.dp) else modifier,
+        modifier = modifier,
     ) {
         PlayerPopupSystemBars(showPlayerActions)
         MaterialTheme(colorScheme = sheetColors) {
-            Box(Modifier.fillMaxWidth().clip(RoundedCornerShape(topStart = 28.dp, topEnd = 28.dp))) {
+            Box(
+                Modifier
+                    .fillMaxWidth()
+                    .then(
+                        if (showPlayerActions && configuration.screenHeightDp > configuration.screenWidthDp) {
+                            Modifier.heightIn(max = configuration.screenHeightDp.dp * 0.62f)
+                        } else {
+                            Modifier
+                        },
+                    )
+                    .clip(RoundedCornerShape(topStart = 28.dp, topEnd = 28.dp)),
+            ) {
                 if (useArtworkBackdrop) {
                     ArtworkBackdrop(
                         palette = palette,
@@ -164,7 +177,12 @@ fun LocalSongDetailsSheet(
                     modifier = Modifier
                         .fillMaxWidth()
                         .navigationBarsPadding(),
-                    contentPadding = PaddingValues(start = 20.dp, end = 20.dp, bottom = 24.dp),
+                    contentPadding = PaddingValues(
+                        start = 20.dp,
+                        top = if (showPlayerActions) 16.dp else 0.dp,
+                        end = 20.dp,
+                        bottom = 24.dp,
+                    ),
                     verticalArrangement = Arrangement.spacedBy(16.dp),
                 ) {
                     item {

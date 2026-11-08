@@ -195,7 +195,7 @@ private fun LegacySavedQueuesDialog(
                     .fillMaxWidth()
                     .navigationBarsPadding()
                     .heightIn(max = 640.dp)
-                    .padding(top = if (hidePlayerPopupHandles) 0.dp else 32.dp)
+                    .padding(top = if (hidePlayerPopupHandles) 16.dp else 32.dp)
                     .padding(start = 24.dp, end = 24.dp, bottom = 20.dp),
             ) {
                 if (!hideManageQueueTitle) {
@@ -370,7 +370,7 @@ private fun ModernSavedQueuesDialog(
             Column(
                 Modifier
                     .fillMaxWidth()
-                    .padding(top = if (hidePlayerPopupHandles) 0.dp else 8.dp)
+                    .padding(top = if (hidePlayerPopupHandles) 16.dp else 8.dp)
                     .heightIn(max = 680.dp)
                     .navigationBarsPadding()
                     .padding(horizontal = 22.dp)
