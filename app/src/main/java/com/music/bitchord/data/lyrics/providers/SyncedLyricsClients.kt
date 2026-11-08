@@ -2,6 +2,7 @@ package com.music.bitchord.data.lyrics.providers
 
 import android.util.Base64
 import com.music.bitchord.data.Http
+import com.music.bitchord.data.lyrics.NetEaseLyrics
 import com.music.bitchord.data.lyrics.QQMusicLyrics
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.async
@@ -794,6 +795,7 @@ internal object NetEaseLyricsClient {
             } ?: return null
 
             NativeLyricsHttp.mergeLrcWithTranslation(mainLrc, transRaw)
+                .let { NetEaseLyrics.removePairedChineseTranslationRows(it) }
         }
     }.getOrNull()
 

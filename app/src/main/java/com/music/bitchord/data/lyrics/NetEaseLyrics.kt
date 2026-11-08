@@ -31,6 +31,57 @@ object NetEaseLyrics {
             .build()
     }
 
+    /**
+     * Applies the Japanese-only translation preference to raw NetEase LRC/YRC
+     * text. The manual search-result provider returns raw text instead of
+     * parsed [LyricLine]s, so filtering only in [lyrics] leaves its paired
+     * Chinese translation rows untouched.
+     *
+     * A Han-only line is removed only when a kana-containing line has the same
+     * exact timestamp. This keeps Chinese-only songs, unsynced metadata, blank
+     * timed rows, and enhanced word-sync markup intact.
+     */
+    internal fun removePairedChineseTranslationRows(rawLyrics: String): String {
+        if (!com.music.bitchord.data.settings.AppSettings.keepJapaneseNeteaseLyricLines.value) {
+            return rawLyrics
+        }
+
+        data class TimedRow(val timestamps: Set<Long>, val text: String)
+
+        val stampAtStart = Regex("""^\[(\d+):(\d{2})(?:[.:](\d{1,3}))?]""")
+        fun parseRow(line: String): TimedRow? {
+            var rest = line.trim()
+            val timestamps = linkedSetOf<Long>()
+            while (true) {
+                val match = stampAtStart.find(rest) ?: break
+                val minutes = match.groupValues[1].toLongOrNull() ?: break
+                val seconds = match.groupValues[2].toLongOrNull() ?: break
+                val fraction = match.groupValues[3]
+                val millis = fraction.padEnd(3, '0').take(3).toLongOrNull() ?: 0L
+                timestamps += minutes * 60_000L + seconds * 1_000L + millis
+                rest = rest.substring(match.range.last + 1)
+            }
+            return timestamps.takeIf { it.isNotEmpty() }?.let { TimedRow(it, rest) }
+        }
+
+        val lines = rawLyrics.lineSequence().toList()
+        val rows = lines.map(::parseRow)
+        val japaneseTimes = rows.asSequence()
+            .filterNotNull()
+            .filter { row -> row.text.any { it.isKana() } }
+            .flatMap { it.timestamps.asSequence() }
+            .toSet()
+        if (japaneseTimes.isEmpty()) return rawLyrics
+
+        val filtered = lines.filterIndexed { index, _ ->
+            val row = rows[index] ?: return@filterIndexed true
+            val hasKana = row.text.any { it.isKana() }
+            val hasHan = row.text.any { it.isHan() }
+            !(hasHan && !hasKana && row.timestamps.any { it in japaneseTimes })
+        }.joinToString("\n")
+        return filtered.takeIf { it.isNotBlank() } ?: rawLyrics
+    }
+
     suspend fun lyrics(
         title: String,
         artist: String,
