@@ -12,6 +12,7 @@ import androidx.compose.runtime.mutableFloatStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.setValue
 import androidx.compose.runtime.snapshotFlow
+import androidx.compose.runtime.withFrameNanos
 import androidx.compose.ui.platform.WindowInfo
 import com.music.bitchord.ui.components.MiniPlayerPull
 import kotlinx.coroutines.CoroutineScope
@@ -179,6 +180,15 @@ class PlayerSheetMotion(
             // The sheet's window takes a frame or two to exist. Started before
             // then, the first stretch of the slide would happen to nothing.
             withTimeoutOrNull(LAYOUT_WAIT_MS) { snapshotFlow { laidOut }.first { it } }
+            // `onMeasured` fires during layout, before that first full player
+            // frame has been drawn. Starting the artwork flight at that point
+            // makes the initial composition, dialog-window attach, and the
+            // first animation frames all compete for the UI thread. Let the
+            // off-screen sheet render two frames at its held mini-player
+            // position first; the transition then starts with a warm layout
+            // and decoded first frame instead of hitching as it appears.
+            withFrameNanos { }
+            withFrameNanos { }
             val startFrom = travel()
             held = startFrom
             slide(from = startFrom, to = 0f)
