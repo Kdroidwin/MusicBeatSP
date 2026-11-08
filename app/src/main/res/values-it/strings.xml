@@ -675,4 +675,22 @@
     <string name="use_this_profile">Usa questo profilo</string>
     <string name="switch_profile_hint">Cambia usando l\'avatar, poi usa questo profilo.</string>
     <string name="profile_unavailable">Nessun profilo con accesso effettuato è ancora disponibile su questa pagina.</string>
+
+    <!-- Local search labels -->
+    <string name="search_filter_all">Tutti</string>
+    <string name="search_filter_songs">Brani</string>
+    <string name="search_filter_albums">Album</string>
+    <string name="search_filter_artists">Artisti</string>
+    <string name="search_filter_folders">Cartelle</string>
+    <string name="search_clear_all">Cancella tutto</string>
+    <string name="search_offline_music_title">Cerca musica offline</string>
+    <string name="search_offline_music_hint">Inserisci titolo, artista, album o cartella</string>
+    <string name="search_music_placeholder">Cerca brani, album e artisti…</string>
+    <string name="search_youtube_music_title">Cerca su YouTube Music</string>
+    <string name="search_youtube_music_hint">Inserisci brano, artista, album o playlist</string>
+    <string name="search_clear_search">Cancella ricerca</string>
+    <string name="search_no_results">Nessun risultato per "%1$s"</string>
+    <string name="search_this_device">Questo dispositivo</string>
+    <string name="search_youtube_music">YouTube Music</string>
+    <string name="search_music_servers">Server musicali</string>
 </resources>

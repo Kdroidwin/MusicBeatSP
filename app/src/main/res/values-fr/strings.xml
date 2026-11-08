@@ -637,4 +637,22 @@
         <item>Les paroles prennent forme</item>
         <item>Presque trouvé les mots</item>
     </string-array>
+
+    <!-- Local search labels -->
+    <string name="search_filter_all">Tout</string>
+    <string name="search_filter_songs">Titres</string>
+    <string name="search_filter_albums">Albums</string>
+    <string name="search_filter_artists">Artistes</string>
+    <string name="search_filter_folders">Dossiers</string>
+    <string name="search_clear_all">Tout effacer</string>
+    <string name="search_offline_music_title">Rechercher la musique hors ligne</string>
+    <string name="search_offline_music_hint">Saisissez un titre, un artiste, un album ou un dossier</string>
+    <string name="search_music_placeholder">Rechercher des titres, albums et artistes…</string>
+    <string name="search_youtube_music_title">Rechercher sur YouTube Music</string>
+    <string name="search_youtube_music_hint">Saisissez un titre, un artiste, un album ou une playlist</string>
+    <string name="search_clear_search">Effacer la recherche</string>
+    <string name="search_no_results">Aucun résultat pour "%1$s"</string>
+    <string name="search_this_device">Cet appareil</string>
+    <string name="search_youtube_music">YouTube Music</string>
+    <string name="search_music_servers">Serveurs musicaux</string>
 </resources>

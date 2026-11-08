@@ -486,13 +486,13 @@ fun LocalSearchScreen(
                                     verticalAlignment = Alignment.CenterVertically,
                                 ) {
                                     Text(
-                                        text = "Recent searches",
+                                        text = stringResource(R.string.recent_searches),
                                         style = MaterialTheme.typography.titleMedium,
                                         color = MaterialTheme.colorScheme.onSurface,
                                     )
                                     TextButton(onClick = onClearSearchHistory) {
                                         Text(
-                                            text = "Clear all",
+                                            text = stringResource(R.string.search_clear_all),
                                             style = MaterialTheme.typography.labelMedium,
                                             color = MaterialTheme.colorScheme.primary,
                                         )
@@ -538,7 +538,7 @@ fun LocalSearchScreen(
                                     )
                                     Icon(
                                         imageVector = Icons.Rounded.Close,
-                                        contentDescription = "Remove",
+                                        contentDescription = stringResource(R.string.remove),
                                         tint = MaterialTheme.colorScheme.onSurfaceVariant,
                                         modifier = Modifier
                                             .size(18.dp)
@@ -577,13 +577,13 @@ fun LocalSearchScreen(
                                 Spacer(modifier = Modifier.height(12.dp))
                                 Text(
                                 text = when {
-                                    useYoutubeMusic -> "Search YouTube Music"
+                                    useYoutubeMusic -> stringResource(R.string.search_youtube_music_title)
                                     useMusicServers -> stringResource(R.string.music_server_search_prompt)
                                     selectedConfiguredSource != null -> stringResource(
                                         R.string.search_configured_source_prompt,
                                         selectedConfiguredSourceLabel.orEmpty(),
                                     )
-                                    else -> "Search offline music"
+                                    else -> stringResource(R.string.search_offline_music_title)
                                 },
                                     style = MaterialTheme.typography.titleMedium,
                                     color = MaterialTheme.colorScheme.onSurfaceVariant,
@@ -592,9 +592,9 @@ fun LocalSearchScreen(
                                 Text(
                                 text = when {
                                     useMusicServers -> stringResource(R.string.music_server_search_hint)
-                                    useYoutubeMusic -> "Type a song, artist, album, or playlist"
+                                    useYoutubeMusic -> stringResource(R.string.search_youtube_music_hint)
                                     selectedConfiguredSource != null -> stringResource(R.string.search_configured_source_hint)
-                                    else -> "Type a title, artist, album, or folder name"
+                                    else -> stringResource(R.string.search_offline_music_hint)
                                 },
                                     style = MaterialTheme.typography.bodySmall,
                                     color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.7f),
@@ -668,7 +668,7 @@ fun LocalSearchScreen(
                             )
                             Spacer(modifier = Modifier.height(12.dp))
                             Text(
-                                text = "No results found for \"$query\"",
+                                text = stringResource(R.string.search_no_results, query),
                                 style = MaterialTheme.typography.bodyLarge,
                                 color = MaterialTheme.colorScheme.onSurfaceVariant,
                             )
@@ -708,7 +708,7 @@ fun LocalSearchScreen(
                     if (selectedFilter == LocalSearchFilter.ALL) {
                         if (matchedArtists.isNotEmpty()) {
                             item(key = "section:artists") {
-                                SearchSectionHeader(title = "Artists", count = matchedArtists.size)
+                                SearchSectionHeader(title = stringResource(R.string.artists), count = matchedArtists.size)
                             }
                             items(matchedArtists, key = { "artist:${it.name}" }) { artist ->
                                 LocalSearchResultRow(
@@ -742,7 +742,7 @@ fun LocalSearchScreen(
 
                         if (matchedAlbums.isNotEmpty()) {
                             item(key = "section:albums") {
-                                SearchSectionHeader(title = "Albums", count = matchedAlbums.size)
+                                SearchSectionHeader(title = stringResource(R.string.albums), count = matchedAlbums.size)
                             }
                             items(matchedAlbums, key = { "album:${it.title}:${it.artist}" }) { album ->
                                 LocalSearchResultRow(
@@ -776,7 +776,7 @@ fun LocalSearchScreen(
 
                         if (matchedTracks.isNotEmpty()) {
                             item(key = "section:songs") {
-                                SearchSectionHeader(title = "Songs", count = matchedTracks.size)
+                                SearchSectionHeader(title = stringResource(R.string.songs), count = matchedTracks.size)
                             }
                             items(matchedTracks, key = { "song:${it.song.videoId}" }) { track ->
                                 LocalSearchResultRow(
@@ -813,7 +813,7 @@ fun LocalSearchScreen(
 
                         if (matchedFolders.isNotEmpty()) {
                             item(key = "section:folders") {
-                                SearchSectionHeader(title = "Folders", count = matchedFolders.size)
+                                SearchSectionHeader(title = stringResource(R.string.folders), count = matchedFolders.size)
                             }
                             items(matchedFolders, key = { "folder:${it.path}" }) { folder ->
                                 LocalSearchResultRow(

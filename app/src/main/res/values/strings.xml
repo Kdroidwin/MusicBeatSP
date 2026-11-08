@@ -2058,4 +2058,19 @@
     <string name="service_copy">Copy</string>
     <string name="service_unavailable">Unavailable</string>
     <string name="service_open_app">Open app</string>
+
+    <!-- Local search labels -->
+    <string name="search_filter_all">All</string>
+    <string name="search_filter_songs">Songs</string>
+    <string name="search_filter_albums">Albums</string>
+    <string name="search_filter_artists">Artists</string>
+    <string name="search_filter_folders">Folders</string>
+    <string name="search_clear_all">Clear all</string>
+    <string name="search_offline_music_title">Search offline music</string>
+    <string name="search_offline_music_hint">Type a title, artist, album, or folder name</string>
+    <string name="search_music_placeholder">Search songs, albums, artists…</string>
+    <string name="search_youtube_music_title">Search YouTube Music</string>
+    <string name="search_youtube_music_hint">Type a song, artist, album, or playlist</string>
+    <string name="search_clear_search">Clear search</string>
+    <string name="search_no_results">No results found for "%1$s"</string>
 </resources>

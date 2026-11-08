@@ -637,4 +637,22 @@
         <item>Songtexte nehmen Form an</item>
         <item>Fast gefunden</item>
     </string-array>
+
+    <!-- Local search labels -->
+    <string name="search_filter_all">Alle</string>
+    <string name="search_filter_songs">Titel</string>
+    <string name="search_filter_albums">Alben</string>
+    <string name="search_filter_artists">Künstler</string>
+    <string name="search_filter_folders">Ordner</string>
+    <string name="search_clear_all">Alle löschen</string>
+    <string name="search_offline_music_title">Offline-Musik durchsuchen</string>
+    <string name="search_offline_music_hint">Titel, Interpret, Album oder Ordner eingeben</string>
+    <string name="search_music_placeholder">Titel, Alben und Künstler suchen…</string>
+    <string name="search_youtube_music_title">YouTube Music durchsuchen</string>
+    <string name="search_youtube_music_hint">Song, Interpret, Album oder Playlist eingeben</string>
+    <string name="search_clear_search">Suche löschen</string>
+    <string name="search_no_results">Keine Ergebnisse für "%1$s"</string>
+    <string name="search_this_device">Dieses Gerät</string>
+    <string name="search_youtube_music">YouTube Music</string>
+    <string name="search_music_servers">Musikserver</string>
 </resources>

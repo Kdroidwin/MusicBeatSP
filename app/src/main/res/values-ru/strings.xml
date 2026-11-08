@@ -659,4 +659,22 @@
         <item>Текст почти готов</item>
         <item>Слова почти найдены</item>
     </string-array>
+
+    <!-- Local search labels -->
+    <string name="search_filter_all">Все</string>
+    <string name="search_filter_songs">Песни</string>
+    <string name="search_filter_albums">Альбомы</string>
+    <string name="search_filter_artists">Исполнители</string>
+    <string name="search_filter_folders">Папки</string>
+    <string name="search_clear_all">Очистить всё</string>
+    <string name="search_offline_music_title">Поиск офлайн-музыки</string>
+    <string name="search_offline_music_hint">Введите название, исполнителя, альбом или папку</string>
+    <string name="search_music_placeholder">Поиск песен, альбомов и исполнителей…</string>
+    <string name="search_youtube_music_title">Поиск в YouTube Music</string>
+    <string name="search_youtube_music_hint">Введите песню, исполнителя, альбом или плейлист</string>
+    <string name="search_clear_search">Очистить поиск</string>
+    <string name="search_no_results">По запросу "%1$s" ничего не найдено</string>
+    <string name="search_this_device">Это устройство</string>
+    <string name="search_youtube_music">YouTube Music</string>
+    <string name="search_music_servers">Музыкальные серверы</string>
 </resources>

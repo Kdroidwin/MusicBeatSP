@@ -641,4 +641,22 @@
         <item>כמעט מצאתי את המילים</item>
     </string-array>
     <string name="hebrew">עברית</string>
+
+    <!-- Local search labels -->
+    <string name="search_filter_all">הכול</string>
+    <string name="search_filter_songs">שירים</string>
+    <string name="search_filter_albums">אלבומים</string>
+    <string name="search_filter_artists">אמנים</string>
+    <string name="search_filter_folders">תיקיות</string>
+    <string name="search_clear_all">נקה הכול</string>
+    <string name="search_offline_music_title">חיפוש במוזיקה לא מקוונת</string>
+    <string name="search_offline_music_hint">הזינו שם של שיר, אמן, אלבום או תיקייה</string>
+    <string name="search_music_placeholder">חיפוש שירים, אלבומים ואמנים…</string>
+    <string name="search_youtube_music_title">חיפוש ב-YouTube Music</string>
+    <string name="search_youtube_music_hint">הזינו שם של שיר, אמן, אלבום או פלייליסט</string>
+    <string name="search_clear_search">נקה את החיפוש</string>
+    <string name="search_no_results">לא נמצאו תוצאות עבור "%1$s"</string>
+    <string name="search_this_device">המכשיר הזה</string>
+    <string name="search_youtube_music">YouTube Music</string>
+    <string name="search_music_servers">שרתי מוזיקה</string>
 </resources>

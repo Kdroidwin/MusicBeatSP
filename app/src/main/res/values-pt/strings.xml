@@ -641,4 +641,22 @@
         <item>As letras estão se formando</item>
         <item>Quase encontrei as palavras</item>
     </string-array>
+
+    <!-- Local search labels -->
+    <string name="search_filter_all">Tudo</string>
+    <string name="search_filter_songs">Músicas</string>
+    <string name="search_filter_albums">Álbuns</string>
+    <string name="search_filter_artists">Artistas</string>
+    <string name="search_filter_folders">Pastas</string>
+    <string name="search_clear_all">Limpar tudo</string>
+    <string name="search_offline_music_title">Pesquisar música offline</string>
+    <string name="search_offline_music_hint">Digite um título, artista, álbum ou pasta</string>
+    <string name="search_music_placeholder">Pesquisar músicas, álbuns e artistas…</string>
+    <string name="search_youtube_music_title">Pesquisar no YouTube Music</string>
+    <string name="search_youtube_music_hint">Digite uma música, artista, álbum ou playlist</string>
+    <string name="search_clear_search">Limpar pesquisa</string>
+    <string name="search_no_results">Nenhum resultado para "%1$s"</string>
+    <string name="search_this_device">Este dispositivo</string>
+    <string name="search_youtube_music">YouTube Music</string>
+    <string name="search_music_servers">Servidores de música</string>
 </resources>

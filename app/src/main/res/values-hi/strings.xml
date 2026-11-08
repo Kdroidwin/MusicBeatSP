@@ -637,4 +637,22 @@
         <item>लिरिक्स जुड़ रहे हैं</item>
         <item>शब्द लगभग मिल गए</item>
     </string-array>
+
+    <!-- Local search labels -->
+    <string name="search_filter_all">सभी</string>
+    <string name="search_filter_songs">गाने</string>
+    <string name="search_filter_albums">एल्बम</string>
+    <string name="search_filter_artists">कलाकार</string>
+    <string name="search_filter_folders">फ़ोल्डर</string>
+    <string name="search_clear_all">सभी हटाएँ</string>
+    <string name="search_offline_music_title">ऑफ़लाइन संगीत खोजें</string>
+    <string name="search_offline_music_hint">शीर्षक, कलाकार, एल्बम या फ़ोल्डर का नाम लिखें</string>
+    <string name="search_music_placeholder">गाने, एल्बम और कलाकार खोजें…</string>
+    <string name="search_youtube_music_title">YouTube Music खोजें</string>
+    <string name="search_youtube_music_hint">गाना, कलाकार, एल्बम या प्लेलिस्ट लिखें</string>
+    <string name="search_clear_search">खोज मिटाएँ</string>
+    <string name="search_no_results">"%1$s" के लिए कोई परिणाम नहीं मिला</string>
+    <string name="search_this_device">यह डिवाइस</string>
+    <string name="search_youtube_music">YouTube Music</string>
+    <string name="search_music_servers">संगीत सर्वर</string>
 </resources>

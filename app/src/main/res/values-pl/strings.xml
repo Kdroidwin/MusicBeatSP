@@ -669,4 +669,22 @@
     <string name="grid_view">Siatka</string>
     <string name="list_view">Lista</string>
     <string name="switch_to_list_view">Przełącz na widok listy</string>
+
+    <!-- Local search labels -->
+    <string name="search_filter_all">Wszystko</string>
+    <string name="search_filter_songs">Utwory</string>
+    <string name="search_filter_albums">Albumy</string>
+    <string name="search_filter_artists">Wykonawcy</string>
+    <string name="search_filter_folders">Foldery</string>
+    <string name="search_clear_all">Wyczyść wszystko</string>
+    <string name="search_offline_music_title">Szukaj muzyki offline</string>
+    <string name="search_offline_music_hint">Wpisz tytuł, wykonawcę, album lub folder</string>
+    <string name="search_music_placeholder">Szukaj utworów, albumów i wykonawców…</string>
+    <string name="search_youtube_music_title">Szukaj w YouTube Music</string>
+    <string name="search_youtube_music_hint">Wpisz utwór, wykonawcę, album lub playlistę</string>
+    <string name="search_clear_search">Wyczyść wyszukiwanie</string>
+    <string name="search_no_results">Brak wyników dla "%1$s"</string>
+    <string name="search_this_device">To urządzenie</string>
+    <string name="search_youtube_music">YouTube Music</string>
+    <string name="search_music_servers">Serwery muzyczne</string>
 </resources>

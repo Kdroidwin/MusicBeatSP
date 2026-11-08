@@ -675,4 +675,22 @@
     <string name="use_this_profile">Bu profili kullan</string>
     <string name="switch_profile_hint">Avatarı kullanarak değiştir, sonra bu profili kullan.</string>
     <string name="profile_unavailable">Bu sayfada henüz giriş yapılmış bir profil yok.</string>
+
+    <!-- Local search labels -->
+    <string name="search_filter_all">Tümü</string>
+    <string name="search_filter_songs">Şarkılar</string>
+    <string name="search_filter_albums">Albümler</string>
+    <string name="search_filter_artists">Sanatçılar</string>
+    <string name="search_filter_folders">Klasörler</string>
+    <string name="search_clear_all">Tümünü temizle</string>
+    <string name="search_offline_music_title">Çevrimdışı müzik ara</string>
+    <string name="search_offline_music_hint">Başlık, sanatçı, albüm veya klasör adı yazın</string>
+    <string name="search_music_placeholder">Şarkı, albüm ve sanatçı ara…</string>
+    <string name="search_youtube_music_title">YouTube Music’te ara</string>
+    <string name="search_youtube_music_hint">Şarkı, sanatçı, albüm veya çalma listesi yazın</string>
+    <string name="search_clear_search">Aramayı temizle</string>
+    <string name="search_no_results">"%1$s" için sonuç bulunamadı</string>
+    <string name="search_this_device">Bu cihaz</string>
+    <string name="search_youtube_music">YouTube Music</string>
+    <string name="search_music_servers">Müzik sunucuları</string>
 </resources>

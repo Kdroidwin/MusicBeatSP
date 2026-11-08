@@ -2031,4 +2031,19 @@
     <string name="service_copy">コピー</string>
     <string name="service_unavailable">利用できません</string>
     <string name="service_open_app">アプリを開く</string>
+
+    <!-- Local search labels -->
+    <string name="search_filter_all">すべて</string>
+    <string name="search_filter_songs">曲</string>
+    <string name="search_filter_albums">アルバム</string>
+    <string name="search_filter_artists">アーティスト</string>
+    <string name="search_filter_folders">フォルダー</string>
+    <string name="search_clear_all">すべて消去</string>
+    <string name="search_offline_music_title">端末内の音楽を検索</string>
+    <string name="search_offline_music_hint">曲名、アーティスト名、アルバム名、フォルダー名を入力</string>
+    <string name="search_music_placeholder">曲・アルバム・アーティストを検索…</string>
+    <string name="search_youtube_music_title">YouTube Musicを検索</string>
+    <string name="search_youtube_music_hint">曲名、アーティスト名、アルバム名、プレイリスト名を入力</string>
+    <string name="search_clear_search">検索を消去</string>
+    <string name="search_no_results">「%1$s」の検索結果はありません</string>
 </resources>

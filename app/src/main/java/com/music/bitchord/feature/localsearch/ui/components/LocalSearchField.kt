@@ -32,8 +32,10 @@ import androidx.compose.ui.focus.focusRequester
 import androidx.compose.ui.graphics.SolidColor
 import androidx.compose.ui.platform.LocalFocusManager
 import androidx.compose.ui.platform.LocalSoftwareKeyboardController
+import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.input.ImeAction
 import androidx.compose.ui.unit.dp
+import com.music.bitchord.R
 
 @Composable
 fun LocalSearchField(
@@ -41,13 +43,14 @@ fun LocalSearchField(
     onQueryChange: (String) -> Unit,
     onSearch: () -> Unit,
     modifier: Modifier = Modifier,
-    placeholder: String = "Search songs, albums, artists...",
+    placeholder: String? = null,
     autoFocus: Boolean = false,
     focusTrigger: Int = 0,
 ) {
     val focusRequester = remember { FocusRequester() }
     val focusManager = LocalFocusManager.current
     val keyboardController = LocalSoftwareKeyboardController.current
+    val displayedPlaceholder = placeholder ?: stringResource(R.string.search_music_placeholder)
 
     LaunchedEffect(autoFocus) {
         if (autoFocus) {
@@ -89,7 +92,7 @@ fun LocalSearchField(
         ) {
             if (query.isEmpty()) {
                 Text(
-                    text = placeholder,
+                    text = displayedPlaceholder,
                     style = MaterialTheme.typography.bodyLarge,
                     color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.7f),
                 )
@@ -124,7 +127,7 @@ fun LocalSearchField(
             ) {
                 Icon(
                     imageVector = Icons.Rounded.Close,
-                    contentDescription = "Clear search",
+                    contentDescription = stringResource(R.string.search_clear_search),
                     tint = MaterialTheme.colorScheme.onSurfaceVariant,
                     modifier = Modifier.size(18.dp),
                 )

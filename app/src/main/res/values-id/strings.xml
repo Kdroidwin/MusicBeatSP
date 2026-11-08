@@ -619,4 +619,22 @@
         <item>Lirik mulai tersusun</item>
         <item>Hampir menemukan kata-katanya</item>
     </string-array>
+
+    <!-- Local search labels -->
+    <string name="search_filter_all">Semua</string>
+    <string name="search_filter_songs">Lagu</string>
+    <string name="search_filter_albums">Album</string>
+    <string name="search_filter_artists">Artis</string>
+    <string name="search_filter_folders">Folder</string>
+    <string name="search_clear_all">Hapus semua</string>
+    <string name="search_offline_music_title">Cari musik offline</string>
+    <string name="search_offline_music_hint">Masukkan judul, artis, album, atau nama folder</string>
+    <string name="search_music_placeholder">Cari lagu, album, dan artis…</string>
+    <string name="search_youtube_music_title">Cari di YouTube Music</string>
+    <string name="search_youtube_music_hint">Masukkan lagu, artis, album, atau playlist</string>
+    <string name="search_clear_search">Hapus pencarian</string>
+    <string name="search_no_results">Tidak ada hasil untuk "%1$s"</string>
+    <string name="search_this_device">Perangkat ini</string>
+    <string name="search_youtube_music">YouTube Music</string>
+    <string name="search_music_servers">Server musik</string>
 </resources>
