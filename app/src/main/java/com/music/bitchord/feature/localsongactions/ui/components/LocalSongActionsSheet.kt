@@ -107,9 +107,11 @@ fun LocalSongActionsSheet(
     val artworkPalette = rememberArtworkPalette(song.thumbnailUrl, dark = true, artPx = CARD_ART_PX)
     val frostedPlayerDetails by AppSettings.frostedPlayerDetails.collectAsStateWithLifecycle()
     val playerPopupsUseArtworkColor by AppSettings.playerPopupsUseArtworkColor.collectAsStateWithLifecycle()
+    val hidePlayerPopupHandles by AppSettings.hidePlayerPopupHandles.collectAsStateWithLifecycle()
     val useArtworkBackdrop = frostedPlayerDetails && (showPlayerActions || song.localUri != null) &&
         (!showPlayerActions || playerPopupsUseArtworkColor)
     val embedDragHandle = showPlayerActions || useArtworkBackdrop
+    val hideEmbeddedDragHandle = showPlayerActions && hidePlayerPopupHandles
     var pickingSleepTimer by remember { mutableStateOf(false) }
     val hiddenActions by AppSettings.hiddenPlayerDetailsActions.collectAsStateWithLifecycle()
     val savedDownloads by Downloads.saved.collectAsStateWithLifecycle()
@@ -190,7 +192,7 @@ fun LocalSongActionsSheet(
                 LocalContentColor provides if (useArtworkBackdrop) artworkPalette.onBackground
                 else MaterialTheme.colorScheme.onSurface,
             ) {
-                if (embedDragHandle) {
+                if (embedDragHandle && !hideEmbeddedDragHandle) {
                     Box(
                         Modifier
                             .align(androidx.compose.ui.Alignment.TopCenter)
@@ -212,7 +214,9 @@ fun LocalSongActionsSheet(
                 }
                 AnimatedContent(
                     targetState = pickingSleepTimer,
-                    modifier = Modifier.padding(top = if (embedDragHandle) 56.dp else 0.dp),
+                    modifier = Modifier.padding(
+                        top = if (embedDragHandle && !hideEmbeddedDragHandle) 56.dp else 0.dp,
+                    ),
                     transitionSpec = { fadeIn() togetherWith fadeOut() },
                     label = "SheetContentTransition",
                 ) { inSleepTimerPicker ->
@@ -233,7 +237,12 @@ fun LocalSongActionsSheet(
                             LocalSongActionsHeader(song = song)
 
                             HorizontalDivider(
-                                modifier = Modifier.padding(horizontal = 20.dp, vertical = 8.dp),
+                                modifier = Modifier.padding(
+                                    start = 20.dp,
+                                    top = if (showPlayerActions) 16.dp else 8.dp,
+                                    end = 20.dp,
+                                    bottom = 8.dp,
+                                ),
                                 thickness = 0.5.dp,
                                 color = if (useArtworkBackdrop) {
                                     artworkPalette.divider.copy(alpha = 0.7f)
