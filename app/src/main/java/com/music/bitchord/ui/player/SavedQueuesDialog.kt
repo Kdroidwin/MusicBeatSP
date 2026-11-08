@@ -159,7 +159,7 @@ private fun LegacySavedQueuesDialog(
         containerColor = if (useFrostedGlass) Color.Transparent else container,
         dragHandle = null,
         contentWindowInsets = { WindowInsets(0, 0, 0, 0) },
-        modifier = Modifier.offset(y = 24.dp),
+        modifier = Modifier.offset(y = 48.dp),
     ) {
         PlayerPopupSystemBars(true)
         Box(Modifier.fillMaxWidth().clip(sheetShape)) {
@@ -352,7 +352,7 @@ private fun ModernSavedQueuesDialog(
         containerColor = if (useFrostedGlass) Color.Transparent else container,
         dragHandle = null,
         contentWindowInsets = { WindowInsets(0, 0, 0, 0) },
-        modifier = Modifier.offset(y = 24.dp),
+        modifier = Modifier.offset(y = 48.dp),
     ) {
         PlayerPopupSystemBars(true)
         Box(Modifier.fillMaxWidth().clip(sheetShape)) {
