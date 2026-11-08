@@ -23,6 +23,7 @@ import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.rounded.Close
 import androidx.compose.material.icons.rounded.OpenInNew
 import androidx.compose.material.icons.rounded.Pause
 import androidx.compose.material.icons.rounded.PlayArrow
@@ -79,7 +80,11 @@ import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 
 @Composable
-fun ServicesScreen(modifier: Modifier = Modifier, allowSpotify: Boolean = true) {
+fun ServicesScreen(
+    modifier: Modifier = Modifier,
+    allowSpotify: Boolean = true,
+    onDismiss: (() -> Unit)? = null,
+) {
     val context = LocalContext.current
     val scope = rememberCoroutineScope()
     val clipboard = LocalClipboardManager.current
@@ -172,7 +177,21 @@ fun ServicesScreen(modifier: Modifier = Modifier, allowSpotify: Boolean = true) 
         verticalArrangement = Arrangement.spacedBy(14.dp),
     ) {
         item {
-            Text(stringResource(R.string.services), style = MaterialTheme.typography.headlineSmall)
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                verticalAlignment = Alignment.CenterVertically,
+            ) {
+                Text(
+                    stringResource(R.string.services),
+                    style = MaterialTheme.typography.headlineSmall,
+                    modifier = Modifier.weight(1f),
+                )
+                onDismiss?.let { dismiss ->
+                    IconButton(onClick = dismiss) {
+                        Icon(Icons.Rounded.Close, contentDescription = stringResource(R.string.close))
+                    }
+                }
+            }
         }
         item {
             ExternalMediaCard(

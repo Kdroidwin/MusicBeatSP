@@ -387,7 +387,9 @@ object MainNavigationTabs {
         MainNavigationTab.entries.toSet() - setOf(MainNavigationTab.HOME, MainNavigationTab.GENRES, MainNavigationTab.SERVICES)
 
     fun normalizeOrder(order: List<MainNavigationTab>): List<MainNavigationTab> =
-        (order + MainNavigationTab.entries).distinct()
+        (order.filterNot { it == MainNavigationTab.SERVICES } + MainNavigationTab.entries.filterNot {
+            it == MainNavigationTab.SERVICES
+        }).distinct()
 
     fun move(
         order: List<MainNavigationTab>,
@@ -395,6 +397,7 @@ object MainNavigationTabs {
         offset: Int,
     ): List<MainNavigationTab> {
         val normalized = normalizeOrder(order).toMutableList()
+        if (tab == MainNavigationTab.SERVICES) return normalized
         val from = normalized.indexOf(tab)
         val to = (from + offset).coerceIn(0, normalized.lastIndex)
         if (from != to) normalized.add(to, normalized.removeAt(from))
@@ -780,7 +783,7 @@ object AppSettings {
 
     /** Main navigation destinations the user wants to keep in the bottom bar. */
     val visibleMainNavigationTabs = MutableStateFlow(MainNavigationTabs.defaultVisibleTabs())
-    val mainNavigationTabOrder = MutableStateFlow<List<MainNavigationTab>>(MainNavigationTab.entries)
+    val mainNavigationTabOrder = MutableStateFlow<List<MainNavigationTab>>(MainNavigationTabs.normalizeOrder(emptyList()))
     val startupTab = MutableStateFlow(MainNavigationTab.SONGS)
 
     /** System UI preferences; bars remain transiently revealable by swipe when hidden. */
@@ -2834,6 +2837,9 @@ object AppSettings {
 
     /** Keeps at least one destination available for navigation. */
     fun setMainNavigationTabVisible(tab: MainNavigationTab, visible: Boolean) {
+        // External-service setup is a contextual dialog, not a permanent
+        // destination in the main navigation.
+        if (tab == MainNavigationTab.SERVICES) return
         if (tab == MainNavigationTab.ALBUM_ARTISTS) {
             setLocalLibraryTabVisible(LocalLibraryTab.ALBUM_ARTISTS, visible)
             return
@@ -2853,9 +2859,9 @@ object AppSettings {
 
     fun effectiveMainNavigationTabs(): Set<MainNavigationTab> =
         if (LocalLibraryTab.ALBUM_ARTISTS in visibleLocalLibraryTabs.value) {
-            visibleMainNavigationTabs.value + MainNavigationTab.ALBUM_ARTISTS
+            (visibleMainNavigationTabs.value - MainNavigationTab.SERVICES) + MainNavigationTab.ALBUM_ARTISTS
         } else {
-            visibleMainNavigationTabs.value - MainNavigationTab.ALBUM_ARTISTS
+            visibleMainNavigationTabs.value - MainNavigationTab.ALBUM_ARTISTS - MainNavigationTab.SERVICES
         }
 
     fun moveMainNavigationTab(tab: MainNavigationTab, offset: Int) {

@@ -676,7 +676,7 @@ private fun navigationTabSettingsSearchEntries(
     localTabs: Set<LocalLibraryTab>,
     localTabOrder: List<LocalLibraryTab>,
 ): List<SettingsSearchEntry> {
-    val mainTabEntries = mainTabOrder.mapIndexed { index, tab ->
+    val mainTabEntries = mainTabOrder.filterNot { it == MainNavigationTab.SERVICES }.mapIndexed { index, tab ->
         val tabTitle = stringResource(when (tab) {
             MainNavigationTab.SONGS -> R.string.songs
             MainNavigationTab.ALBUMS -> R.string.albums
@@ -705,7 +705,7 @@ private fun navigationTabSettingsSearchEntries(
         }.apply {
             reorder = SettingsSearchReorder(
                 moveUpEnabled = index > 0,
-                moveDownEnabled = index < mainTabOrder.lastIndex,
+                moveDownEnabled = index < mainTabOrder.count { it != MainNavigationTab.SERVICES } - 1,
                 moveUp = { AppSettings.moveMainNavigationTab(tab, -1) },
                 moveDown = { AppSettings.moveMainNavigationTab(tab, 1) },
             )
@@ -1178,7 +1178,8 @@ fun SettingsScreen(
     val forceWhiteNavigationBar by AppSettings.forceWhiteNavigationBar.collectAsStateWithLifecycle()
     val playerInkColors by AppSettings.playerInkColors.collectAsStateWithLifecycle()
     val includeRemoteSourceMediaInLibrary by AppSettings.includeRemoteSourceMediaInLibrary.collectAsStateWithLifecycle()
-    val visibleMainTabs by AppSettings.visibleMainNavigationTabs.collectAsStateWithLifecycle()
+    val storedVisibleMainTabs by AppSettings.visibleMainNavigationTabs.collectAsStateWithLifecycle()
+    val visibleMainTabs = storedVisibleMainTabs - MainNavigationTab.SERVICES
     val mainTabOrder by AppSettings.mainNavigationTabOrder.collectAsStateWithLifecycle()
     val localTabs by AppSettings.visibleLocalLibraryTabs.collectAsStateWithLifecycle()
     val localTabOrder by AppSettings.localLibraryTabOrder.collectAsStateWithLifecycle()
@@ -3184,7 +3185,10 @@ fun SettingsScreen(
                         onCheckedChange = setExternalMediaControlWithPermission,
                     )
                 },
-                onClick = { setExternalMediaControlWithPermission(!externalMediaAccessActive) },
+                onClick = {
+                    if (externalMediaAccessActive) onOpenServices()
+                    else setExternalMediaControlWithPermission(true)
+                },
             )
             RowDivider()
             SettingsRow(
@@ -3197,7 +3201,10 @@ fun SettingsScreen(
                         onCheckedChange = setSpotifyIntegrationWithSetup,
                     )
                 },
-                onClick = { setSpotifyIntegrationWithSetup(!spotifyIntegrationEnabled) },
+                onClick = {
+                    if (spotifyIntegrationEnabled) onOpenServices()
+                    else setSpotifyIntegrationWithSetup(true)
+                },
             )
             RowDivider()
             SettingsRow(
@@ -6008,7 +6015,7 @@ fun SettingsScreen(
                 onClick = { showStartupTabPicker = true },
             )
             RowDivider()
-            mainTabOrder.forEachIndexed { index, tab ->
+            mainTabOrder.filterNot { it == MainNavigationTab.SERVICES }.forEachIndexed { index, tab ->
                 if (index > 0) RowDivider()
                 val titleRes = when (tab) {
                     MainNavigationTab.SONGS -> R.string.songs
@@ -6060,13 +6067,13 @@ fun SettingsScreen(
                                 )
                             }
                             IconButton(
-                                enabled = index < mainTabOrder.lastIndex,
+                                enabled = index < mainTabOrder.count { it != MainNavigationTab.SERVICES } - 1,
                                 onClick = { AppSettings.moveMainNavigationTab(tab, 1) },
                             ) {
                                 Icon(
                                     Icons.Rounded.ArrowDownward,
                                     stringResource(R.string.move_down),
-                                    tint = if (index < mainTabOrder.lastIndex) MaterialTheme.colorScheme.onSurfaceVariant else MaterialTheme.colorScheme.outlineVariant,
+                                    tint = if (index < mainTabOrder.count { it != MainNavigationTab.SERVICES } - 1) MaterialTheme.colorScheme.onSurfaceVariant else MaterialTheme.colorScheme.outlineVariant,
                                 )
                             }
                             Switch(
@@ -7035,7 +7042,7 @@ fun SettingsScreen(
                 title = { Text(stringResource(R.string.startup_tab)) },
                 text = {
                     Column {
-                        mainTabOrder.filter {
+                        mainTabOrder.filterNot { it == MainNavigationTab.SERVICES }.filter {
                             it in visibleMainTabs || (
                                 it == MainNavigationTab.ALBUM_ARTISTS &&
                                     com.music.bitchord.data.settings.LocalLibraryTab.ALBUM_ARTISTS in localTabs

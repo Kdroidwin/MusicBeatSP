@@ -685,7 +685,6 @@ private fun BitChordApp(
     }
     val visibleMainNavigationTabs by AppSettings.visibleMainNavigationTabs.collectAsStateWithLifecycle()
     val offlineMode by AppSettings.offlineMode.collectAsStateWithLifecycle()
-    val spotifyIntegrationEnabled by AppSettings.spotifyIntegrationEnabled.collectAsStateWithLifecycle()
     val youtubeMusicEnabled by AppSettings.youtubeMusicEnabled.collectAsStateWithLifecycle()
     val radioAvailable = !offlineMode && !context.packageName.endsWith(".nointernet")
     val homeAvailable = !offlineMode && youtubeMusicEnabled && !context.packageName.endsWith(".nointernet")
@@ -699,9 +698,6 @@ private fun BitChordApp(
         visibleLocalLibraryTabs,
         radioAvailable,
         homeAvailable,
-        spotifyIntegrationEnabled,
-        externalMediaControlEnabled,
-        selectedTab,
     ) {
         val tabs = if (com.music.bitchord.data.settings.LocalLibraryTab.ALBUM_ARTISTS in visibleLocalLibraryTabs) {
             visibleMainNavigationTabs + MainNavigationTab.ALBUM_ARTISTS
@@ -710,12 +706,7 @@ private fun BitChordApp(
         }
         val withRadio = if (radioAvailable) tabs else tabs - MainNavigationTab.RADIO
         val withHome = if (homeAvailable) withRadio else withRadio - MainNavigationTab.HOME
-        val servicesAvailable = externalMediaControlEnabled || (spotifyIntegrationEnabled && radioAvailable)
-        if (servicesAvailable || MainNavigationTab.SERVICES in tabs || selectedTab == TAB_SERVICES) {
-            withHome + MainNavigationTab.SERVICES
-        } else {
-            withHome - MainNavigationTab.SERVICES
-        }
+        withHome - MainNavigationTab.SERVICES
     }
     val visibleTabIndices = remember(effectiveVisibleMainTabs, mainNavigationTabOrder) {
         mainNavigationTabOrder
@@ -847,6 +838,7 @@ private fun BitChordApp(
     }
 
     var showSettings by remember { mutableStateOf(false) }
+    var showServicesSetup by remember { mutableStateOf(false) }
     var externalZipSelection by remember { mutableStateOf<ExternalZipSelection?>(null) }
     var openingExternalZipTrack by remember { mutableStateOf(false) }
     var showWearOs by rememberSaveable { mutableStateOf(false) }
@@ -2830,8 +2822,7 @@ private fun BitChordApp(
                             },
                             onOpenServices = {
                                 showSettings = false
-                                selectedTab = TAB_SERVICES
-                                viewModel.clearDetail()
+                                showServicesSetup = true
                             },
                             onLyricsSources = { showLyricsSources = true },
                             onAppLanguage = { showAppLanguage = true },
@@ -3562,10 +3553,7 @@ private fun BitChordApp(
                                 onCollectionNavigationChanged = onCollectionNavigationChanged,
                             )
                         }
-                        TAB_SERVICES -> ServicesScreen(
-                            modifier = Modifier.fillMaxSize().padding(listPadding),
-                            allowSpotify = !offlineMode && !context.packageName.endsWith(".nointernet"),
-                        )
+                        TAB_SERVICES -> Box(modifier = Modifier.fillMaxSize())
                         else -> Box(modifier = Modifier.fillMaxSize())
                     }
                 }
@@ -4484,6 +4472,28 @@ private fun BitChordApp(
                             }
                             viewModel.loadLocalMusic()
                         },
+                    )
+                }
+            }
+        }
+
+        if (showServicesSetup) {
+            Dialog(
+                onDismissRequest = { showServicesSetup = false },
+                properties = DialogProperties(usePlatformDefaultWidth = false),
+            ) {
+                Surface(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .fillMaxHeight(0.92f)
+                        .padding(horizontal = 16.dp, vertical = 20.dp),
+                    shape = RoundedCornerShape(24.dp),
+                    color = MaterialTheme.colorScheme.background,
+                ) {
+                    ServicesScreen(
+                        modifier = Modifier.fillMaxSize(),
+                        allowSpotify = !offlineMode && !context.packageName.endsWith(".nointernet"),
+                        onDismiss = { showServicesSetup = false },
                     )
                 }
             }
