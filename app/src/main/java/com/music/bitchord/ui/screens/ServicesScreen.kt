@@ -176,7 +176,7 @@ fun ServicesScreen(modifier: Modifier = Modifier, allowSpotify: Boolean = true) 
         }
         item {
             ExternalMediaCard(
-                enabled = externalEnabled,
+                enabled = externalEnabled && ExternalMedia.permitted,
                 onToggle = AppSettings::setExternalMediaControlEnabled,
                 onEnable = {
                     if (ExternalMedia.permitted) AppSettings.setExternalMediaControlEnabled(true)

@@ -685,6 +685,7 @@ private fun BitChordApp(
     }
     val visibleMainNavigationTabs by AppSettings.visibleMainNavigationTabs.collectAsStateWithLifecycle()
     val offlineMode by AppSettings.offlineMode.collectAsStateWithLifecycle()
+    val spotifyIntegrationEnabled by AppSettings.spotifyIntegrationEnabled.collectAsStateWithLifecycle()
     val youtubeMusicEnabled by AppSettings.youtubeMusicEnabled.collectAsStateWithLifecycle()
     val radioAvailable = !offlineMode && !context.packageName.endsWith(".nointernet")
     val homeAvailable = !offlineMode && youtubeMusicEnabled && !context.packageName.endsWith(".nointernet")
@@ -693,14 +694,28 @@ private fun BitChordApp(
     val rememberLastOpenedFolder by AppSettings.rememberLastOpenedFolder.collectAsStateWithLifecycle()
     val lastOpenedFolderPath by AppSettings.lastOpenedFolderPath.collectAsStateWithLifecycle()
     val mainNavigationTabOrder by AppSettings.mainNavigationTabOrder.collectAsStateWithLifecycle()
-    val effectiveVisibleMainTabs = remember(visibleMainNavigationTabs, visibleLocalLibraryTabs, radioAvailable, homeAvailable) {
+    val effectiveVisibleMainTabs = remember(
+        visibleMainNavigationTabs,
+        visibleLocalLibraryTabs,
+        radioAvailable,
+        homeAvailable,
+        spotifyIntegrationEnabled,
+        externalMediaControlEnabled,
+        selectedTab,
+    ) {
         val tabs = if (com.music.bitchord.data.settings.LocalLibraryTab.ALBUM_ARTISTS in visibleLocalLibraryTabs) {
             visibleMainNavigationTabs + MainNavigationTab.ALBUM_ARTISTS
         } else {
             visibleMainNavigationTabs - MainNavigationTab.ALBUM_ARTISTS
         }
         val withRadio = if (radioAvailable) tabs else tabs - MainNavigationTab.RADIO
-        if (homeAvailable) withRadio else withRadio - MainNavigationTab.HOME
+        val withHome = if (homeAvailable) withRadio else withRadio - MainNavigationTab.HOME
+        val servicesAvailable = externalMediaControlEnabled || (spotifyIntegrationEnabled && radioAvailable)
+        if (servicesAvailable || MainNavigationTab.SERVICES in tabs || selectedTab == TAB_SERVICES) {
+            withHome + MainNavigationTab.SERVICES
+        } else {
+            withHome - MainNavigationTab.SERVICES
+        }
     }
     val visibleTabIndices = remember(effectiveVisibleMainTabs, mainNavigationTabOrder) {
         mainNavigationTabOrder
@@ -2812,6 +2827,11 @@ private fun BitChordApp(
                             onOpenReplay = {
                                 showSettings = false
                                 showReplay = true
+                            },
+                            onOpenServices = {
+                                showSettings = false
+                                selectedTab = TAB_SERVICES
+                                viewModel.clearDetail()
                             },
                             onLyricsSources = { showLyricsSources = true },
                             onAppLanguage = { showAppLanguage = true },

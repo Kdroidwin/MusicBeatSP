@@ -210,6 +210,7 @@ import com.music.bitchord.data.settings.ThemeMode
 import com.music.bitchord.playback.audio.bitperfect.BitPerfectOutput
 import com.music.bitchord.data.settings.PillMotionStyle
 import com.music.bitchord.data.stats.Backup
+import com.music.bitchord.external.ExternalMedia
 import com.music.bitchord.feature.localmusic.data.LocalPlaylistStore
 import com.music.bitchord.ui.components.PlaylistOrderDialog
 import com.music.bitchord.feature.localmusic.data.M3uImportException
@@ -1049,6 +1050,7 @@ fun SettingsScreen(
     /** The window's width, for the gates that depend on it. */
     windowWidth: Dp,
     onOpenReplay: () -> Unit,
+    onOpenServices: () -> Unit,
     onLyricsSources: () -> Unit,
     onAppLanguage: () -> Unit,
     onPreloadArtworkNow: () -> Unit,
@@ -1092,6 +1094,52 @@ fun SettingsScreen(
                 Toast.makeText(context, R.string.popup_overlay_access_not_granted, Toast.LENGTH_SHORT).show()
             }
         }
+    }
+    var pendingExternalMediaEnable by rememberSaveable { mutableStateOf(false) }
+    val externalMediaPermissionLauncher = rememberLauncherForActivityResult(
+        ActivityResultContracts.StartActivityForResult(),
+    ) {
+        ExternalMedia.setEnabled(context, AppSettings.externalMediaControlEnabled.value)
+        if (pendingExternalMediaEnable) {
+            if (ExternalMedia.permitted) {
+                AppSettings.setExternalMediaControlEnabled(true)
+                onOpenServices()
+            } else {
+                AppSettings.setExternalMediaControlEnabled(false)
+                Toast.makeText(context, R.string.notification_access_required, Toast.LENGTH_LONG).show()
+            }
+            pendingExternalMediaEnable = false
+        }
+    }
+    val setExternalMediaControlWithPermission: (Boolean) -> Unit = { enabled ->
+        if (!enabled) {
+            pendingExternalMediaEnable = false
+            AppSettings.setExternalMediaControlEnabled(false)
+        } else {
+            ExternalMedia.setEnabled(context, AppSettings.externalMediaControlEnabled.value)
+            if (ExternalMedia.permitted) {
+                AppSettings.setExternalMediaControlEnabled(true)
+                onOpenServices()
+            } else {
+                pendingExternalMediaEnable = true
+                var launched = false
+                for (intent in ExternalMedia.permissionSettingsIntents(context)) {
+                    if (runCatching { externalMediaPermissionLauncher.launch(intent) }.isSuccess) {
+                        launched = true
+                        break
+                    }
+                }
+                if (!launched) {
+                    pendingExternalMediaEnable = false
+                    AppSettings.setExternalMediaControlEnabled(false)
+                    Toast.makeText(context, R.string.notification_access_open_failed, Toast.LENGTH_LONG).show()
+                }
+            }
+        }
+    }
+    val setSpotifyIntegrationWithSetup: (Boolean) -> Unit = { enabled ->
+        AppSettings.setSpotifyIntegrationEnabled(enabled)
+        if (enabled) onOpenServices()
     }
 
     val skipSilence by AppSettings.skipSilence.collectAsStateWithLifecycle()
@@ -1174,6 +1222,7 @@ fun SettingsScreen(
     val hidePlayerQuickActionCircles by AppSettings.hidePlayerQuickActionCircles.collectAsStateWithLifecycle()
     val hidePlayerControlHighlightCircles by AppSettings.hidePlayerControlHighlightCircles.collectAsStateWithLifecycle()
     val externalMediaControlEnabled by AppSettings.externalMediaControlEnabled.collectAsStateWithLifecycle()
+    val externalMediaAccessActive = externalMediaControlEnabled && ExternalMedia.permitted
     val spotifyIntegrationEnabled by AppSettings.spotifyIntegrationEnabled.collectAsStateWithLifecycle()
     val hiddenPlayerDetailsActions by AppSettings.hiddenPlayerDetailsActions.collectAsStateWithLifecycle()
     val audioCutterEnabled by AppSettings.audioCutterEnabled.collectAsStateWithLifecycle()
@@ -2049,14 +2098,14 @@ fun SettingsScreen(
             stringResource(R.string.external_media_control),
             stringResource(R.string.external_media_control_subtitle),
             listOf("notification access", "external player", "other app", "通知アクセス", "他のアプリ", "外部再生"),
-            externalMediaControlEnabled,
-        ) { AppSettings.setExternalMediaControlEnabled(!externalMediaControlEnabled) },
+            externalMediaAccessActive,
+        ) { setExternalMediaControlWithPermission(!externalMediaAccessActive) },
         SettingsSearchEntry(
             stringResource(R.string.spotify_integration),
             stringResource(R.string.spotify_integration_subtitle),
             listOf("Spotify", "Premium", "Developer Dashboard", "Spotify ライブラリ", "公式アプリ"),
             spotifyIntegrationEnabled,
-        ) { AppSettings.setSpotifyIntegrationEnabled(!spotifyIntegrationEnabled) },
+        ) { setSpotifyIntegrationWithSetup(!spotifyIntegrationEnabled) },
         SettingsSearchEntry(
             stringResource(R.string.show_nerd_stats),
             stringResource(R.string.show_nerd_stats_subtitle),
@@ -3131,11 +3180,11 @@ fun SettingsScreen(
                 subtitle = stringResource(R.string.external_media_control_subtitle),
                 trailing = {
                     Switch(
-                        checked = externalMediaControlEnabled,
-                        onCheckedChange = AppSettings::setExternalMediaControlEnabled,
+                        checked = externalMediaAccessActive,
+                        onCheckedChange = setExternalMediaControlWithPermission,
                     )
                 },
-                onClick = { AppSettings.setExternalMediaControlEnabled(!externalMediaControlEnabled) },
+                onClick = { setExternalMediaControlWithPermission(!externalMediaAccessActive) },
             )
             RowDivider()
             SettingsRow(
@@ -3145,10 +3194,10 @@ fun SettingsScreen(
                 trailing = {
                     Switch(
                         checked = spotifyIntegrationEnabled,
-                        onCheckedChange = AppSettings::setSpotifyIntegrationEnabled,
+                        onCheckedChange = setSpotifyIntegrationWithSetup,
                     )
                 },
-                onClick = { AppSettings.setSpotifyIntegrationEnabled(!spotifyIntegrationEnabled) },
+                onClick = { setSpotifyIntegrationWithSetup(!spotifyIntegrationEnabled) },
             )
             RowDivider()
             SettingsRow(

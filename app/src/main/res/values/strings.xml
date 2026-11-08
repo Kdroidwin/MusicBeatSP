@@ -2017,8 +2017,8 @@
     <string name="notification_access_open_failed">Could not open Android Notification access settings.</string>
     <string name="no_external_media_session">No active media session from another app.</string>
     <string name="spotify_integration">Spotify library</string>
-    <string name="spotify_integration_subtitle">Search Spotify and play tracks through the official Spotify app. Off by default.</string>
-    <string name="spotify_integration_description">Connect your Spotify account with Spotify’s authorization screen, browse saved tracks, and play search results in the official Spotify app. Create a Spotify Developer app and enter its Client ID below.</string>
+    <string name="spotify_integration_subtitle">Search Spotify and play tracks through the official Spotify app. Playback requires Spotify Premium. Off by default.</string>
+    <string name="spotify_integration_description">Connect your Spotify account with Spotify’s authorization screen, browse saved tracks, and play search results in the official Spotify app. Official-app playback requires Spotify Premium. Create a Spotify Developer app and enter its Client ID below.</string>
     <string name="spotify_dashboard_setup">Developer Dashboard setup</string>
     <string name="spotify_dashboard_setup_description">This setup stays visible while Spotify is off. Create an app in Spotify Developer Dashboard, register the package name and redirect URI shown here, then enter its Client ID. Tap Connect Spotify to authorize your account. No client secret is used.</string>
     <string name="spotify_dashboard_open">Open Developer Dashboard</string>
