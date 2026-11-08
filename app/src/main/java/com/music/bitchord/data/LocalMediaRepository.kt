@@ -29,7 +29,7 @@ object LocalMediaRepository {
     private const val MIN_LOCAL_MUSIC_DURATION_MS = 30_000L
 
     private val localMusicExtensions = setOf(
-        "mp3", "m4a", "flac", "ogg", "opus", "aac", "webm",
+        "mp3", "m4a", "flac", "ogg", "opus", "aac", "webm", "dsf", "dff",
     )
 
     private val nonMusicPathSegments = listOf(
@@ -289,9 +289,13 @@ object LocalMediaRepository {
         }.toTypedArray()
 
         val filterNonMusic = AppSettings.filterNonMusicAudio.value
+        val dsdAllowed = AppSettings.dsdPlaybackEnabled.value
+        val dsdSelection = if (dsdAllowed) {
+            " OR ${MediaStore.Audio.Media.DISPLAY_NAME} LIKE '%.dsf' OR ${MediaStore.Audio.Media.DISPLAY_NAME} LIKE '%.dff'"
+        } else ""
         val selection = if (filterNonMusic) {
             buildString {
-                append("${MediaStore.Audio.Media.IS_MUSIC} != 0")
+                append("((${MediaStore.Audio.Media.IS_MUSIC} != 0")
                 append(" AND ${MediaStore.Audio.Media.DURATION} >= ?")
                 append(" AND ${MediaStore.Audio.Media.IS_ALARM} = 0")
                 append(" AND ${MediaStore.Audio.Media.IS_NOTIFICATION} = 0")
@@ -299,9 +303,10 @@ object LocalMediaRepository {
                 if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
                     append(" AND ${MediaStore.Audio.Media.IS_PODCAST} = 0")
                 }
+                append(")$dsdSelection)")
             }
         } else {
-            "${MediaStore.Audio.Media.IS_MUSIC} != 0"
+            "(${MediaStore.Audio.Media.IS_MUSIC} != 0$dsdSelection)"
         }
         val selectionArgs = if (filterNonMusic) {
             arrayOf(MIN_LOCAL_MUSIC_DURATION_MS.toString())
@@ -356,6 +361,7 @@ object LocalMediaRepository {
                     while (cursor.moveToNext()) {
                         val id = cursor.getLong(idCol)
                         val displayName = cursor.getString(displayNameCol).orEmpty()
+                        if (!dsdAllowed && isDsdFileName(displayName)) continue
                         val rawTitle = cursor.getString(titleCol)
                         val rawArtist = cursor.getString(artistCol)
                         val rawAlbum = cursor.getString(albumCol)
@@ -525,7 +531,11 @@ object LocalMediaRepository {
                 add(MediaStore.MediaColumns.BUCKET_DISPLAY_NAME)
             }
         }.toTypedArray()
-        val selection = "${MediaStore.Audio.Media.IS_MUSIC} != 0"
+        val dsdAllowed = AppSettings.dsdPlaybackEnabled.value
+        val dsdSelection = if (dsdAllowed) {
+            " OR ${MediaStore.Audio.Media.DISPLAY_NAME} LIKE '%.dsf' OR ${MediaStore.Audio.Media.DISPLAY_NAME} LIKE '%.dff'"
+        } else ""
+        val selection = "(${MediaStore.Audio.Media.IS_MUSIC} != 0$dsdSelection)"
 
         val volumeUris = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
             runCatching {
@@ -556,6 +566,7 @@ object LocalMediaRepository {
                     while (cursor.moveToNext()) {
                         val dur = cursor.getLong(durCol)
                         val displayName = cursor.getString(nameCol).orEmpty()
+                        if (!dsdAllowed && isDsdFileName(displayName)) continue
                         val rawPath = dataCol.takeIf { it >= 0 }?.let(cursor::getString)
                         if (!isEligibleLocalMusic(dur, displayName, rawPath)) continue
                         val relativePath = relativePathCol.takeIf { it >= 0 }?.let(cursor::getString)
@@ -620,12 +631,11 @@ object LocalMediaRepository {
      * of scanner metadata so the same bad rows stay out across Android vendors.
      */
     internal fun isEligibleLocalMusic(durationMs: Long, displayName: String, path: String?): Boolean {
-        if (durationMs < MIN_LOCAL_MUSIC_DURATION_MS) return false
-
         val fileName = path?.substringAfterLast('/')?.takeIf { it.isNotBlank() }
             ?: displayName
         val extension = fileName.substringAfterLast('.', "").lowercase(Locale.ROOT)
         if (extension !in localMusicExtensions) return false
+        if (extension !in DSD_EXTENSIONS && durationMs < MIN_LOCAL_MUSIC_DURATION_MS) return false
 
         val normalizedPath = path
             ?.replace('\\', '/')
@@ -649,8 +659,12 @@ object LocalMediaRepository {
             lower.endsWith(".flac") || lower.endsWith(".wav") ||
             lower.endsWith(".ogg") || lower.endsWith(".opus") ||
             lower.endsWith(".aac") || lower.endsWith(".webm") ||
+            (AppSettings.dsdPlaybackEnabled.value && isDsdFileName(lower)) ||
             lower.endsWith(".3gp")
     }
+
+    private fun isDsdFileName(name: String): Boolean =
+        name.endsWith(".dsf", ignoreCase = true) || name.endsWith(".dff", ignoreCase = true)
 
     /**
      * A song built from a file in the downloads folder the app has no record of
@@ -730,4 +744,6 @@ object LocalMediaRepository {
         val secs = totalSecs % 60
         return String.format(Locale.ROOT, "%d:%02d", minutes, secs)
     }
+
+    private val DSD_EXTENSIONS = setOf("dsf", "dff")
 }

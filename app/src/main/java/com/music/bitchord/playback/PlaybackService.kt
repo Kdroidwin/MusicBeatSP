@@ -9,6 +9,7 @@ import android.media.AudioDeviceInfo
 import android.media.AudioFormat
 import android.media.AudioFocusRequest
 import android.media.AudioManager
+import android.media.AudioTrack
 import android.net.Uri
 import android.os.Bundle
 import android.os.Build
@@ -124,6 +125,7 @@ import com.music.bitchord.playback.audio.bitperfect.BitPerfectAudioSink
 import com.music.bitchord.playback.audio.bitperfect.BitPerfectOutput
 import com.music.bitchord.playback.audio.bitperfect.BitPerfectRoutingSink
 import com.music.bitchord.playback.audio.bitperfect.usb.UsbDirectDevices
+import com.music.bitchord.playback.dsp.dsd.DsdPcmDataSource
 import com.music.bitchord.wear.WearBridge
 import kotlinx.coroutines.CompletableDeferred
 import kotlinx.coroutines.CoroutineScope
@@ -205,6 +207,7 @@ private data class PlaybackAudioChain(
     val transition: TransitionFilterProcessor = TransitionFilterProcessor(),
     val replayGain: ReplayGainAudioProcessor = ReplayGainAudioProcessor(),
     val resampler: ResamplerCutoffAudioProcessor = ResamplerCutoffAudioProcessor(),
+    val darUpsampler: DarPcmUpsamplingAudioProcessor = DarPcmUpsamplingAudioProcessor(),
 )
 
 /**
@@ -1574,10 +1577,11 @@ class PlaybackService : MediaLibraryService() {
         // the shared cache path so prepared/playing tracks use the same bytes,
         // while routing the smb:// scheme to the upstream SMB reader.
         val routedDataSourceFactory = SmbDataSource.RoutingFactory(defaultDataSourceFactory)
-        AudioCache.setUpstream(routedDataSourceFactory)
+        val dsdPcmFactory = DsdPcmDataSource.Factory(this, routedDataSourceFactory)
+        AudioCache.setUpstream(dsdPcmFactory)
         // The watch speaker reads through the same resolver/cache route as this player.
-        WearBridge.attachStreams(AudioCache.playbackFactory(routedDataSourceFactory))
-        mediaSourceFactory = DefaultMediaSourceFactory(AudioCache.playbackFactory(routedDataSourceFactory))
+        WearBridge.attachStreams(AudioCache.playbackFactory(dsdPcmFactory))
+        mediaSourceFactory = DefaultMediaSourceFactory(AudioCache.playbackFactory(dsdPcmFactory))
             .setLoadErrorHandlingPolicy(PermanentAwareLoadErrorPolicy())
 
         configuredFloatOutput = shouldEnableFloatOutput()
@@ -1987,6 +1991,7 @@ class PlaybackService : MediaLibraryService() {
                 chain.transition,
                 chain.replayGain,
                 chain.resampler,
+                chain.darUpsampler,
             ),
         )
         .setMediaSourceFactory(requireNotNull(mediaSourceFactory))
@@ -4464,6 +4469,7 @@ class PlaybackService : MediaLibraryService() {
         transition: TransitionFilterProcessor,
         replayGain: ReplayGainAudioProcessor,
         resamplerCutoff: ResamplerCutoffAudioProcessor,
+        darUpsampler: DarPcmUpsamplingAudioProcessor,
     ) = object : DefaultRenderersFactory(this) {
         init {
             // Do not force PCM_FLOAT onto an OEM speaker mixer merely because
@@ -4505,7 +4511,7 @@ class PlaybackService : MediaLibraryService() {
             .setEnableAudioTrackPlaybackParams(enableAudioTrackPlaybackParams)
             .setAudioProcessorChain(
                 DefaultAudioSink.DefaultAudioProcessorChain(
-                    arrayOf(resamplerCutoff, parametricEq, spatial, transition, replayGain),
+                    arrayOf(resamplerCutoff, parametricEq, spatial, transition, replayGain, darUpsampler),
                     SilenceSkippingAudioProcessor(
                         MIN_SILENCE_US,
                         SilenceSkippingAudioProcessor.DEFAULT_SILENCE_RETENTION_RATIO,
@@ -4533,6 +4539,8 @@ class PlaybackService : MediaLibraryService() {
         val bitPerfect = BitPerfectOutput.ready.value
         chain.replayGain.normalizationGainDbFor = ::loudnessNormalizationGainDbFor
         chain.replayGain.normalizationBypassed = bitPerfect
+        chain.darUpsampler.enabled = AppSettings.darPcmUpsamplingEnabled.value && !bitPerfect
+        configureDarOutputCapabilities(chain.darUpsampler)
         applyVolumeBoost(chain)
         applyAudioOffloadPreference(player)
         player.skipSilenceEnabled = AppSettings.skipSilence.value && !bitPerfect
@@ -4764,7 +4772,8 @@ class PlaybackService : MediaLibraryService() {
         outputReconfigureJob?.cancel()
         outputReconfigureJob = scope.launch {
             val requestedFloat = shouldEnableFloatOutput()
-            if (!forceRebuild && requestedFloat == configuredFloatOutput) {
+            val darNeedsRouteRebuild = AppSettings.darPcmUpsamplingEnabled.value
+            if (!forceRebuild && !darNeedsRouteRebuild && requestedFloat == configuredFloatOutput) {
                 applyOutputRoute()
             } else {
                 rebuildPlayersForOutput(requestedFloat)
@@ -4848,6 +4857,35 @@ class PlaybackService : MediaLibraryService() {
                 device.type == AudioDeviceInfo.TYPE_USB_ACCESSORY
         }
 
+    /** Use the current route's advertised PCM rates to avoid negotiating a rate the output did not report. */
+    private fun configureDarOutputCapabilities(processor: DarPcmUpsamplingAudioProcessor) {
+        val rates = darOutputSampleRates()
+        processor.supportedOutputSampleRates = rates
+        processor.maxOutputSampleRateHz = rates.maxOrNull()
+            ?: AudioTrack.getNativeOutputSampleRate(AudioManager.STREAM_MUSIC).takeIf { it > 0 }
+            ?: 48_000
+    }
+
+    private fun darOutputSampleRates(): Set<Int> {
+        val manager = audioManager ?: return emptySet()
+        val device = currentOutputDevice(manager, preferredUsbDevice()) ?: return emptySet()
+        val rates = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) {
+            runCatching {
+                device.audioProfiles
+                    .filter { it.format in setOf(
+                        AudioFormat.ENCODING_PCM_16BIT,
+                        AudioFormat.ENCODING_PCM_24BIT_PACKED,
+                        AudioFormat.ENCODING_PCM_32BIT,
+                        AudioFormat.ENCODING_PCM_FLOAT,
+                    ) }
+                    .flatMap { it.sampleRates.asIterable() }
+            }.getOrDefault(emptyList())
+        } else {
+            device.sampleRates.toList()
+        }
+        return rates.filter { it > 0 }.toSet()
+    }
+
     private fun shouldEnableFloatOutput(): Boolean {
         val usb = preferredUsbDevice()
         return AudioOutputPolicy.shouldUseFloatOutput(
@@ -4907,6 +4945,18 @@ class PlaybackService : MediaLibraryService() {
             }
         }
         scope.launch {
+            AppSettings.darPcmUpsamplingEnabled.drop(1).collect {
+                // The processor changes the negotiated PCM rate, so rebuild
+                // both sinks while preserving queue and current playback position.
+                requestOutputReconfiguration(forceRebuild = true)
+            }
+        }
+        scope.launch {
+            AppSettings.dsdPlaybackEnabled.drop(1).collect {
+                requestOutputReconfiguration(forceRebuild = true)
+            }
+        }
+        scope.launch {
             AppSettings.pausePlaybackAtZeroVolume.collect { enabled ->
                 if (enabled) pauseLocalPlaybackIfVolumeIsZero()
             }
@@ -4916,6 +4966,8 @@ class PlaybackService : MediaLibraryService() {
                 crossfade?.cancelTransition()
                 activeAudioChain.replayGain.normalizationBypassed = enabled
                 spareAudioChain.replayGain.normalizationBypassed = enabled
+                activeAudioChain.darUpsampler.enabled = AppSettings.darPcmUpsamplingEnabled.value && !enabled
+                spareAudioChain.darUpsampler.enabled = AppSettings.darPcmUpsamplingEnabled.value && !enabled
                 applyVolumeBoost(activeAudioChain)
                 applyVolumeBoost(spareAudioChain)
                 eachPlayer { current ->
@@ -5117,7 +5169,9 @@ class PlaybackService : MediaLibraryService() {
 
     /** Requests Android audio offload only when the two-player crossfade is idle. */
     private fun applyAudioOffloadPreference(target: ExoPlayer) {
-        val enabled = AppSettings.audioOffloadEnabled.value && AppSettings.crossfadeSeconds.value == 0
+        val enabled = AppSettings.audioOffloadEnabled.value &&
+            AppSettings.crossfadeSeconds.value == 0 &&
+            !AppSettings.darPcmUpsamplingEnabled.value
         val preferences = TrackSelectionParameters.AudioOffloadPreferences.Builder()
             .setAudioOffloadMode(
                 if (enabled) TrackSelectionParameters.AudioOffloadPreferences.AUDIO_OFFLOAD_MODE_ENABLED
