@@ -171,17 +171,20 @@ import androidx.compose.ui.draw.shadow
 import androidx.compose.ui.draw.drawWithContent
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.geometry.Rect
+import androidx.compose.ui.geometry.RoundRect
 import androidx.compose.ui.geometry.Size
 import androidx.compose.ui.graphics.BlendMode
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.CompositingStrategy
 import androidx.compose.ui.graphics.Shadow
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.geometry.CornerRadius
 import androidx.compose.ui.graphics.Path
 import androidx.compose.ui.graphics.TransformOrigin
 import androidx.compose.ui.graphics.painter.Painter
 import androidx.compose.ui.graphics.drawscope.ContentDrawScope
 import androidx.compose.ui.graphics.drawscope.clipRect
+import androidx.compose.ui.graphics.drawscope.clipPath
 import androidx.compose.ui.graphics.drawscope.scale
 import androidx.compose.ui.graphics.drawscope.translate
 import androidx.compose.ui.graphics.graphicsLayer
@@ -1109,6 +1112,16 @@ fun NowPlayingScreen(
             val miniInRoot = mini.translate(-anchor.x, -anchor.y - offset)
             val sleeve = lerpRect(miniInRoot, card, fraction)
             if (sleeve.width > 0f && sleeve.height > 0f) {
+                // Keep the travelling cover clipped to the mini-player's
+                // rounded artwork shape all the way to the destination. The
+                // previous rectangular clip exposed one square frame before
+                // MiniPlayer's own rounded image became visible.
+                val cornerPx = with(density) {
+                    lerp(activeDock.miniArtCorner(), 8.dp, fraction).toPx()
+                }.coerceAtMost(minOf(sleeve.width, sleeve.height) / 2f)
+                val sleeveClip = Path().apply {
+                    addRoundRect(RoundRect(sleeve, CornerRadius(cornerPx)))
+                }
                 // The mini-player cover slot is square, while a preserved
                 // sleeve can be portrait or landscape. Cover-scaling the
                 // recorded layer into the interpolated rectangle crops the
@@ -1128,7 +1141,7 @@ fun NowPlayingScreen(
                 if (imageScale.isFinite() && imageScale > 0f) {
                     val drawnWidth = layerSize.width * imageScale
                     val drawnHeight = layerSize.height * imageScale
-                    clipRect(sleeve.left, sleeve.top, sleeve.right, sleeve.bottom) {
+                    clipPath(sleeveClip) {
                         translate(
                             sleeve.center.x - drawnWidth / 2f,
                             sleeve.center.y - drawnHeight / 2f,
