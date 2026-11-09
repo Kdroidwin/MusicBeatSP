@@ -474,6 +474,10 @@ class PlaybackService : MediaLibraryService() {
     /** Idle peer, used only while the active track is nearing its end. */
     private var spare: ExoPlayer? = null
 
+    /** Local queue openings already read once so MediaStore/SD-card pages stay warm. */
+    private val warmedLocalAudioHeaders = ConcurrentHashMap.newKeySet<String>()
+    private var localAudioPrefetchJob: Job? = null
+
     private var crossfade: CrossfadeController? = null
     private val trackAnalyzer = com.music.bitchord.playback.smart.TrackAnalyzer(this, AudioCache)
 
@@ -4343,11 +4347,54 @@ class PlaybackService : MediaLibraryService() {
         } else {
             emptyList()
         }
+        nextArtwork?.takeIf { player.isPlaying }?.let(::prefetchLocalAudioHeader)
         PlaybackArtworkPrefetcher.prefetch(
             context = this,
             nextSong = nextArtwork?.takeIf { player.isPlaying },
         )
         AudioCache.prefetchQueue(upcoming)
+    }
+
+    /**
+     * Reads only the opening of the next MediaStore-backed track while the
+     * current track is audible. The read is discarded immediately; it merely
+     * warms the device's file cache so Media3's first header/frame read does
+     * not have to wait on a cold removable-storage access after the queue skip.
+     */
+    private fun prefetchLocalAudioHeader(song: Song) {
+        val uri = song.localUri?.let { runCatching { Uri.parse(it) }.getOrNull() } ?: return
+        if (uri.scheme == "content" && uri.authority != "media") return
+        if (uri.scheme != "content" && uri.scheme != "file") return
+
+        val key = uri.toString()
+        if (warmedLocalAudioHeaders.size >= LOCAL_AUDIO_PREFETCH_TRACK_LIMIT) {
+            warmedLocalAudioHeaders.clear()
+        }
+        if (!warmedLocalAudioHeaders.add(key)) return
+
+        localAudioPrefetchJob?.cancel()
+        localAudioPrefetchJob = scope.launch(Dispatchers.IO) {
+            try {
+                val input = contentResolver.openInputStream(uri)
+                    ?: throw java.io.IOException("local audio stream unavailable")
+                input.use { stream ->
+                    val buffer = ByteArray(LOCAL_AUDIO_PREFETCH_CHUNK_BYTES)
+                    var remaining = LOCAL_AUDIO_PREFETCH_BYTES
+                    while (remaining > 0) {
+                        val read = stream.read(buffer, 0, minOf(buffer.size, remaining))
+                        if (read < 0) break
+                        if (read > 0) remaining -= read
+                    }
+                }
+            } catch (cancelled: CancellationException) {
+                warmedLocalAudioHeaders.remove(key)
+                throw cancelled
+            } catch (_: Exception) {
+                // Prefetch is optional: normal Media3 playback remains the
+                // fallback, and failed URIs can be tried again later.
+                warmedLocalAudioHeaders.remove(key)
+            }
+        }
     }
 
     /**
@@ -6943,6 +6990,11 @@ class PlaybackService : MediaLibraryService() {
         /** Local skips need only a short decoded lead; network thresholds stay unchanged. */
         const val LOCAL_START_PLAYBACK_MS = 100
         const val LOCAL_RESUME_PLAYBACK_MS = 500
+
+        /** One next-track prefix at a time; only OS page-cache state is retained. */
+        const val LOCAL_AUDIO_PREFETCH_BYTES = 512 * 1024
+        const val LOCAL_AUDIO_PREFETCH_CHUNK_BYTES = 32 * 1024
+        const val LOCAL_AUDIO_PREFETCH_TRACK_LIMIT = 128
 
         /** One second of PCM output keeps short scheduler stalls off AudioTrack. */
         const val TARGET_PCM_BUFFER_DURATION_US = 1_000_000
