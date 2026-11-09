@@ -1336,6 +1336,8 @@
     <string name="keep_screen_on_during_lyrics">Keep screen on while lyrics are open</string>
     <string name="keep_screen_on_during_lyrics_subtitle">Prevent the display from turning off while the lyrics panel is open</string>
     <string name="show_status_bar">Show status bar outside the player</string>
+    <string name="hide_status_bar_in_library_playlists">Hide status bar in Library playlists</string>
+    <string name="hide_status_bar_in_library_playlists_subtitle">Hide Android time, battery, and status icons while a playlist is open from Library. On by default.</string>
     <string name="show_player_status_bar">Show status bar in the player</string>
     <string name="show_player_status_bar_subtitle">Control the Android status bar while the expanded player is open.</string>
     <string name="instant_status_bar_on_player_close">Show status bar immediately</string>

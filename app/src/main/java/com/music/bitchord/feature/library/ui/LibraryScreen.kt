@@ -260,6 +260,7 @@ fun LibraryScreen(
     onArtworkPaletteChanged: ((ArtworkPalette?) -> Unit)? = null,
     onCollectionNavigationChanged: ((Boolean, (() -> Unit)?) -> Unit)? = null,
     onRootListScrollChanged: ((Boolean) -> Unit)? = null,
+    onPlaylistDetailVisibilityChanged: ((Boolean) -> Unit)? = null,
     onOpenYoutubeCollection: (SavedYoutubeCollection) -> Unit = {},
     onOpenReplay: (() -> Unit)? = null,
 ) {
@@ -598,6 +599,9 @@ fun LibraryScreen(
 
     val inDrillDown = drillDownLabel != null
     SideEffect {
+        onPlaylistDetailVisibilityChanged?.invoke(drillDownPlaylistId != null)
+    }
+    SideEffect {
         if (!inDrillDown || !fullScreenCollectionArtwork) {
             onArtworkPaletteChanged?.invoke(null)
         }
@@ -882,7 +886,10 @@ fun LibraryScreen(
         )
     }
     DisposableEffect(Unit) {
-        onDispose { collectionNavigationCallback.value?.invoke(false, null) }
+        onDispose {
+            collectionNavigationCallback.value?.invoke(false, null)
+            onPlaylistDetailVisibilityChanged?.invoke(false)
+        }
     }
 
     BackHandler(enabled = inDrillDown || inHistoryView || selectedFilter == LibraryFilter.YOUTUBE_MUSIC || selectedFilter == LibraryFilter.YOUTUBE_DOWNLOADS) {

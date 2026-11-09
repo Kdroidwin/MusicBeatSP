@@ -790,6 +790,8 @@ object AppSettings {
 
     /** System UI preferences; bars remain transiently revealable by swipe when hidden. */
     val showStatusBar = MutableStateFlow(true)
+    /** Hide Android's status bar while a playlist is open from the Library tab. */
+    val hideStatusBarInLibraryPlaylists = MutableStateFlow(true)
     /** Status bar visibility while the player is expanded over the library. */
     val showPlayerStatusBar = MutableStateFlow(true)
     val instantStatusBarOnPlayerClose = MutableStateFlow(true)
@@ -1660,6 +1662,7 @@ object AppSettings {
         mainNavigationTabOrder.value = readMainNavigationTabOrder()
         startupTab.value = readStartupTab()
         showStatusBar.value = prefs.getBoolean(KEY_SHOW_STATUS_BAR, true)
+        hideStatusBarInLibraryPlaylists.value = prefs.getBoolean(KEY_HIDE_STATUS_BAR_IN_LIBRARY_PLAYLISTS, true)
         showPlayerStatusBar.value = if (prefs.contains(KEY_SHOW_PLAYER_STATUS_BAR)) {
             prefs.getBoolean(KEY_SHOW_PLAYER_STATUS_BAR, true)
         } else {
@@ -2973,6 +2976,11 @@ object AppSettings {
     fun setShowStatusBar(value: Boolean) {
         showStatusBar.value = value
         prefs.edit().putBoolean(KEY_SHOW_STATUS_BAR, value).apply()
+    }
+
+    fun setHideStatusBarInLibraryPlaylists(value: Boolean) {
+        hideStatusBarInLibraryPlaylists.value = value
+        prefs.edit().putBoolean(KEY_HIDE_STATUS_BAR_IN_LIBRARY_PLAYLISTS, value).apply()
     }
 
     fun setShowPlayerStatusBar(value: Boolean) {
@@ -4745,6 +4753,7 @@ object AppSettings {
     private const val KEY_MAIN_FOLDER_TAB_MIGRATED = "main_folder_tab_migrated"
     private const val KEY_STARTUP_TAB = "startup_tab"
     private const val KEY_SHOW_STATUS_BAR = "show_status_bar"
+    private const val KEY_HIDE_STATUS_BAR_IN_LIBRARY_PLAYLISTS = "hide_status_bar_in_library_playlists"
     private const val KEY_SHOW_PLAYER_STATUS_BAR = "show_player_status_bar"
     private const val KEY_INSTANT_STATUS_BAR_ON_PLAYER_CLOSE = "instant_status_bar_on_player_close"
     private const val KEY_SHOW_NAVIGATION_BAR = "show_navigation_bar"

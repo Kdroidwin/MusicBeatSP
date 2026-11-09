@@ -941,6 +941,15 @@ private fun instantStatusBarOnPlayerCloseSearchEntry(enabled: Boolean) = Setting
 )
 
 @Composable
+private fun hideStatusBarInLibraryPlaylistsSearchEntry(enabled: Boolean) = SettingsSearchEntry(
+    title = stringResource(R.string.hide_status_bar_in_library_playlists),
+    subtitle = stringResource(R.string.hide_status_bar_in_library_playlists_subtitle),
+    keywords = listOf("status bar", "library", "playlist", "ステータスバー", "ライブラリ", "プレイリスト", "battery", "電池"),
+    checked = enabled,
+    activate = { AppSettings.setHideStatusBarInLibraryPlaylists(!enabled) },
+)
+
+@Composable
 private fun hideRadioTopLabelsSearchEntry(enabled: Boolean) = SettingsSearchEntry(
     title = stringResource(R.string.hide_radio_top_labels),
     subtitle = stringResource(R.string.hide_radio_top_labels_subtitle),
@@ -1239,6 +1248,7 @@ fun SettingsScreen(
     val keepScreenOn by AppSettings.keepScreenOn.collectAsStateWithLifecycle()
     val keepScreenOnDuringLyrics by AppSettings.keepScreenOnDuringLyrics.collectAsStateWithLifecycle()
     val showStatusBar by AppSettings.showStatusBar.collectAsStateWithLifecycle()
+    val hideStatusBarInLibraryPlaylists by AppSettings.hideStatusBarInLibraryPlaylists.collectAsStateWithLifecycle()
     val showPlayerStatusBar by AppSettings.showPlayerStatusBar.collectAsStateWithLifecycle()
     val instantStatusBarOnPlayerClose by AppSettings.instantStatusBarOnPlayerClose.collectAsStateWithLifecycle()
     val showNavigationBar by AppSettings.showNavigationBar.collectAsStateWithLifecycle()
@@ -1664,6 +1674,7 @@ fun SettingsScreen(
             showTrackDurationInsteadOfRemaining,
         ) { AppSettings.setShowTrackDurationInsteadOfRemaining(!showTrackDurationInsteadOfRemaining) },
         SettingsSearchEntry(stringResource(R.string.show_status_bar), stringResource(R.string.show_status_bar_search_help), listOf("status bar", "library", "ステータスバー", "ライブラリ", "battery", "電池"), showStatusBar) { AppSettings.setShowStatusBar(!showStatusBar) },
+        hideStatusBarInLibraryPlaylistsSearchEntry(hideStatusBarInLibraryPlaylists),
         SettingsSearchEntry(stringResource(R.string.show_player_status_bar), stringResource(R.string.show_player_status_bar_subtitle), listOf("status bar", "player", "ステータスバー", "プレイヤー", "battery", "電池"), showPlayerStatusBar) { AppSettings.setShowPlayerStatusBar(!showPlayerStatusBar) },
         instantStatusBarOnPlayerCloseSearchEntry(instantStatusBarOnPlayerClose),
         hideRadioTopLabelsSearchEntry(hideRadioTopLabels),
@@ -5091,6 +5102,21 @@ fun SettingsScreen(
                     Switch(checked = showStatusBar, onCheckedChange = AppSettings::setShowStatusBar)
                 },
                 onClick = { AppSettings.setShowStatusBar(!showStatusBar) },
+            )
+            RowDivider()
+            SettingsRow(
+                icon = Icons.Rounded.Fullscreen,
+                title = stringResource(R.string.hide_status_bar_in_library_playlists),
+                subtitle = stringResource(R.string.hide_status_bar_in_library_playlists_subtitle),
+                trailing = {
+                    Switch(
+                        checked = hideStatusBarInLibraryPlaylists,
+                        onCheckedChange = AppSettings::setHideStatusBarInLibraryPlaylists,
+                    )
+                },
+                onClick = {
+                    AppSettings.setHideStatusBarInLibraryPlaylists(!hideStatusBarInLibraryPlaylists)
+                },
             )
             RowDivider()
             SettingsRow(

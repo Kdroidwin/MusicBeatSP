@@ -1238,6 +1238,8 @@
     <string name="keep_screen_on_during_lyrics">歌詞表示中は画面を常にオンにする</string>
     <string name="keep_screen_on_during_lyrics_subtitle">歌詞画面を開いている間、画面が自動消灯しないようにします</string>
     <string name="show_status_bar">プレイヤー以外でステータスバーを表示</string>
+    <string name="hide_status_bar_in_library_playlists">ライブラリのプレイリストでステータスバーを隠す</string>
+    <string name="hide_status_bar_in_library_playlists_subtitle">ライブラリでプレイリストを開いている間、Androidの時刻・電池・ステータスアイコンを隠します。初期設定はオンです。</string>
     <string name="show_player_status_bar">プレイヤーでステータスバーを表示</string>
     <string name="show_player_status_bar_subtitle">全画面プレイヤーを開いている間のAndroidステータスバーを設定します。</string>
     <string name="instant_status_bar_on_player_close">プレイヤーを閉じたとき即時表示</string>

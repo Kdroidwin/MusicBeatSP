@@ -363,6 +363,8 @@ class MainActivity : AppCompatActivity() {
     private var expandedPlayerSurfaceActive = false
     /** Root lists use immersive scrolling: hide the status bar while a list is away from its top. */
     private var rootScrollHidesStatusBar = false
+    /** A Library playlist detail is open in the currently selected tab. */
+    private var libraryPlaylistDetailActive = false
     private var musicOnlyModeLockTaskStarted = false
 
     override fun onCreate(savedInstanceState: Bundle?) {
@@ -400,6 +402,7 @@ class MainActivity : AppCompatActivity() {
             val liquidGlassEnabled by AppSettings.liquidGlass.collectAsStateWithLifecycle()
             val keepScreenOn by AppSettings.keepScreenOn.collectAsStateWithLifecycle()
             val showStatusBar by AppSettings.showStatusBar.collectAsStateWithLifecycle()
+            val hideStatusBarInLibraryPlaylists by AppSettings.hideStatusBarInLibraryPlaylists.collectAsStateWithLifecycle()
             val showPlayerStatusBar by AppSettings.showPlayerStatusBar.collectAsStateWithLifecycle()
             val showNavigationBar by AppSettings.showNavigationBar.collectAsStateWithLifecycle()
             val forceWhiteNavigationBar by AppSettings.forceWhiteNavigationBar.collectAsStateWithLifecycle()
@@ -434,7 +437,7 @@ class MainActivity : AppCompatActivity() {
             DisposableEffect(composeView) {
                 onDispose { composeView.keepScreenOn = false }
             }
-            LaunchedEffect(showStatusBar, showPlayerStatusBar, showNavigationBar, forceWhiteNavigationBar) {
+            LaunchedEffect(showStatusBar, hideStatusBarInLibraryPlaylists, showPlayerStatusBar, showNavigationBar, forceWhiteNavigationBar) {
                 applySystemBarPreferences()
             }
             LaunchedEffect(screenOrientation) {
@@ -524,6 +527,7 @@ class MainActivity : AppCompatActivity() {
                                 }
                             },
                             onRootScrollStatusBarChanged = ::setRootScrollStatusBarHidden,
+                            onLibraryPlaylistStatusBarChanged = ::setLibraryPlaylistStatusBarHidden,
                         )
                     }
                 }
@@ -554,7 +558,9 @@ class MainActivity : AppCompatActivity() {
         val showStatusBar = if (expandedPlayerSurfaceActive) {
             AppSettings.showPlayerStatusBar.value
         } else {
-            AppSettings.showStatusBar.value && !rootScrollHidesStatusBar
+            AppSettings.showStatusBar.value &&
+                !rootScrollHidesStatusBar &&
+                !(libraryPlaylistDetailActive && AppSettings.hideStatusBarInLibraryPlaylists.value)
         }
         if (showStatusBar) {
             bars.show(WindowInsetsCompat.Type.statusBars())
@@ -571,6 +577,12 @@ class MainActivity : AppCompatActivity() {
     private fun setRootScrollStatusBarHidden(hidden: Boolean) {
         if (rootScrollHidesStatusBar == hidden) return
         rootScrollHidesStatusBar = hidden
+        applySystemBarPreferences()
+    }
+
+    private fun setLibraryPlaylistStatusBarHidden(hidden: Boolean) {
+        if (libraryPlaylistDetailActive == hidden) return
+        libraryPlaylistDetailActive = hidden
         applySystemBarPreferences()
     }
 
@@ -637,6 +649,7 @@ private fun BitChordApp(
     onPlayerCloseStarted: () -> Unit,
     onPlayerSurfaceVisibilityChanged: (Boolean) -> Unit,
     onRootScrollStatusBarChanged: (Boolean) -> Unit,
+    onLibraryPlaylistStatusBarChanged: (Boolean) -> Unit,
     viewModel: MainViewModel = viewModel(),
 ) {
     val context = LocalContext.current
@@ -676,6 +689,10 @@ private fun BitChordApp(
     val useCollapsibleNavBar = !classicNavBar
     val glassSamplesBackdrop = glassActive && !reduceDynamicBlur
     var selectedTab by rememberSaveable { mutableIntStateOf(AppSettings.startupTab.value.index) }
+    var libraryPlaylistDetailOpen by remember { mutableStateOf(false) }
+    SideEffect {
+        onLibraryPlaylistStatusBarChanged(selectedTab == TAB_LIBRARY && libraryPlaylistDetailOpen)
+    }
     val mediaControlRequest by MediaControlDeepLink.pending.collectAsStateWithLifecycle()
     val hideCollectionTopBar by AppSettings.hideCollectionTopBar.collectAsStateWithLifecycle()
     val hideFloatingCollectionControls by AppSettings.hideFloatingCollectionControls.collectAsStateWithLifecycle()
@@ -3380,6 +3397,7 @@ private fun BitChordApp(
                                 onArtworkPaletteChanged = onLocalArtworkPaletteChanged,
                                 onCollectionNavigationChanged = onCollectionNavigationChanged,
                                 onRootListScrollChanged = onRootLibraryOrSearchScrolled,
+                                onPlaylistDetailVisibilityChanged = { libraryPlaylistDetailOpen = it },
                                 onOpenYoutubeCollection = { collection ->
                                     val type = runCatching { BrowseType.valueOf(collection.type) }
                                         .getOrDefault(BrowseType.OTHER)
