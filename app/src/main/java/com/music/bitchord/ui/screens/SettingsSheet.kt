@@ -6058,7 +6058,7 @@ fun SettingsScreen(
                     MainNavigationTab.ARTISTS -> Icons.Rounded.Person
                     MainNavigationTab.LIBRARY -> Icons.Rounded.LibraryMusic
                     MainNavigationTab.SEARCH -> BitChordIcons.Search
-                    MainNavigationTab.ALBUM_ARTISTS -> Icons.Rounded.Person
+                    MainNavigationTab.ALBUM_ARTISTS -> BitChordIcons.AlbumArtist
                     MainNavigationTab.FOLDERS -> Icons.Rounded.Folder
                     MainNavigationTab.RADIO -> Icons.Rounded.Radio
                     MainNavigationTab.HOME -> Icons.Rounded.Home
@@ -7873,7 +7873,8 @@ SettingsGroup(header = stringResource(R.string.local_music)) {
         val tabIcon = when (tab) {
             LocalLibraryTab.SONGS -> Icons.Rounded.MusicNote
             LocalLibraryTab.ALBUMS -> Icons.Rounded.Album
-            LocalLibraryTab.ARTISTS, LocalLibraryTab.ALBUM_ARTISTS -> Icons.Rounded.Person
+            LocalLibraryTab.ARTISTS -> Icons.Rounded.Person
+            LocalLibraryTab.ALBUM_ARTISTS -> BitChordIcons.AlbumArtist
             LocalLibraryTab.FOLDERS -> Icons.Rounded.Folder
             LocalLibraryTab.PLAYLISTS -> Icons.Rounded.PlaylistPlay
             LocalLibraryTab.GENRES -> Icons.Rounded.LocalOffer

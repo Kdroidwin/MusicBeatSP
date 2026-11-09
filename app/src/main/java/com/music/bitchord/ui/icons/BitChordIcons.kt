@@ -63,6 +63,38 @@ object BitChordIcons {
         }.build()
     }
 
+    /** An artist silhouette set into an album sleeve for the Album Artists tab. */
+    val AlbumArtist: ImageVector by lazy {
+        ImageVector.Builder(
+            name = "bc_album_artist",
+            defaultWidth = 24.dp, defaultHeight = 24.dp,
+            viewportWidth = 24f, viewportHeight = 24f,
+        ).apply {
+            path(
+                stroke = stroke,
+                strokeLineWidth = STROKE,
+                strokeLineCap = StrokeCap.Round,
+                strokeLineJoin = StrokeJoin.Round,
+            ) {
+                // Album sleeve
+                moveTo(7f, 3.8f); lineTo(16f, 3.8f); lineTo(20.2f, 8f)
+                lineTo(20.2f, 18.4f)
+                quadTo(20.2f, 20.2f, 18.4f, 20.2f)
+                lineTo(5.6f, 20.2f)
+                quadTo(3.8f, 20.2f, 3.8f, 18.4f)
+                lineTo(3.8f, 5.6f)
+                quadTo(3.8f, 3.8f, 5.6f, 3.8f)
+                close()
+                // Folded corner and portrait combine the album and artist marks.
+                moveTo(16f, 3.8f); lineTo(16f, 7.2f); lineTo(20f, 7.2f)
+                circle(12f, 10.1f, 2.15f)
+                moveTo(7.8f, 17.5f)
+                curveTo(8.2f, 14.9f, 9.6f, 13.7f, 12f, 13.7f)
+                curveTo(14.4f, 13.7f, 15.8f, 14.9f, 16.2f, 17.5f)
+            }
+        }.build()
+    }
+
     val Explore: ImageVector by lazy {
         ImageVector.Builder(
             name = "bc_explore",

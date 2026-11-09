@@ -965,7 +965,7 @@ fun LocalMusicScreen(
                         LOCAL_TAB_ARTISTS -> Icons.Rounded.Person to stringResource(R.string.artists)
                         LOCAL_TAB_FOLDERS -> Icons.Rounded.Folder to stringResource(R.string.folders)
                         LOCAL_TAB_PLAYLISTS -> Icons.AutoMirrored.Rounded.QueueMusic to stringResource(R.string.playlists)
-                        LOCAL_TAB_ALBUM_ARTISTS -> Icons.Rounded.Person to stringResource(R.string.album_artists)
+                        LOCAL_TAB_ALBUM_ARTISTS -> BitChordIcons.AlbumArtist to stringResource(R.string.album_artists)
                         LOCAL_TAB_GENRES -> Icons.Rounded.LocalOffer to stringResource(R.string.genres)
                         else -> Icons.Rounded.MusicNote to stringResource(R.string.songs)
                     }

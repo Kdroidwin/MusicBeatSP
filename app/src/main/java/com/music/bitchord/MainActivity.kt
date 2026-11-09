@@ -1357,7 +1357,7 @@ private fun BitChordApp(
             BottomTab(artistsLabel, Icons.Rounded.Person),
             BottomTab(libraryLabel, Icons.Rounded.LibraryMusic),
             BottomTab(searchLabel, BitChordIcons.Search),
-            BottomTab(albumArtistsLabel, Icons.Rounded.Person),
+            BottomTab(albumArtistsLabel, BitChordIcons.AlbumArtist),
             BottomTab(foldersLabel, Icons.Rounded.Folder),
             BottomTab(radioLabel, Icons.Rounded.Radio),
             BottomTab(homeLabel, Icons.Rounded.Home),
