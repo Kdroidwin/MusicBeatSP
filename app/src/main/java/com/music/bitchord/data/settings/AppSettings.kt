@@ -819,7 +819,7 @@ object AppSettings {
     val audioCutterEnabled = MutableStateFlow(false)
     /** Player backdrop blur in dp; zero draws sampled colours sharply. */
     val artworkBackdropBlurDp = MutableStateFlow(32f)
-    val persistentLocalArtwork = MutableStateFlow(false)
+    val persistentLocalArtwork = MutableStateFlow(true)
     /** Uses cover/folder/albumart sidecars when an audio file has no embedded cover. */
     val folderArtworkFallbackMode = MutableStateFlow(FolderArtworkFallbackMode.DISABLED)
 
@@ -1689,7 +1689,7 @@ object AppSettings {
         audioCutterEnabled.value = prefs.getBoolean(KEY_AUDIO_CUTTER_ENABLED, false)
         artworkBackdropBlurDp.value = prefs.getFloat(KEY_ARTWORK_BACKDROP_BLUR_DP, 32f)
             .coerceIn(0f, MAX_PLAYER_ARTWORK_BLUR_DP)
-        persistentLocalArtwork.value = prefs.getBoolean(KEY_PERSISTENT_LOCAL_ARTWORK, false)
+        persistentLocalArtwork.value = prefs.getBoolean(KEY_PERSISTENT_LOCAL_ARTWORK, true)
         folderArtworkFallbackMode.value = FolderArtworkFallbackMode.fromPersistedValue(
             prefs.getInt(KEY_FOLDER_ARTWORK_FALLBACK_MODE, FolderArtworkFallbackMode.DISABLED.persistedValue),
         ) ?: FolderArtworkFallbackMode.DISABLED
