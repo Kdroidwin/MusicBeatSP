@@ -4483,6 +4483,18 @@ class PlaybackService : MediaLibraryService() {
             /* bufferForPlaybackMs = */ START_PLAYBACK_MS,
             /* bufferForPlaybackAfterRebufferMs = */ RESUME_PLAYBACK_MS,
         )
+        // A queue skip to a local file is a user-requested track start, not a
+        // network rebuffer. Reusing the 500 ms streaming gate could add up to
+        // half a second to a local next-button press even when the file was local;
+        // keep that protection for streams, and let local decoders start as
+        // soon as a small, safe chunk is ready. The separate local setting is
+        // available in Media3 1.11 and does not alter the stream thresholds.
+        .setBufferDurationsMsForLocalPlayback(
+            DefaultLoadControl.DEFAULT_MIN_BUFFER_FOR_LOCAL_PLAYBACK_MS,
+            FAR_BUFFER_MS,
+            /* bufferForPlaybackMs = */ LOCAL_START_PLAYBACK_MS,
+            /* bufferForPlaybackAfterRebufferMs = */ LOCAL_RESUME_PLAYBACK_MS,
+        )
         .setTargetBufferBytes(FAR_BUFFER_BYTES)
         // The explicit 8 MiB ceiling is a memory target, not a reason to stop
         // high-bitrate streams or raw local PCM before they have enough time
@@ -6927,6 +6939,10 @@ class PlaybackService : MediaLibraryService() {
 
         /** More room after a stall than at the start — see the load control. */
         const val RESUME_PLAYBACK_MS = 2_000
+
+        /** Local skips need only a short decoded lead; network thresholds stay unchanged. */
+        const val LOCAL_START_PLAYBACK_MS = 100
+        const val LOCAL_RESUME_PLAYBACK_MS = 500
 
         /** One second of PCM output keeps short scheduler stalls off AudioTrack. */
         const val TARGET_PCM_BUFFER_DURATION_US = 1_000_000
