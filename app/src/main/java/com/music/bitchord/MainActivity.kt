@@ -1214,13 +1214,6 @@ private fun BitChordApp(
         }
     }
 
-    LaunchedEffect(Unit) {
-        if (LocalMediaRepository.hasStoragePermission(context)) {
-            hasStoragePermission = true
-            viewModel.loadLocalMusic()
-        }
-    }
-
     val lifecycleOwner = LocalLifecycleOwner.current
     DisposableEffect(lifecycleOwner) {
         val observer = LifecycleEventObserver { _, event ->

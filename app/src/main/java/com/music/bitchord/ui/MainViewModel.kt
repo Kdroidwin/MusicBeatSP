@@ -11,6 +11,7 @@ import com.music.bitchord.auth.profileId
 import com.music.bitchord.auth.sessionId
 import com.music.bitchord.auth.adjacentProfile
 import com.music.bitchord.data.LocalMediaRepository
+import com.music.bitchord.data.LocalLibrarySnapshotStore
 import com.music.bitchord.data.TrackLog
 import com.music.bitchord.data.LikeState
 import com.music.bitchord.data.YtMusicRepository
@@ -189,6 +190,7 @@ class MainViewModel(app: Application) : AndroidViewModel(app) {
     private val _localSongs = MutableStateFlow<UiState<List<Song>>>(UiState.Loading)
     val localSongs: StateFlow<UiState<List<Song>>> = _localSongs.asStateFlow()
     private val localSongMetadataOverrides = mutableMapOf<String, Song>()
+    private val localMusicLoadGeneration = AtomicLong(0L)
 
     private val _localArtworkPreload = MutableStateFlow(LocalArtworkPreloadState())
     val localArtworkPreload: StateFlow<LocalArtworkPreloadState> = _localArtworkPreload.asStateFlow()
@@ -1290,6 +1292,11 @@ class MainViewModel(app: Application) : AndroidViewModel(app) {
         // stays in its initial Loading state forever.
         startSearchPipeline()
         startSuggestPipeline()
+        val appContext = getApplication<Application>()
+        if (LocalMediaRepository.hasStoragePermission(appContext)) {
+            LocalLibrarySnapshotStore.read(appContext, localLibrarySnapshotFingerprint())
+                ?.let { cached -> _localSongs.value = UiState.Success(cached) }
+        }
         loadLocalMusic()
         viewModelScope.launch {
             AppSettings.blacklistedFolders.drop(1).collect {
@@ -2588,6 +2595,7 @@ class MainViewModel(app: Application) : AndroidViewModel(app) {
     }
 
     fun loadLocalMusic(isPullToRefresh: Boolean = false) {
+        val generation = localMusicLoadGeneration.incrementAndGet()
         viewModelScope.launch {
             if (isPullToRefresh) {
                 _isRefreshingLocalMusic.value = true
@@ -2596,19 +2604,39 @@ class MainViewModel(app: Application) : AndroidViewModel(app) {
             }
             try {
                 val context = getApplication<Application>()
+                val cacheFingerprint = localLibrarySnapshotFingerprint()
                 if (!LocalMediaRepository.hasStoragePermission(context)) {
+                    if (generation != localMusicLoadGeneration.get()) return@launch
                     _localSongs.value = UiState.Error(text(R.string.storage_required_read))
                 } else {
                     val songs = LocalMediaRepository.getLocalMusic(context)
+                    if (generation != localMusicLoadGeneration.get()) return@launch
                     if (songs.isEmpty()) {
                         _localSongs.value = UiState.Error(text(R.string.no_local_audio_found))
+                        LocalLibrarySnapshotStore.clear(context)
                     } else {
-                        _localSongs.value = UiState.Success(songs.map(::applyLocalSongMetadataOverride))
+                        val refreshed = songs.map(::applyLocalSongMetadataOverride)
+                        _localSongs.value = UiState.Success(refreshed)
+                        if (cacheFingerprint == localLibrarySnapshotFingerprint()) {
+                            LocalLibrarySnapshotStore.write(context, cacheFingerprint, refreshed)
+                        }
                     }
                 }
             } finally {
-                _isRefreshingLocalMusic.value = false
+                if (generation == localMusicLoadGeneration.get()) {
+                    _isRefreshingLocalMusic.value = false
+                }
             }
+        }
+    }
+
+    /** Only reuse a snapshot when the preferences that shape the scan still match. */
+    private fun localLibrarySnapshotFingerprint(): String = buildString {
+        append("filterNonMusic=").append(AppSettings.filterNonMusicAudio.value)
+        append(";dsd=").append(AppSettings.dsdPlaybackEnabled.value)
+        append(";blacklist=")
+        AppSettings.blacklistedFolders.value.sorted().forEach { path ->
+            append(path.length).append(':').append(path).append(';')
         }
     }
 
