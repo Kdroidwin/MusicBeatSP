@@ -724,6 +724,8 @@ object AppSettings {
 
     /** Put the playing track's codec, bitrate and sample rate on the player. */
     val showNerdStats = MutableStateFlow(false)
+    /** Keep technical stats over the artwork instead of toggling the quality badge. */
+    val nerdStatsAlwaysOnArtwork = MutableStateFlow(false)
 
     /** Freezes the main player's mesh gradient instead of letting it drift/crossfade. */
     val reduceAnimation = MutableStateFlow(false)
@@ -1623,6 +1625,7 @@ object AppSettings {
         }.getOrDefault(MediaControlSecondaryAction.SHUFFLE)
         hideMediaControlCustomActions.value = prefs.getBoolean(KEY_HIDE_MEDIA_CONTROL_CUSTOM_ACTIONS, false)
         showNerdStats.value = prefs.getBoolean(KEY_NERD_STATS, false)
+        nerdStatsAlwaysOnArtwork.value = prefs.getBoolean(KEY_NERD_STATS_ALWAYS_ON_ARTWORK, false)
         reduceAnimation.value = prefs.getBoolean(KEY_REDUCE_ANIMATION, false)
         playerArtworkTransition.value = prefs.getBoolean(KEY_PLAYER_ARTWORK_TRANSITION, true)
         walkmanPlayerStyle.value = prefs.getBoolean(KEY_WALKMAN_PLAYER_STYLE, false)
@@ -2239,6 +2242,11 @@ object AppSettings {
     fun setShowNerdStats(value: Boolean) {
         showNerdStats.value = value
         prefs.edit().putBoolean(KEY_NERD_STATS, value).apply()
+    }
+
+    fun setNerdStatsAlwaysOnArtwork(value: Boolean) {
+        nerdStatsAlwaysOnArtwork.value = value
+        prefs.edit().putBoolean(KEY_NERD_STATS_ALWAYS_ON_ARTWORK, value).apply()
     }
 
     fun setThemeMode(value: ThemeMode) {
@@ -4725,6 +4733,7 @@ object AppSettings {
     private const val KEY_MEDIA_CONTROL_SECONDARY_ACTION = "media_control_secondary_action"
     private const val KEY_HIDE_MEDIA_CONTROL_CUSTOM_ACTIONS = "hide_media_control_custom_actions"
     private const val KEY_NERD_STATS = "show_nerd_stats"
+    private const val KEY_NERD_STATS_ALWAYS_ON_ARTWORK = "nerd_stats_always_on_artwork"
     private const val KEY_CACHE_LIMIT = "audio_cache_limit_bytes"
     private const val KEY_REDUCE_ANIMATION = "reduce_animation"
     private const val KEY_PLAYER_ARTWORK_TRANSITION = "player_artwork_transition"

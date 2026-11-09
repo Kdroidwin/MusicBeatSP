@@ -322,7 +322,10 @@
     <string name="reverb_subtitle">部屋の残響を調整します。初期設定はオフです。端末で非対応の場合は適用されません</string>
     <string name="reverb_amount">残響量</string>
     <string name="show_nerd_stats">技術情報を表示</string>
-    <string name="show_nerd_stats_subtitle">プレイヤーにコーデック、ビットレート、サンプルレートを表示</string>
+    <string name="show_nerd_stats_subtitle">ロスレス表示をタップして音質表示と技術情報を切り替えます</string>
+    <string name="nerd_stats_always_on_artwork">アルバムアート上に技術情報を常時表示</string>
+    <string name="nerd_stats_always_on_artwork_subtitle">オンにすると従来どおりカバー上に表示し、オフではロスレス表示をタップしたときだけ表示します</string>
+    <string name="audio_info">音声情報</string>
     <string name="theme">テーマ</string>
     <string name="theme_custom_image">カスタム画像</string>
     <string name="choose_theme_image">テーマ画像を選択</string>

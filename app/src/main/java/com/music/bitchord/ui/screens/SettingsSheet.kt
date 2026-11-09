@@ -267,6 +267,15 @@ private fun dsdPlaybackSearchEntry(enabled: Boolean): SettingsSearchEntry = Sett
 )
 
 @Composable
+private fun nerdStatsArtworkPlacementSearchEntry(enabled: Boolean): SettingsSearchEntry = SettingsSearchEntry(
+    title = stringResource(R.string.nerd_stats_always_on_artwork),
+    subtitle = stringResource(R.string.nerd_stats_always_on_artwork_subtitle),
+    keywords = listOf("stats", "codec", "bitrate", "sample rate", "artwork", "cover", "technical info", "技術情報", "カバー", "常時表示"),
+    checked = enabled,
+    activate = { AppSettings.setNerdStatsAlwaysOnArtwork(!enabled) },
+)
+
+@Composable
 private fun seekButtonsInsideTrackControlsSearchEntry(enabled: Boolean): SettingsSearchEntry = SettingsSearchEntry(
     title = stringResource(R.string.seek_buttons_inside_track_controls),
     subtitle = stringResource(R.string.seek_buttons_inside_track_controls_subtitle),
@@ -1175,6 +1184,7 @@ fun SettingsScreen(
     val hideSeekButtonLabels by AppSettings.hideSeekButtonLabels.collectAsStateWithLifecycle()
     val spatialAudio by AppSettings.spatialAudio.collectAsStateWithLifecycle()
     val nerdStats by AppSettings.showNerdStats.collectAsStateWithLifecycle()
+    val nerdStatsAlwaysOnArtwork by AppSettings.nerdStatsAlwaysOnArtwork.collectAsStateWithLifecycle()
     val reduceAnimation by AppSettings.reduceAnimation.collectAsStateWithLifecycle()
     val playerArtworkTransition by AppSettings.playerArtworkTransition.collectAsStateWithLifecycle()
     val walkmanPlayerStyle by AppSettings.walkmanPlayerStyle.collectAsStateWithLifecycle()
@@ -2132,6 +2142,7 @@ fun SettingsScreen(
             listOf("stats", "codec", "bitrate", "sample rate", "情報", "ビットレート"),
             nerdStats,
         ) { AppSettings.setShowNerdStats(!nerdStats) },
+        nerdStatsArtworkPlacementSearchEntry(nerdStatsAlwaysOnArtwork),
         SettingsSearchEntry(
             stringResource(R.string.lyrics_debug_logs),
             stringResource(R.string.lyrics_debug_logs_subtitle),
@@ -6604,6 +6615,23 @@ fun SettingsScreen(
                     )
                 },
                 onClick = { AppSettings.setShowNerdStats(!nerdStats) },
+            )
+            RowDivider()
+            SettingsRow(
+                icon = Icons.Rounded.GraphicEq,
+                title = stringResource(R.string.nerd_stats_always_on_artwork),
+                subtitle = stringResource(R.string.nerd_stats_always_on_artwork_subtitle),
+                trailing = {
+                    Switch(
+                        checked = nerdStatsAlwaysOnArtwork,
+                        onCheckedChange = AppSettings::setNerdStatsAlwaysOnArtwork,
+                        colors = SwitchDefaults.colors(
+                            checkedTrackColor = MaterialTheme.colorScheme.primary,
+                            checkedBorderColor = MaterialTheme.colorScheme.primary,
+                        ),
+                    )
+                },
+                onClick = { AppSettings.setNerdStatsAlwaysOnArtwork(!nerdStatsAlwaysOnArtwork) },
             )
             RowDivider()
             SettingsRow(

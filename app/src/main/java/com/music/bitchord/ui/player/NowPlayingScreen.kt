@@ -165,6 +165,7 @@ import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.res.stringArrayResource
 import androidx.compose.ui.semantics.clearAndSetSemantics
 import androidx.compose.ui.semantics.contentDescription
+import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.draw.clipToBounds
 import androidx.compose.ui.draw.shadow
@@ -2400,6 +2401,7 @@ fun NowPlayingScreen(
             // line now lives inside the sleeve itself, so the art Box below
             // needs these before the seek bar does.
             val showNerdStats by AppSettings.showNerdStats.collectAsStateWithLifecycle()
+            val nerdStatsAlwaysOnArtwork by AppSettings.nerdStatsAlwaysOnArtwork.collectAsStateWithLifecycle()
             val nerdStats by NerdStats.current.collectAsStateWithLifecycle()
             // Height the artwork block below turns out not to need, spent by the
             // controls at the foot of the screen. Filled in from inside the box,
@@ -2890,7 +2892,7 @@ fun NowPlayingScreen(
                     // evidence, and the two no longer swap for each other on a
                     // tap. Fades out with the sleeve as it collapses to a
                     // thumbnail, where there's no room to read it anyway.
-                    if (showNerdStats && p < 0.5f) {
+                    if (showNerdStats && nerdStatsAlwaysOnArtwork && p < 0.5f) {
                         // A plain white line reads fine over the usual dark
                         // tile, but a light stretch of an animated cover — sky,
                         // snow, a pale sleeve — washes it out entirely. The
@@ -3438,6 +3440,9 @@ fun NowPlayingScreen(
                         stillRacing = stillRacing,
                         losslessRequested = losslessRequested,
                         nerdStats = nerdStats,
+                        showNerdStats = showNerdStats,
+                        nerdStatsAlwaysOnArtwork = nerdStatsAlwaysOnArtwork,
+                        trackKey = song.videoId,
                         modifier = Modifier
                             .align(Alignment.Center)
                             .padding(horizontal = 8.dp),
@@ -6960,14 +6965,7 @@ private fun formatTime(ms: Long): String {
     return "%d:%02d".format(Locale.ROOT, minutes, seconds)
 }
 
-/**
- * The gap between the two timestamps under the seek bar: just the "Lossless"
- * badge when one applies, and nothing otherwise. The stats line that used to
- * fall back to lives inside the sleeve now (see the bottom-centre overlay on
- * the artwork Box above), so there is no tap here to swap it in — the two say
- * the same thing at different resolutions, both read off the stream being
- * decoded rather than off what a source offered to send.
- */
+/** Quality badge below the seek bar, with an optional tap-to-show stats mode. */
 @Composable
 private fun LosslessOrStats(
     isLocalAudio: Boolean,
@@ -6975,13 +6973,32 @@ private fun LosslessOrStats(
     stillRacing: Boolean,
     losslessRequested: Boolean,
     nerdStats: NerdStats.Snapshot?,
+    showNerdStats: Boolean,
+    nerdStatsAlwaysOnArtwork: Boolean,
+    trackKey: String,
     modifier: Modifier = Modifier,
 ) {
+    val context = LocalContext.current
     val hideLosslessLabel by AppSettings.hideLosslessLabel.collectAsStateWithLifecycle()
+    val badgeCanToggleStats = showNerdStats && !nerdStatsAlwaysOnArtwork
+    var statsOnBadge by remember(trackKey, showNerdStats, nerdStatsAlwaysOnArtwork) {
+        mutableStateOf(false)
+    }
+    val badgeModifier = if (badgeCanToggleStats) {
+        modifier.clickable(role = Role.Button) { statsOnBadge = !statsOnBadge }
+    } else {
+        modifier
+    }
+    val statsTextOnBadge = if (badgeCanToggleStats && statsOnBadge) nerdStats?.describe(context) else null
     when {
         // This preference hides the full quality/status badge family: lossless,
         // hi-res, high-quality and the in-progress quality-upgrade label.
-        hideLosslessLabel -> {}
+        hideLosslessLabel && (!showNerdStats || nerdStats == null || nerdStatsAlwaysOnArtwork) -> {}
+        hideLosslessLabel -> LosslessLabel(
+            text = statsTextOnBadge ?: stringResource(R.string.audio_info),
+            animated = false,
+            modifier = badgeModifier,
+        )
         // Still resolving — either the player itself is buffering, or a
         // module is still racing YouTube for this track in the background
         // (see [NerdStats.racingLossless]) even though YouTube already won
@@ -7032,26 +7049,32 @@ private fun LosslessOrStats(
         nerdStats?.isLossless == true && !hideLosslessLabel -> LosslessLabel(
             // Same line Tidal, Qobuz and Apple Music draw it at — see
             // [NerdStats.Snapshot.isHiRes].
-            text = stringResource(if (nerdStats.isHiRes) R.string.hi_res_lossless else R.string.lossless),
+            text = statsTextOnBadge
+                ?: stringResource(if (nerdStats.isHiRes) R.string.hi_res_lossless else R.string.lossless),
             // Shimmer is reserved for the thing that was asked for and
             // confirmed. It is what makes the badge read as an achievement
             // rather than a label, which only one of these two is.
-            animated = true,
-            modifier = modifier,
+            animated = statsTextOnBadge == null,
+            modifier = badgeModifier,
         )
         nerdStats?.isDolbyAtmos == true -> LosslessLabel(
-            text = "Dolby Atmos",
-            animated = true,
+            text = statsTextOnBadge ?: "Dolby Atmos",
+            animated = statsTextOnBadge == null,
             iconPainter = painterResource(R.drawable.ic_dolby_atmos),
-            modifier = modifier,
+            modifier = badgeModifier,
         )
         // Lossy, but the good end of lossy — a module's 320kbps tier, which
         // for a great many tracks is the best copy that exists anywhere the
         // app can reach. See [NerdStats.Snapshot.isHiQuality].
         nerdStats?.isHiQuality == true -> LosslessLabel(
-            text = stringResource(R.string.high_quality),
+            text = statsTextOnBadge ?: stringResource(R.string.high_quality),
             animated = false,
-            modifier = modifier,
+            modifier = badgeModifier,
+        )
+        showNerdStats && !nerdStatsAlwaysOnArtwork && nerdStats != null -> LosslessLabel(
+            text = statsTextOnBadge ?: stringResource(R.string.audio_info),
+            animated = false,
+            modifier = badgeModifier,
         )
         else -> {}
     }

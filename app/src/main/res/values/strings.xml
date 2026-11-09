@@ -351,7 +351,10 @@
     <string name="reverb_subtitle">Adjust room ambience. Starts off; unavailable system effects are ignored.</string>
     <string name="reverb_amount">Amount</string>
     <string name="show_nerd_stats">Show stats for nerds</string>
-    <string name="show_nerd_stats_subtitle">Codec, bitrate and sample rate on the player</string>
+    <string name="show_nerd_stats_subtitle">Tap the lossless badge to switch between quality and codec details</string>
+    <string name="nerd_stats_always_on_artwork">Always show technical info over artwork</string>
+    <string name="nerd_stats_always_on_artwork_subtitle">Use the previous placement over the cover instead of tapping the lossless badge</string>
+    <string name="audio_info">Audio info</string>
     <string name="theme">Theme</string>
     <string name="theme_custom_image">Custom image</string>
     <string name="choose_theme_image">Choose a theme image</string>
