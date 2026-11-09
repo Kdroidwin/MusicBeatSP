@@ -30,7 +30,7 @@ object LocalMediaRepository {
     private const val MIN_LOCAL_MUSIC_DURATION_MS = 30_000L
 
     private val localMusicExtensions = setOf(
-        "mp3", "m4a", "flac", "ogg", "opus", "aac", "webm", "dsf", "dff",
+        "mp3", "m4a", "flac", "wav", "ogg", "opus", "aac", "webm", "dsf", "dff",
     )
 
     private val nonMusicPathSegments = listOf(
@@ -310,7 +310,7 @@ object LocalMediaRepository {
         } else ""
         val selection = if (filterNonMusic) {
             buildString {
-                append("((${MediaStore.Audio.Media.IS_MUSIC} != 0")
+                append("(((${MediaStore.Audio.Media.IS_MUSIC} != 0 OR ${MediaStore.Audio.Media.DISPLAY_NAME} LIKE '%.wav')")
                 append(" AND ${MediaStore.Audio.Media.DURATION} >= ?")
                 append(" AND ${MediaStore.Audio.Media.IS_ALARM} = 0")
                 append(" AND ${MediaStore.Audio.Media.IS_NOTIFICATION} = 0")
@@ -321,7 +321,7 @@ object LocalMediaRepository {
                 append(")$dsdSelection)")
             }
         } else {
-            "(${MediaStore.Audio.Media.IS_MUSIC} != 0$dsdSelection)"
+            "(${MediaStore.Audio.Media.IS_MUSIC} != 0 OR ${MediaStore.Audio.Media.DISPLAY_NAME} LIKE '%.wav'$dsdSelection)"
         }
         val selectionArgs = if (filterNonMusic) {
             arrayOf(MIN_LOCAL_MUSIC_DURATION_MS.toString())
@@ -409,7 +409,7 @@ object LocalMediaRepository {
                         val title = rawTitle.cleanTag()?.removeAudioExtension()
                             ?: displayName.substringBeforeLast('.').takeIf { it.isNotBlank() }
                             ?: "Track $id"
-                        val artist = rawArtist.takeUnless { it.isNullOrBlank() || it == "<unknown>" } ?: "Unknown Artist"
+                        val artist = rawArtist?.trim()?.takeUnless(::isUnknownArtist) ?: "Unknown Artist"
                         val albumArtist = albumArtistCol.takeIf { it >= 0 }
                             ?.let(cursor::getString)
                             .cleanTag()

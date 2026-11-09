@@ -5,6 +5,7 @@ import android.media.MediaMetadataRetriever
 import android.net.Uri
 import android.os.Build
 import com.music.bitchord.data.model.Song
+import com.music.bitchord.data.WavArtistTagReader
 import com.music.bitchord.feature.tageditor.data.TagLibWriter
 import com.music.bitchord.feature.localsongactions.domain.model.LocalSongFullMetadata
 import kotlinx.coroutines.Dispatchers
@@ -90,6 +91,10 @@ object LocalSongMetadataRetriever {
 
             val durationMs = rawDuration?.toLongOrNull()
             val durationFormatted = durationMs?.let { formatDuration(it) } ?: song.durationText
+            val resolvedArtist = rawArtist.usableArtist()
+                ?: song.artist.usableArtist()
+                ?: WavArtistTagReader.readArtist(context, song)?.usableArtist()
+                ?: "Unknown Artist"
 
             val comment = if (includeEmbeddedComment) {
                 TagLibWriter.readEmbeddedComment(context, song)
@@ -97,7 +102,7 @@ object LocalSongMetadataRetriever {
 
             LocalSongFullMetadata(
                 title = rawTitle?.takeUnless { it.isBlank() } ?: song.title,
-                artist = rawArtist?.takeUnless { it.isBlank() } ?: song.artist,
+                artist = resolvedArtist,
                 album = rawAlbum?.takeUnless { it.isBlank() } ?: song.albumName,
                 albumArtist = rawAlbumArtist?.takeUnless { it.isBlank() },
                 trackNumber = formatNumberAndTotal(rawTrack, totalTracks),
@@ -142,6 +147,9 @@ object LocalSongMetadataRetriever {
             "%02d".format(Locale.US, num)
         }
     }
+
+    private fun String?.usableArtist(): String? = this?.trim()
+        ?.takeIf { it.isNotBlank() && !it.equals("<unknown>", ignoreCase = true) && !it.equals("unknown artist", ignoreCase = true) }
 
     private fun formatFileSize(bytes: Long): String {
         if (bytes <= 0) return "0 B"
