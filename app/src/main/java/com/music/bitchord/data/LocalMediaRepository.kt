@@ -261,7 +261,8 @@ object LocalMediaRepository {
                 .artist
                 .trim()
                 .takeUnless(::isUnknownArtist)
-        }.getOrNull()
+        }.getOrNull()?.takeUnless(::isUnknownArtist)
+            ?: WavArtistTagReader.readArtist(context, song)
 
     /**
      * Queries MediaStore for all audio files available on the device.
