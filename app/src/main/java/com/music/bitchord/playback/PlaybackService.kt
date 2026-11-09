@@ -49,6 +49,8 @@ import androidx.media3.exoplayer.DefaultRenderersFactory
 import androidx.media3.exoplayer.ExoPlayer
 import androidx.media3.exoplayer.analytics.AnalyticsListener
 import androidx.media3.exoplayer.audio.AudioSink
+import androidx.media3.exoplayer.audio.AudioTrackAudioOutputProvider
+import androidx.media3.exoplayer.audio.DefaultAudioTrackBufferSizeProvider
 import androidx.media3.exoplayer.audio.DefaultAudioSink
 import androidx.media3.exoplayer.audio.SilenceSkippingAudioProcessor
 import androidx.media3.exoplayer.mediacodec.MediaCodecSelector
@@ -1227,6 +1229,15 @@ class PlaybackService : MediaLibraryService() {
          * and opening an audio track. Only the first is ours to shorten.
          */
         override fun onPlaybackStateChanged(eventTime: AnalyticsListener.EventTime, state: Int) {
+            if (state == Player.STATE_BUFFERING) {
+                val active = player
+                TrackLog.w(
+                    "PLAYBACK_BUFFER",
+                    "entered BUFFERING: buffered=${active?.totalBufferedDuration ?: -1L}ms, " +
+                        "loading=${active?.isLoading}, position=${active?.currentPosition ?: -1L}ms",
+                    about = eventTime.mediaId(),
+                )
+            }
             val cutAt = swapCutAt ?: return
             if (state == Player.STATE_READY) {
                 TrackLog.d(
@@ -1271,6 +1282,28 @@ class PlaybackService : MediaLibraryService() {
             TrackLog.i(
                 "AUDIO_OUT",
                 "AudioTrack ${audioTrackConfig.sampleRate}Hz encoding=${audioTrackConfig.encoding}",
+                about = eventTime.mediaId(),
+            )
+        }
+
+        private var lastUnderrunLogAtMs = 0L
+
+        override fun onAudioUnderrun(
+            eventTime: AnalyticsListener.EventTime,
+            bufferSize: Int,
+            bufferSizeMs: Long,
+            elapsedSinceLastFeedMs: Long,
+        ) {
+            val now = SystemClock.elapsedRealtime()
+            if (now - lastUnderrunLogAtMs < AUDIO_UNDERRUN_LOG_INTERVAL_MS) return
+            lastUnderrunLogAtMs = now
+            val active = player
+            TrackLog.w(
+                "AUDIO_OUT",
+                "AudioTrack underrun: trackBuffer=${bufferSizeMs}ms/${bufferSize}B, " +
+                    "writeGap=${elapsedSinceLastFeedMs}ms, " +
+                    "sourceBuffered=${active?.totalBufferedDuration ?: -1L}ms, " +
+                    "state=${active?.playbackState}",
                 about = eventTime.mediaId(),
             )
         }
@@ -4451,6 +4484,11 @@ class PlaybackService : MediaLibraryService() {
             /* bufferForPlaybackAfterRebufferMs = */ RESUME_PLAYBACK_MS,
         )
         .setTargetBufferBytes(FAR_BUFFER_BYTES)
+        // The explicit 8 MiB ceiling is a memory target, not a reason to stop
+        // a high-bitrate stream before it has even 50 seconds ahead. Media3
+        // keeps this bounded by available heap and falls back to the byte cap
+        // when memory is tight; local-file loading keeps its existing policy.
+        .setPrioritizeTimeOverSizeThresholdsForStreaming(true)
         .setBackBuffer(/* backBufferDurationMs = */ BACK_BUFFER_MS, /* retainBackBufferFromKeyframe = */ true)
         .build()
 
@@ -4510,6 +4548,15 @@ class PlaybackService : MediaLibraryService() {
             val normalSink = DefaultAudioSink.Builder(context)
             .setEnableFloatOutput(enableFloatOutput)
             .setEnableAudioTrackPlaybackParams(enableAudioTrackPlaybackParams)
+            .setAudioOutputProvider(
+                AudioTrackAudioOutputProvider.Builder(context)
+                    .setAudioTrackBufferSizeProvider(
+                        DefaultAudioTrackBufferSizeProvider.Builder()
+                            .setTargetPcmBufferDurationUs(TARGET_PCM_BUFFER_DURATION_US)
+                            .build(),
+                    )
+                    .build(),
+            )
             .setAudioProcessorChain(
                 DefaultAudioSink.DefaultAudioProcessorChain(
                     arrayOf(resamplerCutoff, parametricEq, spatial, transition, replayGain, darUpsampler),
@@ -6879,6 +6926,12 @@ class PlaybackService : MediaLibraryService() {
 
         /** More room after a stall than at the start — see the load control. */
         const val RESUME_PLAYBACK_MS = 2_000
+
+        /** One second of PCM output keeps short scheduler stalls off AudioTrack. */
+        const val TARGET_PCM_BUFFER_DURATION_US = 1_000_000
+
+        /** Prevent underrun diagnostics from flooding the playback log. */
+        const val AUDIO_UNDERRUN_LOG_INTERVAL_MS = 1_000L
 
         /**
          * Outer cap on stream resolution. Individual client calls and probes

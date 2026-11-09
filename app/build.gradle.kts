@@ -308,11 +308,11 @@ dependencies {
     debugImplementation("androidx.compose.ui:ui-tooling")
 
     // ---- Media playback: Media3 / ExoPlayer ----
-    implementation("androidx.media3:media3-exoplayer:1.11.0")
-    implementation("androidx.media3:media3-session:1.11.0")
-    implementation("androidx.media3:media3-common:1.11.0")
-    implementation("androidx.media3:media3-transformer:1.11.0")
-    implementation("androidx.media3:media3-datasource-okhttp:1.11.0")
+    implementation("androidx.media3:media3-exoplayer:1.11.1")
+    implementation("androidx.media3:media3-session:1.11.1")
+    implementation("androidx.media3:media3-common:1.11.1")
+    implementation("androidx.media3:media3-transformer:1.11.1")
+    implementation("androidx.media3:media3-datasource-okhttp:1.11.1")
     // Official Google Cast sender framework. Device discovery and route UI
     // are initialized only when the player details menu is opened.
     implementation("com.google.android.gms:play-services-cast-framework:22.3.1")
@@ -326,7 +326,7 @@ dependencies {
     implementation("org.bouncycastle:bcpkix-jdk18on:1.85")
     // Audio is progressive, but Apple serves its motion artwork as HLS — this
     // is what lets the animated sleeve play it. See CanvasArtworkPlayer.
-    implementation("androidx.media3:media3-exoplayer-hls:1.11.0")
+    implementation("androidx.media3:media3-exoplayer-hls:1.11.1")
     // Source modules hand back manifests rather than files, and which kind is
     // the backend's choice, not ours: the Tidal one served `.m3u8` until
     // September 2026 and `.mpd` after it, for the same track and the same
@@ -334,7 +334,7 @@ dependencies {
     // DefaultMediaSourceFactory cannot build a source for it, falls back to
     // progressive, and the extractors try to sniff XML as audio
     // (ERROR_CODE_PARSING_CONTAINER_UNSUPPORTED). See withResolvedStreamType.
-    implementation("androidx.media3:media3-exoplayer-dash:1.11.0")
+    implementation("androidx.media3:media3-exoplayer-dash:1.11.1")
     implementation("org.jetbrains.kotlinx:kotlinx-coroutines-guava:1.9.0")
 
     // ---- Images: Coil 3 + Palette (dominant colors for the mesh gradient) ----
