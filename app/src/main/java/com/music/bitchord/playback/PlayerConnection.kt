@@ -494,6 +494,15 @@ fun Song.toMediaItem(): MediaItem {
         localUri?.takeUnless(Downloads::isMissingLocalFile)
         ?: localPath?.takeIf { java.io.File(it).exists() }?.let { android.net.Uri.fromFile(java.io.File(it)).toString() }
         ?: Downloads.verifiedSavedUri(videoId)
+    val localAudioExtension = localPath?.substringAfterLast('.', "")
+        ?: offlineUri?.let { runCatching { Uri.parse(it).lastPathSegment?.substringAfterLast('.', "") }.getOrNull() }
+    val needsWmaPcmDecode = localAudioExtension.equals("wma", ignoreCase = true) &&
+        offlineUri?.let { runCatching { Uri.parse(it).scheme in setOf("file", "content") }.getOrDefault(false) } == true
+    val shouldProbeMediaStoreForWma = localAudioExtension.isNullOrBlank() && offlineUri?.let { uriString ->
+        runCatching {
+            Uri.parse(uriString).let { it.scheme == "content" && it.authority == "media" }
+        }.getOrDefault(false)
+    } == true
     val uriString = if (isRssAudio) {
         offlineUri ?: radioStreamUrl ?: remoteFileUri ?: "bitchord://unavailable?source=rss"
     } else radioStreamUrl ?: remoteFileUri ?: offlineUri ?: when {
@@ -534,6 +543,18 @@ fun Song.toMediaItem(): MediaItem {
     return MediaItem.Builder()
         .setMediaId(videoId)
         .setUri(resolvePlaybackUri(uriString, if (isLiveRadio || isOnsenAudio || isRssAudio) null else localPath))
+        .apply {
+            if (needsWmaPcmDecode) {
+                // This key is consumed only by WmaPcmDataSource. It leaves
+                // every other source and decoder path untouched.
+                setCustomCacheKey("$WMA_PCM_CACHE_KEY_PREFIX${Uri.encode(offlineUri)}")
+            } else if (shouldProbeMediaStoreForWma) {
+                // Scoped-storage MediaStore URIs often omit the filename
+                // extension from their URI. Let the WMA source check the
+                // MediaStore display name, then delegate every other file.
+                setCustomCacheKey("$WMA_MEDIASTORE_PROBE_CACHE_KEY_PREFIX${Uri.encode(offlineUri)}")
+            }
+        }
         .apply { if (isLiveRadio || isOnsenAudio) setMimeType(MimeTypes.APPLICATION_M3U8) }
         .apply { clipping?.let(::setClippingConfiguration) }
     .setMediaMetadata(

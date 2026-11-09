@@ -30,7 +30,7 @@ object LocalMediaRepository {
     private const val MIN_LOCAL_MUSIC_DURATION_MS = 30_000L
 
     private val localMusicExtensions = setOf(
-        "mp3", "m4a", "flac", "wav", "ogg", "opus", "aac", "webm", "dsf", "dff",
+        "mp3", "m4a", "flac", "wav", "wma", "ogg", "opus", "aac", "webm", "dsf", "dff",
     )
 
     private val nonMusicPathSegments = listOf(
@@ -271,6 +271,7 @@ object LocalMediaRepository {
         if (!hasStoragePermission(context)) return@withContext emptyList()
         val songs = mutableListOf<Song>()
         val wavSongsWithoutMediaStoreArtist = mutableListOf<Pair<Int, Song>>()
+        val wmaSongsWithoutMediaStoreTags = mutableListOf<Pair<Int, Song>>()
         // This scan runs over every audio file on the device, which includes
         // whatever this app has downloaded into Music/BitChord alongside
         // everything else — but by content URI, the only thing MediaStore
@@ -310,7 +311,7 @@ object LocalMediaRepository {
         } else ""
         val selection = if (filterNonMusic) {
             buildString {
-                append("(((${MediaStore.Audio.Media.IS_MUSIC} != 0 OR ${MediaStore.Audio.Media.DISPLAY_NAME} LIKE '%.wav')")
+                append("(((${MediaStore.Audio.Media.IS_MUSIC} != 0 OR ${MediaStore.Audio.Media.DISPLAY_NAME} LIKE '%.wav' OR ${MediaStore.Audio.Media.DISPLAY_NAME} LIKE '%.wma')")
                 append(" AND ${MediaStore.Audio.Media.DURATION} >= ?")
                 append(" AND ${MediaStore.Audio.Media.IS_ALARM} = 0")
                 append(" AND ${MediaStore.Audio.Media.IS_NOTIFICATION} = 0")
@@ -321,7 +322,7 @@ object LocalMediaRepository {
                 append(")$dsdSelection)")
             }
         } else {
-            "(${MediaStore.Audio.Media.IS_MUSIC} != 0 OR ${MediaStore.Audio.Media.DISPLAY_NAME} LIKE '%.wav'$dsdSelection)"
+            "(${MediaStore.Audio.Media.IS_MUSIC} != 0 OR ${MediaStore.Audio.Media.DISPLAY_NAME} LIKE '%.wav' OR ${MediaStore.Audio.Media.DISPLAY_NAME} LIKE '%.wma'$dsdSelection)"
         }
         val selectionArgs = if (filterNonMusic) {
             arrayOf(MIN_LOCAL_MUSIC_DURATION_MS.toString())
@@ -450,6 +451,9 @@ object LocalMediaRepository {
                         if (displayName.endsWith(".wav", ignoreCase = true) && isUnknownArtist(artist)) {
                             wavSongsWithoutMediaStoreArtist += (songs.lastIndex to song)
                         }
+                        if (displayName.endsWith(".wma", ignoreCase = true) && isUnknownArtist(artist)) {
+                            wmaSongsWithoutMediaStoreTags += (songs.lastIndex to song)
+                        }
                     }
                 }
             }.onFailure {
@@ -477,6 +481,23 @@ object LocalMediaRepository {
             readWavArtist(context, song)?.let { artist ->
                 songs[index] = song.copy(artist = artist)
             }
+        }
+        // MediaStore's WMA metadata support varies between Android builds.
+        // Read tags only for WMA rows whose artist column is missing so WMA
+        // remains visible without adding tag I/O to the regular library scan.
+        wmaSongsWithoutMediaStoreTags.forEach { (index, song) ->
+            runCatching { TagLibWriter.readTags(context, song, readArtwork = false) }
+                .getOrNull()
+                ?.let { tags ->
+                    songs[index] = song.copy(
+                        title = tags.title.trim().takeIf(String::isNotBlank) ?: song.title,
+                        artist = tags.artist.trim().takeUnless(::isUnknownArtist) ?: song.artist,
+                        albumName = tags.album.trim().takeIf(String::isNotBlank) ?: song.albumName,
+                        albumArtist = tags.albumArtist.trim().takeIf(String::isNotBlank) ?: song.albumArtist,
+                        trackNumber = tags.trackNumber.substringBefore('/').toIntOrNull()
+                            ?.takeIf { it > 0 } ?: song.trackNumber,
+                    )
+                }
         }
 
         songs
@@ -561,7 +582,7 @@ object LocalMediaRepository {
         val dsdSelection = if (dsdAllowed) {
             " OR ${MediaStore.Audio.Media.DISPLAY_NAME} LIKE '%.dsf' OR ${MediaStore.Audio.Media.DISPLAY_NAME} LIKE '%.dff'"
         } else ""
-        val selection = "(${MediaStore.Audio.Media.IS_MUSIC} != 0$dsdSelection)"
+        val selection = "(${MediaStore.Audio.Media.IS_MUSIC} != 0 OR ${MediaStore.Audio.Media.DISPLAY_NAME} LIKE '%.wav' OR ${MediaStore.Audio.Media.DISPLAY_NAME} LIKE '%.wma'$dsdSelection)"
 
         val volumeUris = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
             runCatching {
@@ -672,7 +693,7 @@ object LocalMediaRepository {
 
     private fun String.removeAudioExtension(): String {
         val extension = substringAfterLast('.', "").lowercase(Locale.ROOT)
-        return if (extension in localMusicExtensions || extension == "wav") {
+        return if (extension in localMusicExtensions) {
             substringBeforeLast('.').ifBlank { this }
         } else {
             this
@@ -682,7 +703,7 @@ object LocalMediaRepository {
     private fun isAudioFileName(name: String): Boolean {
         val lower = name.lowercase(Locale.ROOT)
         return lower.endsWith(".mp3") || lower.endsWith(".m4a") ||
-            lower.endsWith(".flac") || lower.endsWith(".wav") ||
+            lower.endsWith(".flac") || lower.endsWith(".wav") || lower.endsWith(".wma") ||
             lower.endsWith(".ogg") || lower.endsWith(".opus") ||
             lower.endsWith(".aac") || lower.endsWith(".webm") ||
             (AppSettings.dsdPlaybackEnabled.value && isDsdFileName(lower)) ||

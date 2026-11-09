@@ -1578,10 +1578,11 @@ class PlaybackService : MediaLibraryService() {
         // while routing the smb:// scheme to the upstream SMB reader.
         val routedDataSourceFactory = SmbDataSource.RoutingFactory(defaultDataSourceFactory)
         val dsdPcmFactory = DsdPcmDataSource.Factory(this, routedDataSourceFactory)
-        AudioCache.setUpstream(dsdPcmFactory)
+        val wmaPcmFactory = WmaPcmDataSource.Factory(this, dsdPcmFactory)
+        AudioCache.setUpstream(wmaPcmFactory)
         // The watch speaker reads through the same resolver/cache route as this player.
-        WearBridge.attachStreams(AudioCache.playbackFactory(dsdPcmFactory))
-        mediaSourceFactory = DefaultMediaSourceFactory(AudioCache.playbackFactory(dsdPcmFactory))
+        WearBridge.attachStreams(AudioCache.playbackFactory(wmaPcmFactory))
+        mediaSourceFactory = DefaultMediaSourceFactory(AudioCache.playbackFactory(wmaPcmFactory))
             .setLoadErrorHandlingPolicy(PermanentAwareLoadErrorPolicy())
 
         configuredFloatOutput = shouldEnableFloatOutput()
