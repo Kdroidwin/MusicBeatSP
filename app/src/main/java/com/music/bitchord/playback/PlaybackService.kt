@@ -4485,10 +4485,11 @@ class PlaybackService : MediaLibraryService() {
         )
         .setTargetBufferBytes(FAR_BUFFER_BYTES)
         // The explicit 8 MiB ceiling is a memory target, not a reason to stop
-        // a high-bitrate stream before it has even 50 seconds ahead. Media3
-        // keeps this bounded by available heap and falls back to the byte cap
-        // when memory is tight; local-file loading keeps its existing policy.
+        // high-bitrate streams or raw local PCM before they have enough time
+        // buffered to start or recover. Media3 prioritizes time while heap
+        // headroom is available and falls back to the byte cap under pressure.
         .setPrioritizeTimeOverSizeThresholdsForStreaming(true)
+        .setPrioritizeTimeOverSizeThresholdsForLocalPlayback(true)
         .setBackBuffer(/* backBufferDurationMs = */ BACK_BUFFER_MS, /* retainBackBufferFromKeyframe = */ true)
         .build()
 
