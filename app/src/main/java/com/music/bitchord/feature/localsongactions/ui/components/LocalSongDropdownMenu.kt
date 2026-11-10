@@ -59,6 +59,7 @@ fun LocalSongDropdownMenu(
     onDeleteFromDevice: () -> Unit,
     onDetails: () -> Unit,
     onRemoveFromPlaylist: (() -> Unit)? = null,
+    removeFromPlaylistLabelRes: Int = R.string.remove_from_playlist,
     artworkUrlForPalette: String? = null,
     disableArtworkPalette: Boolean = false,
     modifier: Modifier = Modifier,
@@ -135,7 +136,7 @@ fun LocalSongDropdownMenu(
 
             if (onRemoveFromPlaylist != null) {
                 DropdownMenuItem(
-                    text = { Text(stringResource(R.string.remove_from_playlist)) },
+                    text = { Text(stringResource(removeFromPlaylistLabelRes)) },
                     leadingIcon = {
                         Icon(
                             Icons.Rounded.PlaylistRemove,

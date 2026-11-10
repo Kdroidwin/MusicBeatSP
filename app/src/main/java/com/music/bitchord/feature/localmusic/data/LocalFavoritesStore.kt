@@ -31,6 +31,9 @@ object LocalFavoritesStore {
     private lateinit var atomicStore: AtomicFile
     private val _favoriteIds = MutableStateFlow<Set<String>>(emptySet())
     val favoriteIds: StateFlow<Set<String>> = _favoriteIds.asStateFlow()
+    private val _favoriteOrder = MutableStateFlow<List<String>>(emptyList())
+    /** Stable insertion/manual order used by the Favorites collection. */
+    val favoriteOrder: StateFlow<List<String>> = _favoriteOrder.asStateFlow()
     private val _favoriteSongs = MutableStateFlow<Map<String, Song>>(emptyMap())
     /** Track metadata for favorites that are not in the device or remote library list. */
     val favoriteSongs: StateFlow<Map<String, Song>> = _favoriteSongs.asStateFlow()
@@ -74,6 +77,7 @@ object LocalFavoritesStore {
         // favorite; local files and source-backed tracks retain their own IDs.
         val migratedIds = loadedIds.toMutableSet()
         val migratedSongs = linkedMapOf<String, Song>()
+        val loadedOrder = snapshot?.order.orEmpty().ifEmpty { loadedIds.toList() }
         loadedSongs.forEach { (savedId, song) ->
             if (savedId !in loadedIds) return@forEach
             val canonicalId = song.videoId.takeIf { it.isYouTubeVideoId() } ?: savedId
@@ -83,10 +87,19 @@ object LocalFavoritesStore {
             }
             migratedSongs[canonicalId] = song.forFavoriteStorage()
         }
-        _favoriteIds.value = migratedIds
+        val migratedOrder = linkedSetOf<String>()
+        loadedOrder.forEach { savedId ->
+            val song = loadedSongs[savedId]
+            val canonicalId = song?.videoId?.takeIf { it.isYouTubeVideoId() } ?: savedId
+            if (canonicalId in migratedIds) migratedOrder += canonicalId
+        }
+        migratedIds.forEach { migratedOrder += it }
+        _favoriteOrder.value = migratedOrder.toList()
+        _favoriteIds.value = LinkedHashSet(migratedOrder)
         _favoriteSongs.value = migratedSongs
         if (snapshot == null || migratedIds != loadedIds ||
-            migratedSongs != loadedSongs.filterKeys { it in loadedIds }
+            migratedSongs != loadedSongs.filterKeys { it in loadedIds } ||
+            snapshot?.order != migratedOrder.toList()
         ) {
             persist()
         }
@@ -98,6 +111,7 @@ object LocalFavoritesStore {
             val snapshot = StoredFavoritesSnapshot(
                 ids = _favoriteIds.value,
                 songs = _favoriteSongs.value.mapValues { (_, song) -> StoredFavoriteSong.from(song) },
+                order = _favoriteOrder.value,
             )
             var output: java.io.FileOutputStream? = null
             try {
@@ -124,9 +138,11 @@ object LocalFavoritesStore {
             val wasFavorite = canonicalId in current
             if (wasFavorite) {
                 _favoriteIds.value = current - canonicalId
+                _favoriteOrder.value = _favoriteOrder.value.filterNot { it == canonicalId }
                 _favoriteSongs.value = _favoriteSongs.value - canonicalId
             } else {
                 _favoriteIds.value = current + canonicalId
+                if (canonicalId !in _favoriteOrder.value) _favoriteOrder.value = _favoriteOrder.value + canonicalId
                 song?.let { _favoriteSongs.value = _favoriteSongs.value + (canonicalId to it.forFavoriteStorage()) }
             }
             persist()
@@ -140,6 +156,7 @@ object LocalFavoritesStore {
         synchronized(persistLock) {
             if (canonicalId !in _favoriteIds.value) {
                 _favoriteIds.value = _favoriteIds.value + canonicalId
+                _favoriteOrder.value = _favoriteOrder.value + canonicalId
             }
             song?.let { _favoriteSongs.value = _favoriteSongs.value + (canonicalId to it.forFavoriteStorage()) }
             persist()
@@ -150,7 +167,26 @@ object LocalFavoritesStore {
         synchronized(persistLock) {
             if (songId in _favoriteIds.value || songId in _favoriteSongs.value) {
                 _favoriteIds.value = _favoriteIds.value - songId
+                _favoriteOrder.value = _favoriteOrder.value.filterNot { it == songId }
                 _favoriteSongs.value = _favoriteSongs.value - songId
+                persist()
+            }
+        }
+    }
+
+    /** Persist a user-selected order, retaining IDs that are temporarily unresolved. */
+    fun setFavoriteOrder(orderedIds: List<String>) {
+        synchronized(persistLock) {
+            val current = _favoriteIds.value
+            val ordered = LinkedHashSet<String>()
+            orderedIds.forEach { if (it in current) ordered += it }
+            _favoriteOrder.value.forEach { if (it in current) ordered += it }
+            current.forEach { ordered += it }
+            if (_favoriteOrder.value != ordered.toList()) {
+                _favoriteOrder.value = ordered.toList()
+                // Set equality ignores order, so assign a fresh insertion-ordered set
+                // only after the dedicated order flow has published the change.
+                _favoriteIds.value = LinkedHashSet(ordered)
                 persist()
             }
         }
@@ -162,7 +198,8 @@ object LocalFavoritesStore {
 
     fun importFavorites(incoming: Set<String>) {
         synchronized(persistLock) {
-            _favoriteIds.value = incoming
+            _favoriteOrder.value = incoming.toList()
+            _favoriteIds.value = LinkedHashSet(_favoriteOrder.value)
             _favoriteSongs.value = _favoriteSongs.value.filterKeys { it in incoming }
             persist()
         }
@@ -205,6 +242,7 @@ object LocalFavoritesStore {
     private data class StoredFavoritesSnapshot(
         val ids: Set<String> = emptySet(),
         val songs: Map<String, StoredFavoriteSong> = emptyMap(),
+        val order: List<String> = emptyList(),
     )
 
     @Serializable

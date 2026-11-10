@@ -1221,6 +1221,8 @@
     <string name="hide_player_artist_subtitle">曲名は残して、アーティスト名だけを隠します</string>
     <string name="hide_unknown_player_artist">不明なアーティストを隠す</string>
     <string name="hide_unknown_player_artist_subtitle">アーティスト名がUnknown Artistの場合、自動的に行を隠します</string>
+    <string name="hide_unknown_mini_player_artist">ミニプレイヤーで不明なアーティストを隠す</string>
+    <string name="hide_unknown_mini_player_artist_subtitle">Unknown ArtistやUnknown Artistsの場合、ミニプレイヤーのアーティスト行を隠します</string>
     <string name="hide_unknown_playlist_artist">プレイリストで不明なアーティストを隠す</string>
     <string name="hide_unknown_playlist_artist_subtitle">曲のアーティストタグが &lt;unknown&gt; の場合、プレイリスト内のアーティスト行を隠します</string>
     <string name="center_player_track_info">プレーヤーの楽曲情報を中央揃え</string>
@@ -1484,6 +1486,8 @@
     <string name="artist_image_update_failed">アーティスト画像を保存できませんでした</string>
     <string name="edit_lyrics">歌詞を編集</string>
     <string name="share_file">ファイルを共有</string>
+    <string name="share_now_playing">再生中の曲を共有</string>
+    <string name="now_playing_share_failed">再生中の曲の共有画像を作成できませんでした</string>
     <string name="metadata">メタデータ</string>
     <string name="file">ファイル</string>
     <string name="advanced_options">詳細オプション</string>
@@ -1665,6 +1669,14 @@
     <string name="saved_queues_section">保存済みキュー</string>
 
     <string name="favorites">お気に入り</string>
+    <string name="remove_from_favorites">お気に入りから削除</string>
+    <string name="remove_favorite_tracks_confirmation">選択した%1$d曲をお気に入りから削除しますか？</string>
+    <string name="bulk_tag_requires_local_tracks">タグを編集する曲は端末内から選択してください</string>
+    <string name="favorite_sort_title">お気に入りを並び替え</string>
+    <string name="sort_artist_ascending">アーティスト順（A→Z）</string>
+    <string name="sort_artist_descending">アーティスト順（Z→A）</string>
+    <string name="sort_album_ascending">アルバム順（A→Z）</string>
+    <string name="sort_album_descending">アルバム順（Z→A）</string>
     <string name="subscribe">登録</string>
     <string name="unsubscribe">登録解除</string>
     <string name="select_all">すべて選択</string>

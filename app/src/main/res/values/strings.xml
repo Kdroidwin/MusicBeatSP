@@ -29,6 +29,14 @@
     <string name="on_device">On Device</string>
     <string name="playlists">Playlists</string>
     <string name="favorites">Favorites</string>
+    <string name="remove_from_favorites">Remove from Favorites</string>
+    <string name="remove_favorite_tracks_confirmation">Remove %1$d selected tracks from Favorites?</string>
+    <string name="bulk_tag_requires_local_tracks">Select tracks saved on this device to edit tags</string>
+    <string name="favorite_sort_title">Sort Favorites</string>
+    <string name="sort_artist_ascending">Artist (A to Z)</string>
+    <string name="sort_artist_descending">Artist (Z to A)</string>
+    <string name="sort_album_ascending">Album (A to Z)</string>
+    <string name="sort_album_descending">Album (Z to A)</string>
     <string name="recently_played">Recently played</string>
     <string name="most_played">Most played</string>
     <string name="no_play_history">No listening history yet</string>
@@ -1319,6 +1327,8 @@
     <string name="hide_player_artist_subtitle">Keep the track title and hide only the artist line</string>
     <string name="hide_unknown_player_artist">Hide unknown artist</string>
     <string name="hide_unknown_player_artist_subtitle">Automatically hide the artist line when its name is Unknown Artist</string>
+    <string name="hide_unknown_mini_player_artist">Hide unknown artist in mini player</string>
+    <string name="hide_unknown_mini_player_artist_subtitle">Hide the mini player artist line for Unknown Artist or Unknown Artists</string>
     <string name="hide_unknown_playlist_artist">Hide unknown artist in playlists</string>
     <string name="hide_unknown_playlist_artist_subtitle">Hide the artist line in playlist track lists when the tag is &lt;unknown&gt;</string>
     <string name="center_player_track_info">Center player track information</string>
@@ -1575,6 +1585,8 @@
     <string name="artist_image_update_failed">Couldn’t save artist image</string>
     <string name="edit_lyrics">Edit lyrics</string>
     <string name="share_file">Share file</string>
+    <string name="share_now_playing">Share Now Playing</string>
+    <string name="now_playing_share_failed">Could not create the Now Playing image</string>
     <string name="metadata">Metadata</string>
     <string name="file">File</string>
     <string name="advanced_options">Advanced Options</string>

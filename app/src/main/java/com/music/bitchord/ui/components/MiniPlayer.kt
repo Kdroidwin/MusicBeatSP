@@ -62,6 +62,7 @@ import dev.chrisbanes.haze.HazeState
 import dev.chrisbanes.haze.materials.ExperimentalHazeMaterialsApi
 import dev.chrisbanes.haze.materials.HazeMaterials
 import kotlinx.coroutines.launch
+import java.util.Locale
 
 /**
  * The transport buttons' touch target. Material's default 48dp is what a bar
@@ -145,6 +146,7 @@ fun MiniPlayer(
     val reduceDynamicBlur by AppSettings.reduceDynamicBlur.collectAsStateWithLifecycle()
     val useArtworkColor by AppSettings.miniPlayerArtworkColor.collectAsStateWithLifecycle()
     val showArtworkOutline by AppSettings.miniPlayerArtworkOutline.collectAsStateWithLifecycle()
+    val hideUnknownArtist by AppSettings.hideUnknownMiniPlayerArtist.collectAsStateWithLifecycle()
     val showPreviousButton by AppSettings.miniPlayerPreviousButton.collectAsStateWithLifecycle()
     val swipeChangesTrack by AppSettings.miniPlayerSwipeChangesTrack.collectAsStateWithLifecycle()
     val swipeUpExpands by AppSettings.miniPlayerSwipeUpExpands.collectAsStateWithLifecycle()
@@ -156,6 +158,8 @@ fun MiniPlayer(
     val surfaceColor = if (useArtworkColor) artworkPalette.background else MaterialTheme.colorScheme.surface
     val primaryContentColor = if (useArtworkColor) artworkPalette.onBackground else MaterialTheme.colorScheme.onBackground
     val secondaryContentColor = if (useArtworkColor) artworkPalette.onBackgroundVariant else MaterialTheme.colorScheme.onSurfaceVariant
+    val normalizedArtist = remember(song.artist) { song.artist.trim().lowercase(Locale.ROOT) }
+    val showArtist = !(hideUnknownArtist && normalizedArtist in HIDDEN_UNKNOWN_ARTISTS)
     val haptics = rememberHaptics()
     val density = LocalDensity.current
     val dismissThresholdPx = with(density) { 48.dp.toPx() }
@@ -297,13 +301,15 @@ fun MiniPlayer(
                     style = MaterialTheme.typography.titleMedium,
                     color = primaryContentColor,
                 )
-                Text(
-                    text = song.artist,
-                    style = MaterialTheme.typography.bodyMedium,
-                    color = secondaryContentColor,
-                    maxLines = 1,
-                    overflow = TextOverflow.Ellipsis,
-                )
+                if (showArtist) {
+                    Text(
+                        text = song.artist,
+                        style = MaterialTheme.typography.bodyMedium,
+                        color = secondaryContentColor,
+                        maxLines = 1,
+                        overflow = TextOverflow.Ellipsis,
+                    )
+                }
             }
             if (showPreviousButton) {
                 IconButton(
@@ -363,3 +369,11 @@ fun MiniPlayer(
         }
     }
 }
+
+private val HIDDEN_UNKNOWN_ARTISTS = setOf(
+    "unknown artist",
+    "unknown artists",
+    "unknown",
+    "<unknown>",
+    "不明なアーティスト",
+)

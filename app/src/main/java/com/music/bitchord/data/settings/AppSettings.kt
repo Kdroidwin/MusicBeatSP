@@ -304,6 +304,17 @@ enum class LibrarySort {
     TITLE_DESC,
 }
 
+/** Ordering offered by the Favorites collection's track menu. */
+enum class FavoriteSongSort {
+    DEFAULT,
+    TITLE_ASC,
+    TITLE_DESC,
+    ARTIST_ASC,
+    ARTIST_DESC,
+    ALBUM_ASC,
+    ALBUM_DESC,
+}
+
 /**
  * Ordering for the track list on an album or playlist page — the same idea as
  * the Downloads folder's sort, with a date option for the one thing a
@@ -967,6 +978,8 @@ object AppSettings {
     val useLibraryIconForPlaylistControl = MutableStateFlow(false)
     val hidePlayerArtist = MutableStateFlow(false)
     val hideUnknownPlayerArtist = MutableStateFlow(false)
+    /** Hides the unknown artist subtitle only in the mini player. */
+    val hideUnknownMiniPlayerArtist = MutableStateFlow(true)
     /** Hides only the literal unknown-artist tag in playlist track lists. */
     val hideUnknownPlaylistArtist = MutableStateFlow(false)
     val centerPlayerTrackInfo = MutableStateFlow(false)
@@ -1208,6 +1221,7 @@ object AppSettings {
      * [SongSort.DEFAULT].
      */
     val detailSongSorts = MutableStateFlow<Map<String, SongSort>>(emptyMap())
+    val libraryFavoriteSongSort = MutableStateFlow(FavoriteSongSort.DEFAULT)
 
     /** Optional root path selected for the folders tab. */
     val localMusicFolderUri = MutableStateFlow("")
@@ -1778,6 +1792,7 @@ object AppSettings {
         useLibraryIconForPlaylistControl.value = prefs.getBoolean(KEY_LIBRARY_ICON_FOR_PLAYLIST_CONTROL, false)
         hidePlayerArtist.value = prefs.getBoolean(KEY_HIDE_PLAYER_ARTIST, false)
         hideUnknownPlayerArtist.value = prefs.getBoolean(KEY_HIDE_UNKNOWN_PLAYER_ARTIST, false)
+        hideUnknownMiniPlayerArtist.value = prefs.getBoolean(KEY_HIDE_UNKNOWN_MINI_PLAYER_ARTIST, true)
         hideUnknownPlaylistArtist.value = prefs.getBoolean(KEY_HIDE_UNKNOWN_PLAYLIST_ARTIST, false)
         centerPlayerTrackInfo.value = prefs.getBoolean(KEY_CENTER_PLAYER_TRACK_INFO, false)
         playerDetailsVerticalMenu.value = prefs.getBoolean(KEY_PLAYER_DETAILS_VERTICAL_MENU, false)
@@ -1928,6 +1943,9 @@ object AppSettings {
             ?.let { saved -> LibrarySort.entries.firstOrNull { it.name == saved } }
             ?: LibrarySort.DEFAULT
         detailSongSorts.value = readDetailSongSorts()
+        libraryFavoriteSongSort.value = prefs.getString(KEY_LIBRARY_FAVORITE_SONG_SORT, null)
+            ?.let { saved -> FavoriteSongSort.entries.firstOrNull { it.name == saved } }
+            ?: FavoriteSongSort.DEFAULT
         LauncherIconManager.apply(appContext, launcherIcon.value)
         blacklistedFolders.value = prefs.getStringSet(KEY_BLACKLISTED_FOLDERS, emptySet()).orEmpty()
         pinnedPlaylists.value = readPinnedPlaylists()
@@ -3465,6 +3483,11 @@ object AppSettings {
         prefs.edit().putBoolean(KEY_HIDE_UNKNOWN_PLAYER_ARTIST, value).apply()
     }
 
+    fun setHideUnknownMiniPlayerArtist(value: Boolean) {
+        hideUnknownMiniPlayerArtist.value = value
+        prefs.edit().putBoolean(KEY_HIDE_UNKNOWN_MINI_PLAYER_ARTIST, value).apply()
+    }
+
     fun setHideUnknownPlaylistArtist(value: Boolean) {
         hideUnknownPlaylistArtist.value = value
         prefs.edit().putBoolean(KEY_HIDE_UNKNOWN_PLAYLIST_ARTIST, value).apply()
@@ -4139,6 +4162,11 @@ object AppSettings {
             KEY_DETAIL_SONG_SORTS,
             detailSongSorts.value.entries.joinToString(",") { (id, sort) -> "$id=${sort.name}" },
         ).apply()
+    }
+
+    fun setLibraryFavoriteSongSort(value: FavoriteSongSort) {
+        libraryFavoriteSongSort.value = value
+        prefs.edit().putString(KEY_LIBRARY_FAVORITE_SONG_SORT, value.name).apply()
     }
 
     fun setLocalSongsViewType(value: LibraryViewType) {
@@ -4839,6 +4867,7 @@ object AppSettings {
     private const val KEY_LIBRARY_ICON_FOR_PLAYLIST_CONTROL = "library_icon_for_playlist_control"
     private const val KEY_HIDE_PLAYER_ARTIST = "hide_player_artist"
     private const val KEY_HIDE_UNKNOWN_PLAYER_ARTIST = "hide_unknown_player_artist"
+    private const val KEY_HIDE_UNKNOWN_MINI_PLAYER_ARTIST = "hide_unknown_mini_player_artist"
     private const val KEY_HIDE_UNKNOWN_PLAYLIST_ARTIST = "hide_unknown_playlist_artist"
     private const val KEY_CENTER_PLAYER_TRACK_INFO = "center_player_track_info"
     private const val KEY_PLAYER_DETAILS_VERTICAL_MENU = "player_details_vertical_menu"
@@ -4928,6 +4957,7 @@ object AppSettings {
     private const val KEY_LIBRARY_SORT = "library_sort"
     private const val KEY_YOUTUBE_DOWNLOADS_SORT = "youtube_downloads_sort"
     private const val KEY_DETAIL_SONG_SORTS = "detail_song_sorts"
+    private const val KEY_LIBRARY_FAVORITE_SONG_SORT = "library_favorite_song_sort"
     private const val KEY_LOCAL_MUSIC_VIEW_TYPE = "local_music_view_type"
     private const val KEY_LOCAL_SONGS_VIEW_TYPE = "local_songs_view_type"
     private const val KEY_LOCAL_ALBUMS_VIEW_TYPE = "local_albums_view_type"

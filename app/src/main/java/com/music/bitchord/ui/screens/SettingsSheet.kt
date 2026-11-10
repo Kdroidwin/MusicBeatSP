@@ -580,6 +580,7 @@ private fun resetDeezerArtistArtwork(context: Context) {
 private fun additionalArtworkSettingsSearchEntries(
     playerPopupsUseArtworkColor: Boolean,
     hidePlayerPopupHandles: Boolean,
+    hideUnknownMiniPlayerArtist: Boolean,
     queueHeadingMusicNoteIcon: Boolean,
     queueHeadingItalicPlayQueue: Boolean,
     smartPlaylistsEnabled: Boolean,
@@ -600,6 +601,12 @@ private fun additionalArtworkSettingsSearchEntries(
         listOf("player", "popup", "drag handle", "hide", "remove", "delete", "プレーヤー", "ポップアップ", "ドラッグハンドル", "ハンドル", "枠", "削除", "非表示"),
         hidePlayerPopupHandles,
     ) { AppSettings.setHidePlayerPopupHandles(!hidePlayerPopupHandles) },
+    SettingsSearchEntry(
+        stringResource(R.string.hide_unknown_mini_player_artist),
+        stringResource(R.string.hide_unknown_mini_player_artist_subtitle),
+        listOf("mini player", "artist", "unknown", "ミニプレイヤー", "アーティスト", "不明"),
+        hideUnknownMiniPlayerArtist,
+    ) { AppSettings.setHideUnknownMiniPlayerArtist(!hideUnknownMiniPlayerArtist) },
     SettingsSearchEntry(
         stringResource(R.string.queue_heading_music_note_icon),
         stringResource(R.string.queue_heading_music_note_icon_subtitle),
@@ -1327,6 +1334,7 @@ fun SettingsScreen(
     val appleMusicStyleMenus by AppSettings.appleMusicStyleMenus.collectAsStateWithLifecycle()
     val hidePlayerArtist by AppSettings.hidePlayerArtist.collectAsStateWithLifecycle()
     val hideUnknownPlayerArtist by AppSettings.hideUnknownPlayerArtist.collectAsStateWithLifecycle()
+    val hideUnknownMiniPlayerArtist by AppSettings.hideUnknownMiniPlayerArtist.collectAsStateWithLifecycle()
     val hideUnknownPlaylistArtist by AppSettings.hideUnknownPlaylistArtist.collectAsStateWithLifecycle()
     val centerPlayerTrackInfo by AppSettings.centerPlayerTrackInfo.collectAsStateWithLifecycle()
     val playerDetailsVerticalMenu by AppSettings.playerDetailsVerticalMenu.collectAsStateWithLifecycle()
@@ -2487,6 +2495,7 @@ fun SettingsScreen(
         additionalArtworkSettingsSearchEntries(
             playerPopupsUseArtworkColor = playerPopupsUseArtworkColor,
             hidePlayerPopupHandles = hidePlayerPopupHandles,
+            hideUnknownMiniPlayerArtist = hideUnknownMiniPlayerArtist,
             queueHeadingMusicNoteIcon = queueHeadingMusicNoteIcon,
             queueHeadingItalicPlayQueue = queueHeadingItalicPlayQueue,
             smartPlaylistsEnabled = smartPlaylistsEnabled,
@@ -4197,6 +4206,19 @@ fun SettingsScreen(
                     )
                 },
                 onClick = { AppSettings.setHideUnknownPlayerArtist(!hideUnknownPlayerArtist) },
+            )
+            RowDivider()
+            SettingsRow(
+                icon = Icons.Rounded.Person,
+                title = stringResource(R.string.hide_unknown_mini_player_artist),
+                subtitle = stringResource(R.string.hide_unknown_mini_player_artist_subtitle),
+                trailing = {
+                    Switch(
+                        checked = hideUnknownMiniPlayerArtist,
+                        onCheckedChange = AppSettings::setHideUnknownMiniPlayerArtist,
+                    )
+                },
+                onClick = { AppSettings.setHideUnknownMiniPlayerArtist(!hideUnknownMiniPlayerArtist) },
             )
             RowDivider()
             SettingsRow(
