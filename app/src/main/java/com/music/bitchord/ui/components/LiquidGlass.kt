@@ -63,14 +63,18 @@ private const val LENS_HEIGHT = 0.5f
 private const val LENS_AMOUNT = 0.5f
 private const val LENS_MAX_DP = 48f
 private const val SURFACE_OPACITY = 0.4f
-// Keep the pre-BitChord treatment above intact. The upstream renderer had been
-// ported, but sharing these material values made its normal surfaces look like
-// the old glass unless the selected-tab lens happened to be visible.
-private const val BIT_CHORD_VIBRANCY = 1.25f
-private const val BIT_CHORD_BLUR_RADIUS_DP = 15f
-private const val BIT_CHORD_LENS_HEIGHT = 0.72f
-private const val BIT_CHORD_LENS_AMOUNT = 0.78f
-private const val BIT_CHORD_SURFACE_OPACITY = 0.24f
+// Keep the pre-BitChord renderer intact. The two settings previously shared
+// almost the same material; the only dependable difference was a resting tab
+// lens whose refraction is unavailable on Android 12/12L. Give the new material
+// its own translucent surface and a visible rim as well, including its
+// reduce-blur fallback, so the choice remains apparent without motion/API 33.
+private const val BIT_CHORD_VIBRANCY = 1.35f
+private const val BIT_CHORD_BLUR_RADIUS_DP = 18f
+private const val BIT_CHORD_LENS_HEIGHT = 0.92f
+private const val BIT_CHORD_LENS_AMOUNT = 0.92f
+private const val BIT_CHORD_SURFACE_OPACITY = 0.12f
+private val BIT_CHORD_EDGE_WIDTH = 1.dp
+private val BIT_CHORD_EDGE_COLOR = Color.White.copy(alpha = 0.26f)
 
 /**
  * Resolution fraction the glass surface records and processes its backdrop at.
@@ -120,9 +124,9 @@ fun glassIndicatorColor(): Color {
     return if (LocalLegacyLiquidGlassEnabled.current) {
         if (lightTheme) Color.White else Color.Black
     } else if (lightTheme) {
-        Color.White.copy(alpha = 0.5f)
+        Color.White.copy(alpha = 0.52f)
     } else {
-        Color.White.copy(alpha = 0.14f)
+        Color.White.copy(alpha = 0.32f)
     }
 }
 
@@ -199,10 +203,20 @@ private fun Modifier.legacyLiquidGlass(shape: CornerBasedShape, drawEdge: Boolea
 @Composable
 private fun Modifier.bitChordLiquidGlass(shape: CornerBasedShape, drawEdge: Boolean): Modifier {
     if (!isGlassSupported()) return this
+    val themeTint = if (MaterialTheme.colorScheme.surface.luminance() > 0.5f) {
+        Color(0xFFFAFAFA)
+    } else {
+        Color(0xFF121212)
+    }
+    val rim = if (MaterialTheme.colorScheme.surface.luminance() > 0.5f) {
+        BIT_CHORD_EDGE_COLOR.copy(alpha = 0.34f)
+    } else {
+        BIT_CHORD_EDGE_COLOR
+    }
     val reduceDynamicBlur by AppSettings.reduceDynamicBlur.collectAsStateWithLifecycle()
     if (reduceDynamicBlur) {
-        return background(MaterialTheme.colorScheme.surface, shape).then(
-            if (drawEdge) Modifier.border(GLASS_EDGE_WIDTH, GLASS_EDGE_COLOR, shape) else Modifier,
+        return background(themeTint.copy(alpha = BIT_CHORD_SURFACE_OPACITY), shape).then(
+            if (drawEdge) Modifier.border(BIT_CHORD_EDGE_WIDTH, rim, shape) else Modifier,
         )
     }
     val backdrop = LocalAppBackdrop.current
@@ -211,11 +225,6 @@ private fun Modifier.bitChordLiquidGlass(shape: CornerBasedShape, drawEdge: Bool
     val blurPx = with(density) { BIT_CHORD_BLUR_RADIUS_DP.dp.toPx() } * GLASS_RESOLUTION_SCALE
     val lensHeightPx = with(density) { (BIT_CHORD_LENS_HEIGHT * LENS_MAX_DP).dp.toPx() } * GLASS_RESOLUTION_SCALE
     val lensAmountPx = with(density) { (BIT_CHORD_LENS_AMOUNT * LENS_MAX_DP).dp.toPx() } * GLASS_RESOLUTION_SCALE
-    val themeTint = if (MaterialTheme.colorScheme.surface.luminance() > 0.5f) {
-        Color(0xFFFAFAFA)
-    } else {
-        Color(0xFF121212)
-    }
 
     return drawBackdrop(
         backdrop = backdrop,
@@ -239,5 +248,7 @@ private fun Modifier.bitChordLiquidGlass(shape: CornerBasedShape, drawEdge: Bool
         },
         exportedBackdrop = exportedBackdrop,
         backdropScale = GLASS_RESOLUTION_SCALE,
+    ).then(
+        if (drawEdge) Modifier.border(BIT_CHORD_EDGE_WIDTH, rim, shape) else Modifier,
     )
 }

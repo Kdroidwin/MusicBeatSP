@@ -413,10 +413,10 @@
     <string name="reduce_dynamic_blur">Reduce dynamic blur</string>
     <string name="reduce_dynamic_blur_subtitle">Swaps frosted glass for solid fills across the app</string>
     <string name="liquid_glass">Liquid Glass</string>
-    <string name="liquid_glass_subtitle">BitChord’s Liquid Glass style with a refracting tab-selection pill. Android 12+ only; uses more GPU.</string>
+    <string name="liquid_glass_subtitle">BitChord’s refracting tab-selection pill with a clearer glass surface and rim. Android 12+ only; uses more GPU.</string>
     <string name="liquid_glass_unavailable">Requires Android 12 or newer</string>
     <string name="liquid_glass_legacy">Liquid Glass (old)</string>
-    <string name="liquid_glass_legacy_subtitle">Use the previous MusicBeat glass rendering instead of BitChord’s style.</string>
+    <string name="liquid_glass_legacy_subtitle">Use MusicBeat’s previous darker glass surface and flat tab selection.</string>
     <string name="analog_digital_peak_meter">Analog + digital peak meter</string>
     <string name="spectrum_analyzer">Spectrum analyzer</string>
     <string name="audio_visualization_permission_subtitle">Shows live levels from the PCM audio sent to the output. Microphone access is not used.</string>

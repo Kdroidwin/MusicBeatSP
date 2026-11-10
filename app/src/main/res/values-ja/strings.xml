@@ -1695,10 +1695,10 @@
     <string name="double_tap_to_seek">ダブルタップでシーク</string>
     <string name="double_tap_to_seek_subtitle">アルバムアートの左右をダブルタップすると5秒移動します</string>
     <string name="liquid_glass">Liquid Glass</string>
-    <string name="liquid_glass_subtitle">BitChordスタイルのLiquid Glassと、屈折するタブ選択ピルを使います。Android 12以降が必要で、GPU使用量が増えます。</string>
+    <string name="liquid_glass_subtitle">BitChord風の屈折するタブ選択ピルと、透け感の強いガラス面・縁を使います。Android 12以降が必要で、GPU使用量が増えます。</string>
     <string name="liquid_glass_unavailable">Android 12以降が必要です</string>
     <string name="liquid_glass_legacy">Liquid Glass（旧）</string>
-    <string name="liquid_glass_legacy_subtitle">BitChordスタイルの代わりに、従来のMusicBeatのガラス表示を使います。</string>
+    <string name="liquid_glass_legacy_subtitle">従来の濃いガラス面とフラットなタブ選択表示を使います。</string>
     <string name="analog_digital_peak_meter">アナログ＋デジタルピークメーター</string>
     <string name="spectrum_analyzer">スペクトラムアナライザー</string>
     <string name="audio_visualization_permission_subtitle">出力へ送られるPCM音声のレベルを表示します。マイクは使用しません。</string>
