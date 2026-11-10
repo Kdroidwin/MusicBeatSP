@@ -803,6 +803,9 @@ object AppSettings {
     /** Replaces the long settings list with category → setting navigation. */
     val settingsHierarchicalNavigation = MutableStateFlow(false)
 
+    /** Uses BitChord-style category cards while browsing hierarchical settings. */
+    val settingsBitChordCategoryStyle = MutableStateFlow(true)
+
     /** Main navigation destinations the user wants to keep in the bottom bar. */
     val visibleMainNavigationTabs = MutableStateFlow(MainNavigationTabs.defaultVisibleTabs())
     val mainNavigationTabOrder = MutableStateFlow<List<MainNavigationTab>>(MainNavigationTabs.normalizeOrder(emptyList()))
@@ -1679,6 +1682,7 @@ object AppSettings {
         showSpectrumAnalyzer.value = prefs.getBoolean(KEY_SPECTRUM_ANALYZER, false)
         classicNavBar.value = prefs.getBoolean(KEY_CLASSIC_NAV_BAR, false)
         settingsHierarchicalNavigation.value = prefs.getBoolean(KEY_SETTINGS_HIERARCHICAL_NAVIGATION, false)
+        settingsBitChordCategoryStyle.value = prefs.getBoolean(KEY_SETTINGS_BITCHORD_CATEGORY_STYLE, true)
         hideNavigationBarLabels.value = prefs.getBoolean(KEY_HIDE_NAVIGATION_BAR_LABELS, false)
         mainNavigationTabsPopup.value = prefs.getBoolean(KEY_MAIN_NAVIGATION_TABS_POPUP, false)
         visibleLocalLibraryTabs.value = readVisibleLocalLibraryTabs()
@@ -2893,6 +2897,11 @@ object AppSettings {
     fun setSettingsHierarchicalNavigation(value: Boolean) {
         settingsHierarchicalNavigation.value = value
         prefs.edit().putBoolean(KEY_SETTINGS_HIERARCHICAL_NAVIGATION, value).apply()
+    }
+
+    fun setSettingsBitChordCategoryStyle(value: Boolean) {
+        settingsBitChordCategoryStyle.value = value
+        prefs.edit().putBoolean(KEY_SETTINGS_BITCHORD_CATEGORY_STYLE, value).apply()
     }
 
     fun setHideNavigationBarLabels(value: Boolean) {
@@ -4819,6 +4828,7 @@ object AppSettings {
     private const val KEY_SPECTRUM_ANALYZER = "show_spectrum_analyzer"
     private const val KEY_CLASSIC_NAV_BAR = "classic_nav_bar"
     private const val KEY_SETTINGS_HIERARCHICAL_NAVIGATION = "settings_hierarchical_navigation"
+    private const val KEY_SETTINGS_BITCHORD_CATEGORY_STYLE = "settings_bitchord_category_style"
     private const val KEY_HIDE_NAVIGATION_BAR_LABELS = "hide_navigation_bar_labels"
     private const val KEY_MAIN_NAVIGATION_TABS_POPUP = "main_navigation_tabs_popup"
     private const val KEY_VISIBLE_MAIN_NAVIGATION_TABS = "visible_main_navigation_tabs"

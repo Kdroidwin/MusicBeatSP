@@ -1562,6 +1562,8 @@
     <string name="settings_search_no_results">該当する設定はありません</string>
     <string name="settings_hierarchical_navigation">設定を項目別の階層で表示</string>
     <string name="settings_hierarchical_navigation_subtitle">カテゴリを選んでから設定項目を表示します</string>
+    <string name="settings_bitchord_category_style">BitChord風のカテゴリデザイン</string>
+    <string name="settings_bitchord_category_style_subtitle">カテゴリカードと設定カードで表示します。オフにすると従来のカテゴリ一覧になります。</string>
     <string name="settings_categories">設定カテゴリ</string>
     <string name="settings_all_categories">すべてのカテゴリ</string>
     <string name="settings_category_playback">再生と音質</string>

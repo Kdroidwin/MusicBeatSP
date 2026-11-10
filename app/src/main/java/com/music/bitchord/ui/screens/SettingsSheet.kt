@@ -327,6 +327,7 @@ private data class SettingsSearchReorder(
 @Composable
 private fun supplementalSettingsSearchEntries(
     hierarchicalNavigation: Boolean,
+    bitChordCategoryStyle: Boolean,
     autoFetchYoutubeLyrics: Boolean,
     lyricsWebSearchQuery: String,
     removeNeteaseCredits: Boolean,
@@ -350,6 +351,12 @@ private fun supplementalSettingsSearchEntries(
         keywords = listOf("settings", "categories", "hierarchy", "設定", "カテゴリ", "階層"),
         checked = hierarchicalNavigation,
     ) { AppSettings.setSettingsHierarchicalNavigation(!hierarchicalNavigation) },
+    SettingsSearchEntry(
+        title = stringResource(R.string.settings_bitchord_category_style),
+        subtitle = stringResource(R.string.settings_bitchord_category_style_subtitle),
+        keywords = listOf("settings", "categories", "BitChord", "cards", "設定", "カテゴリ", "カード", "BitChord風"),
+        checked = bitChordCategoryStyle,
+    ) { AppSettings.setSettingsBitChordCategoryStyle(!bitChordCategoryStyle) },
     SettingsSearchEntry(
         title = stringResource(R.string.auto_fetch_lyrics_on_youtube_playback),
         subtitle = stringResource(R.string.auto_fetch_lyrics_on_youtube_playback_subtitle),
@@ -439,16 +446,16 @@ private fun supplementalSettingsSearchEntries(
     ),
 )
 
-private enum class SettingsSearchCategory(val titleRes: Int) {
-    PLAYBACK(R.string.settings_category_playback),
-    PLAYER(R.string.settings_category_player),
-    LYRICS(R.string.settings_category_lyrics),
-    LIBRARY(R.string.settings_category_library),
-    RADIO(R.string.settings_category_radio),
-    APPEARANCE(R.string.settings_category_appearance),
-    CONNECTIONS(R.string.settings_category_connections),
-    SYSTEM(R.string.settings_category_system),
-    OTHER(R.string.settings_category_other),
+private enum class SettingsSearchCategory(val titleRes: Int, val icon: ImageVector) {
+    PLAYBACK(R.string.settings_category_playback, Icons.Rounded.Headphones),
+    PLAYER(R.string.settings_category_player, Icons.Rounded.PlayArrow),
+    LYRICS(R.string.settings_category_lyrics, Icons.AutoMirrored.Rounded.Notes),
+    LIBRARY(R.string.settings_category_library, Icons.Rounded.LibraryMusic),
+    RADIO(R.string.settings_category_radio, Icons.Rounded.Radio),
+    APPEARANCE(R.string.settings_category_appearance, Icons.Rounded.Brightness4),
+    CONNECTIONS(R.string.settings_category_connections, Icons.Rounded.Cloud),
+    SYSTEM(R.string.settings_category_system, Icons.Rounded.Settings),
+    OTHER(R.string.settings_category_other, Icons.Rounded.MoreHoriz),
 }
 
 private fun settingsSearchCategory(text: String): SettingsSearchCategory {
@@ -1311,6 +1318,7 @@ fun SettingsScreen(
     val liquidGlassLegacy by AppSettings.liquidGlassLegacy.collectAsStateWithLifecycle()
     val classicNavBar by AppSettings.classicNavBar.collectAsStateWithLifecycle()
     val settingsHierarchicalNavigation by AppSettings.settingsHierarchicalNavigation.collectAsStateWithLifecycle()
+    val settingsBitChordCategoryStyle by AppSettings.settingsBitChordCategoryStyle.collectAsStateWithLifecycle()
     val mainNavigationTabsPopup by AppSettings.mainNavigationTabsPopup.collectAsStateWithLifecycle()
     val settingsTopBarUsesMoreIcon by AppSettings.settingsTopBarUsesMoreIcon.collectAsStateWithLifecycle()
     val hideSettingsIconOnScroll by AppSettings.hideSettingsIconOnScroll.collectAsStateWithLifecycle()
@@ -2580,6 +2588,7 @@ fun SettingsScreen(
         ) +
         supplementalSettingsSearchEntries(
             hierarchicalNavigation = settingsHierarchicalNavigation,
+            bitChordCategoryStyle = settingsBitChordCategoryStyle,
             autoFetchYoutubeLyrics = autoFetchLyricsOnYoutubePlayback,
             lyricsWebSearchQuery = lyricsWebSearchQuery,
             removeNeteaseCredits = removeNeteaseLyricCredits,
@@ -3213,6 +3222,29 @@ fun SettingsScreen(
                 },
                 onClick = { AppSettings.setSettingsHierarchicalNavigation(!settingsHierarchicalNavigation) },
             )
+            RowDivider()
+            SettingsRow(
+                icon = Icons.Rounded.AutoAwesome,
+                title = stringResource(R.string.settings_bitchord_category_style),
+                subtitle = stringResource(R.string.settings_bitchord_category_style_subtitle),
+                enabled = settingsHierarchicalNavigation,
+                trailing = {
+                    Switch(
+                        checked = settingsBitChordCategoryStyle,
+                        onCheckedChange = AppSettings::setSettingsBitChordCategoryStyle,
+                        enabled = settingsHierarchicalNavigation,
+                        colors = SwitchDefaults.colors(
+                            checkedTrackColor = MaterialTheme.colorScheme.primary,
+                            checkedBorderColor = MaterialTheme.colorScheme.primary,
+                        ),
+                    )
+                },
+                onClick = {
+                    if (settingsHierarchicalNavigation) {
+                        AppSettings.setSettingsBitChordCategoryStyle(!settingsBitChordCategoryStyle)
+                    }
+                },
+            )
         }
 
         OutlinedTextField(
@@ -3318,29 +3350,153 @@ fun SettingsScreen(
                 val availableCategories = SettingsSearchCategory.entries.filter { category ->
                     allSettingsSearchEntries.any { it.category == category }
                 }
-                SettingsGroup(header = stringResource(R.string.settings_categories)) {
-                    availableCategories.forEachIndexed { index, category ->
-                        if (index > 0) RowDivider()
-                        SettingsRow(
-                            icon = Icons.Rounded.Tune,
-                            title = stringResource(category.titleRes),
-                            subtitle = stringResource(R.string.settings_category_entry_count, allSettingsSearchEntries.count { it.category == category }),
-                            trailing = { Chevron() },
-                            onClick = { selectedSettingsCategory = category.name },
-                        )
+                if (settingsBitChordCategoryStyle) {
+                    Text(
+                        text = stringResource(R.string.settings_categories),
+                        style = MaterialTheme.typography.titleMedium,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                        modifier = Modifier.padding(start = 20.dp, end = 20.dp, top = 22.dp, bottom = 12.dp),
+                    )
+                    Column(
+                        modifier = Modifier.fillMaxWidth().padding(horizontal = 16.dp),
+                        verticalArrangement = Arrangement.spacedBy(12.dp),
+                    ) {
+                        availableCategories.chunked(2).forEach { rowCategories ->
+                            Row(horizontalArrangement = Arrangement.spacedBy(12.dp)) {
+                                rowCategories.forEach { category ->
+                                    Column(
+                                        modifier = Modifier
+                                            .weight(1f)
+                                            .heightIn(min = 142.dp)
+                                            .clip(RoundedCornerShape(22.dp))
+                                            .background(MaterialTheme.colorScheme.surfaceVariant)
+                                            .clickable { selectedSettingsCategory = category.name }
+                                            .padding(16.dp),
+                                        verticalArrangement = Arrangement.SpaceBetween,
+                                    ) {
+                                        Row(
+                                            modifier = Modifier.fillMaxWidth(),
+                                            horizontalArrangement = Arrangement.SpaceBetween,
+                                            verticalAlignment = Alignment.Top,
+                                        ) {
+                                            Box(
+                                                modifier = Modifier
+                                                    .size(46.dp)
+                                                    .clip(RoundedCornerShape(16.dp))
+                                                    .background(MaterialTheme.colorScheme.primaryContainer),
+                                                contentAlignment = Alignment.Center,
+                                            ) {
+                                                Icon(
+                                                    imageVector = category.icon,
+                                                    contentDescription = null,
+                                                    tint = MaterialTheme.colorScheme.onPrimaryContainer,
+                                                    modifier = Modifier.size(24.dp),
+                                                )
+                                            }
+                                            Icon(
+                                                imageVector = Icons.Rounded.ChevronRight,
+                                                contentDescription = null,
+                                                tint = MaterialTheme.colorScheme.onSurfaceVariant,
+                                            )
+                                        }
+                                        Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
+                                            Text(
+                                                text = stringResource(category.titleRes),
+                                                style = MaterialTheme.typography.titleMedium,
+                                                color = MaterialTheme.colorScheme.onSurface,
+                                                maxLines = 2,
+                                                overflow = TextOverflow.Ellipsis,
+                                            )
+                                            Text(
+                                                text = stringResource(
+                                                    R.string.settings_category_entry_count,
+                                                    allSettingsSearchEntries.count { it.category == category },
+                                                ),
+                                                style = MaterialTheme.typography.bodySmall,
+                                                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                                            )
+                                        }
+                                    }
+                                }
+                                if (rowCategories.size == 1) Spacer(Modifier.weight(1f))
+                            }
+                        }
+                    }
+                } else {
+                    SettingsGroup(header = stringResource(R.string.settings_categories)) {
+                        availableCategories.forEachIndexed { index, category ->
+                            if (index > 0) RowDivider()
+                            SettingsRow(
+                                icon = Icons.Rounded.Tune,
+                                title = stringResource(category.titleRes),
+                                subtitle = stringResource(R.string.settings_category_entry_count, allSettingsSearchEntries.count { it.category == category }),
+                                trailing = { Chevron() },
+                                onClick = { selectedSettingsCategory = category.name },
+                            )
+                        }
                     }
                 }
             } else {
-                SettingsGroup(header = stringResource(R.string.settings_categories)) {
-                    SettingsRow(
-                        icon = Icons.Rounded.Settings,
-                        title = stringResource(R.string.settings_all_categories),
-                        trailing = { Chevron() },
-                        onClick = { selectedSettingsCategory = null },
-                    )
-                }
-                SettingsGroup(header = stringResource(selectedCategory.titleRes)) {
-                    SettingsSearchEntryRows(allSettingsSearchEntries.filter { it.category == selectedCategory })
+                val categoryEntries = allSettingsSearchEntries.filter { it.category == selectedCategory }
+                if (settingsBitChordCategoryStyle) {
+                    Row(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .padding(start = 20.dp, end = 20.dp, top = 12.dp, bottom = 8.dp),
+                        verticalAlignment = Alignment.CenterVertically,
+                    ) {
+                        Box(
+                            modifier = Modifier
+                                .size(54.dp)
+                                .clip(RoundedCornerShape(18.dp))
+                                .background(MaterialTheme.colorScheme.primaryContainer),
+                            contentAlignment = Alignment.Center,
+                        ) {
+                            Icon(
+                                imageVector = selectedCategory.icon,
+                                contentDescription = null,
+                                tint = MaterialTheme.colorScheme.onPrimaryContainer,
+                                modifier = Modifier.size(28.dp),
+                            )
+                        }
+                        Column(Modifier.weight(1f).padding(start = 14.dp)) {
+                            Text(
+                                text = stringResource(selectedCategory.titleRes),
+                                style = MaterialTheme.typography.headlineSmall,
+                                color = MaterialTheme.colorScheme.onBackground,
+                            )
+                            Text(
+                                text = stringResource(R.string.settings_category_entry_count, categoryEntries.size),
+                                style = MaterialTheme.typography.bodyMedium,
+                                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                            )
+                        }
+                    }
+                    SettingsGroup {
+                        SettingsRow(
+                            icon = Icons.Rounded.Settings,
+                            title = stringResource(R.string.settings_all_categories),
+                            trailing = { Chevron() },
+                            onClick = { selectedSettingsCategory = null },
+                        )
+                    }
+                    categoryEntries.forEach { entry ->
+                        SettingsGroup {
+                            SettingsSearchEntryRow(entry)
+                        }
+                    }
+                } else {
+                    SettingsGroup(header = stringResource(R.string.settings_categories)) {
+                        SettingsRow(
+                            icon = Icons.Rounded.Settings,
+                            title = stringResource(R.string.settings_all_categories),
+                            trailing = { Chevron() },
+                            onClick = { selectedSettingsCategory = null },
+                        )
+                    }
+                    SettingsGroup(header = stringResource(selectedCategory.titleRes)) {
+                        SettingsSearchEntryRows(categoryEntries)
+                    }
                 }
             }
         } else {

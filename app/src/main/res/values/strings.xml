@@ -1668,6 +1668,8 @@
     <string name="settings_search_no_results">No matching settings</string>
     <string name="settings_hierarchical_navigation">Group settings by category</string>
     <string name="settings_hierarchical_navigation_subtitle">Browse settings through category pages</string>
+    <string name="settings_bitchord_category_style">BitChord-style category design</string>
+    <string name="settings_bitchord_category_style_subtitle">Use category cards and focused setting cards. Turn off to keep the classic category list.</string>
     <string name="settings_categories">Settings categories</string>
     <string name="settings_all_categories">All categories</string>
     <string name="settings_category_playback">Playback and sound</string>

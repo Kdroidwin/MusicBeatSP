@@ -63,6 +63,14 @@ private const val LENS_HEIGHT = 0.5f
 private const val LENS_AMOUNT = 0.5f
 private const val LENS_MAX_DP = 48f
 private const val SURFACE_OPACITY = 0.4f
+// Keep the pre-BitChord treatment above intact. The upstream renderer had been
+// ported, but sharing these material values made its normal surfaces look like
+// the old glass unless the selected-tab lens happened to be visible.
+private const val BIT_CHORD_VIBRANCY = 1.25f
+private const val BIT_CHORD_BLUR_RADIUS_DP = 15f
+private const val BIT_CHORD_LENS_HEIGHT = 0.72f
+private const val BIT_CHORD_LENS_AMOUNT = 0.78f
+private const val BIT_CHORD_SURFACE_OPACITY = 0.24f
 
 /**
  * Resolution fraction the glass surface records and processes its backdrop at.
@@ -200,9 +208,9 @@ private fun Modifier.bitChordLiquidGlass(shape: CornerBasedShape, drawEdge: Bool
     val backdrop = LocalAppBackdrop.current
     val exportedBackdrop = LocalGlassExport.current
     val density = LocalDensity.current
-    val blurPx = with(density) { BLUR_RADIUS_DP.dp.toPx() } * GLASS_RESOLUTION_SCALE
-    val lensHeightPx = with(density) { (LENS_HEIGHT * LENS_MAX_DP).dp.toPx() } * GLASS_RESOLUTION_SCALE
-    val lensAmountPx = with(density) { (LENS_AMOUNT * LENS_MAX_DP).dp.toPx() } * GLASS_RESOLUTION_SCALE
+    val blurPx = with(density) { BIT_CHORD_BLUR_RADIUS_DP.dp.toPx() } * GLASS_RESOLUTION_SCALE
+    val lensHeightPx = with(density) { (BIT_CHORD_LENS_HEIGHT * LENS_MAX_DP).dp.toPx() } * GLASS_RESOLUTION_SCALE
+    val lensAmountPx = with(density) { (BIT_CHORD_LENS_AMOUNT * LENS_MAX_DP).dp.toPx() } * GLASS_RESOLUTION_SCALE
     val themeTint = if (MaterialTheme.colorScheme.surface.luminance() > 0.5f) {
         Color(0xFFFAFAFA)
     } else {
@@ -213,7 +221,7 @@ private fun Modifier.bitChordLiquidGlass(shape: CornerBasedShape, drawEdge: Bool
         backdrop = backdrop,
         shape = { shape },
         effects = {
-            colorControls(saturation = 1f + 0.5f * VIBRANCY)
+            colorControls(saturation = 1f + 0.5f * BIT_CHORD_VIBRANCY)
             blur(blurPx)
             if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
                 lens(
@@ -227,7 +235,7 @@ private fun Modifier.bitChordLiquidGlass(shape: CornerBasedShape, drawEdge: Bool
         highlight = { if (drawEdge) Highlight.Default else null },
         shadow = { Shadow.Default },
         onDrawSurface = {
-            drawRect(color = themeTint.copy(alpha = SURFACE_OPACITY), size = size)
+            drawRect(color = themeTint.copy(alpha = BIT_CHORD_SURFACE_OPACITY), size = size)
         },
         exportedBackdrop = exportedBackdrop,
         backdropScale = GLASS_RESOLUTION_SCALE,
