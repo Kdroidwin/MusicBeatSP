@@ -2,9 +2,6 @@ package com.music.bitchord.playback
 
 import android.os.SystemClock
 import androidx.media3.common.C
-import androidx.media3.common.audio.AudioProcessor
-import androidx.media3.common.audio.BaseAudioProcessor
-import androidx.media3.common.util.UnstableApi
 import java.nio.ByteBuffer
 import java.nio.ByteOrder
 import java.util.concurrent.atomic.AtomicReference
@@ -198,46 +195,5 @@ internal class AudioVisualizationPcmAnalyzer {
     private companion object {
         const val FFT_SIZE = 512
         const val SPECTRUM_BARS = 32
-    }
-}
-
-@UnstableApi
-internal class AudioVisualizationAudioProcessor : BaseAudioProcessor() {
-    private val analyzer = AudioVisualizationPcmAnalyzer()
-
-    override fun onConfigure(inputAudioFormat: AudioProcessor.AudioFormat): AudioProcessor.AudioFormat =
-        if (inputAudioFormat.encoding in SUPPORTED_ENCODINGS && inputAudioFormat.channelCount > 0) {
-            inputAudioFormat
-        } else {
-            AudioProcessor.AudioFormat.NOT_SET
-        }
-
-    override fun queueInput(inputBuffer: ByteBuffer) {
-        if (!inputBuffer.hasRemaining()) return
-        val capturePeak = com.music.bitchord.data.settings.AppSettings.showAnalogDigitalPeakMeter.value
-        val captureSpectrum = com.music.bitchord.data.settings.AppSettings.showSpectrumAnalyzer.value
-        if (capturePeak || captureSpectrum) {
-            analyzer.process(
-                input = inputBuffer.duplicate(),
-                encoding = inputAudioFormat.encoding,
-                channelCount = inputAudioFormat.channelCount,
-                capturePeak = capturePeak,
-                captureSpectrum = captureSpectrum,
-            )
-        }
-        val output = replaceOutputBuffer(inputBuffer.remaining())
-        output.put(inputBuffer)
-        output.flip()
-    }
-
-    private companion object {
-        val SUPPORTED_ENCODINGS = setOf(
-            C.ENCODING_PCM_16BIT,
-            C.ENCODING_PCM_24BIT,
-            C.ENCODING_PCM_24BIT_BIG_ENDIAN,
-            C.ENCODING_PCM_32BIT,
-            C.ENCODING_PCM_32BIT_BIG_ENDIAN,
-            C.ENCODING_PCM_FLOAT,
-        )
     }
 }

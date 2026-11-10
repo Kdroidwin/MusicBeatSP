@@ -210,7 +210,6 @@ private data class PlaybackAudioChain(
     val replayGain: ReplayGainAudioProcessor = ReplayGainAudioProcessor(),
     val resampler: ResamplerCutoffAudioProcessor = ResamplerCutoffAudioProcessor(),
     val darUpsampler: DarPcmUpsamplingAudioProcessor = DarPcmUpsamplingAudioProcessor(),
-    val audioVisualization: AudioVisualizationAudioProcessor = AudioVisualizationAudioProcessor(),
 )
 
 /**
@@ -2031,7 +2030,6 @@ class PlaybackService : MediaLibraryService() {
                 chain.replayGain,
                 chain.resampler,
                 chain.darUpsampler,
-                chain.audioVisualization,
             ),
         )
         .setMediaSourceFactory(requireNotNull(mediaSourceFactory))
@@ -4571,7 +4569,6 @@ class PlaybackService : MediaLibraryService() {
         replayGain: ReplayGainAudioProcessor,
         resamplerCutoff: ResamplerCutoffAudioProcessor,
         darUpsampler: DarPcmUpsamplingAudioProcessor,
-        audioVisualization: AudioVisualizationAudioProcessor,
     ) = object : DefaultRenderersFactory(this) {
         init {
             // Do not force PCM_FLOAT onto an OEM speaker mixer merely because
@@ -4622,15 +4619,7 @@ class PlaybackService : MediaLibraryService() {
             )
             .setAudioProcessorChain(
                 DefaultAudioSink.DefaultAudioProcessorChain(
-                    arrayOf(
-                        resamplerCutoff,
-                        parametricEq,
-                        spatial,
-                        transition,
-                        replayGain,
-                        darUpsampler,
-                        audioVisualization,
-                    ),
+                    arrayOf(resamplerCutoff, parametricEq, spatial, transition, replayGain, darUpsampler),
                     SilenceSkippingAudioProcessor(
                         MIN_SILENCE_US,
                         SilenceSkippingAudioProcessor.DEFAULT_SILENCE_RETENTION_RATIO,

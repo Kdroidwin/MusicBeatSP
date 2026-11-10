@@ -16,6 +16,7 @@ import androidx.media3.common.AudioAttributes
 import androidx.media3.common.AuxEffectInfo
 import androidx.media3.common.Format
 import androidx.media3.common.PlaybackParameters
+import androidx.media3.common.MimeTypes
 import androidx.media3.common.util.Clock
 import androidx.media3.common.util.UnstableApi
 import androidx.media3.exoplayer.analytics.PlayerId
@@ -23,6 +24,8 @@ import androidx.media3.exoplayer.audio.AudioCapabilities
 import androidx.media3.exoplayer.audio.AudioOffloadSupport
 import androidx.media3.exoplayer.audio.AudioOutputProvider
 import androidx.media3.exoplayer.audio.AudioSink
+import com.music.bitchord.data.settings.AppSettings
+import com.music.bitchord.playback.AudioVisualizationPcmAnalyzer
 import java.nio.ByteBuffer
 
 /**
@@ -60,12 +63,15 @@ internal class BitPerfectRoutingSink(
     private var retiring: AudioSink? = null
     private var lastConfig: AudioSink.AudioSinkConfig? = null
     private var playing = false
+    private var normalInput: ByteBuffer? = null
+    private val visualizationAnalyzer = AudioVisualizationPcmAnalyzer()
 
     /** Whether the current stream is going to the exclusive output. */
     val isBitPerfect: Boolean get() = active === bitPerfect
 
     override fun configure(audioSinkConfig: AudioSink.AudioSinkConfig) {
         lastConfig = audioSinkConfig
+        normalInput = null
         val target = if (bitPerfect.canAccept(audioSinkConfig.format)) {
             try {
                 bitPerfect.configure(audioSinkConfig)
@@ -97,16 +103,16 @@ internal class BitPerfectRoutingSink(
         if (active !== bitPerfect) {
             // Straight after direct USB, until the DAC is an Android output again.
             if (bitPerfect.holdsNormalOutput()) return false
-            return active.handleBuffer(buffer, presentationTimeUs, encodedAccessUnitCount)
+            return handleNormalBuffer(active, buffer, presentationTimeUs, encodedAccessUnitCount)
         }
         return try {
             bitPerfect.handleBuffer(buffer, presentationTimeUs, encodedAccessUnitCount)
         } catch (error: AudioSink.InitializationException) {
             fallBack(error)
-            normal.handleBuffer(buffer, presentationTimeUs, encodedAccessUnitCount)
+            handleNormalBuffer(normal, buffer, presentationTimeUs, encodedAccessUnitCount)
         } catch (error: AudioSink.WriteException) {
             fallBack(error)
-            normal.handleBuffer(buffer, presentationTimeUs, encodedAccessUnitCount)
+            handleNormalBuffer(normal, buffer, presentationTimeUs, encodedAccessUnitCount)
         }
     }
 
@@ -145,12 +151,14 @@ internal class BitPerfectRoutingSink(
     }
 
     override fun flush() {
+        normalInput = null
         retiring?.let { it.flush(); it.reset() }
         retiring = null
         active.flush()
     }
 
     override fun reset() {
+        normalInput = null
         retiring?.reset()
         retiring = null
         normal.reset()
@@ -241,6 +249,33 @@ internal class BitPerfectRoutingSink(
     private inline fun both(action: (AudioSink) -> Unit) {
         action(normal)
         action(bitPerfect)
+    }
+
+    /** Analyze decoded PCM through a duplicate; the sink receives the original buffer unchanged. */
+    private fun handleNormalBuffer(
+        target: AudioSink,
+        buffer: ByteBuffer,
+        presentationTimeUs: Long,
+        encodedAccessUnitCount: Int,
+    ): Boolean {
+        if (buffer !== normalInput) {
+            normalInput = buffer
+            val capturePeak = AppSettings.showAnalogDigitalPeakMeter.value
+            val captureSpectrum = AppSettings.showSpectrumAnalyzer.value
+            val format = lastConfig?.format
+            if ((capturePeak || captureSpectrum) && format?.sampleMimeType == MimeTypes.AUDIO_RAW) {
+                visualizationAnalyzer.process(
+                    input = buffer.duplicate(),
+                    encoding = format.pcmEncoding,
+                    channelCount = format.channelCount,
+                    capturePeak = capturePeak,
+                    captureSpectrum = captureSpectrum,
+                )
+            }
+        }
+        val consumed = target.handleBuffer(buffer, presentationTimeUs, encodedAccessUnitCount)
+        if (consumed) normalInput = null
+        return consumed
     }
 
     private companion object {
