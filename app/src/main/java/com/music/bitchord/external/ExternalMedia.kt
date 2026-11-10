@@ -15,6 +15,17 @@ import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.graphics.ImageBitmap
 import androidx.compose.ui.graphics.asImageBitmap
+import com.music.bitchord.data.settings.AppSettings
+import okhttp3.Dns
+import okhttp3.OkHttpClient
+import okhttp3.HttpUrl.Companion.toHttpUrlOrNull
+import okhttp3.Request
+import java.io.IOException
+import java.net.Inet4Address
+import java.net.Inet6Address
+import java.net.InetAddress
+import java.net.UnknownHostException
+import java.util.concurrent.TimeUnit
 
 /**
  * ほかの音楽アプリ(Spotify・Qobuz・Amazon Music・YouTube Music など)の再生を、このアプリから表示・操作する。
@@ -64,6 +75,36 @@ object ExternalMedia {
     private var enabled = false
     private var artKey: Any? = null
     private var artCache: ImageBitmap? = null
+    /** External session metadata is untrusted; image traffic gets no credentials and cannot target LAN hosts. */
+    private val artClient by lazy(LazyThreadSafetyMode.SYNCHRONIZED) {
+        OkHttpClient.Builder()
+            .connectTimeout(8, TimeUnit.SECONDS)
+            .readTimeout(15, TimeUnit.SECONDS)
+            .callTimeout(20, TimeUnit.SECONDS)
+            .cookieJar(okhttp3.CookieJar.NO_COOKIES)
+            .authenticator(okhttp3.Authenticator.NONE)
+            .addInterceptor { chain ->
+                if (AppSettings.offlineMode.value) throw IOException("Offline mode is enabled")
+                chain.proceed(chain.request())
+            }
+            .dns(Dns { hostname ->
+                val addresses = Dns.SYSTEM.lookup(hostname)
+                if (addresses.isEmpty() || addresses.any { !it.isPubliclyRoutable() }) {
+                    throw UnknownHostException("Artwork host does not resolve to public addresses")
+                }
+                addresses
+            })
+            .addNetworkInterceptor { chain ->
+                val url = chain.request().url
+                if (AppSettings.offlineMode.value || !url.isHttps || url.port != 443 || url.encodedUsername.isNotEmpty() ||
+                    url.encodedPassword.isNotEmpty() || url.host.isIpLiteral()
+                ) {
+                    throw IOException("External artwork must use a public HTTPS host while online")
+                }
+                chain.proceed(chain.request())
+            }
+            .build()
+    }
 
     private val sessionsListener = MediaSessionManager.OnActiveSessionsChangedListener { list -> pick(list.orEmpty()) }
 
@@ -236,18 +277,23 @@ object ExternalMedia {
 
     private fun readBytes(ctx: Context, u: String): ByteArray? {
         val max = 16 shl 20
-        if (u.startsWith("http://") || u.startsWith("https://")) {
-            val conn = java.net.URL(u).openConnection() as java.net.HttpURLConnection
-            conn.connectTimeout = 8000
-            conn.readTimeout = 15000
-            conn.instanceFollowRedirects = true
-            conn.setRequestProperty("User-Agent", "MusicBeatSP")
-            return try {
-                if (conn.responseCode !in 200..299) null
-                else conn.inputStream.use { it.readLimited(max) }
-            } finally {
-                conn.disconnect()
-            }
+        if (u.startsWith("http://", ignoreCase = true) || u.startsWith("https://", ignoreCase = true)) {
+            val url = u.toHttpUrlOrNull()?.takeIf {
+                it.isHttps && it.port == 443 && it.encodedUsername.isEmpty() &&
+                    it.encodedPassword.isEmpty() && !it.host.isIpLiteral()
+            } ?: return null
+            return runCatching {
+                artClient.newCall(
+                    Request.Builder()
+                        .url(url)
+                        .header("User-Agent", "MusicBeatSP")
+                        .build(),
+                ).execute().use { response ->
+                    val body = response.body ?: return@use null
+                    if (!response.isSuccessful || body.contentLength() > max) null
+                    else body.byteStream().use { it.readLimited(max) }
+                }
+            }.getOrNull()
         }
         // content:// など(読む許可が無ければ例外になり、元の小さな画像のままにする)
         return ctx.contentResolver.openInputStream(android.net.Uri.parse(u))?.use { it.readLimited(max) }
@@ -263,6 +309,45 @@ object ExternalMedia {
             if (out.size() > max) return null
         }
         return out.toByteArray()
+    }
+
+    private fun String.isIpLiteral(): Boolean =
+        contains(':') || matches(Regex("\\d{1,3}(?:\\.\\d{1,3}){3}"))
+
+    private fun InetAddress.isPubliclyRoutable(): Boolean {
+        if (isAnyLocalAddress || isLoopbackAddress || isLinkLocalAddress || isSiteLocalAddress || isMulticastAddress) {
+            return false
+        }
+        return when (this) {
+            is Inet4Address -> {
+                val octets = address.map { it.toInt() and 0xff }
+                val first = octets[0]
+                val second = octets[1]
+                when {
+                    first == 0 || first == 10 || first == 127 || first >= 224 -> false
+                    first == 100 && second in 64..127 -> false // Shared address space (RFC 6598)
+                    first == 169 && second == 254 -> false
+                    first == 172 && second in 16..31 -> false
+                    first == 192 && (second == 0 || second == 168) -> false
+                    first == 192 && second == 88 && octets[2] == 99 -> false
+                    first == 198 && second in 18..19 -> false
+                    first == 198 && second == 51 && octets[2] == 100 -> false
+                    first == 203 && second == 0 && octets[2] == 113 -> false
+                    else -> true
+                }
+            }
+            is Inet6Address -> {
+                val bytes = address
+                val first = bytes[0].toInt() and 0xff
+                val second = bytes[1].toInt() and 0xff
+                // Only global unicast (2000::/3), excluding the documentation
+                // prefix and the deprecated Teredo transition prefix.
+                (first and 0xe0) == 0x20 &&
+                    !(first == 0x20 && second == 0x01 && bytes[2].toInt() == 0x0d && bytes[3].toInt() == 0xb8) &&
+                    !(first == 0x20 && second == 0x01 && bytes[2].toInt() == 0x00 && bytes[3].toInt() == 0x00)
+            }
+            else -> false
+        }
     }
 
     private fun decode(bytes: ByteArray): Bitmap? {
