@@ -1,7 +1,7 @@
 # MusicBeatSP
 
 ### A local-first music player for Android
-**Lossless audio · Synchronized lyrics · Customizable library and player · ReplayGain · Google Cast**
+**Lossless audio · Synchronized lyrics · Customizable library and player · ReplayGain ·AI-powered lyric synchronization·Multiple saved queues·Audio-guided lyric editor · Advanced parametric EQ ·Automix ·  radiko·音泉 · Podcast ·Deep player customization · Google Cast**
 
 <br/>
 
