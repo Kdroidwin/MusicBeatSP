@@ -39,6 +39,7 @@ private fun LyricLine.splitTrailingBracket(): LyricLine {
     // voice. Otherwise the display formatter can turn `((とわ))` into the
     // literal ` (とわ)` and the ruby parser never sees the original marker.
     if (LyricsFurigana.annotations(text).isNotEmpty()) return this
+    if (LyricsFurigana.hasPlainJapaneseParenthetical(text)) return this
 
     val open = bracketStart(text) ?: return this
     val lead = text.substring(0, open).trimEnd()

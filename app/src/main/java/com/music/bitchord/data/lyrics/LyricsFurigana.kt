@@ -1,14 +1,8 @@
 package com.music.bitchord.data.lyrics
 
 /**
- * Reads inline furigana notation used by lyric sources and local files:
- * `漢字((かんじ))` (and its full-width equivalent). It also accepts a
- * single-parenthesis, hiragana-only reading such as `永遠(とわ)`, which can
- * result when an older lyric formatter removes one pair of ruby markers.
- *
- * This parser is shared by the lyric renderer and the background-vocal
- * splitter. Keeping the notation intact until it reaches the renderer avoids
- * interpreting its closing parentheses as a backing-vocal annotation.
+ * Reads the app's explicit inline furigana notation: `漢字((かんじ))`.
+ * Parentheses that are not this exact ASCII double pair remain lyric text.
  */
 internal object LyricsFurigana {
     internal data class Annotation(
@@ -19,7 +13,7 @@ internal object LyricsFurigana {
     )
 
     fun annotations(source: String): List<Annotation> {
-        if (source.length < 4) return emptyList()
+        if (source.length < 5) return emptyList()
         val found = mutableListOf<Annotation>()
         var cursor = 0
         while (cursor < source.length) {
@@ -36,41 +30,73 @@ internal object LyricsFurigana {
                 if (!isKanjiBase(codePoint)) break
                 cursor += Character.charCount(codePoint)
             }
-            // Japanese ruby bases often include kana after the kanji:
-            // `輝く((かがやく))`, `姉さん((ねえさん))`. Without this suffix,
-            // the lyric pipeline mistakes the final `((reading))` for a
-            // parenthesized backing vocal before the renderer can see it.
+            // Japanese bases commonly include kana suffixes: 輝く((かがやく)).
             while (cursor < source.length) {
                 codePoint = source.codePointAt(cursor)
                 if (!isKanaBase(codePoint)) break
                 cursor += Character.charCount(codePoint)
             }
             val baseEnd = cursor
-            val delimiters = when {
-                source.startsWith("((", baseEnd) -> "((" to "))"
-                source.startsWith("（（", baseEnd) -> "（（" to "））"
-                source.startsWith("(", baseEnd) -> "(" to ")"
-                source.startsWith("（", baseEnd) -> "（" to "）"
-                else -> continue
-            }
-            val readingStart = baseEnd + delimiters.first.length
-            val closing = source.indexOf(delimiters.second, readingStart)
+            if (!source.startsWith("((", baseEnd)) continue
+            val readingStart = baseEnd + 2
+            val closing = source.indexOf("))", readingStart)
             if (closing < 0) continue
             val reading = source.substring(readingStart, closing)
             if (reading.isBlank() || reading.any(::isParenthesis)) continue
-            // Single parentheses are ambiguous with asides. A Japanese
-            // furigana reading is safe to recover here only when it is all
-            // hiragana; preserve katakana annotations like `歌手(ゲスト)`.
-            if (delimiters.first.length == 1 && !reading.isHiraganaReading()) continue
+
             found += Annotation(
                 sourceStart = baseStart,
-                sourceEndExclusive = closing + delimiters.second.length,
+                sourceEndExclusive = closing + 2,
                 base = source.substring(baseStart, baseEnd),
                 reading = reading,
             )
-            cursor = closing + delimiters.second.length
+            cursor = closing + 2
         }
         return found
+    }
+
+    /**
+     * A single pair after Japanese text is valid lyric punctuation, not a
+     * backing-vocal marker. Keep it inline so it remains an ordinary bracket.
+     */
+    fun hasPlainJapaneseParenthetical(source: String): Boolean {
+        var cursor = 0
+        while (cursor < source.length) {
+            var codePoint = source.codePointAt(cursor)
+            if (!isKanjiBase(codePoint)) {
+                cursor += Character.charCount(codePoint)
+                continue
+            }
+            cursor += Character.charCount(codePoint)
+            while (cursor < source.length) {
+                codePoint = source.codePointAt(cursor)
+                if (!isKanjiBase(codePoint) && !isKanaBase(codePoint)) break
+                cursor += Character.charCount(codePoint)
+            }
+            val baseEnd = cursor
+            if (source.startsWith("((", baseEnd)) {
+                // The double pair is reserved for furigana, even if its
+                // contents are malformed. Advance past the opener so an
+                // invalid annotation cannot trap this scan in a loop.
+                cursor = baseEnd + 2
+                continue
+            }
+            val (open, close) = when {
+                source.startsWith("(", baseEnd) -> '(' to ')'
+                source.startsWith("（", baseEnd) -> '（' to '）'
+                else -> continue
+            }
+            val closeIndex = source.indexOf(close, baseEnd + 1)
+            if (closeIndex > baseEnd + 1) {
+                val reading = source.substring(baseEnd + 1, closeIndex)
+                if (reading.isHiraganaReading() && !reading.any(::isParenthesis)) return true
+            }
+            // Do not treat a second opener as evidence of single-pair ruby.
+            if (source.getOrNull(baseEnd) == open && source.getOrNull(baseEnd + 1) == open) {
+                cursor = baseEnd + 2
+            }
+        }
+        return false
     }
 
     fun hasTrailingAnnotation(source: String): Boolean {
