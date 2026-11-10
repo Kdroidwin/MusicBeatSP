@@ -555,6 +555,38 @@ internal fun GlassSelectionPill(
     )
 }
 
+/** A settled BitChord glass lens; the legacy renderer keeps its flat indicator. */
+@Composable
+internal fun StaticGlassSelectionPill(
+    fillColor: Color,
+    barGlass: LayerBackdrop,
+    tabRow: LayerBackdrop,
+    modifier: Modifier,
+) {
+    val page = LocalAppBackdrop.current
+    val shape = remember { RoundedCornerShape(percent = 50) }
+    val backdrop = remember(page, barGlass, tabRow, fillColor) {
+        SelectionPillBackdrop(page, barGlass, tabRow) { fillColor }
+    }
+    Box(
+        modifier.drawBackdrop(
+            backdrop = backdrop,
+            shape = { shape },
+            effects = {
+                if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
+                    lens(
+                        refractionHeight = LENS_HEIGHT.toPx(),
+                        refractionAmount = LENS_AMOUNT.toPx(),
+                        chromaticAberration = true,
+                    )
+                }
+            },
+            highlight = { Highlight.Default },
+            shadow = { PILL_SHADOW },
+        ),
+    )
+}
+
 /** The rim and its shadow are gone by the time the hand-off is 55% through. */
 private fun rimOf(presence: Float): Float = ((presence - 0.45f) / 0.55f).coerceIn(0f, 1f)
 

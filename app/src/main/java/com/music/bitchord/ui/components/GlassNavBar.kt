@@ -157,7 +157,7 @@ fun GlassNavBar(
     val indicatorColor = when {
         matchMiniPlayerColor && useArtworkColor -> miniArtworkPalette.accent.copy(alpha = 0.18f)
         artworkThemeActive -> navigationArtworkPalette.accent.copy(alpha = 0.18f)
-        useGlass -> glassIndicatorColor().copy(alpha = 0.5f)
+        useGlass -> glassIndicatorColor()
         else -> MaterialTheme.colorScheme.primary.copy(alpha = 0.14f)
     }
     val haptics = rememberHaptics()

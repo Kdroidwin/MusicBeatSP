@@ -3197,15 +3197,22 @@ fun SettingsScreen(
             .verticalScroll(settingsScrollState)
             .padding(contentPadding),
     ) {
+        val selectedCategoryPage = SettingsSearchCategory.entries.firstOrNull {
+            it.name == selectedSettingsCategory
+        }
+        val showBitChordCategoryPage = settingsHierarchicalNavigation &&
+            settingsBitChordCategoryStyle && settingsSearchQuery.isBlank() && selectedCategoryPage != null
         val originalDeveloperLabel = stringResource(R.string.original_developer)
         Text(
-            text = stringResource(R.string.settings),
+            text = stringResource(
+                if (showBitChordCategoryPage) selectedCategoryPage!!.titleRes else R.string.settings,
+            ),
             style = MaterialTheme.typography.displayLarge,
             color = MaterialTheme.colorScheme.onBackground,
             modifier = Modifier.padding(start = 20.dp, end = 20.dp, top = 8.dp, bottom = 14.dp),
         )
 
-        SettingsGroup(header = stringResource(R.string.settings_categories)) {
+        if (!showBitChordCategoryPage) SettingsGroup(header = stringResource(R.string.settings_categories)) {
             SettingsRow(
                 icon = Icons.Rounded.Tune,
                 title = stringResource(R.string.settings_hierarchical_navigation),
@@ -3247,23 +3254,25 @@ fun SettingsScreen(
             )
         }
 
-        OutlinedTextField(
-            value = settingsSearchQuery,
-            onValueChange = { settingsSearchQuery = it },
-            modifier = Modifier
-                .fillMaxWidth()
-                .padding(horizontal = 20.dp, vertical = 4.dp),
-            singleLine = true,
-            label = { Text(stringResource(R.string.search_settings)) },
-            leadingIcon = {
-                Icon(
-                    imageVector = BitChordIcons.Search,
-                    contentDescription = null,
-                    tint = MaterialTheme.colorScheme.onSurfaceVariant,
-                    modifier = Modifier.size(20.dp),
-                )
-            },
-        )
+        if (!showBitChordCategoryPage) {
+            OutlinedTextField(
+                value = settingsSearchQuery,
+                onValueChange = { settingsSearchQuery = it },
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(horizontal = 20.dp, vertical = 4.dp),
+                singleLine = true,
+                label = { Text(stringResource(R.string.search_settings)) },
+                leadingIcon = {
+                    Icon(
+                        imageVector = BitChordIcons.Search,
+                        contentDescription = null,
+                        tint = MaterialTheme.colorScheme.onSurfaceVariant,
+                        modifier = Modifier.size(20.dp),
+                    )
+                },
+            )
+        }
 
         val wearSearchEntry = if (WatchInstaller.available(context)) {
                 listOf(
@@ -3345,81 +3354,21 @@ fun SettingsScreen(
                 }
             }
         } else if (settingsHierarchicalNavigation) {
-            val selectedCategory = SettingsSearchCategory.entries.firstOrNull { it.name == selectedSettingsCategory }
+            val selectedCategory = selectedCategoryPage
             if (selectedCategory == null) {
                 val availableCategories = SettingsSearchCategory.entries.filter { category ->
                     allSettingsSearchEntries.any { it.category == category }
                 }
                 if (settingsBitChordCategoryStyle) {
-                    Text(
-                        text = stringResource(R.string.settings_categories),
-                        style = MaterialTheme.typography.titleMedium,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant,
-                        modifier = Modifier.padding(start = 20.dp, end = 20.dp, top = 22.dp, bottom = 12.dp),
-                    )
-                    Column(
-                        modifier = Modifier.fillMaxWidth().padding(horizontal = 16.dp),
-                        verticalArrangement = Arrangement.spacedBy(12.dp),
-                    ) {
-                        availableCategories.chunked(2).forEach { rowCategories ->
-                            Row(horizontalArrangement = Arrangement.spacedBy(12.dp)) {
-                                rowCategories.forEach { category ->
-                                    Column(
-                                        modifier = Modifier
-                                            .weight(1f)
-                                            .heightIn(min = 142.dp)
-                                            .clip(RoundedCornerShape(22.dp))
-                                            .background(MaterialTheme.colorScheme.surfaceVariant)
-                                            .clickable { selectedSettingsCategory = category.name }
-                                            .padding(16.dp),
-                                        verticalArrangement = Arrangement.SpaceBetween,
-                                    ) {
-                                        Row(
-                                            modifier = Modifier.fillMaxWidth(),
-                                            horizontalArrangement = Arrangement.SpaceBetween,
-                                            verticalAlignment = Alignment.Top,
-                                        ) {
-                                            Box(
-                                                modifier = Modifier
-                                                    .size(46.dp)
-                                                    .clip(RoundedCornerShape(16.dp))
-                                                    .background(MaterialTheme.colorScheme.primaryContainer),
-                                                contentAlignment = Alignment.Center,
-                                            ) {
-                                                Icon(
-                                                    imageVector = category.icon,
-                                                    contentDescription = null,
-                                                    tint = MaterialTheme.colorScheme.onPrimaryContainer,
-                                                    modifier = Modifier.size(24.dp),
-                                                )
-                                            }
-                                            Icon(
-                                                imageVector = Icons.Rounded.ChevronRight,
-                                                contentDescription = null,
-                                                tint = MaterialTheme.colorScheme.onSurfaceVariant,
-                                            )
-                                        }
-                                        Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
-                                            Text(
-                                                text = stringResource(category.titleRes),
-                                                style = MaterialTheme.typography.titleMedium,
-                                                color = MaterialTheme.colorScheme.onSurface,
-                                                maxLines = 2,
-                                                overflow = TextOverflow.Ellipsis,
-                                            )
-                                            Text(
-                                                text = stringResource(
-                                                    R.string.settings_category_entry_count,
-                                                    allSettingsSearchEntries.count { it.category == category },
-                                                ),
-                                                style = MaterialTheme.typography.bodySmall,
-                                                color = MaterialTheme.colorScheme.onSurfaceVariant,
-                                            )
-                                        }
-                                    }
-                                }
-                                if (rowCategories.size == 1) Spacer(Modifier.weight(1f))
-                            }
+                    SettingsGroup {
+                        availableCategories.forEachIndexed { index, category ->
+                            if (index > 0) RowDivider()
+                            SettingsRow(
+                                icon = category.icon,
+                                title = stringResource(category.titleRes),
+                                trailing = { Chevron() },
+                                onClick = { selectedSettingsCategory = category.name },
+                            )
                         }
                     }
                 } else {
@@ -3439,39 +3388,6 @@ fun SettingsScreen(
             } else {
                 val categoryEntries = allSettingsSearchEntries.filter { it.category == selectedCategory }
                 if (settingsBitChordCategoryStyle) {
-                    Row(
-                        modifier = Modifier
-                            .fillMaxWidth()
-                            .padding(start = 20.dp, end = 20.dp, top = 12.dp, bottom = 8.dp),
-                        verticalAlignment = Alignment.CenterVertically,
-                    ) {
-                        Box(
-                            modifier = Modifier
-                                .size(54.dp)
-                                .clip(RoundedCornerShape(18.dp))
-                                .background(MaterialTheme.colorScheme.primaryContainer),
-                            contentAlignment = Alignment.Center,
-                        ) {
-                            Icon(
-                                imageVector = selectedCategory.icon,
-                                contentDescription = null,
-                                tint = MaterialTheme.colorScheme.onPrimaryContainer,
-                                modifier = Modifier.size(28.dp),
-                            )
-                        }
-                        Column(Modifier.weight(1f).padding(start = 14.dp)) {
-                            Text(
-                                text = stringResource(selectedCategory.titleRes),
-                                style = MaterialTheme.typography.headlineSmall,
-                                color = MaterialTheme.colorScheme.onBackground,
-                            )
-                            Text(
-                                text = stringResource(R.string.settings_category_entry_count, categoryEntries.size),
-                                style = MaterialTheme.typography.bodyMedium,
-                                color = MaterialTheme.colorScheme.onSurfaceVariant,
-                            )
-                        }
-                    }
                     SettingsGroup {
                         SettingsRow(
                             icon = Icons.Rounded.Settings,
@@ -3479,11 +3395,8 @@ fun SettingsScreen(
                             trailing = { Chevron() },
                             onClick = { selectedSettingsCategory = null },
                         )
-                    }
-                    categoryEntries.forEach { entry ->
-                        SettingsGroup {
-                            SettingsSearchEntryRow(entry)
-                        }
+                        if (categoryEntries.isNotEmpty()) RowDivider()
+                        SettingsSearchEntryRows(categoryEntries)
                     }
                 } else {
                     SettingsGroup(header = stringResource(R.string.settings_categories)) {

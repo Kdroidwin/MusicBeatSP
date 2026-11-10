@@ -940,7 +940,7 @@ private fun SharedTransitionScope.ExpandedTabs(
                     .padding(contentPadding)
                     .animateContentSize(),
             ) {
-                if (showPill && (!glassPill || pill.isFlat)) {
+                if (showPill && !glassPill) {
                     FlatSelectionPill(
                         color = colors.indicatorColor,
                         modifier = Modifier.matchParentSize().pillPlacement(
@@ -1048,17 +1048,27 @@ private fun SharedTransitionScope.ExpandedTabs(
                 }
             }
         }
-        if (glassPill && showPill && !pill.isFlat) {
-            GlassSelectionPill(
-                motion = pill,
-                fillColor = colors.indicatorColor,
-                barGlass = barGlass,
-                tabRow = tabRow,
-                modifier = Modifier.matchParentSize().pillPlacement(
-                    center = { pillCenterInRow(pill.position) + Offset(padLeftPx, padTopPx) },
-                    size = { pill.liveSize(restSize, liftedSize) },
-                ),
+        if (glassPill && showPill) {
+            val selectionModifier = Modifier.matchParentSize().pillPlacement(
+                center = { pillCenterInRow(pill.position) + Offset(padLeftPx, padTopPx) },
+                size = { pill.liveSize(restSize, liftedSize) },
             )
+            if (pill.isFlat) {
+                StaticGlassSelectionPill(
+                    fillColor = colors.indicatorColor,
+                    barGlass = barGlass,
+                    tabRow = tabRow,
+                    modifier = selectionModifier,
+                )
+            } else {
+                GlassSelectionPill(
+                    motion = pill,
+                    fillColor = colors.indicatorColor,
+                    barGlass = barGlass,
+                    tabRow = tabRow,
+                    modifier = selectionModifier,
+                )
+            }
         }
     }
 }
