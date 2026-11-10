@@ -379,9 +379,12 @@ enum class PlayerQuickAction {
 
 /** Items shown in the player’s song actions sheet opened from the More button. */
 enum class PlayerDetailsAction {
+    DOWNLOAD,
+    DELETE_DOWNLOAD,
     ALBUM,
     ARTIST,
     ADD_TO_PLAYLIST,
+    CHANGE_ARTIST_IMAGE,
     EQUALIZER,
     CHROMECAST,
     PLAYBACK_TUNING,
@@ -390,7 +393,27 @@ enum class PlayerDetailsAction {
     EDIT_LYRICS,
     DETAILS,
     SHARE_FILE,
+    SHARE_NOW_PLAYING,
 }
+
+/** Existing order in the player's More menu, retained until the listener changes it. */
+val DEFAULT_PLAYER_DETAILS_ACTION_ORDER = listOf(
+    PlayerDetailsAction.DOWNLOAD,
+    PlayerDetailsAction.DELETE_DOWNLOAD,
+    PlayerDetailsAction.ALBUM,
+    PlayerDetailsAction.ARTIST,
+    PlayerDetailsAction.ADD_TO_PLAYLIST,
+    PlayerDetailsAction.CHANGE_ARTIST_IMAGE,
+    PlayerDetailsAction.EQUALIZER,
+    PlayerDetailsAction.CHROMECAST,
+    PlayerDetailsAction.PLAYBACK_TUNING,
+    PlayerDetailsAction.SLEEP_TIMER,
+    PlayerDetailsAction.TAG_EDITOR,
+    PlayerDetailsAction.EDIT_LYRICS,
+    PlayerDetailsAction.DETAILS,
+    PlayerDetailsAction.SHARE_FILE,
+    PlayerDetailsAction.SHARE_NOW_PLAYING,
+)
 
 object MainNavigationTabs {
     /** Newly introduced destinations stay opt-in unless the user enables them. */
@@ -840,6 +863,7 @@ object AppSettings {
     /** DSD-to-PCM playback path; disabled until explicitly selected. */
     val dsdPlaybackEnabled = MutableStateFlow(false)
     val hiddenPlayerDetailsActions = MutableStateFlow<Set<PlayerDetailsAction>>(emptySet())
+    val playerDetailsActionOrder = MutableStateFlow(DEFAULT_PLAYER_DETAILS_ACTION_ORDER)
     /** The cutter is opt-in because it exports a re-encoded, edited copy of a track. */
     val audioCutterEnabled = MutableStateFlow(false)
     /** Player backdrop blur in dp; zero draws sampled colours sharply. */
@@ -1720,6 +1744,7 @@ object AppSettings {
         darPcmUpsamplingEnabled.value = prefs.getBoolean(KEY_DAR_PCM_UPSAMPLING_ENABLED, false)
         dsdPlaybackEnabled.value = prefs.getBoolean(KEY_DSD_PLAYBACK_ENABLED, false)
         hiddenPlayerDetailsActions.value = readHiddenPlayerDetailsActions()
+        playerDetailsActionOrder.value = readPlayerDetailsActionOrder()
         audioCutterEnabled.value = prefs.getBoolean(KEY_AUDIO_CUTTER_ENABLED, false)
         artworkBackdropBlurDp.value = prefs.getFloat(KEY_ARTWORK_BACKDROP_BLUR_DP, 32f)
             .coerceIn(0f, MAX_PLAYER_ARTWORK_BLUR_DP)
@@ -3140,11 +3165,34 @@ object AppSettings {
         prefs.edit().putStringSet(KEY_HIDDEN_PLAYER_DETAILS_ACTIONS, hidden.map { it.name }.toSet()).apply()
     }
 
+    fun setPlayerDetailsActionOrder(actions: List<PlayerDetailsAction>) {
+        val normalized = (actions.distinct() + DEFAULT_PLAYER_DETAILS_ACTION_ORDER).distinct()
+        playerDetailsActionOrder.value = normalized
+        prefs.edit().putString(KEY_PLAYER_DETAILS_ACTION_ORDER, normalized.joinToString(",") { it.name }).apply()
+    }
+
+    fun movePlayerDetailsAction(action: PlayerDetailsAction, offset: Int) {
+        val ordered = playerDetailsActionOrder.value.toMutableList()
+        val from = ordered.indexOf(action)
+        if (from < 0) return
+        val to = (from + offset).coerceIn(0, ordered.lastIndex)
+        if (from == to) return
+        ordered.add(to, ordered.removeAt(from))
+        setPlayerDetailsActionOrder(ordered)
+    }
+
     private fun readHiddenPlayerDetailsActions(): Set<PlayerDetailsAction> =
         prefs.getStringSet(KEY_HIDDEN_PLAYER_DETAILS_ACTIONS, emptySet())
             .orEmpty()
             .mapNotNull { name -> PlayerDetailsAction.entries.firstOrNull { it.name == name } }
             .toSet()
+
+    private fun readPlayerDetailsActionOrder(): List<PlayerDetailsAction> =
+        (prefs.getString(KEY_PLAYER_DETAILS_ACTION_ORDER, null)
+            ?.split(",")
+            ?.mapNotNull { name -> PlayerDetailsAction.entries.firstOrNull { it.name == name } }
+            ?.distinct()
+            .orEmpty() + DEFAULT_PLAYER_DETAILS_ACTION_ORDER).distinct()
 
     fun setAudioCutterEnabled(value: Boolean) {
         audioCutterEnabled.value = value
@@ -4853,6 +4901,7 @@ object AppSettings {
     private const val KEY_DAR_PCM_UPSAMPLING_ENABLED = "dar_pcm_upsampling_enabled"
     private const val KEY_DSD_PLAYBACK_ENABLED = "dsd_playback_enabled"
     private const val KEY_HIDDEN_PLAYER_DETAILS_ACTIONS = "hidden_player_details_actions"
+    private const val KEY_PLAYER_DETAILS_ACTION_ORDER = "player_details_action_order"
     private const val KEY_AUDIO_CUTTER_ENABLED = "audio_cutter_enabled"
     private const val KEY_ARTWORK_BACKDROP_BLUR_DP = "artwork_backdrop_blur_dp"
     private const val KEY_PERSISTENT_LOCAL_ARTWORK = "persistent_local_artwork"

@@ -325,6 +325,29 @@ private data class SettingsSearchReorder(
 )
 
 @Composable
+private fun playerDetailsMenuSearchEntries(
+    actionOrder: List<PlayerDetailsAction>,
+    hiddenActions: Set<PlayerDetailsAction>,
+): List<SettingsSearchEntry> = PlayerDetailsAction.entries.map { action ->
+    val index = actionOrder.indexOf(action)
+    SettingsSearchEntry(
+        title = stringResource(R.string.player_menu_action_visibility, action.localizedLabel()),
+        subtitle = stringResource(R.string.player_details_actions_subtitle),
+        keywords = listOf("player", "menu", "details", action.localizedLabel(), "表示", "非表示", "並び替え"),
+        checked = action !in hiddenActions,
+    ) {
+        AppSettings.setPlayerDetailsActionVisible(action, action in hiddenActions)
+    }.apply {
+        reorder = SettingsSearchReorder(
+            moveUpEnabled = index > 0,
+            moveDownEnabled = index >= 0 && index < actionOrder.lastIndex,
+            moveUp = { AppSettings.movePlayerDetailsAction(action, -1) },
+            moveDown = { AppSettings.movePlayerDetailsAction(action, 1) },
+        )
+    }
+}
+
+@Composable
 private fun supplementalSettingsSearchEntries(
     hierarchicalNavigation: Boolean,
     bitChordCategoryStyle: Boolean,
@@ -1353,6 +1376,7 @@ fun SettingsScreen(
     val externalMediaAccessActive = externalMediaControlEnabled && ExternalMedia.permitted
     val spotifyIntegrationEnabled by AppSettings.spotifyIntegrationEnabled.collectAsStateWithLifecycle()
     val hiddenPlayerDetailsActions by AppSettings.hiddenPlayerDetailsActions.collectAsStateWithLifecycle()
+    val playerDetailsActionOrder by AppSettings.playerDetailsActionOrder.collectAsStateWithLifecycle()
     val audioCutterEnabled by AppSettings.audioCutterEnabled.collectAsStateWithLifecycle()
     val artworkBackdropBlurDp by AppSettings.artworkBackdropBlurDp.collectAsStateWithLifecycle()
     val keepScreenOn by AppSettings.keepScreenOn.collectAsStateWithLifecycle()
@@ -2438,29 +2462,7 @@ fun SettingsScreen(
                 if (action in quickActions) quickActions - action else quickActions + action,
             )
         }
-    } + PlayerDetailsAction.entries.map { action ->
-        val actionTitle = stringResource(when (action) {
-            PlayerDetailsAction.ALBUM -> R.string.go_to_album
-            PlayerDetailsAction.ARTIST -> R.string.go_to_artist
-            PlayerDetailsAction.ADD_TO_PLAYLIST -> R.string.add_to_playlist
-            PlayerDetailsAction.EQUALIZER -> R.string.equalizer
-            PlayerDetailsAction.CHROMECAST -> R.string.chromecast
-            PlayerDetailsAction.PLAYBACK_TUNING -> R.string.playback_tuning
-            PlayerDetailsAction.SLEEP_TIMER -> R.string.sleep_timer
-            PlayerDetailsAction.TAG_EDITOR -> R.string.tag_editor
-            PlayerDetailsAction.EDIT_LYRICS -> R.string.edit_lyrics
-            PlayerDetailsAction.DETAILS -> R.string.details
-            PlayerDetailsAction.SHARE_FILE -> R.string.share_file
-        })
-        SettingsSearchEntry(
-            title = stringResource(R.string.player_menu_action_visibility, actionTitle),
-            subtitle = stringResource(R.string.player_details_actions_subtitle),
-            keywords = listOf("player", "menu", "details", actionTitle, "表示", "非表示"),
-            checked = action !in hiddenPlayerDetailsActions,
-        ) {
-            AppSettings.setPlayerDetailsActionVisible(action, action in hiddenPlayerDetailsActions)
-        }
-    } + listOf(
+    } + playerDetailsMenuSearchEntries(playerDetailsActionOrder, hiddenPlayerDetailsActions) + listOf(
         SettingsSearchEntry(
             stringResource(R.string.local_folder_hierarchy),
             stringResource(R.string.local_folder_hierarchy_subtitle),
@@ -4672,30 +4674,34 @@ fun SettingsScreen(
                 },
                 onClick = { AppSettings.setAudioCutterEnabled(!audioCutterEnabled) },
             )
-            PlayerDetailsAction.entries.forEach { action ->
+            playerDetailsActionOrder.forEachIndexed { index, action ->
                 RowDivider()
-                val title = stringResource(when (action) {
-                    PlayerDetailsAction.ALBUM -> R.string.go_to_album
-                    PlayerDetailsAction.ARTIST -> R.string.go_to_artist
-                    PlayerDetailsAction.ADD_TO_PLAYLIST -> R.string.add_to_playlist
-                    PlayerDetailsAction.EQUALIZER -> R.string.equalizer
-                    PlayerDetailsAction.CHROMECAST -> R.string.chromecast
-                    PlayerDetailsAction.PLAYBACK_TUNING -> R.string.playback_tuning
-                    PlayerDetailsAction.SLEEP_TIMER -> R.string.sleep_timer
-                    PlayerDetailsAction.TAG_EDITOR -> R.string.tag_editor
-                    PlayerDetailsAction.EDIT_LYRICS -> R.string.edit_lyrics
-                    PlayerDetailsAction.DETAILS -> R.string.details
-                    PlayerDetailsAction.SHARE_FILE -> R.string.share_file
-                })
+                val title = action.localizedLabel()
                 val visible = action !in hiddenPlayerDetailsActions
                 SettingsRow(
                     icon = Icons.Rounded.MoreVert,
                     title = title,
                     trailing = {
-                        Switch(
-                            checked = visible,
-                            onCheckedChange = { AppSettings.setPlayerDetailsActionVisible(action, it) },
-                        )
+                        Row(verticalAlignment = Alignment.CenterVertically) {
+                            IconButton(
+                                onClick = { AppSettings.movePlayerDetailsAction(action, -1) },
+                                enabled = index > 0,
+                                modifier = Modifier.size(36.dp),
+                            ) {
+                                Icon(Icons.Rounded.ArrowUpward, stringResource(R.string.move_up))
+                            }
+                            IconButton(
+                                onClick = { AppSettings.movePlayerDetailsAction(action, 1) },
+                                enabled = index < playerDetailsActionOrder.lastIndex,
+                                modifier = Modifier.size(36.dp),
+                            ) {
+                                Icon(Icons.Rounded.ArrowDownward, stringResource(R.string.move_down))
+                            }
+                            Switch(
+                                checked = visible,
+                                onCheckedChange = { AppSettings.setPlayerDetailsActionVisible(action, it) },
+                            )
+                        }
                     },
                     onClick = { AppSettings.setPlayerDetailsActionVisible(action, !visible) },
                 )
@@ -8882,6 +8888,27 @@ private fun TransportSideAction.localizedLabel(): String = stringResource(
         TransportSideAction.QUEUE -> R.string.quick_action_queue
         TransportSideAction.PLAYLISTS -> R.string.quick_action_playlists
         TransportSideAction.SEARCH -> R.string.quick_action_search
+    },
+)
+
+@Composable
+private fun PlayerDetailsAction.localizedLabel(): String = stringResource(
+    when (this) {
+        PlayerDetailsAction.DOWNLOAD -> R.string.download
+        PlayerDetailsAction.DELETE_DOWNLOAD -> R.string.delete_download
+        PlayerDetailsAction.ALBUM -> R.string.go_to_album
+        PlayerDetailsAction.ARTIST -> R.string.go_to_artist
+        PlayerDetailsAction.ADD_TO_PLAYLIST -> R.string.add_to_playlist
+        PlayerDetailsAction.CHANGE_ARTIST_IMAGE -> R.string.change_artist_image
+        PlayerDetailsAction.EQUALIZER -> R.string.equalizer
+        PlayerDetailsAction.CHROMECAST -> R.string.chromecast
+        PlayerDetailsAction.PLAYBACK_TUNING -> R.string.playback_tuning
+        PlayerDetailsAction.SLEEP_TIMER -> R.string.sleep_timer
+        PlayerDetailsAction.TAG_EDITOR -> R.string.tag_editor
+        PlayerDetailsAction.EDIT_LYRICS -> R.string.edit_lyrics
+        PlayerDetailsAction.DETAILS -> R.string.details
+        PlayerDetailsAction.SHARE_FILE -> R.string.share_file
+        PlayerDetailsAction.SHARE_NOW_PLAYING -> R.string.share_now_playing
     },
 )
 

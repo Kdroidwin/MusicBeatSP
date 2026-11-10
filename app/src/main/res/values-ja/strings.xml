@@ -1369,7 +1369,7 @@
     <string name="player_bar_thickness_subtitle">表示するバーの太さを2〜14 dpで調整します</string>
     <string name="player_bar_thickness_value">%1$d dp</string>
     <string name="player_details_actions">プレーヤーの詳細メニュー</string>
-    <string name="player_details_actions_subtitle">プレーヤーの「…」メニューに表示する操作を選択します。</string>
+    <string name="player_details_actions_subtitle">プレーヤーの「…」メニューの順序と表示・非表示を設定します。</string>
     <string name="player_menu_action_visibility">メニューに表示: %1$s</string>
     <string name="audio_cutter_enabled">オーディオカッターを有効にする</string>
     <string name="audio_cutter_enabled_subtitle">ローカル曲の詳細画面にカッターを追加します。元のファイルは残し、AACの編集済みコピーを保存します（再エンコード時は256 kbpsを要求）。</string>

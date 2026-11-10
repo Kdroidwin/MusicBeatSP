@@ -1483,7 +1483,7 @@
     <string name="player_bar_thickness_subtitle">Adjust the visible bar thickness from 2 to 14 dp</string>
     <string name="player_bar_thickness_value">%1$d dp</string>
     <string name="player_details_actions">Player details menu</string>
-    <string name="player_details_actions_subtitle">Choose which actions appear in the player’s More menu.</string>
+    <string name="player_details_actions_subtitle">Reorder actions and choose which appear in the player’s More menu.</string>
     <string name="player_menu_action_visibility">Show in player menu: %1$s</string>
     <string name="audio_cutter_enabled">Enable audio cutter</string>
     <string name="audio_cutter_enabled_subtitle">Adds an audio cutter to local track details. Exports a new AAC copy (requests 256 kbps when re-encoding); the original is kept.</string>

@@ -117,6 +117,7 @@ fun LocalSongActionsSheet(
     val hideEmbeddedDragHandle = showPlayerActions && hidePlayerPopupHandles
     var pickingSleepTimer by remember { mutableStateOf(false) }
     val hiddenActions by AppSettings.hiddenPlayerDetailsActions.collectAsStateWithLifecycle()
+    val actionOrder by AppSettings.playerDetailsActionOrder.collectAsStateWithLifecycle()
     val savedDownloads by Downloads.saved.collectAsStateWithLifecycle()
 
     val afterTrack by SleepTimer.afterTrack.collectAsStateWithLifecycle()
@@ -255,138 +256,116 @@ fun LocalSongActionsSheet(
                                 } else MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.5f),
                             )
 
-                    // This action deliberately precedes the existing album row.
-                    onDownloadYoutubeOpus?.let { download ->
-                        val deleteDownload = onDeleteYoutubeDownload?.takeIf {
-                            song.videoId in savedDownloads
-                        }
-                        LocalSongActionItem(
-                            icon = Icons.Rounded.FileDownload,
-                            label = stringResource(R.string.download),
-                            onClick = download,
-                            trailingActionIcon = deleteDownload?.let { Icons.Rounded.Delete },
-                            trailingActionContentDescription = deleteDownload?.let {
-                                stringResource(R.string.delete_download)
-                            },
-                            onTrailingAction = deleteDownload,
-                        )
+                    val deleteDownload = onDeleteYoutubeDownload?.takeIf {
+                        song.videoId in savedDownloads
                     }
-                    if (onDownloadYoutubeOpus == null) {
-                        onDeleteYoutubeDownload?.takeIf { song.videoId in savedDownloads }?.let { delete ->
-                            LocalSongActionItem(
-                                icon = Icons.Rounded.Delete,
-                                label = stringResource(R.string.delete_download),
-                                onClick = delete,
+                    val downloadIndex = actionOrder.indexOf(PlayerDetailsAction.DOWNLOAD)
+                    val deleteIndex = actionOrder.indexOf(PlayerDetailsAction.DELETE_DOWNLOAD)
+                    val showDeleteBesideDownload = onDownloadYoutubeOpus != null &&
+                        deleteDownload != null &&
+                        PlayerDetailsAction.DOWNLOAD !in hiddenActions &&
+                        PlayerDetailsAction.DELETE_DOWNLOAD !in hiddenActions &&
+                        deleteIndex == downloadIndex + 1
+
+                    // Render the real action handlers in the persisted order. The delete
+                    // affordance stays beside Download by default, but becomes its own
+                    // row when the user moves it elsewhere or hides Download.
+                    actionOrder.forEach { action ->
+                        if (action in hiddenActions) return@forEach
+                        when (action) {
+                            PlayerDetailsAction.DOWNLOAD -> onDownloadYoutubeOpus?.let { download ->
+                                LocalSongActionItem(
+                                    icon = Icons.Rounded.FileDownload,
+                                    label = stringResource(R.string.download),
+                                    onClick = download,
+                                    trailingActionIcon = if (showDeleteBesideDownload) Icons.Rounded.Delete else null,
+                                    trailingActionContentDescription = if (showDeleteBesideDownload) {
+                                        stringResource(R.string.delete_download)
+                                    } else null,
+                                    onTrailingAction = if (showDeleteBesideDownload) deleteDownload else null,
+                                )
+                            }
+                            PlayerDetailsAction.DELETE_DOWNLOAD -> if (
+                                deleteDownload != null && !showDeleteBesideDownload
+                            ) {
+                                LocalSongActionItem(
+                                    icon = Icons.Rounded.Delete,
+                                    label = stringResource(R.string.delete_download),
+                                    onClick = deleteDownload,
+                                )
+                            }
+                            PlayerDetailsAction.ALBUM -> LocalSongActionItem(
+                                icon = Icons.Rounded.Album,
+                                label = stringResource(R.string.go_to_album),
+                                onClick = onGoToAlbum,
                             )
+                            PlayerDetailsAction.ARTIST -> LocalSongActionItem(
+                                icon = Icons.Rounded.Person,
+                                label = stringResource(R.string.go_to_artist),
+                                trailingIcon = if (artists.size > 1) Icons.AutoMirrored.Rounded.KeyboardArrowRight else null,
+                                onClick = onGoToArtist,
+                            )
+                            PlayerDetailsAction.ADD_TO_PLAYLIST -> LocalSongActionItem(
+                                icon = Icons.AutoMirrored.Rounded.PlaylistAdd,
+                                label = stringResource(R.string.add_to_playlist),
+                                onClick = onAddToPlaylist,
+                            )
+                            PlayerDetailsAction.CHANGE_ARTIST_IMAGE -> onChangeArtistImage?.let { changeImage ->
+                                LocalSongActionItem(
+                                    icon = Icons.Rounded.Image,
+                                    label = stringResource(R.string.change_artist_image),
+                                    onClick = changeImage,
+                                )
+                            }
+                            PlayerDetailsAction.EQUALIZER -> LocalSongActionItem(
+                                icon = Icons.Rounded.GraphicEq,
+                                label = stringResource(R.string.equalizer),
+                                onClick = onEqualizer,
+                            )
+                            PlayerDetailsAction.CHROMECAST -> if (showPlayerActions) {
+                                CastActionItem(onUnavailable = onCastUnavailable)
+                            }
+                            PlayerDetailsAction.PLAYBACK_TUNING -> if (showPlayerActions) {
+                                LocalSongActionItem(
+                                    icon = Icons.Rounded.Speed,
+                                    label = stringResource(R.string.playback_tuning),
+                                    onClick = onPlaybackTuning,
+                                )
+                            }
+                            PlayerDetailsAction.SLEEP_TIMER -> LocalSongActionItem(
+                                icon = Icons.Rounded.Bedtime,
+                                label = stringResource(R.string.sleep_timer),
+                                value = sleepTimerStatus,
+                                onClick = { pickingSleepTimer = true },
+                            )
+                            PlayerDetailsAction.TAG_EDITOR -> LocalSongActionItem(
+                                icon = Icons.Rounded.Edit,
+                                label = stringResource(R.string.tag_editor),
+                                onClick = onTagEditor,
+                            )
+                            PlayerDetailsAction.EDIT_LYRICS -> LocalSongActionItem(
+                                icon = Icons.AutoMirrored.Rounded.Notes,
+                                label = stringResource(R.string.edit_lyrics),
+                                onClick = onEditLyrics,
+                            )
+                            PlayerDetailsAction.DETAILS -> LocalSongActionItem(
+                                icon = Icons.Rounded.Info,
+                                label = stringResource(R.string.details),
+                                onClick = onDetails,
+                            )
+                            PlayerDetailsAction.SHARE_FILE -> LocalSongActionItem(
+                                icon = Icons.Rounded.Share,
+                                label = stringResource(R.string.share_file),
+                                onClick = onShareFile,
+                            )
+                            PlayerDetailsAction.SHARE_NOW_PLAYING -> onShareNowPlaying?.let { share ->
+                                LocalSongActionItem(
+                                    icon = Icons.Rounded.IosShare,
+                                    label = stringResource(R.string.share_now_playing),
+                                    onClick = share,
+                                )
+                            }
                         }
-                    }
-
-                    // 1. Go to Album
-                    if (PlayerDetailsAction.ALBUM !in hiddenActions) {
-                        LocalSongActionItem(
-                            icon = Icons.Rounded.Album,
-                            label = stringResource(R.string.go_to_album),
-                            onClick = onGoToAlbum,
-                        )
-                    }
-
-                    // 2. Go to Artist
-                    if (PlayerDetailsAction.ARTIST !in hiddenActions) {
-                        LocalSongActionItem(
-                            icon = Icons.Rounded.Person,
-                            label = stringResource(R.string.go_to_artist),
-                            trailingIcon = if (artists.size > 1) Icons.AutoMirrored.Rounded.KeyboardArrowRight else null,
-                            onClick = onGoToArtist,
-                        )
-                    }
-
-                    // 3. Add to playlist
-                    if (PlayerDetailsAction.ADD_TO_PLAYLIST !in hiddenActions) {
-                        LocalSongActionItem(
-                            icon = Icons.AutoMirrored.Rounded.PlaylistAdd,
-                            label = stringResource(R.string.add_to_playlist),
-                            onClick = onAddToPlaylist,
-                        )
-                    }
-                    onChangeArtistImage?.let { changeImage ->
-                        LocalSongActionItem(
-                            icon = Icons.Rounded.Image,
-                            label = stringResource(R.string.change_artist_image),
-                            onClick = changeImage,
-                        )
-                    }
-
-                    // 4. Equalizer
-                    if (PlayerDetailsAction.EQUALIZER !in hiddenActions) {
-                        LocalSongActionItem(
-                            icon = Icons.Rounded.GraphicEq,
-                            label = stringResource(R.string.equalizer),
-                            onClick = onEqualizer,
-                        )
-                    }
-
-                    if (showPlayerActions && PlayerDetailsAction.CHROMECAST !in hiddenActions) {
-                        CastActionItem(onUnavailable = onCastUnavailable)
-                    }
-                    if (showPlayerActions && PlayerDetailsAction.PLAYBACK_TUNING !in hiddenActions) {
-                        LocalSongActionItem(
-                            icon = Icons.Rounded.Speed,
-                            label = stringResource(R.string.playback_tuning),
-                            onClick = onPlaybackTuning,
-                        )
-                    }
-
-                    // 5. Sleep timer
-                    if (PlayerDetailsAction.SLEEP_TIMER !in hiddenActions) {
-                        LocalSongActionItem(
-                            icon = Icons.Rounded.Bedtime,
-                            label = stringResource(R.string.sleep_timer),
-                            value = sleepTimerStatus,
-                            onClick = { pickingSleepTimer = true },
-                        )
-                    }
-
-                    // 6. Tag editor
-                    if (PlayerDetailsAction.TAG_EDITOR !in hiddenActions) {
-                        LocalSongActionItem(
-                            icon = Icons.Rounded.Edit,
-                            label = stringResource(R.string.tag_editor),
-                            onClick = onTagEditor,
-                        )
-                    }
-
-                    // 7. Edit lyrics
-                    if (PlayerDetailsAction.EDIT_LYRICS !in hiddenActions) {
-                        LocalSongActionItem(
-                            icon = Icons.AutoMirrored.Rounded.Notes,
-                            label = stringResource(R.string.edit_lyrics),
-                            onClick = onEditLyrics,
-                        )
-                    }
-
-                    // 8. Details
-                    if (PlayerDetailsAction.DETAILS !in hiddenActions) {
-                        LocalSongActionItem(
-                            icon = Icons.Rounded.Info,
-                            label = stringResource(R.string.details),
-                            onClick = onDetails,
-                        )
-                    }
-
-                    // 9. Share file
-                    if (PlayerDetailsAction.SHARE_FILE !in hiddenActions) {
-                        LocalSongActionItem(
-                            icon = Icons.Rounded.Share,
-                            label = stringResource(R.string.share_file),
-                            onClick = onShareFile,
-                        )
-                    }
-                    onShareNowPlaying?.let { share ->
-                        LocalSongActionItem(
-                            icon = Icons.Rounded.IosShare,
-                            label = stringResource(R.string.share_now_playing),
-                            onClick = share,
-                        )
                     }
 
                             Spacer(Modifier.height(8.dp))
