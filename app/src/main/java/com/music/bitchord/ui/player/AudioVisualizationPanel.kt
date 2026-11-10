@@ -57,6 +57,9 @@ internal fun AudioVisualizationPanel(
     audioSessionId: Int,
     showPeakMeter: Boolean,
     showSpectrum: Boolean,
+    capturePeakMeter: Boolean = showPeakMeter,
+    captureSpectrum: Boolean = showSpectrum,
+    previewOnly: Boolean = false,
     modifier: Modifier = Modifier,
 ) {
     val context = LocalContext.current
@@ -64,13 +67,15 @@ internal fun AudioVisualizationPanel(
         context,
         android.Manifest.permission.RECORD_AUDIO,
     ) == PackageManager.PERMISSION_GRANTED
-    if (audioSessionId <= 0 || !permissionGranted || (!showPeakMeter && !showSpectrum)) return
+    if (!showPeakMeter && !showSpectrum) return
+    val canCapture = audioSessionId > 0 && permissionGranted &&
+        (capturePeakMeter || captureSpectrum)
 
     val frameRef = remember(audioSessionId) { AtomicReference(AudioVisualizationFrame()) }
     var frame by remember(audioSessionId) { mutableStateOf(AudioVisualizationFrame()) }
 
-    DisposableEffect(audioSessionId, showPeakMeter, showSpectrum, permissionGranted) {
-        val effect = runCatching { Visualizer(audioSessionId) }.getOrNull()
+    DisposableEffect(audioSessionId, capturePeakMeter, captureSpectrum, canCapture) {
+        val effect = if (canCapture) runCatching { Visualizer(audioSessionId) }.getOrNull() else null
         if (effect != null) {
             runCatching {
                 val captureRange = Visualizer.getCaptureSizeRange()
@@ -82,7 +87,7 @@ internal fun AudioVisualizationPanel(
                             waveform: ByteArray?,
                             samplingRate: Int,
                         ) {
-                            if (!showPeakMeter) return
+                            if (!capturePeakMeter) return
                             val samples = waveform ?: return
                             if (samples.isEmpty()) return
                             var peak = 0f
@@ -98,7 +103,7 @@ internal fun AudioVisualizationPanel(
                             fft: ByteArray?,
                             samplingRate: Int,
                         ) {
-                            if (!showSpectrum) return
+                            if (!captureSpectrum) return
                             val samples = fft ?: return
                             if (samples.isEmpty()) return
                             val bins = samples.size / 2
@@ -121,8 +126,8 @@ internal fun AudioVisualizationPanel(
                         }
                     },
                     (Visualizer.getMaxCaptureRate() / 2).coerceAtLeast(2_000),
-                    showPeakMeter,
-                    showSpectrum,
+                    capturePeakMeter,
+                    captureSpectrum,
                 )
                 effect.enabled = true
             }.onFailure { runCatching { effect.release() } }
@@ -135,12 +140,33 @@ internal fun AudioVisualizationPanel(
         }
     }
 
-    LaunchedEffect(audioSessionId) {
+    LaunchedEffect(audioSessionId, canCapture) {
+        if (!canCapture) {
+            frame = AudioVisualizationFrame()
+            return@LaunchedEffect
+        }
         while (true) {
             frame = frameRef.get()
             delay(33)
         }
     }
+
+    val previewFrame = remember {
+        val peaks = floatArrayOf(0.18f, 0.45f, 0.72f, 0.36f, 0.60f)
+        AudioVisualizationFrame(
+            peak = 0.58f,
+            spectrum = FloatArray(32) { index ->
+                val nearest = peaks.indices.minOf { abs(index - peaks[it] * 30f) }
+                (0.14f + (1f - nearest / 8f).coerceAtLeast(0f) * 0.72f).coerceIn(0.08f, 0.86f)
+            },
+        )
+    }
+    val visibleFrame = if (previewOnly) {
+        AudioVisualizationFrame(
+            peak = if (canCapture && capturePeakMeter) frame.peak else previewFrame.peak,
+            spectrum = if (canCapture && captureSpectrum) frame.spectrum else previewFrame.spectrum,
+        )
+    } else frame
 
     val accent = MaterialTheme.colorScheme.primary
     val secondary = MaterialTheme.colorScheme.onSurfaceVariant
@@ -179,7 +205,7 @@ internal fun AudioVisualizationPanel(
                             strokeWidth = 1.dp.toPx(),
                         )
                     }
-                    val needleAngle = PI + PI * frame.peak
+                    val needleAngle = PI + PI * visibleFrame.peak
                     drawLine(
                         accent,
                         center,
@@ -199,11 +225,11 @@ internal fun AudioVisualizationPanel(
                             overflow = TextOverflow.Ellipsis,
                             modifier = Modifier.weight(1f),
                         )
-                        val db = if (frame.peak <= 0.0001f) "−∞" else "%.0f".format((-20f * kotlin.math.log10(frame.peak)).coerceAtLeast(0f).let { -it })
+                        val db = if (visibleFrame.peak <= 0.0001f) "−∞" else "%.0f".format((-20f * kotlin.math.log10(visibleFrame.peak)).coerceAtLeast(0f).let { -it })
                         Text(text = "$db dB", color = secondary, fontSize = 10.sp)
                     }
                     Canvas(Modifier.fillMaxWidth().height(5.dp)) {
-                        val filled = size.width * frame.peak
+                        val filled = size.width * visibleFrame.peak
                         drawRoundRect(secondary.copy(alpha = 0.18f), cornerRadius = androidx.compose.ui.geometry.CornerRadius(size.height))
                         if (filled > 0f) {
                             drawRoundRect(accent, size = Size(filled, size.height), cornerRadius = androidx.compose.ui.geometry.CornerRadius(size.height))
@@ -226,8 +252,8 @@ internal fun AudioVisualizationPanel(
                 )
                 Canvas(Modifier.weight(1f).height(30.dp)) {
                     val gap = 2.dp.toPx()
-                    val barWidth = ((size.width - gap * (frame.spectrum.size - 1)) / frame.spectrum.size).coerceAtLeast(1f)
-                    frame.spectrum.forEachIndexed { index, level ->
+                    val barWidth = ((size.width - gap * (visibleFrame.spectrum.size - 1)) / visibleFrame.spectrum.size).coerceAtLeast(1f)
+                    visibleFrame.spectrum.forEachIndexed { index, level ->
                         val height = size.height * level
                         drawRoundRect(
                             color = accent.copy(alpha = 0.28f + level * 0.72f),
@@ -238,6 +264,14 @@ internal fun AudioVisualizationPanel(
                     }
                 }
             }
+        }
+        if (previewOnly) {
+            Text(
+                text = stringResource(R.string.audio_visualization_preview_hint),
+                color = secondary.copy(alpha = 0.75f),
+                fontSize = 10.sp,
+                modifier = Modifier.padding(start = 2.dp, top = 1.dp),
+            )
         }
     }
 }

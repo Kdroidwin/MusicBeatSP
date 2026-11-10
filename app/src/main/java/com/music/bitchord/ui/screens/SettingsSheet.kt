@@ -178,6 +178,7 @@ import com.music.bitchord.data.LocalMediaRepository
 import com.music.bitchord.data.NerdStats
 import com.music.bitchord.data.scrobbling.LastFM
 import com.music.bitchord.data.settings.AppSettings
+import com.music.bitchord.ui.player.AudioVisualizationPanel
 import com.music.bitchord.data.settings.FolderArtworkFallbackMode
 import com.music.bitchord.data.settings.PlayerArtworkMode
 import com.music.bitchord.data.settings.PlayerInkGroup
@@ -1298,6 +1299,7 @@ fun SettingsScreen(
     val nerdStatsAlwaysOnArtwork by AppSettings.nerdStatsAlwaysOnArtwork.collectAsStateWithLifecycle()
     val showAnalogDigitalPeakMeter by AppSettings.showAnalogDigitalPeakMeter.collectAsStateWithLifecycle()
     val showSpectrumAnalyzer by AppSettings.showSpectrumAnalyzer.collectAsStateWithLifecycle()
+    val visualizerAudioSessionId by AppSettings.audioSessionId.collectAsStateWithLifecycle()
     val reduceAnimation by AppSettings.reduceAnimation.collectAsStateWithLifecycle()
     val playerArtworkTransition by AppSettings.playerArtworkTransition.collectAsStateWithLifecycle()
     val walkmanPlayerStyle by AppSettings.walkmanPlayerStyle.collectAsStateWithLifecycle()
@@ -3291,6 +3293,23 @@ fun SettingsScreen(
                     )
                 } else {
                     SettingsSearchEntryRows(matches)
+                    val showPeakMeterPreview = matches.any {
+                        it.title == context.getString(R.string.analog_digital_peak_meter)
+                    }
+                    val showSpectrumPreview = matches.any {
+                        it.title == context.getString(R.string.spectrum_analyzer)
+                    }
+                    if (showPeakMeterPreview || showSpectrumPreview) {
+                        AudioVisualizationPanel(
+                            audioSessionId = visualizerAudioSessionId,
+                            showPeakMeter = showPeakMeterPreview,
+                            showSpectrum = showSpectrumPreview,
+                            capturePeakMeter = showPeakMeterPreview && showAnalogDigitalPeakMeter,
+                            captureSpectrum = showSpectrumPreview && showSpectrumAnalyzer,
+                            previewOnly = true,
+                            modifier = Modifier.padding(horizontal = 18.dp, vertical = 12.dp),
+                        )
+                    }
                 }
             }
         } else if (settingsHierarchicalNavigation) {
@@ -6776,6 +6795,14 @@ fun SettingsScreen(
                 showSpectrum = showSpectrumAnalyzer,
                 onPeakMeterChange = { setAudioVisualization(1, it) },
                 onSpectrumChange = { setAudioVisualization(2, it) },
+            )
+            AudioVisualizationPanel(
+                audioSessionId = visualizerAudioSessionId,
+                showPeakMeter = true,
+                showSpectrum = true,
+                capturePeakMeter = showAnalogDigitalPeakMeter,
+                captureSpectrum = showSpectrumAnalyzer,
+                previewOnly = true,
             )
             SettingsRow(
                 icon = Icons.Rounded.GraphicEq,
