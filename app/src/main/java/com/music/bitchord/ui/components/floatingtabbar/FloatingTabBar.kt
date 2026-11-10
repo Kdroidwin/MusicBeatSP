@@ -42,6 +42,7 @@ import androidx.compose.animation.SharedTransitionLayout
 import androidx.compose.animation.SharedTransitionScope
 import androidx.compose.animation.animateContentSize
 import androidx.compose.animation.core.FastOutSlowInEasing
+import androidx.compose.animation.core.AnimationSpec
 import androidx.compose.animation.core.animateFloat
 import androidx.compose.animation.core.animateFloatAsState
 import androidx.compose.animation.core.keyframes
@@ -73,18 +74,25 @@ import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.runtime.Immutable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.mutableStateListOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.rememberCoroutineScope
+import androidx.compose.runtime.rememberUpdatedState
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.draw.drawBehind
 import androidx.compose.ui.draw.shadow
+import androidx.compose.ui.input.pointer.pointerInput
+import androidx.compose.foundation.gestures.detectHorizontalDragGestures
+import androidx.compose.ui.layout.onSizeChanged
 import androidx.compose.ui.geometry.CornerRadius
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.geometry.Size
@@ -96,11 +104,23 @@ import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.input.nestedscroll.NestedScrollConnection
 import androidx.compose.ui.input.nestedscroll.NestedScrollSource
 import androidx.compose.ui.platform.LocalDensity
+import androidx.compose.ui.platform.LocalLayoutDirection
 import androidx.compose.ui.unit.Dp
+import androidx.compose.ui.unit.IntSize
+import androidx.compose.ui.unit.LayoutDirection
 import androidx.compose.ui.unit.dp
+import kotlin.math.roundToInt
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.music.bitchord.data.settings.AppSettings
 import com.music.bitchord.data.settings.PillMotionStyle
+import com.music.bitchord.ui.components.LocalLiquidGlassEnabled
+import com.music.bitchord.ui.components.LocalLegacyLiquidGlassEnabled
+import com.music.bitchord.ui.components.LocalGlassExport
+import com.music.bitchord.ui.components.isGlassSupported
+import com.music.bitchord.ui.components.backdrop.backdrops.layerBackdrop
+import com.music.bitchord.ui.components.backdrop.backdrops.rememberLayerBackdrop
+import com.music.bitchord.ui.haptics.Haptic
+import com.music.bitchord.ui.haptics.rememberHaptics
 
 /** Hoisted so the default is one stable lambda rather than a new one per call. */
 private val DefaultTabBarContentModifier: @Composable () -> Modifier = { Modifier }
@@ -746,8 +766,15 @@ private fun SharedTransitionScope.ExpandedTabs(
 ) {
     val inlineTab = scope.getInlineTab(selectedTabKey)
     val selectedIndex = scope.tabs.indexOfFirst { it.key == selectedTabKey }
+    val useBitChordGlass = LocalLiquidGlassEnabled.current &&
+        !LocalLegacyLiquidGlassEnabled.current && isGlassSupported()
     val reduceMotion by AppSettings.reduceAnimation.collectAsStateWithLifecycle()
     val pillMotionStyle by AppSettings.pillMotionStyle.collectAsStateWithLifecycle()
+
+    // Keep MusicBeat's established indicator and animation untouched for the
+    // ordinary and legacy renderers. The BitChord renderer gets its upstream
+    // lifted glass pill only when that style is explicitly active.
+    if (!useBitChordGlass) {
     val indicatorPosition by animateFloatAsState(
         targetValue = selectedIndex.coerceAtLeast(0).toFloat(),
         animationSpec = when {
@@ -841,6 +868,196 @@ private fun SharedTransitionScope.ExpandedTabs(
                         interactionSource = remember { MutableInteractionSource() }
                     )
                     .padding(sizes.tabExpandedContentPadding)
+            )
+        }
+    }
+        return
+    }
+
+    val currentSelectedTabIndex by rememberUpdatedState(selectedIndex)
+    val reduceDynamicBlur by AppSettings.reduceDynamicBlur.collectAsStateWithLifecycle()
+    val selectionSpec: AnimationSpec<Float> = if (reduceMotion) snap() else spring(dampingRatio = 0.72f, stiffness = 320f)
+    val haptics = rememberHaptics()
+    val coroutineScope = rememberCoroutineScope()
+    val pill = remember { GlassPillMotion(coroutineScope, selectedIndex.coerceAtLeast(0)) }
+    pill.reduceMotion = reduceMotion
+    val glassPill = !reduceDynamicBlur
+    val barGlass = rememberLayerBackdrop()
+    val tabRow = rememberLayerBackdrop()
+    var rowSize by remember { mutableStateOf(IntSize.Zero) }
+    var lastHapticTab by remember { mutableIntStateOf(selectedIndex) }
+    var lastSelectedTabIndex by remember { mutableIntStateOf(selectedIndex) }
+    val density = LocalDensity.current
+    val layoutDirection = LocalLayoutDirection.current
+    val isRtl = layoutDirection == LayoutDirection.Rtl
+    val tabCount = scope.tabs.size
+    val tabSpacingPx = with(density) { sizes.tabSpacing.toPx() }
+    val tabWidthPx = if (rowSize.width > 0 && tabCount > 0) {
+        (rowSize.width - tabSpacingPx * (tabCount - 1)) / tabCount
+    } else 0f
+    val tabStepPx = if (rowSize.width > 0 && tabCount > 0) {
+        (rowSize.width + tabSpacingPx) / tabCount
+    } else 0f
+    pill.stepDp = tabStepPx / density.density
+    val currentTabStepPx by rememberUpdatedState(tabStepPx)
+    val currentIsRtl by rememberUpdatedState(isRtl)
+    val contentPadding = sizes.tabBarContentPadding
+    val padLeftPx = with(density) { contentPadding.calculateLeftPadding(layoutDirection).toPx() }
+    val padTopPx = with(density) { contentPadding.calculateTopPadding().toPx() }
+    val padBottomPx = with(density) { contentPadding.calculateBottomPadding().toPx() }
+    val rowHeightPx = rowSize.height.toFloat()
+    val restSize = Size(tabWidthPx, rowHeightPx)
+    val liftedHeightPx = rowHeightPx + padTopPx + padBottomPx + with(density) { PILL_GROW_HEIGHT.toPx() }
+    val liftedSize = if (rowHeightPx > 0f) Size(liftedHeightPx * tabWidthPx / rowHeightPx, liftedHeightPx) else restSize
+    val pillCenterInRow: (Float) -> Offset = { position ->
+        val x = position * tabStepPx + tabWidthPx / 2f
+        Offset(if (isRtl) rowSize.width - x else x, rowHeightPx / 2f)
+    }
+    val showPill = selectedIndex >= 0 && tabWidthPx > 0f
+
+    LaunchedEffect(selectedIndex) {
+        if (selectedIndex >= 0) {
+            if (lastSelectedTabIndex < 0) pill.snapTo(selectedIndex) else pill.animateTo(selectedIndex)
+        }
+        lastSelectedTabIndex = selectedIndex
+        lastHapticTab = selectedIndex
+    }
+
+    Box(
+        modifier = modifier.sharedElement(
+            sharedContentState = rememberSharedContentState("tabGroup"),
+            animatedVisibilityScope = animatedVisibilityScope,
+            zIndexInOverlay = 1f,
+        ),
+    ) {
+        CompositionLocalProvider(LocalGlassExport provides barGlass) {
+            Box(
+                modifier = Modifier
+                    .shadow(shape = shapes.tabBarShape, elevation = elevations.expandedElevation)
+                    .background(color = colors.backgroundColor, shape = shapes.tabBarShape)
+                    .clip(shapes.tabBarShape)
+                    .then(tabBarContentModifier())
+                    .padding(contentPadding)
+                    .animateContentSize(),
+            ) {
+                if (showPill && (!glassPill || pill.isFlat)) {
+                    FlatSelectionPill(
+                        color = colors.indicatorColor,
+                        modifier = Modifier.matchParentSize().pillPlacement(
+                            center = { pillCenterInRow(pill.position) },
+                            size = { pill.liveSize(restSize, liftedSize) },
+                        ),
+                    )
+                }
+
+                Row(
+                    horizontalArrangement = Arrangement.spacedBy(sizes.tabSpacing),
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .onSizeChanged { rowSize = it }
+                        .layerBackdrop(tabRow)
+                        .pointerInput(Unit) {
+                            var totalDrag = 0f
+                            var dragStartIndex = currentSelectedTabIndex
+                            var direction = 1f
+                            var step = 0f
+                            var holding = false
+                            detectHorizontalDragGestures(
+                                onDragStart = {
+                                    step = currentTabStepPx
+                                    holding = currentSelectedTabIndex >= 0 && step > 0f
+                                    if (!holding) return@detectHorizontalDragGestures
+                                    direction = if (currentIsRtl) -1f else 1f
+                                    totalDrag = 0f
+                                    dragStartIndex = currentSelectedTabIndex
+                                    pill.startDrag()
+                                },
+                                onDragCancel = {
+                                    if (holding) pill.release(currentSelectedTabIndex)
+                                    holding = false
+                                },
+                                onDragEnd = {
+                                    if (!holding) return@detectHorizontalDragGestures
+                                    holding = false
+                                    val nextIndex = (dragStartIndex + totalDrag / step)
+                                        .coerceIn(0f, scope.tabs.lastIndex.toFloat()).roundToInt()
+                                    pill.release(nextIndex)
+                                    if (nextIndex != currentSelectedTabIndex) scope.tabs[nextIndex].onClick()
+                                },
+                                onHorizontalDrag = { _, delta ->
+                                    if (!holding) return@detectHorizontalDragGestures
+                                    totalDrag += delta * direction
+                                    val position = (dragStartIndex + totalDrag / step)
+                                        .coerceIn(0f, scope.tabs.lastIndex.toFloat())
+                                    pill.dragTo(position)
+                                    val approximateTab = position.roundToInt()
+                                    if (approximateTab != lastHapticTab) {
+                                        haptics.play(Haptic.Tick)
+                                        lastHapticTab = approximateTab
+                                    }
+                                },
+                            )
+                        },
+                ) {
+                    scope.tabs.forEach { tab ->
+                        val isSelected = tab.key == selectedTabKey
+                        val iconScale by animateFloatAsState(
+                            targetValue = if (isSelected) 1.08f else 1f,
+                            animationSpec = selectionSpec,
+                            label = "glassTabScale",
+                        )
+                        Tab(
+                            icon = {
+                                Box(
+                                    modifier = (if (tab.key == inlineTab?.key) {
+                                        Modifier.sharedElement(
+                                            sharedContentState = rememberSharedContentState("tab#${tab.key}-icon"),
+                                            animatedVisibilityScope = animatedVisibilityScope,
+                                            zIndexInOverlay = 1f,
+                                        )
+                                    } else {
+                                        Modifier.animateEnterExitTab(
+                                            sharedTransitionScope = this@ExpandedTabs,
+                                            animatedVisibilityScope = animatedVisibilityScope,
+                                        )
+                                    }).graphicsLayer {
+                                        scaleX = iconScale
+                                        scaleY = iconScale
+                                    },
+                                ) { tab.icon() }
+                            },
+                            title = {
+                                Box(Modifier.animateEnterExitTab(
+                                    sharedTransitionScope = this@ExpandedTabs,
+                                    animatedVisibilityScope = animatedVisibilityScope,
+                                )) { tab.title() }
+                            },
+                            isInline = false,
+                            modifier = Modifier
+                                .weight(1f)
+                                .skipToLookaheadSize()
+                                .clip(shapes.tabShape)
+                                .clickable(
+                                    onClick = tab.onClick,
+                                    indication = tab.indication?.invoke(),
+                                    interactionSource = remember { MutableInteractionSource() },
+                                )
+                                .padding(sizes.tabExpandedContentPadding),
+                        )
+                    }
+                }
+            }
+        }
+        if (glassPill && showPill && !pill.isFlat) {
+            GlassSelectionPill(
+                motion = pill,
+                fillColor = colors.indicatorColor,
+                barGlass = barGlass,
+                tabRow = tabRow,
+                modifier = Modifier.matchParentSize().pillPlacement(
+                    center = { pillCenterInRow(pill.position) + Offset(padLeftPx, padTopPx) },
+                    size = { pill.liveSize(restSize, liftedSize) },
+                ),
             )
         }
     }

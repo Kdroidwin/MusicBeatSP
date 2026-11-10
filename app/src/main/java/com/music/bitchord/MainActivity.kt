@@ -273,6 +273,7 @@ import com.music.bitchord.ui.components.FrostedTopBar
 import com.music.bitchord.ui.components.LastfmLoginAlert
 import com.music.bitchord.ui.components.LocalAppBackdrop
 import com.music.bitchord.ui.components.LocalLiquidGlassEnabled
+import com.music.bitchord.ui.components.LocalLegacyLiquidGlassEnabled
 import com.music.bitchord.ui.components.backdrop.backdrops.LayerBackdrop
 import com.music.bitchord.ui.components.backdrop.backdrops.layerBackdrop
 import com.music.bitchord.ui.components.backdrop.backdrops.rememberLayerBackdrop
@@ -401,6 +402,7 @@ class MainActivity : AppCompatActivity() {
             }
             val highPerformance by AppSettings.highPerformanceMode.collectAsStateWithLifecycle()
             val liquidGlassEnabled by AppSettings.liquidGlass.collectAsStateWithLifecycle()
+            val liquidGlassLegacyEnabled by AppSettings.liquidGlassLegacy.collectAsStateWithLifecycle()
             val keepScreenOn by AppSettings.keepScreenOn.collectAsStateWithLifecycle()
             val showStatusBar by AppSettings.showStatusBar.collectAsStateWithLifecycle()
             val hideStatusBarInLibraryPlaylists by AppSettings.hideStatusBarInLibraryPlaylists.collectAsStateWithLifecycle()
@@ -481,7 +483,8 @@ class MainActivity : AppCompatActivity() {
                 val appBackdrop = rememberLayerBackdrop(onDraw = paintBackdrop)
                 CompositionLocalProvider(
                     LocalOverscrollFactory provides iosOverscrollFactory,
-                    LocalLiquidGlassEnabled provides liquidGlassEnabled,
+                    LocalLiquidGlassEnabled provides (liquidGlassEnabled || liquidGlassLegacyEnabled),
+                    LocalLegacyLiquidGlassEnabled provides liquidGlassLegacyEnabled,
                     LocalAppBackdrop provides appBackdrop,
                 ) {
                 // The window's width, measured rather than asked for.

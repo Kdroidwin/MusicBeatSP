@@ -276,6 +276,38 @@ private fun nerdStatsArtworkPlacementSearchEntry(enabled: Boolean): SettingsSear
 )
 
 @Composable
+private fun liquidGlassLegacySearchEntry(enabled: Boolean): SettingsSearchEntry = SettingsSearchEntry(
+    title = stringResource(R.string.liquid_glass_legacy),
+    subtitle = stringResource(R.string.liquid_glass_legacy_subtitle),
+    keywords = listOf("liquid glass", "legacy", "old", "旧", "液体ガラス", "従来"),
+    checked = enabled,
+    activate = { AppSettings.setLegacyLiquidGlass(!enabled) },
+)
+
+@Composable
+private fun audioVisualizationSearchEntries(
+    analogPeakEnabled: Boolean,
+    spectrumEnabled: Boolean,
+    onAnalogPeakClick: () -> Unit,
+    onSpectrumClick: () -> Unit,
+): List<SettingsSearchEntry> = listOf(
+    SettingsSearchEntry(
+        title = stringResource(R.string.analog_digital_peak_meter),
+        subtitle = stringResource(R.string.audio_visualization_permission_subtitle),
+        keywords = listOf("audio", "player", "meter", "peak", "analog", "digital", "音声", "プレイヤー", "メーター", "ピーク", "アナログ", "デジタル"),
+        checked = analogPeakEnabled,
+        activate = onAnalogPeakClick,
+    ),
+    SettingsSearchEntry(
+        title = stringResource(R.string.spectrum_analyzer),
+        subtitle = stringResource(R.string.audio_visualization_permission_subtitle),
+        keywords = listOf("audio", "player", "spectrum", "analyzer", "visualizer", "音声", "プレイヤー", "スペクトラム", "アナライザー", "音域"),
+        checked = spectrumEnabled,
+        activate = onSpectrumClick,
+    ),
+)
+
+@Composable
 private fun seekButtonsInsideTrackControlsSearchEntry(enabled: Boolean): SettingsSearchEntry = SettingsSearchEntry(
     title = stringResource(R.string.seek_buttons_inside_track_controls),
     subtitle = stringResource(R.string.seek_buttons_inside_track_controls_subtitle),
@@ -1001,6 +1033,49 @@ private fun FullBleedArtworkBottomBlurSettingsRow(strengthDp: Int) {
 }
 
 @Composable
+private fun AudioVisualizationSettingsRows(
+    showPeakMeter: Boolean,
+    showSpectrum: Boolean,
+    onPeakMeterChange: (Boolean) -> Unit,
+    onSpectrumChange: (Boolean) -> Unit,
+) {
+    SettingsRow(
+        icon = Icons.Rounded.GraphicEq,
+        title = stringResource(R.string.analog_digital_peak_meter),
+        subtitle = stringResource(R.string.audio_visualization_permission_subtitle),
+        trailing = {
+            Switch(
+                checked = showPeakMeter,
+                onCheckedChange = onPeakMeterChange,
+                colors = SwitchDefaults.colors(
+                    checkedTrackColor = MaterialTheme.colorScheme.primary,
+                    checkedBorderColor = MaterialTheme.colorScheme.primary,
+                ),
+            )
+        },
+        onClick = { onPeakMeterChange(!showPeakMeter) },
+    )
+    RowDivider()
+    SettingsRow(
+        icon = Icons.Rounded.GraphicEq,
+        title = stringResource(R.string.spectrum_analyzer),
+        subtitle = stringResource(R.string.audio_visualization_permission_subtitle),
+        trailing = {
+            Switch(
+                checked = showSpectrum,
+                onCheckedChange = onSpectrumChange,
+                colors = SwitchDefaults.colors(
+                    checkedTrackColor = MaterialTheme.colorScheme.primary,
+                    checkedBorderColor = MaterialTheme.colorScheme.primary,
+                ),
+            )
+        },
+        onClick = { onSpectrumChange(!showSpectrum) },
+    )
+    RowDivider()
+}
+
+@Composable
 private fun appleMusicLyricsButtonStyleSearchEntry(enabled: Boolean) = SettingsSearchEntry(
     title = stringResource(R.string.apple_music_lyrics_button_style),
     subtitle = stringResource(R.string.apple_music_button_style_subtitle),
@@ -1096,6 +1171,35 @@ fun SettingsScreen(
     val context = LocalContext.current
     val musicFolderRootPicker = rememberMusicFolderRootPicker(AppSettings::setLocalMusicFolderPath)
     val settingsScrollState = rememberScrollState()
+    var pendingAudioVisualizationSetting by remember { mutableStateOf<Int?>(null) }
+    val audioVisualizationPermissionLauncher = rememberLauncherForActivityResult(
+        ActivityResultContracts.RequestPermission(),
+    ) { granted ->
+        when (pendingAudioVisualizationSetting) {
+            1 -> AppSettings.setShowAnalogDigitalPeakMeter(granted)
+            2 -> AppSettings.setShowSpectrumAnalyzer(granted)
+        }
+        pendingAudioVisualizationSetting = null
+        if (!granted) {
+            Toast.makeText(context, R.string.audio_visualization_permission_denied, Toast.LENGTH_LONG).show()
+        }
+    }
+    val setAudioVisualization: (Int, Boolean) -> Unit = { setting, enabled ->
+        if (!enabled) {
+            if (setting == 1) AppSettings.setShowAnalogDigitalPeakMeter(false)
+            else AppSettings.setShowSpectrumAnalyzer(false)
+        } else if (ContextCompat.checkSelfPermission(context, Manifest.permission.RECORD_AUDIO) == PackageManager.PERMISSION_GRANTED) {
+            if (setting == 1) AppSettings.setShowAnalogDigitalPeakMeter(true)
+            else AppSettings.setShowSpectrumAnalyzer(true)
+        } else {
+            pendingAudioVisualizationSetting = setting
+            runCatching { audioVisualizationPermissionLauncher.launch(Manifest.permission.RECORD_AUDIO) }
+                .onFailure {
+                    pendingAudioVisualizationSetting = null
+                    Toast.makeText(context, R.string.audio_visualization_permission_denied, Toast.LENGTH_LONG).show()
+                }
+        }
+    }
     var volumeHandoffBluetoothGranted by remember(context) {
         mutableStateOf(com.music.bitchord.playback.VolumeHandoff.canHearConnections(context))
     }
@@ -1192,6 +1296,8 @@ fun SettingsScreen(
     val spatialAudio by AppSettings.spatialAudio.collectAsStateWithLifecycle()
     val nerdStats by AppSettings.showNerdStats.collectAsStateWithLifecycle()
     val nerdStatsAlwaysOnArtwork by AppSettings.nerdStatsAlwaysOnArtwork.collectAsStateWithLifecycle()
+    val showAnalogDigitalPeakMeter by AppSettings.showAnalogDigitalPeakMeter.collectAsStateWithLifecycle()
+    val showSpectrumAnalyzer by AppSettings.showSpectrumAnalyzer.collectAsStateWithLifecycle()
     val reduceAnimation by AppSettings.reduceAnimation.collectAsStateWithLifecycle()
     val playerArtworkTransition by AppSettings.playerArtworkTransition.collectAsStateWithLifecycle()
     val walkmanPlayerStyle by AppSettings.walkmanPlayerStyle.collectAsStateWithLifecycle()
@@ -1200,6 +1306,7 @@ fun SettingsScreen(
     val pillMotionStyle by AppSettings.pillMotionStyle.collectAsStateWithLifecycle()
     val reduceDynamicBlur by AppSettings.reduceDynamicBlur.collectAsStateWithLifecycle()
     val liquidGlass by AppSettings.liquidGlass.collectAsStateWithLifecycle()
+    val liquidGlassLegacy by AppSettings.liquidGlassLegacy.collectAsStateWithLifecycle()
     val classicNavBar by AppSettings.classicNavBar.collectAsStateWithLifecycle()
     val settingsHierarchicalNavigation by AppSettings.settingsHierarchicalNavigation.collectAsStateWithLifecycle()
     val mainNavigationTabsPopup by AppSettings.mainNavigationTabsPopup.collectAsStateWithLifecycle()
@@ -3160,7 +3267,13 @@ fun SettingsScreen(
                 ),
             )
         } else emptyList()
-        val allSettingsSearchEntries = settingsSearchEntries + fontResetSearchEntry +
+        val allSettingsSearchEntries = settingsSearchEntries +
+            audioVisualizationSearchEntries(
+                analogPeakEnabled = showAnalogDigitalPeakMeter,
+                spectrumEnabled = showSpectrumAnalyzer,
+                onAnalogPeakClick = { setAudioVisualization(1, !showAnalogDigitalPeakMeter) },
+                onSpectrumClick = { setAudioVisualization(2, !showSpectrumAnalyzer) },
+            ) + listOf(liquidGlassLegacySearchEntry(liquidGlassLegacy)) + fontResetSearchEntry +
             volumeHandoffPermissionSearchEntry + settingsActionSearchEntries + wearSearchEntry
 
         if (settingsSearchQuery.isNotBlank()) {
@@ -5362,6 +5475,25 @@ fun SettingsScreen(
             )
             RowDivider()
             SettingsRow(
+                icon = Icons.Rounded.AutoAwesome,
+                title = stringResource(R.string.liquid_glass_legacy),
+                subtitle = stringResource(R.string.liquid_glass_legacy_subtitle),
+                enabled = liquidGlassSupported,
+                trailing = {
+                    Switch(
+                        checked = liquidGlassLegacy,
+                        onCheckedChange = AppSettings::setLegacyLiquidGlass,
+                        enabled = liquidGlassSupported,
+                        colors = SwitchDefaults.colors(
+                            checkedTrackColor = MaterialTheme.colorScheme.primary,
+                            checkedBorderColor = MaterialTheme.colorScheme.primary,
+                        ),
+                    )
+                },
+                onClick = { if (liquidGlassSupported) AppSettings.setLegacyLiquidGlass(!liquidGlassLegacy) },
+            )
+            RowDivider()
+            SettingsRow(
                 icon = Icons.Rounded.ViewStream,
                 title = stringResource(R.string.classic_nav_bar),
                 subtitle = stringResource(R.string.classic_nav_bar_subtitle),
@@ -6639,6 +6771,12 @@ fun SettingsScreen(
                 onClick = { AppSettings.setShowNerdStats(!nerdStats) },
             )
             RowDivider()
+            AudioVisualizationSettingsRows(
+                showPeakMeter = showAnalogDigitalPeakMeter,
+                showSpectrum = showSpectrumAnalyzer,
+                onPeakMeterChange = { setAudioVisualization(1, it) },
+                onSpectrumChange = { setAudioVisualization(2, it) },
+            )
             SettingsRow(
                 icon = Icons.Rounded.GraphicEq,
                 title = stringResource(R.string.nerd_stats_always_on_artwork),

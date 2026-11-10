@@ -1693,8 +1693,14 @@
     <string name="double_tap_to_seek">ダブルタップでシーク</string>
     <string name="double_tap_to_seek_subtitle">アルバムアートの左右をダブルタップすると5秒移動します</string>
     <string name="liquid_glass">Liquid Glass</string>
-    <string name="liquid_glass_subtitle">フローティングナビゲーションバーに屈折するガラス表現を追加します。Android 12以降が必要で、GPU使用量が増えます。</string>
+    <string name="liquid_glass_subtitle">BitChordスタイルのLiquid Glassと、屈折するタブ選択ピルを使います。Android 12以降が必要で、GPU使用量が増えます。</string>
     <string name="liquid_glass_unavailable">Android 12以降が必要です</string>
+    <string name="liquid_glass_legacy">Liquid Glass（旧）</string>
+    <string name="liquid_glass_legacy_subtitle">BitChordスタイルの代わりに、従来のMusicBeatのガラス表示を使います。</string>
+    <string name="analog_digital_peak_meter">アナログ＋デジタルピークメーター</string>
+    <string name="spectrum_analyzer">スペクトラムアナライザー</string>
+    <string name="audio_visualization_permission_subtitle">再生中の音声レベルを表示します。Androidの音声アクセス権限が必要です。音声の録音・保存はしません。</string>
+    <string name="audio_visualization_permission_denied">再生表示には音声アクセス権限が必要です。</string>
     <string name="legacy_mesh_gradient">従来のメッシュグラデーション</string>
     <string name="legacy_mesh_gradient_subtitle">バージョン1.5のように、プレーヤーの背景にゆっくり動く色の模様を表示します。</string>
     <string name="start_radio">ラジオを開始</string>

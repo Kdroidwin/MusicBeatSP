@@ -784,6 +784,13 @@ object AppSettings {
     /** Real backdrop-sampled glass (blur, lens refraction) on the floating nav bar, Android 12+ only. */
     val liquidGlass = MutableStateFlow(false)
 
+    /** Previous liquid-glass rendering retained as an explicit compatibility option. */
+    val liquidGlassLegacy = MutableStateFlow(false)
+
+    /** Optional playback visualization controls; both are off until enabled by the listener. */
+    val showAnalogDigitalPeakMeter = MutableStateFlow(false)
+    val showSpectrumAnalyzer = MutableStateFlow(false)
+
     /** When true, uses the classic stacked mini player + bottom bar instead of the collapsible floating bar. */
     val classicNavBar = MutableStateFlow(false)
 
@@ -1667,6 +1674,9 @@ object AppSettings {
         dontRepeatSuggestions.value = prefs.getBoolean(KEY_DONT_REPEAT_SUGGESTIONS, false)
         reduceDynamicBlur.value = prefs.getBoolean(KEY_REDUCE_BLUR, false)
         liquidGlass.value = prefs.getBoolean(KEY_LIQUID_GLASS, false)
+        liquidGlassLegacy.value = prefs.getBoolean(KEY_LIQUID_GLASS_LEGACY, false) && !liquidGlass.value
+        showAnalogDigitalPeakMeter.value = prefs.getBoolean(KEY_ANALOG_DIGITAL_PEAK_METER, false)
+        showSpectrumAnalyzer.value = prefs.getBoolean(KEY_SPECTRUM_ANALYZER, false)
         classicNavBar.value = prefs.getBoolean(KEY_CLASSIC_NAV_BAR, false)
         settingsHierarchicalNavigation.value = prefs.getBoolean(KEY_SETTINGS_HIERARCHICAL_NAVIGATION, false)
         hideNavigationBarLabels.value = prefs.getBoolean(KEY_HIDE_NAVIGATION_BAR_LABELS, false)
@@ -2849,7 +2859,30 @@ object AppSettings {
 
     fun setLiquidGlass(value: Boolean) {
         liquidGlass.value = value
-        prefs.edit().putBoolean(KEY_LIQUID_GLASS, value).apply()
+        if (value) liquidGlassLegacy.value = false
+        prefs.edit()
+            .putBoolean(KEY_LIQUID_GLASS, value)
+            .putBoolean(KEY_LIQUID_GLASS_LEGACY, if (value) false else liquidGlassLegacy.value)
+            .apply()
+    }
+
+    fun setLegacyLiquidGlass(value: Boolean) {
+        liquidGlassLegacy.value = value
+        if (value) liquidGlass.value = false
+        prefs.edit()
+            .putBoolean(KEY_LIQUID_GLASS_LEGACY, value)
+            .putBoolean(KEY_LIQUID_GLASS, if (value) false else liquidGlass.value)
+            .apply()
+    }
+
+    fun setShowAnalogDigitalPeakMeter(value: Boolean) {
+        showAnalogDigitalPeakMeter.value = value
+        prefs.edit().putBoolean(KEY_ANALOG_DIGITAL_PEAK_METER, value).apply()
+    }
+
+    fun setShowSpectrumAnalyzer(value: Boolean) {
+        showSpectrumAnalyzer.value = value
+        prefs.edit().putBoolean(KEY_SPECTRUM_ANALYZER, value).apply()
     }
 
     fun setClassicNavBar(value: Boolean) {
@@ -4781,6 +4814,9 @@ object AppSettings {
     private const val KEY_DONT_REPEAT_SUGGESTIONS = "dont_repeat_suggestions"
     private const val KEY_REDUCE_BLUR = "reduce_dynamic_blur"
     private const val KEY_LIQUID_GLASS = "liquid_glass"
+    private const val KEY_LIQUID_GLASS_LEGACY = "liquid_glass_legacy"
+    private const val KEY_ANALOG_DIGITAL_PEAK_METER = "show_analog_digital_peak_meter"
+    private const val KEY_SPECTRUM_ANALYZER = "show_spectrum_analyzer"
     private const val KEY_CLASSIC_NAV_BAR = "classic_nav_bar"
     private const val KEY_SETTINGS_HIERARCHICAL_NAVIGATION = "settings_hierarchical_navigation"
     private const val KEY_HIDE_NAVIGATION_BAR_LABELS = "hide_navigation_bar_labels"

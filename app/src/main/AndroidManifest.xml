@@ -7,6 +7,8 @@
     <uses-permission android:name="android.permission.ACCESS_NETWORK_STATE" />
     <uses-permission android:name="android.permission.WAKE_LOCK" />
     <uses-permission android:name="android.permission.MODIFY_AUDIO_SETTINGS" />
+    <!-- Required only for the optional live playback visualizers; no audio is recorded or saved. -->
+    <uses-permission android:name="android.permission.RECORD_AUDIO" />
     <!-- Optional: lower a Bluetooth output to other apps' saved volume while the app is closed. -->
     <uses-permission android:name="android.permission.BLUETOOTH" android:maxSdkVersion="30" />
     <uses-permission android:name="android.permission.BLUETOOTH_CONNECT" />

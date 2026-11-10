@@ -1180,6 +1180,9 @@ fun NowPlayingScreen(
     // source tree, so it needs its own source for the same frosted material as
     // the bottom navigation pill.
     val syncedLyricsEnabled by AppSettings.syncedLyrics.collectAsStateWithLifecycle()
+    val visualizerAudioSessionId by AppSettings.audioSessionId.collectAsStateWithLifecycle()
+    val showAnalogDigitalPeakMeter by AppSettings.showAnalogDigitalPeakMeter.collectAsStateWithLifecycle()
+    val showSpectrumAnalyzer by AppSettings.showSpectrumAnalyzer.collectAsStateWithLifecycle()
     val playerTitleFontSizeSp by AppSettings.playerTitleFontSizeSp.collectAsStateWithLifecycle()
     val playerArtistFontSizeSp by AppSettings.playerArtistFontSizeSp.collectAsStateWithLifecycle()
     val playerPlayPauseIconSizeDp by AppSettings.playerPlayPauseIconSizeDp.collectAsStateWithLifecycle()
@@ -3311,6 +3314,13 @@ fun NowPlayingScreen(
                     .fillMaxWidth(),
                 horizontalAlignment = Alignment.CenterHorizontally,
             ) {
+            if (showAnalogDigitalPeakMeter || showSpectrumAnalyzer) {
+                AudioVisualizationPanel(
+                    audioSessionId = visualizerAudioSessionId,
+                    showPeakMeter = showAnalogDigitalPeakMeter,
+                    showSpectrum = showSpectrumAnalyzer,
+                )
+            }
             // Current lyric, one line, directly above the scrubber. It stays in
             // the layout — and stays fully visible — whether or not the queue
             // is open: dropping it would shorten this block and the controls
