@@ -110,6 +110,7 @@ import com.music.bitchord.ui.components.SectionIndexer
 import com.music.bitchord.feature.artistimage.model.ArtistImage
 import com.music.bitchord.feature.artistimage.data.ArtistArtworkStore
 import com.music.bitchord.ui.components.ExplicitSongTitle
+import com.music.bitchord.ui.components.SongArtworkImage
 import com.music.bitchord.ui.components.PAGE_GUTTER
 import com.music.bitchord.ui.components.GridTitleOnArt
 import com.music.bitchord.ui.components.ScaledGridCells
@@ -648,15 +649,12 @@ fun SongGridCard(
                 tint = MaterialTheme.colorScheme.onSurfaceVariant,
                 modifier = Modifier.size(36.dp),
             )
-            val artworkUrl = song.artworkAt(CARD_ART_PX)
-            if (artworkUrl != null) {
-                AsyncImage(
-                    model = artworkUrl,
-                    contentDescription = null,
-                    contentScale = if (preserveArtworkAspectRatio) ContentScale.Fit else ContentScale.Crop,
-                    modifier = Modifier.fillMaxSize(),
-                )
-            }
+            SongArtworkImage(
+                song = song,
+                artworkPx = CARD_ART_PX,
+                contentScale = if (preserveArtworkAspectRatio) ContentScale.Fit else ContentScale.Crop,
+                modifier = Modifier.fillMaxSize(),
+            )
             if (isCurrent) {
                 Icon(
                     Icons.Rounded.GraphicEq,

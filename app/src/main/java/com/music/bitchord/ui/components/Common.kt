@@ -31,6 +31,8 @@ import androidx.compose.ui.layout.onSizeChanged
 import androidx.compose.ui.layout.ContentScale
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.music.bitchord.data.settings.AppSettings
+import coil3.compose.AsyncImagePainter
+import coil3.compose.AsyncImage
 import com.music.bitchord.download.Downloads
 import com.music.bitchord.ui.haptics.Haptic
 import com.music.bitchord.ui.haptics.rememberHaptics
@@ -66,7 +68,6 @@ import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.text.TextStyle
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
-import coil3.compose.AsyncImage
 import com.music.bitchord.R
 import com.music.bitchord.data.model.ROW_ART_PX
 import com.music.bitchord.data.model.Song
@@ -121,6 +122,44 @@ val FLOATING_BAR_MAX_WIDTH = 440.dp
  * showing: enough to say the row scrolls without a card being half a card.
  */
 val SHELF_CARD_WIDTH = 150.dp
+
+/**
+ * Draws local artwork first and retries with a saved online thumbnail if the
+ * downloaded file has no readable embedded cover. Download metadata keeps the
+ * original thumbnail URL, so this also repairs favorites after process restart.
+ */
+@Composable
+internal fun SongArtworkImage(
+    song: Song,
+    artworkPx: Int,
+    modifier: Modifier = Modifier,
+    contentScale: ContentScale = ContentScale.Crop,
+    contentDescription: String? = null,
+) {
+    val folderArtworkFallbackMode by AppSettings.folderArtworkFallbackMode.collectAsStateWithLifecycle()
+    val artworkModel = remember(song, artworkPx, folderArtworkFallbackMode) { song.artworkAt(artworkPx) }
+    val remoteFallback = remember(song.thumbnailUrl, artworkPx) {
+        song.thumbnailUrl
+            ?.takeIf { it.startsWith("http://") || it.startsWith("https://") }
+            ?.artworkAt(artworkPx)
+    }
+    var useRemoteFallback by remember(song.videoId, song.localUri, artworkModel, remoteFallback) {
+        mutableStateOf(artworkModel == null)
+    }
+    AsyncImage(
+        model = if (useRemoteFallback) remoteFallback ?: artworkModel else artworkModel ?: remoteFallback,
+        contentDescription = contentDescription,
+        contentScale = contentScale,
+        modifier = modifier,
+        onState = { state ->
+            if (state is AsyncImagePainter.State.Error && !useRemoteFallback &&
+                remoteFallback != null && remoteFallback != artworkModel
+            ) {
+                useRemoteFallback = true
+            }
+        },
+    )
+}
 
 /** A song title with the catalogue-standard outlined E for explicit audio. */
 @Composable
@@ -460,8 +499,6 @@ private fun SongRowContent(
     hideUnknownArtistLine: Boolean = false,
     dropdownMenu: (@Composable () -> Unit)? = null,
 ) {
-    val folderArtworkFallbackMode by AppSettings.folderArtworkFallbackMode.collectAsStateWithLifecycle()
-    val artworkModel = remember(song, folderArtworkFallbackMode) { song.artworkAt(ROW_ART_PX) }
     val titleColor by animateColorAsState(
         targetValue = if (isCurrent) activeTint else MaterialTheme.colorScheme.onBackground,
         label = "song row title",
@@ -498,9 +535,9 @@ private fun SongRowContent(
                 }
             }
         } else {
-            AsyncImage(
-                model = artworkModel,
-                contentDescription = null,
+            SongArtworkImage(
+                song = song,
+                artworkPx = ROW_ART_PX,
                 contentScale = artworkContentScale,
                 modifier = Modifier
                     .size(52.dp)

@@ -985,8 +985,15 @@ fun NowPlayingScreen(
     val haptics = rememberHaptics()
     val folderArtworkFallbackMode by AppSettings.folderArtworkFallbackMode.collectAsStateWithLifecycle()
     val artUrl = remember(song, folderArtworkFallbackMode) { song.artworkAt(ART_PX) }
+    val remoteArtFallbackUrl = song.thumbnailUrl?.artworkAt(ART_PX)
+        ?.takeIf { it.startsWith("http://") || it.startsWith("https://") }
+        ?.takeIf { it != artUrl }
+    var useRemoteArtworkFallback by remember(song.videoId, artUrl, remoteArtFallbackUrl) {
+        mutableStateOf(false)
+    }
+    val displayedArtUrl = if (useRemoteArtworkFallback) remoteArtFallbackUrl ?: artUrl else artUrl
     val sharedPlayerBackdrop = LocalSharedPlayerBackdrop.current
-    val artworkPalette = rememberArtworkPalette(artUrl, dark = true, artPx = ART_PX)
+    val artworkPalette = rememberArtworkPalette(displayedArtUrl, dark = true, artPx = ART_PX)
     val playerInkOverrides by AppSettings.playerInkColors.collectAsStateWithLifecycle()
     // Match the sampled artwork hue; contrast-only white/black switching is
     // not the artwork-colour option users selected.
@@ -1038,10 +1045,15 @@ fun NowPlayingScreen(
     // first frame of the cover. Asking the full-size artwork pipeline for its
     // own palette here used to leave an art-colour player black until a second,
     // larger decode had finished.
-    val backdropArtworkUrl = localPreviewArtUrl ?: artUrl
-    val remoteArtFallbackUrl = song.thumbnailUrl?.artworkAt(ART_PX)
-        ?.takeIf { it.startsWith("http://") || it.startsWith("https://") }
-        ?.takeIf { it != artUrl }
+    // Keep the backdrop palette and mesh on the same image source as the cover.
+    // If a downloaded container has no embedded image, the cover's onState
+    // fallback switches this URL too; otherwise the cover appeared while the
+    // lower half stayed black from a failed local-art decode.
+    val backdropArtworkUrl = if (useRemoteArtworkFallback) {
+        remoteArtFallbackUrl ?: artUrl
+    } else {
+        localPreviewArtUrl ?: artUrl
+    }
 
     val playerArtworkTransitionEnabled by AppSettings.playerArtworkTransition.collectAsStateWithLifecycle()
     val preserveArtworkShapeInCompactTransitions by AppSettings.preserveArtworkShapeInCompactTransitions.collectAsStateWithLifecycle()
@@ -1790,8 +1802,6 @@ fun NowPlayingScreen(
     // full-bleed at once. Keyed on the cover there is nothing to reset: the
     // bitmap really is still loaded, so the state stays true and the two
     // layers go on trading places as they should.
-    var useRemoteArtworkFallback by remember(artUrl) { mutableStateOf(false) }
-    val displayedArtUrl = if (useRemoteArtworkFallback) remoteArtFallbackUrl ?: artUrl else artUrl
     // A large embedded-cover read/decode can compete with the first audio
     // buffer on slower devices. The MediaStore thumbnail is already on screen;
     // wait until ExoPlayer leaves BUFFERING before asking for the full cover.
