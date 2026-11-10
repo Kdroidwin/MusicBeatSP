@@ -419,9 +419,10 @@
     <string name="liquid_glass_legacy_subtitle">Use the previous MusicBeat glass rendering instead of BitChord’s style.</string>
     <string name="analog_digital_peak_meter">Analog + digital peak meter</string>
     <string name="spectrum_analyzer">Spectrum analyzer</string>
-    <string name="audio_visualization_permission_subtitle">Shows live playback levels. Android audio permission is required; MusicBeat does not record or save audio.</string>
+    <string name="audio_visualization_permission_subtitle">Shows live levels from the PCM audio sent to the output. Microphone access is not used.</string>
     <string name="audio_visualization_permission_denied">Allow audio access to show playback visualizations.</string>
-    <string name="audio_visualization_preview_hint">Preview · plays with the current track when enabled.</string>
+    <string name="audio_visualization_preview_hint">Live PCM levels from the current playback; no microphone access is used.</string>
+    <string name="audio_visualization_waiting">Play a track to see its live audio levels.</string>
     <string name="classic_nav_bar">Classic navigation bar</string>
     <string name="classic_nav_bar_subtitle">Use separate stacked mini player and bottom bar instead of collapsible floating bar</string>
     <string name="navigation_bar_matches_mini_player_color">Match navigation bar to mini player color</string>

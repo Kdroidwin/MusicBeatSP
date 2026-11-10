@@ -1701,9 +1701,10 @@
     <string name="liquid_glass_legacy_subtitle">BitChordスタイルの代わりに、従来のMusicBeatのガラス表示を使います。</string>
     <string name="analog_digital_peak_meter">アナログ＋デジタルピークメーター</string>
     <string name="spectrum_analyzer">スペクトラムアナライザー</string>
-    <string name="audio_visualization_permission_subtitle">再生中の音声レベルを表示します。Androidの音声アクセス権限が必要です。音声の録音・保存はしません。</string>
+    <string name="audio_visualization_permission_subtitle">出力へ送られるPCM音声のレベルを表示します。マイクは使用しません。</string>
     <string name="audio_visualization_permission_denied">再生表示には音声アクセス権限が必要です。</string>
-    <string name="audio_visualization_preview_hint">プレビュー・有効にすると再生中の曲に反応します。</string>
+    <string name="audio_visualization_preview_hint">再生中のPCM音声を表示します。マイクは使用しません。</string>
+    <string name="audio_visualization_waiting">曲を再生すると音声レベルが表示されます。</string>
     <string name="legacy_mesh_gradient">従来のメッシュグラデーション</string>
     <string name="legacy_mesh_gradient_subtitle">バージョン1.5のように、プレーヤーの背景にゆっくり動く色の模様を表示します。</string>
     <string name="start_radio">ラジオを開始</string>

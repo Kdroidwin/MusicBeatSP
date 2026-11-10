@@ -2,6 +2,7 @@ package com.music.bitchord.ui.screens
 
 import android.Manifest
 import android.content.Context
+import android.content.pm.PackageManager
 import android.content.Intent
 import android.media.audiofx.AudioEffect
 import android.net.Uri
@@ -137,7 +138,6 @@ import androidx.lifecycle.LifecycleEventObserver
 import androidx.lifecycle.lifecycleScope
 import androidx.lifecycle.compose.LocalLifecycleOwner
 import androidx.lifecycle.viewmodel.compose.viewModel
-import android.content.pm.PackageManager
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.alpha
@@ -1179,33 +1179,10 @@ fun SettingsScreen(
     val context = LocalContext.current
     val musicFolderRootPicker = rememberMusicFolderRootPicker(AppSettings::setLocalMusicFolderPath)
     val settingsScrollState = rememberScrollState()
-    var pendingAudioVisualizationSetting by remember { mutableStateOf<Int?>(null) }
-    val audioVisualizationPermissionLauncher = rememberLauncherForActivityResult(
-        ActivityResultContracts.RequestPermission(),
-    ) { granted ->
-        when (pendingAudioVisualizationSetting) {
-            1 -> AppSettings.setShowAnalogDigitalPeakMeter(granted)
-            2 -> AppSettings.setShowSpectrumAnalyzer(granted)
-        }
-        pendingAudioVisualizationSetting = null
-        if (!granted) {
-            Toast.makeText(context, R.string.audio_visualization_permission_denied, Toast.LENGTH_LONG).show()
-        }
-    }
     val setAudioVisualization: (Int, Boolean) -> Unit = { setting, enabled ->
-        if (!enabled) {
-            if (setting == 1) AppSettings.setShowAnalogDigitalPeakMeter(false)
-            else AppSettings.setShowSpectrumAnalyzer(false)
-        } else if (ContextCompat.checkSelfPermission(context, Manifest.permission.RECORD_AUDIO) == PackageManager.PERMISSION_GRANTED) {
-            if (setting == 1) AppSettings.setShowAnalogDigitalPeakMeter(true)
-            else AppSettings.setShowSpectrumAnalyzer(true)
-        } else {
-            pendingAudioVisualizationSetting = setting
-            runCatching { audioVisualizationPermissionLauncher.launch(Manifest.permission.RECORD_AUDIO) }
-                .onFailure {
-                    pendingAudioVisualizationSetting = null
-                    Toast.makeText(context, R.string.audio_visualization_permission_denied, Toast.LENGTH_LONG).show()
-                }
+        when (setting) {
+            1 -> AppSettings.setShowAnalogDigitalPeakMeter(enabled)
+            2 -> AppSettings.setShowSpectrumAnalyzer(enabled)
         }
     }
     var volumeHandoffBluetoothGranted by remember(context) {
@@ -1306,7 +1283,6 @@ fun SettingsScreen(
     val nerdStatsAlwaysOnArtwork by AppSettings.nerdStatsAlwaysOnArtwork.collectAsStateWithLifecycle()
     val showAnalogDigitalPeakMeter by AppSettings.showAnalogDigitalPeakMeter.collectAsStateWithLifecycle()
     val showSpectrumAnalyzer by AppSettings.showSpectrumAnalyzer.collectAsStateWithLifecycle()
-    val visualizerAudioSessionId by AppSettings.audioSessionId.collectAsStateWithLifecycle()
     val reduceAnimation by AppSettings.reduceAnimation.collectAsStateWithLifecycle()
     val playerArtworkTransition by AppSettings.playerArtworkTransition.collectAsStateWithLifecycle()
     val walkmanPlayerStyle by AppSettings.walkmanPlayerStyle.collectAsStateWithLifecycle()
@@ -3342,12 +3318,8 @@ fun SettingsScreen(
                     }
                     if (showPeakMeterPreview || showSpectrumPreview) {
                         AudioVisualizationPanel(
-                            audioSessionId = visualizerAudioSessionId,
                             showPeakMeter = showPeakMeterPreview,
                             showSpectrum = showSpectrumPreview,
-                            capturePeakMeter = showPeakMeterPreview && showAnalogDigitalPeakMeter,
-                            captureSpectrum = showSpectrumPreview && showSpectrumAnalyzer,
-                            previewOnly = true,
                             modifier = Modifier.padding(horizontal = 18.dp, vertical = 12.dp),
                         )
                     }
@@ -6865,14 +6837,12 @@ fun SettingsScreen(
                 onPeakMeterChange = { setAudioVisualization(1, it) },
                 onSpectrumChange = { setAudioVisualization(2, it) },
             )
-            AudioVisualizationPanel(
-                audioSessionId = visualizerAudioSessionId,
-                showPeakMeter = true,
-                showSpectrum = true,
-                capturePeakMeter = showAnalogDigitalPeakMeter,
-                captureSpectrum = showSpectrumAnalyzer,
-                previewOnly = true,
-            )
+            if (showAnalogDigitalPeakMeter || showSpectrumAnalyzer) {
+                AudioVisualizationPanel(
+                    showPeakMeter = showAnalogDigitalPeakMeter,
+                    showSpectrum = showSpectrumAnalyzer,
+                )
+            }
             SettingsRow(
                 icon = Icons.Rounded.GraphicEq,
                 title = stringResource(R.string.nerd_stats_always_on_artwork),

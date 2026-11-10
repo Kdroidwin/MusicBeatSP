@@ -21,6 +21,7 @@ import androidx.media3.common.PlaybackParameters
 import androidx.media3.common.util.UnstableApi
 import androidx.media3.common.util.Util
 import androidx.media3.exoplayer.audio.AudioSink
+import com.music.bitchord.playback.AudioVisualizationPcmAnalyzer
 import java.nio.ByteBuffer
 import java.nio.ByteOrder
 import kotlin.math.abs
@@ -86,6 +87,7 @@ internal class BitPerfectAudioSink(private val outputs: BitPerfectOutputs) : Aud
     private var startMediaTimeUs = C.TIME_UNSET
     private var needsResync = false
     private var currentInput: ByteBuffer? = null
+    private val visualizationAnalyzer = AudioVisualizationPcmAnalyzer()
 
     private var playing = false
     private var endOfStream = false
@@ -149,6 +151,17 @@ internal class BitPerfectAudioSink(private val outputs: BitPerfectOutputs) : Aud
 
         if (buffer !== currentInput) {
             currentInput = buffer
+            val capturePeak = com.music.bitchord.data.settings.AppSettings.showAnalogDigitalPeakMeter.value
+            val captureSpectrum = com.music.bitchord.data.settings.AppSettings.showSpectrumAnalyzer.value
+            if (capturePeak || captureSpectrum) {
+                visualizationAnalyzer.process(
+                    input = buffer.duplicate(),
+                    encoding = input.encoding,
+                    channelCount = input.channelCount,
+                    capturePeak = capturePeak,
+                    captureSpectrum = captureSpectrum,
+                )
+            }
             syncTimestamp(input, presentationTimeUs)
         }
         try {

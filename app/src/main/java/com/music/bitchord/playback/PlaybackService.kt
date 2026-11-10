@@ -210,6 +210,7 @@ private data class PlaybackAudioChain(
     val replayGain: ReplayGainAudioProcessor = ReplayGainAudioProcessor(),
     val resampler: ResamplerCutoffAudioProcessor = ResamplerCutoffAudioProcessor(),
     val darUpsampler: DarPcmUpsamplingAudioProcessor = DarPcmUpsamplingAudioProcessor(),
+    val audioVisualization: AudioVisualizationAudioProcessor = AudioVisualizationAudioProcessor(),
 )
 
 /**
@@ -2030,6 +2031,7 @@ class PlaybackService : MediaLibraryService() {
                 chain.replayGain,
                 chain.resampler,
                 chain.darUpsampler,
+                chain.audioVisualization,
             ),
         )
         .setMediaSourceFactory(requireNotNull(mediaSourceFactory))
@@ -4569,6 +4571,7 @@ class PlaybackService : MediaLibraryService() {
         replayGain: ReplayGainAudioProcessor,
         resamplerCutoff: ResamplerCutoffAudioProcessor,
         darUpsampler: DarPcmUpsamplingAudioProcessor,
+        audioVisualization: AudioVisualizationAudioProcessor,
     ) = object : DefaultRenderersFactory(this) {
         init {
             // Do not force PCM_FLOAT onto an OEM speaker mixer merely because
@@ -4619,7 +4622,15 @@ class PlaybackService : MediaLibraryService() {
             )
             .setAudioProcessorChain(
                 DefaultAudioSink.DefaultAudioProcessorChain(
-                    arrayOf(resamplerCutoff, parametricEq, spatial, transition, replayGain, darUpsampler),
+                    arrayOf(
+                        resamplerCutoff,
+                        parametricEq,
+                        spatial,
+                        transition,
+                        replayGain,
+                        darUpsampler,
+                        audioVisualization,
+                    ),
                     SilenceSkippingAudioProcessor(
                         MIN_SILENCE_US,
                         SilenceSkippingAudioProcessor.DEFAULT_SILENCE_RETENTION_RATIO,
@@ -5036,8 +5047,13 @@ class PlaybackService : MediaLibraryService() {
             }
         }
         scope.launch {
-            combine(AppSettings.audioOffloadEnabled, AppSettings.crossfadeSeconds) { enabled, crossfadeSeconds ->
-                enabled && crossfadeSeconds == 0
+            combine(
+                AppSettings.audioOffloadEnabled,
+                AppSettings.crossfadeSeconds,
+                AppSettings.showAnalogDigitalPeakMeter,
+                AppSettings.showSpectrumAnalyzer,
+            ) { enabled, crossfadeSeconds, peakMeter, spectrumAnalyzer ->
+                enabled && crossfadeSeconds == 0 && !peakMeter && !spectrumAnalyzer
             }.distinctUntilChanged().collect { effectiveOffload ->
                 eachPlayer(::applyAudioOffloadPreference)
                 // Do not let an already armed overlap run after offload becomes
@@ -5279,7 +5295,9 @@ class PlaybackService : MediaLibraryService() {
     private fun applyAudioOffloadPreference(target: ExoPlayer) {
         val enabled = AppSettings.audioOffloadEnabled.value &&
             AppSettings.crossfadeSeconds.value == 0 &&
-            !AppSettings.darPcmUpsamplingEnabled.value
+            !AppSettings.darPcmUpsamplingEnabled.value &&
+            !AppSettings.showAnalogDigitalPeakMeter.value &&
+            !AppSettings.showSpectrumAnalyzer.value
         val preferences = TrackSelectionParameters.AudioOffloadPreferences.Builder()
             .setAudioOffloadMode(
                 if (enabled) TrackSelectionParameters.AudioOffloadPreferences.AUDIO_OFFLOAD_MODE_ENABLED
