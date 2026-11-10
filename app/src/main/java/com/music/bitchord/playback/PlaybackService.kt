@@ -6565,19 +6565,24 @@ class PlaybackService : MediaLibraryService() {
             browser: MediaSession.ControllerInfo,
             query: String,
             params: LibraryParams?,
-        ): ListenableFuture<LibraryResult<Void>> = scope.future(Dispatchers.IO) {
-            val results = try {
-                withTimeoutOrNull(3000L) {
-                    YtMusicRepository.search(query, SearchFilter.SONGS).getOrNull()
-                } ?: emptyList()
-            } catch (_: Exception) {
-                emptyList()
+        ): ListenableFuture<LibraryResult<Void>> {
+            if (query.length > MAX_EXTERNAL_SEARCH_QUERY_LENGTH) {
+                return Futures.immediateFuture(LibraryResult.ofVoid(params))
             }
-            val songs = results.mapNotNull { if (it is SearchResult.Track) it.song else null }
-            searchResults[query] = songs
-            songs.forEach { songCache[it.videoId] = it }
-            session.notifySearchResultChanged(browser, query, songs.size, params)
-            LibraryResult.ofVoid(params)
+            return scope.future(Dispatchers.IO) {
+                val results = try {
+                    withTimeoutOrNull(3000L) {
+                        YtMusicRepository.search(query, SearchFilter.SONGS).getOrNull()
+                    } ?: emptyList()
+                } catch (_: Exception) {
+                    emptyList()
+                }
+                val songs = results.mapNotNull { if (it is SearchResult.Track) it.song else null }
+                searchResults[query] = songs
+                songs.forEach { songCache[it.videoId] = it }
+                session.notifySearchResultChanged(browser, query, songs.size, params)
+                LibraryResult.ofVoid(params)
+            }
         }
 
         override fun onGetSearchResult(
@@ -6588,6 +6593,9 @@ class PlaybackService : MediaLibraryService() {
             pageSize: Int,
             params: LibraryParams?,
         ): ListenableFuture<LibraryResult<ImmutableList<MediaItem>>> = scope.future(Dispatchers.IO) {
+            if (query.length > MAX_EXTERNAL_SEARCH_QUERY_LENGTH || page < 0 || pageSize <= 0) {
+                return@future LibraryResult.ofItemList(ImmutableList.of(), params)
+            }
             val songs = searchResults[query] ?: try {
                 withTimeoutOrNull(3000L) {
                     YtMusicRepository.search(query, SearchFilter.SONGS).getOrNull()
@@ -6597,9 +6605,12 @@ class PlaybackService : MediaLibraryService() {
                 emptyList()
             }
             songs.forEach { songCache[it.videoId] = it }
-            val fromIndex = (page * pageSize).coerceAtMost(songs.size)
-            val toIndex = ((page + 1) * pageSize).coerceAtMost(songs.size)
-            val paged = if (fromIndex < toIndex) songs.subList(fromIndex, toIndex) else songs
+            val boundedPageSize = pageSize.coerceAtMost(MAX_EXTERNAL_SEARCH_PAGE_SIZE)
+            val fromLong = page.toLong() * boundedPageSize.toLong()
+            if (fromLong >= songs.size) return@future LibraryResult.ofItemList(ImmutableList.of(), params)
+            val fromIndex = fromLong.toInt()
+            val toIndex = (fromLong + boundedPageSize).coerceAtMost(songs.size.toLong()).toInt()
+            val paged = songs.subList(fromIndex, toIndex)
             val items = paged.map { it.toMediaItem() }
             LibraryResult.ofItemList(ImmutableList.copyOf(items), params)
         }
@@ -6917,6 +6928,7 @@ class PlaybackService : MediaLibraryService() {
         private const val MAX_EXTERNAL_MEDIA_ITEMS = 1_000
         private const val MAX_EXTERNAL_MEDIA_ID_LENGTH = 256
         private const val MAX_EXTERNAL_SEARCH_QUERY_LENGTH = 500
+        private const val MAX_EXTERNAL_SEARCH_PAGE_SIZE = 250
         const val MEDIA_ROOT_ID = "root"
         const val MEDIA_RECENTS_ID = "recents"
         const val MEDIA_QUICK_PICKS_ID = "quick_picks"

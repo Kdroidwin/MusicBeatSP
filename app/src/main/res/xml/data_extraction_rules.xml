@@ -8,6 +8,7 @@
         <exclude domain="sharedpref" path="bitchord_sources.xml" />
         <exclude domain="sharedpref" path="bitchord_sources_plain.xml" />
         <exclude domain="sharedpref" path="music_server_credentials_encrypted.xml" />
+        <exclude domain="sharedpref" path="spotify.xml" />
         <exclude domain="file" path="lyrics_extensions/" />
         <!-- WebView may persist Google/Spotify session cookies under app_webview. -->
         <exclude domain="root" path="app_webview/" />
@@ -20,6 +21,7 @@
         <exclude domain="sharedpref" path="bitchord_sources.xml" />
         <exclude domain="sharedpref" path="bitchord_sources_plain.xml" />
         <exclude domain="sharedpref" path="music_server_credentials_encrypted.xml" />
+        <exclude domain="sharedpref" path="spotify.xml" />
         <exclude domain="file" path="lyrics_extensions/" />
         <!-- WebView may persist Google/Spotify session cookies under app_webview. -->
         <exclude domain="root" path="app_webview/" />

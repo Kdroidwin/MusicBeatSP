@@ -14,6 +14,7 @@ import java.net.URLEncoder
 import java.security.MessageDigest
 import java.security.SecureRandom
 import android.util.Base64
+import com.music.bitchord.auth.AuthStore
 
 /** ログインが必要(まだしていない・取り消された)ことを表す */
 class SpotifyLoginRequired : IOException("Spotify login required")
@@ -38,6 +39,8 @@ object SpotifyAuth {
     private const val K_SCOPE = "scope"
     private const val K_PKCE_VERIFIER = "pkceVerifier"
     private const val K_AUTH_STATE = "authState"
+    private const val SECURE_ACCESS_TOKEN = "spotify.oauth.access_token"
+    private const val SECURE_REFRESH_TOKEN = "spotify.oauth.refresh_token"
 
     private fun prefs(ctx: Context) = ctx.applicationContext.getSharedPreferences(PREFS, Context.MODE_PRIVATE)
 
@@ -47,13 +50,18 @@ object SpotifyAuth {
         val v = id.trim()
         if (v == clientId(ctx)) return
         // ID を変えたら、前の ID で得たトークンは使えないので消す
+        removeTokens(ctx)
         prefs(ctx).edit().putString(K_CLIENT, v).remove(K_REFRESH).remove(K_ACCESS).remove(K_EXPIRES)
             .remove(K_SCOPE).remove(K_LOGGED_IN).remove(K_PKCE_VERIFIER).remove(K_AUTH_STATE).apply()
     }
 
-    fun isLoggedIn(ctx: Context): Boolean = prefs(ctx).getBoolean(K_LOGGED_IN, false)
+    fun isLoggedIn(ctx: Context): Boolean =
+        prefs(ctx).getBoolean(K_LOGGED_IN, false) &&
+            !readToken(ctx, SECURE_ACCESS_TOKEN, K_ACCESS).isNullOrBlank() &&
+            !readToken(ctx, SECURE_REFRESH_TOKEN, K_REFRESH).isNullOrBlank()
 
     fun logout(ctx: Context) {
+        removeTokens(ctx)
         prefs(ctx).edit().remove(K_REFRESH).remove(K_ACCESS).remove(K_EXPIRES).remove(K_SCOPE)
             .remove(K_LOGGED_IN).remove(K_PKCE_VERIFIER).remove(K_AUTH_STATE).apply()
     }
@@ -104,7 +112,9 @@ object SpotifyAuth {
                     "code_verifier" to verifier,
                 )
                 save(ctx, json)
-                if (p.getString(K_ACCESS, null).isNullOrBlank() || p.getString(K_REFRESH, null).isNullOrBlank()) {
+                if (readToken(ctx, SECURE_ACCESS_TOKEN, K_ACCESS).isNullOrBlank() ||
+                    readToken(ctx, SECURE_REFRESH_TOKEN, K_REFRESH).isNullOrBlank()
+                ) {
                     logout(ctx)
                     throw IOException("Spotify did not return the tokens needed to finish sign-in.")
                 }
@@ -130,9 +140,9 @@ object SpotifyAuth {
     fun accessToken(ctx: Context, forceRefresh: Boolean = false): String {
         val p = prefs(ctx)
         if (!isLoggedIn(ctx)) throw SpotifyLoginRequired()
-        val access = p.getString(K_ACCESS, null)
+        val access = readToken(ctx, SECURE_ACCESS_TOKEN, K_ACCESS)
         if (!forceRefresh && !access.isNullOrEmpty() && System.currentTimeMillis() < p.getLong(K_EXPIRES, 0) - 60_000) return access
-        val refresh = p.getString(K_REFRESH, null)
+        val refresh = readToken(ctx, SECURE_REFRESH_TOKEN, K_REFRESH)
         if (refresh.isNullOrEmpty()) { logout(ctx); throw SpotifyLoginRequired() }
         val json = try {
             tokenRequest("grant_type" to "refresh_token", "refresh_token" to refresh, "client_id" to clientId(ctx))
@@ -142,20 +152,57 @@ object SpotifyAuth {
             throw SpotifyLoginRequired()
         }
         save(ctx, json)
-        return p.getString(K_ACCESS, null) ?: throw SpotifyLoginRequired()
+        return readToken(ctx, SECURE_ACCESS_TOKEN, K_ACCESS) ?: throw SpotifyLoginRequired()
     }
 
     private fun save(ctx: Context, json: JSONObject) {
         val access = json.optString("access_token")
         if (access.isEmpty()) return
-        val e = prefs(ctx).edit()
-            .putString(K_ACCESS, access)
-            .putLong(K_EXPIRES, System.currentTimeMillis() + json.optLong("expires_in", 3600) * 1000)
+        val authStore = AuthStore(ctx)
+        if (!authStore.setProtectedValueStrict(SECURE_ACCESS_TOKEN, access)) {
+            throw IOException("Secure Spotify token storage is unavailable.")
+        }
         // 更新のときは、新しいリフレッシュトークンが返らないこともある(そのときは今のものを使い続ける)
-        json.optString("refresh_token").takeIf { it.isNotEmpty() }?.let { e.putString(K_REFRESH, it) }
+        json.optString("refresh_token").takeIf { it.isNotEmpty() }?.let {
+            if (!authStore.setProtectedValueStrict(SECURE_REFRESH_TOKEN, it)) {
+                throw IOException("Secure Spotify token storage is unavailable.")
+            }
+        }
+        prefs(ctx).edit()
+            .remove(K_ACCESS)
+            .remove(K_REFRESH)
+            .putLong(K_EXPIRES, System.currentTimeMillis() + json.optLong("expires_in", 3600) * 1000)
+            .apply()
         // 許可された範囲(更新のときは返らないこともある)
-        json.optString("scope").takeIf { it.isNotEmpty() }?.let { e.putString(K_SCOPE, it) }
-        e.apply()
+        json.optString("scope").takeIf { it.isNotEmpty() }?.let {
+            prefs(ctx).edit().putString(K_SCOPE, it).apply()
+        }
+    }
+
+    /** Migrate legacy plaintext OAuth tokens once, then keep them in Keystore-backed storage. */
+    private fun readToken(ctx: Context, secureKey: String, legacyKey: String): String? {
+        val authStore = AuthStore(ctx)
+        val secureValue = authStore.getProtectedValue(secureKey)
+        val legacyValue = prefs(ctx).getString(legacyKey, null)
+        if (secureValue != null) {
+            if (legacyValue != null) prefs(ctx).edit().remove(legacyKey).apply()
+            return secureValue
+        }
+        if (legacyValue.isNullOrBlank()) return null
+        if (!authStore.setProtectedValueStrict(secureKey, legacyValue)) {
+            // If the device Keystore is unavailable, fail closed and remove
+            // the old plaintext copy instead of continuing to persist it.
+            prefs(ctx).edit().remove(legacyKey).apply()
+            return null
+        }
+        prefs(ctx).edit().remove(legacyKey).apply()
+        return legacyValue
+    }
+
+    private fun removeTokens(ctx: Context) {
+        val authStore = AuthStore(ctx)
+        authStore.setProtectedValueStrict(SECURE_ACCESS_TOKEN, "")
+        authStore.setProtectedValueStrict(SECURE_REFRESH_TOKEN, "")
     }
 
     private class TokenRejected(msg: String) : IOException(msg)
