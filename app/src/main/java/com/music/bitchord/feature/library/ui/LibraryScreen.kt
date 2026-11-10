@@ -1079,7 +1079,8 @@ fun LibraryScreen(
                     artworkUrl = drillDownArt,
                     songs = drillDownSongs,
                     isArtist = false,
-                    isPlaylist = drillDownPlaylistId != null,
+                    // Favorites use the same saved, draggable song ordering as a playlist.
+                    isPlaylist = drillDownPlaylistId != null || drillDownIsFavorites,
                     showArtworkInList = showPlaylistSongArtwork,
                     showCollectionArtworkInList = drillDownPlaylistId == null && showCollectionSongArtwork,
                     fullScreenArtwork = fullScreenCollectionArtwork,
