@@ -169,13 +169,21 @@ fun PopupNavigationBar(
                 .clip(shape)
                 .then(
                     when {
+                        // Glass must win over artwork/Haze matching. Otherwise
+                        // the common "match mini-player color" setting bypasses
+                        // both Liquid Glass renderers and makes old/new identical.
+                        useGlass -> Modifier
+                            .liquidGlass(shape = shape)
+                            .then(
+                                if (matchArtwork) Modifier.background(container.copy(alpha = 0.24f), shape)
+                                else Modifier,
+                            )
                         matchMiniPlayerColor && reduceDynamicBlur -> Modifier.background(container)
                         matchMiniPlayerColor -> Modifier.optimizedHazeEffect(
                             state = hazeState,
                             style = HazeMaterials.thin(container),
                         )
                         reduceDynamicBlur -> Modifier.background(container)
-                        useGlass -> Modifier.liquidGlass(shape = shape)
                         else -> Modifier.optimizedHazeEffect(
                             state = hazeState,
                             style = HazeMaterials.regular(container),
@@ -393,7 +401,14 @@ fun FloatingBottomBar(
             .fillMaxWidth()
             .clip(pillShape)
             .then(
-                if (matchMiniPlayerColor && reduceDynamicBlur) {
+                if (useGlass) {
+                    Modifier
+                        .liquidGlass(shape = pillShape)
+                        .then(
+                            if (matchArtwork) Modifier.background(container.copy(alpha = 0.24f), pillShape)
+                            else Modifier,
+                        )
+                } else if (matchMiniPlayerColor && reduceDynamicBlur) {
                     Modifier.background(container)
                 } else if (matchMiniPlayerColor) {
                     Modifier.optimizedHazeEffect(
@@ -402,8 +417,6 @@ fun FloatingBottomBar(
                     )
                 } else if (reduceDynamicBlur) {
                     Modifier.background(container)
-                } else if (useGlass) {
-                    Modifier.liquidGlass(shape = pillShape)
                 } else {
                     Modifier.optimizedHazeEffect(
                         state = hazeState,
@@ -438,8 +451,11 @@ fun FloatingBottomBar(
                     }
                     .clip(pillShape)
                     .background(
-                        (if (matchArtwork) artworkPalette.accent else MaterialTheme.colorScheme.primary)
-                            .copy(alpha = 0.14f),
+                        when {
+                            useGlass -> glassIndicatorColor()
+                            matchArtwork -> artworkPalette.accent.copy(alpha = 0.14f)
+                            else -> MaterialTheme.colorScheme.primary.copy(alpha = 0.14f)
+                        },
                     ),
             )
         }

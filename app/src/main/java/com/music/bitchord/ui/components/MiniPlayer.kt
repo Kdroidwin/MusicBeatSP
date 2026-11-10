@@ -155,6 +155,7 @@ fun MiniPlayer(
         imageUrl = song.thumbnailUrl.takeIf { useArtworkColor },
         artPx = ROW_ART_PX,
     )
+    val useGlass = LocalLiquidGlassEnabled.current && isGlassSupported()
     val surfaceColor = if (useArtworkColor) artworkPalette.background else MaterialTheme.colorScheme.surface
     val primaryContentColor = if (useArtworkColor) artworkPalette.onBackground else MaterialTheme.colorScheme.onBackground
     val secondaryContentColor = if (useArtworkColor) artworkPalette.onBackgroundVariant else MaterialTheme.colorScheme.onSurfaceVariant
@@ -245,7 +246,20 @@ fun MiniPlayer(
             }
             .clip(shape)
             .then(
-                if (reduceDynamicBlur) {
+                if (useGlass) {
+                    Modifier
+                        .liquidGlass(
+                            shape = shape,
+                            drawEdge = !useArtworkColor || showArtworkOutline,
+                        )
+                        .then(
+                            if (useArtworkColor) {
+                                Modifier.background(surfaceColor.copy(alpha = 0.24f), shape)
+                            } else {
+                                Modifier
+                            },
+                        )
+                } else if (reduceDynamicBlur) {
                     Modifier.background(surfaceColor)
                 } else {
                     Modifier.optimizedHazeEffect(
