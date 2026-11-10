@@ -2004,6 +2004,7 @@ fun NowPlayingScreen(
             ArtworkMeshBackdrop(
                 mesh = artMesh,
                 seam = if (heroMode) heroHeight else 0.dp,
+                fallback = artworkPalette.wash,
                 blurRadius = activeBackdropBlur,
             )
         }
@@ -4443,6 +4444,7 @@ fun TabletPlayerBackdrop(
             ?.let { song.artworkAt(480) }
     }
     val backdropArtworkUrl = localPreviewArtUrl ?: artUrl
+    val artworkPalette = rememberArtworkPalette(backdropArtworkUrl, dark = true, artPx = ART_PX)
     val legacyMesh by AppSettings.legacyMeshGradient.collectAsStateWithLifecycle()
     val blurRadius by AppSettings.artworkBackdropBlurDp.collectAsStateWithLifecycle()
     Box(modifier.fillMaxSize()) {
@@ -4455,6 +4457,7 @@ fun TabletPlayerBackdrop(
         } else {
             ArtworkMeshBackdrop(
                 mesh = rememberArtworkMesh(backdropArtworkUrl, artPx = ART_PX),
+                fallback = artworkPalette.wash,
                 blurRadius = blurRadius.dp,
             )
         }

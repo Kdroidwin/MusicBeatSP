@@ -298,6 +298,7 @@ import com.music.bitchord.data.YtMusicRepository
 import com.music.bitchord.data.innertube.InnertubeParser
 import com.music.bitchord.playback.SingleSongPlaybackManager
 import com.music.bitchord.ui.player.NowPlayingScreen
+import com.music.bitchord.ui.player.shareNowPlayingPoster
 import com.music.bitchord.ui.player.TabletLyricsPane
 import com.music.bitchord.ui.player.TabletPlayerBackdrop
 import com.music.bitchord.ui.player.LocalSharedPlayerBackdrop
@@ -1321,10 +1322,10 @@ private fun BitChordApp(
     } else {
         TopBarContentHeight + TopBarContentGap
     }
-    val rootTopPaddingTarget = if (rootTabTopBarScrollEnabled && rootTabTopBarCollapsed) {
-        0.dp
-    } else {
-        expandedRootTopPadding
+    val rootTopPaddingTarget = when {
+        showReplay && showStatusBar -> WindowInsets.statusBarsIgnoringVisibility.asPaddingValues().calculateTopPadding()
+        showReplay || (rootTabTopBarScrollEnabled && rootTabTopBarCollapsed) -> 0.dp
+        else -> expandedRootTopPadding
     }
     val rootTopPaddingState = animateDpAsState(
         targetValue = rootTopPaddingTarget,
@@ -3590,7 +3591,7 @@ private fun BitChordApp(
                     (detail != null && !isLocalDetail && detail.type in setOf(BrowseType.ALBUM, BrowseType.PLAYLIST))
                 val hideFloatingCollectionControlsNow =
                     hideFloatingCollectionControls && hideCollectionHeaderNow && isAlbumOrPlaylistArtworkDetail
-                if (!hideCollectionHeaderNow && !isRadioScreenVisible && !rootTabFloatingSettingsOnly) {
+                if (!showReplay && !hideCollectionHeaderNow && !isRadioScreenVisible && !rootTabFloatingSettingsOnly) {
                     TopFadeBlur(
                         hazeState = hazeState,
                         // Replay paints its own full-bleed black backdrop up under the
@@ -3612,7 +3613,7 @@ private fun BitChordApp(
                 }
 
                 val showCollectionSortAction = detail != null && !isLocalDetail && detail.type != BrowseType.ARTIST
-                if (!hideFloatingCollectionControlsNow || showCollectionSortAction) {
+                if (!showReplay && (!hideFloatingCollectionControlsNow || showCollectionSortAction)) {
                     FrostedTopBar(
                         title = when {
                             showSources -> stringResource(R.string.sources)
@@ -4326,6 +4327,16 @@ private fun BitChordApp(
                             songActions = null
                             LocalSongActionsHelper.shareSong(context, song)
                         },
+                        onShareNowPlaying = if (menuFromPlayer) {
+                            {
+                                songActions = null
+                                scope.launch {
+                                    if (!shareNowPlayingPoster(context, song)) {
+                                        Toast.makeText(context, R.string.now_playing_share_failed, Toast.LENGTH_SHORT).show()
+                                    }
+                                }
+                            }
+                        } else null,
                         onMore = {
                             showLegacyActions = true
                             showAppleMenu = false
@@ -4446,6 +4457,16 @@ private fun BitChordApp(
                         songActions = null
                         LocalSongActionsHelper.shareSong(context, song)
                     },
+                    onShareNowPlaying = if (menuFromPlayer) {
+                        {
+                            songActions = null
+                            scope.launch {
+                                if (!shareNowPlayingPoster(context, song)) {
+                                    Toast.makeText(context, R.string.now_playing_share_failed, Toast.LENGTH_SHORT).show()
+                                }
+                            }
+                        }
+                    } else null,
                 )
                 }
             }

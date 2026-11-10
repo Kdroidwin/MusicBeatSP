@@ -249,7 +249,7 @@ private fun Heading(state: ReplayState, onPeriodChange: (ReplayPeriod) -> Unit, 
     val context = LocalContext.current
     val textColor = if (dark) Color.White else Color.Black
     Column(Modifier.padding(horizontal = PAGE_GUTTER + 10.dp)) {
-        Spacer(Modifier.height(48.dp))
+        Spacer(Modifier.height(8.dp))
         Text(
             text = stringResource(R.string.replay),
             style = MaterialTheme.typography.displayLarge,

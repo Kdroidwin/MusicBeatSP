@@ -32,6 +32,7 @@ import androidx.compose.material.icons.rounded.Image
 import androidx.compose.material.icons.rounded.Info
 import androidx.compose.material.icons.rounded.Person
 import androidx.compose.material.icons.rounded.Share
+import androidx.compose.material.icons.rounded.IosShare
 import androidx.compose.material.icons.rounded.Speed
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.BottomSheetDefaults
@@ -99,6 +100,7 @@ fun LocalSongActionsSheet(
     onDownloadYoutubeOpus: (() -> Unit)? = null,
     onDeleteYoutubeDownload: (() -> Unit)? = null,
     onChangeArtistImage: (() -> Unit)? = null,
+    onShareNowPlaying: (() -> Unit)? = null,
 ) {
     val sheetState = rememberModalBottomSheetState(skipPartiallyExpanded = true)
     val sheetShape = RoundedCornerShape(topStart = 24.dp, topEnd = 24.dp)
@@ -377,6 +379,13 @@ fun LocalSongActionsSheet(
                             icon = Icons.Rounded.Share,
                             label = stringResource(R.string.share_file),
                             onClick = onShareFile,
+                        )
+                    }
+                    onShareNowPlaying?.let { share ->
+                        LocalSongActionItem(
+                            icon = Icons.Rounded.IosShare,
+                            label = stringResource(R.string.share_now_playing),
+                            onClick = share,
                         )
                     }
 

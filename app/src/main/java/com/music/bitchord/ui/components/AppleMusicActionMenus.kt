@@ -30,6 +30,7 @@ import androidx.compose.material.icons.rounded.FileDownload
 import androidx.compose.material.icons.rounded.GraphicEq
 import androidx.compose.material.icons.rounded.Image
 import androidx.compose.material.icons.rounded.Info
+import androidx.compose.material.icons.rounded.IosShare
 import androidx.compose.material.icons.rounded.MoreHoriz
 import androidx.compose.material.icons.rounded.OpenInNew
 import androidx.compose.material.icons.rounded.Person
@@ -93,6 +94,7 @@ fun AppleMusicTrackActionsMenu(
     onEditLyrics: () -> Unit,
     onDetails: () -> Unit,
     onShare: () -> Unit,
+    onShareNowPlaying: (() -> Unit)? = null,
     onMore: () -> Unit,
 ) {
     val menu: @Composable () -> Unit = {
@@ -142,6 +144,7 @@ fun AppleMusicTrackActionsMenu(
                 MenuRow(R.string.edit_lyrics, Icons.AutoMirrored.Rounded.Notes, onCloseMenu, onEditLyrics)
                 MenuRow(R.string.details, Icons.Rounded.Info, onCloseMenu, onDetails)
                 MenuRow(R.string.share, Icons.Rounded.Share, onCloseMenu, onShare)
+                onShareNowPlaying?.let { MenuRow(R.string.share_now_playing, Icons.Rounded.IosShare, onCloseMenu, it) }
                 IosMenuSeparator()
                 MenuRow(R.string.more, Icons.Rounded.MoreHoriz, onCloseMenu, onMore)
             }
