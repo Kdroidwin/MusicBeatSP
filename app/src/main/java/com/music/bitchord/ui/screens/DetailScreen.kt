@@ -26,6 +26,8 @@ import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.rounded.Check
+import androidx.compose.material.icons.rounded.Delete
+import androidx.compose.material.icons.rounded.Edit
 import androidx.compose.material.icons.rounded.Notifications
 import androidx.compose.material.icons.rounded.PlayArrow
 import androidx.compose.material.icons.rounded.Shuffle
@@ -40,6 +42,7 @@ import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
+import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
@@ -84,22 +87,29 @@ fun DetailScreen(
     listState: LazyListState = rememberLazyListState(),
     onSongClick: (List<Song>, Int) -> Unit,
     onSongLongPress: (Song) -> Unit,
+    onSongMore: ((Song) -> Unit)? = null,
     onSongSwipe: (Song) -> Unit,
     onShuffle: (List<Song>) -> Unit,
     onSectionItemClick: (ShelfItem) -> Unit,
     onToggleSubscription: (() -> Unit)?,
     contentPadding: PaddingValues,
+    onChangeArtistArtwork: (() -> Unit)? = null,
+    onResetArtistArtwork: (() -> Unit)? = null,
+    selectionMode: Boolean = false,
+    selectionToolbar: (@Composable (Color) -> Unit)? = null,
     modifier: Modifier = Modifier,
 ) {
     val songsState = page.songs
     val songs = (songsState as? UiState.Success)?.data.orEmpty()
+    val showArtistOverview by AppSettings.showArtistOverview.collectAsStateWithLifecycle()
+    val showLocalArtistSections by AppSettings.showLocalArtistSections.collectAsStateWithLifecycle()
     val subscribed = page.subscription?.subscribed == true
     val subscriptionLabel = page.subscription?.let {
         stringResource(if (it.subscribed) R.string.unsubscribe else R.string.subscribe)
     }
     var appleArt by remember(page.browseId) { mutableStateOf(AppleArtistArtRepository.cached(page.browseId)) }
     LaunchedEffect(page.browseId, page.title, page.sections, songsState is UiState.Loading) {
-        if (AppSettings.youtubeMusicNetworkAllowed && songsState !is UiState.Loading) {
+        if (!page.browseId.startsWith("local:") && AppSettings.youtubeMusicNetworkAllowed && songsState !is UiState.Loading) {
             appleArt = AppleArtistArtRepository.artFor(page.browseId, page.title) {
                 page.appleCatalogue()
             } ?: appleArt
@@ -126,12 +136,16 @@ fun DetailScreen(
                 subscriptionLabel = subscriptionLabel,
                 subscribed = subscribed,
                 onToggleSubscription = onToggleSubscription,
+                hasCustomArtwork = page.artistArtworkOverride != null,
+                onChangeArtwork = onChangeArtistArtwork,
+                onResetArtwork = onResetArtistArtwork,
             )
         }
 
-        if (page.description?.isNotBlank() == true || page.subscriberCountText != null || page.monthlyListenerCount != null) {
+        if (showArtistOverview && (page.description?.isNotBlank() == true || page.subscriberCountText != null || page.monthlyListenerCount != null)) {
             item(key = "artist-about") {
                 Column(Modifier.fillMaxWidth().padding(horizontal = PAGE_GUTTER, vertical = 14.dp)) {
+                    SectionTitle(stringResource(R.string.about_artist), palette)
                     if (page.description?.isNotBlank() == true) {
                         Text(
                             text = page.description,
@@ -154,6 +168,17 @@ fun DetailScreen(
             }
         }
 
+        val localSections = page.sections.take(page.localSectionsCount.coerceIn(0, page.sections.size))
+        val remoteSections = page.sections.drop(localSections.size)
+        if (showLocalArtistSections) {
+            items(localSections, key = { "local-artist-shelf-${it.title}" }) { shelf ->
+                ArtistShelf(shelf = shelf, palette = palette, onItemClick = onSectionItemClick)
+            }
+        }
+        if (selectionMode && selectionToolbar != null) {
+            item(key = "artist-selection-toolbar") { selectionToolbar(palette.onBackground) }
+        }
+
         when (songsState) {
             UiState.Loading -> item(key = "artist-loading") {
                 Box(Modifier.fillMaxWidth().padding(32.dp), contentAlignment = Alignment.Center) {
@@ -172,7 +197,23 @@ fun DetailScreen(
                     item(key = "top-songs-heading") {
                         SectionTitle(stringResource(R.string.top_songs), palette)
                     }
-                    item(key = "top-songs") {
+                    if (page.hybridArtist || page.browseId.startsWith("local:artist:")) {
+                        itemsIndexed(songs, key = { _, song -> "artist-local-${song.localUri ?: song.videoId}" }) { index, song ->
+                            SongRow(
+                                song = song,
+                                onClick = { onSongClick(songs, index) },
+                                onLongPress = { onSongLongPress(song) },
+                                onMore = onSongMore?.let { more -> { more(song) } },
+                                onSwipeToQueue = { onSongSwipe(song) },
+                                rowBackground = wash,
+                                subtitleColor = palette.onBackgroundVariant,
+                                downloadedTint = null,
+                                isCurrent = currentSong?.videoId == song.videoId,
+                                isPlaying = currentSong?.videoId == song.videoId && isPlaying,
+                                activeTint = palette.accent,
+                            )
+                        }
+                    } else item(key = "top-songs") {
                         val topSongs = songs.take(20)
                         BoxWithConstraints {
                             val columnWidth = (maxWidth - PAGE_GUTTER * 2).coerceAtLeast(260.dp)
@@ -208,7 +249,7 @@ fun DetailScreen(
             }
         }
 
-        items(page.sections, key = { "artist-shelf-${it.title}" }) { shelf ->
+        items(remoteSections, key = { "artist-shelf-${it.title}" }) { shelf ->
             ArtistShelf(
                 shelf = shelf,
                 palette = palette,
@@ -248,6 +289,9 @@ private fun ArtistHero(
     subscriptionLabel: String?,
     subscribed: Boolean,
     onToggleSubscription: (() -> Unit)?,
+    hasCustomArtwork: Boolean,
+    onChangeArtwork: (() -> Unit)?,
+    onResetArtwork: (() -> Unit)?,
 ) {
     BoxWithConstraints(Modifier.fillMaxWidth()) {
         val artHeight = (maxWidth * 1.1f).coerceIn(340.dp, 590.dp)
@@ -270,6 +314,37 @@ private fun ArtistHero(
                     )
                 },
             )
+            if (onChangeArtwork != null) {
+                Row(
+                    modifier = Modifier.align(Alignment.TopEnd).padding(14.dp),
+                    horizontalArrangement = Arrangement.spacedBy(8.dp),
+                ) {
+                    IconButton(
+                        onClick = onChangeArtwork,
+                        modifier = Modifier.size(44.dp).clip(CircleShape).background(Color.Black.copy(alpha = 0.46f)),
+                    ) {
+                        Icon(
+                            Icons.Rounded.Edit,
+                            contentDescription = stringResource(R.string.change_artist_image),
+                            tint = Color.White,
+                            modifier = Modifier.size(21.dp),
+                        )
+                    }
+                    if (hasCustomArtwork && onResetArtwork != null) {
+                        IconButton(
+                            onClick = onResetArtwork,
+                            modifier = Modifier.size(44.dp).clip(CircleShape).background(Color.Black.copy(alpha = 0.46f)),
+                        ) {
+                            Icon(
+                                Icons.Rounded.Delete,
+                                contentDescription = stringResource(R.string.reset_artist_image),
+                                tint = Color.White,
+                                modifier = Modifier.size(21.dp),
+                            )
+                        }
+                    }
+                }
+            }
             Column(
                 modifier = Modifier.align(Alignment.BottomStart).fillMaxWidth().padding(PAGE_GUTTER),
                 horizontalAlignment = Alignment.Start,

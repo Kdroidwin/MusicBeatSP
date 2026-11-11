@@ -1594,6 +1594,7 @@
     <string name="change_artist_image">Change artist image</string>
     <string name="reset_artist_image">Reset artist image</string>
     <string name="artist_image_updated">Artist image updated</string>
+    <string name="artist_image_reset_done">Artist image reset</string>
     <string name="artist_image_update_failed">Couldn’t save artist image</string>
     <string name="edit_lyrics">Edit lyrics</string>
     <string name="share_file">Share file</string>
@@ -2119,6 +2120,10 @@
     <string name="player_artist_page_mode_local_subtitle">Show tracks and releases from this device only.</string>
     <string name="player_artist_page_mode_online_subtitle">Use the YouTube Music artist page, including its releases and recommendations.</string>
     <string name="player_artist_page_mode_hybrid_subtitle">Use your frequently played tracks and releases first, then online artist art and catalogue shelves.</string>
+    <string name="show_local_artist_sections">Show this device’s releases and playlists</string>
+    <string name="show_local_artist_sections_subtitle">Show albums, singles, EPs, and playlists from this device above the artist’s tracks.</string>
+    <string name="show_artist_overview">Show artist overview</string>
+    <string name="show_artist_overview_subtitle">Show the artist description and audience information when available.</string>
     <string name="hybrid_local_releases">Your albums, singles &amp; EPs</string>
     <string name="hybrid_local_playlists">Your playlists</string>
     <string name="hybrid_playlist_track_count">%1$d tracks</string>

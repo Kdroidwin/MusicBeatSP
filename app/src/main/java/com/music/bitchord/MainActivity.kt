@@ -977,8 +977,8 @@ private fun BitChordApp(
     val detailStack by viewModel.detailStack.collectAsStateWithLifecycle()
     val artistArtworkUris by ArtistArtworkStore.imageUris.collectAsStateWithLifecycle()
     val detail = detailStack.lastOrNull()?.let { page ->
-        if (page.hybridArtist) {
-            ArtistArtworkStore.imageUriFor(page.title, artistArtworkUris)?.let { customArt ->
+        if (page.type == BrowseType.ARTIST) {
+            ArtistArtworkStore.imageUriFor(page.title, artistArtworkUris, page.browseId)?.let { customArt ->
                 page.copy(thumbnailUrl = customArt, artistArtworkOverride = customArt)
             } ?: page
         } else {
@@ -1402,14 +1402,17 @@ private fun BitChordApp(
 
     val scope = rememberCoroutineScope()
     var pendingArtistImageName by remember { mutableStateOf<String?>(null) }
+    var pendingArtistImageKey by remember { mutableStateOf<String?>(null) }
     val artistImagePicker = rememberLauncherForActivityResult(
         ActivityResultContracts.PickVisualMedia(),
     ) { uri ->
         val artistName = pendingArtistImageName
+        val artistKey = pendingArtistImageKey
         pendingArtistImageName = null
+        pendingArtistImageKey = null
         if (uri != null && !artistName.isNullOrBlank()) {
             scope.launch {
-                val saved = runCatching { ArtistArtworkStore.set(context, artistName, uri) }.getOrDefault(false)
+                val saved = runCatching { ArtistArtworkStore.set(context, artistName, uri, artistKey) }.getOrDefault(false)
                 Toast.makeText(
                     context,
                     if (saved) R.string.artist_image_updated else R.string.artist_image_update_failed,
@@ -1419,9 +1422,17 @@ private fun BitChordApp(
         }
     }
 
-    fun chooseArtistImage(artistName: String) {
+    fun chooseArtistImage(artistName: String, browseId: String? = null) {
         pendingArtistImageName = artistName
+        pendingArtistImageKey = ArtistArtworkStore.identityKeyFor(artistName, browseId)
         artistImagePicker.launch(PickVisualMediaRequest(ActivityResultContracts.PickVisualMedia.ImageOnly))
+    }
+
+    fun resetArtistImage(artistName: String, browseId: String?) {
+        val key = ArtistArtworkStore.identityKeyFor(artistName, browseId)
+        if (ArtistArtworkStore.remove(context, artistName, key)) {
+            Toast.makeText(context, R.string.artist_image_reset_done, Toast.LENGTH_SHORT).show()
+        }
     }
 
     suspend fun writeLocalArtistRename(pending: PendingLocalArtistRename) {
@@ -2437,10 +2448,12 @@ private fun BitChordApp(
     // under the status bar inset, and that inset varies by device and by window,
     // so a fixed number only ever lines up on the one device it was picked on.
     // See [topBarContentPadding].
+    val fullBleedArtistDetail = detail?.type == BrowseType.ARTIST &&
+        !showSettings && !showReplay && !showSources && !showWearOs
     val listPadding = PaddingValues(
         // Shrink the reserved header space with the same short motion as the
         // system-bar transition, instead of moving the list in one frame.
-        top = rootTopPaddingState.value,
+        top = if (fullBleedArtistDetail) 0.dp else rootTopPaddingState.value,
         bottom = if (player.song != null && !playerDocked) 210.dp else 140.dp,
     )
 
@@ -2805,6 +2818,14 @@ private fun BitChordApp(
                     }
                 }
             },
+            onOpenArtistCredit = { artistName, browseId ->
+                dismissNowPlaying()
+                if (artistName.isNotBlank()) {
+                    openPlayerArtistPage(artistName, browseId?.takeIf(String::isNotBlank))
+                } else {
+                    Toast.makeText(context, "No artist information", Toast.LENGTH_SHORT).show()
+                }
+            },
             lyrics = lyrics,
             lyricsSource = lyricsSource,
             lyricsUnavailable = lyricsChecked && lyricsVideoId == player.song?.videoId && lyrics.isNullOrEmpty(),
@@ -3126,14 +3147,28 @@ private fun BitChordApp(
                                 selectedLocalArtistSongIds + id
                             }
                         }
-                        if (page.type == BrowseType.ARTIST && !page.browseId.startsWith("local:")) {
+                        if (page.type == BrowseType.ARTIST) {
                             DetailScreen(
                                 page = page,
                                 currentSong = player.song,
                                 isPlaying = player.isPlaying,
                                 listState = detailListState,
-                                onSongClick = { songs, index -> play(songs, index) },
-                                onSongLongPress = { openSongMenu(withAlbum(it)) },
+                                onSongClick = { songs, index ->
+                                    if (isEditableLocalArtist && localArtistSelectionMode) {
+                                        songs.getOrNull(index)?.let(toggleLocalArtistSelection)
+                                    } else {
+                                        play(songs, index)
+                                    }
+                                },
+                                onSongLongPress = { song ->
+                                    if (isEditableLocalArtist) {
+                                        localArtistSelectionMode = true
+                                        toggleLocalArtistSelection(song)
+                                    } else {
+                                        openSongMenu(withAlbum(song))
+                                    }
+                                },
+                                onSongMore = { openSongMenu(withAlbum(it)) },
                                 onSongSwipe = { onSongSwipe(withAlbum(it)) },
                                 onShuffle = { songs ->
                                     if (songs.isNotEmpty()) {
@@ -3168,8 +3203,78 @@ private fun BitChordApp(
                                     null
                                 },
                                 contentPadding = listPadding,
+                                onChangeArtistArtwork = { chooseArtistImage(page.title, page.browseId) },
+                                onResetArtistArtwork = { resetArtistImage(page.title, page.browseId) },
+                                selectionMode = isEditableLocalArtist && localArtistSelectionMode,
+                                selectionToolbar = if (isEditableLocalArtist && localArtistSelectionMode) {
+                                    { contentColor ->
+                                        Row(
+                                            modifier = Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 4.dp),
+                                            verticalAlignment = Alignment.CenterVertically,
+                                            horizontalArrangement = Arrangement.spacedBy(4.dp),
+                                        ) {
+                                            Text(
+                                                text = pluralStringResource(
+                                                    R.plurals.song_count_plural,
+                                                    selectedLocalArtistSongIds.size,
+                                                    selectedLocalArtistSongIds.size,
+                                                ),
+                                                color = contentColor,
+                                                modifier = Modifier.weight(1f),
+                                                maxLines = 1,
+                                            )
+                                            TextButton(
+                                                onClick = {
+                                                    selectedLocalArtistSongIds = if (
+                                                        localArtistSongKeys.isNotEmpty() &&
+                                                        selectedLocalArtistSongIds.containsAll(localArtistSongKeys)
+                                                    ) emptySet() else localArtistSongKeys
+                                                },
+                                            ) {
+                                                Text(
+                                                    stringResource(
+                                                        if (
+                                                            localArtistSongKeys.isNotEmpty() &&
+                                                            selectedLocalArtistSongIds.containsAll(localArtistSongKeys)
+                                                        ) R.string.deselect_all else R.string.select_all,
+                                                    ),
+                                                    color = contentColor,
+                                                )
+                                            }
+                                            IconButton(
+                                                enabled = selectedLocalArtistSongIds.isNotEmpty(),
+                                                onClick = {
+                                                    localArtistRenameTargets = pageSongs.filter {
+                                                        (it.localUri ?: it.videoId) in selectedLocalArtistSongIds
+                                                    }
+                                                    localArtistRenameValue = page.title
+                                                    showLocalArtistRenameDialog = true
+                                                },
+                                            ) {
+                                                Icon(
+                                                    imageVector = Icons.Rounded.Edit,
+                                                    contentDescription = stringResource(R.string.bulk_tag_edit),
+                                                    tint = contentColor,
+                                                )
+                                            }
+                                            IconButton(
+                                                onClick = {
+                                                    localArtistSelectionMode = false
+                                                    selectedLocalArtistSongIds = emptySet()
+                                                },
+                                            ) {
+                                                Icon(
+                                                    imageVector = Icons.Rounded.Close,
+                                                    contentDescription = stringResource(R.string.cancel),
+                                                    tint = contentColor,
+                                                )
+                                            }
+                                        }
+                                    }
+                                } else null,
                             )
-                        } else DrillDownSongList(
+                        } else {
+                            DrillDownSongList(
                             label = page.title,
                             artworkUrl = page.thumbnailUrl,
                             songs = pageSongs,
@@ -3299,8 +3404,9 @@ private fun BitChordApp(
                                 )
                             },
                             onBack = { viewModel.closeDetail() },
-                            contentPadding = listPadding,
-                        )
+                                contentPadding = listPadding,
+                            )
+                        }
                         if (isEditableLocalArtist && showLocalArtistRenameDialog) {
                             AlertDialog(
                                 onDismissRequest = {
@@ -3491,6 +3597,7 @@ private fun BitChordApp(
                                 onSongTagsOrLyricsSaved = { viewModel.reloadLyrics(it) },
                                 onSongMetadataUpdated = viewModel::updateLocalSongMetadata,
                                 onCollectionNavigationChanged = onCollectionNavigationChanged,
+                                onOpenArtistPage = { artist, _ -> openLocalArtist(artist, null) },
                             )
                         }
                         TAB_ALBUM_ARTISTS -> if (!hasStoragePermission && catalogSongs.isEmpty()) {
@@ -3754,6 +3861,8 @@ private fun BitChordApp(
                 // Radio is intentionally solid, so its scrolling text never blurs
                 // behind the pinned header (including its nested program details).
                 val isDetailVisible = detail != null && !isLocalDetail && !showSettings && !showReplay
+                val isArtistDetail = detail?.type == BrowseType.ARTIST &&
+                    !showSettings && !showReplay && !showSources && !showWearOs
                 val isRadioScreenVisible = selectedTab == TAB_RADIO && detail == null &&
                     !showSettings && !showReplay && !showSources && !showWearOs
                 val isLocalCollectionArtworkVisible = localCollectionPalette != null &&
@@ -3765,7 +3874,7 @@ private fun BitChordApp(
                 // back handler reported by that screen. Root category pages do
                 // not report one and keep their labels visible.
                 val hideCollectionHeaderNow = hideCollectionTopBar && !showSettings && !showReplay &&
-                    ((detail != null && !isLocalDetail) || localCollectionBackHandler != null)
+                    ((detail != null && !isLocalDetail) || localCollectionBackHandler != null) || isArtistDetail
                 val isAlbumOrPlaylistArtworkDetail = isLocalCollectionArtworkVisible ||
                     (detail != null && !isLocalDetail && detail.type in setOf(BrowseType.ALBUM, BrowseType.PLAYLIST))
                 val hideFloatingCollectionControlsNow =
@@ -3792,7 +3901,7 @@ private fun BitChordApp(
                 }
 
                 val showCollectionSortAction = detail != null && !isLocalDetail && detail.type != BrowseType.ARTIST
-                if (!showReplay && (!hideFloatingCollectionControlsNow || showCollectionSortAction)) {
+                if (!showReplay && !isArtistDetail && (!hideFloatingCollectionControlsNow || showCollectionSortAction)) {
                     FrostedTopBar(
                         title = when {
                             showSources -> stringResource(R.string.sources)
@@ -4894,7 +5003,7 @@ private fun BitChordApp(
             } == true
             val artistArtworkUris by ArtistArtworkStore.imageUris.collectAsStateWithLifecycle()
             val hasCustomArtistArtwork = target.type == BrowseType.ARTIST &&
-                ArtistArtworkStore.imageUriFor(target.title, artistArtworkUris) != null
+                ArtistArtworkStore.imageUriFor(target.title, artistArtworkUris, target.browseId) != null
             val onAddCollectionToPlaylist = savableCollectionId?.let {
                 act { songs ->
                     if (songs.isEmpty()) {
@@ -5051,12 +5160,16 @@ private fun BitChordApp(
                     onChangeArtistImage = if (target.type == BrowseType.ARTIST) {
                         {
                             browseActions = null
-                            chooseArtistImage(target.title)
+                            chooseArtistImage(target.title, target.browseId)
                         }
                     } else null,
                     onResetArtistImage = if (hasCustomArtistArtwork) {
                         {
-                            ArtistArtworkStore.remove(context, target.title)
+                            ArtistArtworkStore.remove(
+                                context,
+                                target.title,
+                                ArtistArtworkStore.identityKeyFor(target.title, target.browseId),
+                            )
                             browseActions = null
                         }
                     } else null,

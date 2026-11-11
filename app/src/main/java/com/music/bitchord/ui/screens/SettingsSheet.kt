@@ -652,6 +652,8 @@ private fun additionalArtworkSettingsSearchEntries(
     smartPlaylistsEnabled: Boolean,
     artistDeezerArtworkEnabled: Boolean,
     playerArtistPageModeLabel: String,
+    showLocalArtistSections: Boolean,
+    showArtistOverview: Boolean,
     onChoosePlayerArtistPageMode: () -> Unit,
     folderArtworkFallbackLabel: String,
     onChooseFolderArtworkFallback: () -> Unit,
@@ -700,6 +702,18 @@ private fun additionalArtworkSettingsSearchEntries(
         valueLabel = playerArtistPageModeLabel,
         activate = onChoosePlayerArtistPageMode,
     ),
+    SettingsSearchEntry(
+        stringResource(R.string.show_local_artist_sections),
+        stringResource(R.string.show_local_artist_sections_subtitle),
+        listOf("artist", "local", "album", "single", "EP", "playlist", "アーティスト", "端末内", "アルバム", "シングル", "プレイリスト"),
+        showLocalArtistSections,
+    ) { AppSettings.setShowLocalArtistSections(!showLocalArtistSections) },
+    SettingsSearchEntry(
+        stringResource(R.string.show_artist_overview),
+        stringResource(R.string.show_artist_overview_subtitle),
+        listOf("artist", "overview", "about", "description", "アーティスト", "概要", "説明"),
+        showArtistOverview,
+    ) { AppSettings.setShowArtistOverview(!showArtistOverview) },
     SettingsSearchEntry(
         title = stringResource(R.string.artist_deezer_artwork_enabled),
         subtitle = stringResource(R.string.artist_deezer_artwork_enabled_subtitle),
@@ -1412,6 +1426,8 @@ fun SettingsScreen(
     val onlineAlbumArtistArtwork by AppSettings.onlineAlbumArtistArtwork.collectAsStateWithLifecycle()
     val artistDeezerArtworkEnabled by AppSettings.artistDeezerArtworkEnabled.collectAsStateWithLifecycle()
     val playerArtistPageMode by AppSettings.playerArtistPageMode.collectAsStateWithLifecycle()
+    val showLocalArtistSections by AppSettings.showLocalArtistSections.collectAsStateWithLifecycle()
+    val showArtistOverview by AppSettings.showArtistOverview.collectAsStateWithLifecycle()
     val playerArtistPageModeLabel = stringResource(
         when (playerArtistPageMode) {
             PlayerArtistPageMode.LOCAL -> R.string.player_artist_page_mode_local
@@ -2660,6 +2676,8 @@ fun SettingsScreen(
             smartPlaylistsEnabled = smartPlaylistsEnabled,
             artistDeezerArtworkEnabled = artistDeezerArtworkEnabled,
             playerArtistPageModeLabel = playerArtistPageModeLabel,
+            showLocalArtistSections = showLocalArtistSections,
+            showArtistOverview = showArtistOverview,
             onChoosePlayerArtistPageMode = { showPlayerArtistPageModeDialog = true },
             folderArtworkFallbackLabel = stringResource(
                 when (folderArtworkFallbackMode) {
@@ -6606,6 +6624,8 @@ fun SettingsScreen(
             onlineAlbumArtistArtwork = onlineAlbumArtistArtwork,
             artistDeezerArtworkEnabled = artistDeezerArtworkEnabled,
             playerArtistPageModeLabel = playerArtistPageModeLabel,
+            showLocalArtistSections = showLocalArtistSections,
+            showArtistOverview = showArtistOverview,
             filterNonMusicAudio = filterNonMusicAudio,
             showPlaylistSongArtwork = showPlaylistSongArtwork,
             showCollectionSongArtwork = showCollectionSongArtwork,
@@ -8240,6 +8260,8 @@ private fun LocalMusicSettingsGroup(
     onlineAlbumArtistArtwork: Boolean,
     artistDeezerArtworkEnabled: Boolean,
     playerArtistPageModeLabel: String,
+    showLocalArtistSections: Boolean,
+    showArtistOverview: Boolean,
     filterNonMusicAudio: Boolean,
     showPlaylistSongArtwork: Boolean,
     showCollectionSongArtwork: Boolean,
@@ -8442,6 +8464,32 @@ SettingsGroup(header = stringResource(R.string.local_music)) {
             }
         },
         onClick = onChoosePlayerArtistPageMode,
+    )
+    RowDivider()
+    SettingsRow(
+        icon = Icons.Rounded.Album,
+        title = stringResource(R.string.show_local_artist_sections),
+        subtitle = stringResource(R.string.show_local_artist_sections_subtitle),
+        trailing = {
+            Switch(
+                checked = showLocalArtistSections,
+                onCheckedChange = AppSettings::setShowLocalArtistSections,
+            )
+        },
+        onClick = { AppSettings.setShowLocalArtistSections(!showLocalArtistSections) },
+    )
+    RowDivider()
+    SettingsRow(
+        icon = Icons.Rounded.Info,
+        title = stringResource(R.string.show_artist_overview),
+        subtitle = stringResource(R.string.show_artist_overview_subtitle),
+        trailing = {
+            Switch(
+                checked = showArtistOverview,
+                onCheckedChange = AppSettings::setShowArtistOverview,
+            )
+        },
+        onClick = { AppSettings.setShowArtistOverview(!showArtistOverview) },
     )
     RowDivider()
     SettingsRow(

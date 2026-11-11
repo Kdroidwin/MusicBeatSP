@@ -1487,6 +1487,7 @@
     <string name="change_artist_image">アーティスト画像を変更</string>
     <string name="reset_artist_image">アーティスト画像をリセット</string>
     <string name="artist_image_updated">アーティスト画像を変更しました</string>
+    <string name="artist_image_reset_done">アーティスト画像をリセットしました</string>
     <string name="artist_image_update_failed">アーティスト画像を保存できませんでした</string>
     <string name="edit_lyrics">歌詞を編集</string>
     <string name="share_file">ファイルを共有</string>
@@ -2092,6 +2093,10 @@
     <string name="player_artist_page_mode_local_subtitle">この端末にある曲とリリースだけを表示します。</string>
     <string name="player_artist_page_mode_online_subtitle">YouTube Musicのアーティストページ、リリース、おすすめを表示します。</string>
     <string name="player_artist_page_mode_hybrid_subtitle">よく聴く曲と手元のリリースを優先し、オンラインのアーティスト画像やカタログも表示します。</string>
+    <string name="show_local_artist_sections">端末内のリリースとプレイリストを表示</string>
+    <string name="show_local_artist_sections_subtitle">アーティストの曲一覧より前に、端末内のアルバム・シングル・EP・プレイリストを表示します。</string>
+    <string name="show_artist_overview">アーティストの概要を表示</string>
+    <string name="show_artist_overview_subtitle">情報がある場合、アーティストの説明とリスナー情報を表示します。</string>
     <string name="hybrid_local_releases">端末内のアルバム・シングル・EP</string>
     <string name="hybrid_local_playlists">端末内のプレイリスト</string>
     <string name="hybrid_playlist_track_count">%1$d曲</string>

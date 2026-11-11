@@ -27,10 +27,13 @@ object ArtistArtworkStore {
         val artistName: String,
         val mimeType: String,
         val bytes: ByteArray,
+        /** Stable remote artist identity; null keeps older name-keyed backups compatible. */
+        val artistKey: String? = null,
     )
 
     private data class Entry(
         val artistName: String,
+        val artistKey: String,
         val mimeType: String,
         val fileName: String,
     )
@@ -53,20 +56,44 @@ object ArtistArtworkStore {
         .replace(Regex("\\s+"), " ")
         .lowercase(Locale.ROOT)
 
-    fun imageUriFor(artistName: String, uriMap: Map<String, String> = _imageUris.value): String? =
-        uriMap[keyFor(artistName)]
+    /** Remote artists with the same display name remain separate; local names keep legacy behavior. */
+    fun identityKeyFor(artistName: String, browseId: String? = null): String {
+        val remoteId = browseId?.trim()?.takeIf { it.isNotEmpty() && !it.startsWith("local:") }
+        return remoteId?.let { "browse:$it" } ?: keyFor(artistName)
+    }
 
-    suspend fun set(context: Context, artistName: String, source: Uri): Boolean {
+    fun imageUriFor(
+        artistName: String,
+        uriMap: Map<String, String> = _imageUris.value,
+        browseId: String? = null,
+    ): String? {
+        val remoteId = browseId?.takeIf { it.isNotBlank() && !it.startsWith("local:") }
+        // A remote channel id is the artist identity. Falling back to a shared
+        // display-name entry would attach one same-named artist's portrait to
+        // another channel, the collision this store's identity keys prevent.
+        return if (remoteId != null) {
+            uriMap[identityKeyFor(artistName, remoteId)]
+        } else {
+            uriMap[keyFor(artistName)]
+        }
+    }
+
+    suspend fun set(
+        context: Context,
+        artistName: String,
+        source: Uri,
+        artistKey: String? = null,
+    ): Boolean {
         val name = artistName.trim().replace(Regex("\\s+"), " ")
         if (name.isBlank()) return false
         val artwork = TagLibWriter.prepareArtwork(context, source) ?: return false
         return withContext(Dispatchers.IO) {
-            putBytes(context.applicationContext, name, artwork.mimeType, artwork.bytes)
+            putBytes(context.applicationContext, name, artistKey ?: keyFor(name), artwork.mimeType, artwork.bytes)
         }
     }
 
-    fun remove(context: Context, artistName: String): Boolean = synchronized(lock) {
-        val key = keyFor(artistName)
+    fun remove(context: Context, artistName: String, artistKey: String? = null): Boolean = synchronized(lock) {
+        val key = artistKey ?: keyFor(artistName)
         val old = entries[key] ?: return false
         val updated = entries - key
         persist(context.applicationContext, updated)
@@ -85,7 +112,7 @@ object ArtistArtworkStore {
                 val bytes = runCatching { file.readBytes() }.getOrNull()
                     ?.takeIf { it.isNotEmpty() && it.size <= MAX_IMAGE_BYTES }
                     ?: return@mapNotNull null
-                BackupArtwork(entry.artistName, entry.mimeType, bytes)
+                BackupArtwork(entry.artistName, entry.mimeType, bytes, entry.artistKey)
             }
         }
     }
@@ -98,15 +125,16 @@ object ArtistArtworkStore {
         artwork.forEach { item ->
             val name = item.artistName.trim().replace(Regex("\\s+"), " ")
             require(name.isNotBlank() && name.length <= 300) { "Invalid artist name in backup" }
+            val key = item.artistKey?.trim()?.takeIf(String::isNotBlank) ?: keyFor(name)
+            require(key.length <= 500) { "Invalid artist identity in backup" }
             require(item.mimeType == "image/jpeg" || item.mimeType == "image/png") {
                 "Unsupported artist image format in backup"
             }
             validateImage(item.bytes)
             totalBytes += item.bytes.size
             require(totalBytes <= 96L * 1024 * 1024) { "Artist images exceed the backup size limit" }
-            val key = keyFor(name)
             val extension = if (item.mimeType == "image/png") "png" else "jpg"
-            prepared[key] = Entry(name, item.mimeType, "${digest(key)}.$extension") to item.bytes
+            prepared[key] = Entry(name, key, item.mimeType, "${digest(key)}.$extension") to item.bytes
         }
 
         synchronized(lock) {
@@ -129,15 +157,15 @@ object ArtistArtworkStore {
         }
     }
 
-    private fun putBytes(context: Context, artistName: String, mimeType: String, bytes: ByteArray): Boolean =
+    private fun putBytes(context: Context, artistName: String, artistKey: String, mimeType: String, bytes: ByteArray): Boolean =
         synchronized(lock) {
             if (mimeType !in setOf("image/jpeg", "image/png") || bytes.isEmpty() || bytes.size > MAX_IMAGE_BYTES) {
                 return false
             }
             runCatching { validateImage(bytes) }.getOrElse { return false }
-            val key = keyFor(artistName)
+            val key = artistKey
             val extension = if (mimeType == "image/png") "png" else "jpg"
-            val entry = Entry(artistName, mimeType, "${digest(key)}.$extension")
+            val entry = Entry(artistName, key, mimeType, "${digest(key)}.$extension")
             val dir = directory(context).apply { mkdirs() }
             runCatching { writeAtomically(File(dir, entry.fileName), bytes) }.getOrElse { return false }
             val updated = entries + (key to entry)
@@ -180,9 +208,9 @@ object ArtistArtworkStore {
                 val name = item.optString("artistName").trim()
                 val mime = item.optString("mimeType")
                 val fileName = item.optString("fileName")
-                val key = keyFor(name)
+                val key = item.optString("artistKey").takeIf(String::isNotBlank) ?: keyFor(name)
                 if (key.isBlank() || fileName.isBlank() || mime !in setOf("image/jpeg", "image/png")) continue
-                if (File(dir, fileName).isFile) put(key, Entry(name, mime, fileName))
+                if (File(dir, fileName).isFile) put(key, Entry(name, key, mime, fileName))
             }
         }
     }
@@ -193,6 +221,7 @@ object ArtistArtworkStore {
             array.put(
                 JSONObject()
                     .put("artistName", entry.artistName)
+                    .put("artistKey", entry.artistKey)
                     .put("mimeType", entry.mimeType)
                     .put("fileName", entry.fileName),
             )

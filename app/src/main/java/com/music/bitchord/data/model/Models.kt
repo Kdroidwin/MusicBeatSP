@@ -580,6 +580,8 @@ data class DetailPage(
     val hybridArtist: Boolean = false,
     /** A user-selected portrait takes precedence over catalogue artist art in Hybrid mode. */
     val artistArtworkOverride: String? = null,
+    /** Number of leading sections which belong to this device's own library. */
+    val localSectionsCount: Int = 0,
 )
 
 /**

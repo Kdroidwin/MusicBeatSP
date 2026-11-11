@@ -1248,6 +1248,10 @@ object AppSettings {
     val artistDeezerArtworkEnabled = MutableStateFlow(true)
     /** Player artist navigation defaults to a local/online hybrid. */
     val playerArtistPageMode = MutableStateFlow(PlayerArtistPageMode.HYBRID)
+    /** Artist landing pages include this device's albums and playlists by default. */
+    val showLocalArtistSections = MutableStateFlow(true)
+    /** The artist overview remains visible unless explicitly hidden. */
+    val showArtistOverview = MutableStateFlow(true)
     val localMusicViewType = MutableStateFlow(LibraryViewType.LIST)
     val downloadedSongsViewType = MutableStateFlow(LibraryViewType.LIST)
     val downloadedAlbumsViewType = MutableStateFlow(LibraryViewType.GRID)
@@ -1996,6 +2000,8 @@ object AppSettings {
         playerArtistPageMode.value = prefs.getString(KEY_PLAYER_ARTIST_PAGE_MODE, null)
             ?.let { saved -> PlayerArtistPageMode.entries.firstOrNull { it.name == saved } }
             ?: PlayerArtistPageMode.HYBRID
+        showLocalArtistSections.value = prefs.getBoolean(KEY_SHOW_LOCAL_ARTIST_SECTIONS, true)
+        showArtistOverview.value = prefs.getBoolean(KEY_SHOW_ARTIST_OVERVIEW, true)
         downloadedMusicViewType.value = readLibraryViewType(KEY_DOWNLOADED_MUSIC_VIEW_TYPE, LibraryViewType.LIST)
         downloadedSongsViewType.value = readLibraryViewType(KEY_DOWNLOADED_SONGS_VIEW_TYPE, downloadedMusicViewType.value)
         downloadedAlbumsViewType.value = readLibraryViewType(KEY_DOWNLOADED_ALBUMS_VIEW_TYPE, LibraryViewType.GRID)
@@ -4522,6 +4528,16 @@ object AppSettings {
         prefs.edit().putString(KEY_PLAYER_ARTIST_PAGE_MODE, value.name).apply()
     }
 
+    fun setShowLocalArtistSections(value: Boolean) {
+        showLocalArtistSections.value = value
+        prefs.edit().putBoolean(KEY_SHOW_LOCAL_ARTIST_SECTIONS, value).apply()
+    }
+
+    fun setShowArtistOverview(value: Boolean) {
+        showArtistOverview.value = value
+        prefs.edit().putBoolean(KEY_SHOW_ARTIST_OVERVIEW, value).apply()
+    }
+
     fun setLocalMusicViewType(value: LibraryViewType) {
         setLocalSongsViewType(value)
     }
@@ -5107,6 +5123,8 @@ object AppSettings {
     private const val KEY_ONLINE_ALBUM_ARTIST_ARTWORK = "online_album_artist_artwork"
     private const val KEY_ARTIST_DEEZER_ARTWORK_ENABLED = "artist_deezer_artwork_enabled"
     private const val KEY_PLAYER_ARTIST_PAGE_MODE = "player_artist_page_mode"
+    private const val KEY_SHOW_LOCAL_ARTIST_SECTIONS = "show_local_artist_sections"
+    private const val KEY_SHOW_ARTIST_OVERVIEW = "show_artist_overview"
     private const val KEY_LIBRARY_SORT = "library_sort"
     private const val KEY_YOUTUBE_DOWNLOADS_SORT = "youtube_downloads_sort"
     private const val KEY_DETAIL_SONG_SORTS = "detail_song_sorts"

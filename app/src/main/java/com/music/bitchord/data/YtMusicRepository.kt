@@ -924,7 +924,11 @@ object YtMusicRepository {
      * "Top songs" playlist is fetched to fill the list out.
      */
     suspend fun artistPage(browseId: String): Result<ArtistPage> = call("artist:$browseId") {
-        val page = InnertubeParser.parseArtistPage(Innertube.browse(browseId))
+        // Ask YouTube Music for the overview in the device's language. Other
+        // browse operations keep their established English request context.
+        val page = InnertubeParser.parseArtistPage(
+            Innertube.browse(browseId, language = Innertube.currentLanguage),
+        )
         val fullSongs = page.moreSongsBrowseId?.let { playlistId ->
             runCatching { songsPaged(playlistId) }.getOrNull()
         }

@@ -103,6 +103,7 @@ object Backup {
                         artistName = item.artistName,
                         mimeType = item.mimeType,
                         imageBase64 = Base64.encodeToString(item.bytes, Base64.NO_WRAP),
+                        artistKey = item.artistKey,
                     )
                 },
                 radioRecordingFavorites = radioFavorites,
@@ -165,7 +166,7 @@ object Backup {
                 val artwork = file.artistArtwork.map { item ->
                     val bytes = runCatching { Base64.decode(item.imageBase64, Base64.DEFAULT) }
                         .getOrElse { error("That backup contains an invalid artist image") }
-                    ArtistArtworkStore.BackupArtwork(item.artistName, item.mimeType, bytes)
+                    ArtistArtworkStore.BackupArtwork(item.artistName, item.mimeType, bytes, item.artistKey)
                 }
                 ArtistArtworkStore.importBackup(context, artwork)
             }
@@ -301,6 +302,7 @@ object Backup {
         val artistName: String,
         val mimeType: String,
         val imageBase64: String,
+        val artistKey: String? = null,
     )
 
     @Serializable

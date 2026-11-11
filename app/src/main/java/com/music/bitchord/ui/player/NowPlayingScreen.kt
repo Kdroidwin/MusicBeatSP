@@ -95,6 +95,7 @@ import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import com.music.bitchord.feature.localmusic.data.LocalFavoritesStore
+import com.music.bitchord.feature.artistimage.util.ArtistSplitter
 import com.music.bitchord.data.lyrics.LyricsFurigana
 import com.music.bitchord.data.sources.SourceRegistry
 import androidx.compose.material.icons.Icons
@@ -976,6 +977,7 @@ fun NowPlayingScreen(
     onOpenSearch: () -> Unit,
     onOpenAlbum: (String) -> Unit,
     onOpenArtist: (String) -> Unit,
+    onOpenArtistCredit: (String, String?) -> Unit,
     instantStatusBarReveal: Boolean = false,
     lyrics: List<LyricLine>?,
     lyricsSource: LyricsSource?,
@@ -3093,20 +3095,66 @@ fun NowPlayingScreen(
                             modifier = Modifier.opensPage(song.albumId, onOpenAlbum),
                         )
                         if (showPlayerArtist) {
-                            MarqueeText(
-                                text = song.artist,
-                                style = MaterialTheme.typography.titleLarge.copy(
-                                    fontWeight = FontWeight.W500,
-                                    fontSize = artistSize,
-                                ),
-                                color = LocalPlayerSongArtistInk.current.copy(alpha = 0.55f),
-                                enabled = scrolls,
-                                // A title that's also scrolling gets to go first —
-                                // starting together reads as clutter, so the artist
-                                // waits a beat before it joins in.
-                                startDelayMillis = if (titleOverflowing) MARQUEE_ARTIST_STAGGER_MS else 0L,
-                                modifier = Modifier.opensPage(song.artistId, onOpenArtist),
+                            val artistCredits = remember(song.artist) { ArtistSplitter.split(song.artist) }
+                            val artistStyle = MaterialTheme.typography.titleLarge.copy(
+                                fontWeight = FontWeight.W500,
+                                fontSize = artistSize,
                             )
+                            val artistInk = LocalPlayerSongArtistInk.current.copy(alpha = 0.55f)
+                            if (artistCredits.size <= 1) {
+                                val artistName = artistCredits.firstOrNull()?.takeIf(String::isNotBlank) ?: song.artist
+                                MarqueeText(
+                                    text = song.artist,
+                                    style = artistStyle,
+                                    color = artistInk,
+                                    enabled = scrolls,
+                                    // A title that's also scrolling gets to go first —
+                                    // starting together reads as clutter, so the artist
+                                    // waits a beat before it joins in.
+                                    startDelayMillis = if (titleOverflowing) MARQUEE_ARTIST_STAGGER_MS else 0L,
+                                    modifier = Modifier.clip(RoundedCornerShape(6.dp)).clickable {
+                                        if (artistName.isNotBlank()) onOpenArtistCredit(artistName, song.artistId)
+                                    },
+                                )
+                            } else {
+                                Row(
+                                    modifier = Modifier.fillMaxWidth().horizontalScroll(rememberScrollState()),
+                                    verticalAlignment = Alignment.CenterVertically,
+                                ) {
+                                    var cursor = 0
+                                    artistCredits.forEachIndexed { index, artistName ->
+                                        val start = song.artist.indexOf(artistName, cursor, ignoreCase = true)
+                                        if (start >= cursor) {
+                                            val separator = song.artist.substring(cursor, start)
+                                            if (separator.isNotEmpty()) Text(separator, style = artistStyle, color = artistInk)
+                                            Text(
+                                                text = artistName,
+                                                style = artistStyle,
+                                                color = artistInk,
+                                                maxLines = 1,
+                                                modifier = Modifier.clip(RoundedCornerShape(6.dp)).clickable {
+                                                    onOpenArtistCredit(artistName, song.artistId.takeIf { index == 0 })
+                                                },
+                                            )
+                                            cursor = start + artistName.length
+                                        } else {
+                                            if (index > 0) Text(" · ", style = artistStyle, color = artistInk)
+                                            Text(
+                                                text = artistName,
+                                                style = artistStyle,
+                                                color = artistInk,
+                                                maxLines = 1,
+                                                modifier = Modifier.clip(RoundedCornerShape(6.dp)).clickable {
+                                                    onOpenArtistCredit(artistName, song.artistId.takeIf { index == 0 })
+                                                },
+                                            )
+                                        }
+                                    }
+                                    if (cursor < song.artist.length) {
+                                        Text(song.artist.substring(cursor), style = artistStyle, color = artistInk)
+                                    }
+                                }
+                            }
                         }
                     }
                     Spacer(Modifier.width(10.dp))

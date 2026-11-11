@@ -517,8 +517,8 @@ object Innertube {
 
     // ---- Public API ---------------------------------------------------------
 
-    suspend fun browse(browseId: String, params: String? = null): JsonObject =
-        postMusic("browse") {
+    suspend fun browse(browseId: String, params: String? = null, language: String = "en"): JsonObject =
+        postMusic("browse", language = language) {
             put("browseId", browseId)
             params?.let { put("params", it) }
         }
@@ -1161,6 +1161,7 @@ object Innertube {
     private suspend fun postMusic(
         endpoint: String,
         query: Map<String, String> = emptyMap(),
+        language: String = "en",
         bodyExtras: JsonObjectBuilder.() -> Unit,
     ): JsonObject {
         // This is the common authenticated request path: Home, Library,
@@ -1199,7 +1200,7 @@ object Innertube {
                             putJsonObject("client") {
                                 put("clientName", "WEB_REMIX")
                                 put("clientVersion", clientVersion)
-                                put("hl", "en")
+                                put("hl", language.takeIf(String::isNotBlank) ?: "en")
                                 put("gl", "US")
                                 visitorData?.let { put("visitorData", it) }
                             }

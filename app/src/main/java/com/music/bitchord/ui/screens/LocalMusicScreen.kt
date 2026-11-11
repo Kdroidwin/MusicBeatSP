@@ -268,6 +268,8 @@ fun LocalMusicScreen(
     onCollectionLongPress: ((String, List<Song>) -> Unit)? = null,
     /** Artist grouping menu; separate so caller can add artist-specific actions. */
     onArtistLongPress: ((String, List<Song>) -> Unit)? = null,
+    /** Opens a local artist through the shared full-page artist experience. */
+    onOpenArtistPage: ((String, List<Song>) -> Unit)? = null,
     /**
      * The albums and playlists that were downloaded *as* albums and playlists.
      *
@@ -1237,16 +1239,20 @@ fun LocalMusicScreen(
                             else AppSettings.setLocalArtistSort(it)
                         },
                         onArtistClick = { artist, artistSongs ->
-                            drillDownLabel = artist
-                            drillDownSongs = artistSongs
-                            drillDownArt = null
-                            drillDownIsArtist = true
-                            drillDownFullScreenArtwork = false
-                            val groupedAlbums = albumEntries(artistSongs, emptyList())
-                            drillDownAlbumEntries = groupedAlbums
-                            drillDownShowsAlbums = artistsOpenAlbums
-                            parentArtistAlbums = null
-                            parentArtistLabel = artist
+                            if (!isDownloads && onOpenArtistPage != null) {
+                                onOpenArtistPage(artist, artistSongs)
+                            } else {
+                                drillDownLabel = artist
+                                drillDownSongs = artistSongs
+                                drillDownArt = null
+                                drillDownIsArtist = true
+                                drillDownFullScreenArtwork = false
+                                val groupedAlbums = albumEntries(artistSongs, emptyList())
+                                drillDownAlbumEntries = groupedAlbums
+                                drillDownShowsAlbums = artistsOpenAlbums
+                                parentArtistAlbums = null
+                                parentArtistLabel = artist
+                            }
                         },
                         onArtistLongPress = onArtistLongPress ?: onCollectionLongPress,
                         contentPadding = bodyContentPadding,
