@@ -24,10 +24,12 @@ import androidx.compose.material3.DropdownMenuItem
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.IconButtonDefaults
+import androidx.compose.material3.LocalContentColor
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
@@ -45,7 +47,9 @@ import coil3.compose.AsyncImage
 import com.music.bitchord.R
 import com.music.bitchord.feature.localmusic.domain.model.LocalPlaylist
 import com.music.bitchord.data.model.Song
+import com.music.bitchord.data.model.ROW_ART_PX
 import com.music.bitchord.feature.localmusic.ui.components.rememberM3uExportAction
+import com.music.bitchord.ui.theme.rememberArtworkPalette
 
 /**
  * Grid presentation card for a user-created playlist.
@@ -66,10 +70,18 @@ fun LibraryPlaylistCard(
     onMoveDown: () -> Unit = {},
     librarySongs: List<Song> = emptyList(),
     resolvedTrackCount: Int = playlist.songIds.size,
+    showPlayButton: Boolean = true,
+    menuUsesArtworkColor: Boolean = true,
     modifier: Modifier = Modifier,
 ) {
     var menuOpen by remember { mutableStateOf(false) }
     val exportM3u = rememberM3uExportAction(playlist, librarySongs)
+    val cover = playlist.customCoverUrl ?: playlist.coverUrl
+    val menuPalette = if (menuOpen && menuUsesArtworkColor) {
+        rememberArtworkPalette(cover, artPx = ROW_ART_PX)
+    } else {
+        null
+    }
 
     Surface(
         modifier = modifier
@@ -92,7 +104,6 @@ fun LibraryPlaylistCard(
                     .background(MaterialTheme.colorScheme.primaryContainer.copy(alpha = 0.7f)),
                 contentAlignment = Alignment.Center,
             ) {
-                val cover = playlist.customCoverUrl ?: playlist.coverUrl
                 if (!cover.isNullOrBlank()) {
                     AsyncImage(
                         model = cover,
@@ -109,7 +120,7 @@ fun LibraryPlaylistCard(
                     )
                 }
 
-                if (resolvedTrackCount > 0) {
+                if (showPlayButton && resolvedTrackCount > 0) {
                     IconButton(
                         onClick = onPlay,
                         modifier = Modifier
@@ -172,11 +183,15 @@ fun LibraryPlaylistCard(
                         )
                     }
 
-                    DropdownMenu(
-                        expanded = menuOpen,
-                        onDismissRequest = { menuOpen = false },
-                        shape = RoundedCornerShape(16.dp),
+                    CompositionLocalProvider(
+                        LocalContentColor provides (menuPalette?.onBackground ?: MaterialTheme.colorScheme.onSurface),
                     ) {
+                        DropdownMenu(
+                            expanded = menuOpen,
+                            onDismissRequest = { menuOpen = false },
+                            shape = RoundedCornerShape(16.dp),
+                            containerColor = menuPalette?.background ?: MaterialTheme.colorScheme.surfaceContainerHigh,
+                        ) {
                         DropdownMenuItem(
                             text = { Text(stringResource(R.string.change_playlist_cover)) },
                             onClick = {
@@ -249,6 +264,7 @@ fun LibraryPlaylistCard(
                                 onDelete()
                             },
                         )
+                        }
                     }
                 }
             }

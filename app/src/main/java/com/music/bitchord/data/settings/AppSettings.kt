@@ -673,6 +673,10 @@ object AppSettings {
     val gridColumns = MutableStateFlow<Map<String, Int>>(emptyMap())
     /** Draws grid item titles over the artwork instead of below it. */
     val gridTitleOverlay = MutableStateFlow(false)
+    /** Hides the play affordance drawn over playlist covers in the Library grid. */
+    val hideLibraryGridPlaylistPlayButton = MutableStateFlow(false)
+    /** Tints playlist action menus in the Library grid from their cover art. */
+    val libraryGridPlaylistMenuUsesArtworkColor = MutableStateFlow(true)
     /** Uses the playlist page artwork palette for track menus opened inside it. */
     val playlistTrackMenuUsesArtworkColor = MutableStateFlow(true)
     /** Optional typography overrides on the expanded player header, in scaled-independent units. */
@@ -1626,6 +1630,8 @@ object AppSettings {
                 .takeIf { it > 0 }?.let { kind.key to it.coerceIn(GridKind.MIN_COLUMNS, GridKind.MAX_COLUMNS) }
         }.toMap()
         gridTitleOverlay.value = prefs.getBoolean(KEY_GRID_TITLE_OVERLAY, false)
+        hideLibraryGridPlaylistPlayButton.value = prefs.getBoolean(KEY_HIDE_LIBRARY_GRID_PLAY_BUTTON, false)
+        libraryGridPlaylistMenuUsesArtworkColor.value = prefs.getBoolean(KEY_LIBRARY_GRID_PLAYLIST_MENU_ARTWORK_COLOR, true)
         customFontPath.value = prefs.getString(KEY_CUSTOM_FONT_PATH, "").orEmpty()
         customFontName.value = prefs.getString(KEY_CUSTOM_FONT_NAME, "").orEmpty()
         playlistTrackMenuUsesArtworkColor.value = prefs.getBoolean(KEY_PLAYLIST_TRACK_MENU_ARTWORK_COLOR, true)
@@ -2156,6 +2162,16 @@ object AppSettings {
     fun setGridTitleOverlay(value: Boolean) {
         gridTitleOverlay.value = value
         prefs.edit().putBoolean(KEY_GRID_TITLE_OVERLAY, value).apply()
+    }
+
+    fun setHideLibraryGridPlaylistPlayButton(value: Boolean) {
+        hideLibraryGridPlaylistPlayButton.value = value
+        prefs.edit().putBoolean(KEY_HIDE_LIBRARY_GRID_PLAY_BUTTON, value).apply()
+    }
+
+    fun setLibraryGridPlaylistMenuUsesArtworkColor(value: Boolean) {
+        libraryGridPlaylistMenuUsesArtworkColor.value = value
+        prefs.edit().putBoolean(KEY_LIBRARY_GRID_PLAYLIST_MENU_ARTWORK_COLOR, value).apply()
     }
 
     fun setLockBottomBarExpanded(value: Boolean) {
@@ -4825,6 +4841,8 @@ object AppSettings {
     private const val KEY_LOCK_BOTTOM_BAR_EXPANDED = "lock_bottom_bar_expanded"
     private const val KEY_GRID_COLUMNS_PREFIX = "grid_columns_"
     private const val KEY_GRID_TITLE_OVERLAY = "grid_title_overlay"
+    private const val KEY_HIDE_LIBRARY_GRID_PLAY_BUTTON = "hide_library_grid_playlist_play_button"
+    private const val KEY_LIBRARY_GRID_PLAYLIST_MENU_ARTWORK_COLOR = "library_grid_playlist_menu_artwork_color"
     private const val KEY_CUSTOM_FONT_PATH = "custom_font_path"
     private const val KEY_CUSTOM_FONT_NAME = "custom_font_name"
     private const val KEY_PLAYLIST_TRACK_MENU_ARTWORK_COLOR = "playlist_track_menu_artwork_color"

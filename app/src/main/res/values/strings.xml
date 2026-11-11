@@ -1315,6 +1315,10 @@
     <string name="mini_player_swipe_down_dismisses_subtitle">When off, swiping down will no longer close the mini player. On by default.</string>
     <string name="playlist_track_menu_artwork_color">Match playlist song menus and tag editor to artwork</string>
     <string name="playlist_track_menu_artwork_color_subtitle">Use the playlist cover for track menus and selected-song artwork for the bulk tag editor. On by default.</string>
+    <string name="library_grid_playlist_menu_artwork_color">Match Library playlist menus to artwork</string>
+    <string name="library_grid_playlist_menu_artwork_color_subtitle">Use each playlist cover’s colors in its grid action menu. On by default.</string>
+    <string name="hide_library_grid_playlist_play_button">Hide playlist grid play button</string>
+    <string name="hide_library_grid_playlist_play_button_subtitle">Hide the play button drawn over playlist covers in the Library grid. Off by default.</string>
     <string name="preload_album_art">Preload local album art on startup</string>
     <string name="preload_album_art_subtitle">Preload every local track cover at launch and keep the extracted images in app storage</string>
     <string name="preload_album_art_now">Preload artwork now</string>

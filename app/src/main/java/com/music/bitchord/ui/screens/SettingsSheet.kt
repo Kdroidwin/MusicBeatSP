@@ -1516,6 +1516,8 @@ fun SettingsScreen(
     val customFontName by AppSettings.customFontName.collectAsStateWithLifecycle()
     val gridColumns by AppSettings.gridColumns.collectAsStateWithLifecycle()
     val gridTitleOverlay by AppSettings.gridTitleOverlay.collectAsStateWithLifecycle()
+    val hideLibraryGridPlaylistPlayButton by AppSettings.hideLibraryGridPlaylistPlayButton.collectAsStateWithLifecycle()
+    val libraryGridPlaylistMenuUsesArtworkColor by AppSettings.libraryGridPlaylistMenuUsesArtworkColor.collectAsStateWithLifecycle()
     val lockBottomBarExpanded by AppSettings.lockBottomBarExpanded.collectAsStateWithLifecycle()
     val volumeHandoff by AppSettings.volumeHandoff.collectAsStateWithLifecycle()
     val autoplaySource by AppSettings.autoplaySource.collectAsStateWithLifecycle()
@@ -2142,7 +2144,7 @@ fun SettingsScreen(
         SettingsSearchEntry(
             stringResource(R.string.playlist_track_menu_artwork_color),
             stringResource(R.string.playlist_track_menu_artwork_color_subtitle),
-            listOf("playlist", "track menu", "tag editor", "bulk tag", "selected songs", "artwork", "color", "プレイリスト", "曲メニュー", "タグ編集", "一括タグ編集", "選択した曲", "アートワーク", "色"),
+            listOf("playlist", "track menu", "grid menu", "tag editor", "bulk tag", "selected songs", "artwork", "color", "プレイリスト", "曲メニュー", "グリッド", "タグ編集", "一括タグ編集", "選択した曲", "アートワーク", "色"),
             playlistTrackMenuUsesArtworkColor,
         ) { AppSettings.setPlaylistTrackMenuUsesArtworkColor(!playlistTrackMenuUsesArtworkColor) },
         SettingsSearchEntry(
@@ -2753,6 +2755,20 @@ fun SettingsScreen(
             checked = gridTitleOverlay,
             valueLabel = stringResource(if (gridTitleOverlay) R.string.grid_titles_on_art else R.string.grid_titles_below),
             activate = { AppSettings.setGridTitleOverlay(!gridTitleOverlay) },
+        ),
+        SettingsSearchEntry(
+            title = stringResource(R.string.hide_library_grid_playlist_play_button),
+            subtitle = stringResource(R.string.hide_library_grid_playlist_play_button_subtitle),
+            keywords = listOf("library", "playlist", "grid", "play button", "hide", "ライブラリ", "プレイリスト", "グリッド", "再生ボタン", "非表示"),
+            checked = hideLibraryGridPlaylistPlayButton,
+            activate = { AppSettings.setHideLibraryGridPlaylistPlayButton(!hideLibraryGridPlaylistPlayButton) },
+        ),
+        SettingsSearchEntry(
+            title = stringResource(R.string.library_grid_playlist_menu_artwork_color),
+            subtitle = stringResource(R.string.library_grid_playlist_menu_artwork_color_subtitle),
+            keywords = listOf("library", "playlist", "grid", "menu", "artwork", "color", "ライブラリ", "プレイリスト", "グリッド", "メニュー", "アルバムアート", "色"),
+            checked = libraryGridPlaylistMenuUsesArtworkColor,
+            activate = { AppSettings.setLibraryGridPlaylistMenuUsesArtworkColor(!libraryGridPlaylistMenuUsesArtworkColor) },
         ),
     ) + com.music.bitchord.data.settings.GridKind.entries.map { kind ->
         val label = when (kind) {
@@ -8896,6 +8912,34 @@ private fun GridSizeSettingsRows() {
         selectedIndex = if (titleOverlay) 1 else 0,
         onSelect = { AppSettings.setGridTitleOverlay(it == 1) },
         modifier = Modifier.padding(start = ROW_INSET, end = ROW_INSET, bottom = 14.dp),
+    )
+    val hidePlaylistPlayButton by AppSettings.hideLibraryGridPlaylistPlayButton.collectAsStateWithLifecycle()
+    RowDivider()
+    SettingsRow(
+        icon = Icons.Rounded.PlayArrow,
+        title = stringResource(R.string.hide_library_grid_playlist_play_button),
+        subtitle = stringResource(R.string.hide_library_grid_playlist_play_button_subtitle),
+        trailing = {
+            Switch(
+                checked = hidePlaylistPlayButton,
+                onCheckedChange = AppSettings::setHideLibraryGridPlaylistPlayButton,
+            )
+        },
+        onClick = { AppSettings.setHideLibraryGridPlaylistPlayButton(!hidePlaylistPlayButton) },
+    )
+    val playlistMenuUsesArtworkColor by AppSettings.libraryGridPlaylistMenuUsesArtworkColor.collectAsStateWithLifecycle()
+    RowDivider()
+    SettingsRow(
+        icon = Icons.Rounded.AutoAwesome,
+        title = stringResource(R.string.library_grid_playlist_menu_artwork_color),
+        subtitle = stringResource(R.string.library_grid_playlist_menu_artwork_color_subtitle),
+        trailing = {
+            Switch(
+                checked = playlistMenuUsesArtworkColor,
+                onCheckedChange = AppSettings::setLibraryGridPlaylistMenuUsesArtworkColor,
+            )
+        },
+        onClick = { AppSettings.setLibraryGridPlaylistMenuUsesArtworkColor(!playlistMenuUsesArtworkColor) },
     )
 }
 

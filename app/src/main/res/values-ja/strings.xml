@@ -1201,6 +1201,10 @@
     <string name="main_navigation_popup_subtitle">下部のタブバーを1つのボタンにまとめ、メニューから画面を選びます。初期設定はオフです</string>
     <string name="playlist_track_menu_artwork_color">プレイリスト内の曲メニューとタグ編集をアートワークの色に合わせる</string>
     <string name="playlist_track_menu_artwork_color_subtitle">曲メニューにはプレイリストのカバー色を、一括タグ編集には選択中の曲のアルバムアート色を使います。初期設定はオンです。</string>
+    <string name="library_grid_playlist_menu_artwork_color">ライブラリのプレイリストメニューをアートワークの色に合わせる</string>
+    <string name="library_grid_playlist_menu_artwork_color_subtitle">グリッド表示の操作メニューに、各プレイリストのカバー色を使います。初期設定はオンです。</string>
+    <string name="hide_library_grid_playlist_play_button">ライブラリのプレイリスト再生ボタンを非表示</string>
+    <string name="hide_library_grid_playlist_play_button_subtitle">ライブラリをグリッド表示したとき、カバー上の再生ボタンを隠します。初期設定はオフです。</string>
     <string name="preload_album_art">起動時にローカルのアートを読み込む</string>
     <string name="preload_album_art_subtitle">起動時に端末内の全曲のアートを先読みし、取得画像をアプリ内ストレージに保存します</string>
     <string name="preload_album_art_now">今すぐアートを先読み</string>

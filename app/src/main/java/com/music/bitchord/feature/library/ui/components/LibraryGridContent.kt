@@ -41,6 +41,8 @@ fun LibraryGridContent(
     librarySongs: List<Song> = emptyList(),
     smartPlaylistTrackCounts: Map<String, Int> = emptyMap(),
     favoriteUsesStar: Boolean = false,
+    hidePlaylistPlayButton: Boolean = false,
+    playlistMenuUsesArtworkColor: Boolean = true,
     visibleCategories: Set<LibraryCategory> = LibraryCategory.entries.toSet(),
     contentPadding: PaddingValues,
     modifier: Modifier = Modifier,
@@ -94,6 +96,8 @@ fun LibraryGridContent(
                     onMoveDown = { onMovePlaylist(playlist, 1) },
                     librarySongs = librarySongs,
                     resolvedTrackCount = smartPlaylistTrackCounts[playlist.id] ?: playlist.songIds.size,
+                    showPlayButton = !hidePlaylistPlayButton,
+                    menuUsesArtworkColor = playlistMenuUsesArtworkColor,
                 )
             }
 

@@ -301,6 +301,8 @@ fun LibraryScreen(
     val fullScreenCollectionArtwork by AppSettings.fullScreenCollectionArtwork.collectAsStateWithLifecycle()
     val keepCollectionArtworkAspectRatio by AppSettings.keepCollectionArtworkAspectRatio.collectAsStateWithLifecycle()
     val playlistTrackMenuUsesArtworkColor by AppSettings.playlistTrackMenuUsesArtworkColor.collectAsStateWithLifecycle()
+    val hideLibraryGridPlaylistPlayButton by AppSettings.hideLibraryGridPlaylistPlayButton.collectAsStateWithLifecycle()
+    val libraryGridPlaylistMenuUsesArtworkColor by AppSettings.libraryGridPlaylistMenuUsesArtworkColor.collectAsStateWithLifecycle()
     val favoritesLabel = stringResource(R.string.favorites)
     val playStatsRevision by LocalPlayStatsStore.revision.collectAsStateWithLifecycle()
     var smartPlaylistSongs by remember { mutableStateOf<Map<String, List<Song>>>(emptyMap()) }
@@ -1566,6 +1568,8 @@ fun LibraryScreen(
                             librarySongs = songs,
                             smartPlaylistTrackCounts = smartPlaylistTrackCounts,
                             favoriteUsesStar = favoriteUsesStar,
+                            hidePlaylistPlayButton = hideLibraryGridPlaylistPlayButton,
+                            playlistMenuUsesArtworkColor = libraryGridPlaylistMenuUsesArtworkColor,
                             visibleCategories = visibleLibraryCategories,
                             contentPadding = PaddingValues(
                                 top = 0.dp,
