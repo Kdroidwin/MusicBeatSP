@@ -767,6 +767,9 @@ private fun BitChordApp(
      * question this used to answer on its own: is the player covering the page?
      */
     var showNowPlaying by remember { mutableStateOf(false) }
+    var playerArtworkPreloadSong by remember { mutableStateOf<Song?>(null) }
+    var pendingArtworkPlayerOpenSong by remember { mutableStateOf<Song?>(null) }
+    var artworkReadyPlayerOpenSong by remember { mutableStateOf<Song?>(null) }
     var revealStatusBarDuringPlayerClose by remember { mutableStateOf(false) }
     LaunchedEffect(showNowPlaying) {
         revealStatusBarDuringPlayerClose = false
@@ -825,6 +828,9 @@ private fun BitChordApp(
     }
     fun dismissNowPlaying() {
         if (!showNowPlaying) return
+        pendingArtworkPlayerOpenSong = null
+        artworkReadyPlayerOpenSong = null
+        playerArtworkPreloadSong = null
         preparePlayerStatusBarReveal()
         if (playerArtworkTransitionEnabled && !widePlayerLayout) {
             playerSheetMotion.close()
@@ -1077,6 +1083,9 @@ private fun BitChordApp(
         },
     )
     val onDismissMusicBar: () -> Unit = {
+        pendingArtworkPlayerOpenSong = null
+        artworkReadyPlayerOpenSong = null
+        playerArtworkPreloadSong = null
         controller?.stop()
         controller?.clearMediaItems()
     }
@@ -1511,10 +1520,14 @@ private fun BitChordApp(
         val shouldStartPlayback = !pauseNextPlayRequest
         pauseNextPlayRequest = false
         playJob?.cancel()
+        pendingArtworkPlayerOpenSong = null
+        artworkReadyPlayerOpenSong = null
+        playerArtworkPreloadSong = null
         playRequestGeneration++
         activeRadioSeed = null
         playJob = scope.launch {
             if (songs.isEmpty()) return@launch
+            var requestedArtworkSong: Song? = null
             try {
                 val resolvedSongs = songs.map { s ->
                     if (s.localUri != null && !Downloads.isMissingLocalFile(s.localUri)) {
@@ -1553,12 +1566,36 @@ private fun BitChordApp(
                 val requestedIndex = index.coerceIn(songs.indices)
                 val startIndex = playable.indexOfFirst { (originalIndex, _) -> originalIndex >= requestedIndex }
                     .takeIf { it >= 0 } ?: 0
+                val selectedSong = playable[startIndex].second
+                requestedArtworkSong = selectedSong
+                if (!playerDocked) {
+                    // The full player opens as part of this action, so give its
+                    // artwork palette a head start before Media3 replaces the
+                    // current item and reports a new player state.
+                    playerArtworkPreloadSong = selectedSong
+                    pendingArtworkPlayerOpenSong = selectedSong
+                    artworkReadyPlayerOpenSong = null
+                }
                 controller?.playSongs(playable.map { it.second }, startIndex, shouldPlay = shouldStartPlayback)
                 // Nothing to raise where the player is already open beside the page.
-                openNowPlaying()
+                if (playerDocked || controller == null) {
+                    pendingArtworkPlayerOpenSong = null
+                    artworkReadyPlayerOpenSong = null
+                    playerArtworkPreloadSong = null
+                    openNowPlaying()
+                }
             } catch (cancelled: CancellationException) {
                 throw cancelled
             } catch (error: Exception) {
+                requestedArtworkSong?.let { requested ->
+                    if (pendingArtworkPlayerOpenSong?.isSameTrackAs(requested) == true) {
+                        pendingArtworkPlayerOpenSong = null
+                        artworkReadyPlayerOpenSong = null
+                    }
+                    if (playerArtworkPreloadSong?.isSameTrackAs(requested) == true) {
+                        playerArtworkPreloadSong = null
+                    }
+                }
                 TrackLog.e("Player", "Could not start the selected queue", error)
                 Toast.makeText(context, R.string.couldnt_load_tracks, Toast.LENGTH_SHORT).show()
             }
@@ -1586,11 +1623,24 @@ private fun BitChordApp(
      */
     val playRadio: (Song) -> Unit = { song ->
         playJob?.cancel()
+        pendingArtworkPlayerOpenSong = null
+        artworkReadyPlayerOpenSong = null
+        playerArtworkPreloadSong = null
         playRequestGeneration++
         activeRadioSeed = null
         playJob = scope.launch {
+            if (!playerDocked) {
+                playerArtworkPreloadSong = song
+                pendingArtworkPlayerOpenSong = song
+                artworkReadyPlayerOpenSong = null
+            }
             controller?.playSongs(listOf(song), 0)
-            openNowPlaying()
+            if (playerDocked || controller == null) {
+                pendingArtworkPlayerOpenSong = null
+                artworkReadyPlayerOpenSong = null
+                playerArtworkPreloadSong = null
+                openNowPlaying()
+            }
         }
     }
 
@@ -2410,12 +2460,34 @@ private fun BitChordApp(
             } else null,
         )
     }
+    LaunchedEffect(playerSong, playerArtworkPreloadSong, pendingArtworkPlayerOpenSong, artworkReadyPlayerOpenSong) {
+        val pending = pendingArtworkPlayerOpenSong
+        val ready = artworkReadyPlayerOpenSong
+        if (pending != null && ready?.isSameTrackAs(pending) == true && playerSong?.isSameTrackAs(pending) == true) {
+            pendingArtworkPlayerOpenSong = null
+            artworkReadyPlayerOpenSong = null
+            openNowPlaying()
+        }
+        if (
+            pendingArtworkPlayerOpenSong == null &&
+            playerSong != null &&
+            playerArtworkPreloadSong?.isSameTrackAs(playerSong) == true
+        ) {
+            playerArtworkPreloadSong = null
+        }
+    }
     // The compact player is visible before the expanded player is opened. Use
     // that time to warm the exact artwork palette and mesh keys the full player
     // will request, without delaying or changing audio playback.
+    val artworkSongToPreload = playerArtworkPreloadSong ?: playerSong
     PlayerArtworkBackdropPreloader(
-        song = playerSong,
-        enabled = !player.isLoading,
+        song = artworkSongToPreload,
+        enabled = artworkSongToPreload != null && (playerArtworkPreloadSong != null || !player.isLoading),
+        onArtworkReady = { readySong ->
+            if (pendingArtworkPlayerOpenSong?.isSameTrackAs(readySong) == true) {
+                artworkReadyPlayerOpenSong = readySong
+            }
+        },
     )
     // The three-dot menu snapshots the track into songActions when it's opened,
     // so a menu opened before the lookup above resolves would otherwise be
@@ -2728,7 +2800,12 @@ private fun BitChordApp(
         }
         BackHandler(
             enabled = detail != null,
-        ) { viewModel.closeDetail() }
+        ) {
+            pendingArtworkPlayerOpenSong = null
+            artworkReadyPlayerOpenSong = null
+            playerArtworkPreloadSong = null
+            viewModel.closeDetail()
+        }
         BackHandler(enabled = showSources) { showSources = false }
         BackHandler(enabled = showWearOs) { showWearOs = false }
         BackHandler(enabled = showSettings && !showWearOs) {
@@ -2738,6 +2815,9 @@ private fun BitChordApp(
         BackHandler(
             enabled = detail == null && !showSettings && !showReplay && selectedTab != TAB_SONGS,
         ) {
+            pendingArtworkPlayerOpenSong = null
+            artworkReadyPlayerOpenSong = null
+            playerArtworkPreloadSong = null
             selectedTab = TAB_SONGS
         }
         BackHandler(enabled = showListenBrainzLogin) { showListenBrainzLogin = false }
@@ -3706,6 +3786,11 @@ private fun BitChordApp(
                 // One tab handler, whichever bar is drawing it.
                 val onTabSelected: (Int) -> Unit = onTabSelected@{ visibleIndex ->
                     val index = visibleTabIndices.getOrNull(visibleIndex) ?: return@onTabSelected
+                    // A slow artwork lookup must not open the player after the
+                    // user has moved to another screen.
+                    pendingArtworkPlayerOpenSong = null
+                    artworkReadyPlayerOpenSong = null
+                    playerArtworkPreloadSong = null
                     if (index == TAB_SEARCH && selectedTab == TAB_SEARCH) {
                         searchFocusTrigger++
                     } else {

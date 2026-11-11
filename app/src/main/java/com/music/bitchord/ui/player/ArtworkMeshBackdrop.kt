@@ -12,10 +12,13 @@ import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.Immutable
 import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.SideEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.rememberUpdatedState
 import androidx.compose.runtime.setValue
+import androidx.compose.runtime.snapshotFlow
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
@@ -46,22 +49,25 @@ import com.music.bitchord.feature.localmusic.coil.LocalAudioArtworkFetcher
 import com.music.bitchord.ui.theme.rememberArtworkPalette
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.delay
+import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.withContext
+import kotlinx.coroutines.withTimeoutOrNull
 import kotlin.math.floor
 import kotlin.math.roundToInt
 import kotlin.random.Random
 
 /**
- * Reads the still artwork palette and its tiny backdrop mesh while the track
- * is already playing in the compact player. The expanded player uses the same
- * request keys, so opening it can paint the artwork colours on its first frame
- * instead of starting with the dark theme fallback and waiting for a decode.
- * Nothing in this path touches the media player or delays playback.
+ * Reads the still artwork palette and its tiny backdrop mesh while a track is
+ * starting or playing. The expanded player uses the same request keys, so the
+ * artwork colour can be ready before its first frame instead of starting with
+ * the dark theme fallback. The optional callback only coordinates presentation;
+ * it never touches the media player or delays playback.
  */
 @Composable
 fun PlayerArtworkBackdropPreloader(
     song: Song?,
     enabled: Boolean,
+    onArtworkReady: (Song) -> Unit = {},
 ) {
     if (song == null || !enabled) return
 
@@ -78,14 +84,38 @@ fun PlayerArtworkBackdropPreloader(
     // full-screen copy while a track is starting. Both caches key by artwork
     // identity rather than requested resolution, so the expanded player can
     // use these results without changing its sharp cover request.
-    rememberArtworkPalette(
+    val artworkPalette = rememberArtworkPalette(
         imageUrl = artUrl,
         dark = true,
         artPx = ROW_ART_PX,
         animateOnLoad = false,
     )
     rememberArtworkMesh(backdropArtworkUrl, artPx = ROW_ART_PX)
+
+    val paletteCacheKey = remember(artUrl, folderArtworkFallbackMode) {
+        artUrl.orEmpty() + "|folder-art-mode=" + folderArtworkFallbackMode.persistedValue
+    }
+    var paletteReady by remember(paletteCacheKey) {
+        mutableStateOf(artworkPalette.isResolved)
+    }
+    SideEffect { paletteReady = artworkPalette.isResolved }
+    val currentSong by rememberUpdatedState(song)
+    val currentOnArtworkReady by rememberUpdatedState(onArtworkReady)
+    LaunchedEffect(song, artUrl, backdropArtworkUrl, enabled) {
+        if (artUrl != null) {
+            // Opening directly from a song or album list can happen in the
+            // same frame that Media3 starts preparing the track. Warm the
+            // artwork first, with a short cap so a slow or unavailable image
+            // never holds the player closed indefinitely.
+            withTimeoutOrNull(PLAYER_ARTWORK_PALETTE_WAIT_MS) {
+                snapshotFlow { paletteReady }.first { it }
+            }
+        }
+        currentSong?.let(currentOnArtworkReady)
+    }
 }
+
+private const val PLAYER_ARTWORK_PALETTE_WAIT_MS = 800L
 
 /**
  * The artwork's own colours, upside down and reduced to a mesh, for the player
