@@ -106,7 +106,6 @@ fun SourcesScreen(
     val context = LocalContext.current
     val configs by SourceRegistry.configs.collectAsStateWithLifecycle()
     val webdavUrl by AppSettings.webdavUrl.collectAsStateWithLifecycle()
-    val webdavAllowInsecureHttp by AppSettings.webdavAllowInsecureHttp.collectAsStateWithLifecycle()
     val webdavUsername by AppSettings.webdavUsername.collectAsStateWithLifecycle()
     val webdavPassword by AppSettings.webdavPassword.collectAsStateWithLifecycle()
     val smbHost by AppSettings.smbHost.collectAsStateWithLifecycle()
@@ -241,13 +240,9 @@ fun SourcesScreen(
             disconnectTitle = stringResource(R.string.webdav_disconnect),
             configured = webdavUrl.isNotBlank(),
             testFailedRes = R.string.webdav_test_failed,
-            securityToggleTitle = stringResource(R.string.webdav_allow_insecure_http),
-            securityToggleSubtitle = stringResource(R.string.webdav_allow_insecure_http_subtitle),
-            securityAllowed = webdavAllowInsecureHttp,
-            onSecurityAllowedChange = AppSettings::setWebDavAllowInsecureHttp,
             onEdit = onEditWebDav,
             onTest = {
-                WebDavRepository.testConnection(webdavUrl, webdavUsername, webdavPassword, webdavAllowInsecureHttp)
+                WebDavRepository.testConnection(webdavUrl, webdavUsername, webdavPassword)
             },
             onDisconnect = { AppSettings.clearWebDav() },
         )
@@ -306,10 +301,6 @@ private fun RemoteLibrarySection(
     disconnectTitle: String,
     configured: Boolean,
     testFailedRes: Int,
-    securityToggleTitle: String? = null,
-    securityToggleSubtitle: String? = null,
-    securityAllowed: Boolean = false,
-    onSecurityAllowedChange: ((Boolean) -> Unit)? = null,
     onEdit: () -> Unit,
     onTest: suspend () -> Result<Unit>,
     onDisconnect: () -> Unit,
@@ -320,25 +311,6 @@ private fun RemoteLibrarySection(
     var testResult by remember { mutableStateOf<String?>(null) }
     SettingsGroup(header = title, footer = description) {
         SettingsRow(icon = icon, title = title, subtitle = subtitle, onClick = onEdit)
-        if (securityToggleTitle != null && onSecurityAllowedChange != null) {
-            RowDivider()
-            SettingsRow(
-                icon = Icons.Rounded.Cloud,
-                title = securityToggleTitle,
-                subtitle = securityToggleSubtitle.orEmpty(),
-                trailing = {
-                    Switch(
-                        checked = securityAllowed,
-                        onCheckedChange = onSecurityAllowedChange,
-                        colors = SwitchDefaults.colors(
-                            checkedTrackColor = MaterialTheme.colorScheme.primary,
-                            checkedBorderColor = MaterialTheme.colorScheme.primary,
-                        ),
-                    )
-                },
-                onClick = { onSecurityAllowedChange(!securityAllowed) },
-            )
-        }
         if (configured) {
             RowDivider()
             SettingsRow(

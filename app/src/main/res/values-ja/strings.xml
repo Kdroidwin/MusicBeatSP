@@ -893,7 +893,7 @@
     <string name="music_server_username">ユーザー名</string>
     <string name="music_server_password">パスワード</string>
     <string name="music_server_credential_note">認証情報は端末内で暗号化し、アプリのバックアップには含めません。</string>
-    <string name="music_server_allow_http">このサーバーで暗号化されないHTTPを許可します。通信中の認証情報と音声は暗号化されません。</string>
+    <string name="https_required">セキュリティのためHTTP接続は無効です。HTTPSのURLを入力してください。</string>
     <string name="music_server_test_ok">接続に成功しました</string>
     <string name="test_connection">接続テスト</string>
     <string name="edit">編集</string>
@@ -1615,8 +1615,6 @@
 <string name="webdav_not_configured">「ソース」でサーバーを接続してください</string>
 <string name="webdav_subtitle">サーバー上の音楽</string>
 <string name="webdav_test_failed">接続できません: %1$s</string>
-<string name="webdav_allow_insecure_http">暗号化されていないHTTPを許可</string>
-<string name="webdav_allow_insecure_http_subtitle">信頼できるローカルネットワークでのみ有効にしてください。通常はHTTPSを使用します。</string>
 
     <!-- Wear OS companion -->
     <string name="wear_os_section">Wear OS 向け MusicBeatSP</string>
@@ -1820,8 +1818,6 @@
     <string name="player_transport_spacing_value">%1$d dp</string>
     <string name="show_player_top_grabber">プレイヤー上部のハンドルを表示</string>
     <string name="show_player_top_grabber_subtitle">プレイヤーを閉じるときに使う上部の線を表示します。</string>
-    <string name="allow_cleartext_http">暗号化されていないHTTPを許可</string>
-    <string name="allow_cleartext_http_subtitle">初期設定はオフです。HTTPの利用にはサーバーごとの許可も必要です。認証情報と音源は暗号化されません。</string>
     <string name="lyrics_editor_source_embedded">埋め込み</string>
     <string name="lyrics_editor_source_downloaded">ダウンロード済み</string>
     <string name="lyrics_editor_source_file">ファイル</string>

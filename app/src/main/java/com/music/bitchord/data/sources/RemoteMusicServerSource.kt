@@ -52,7 +52,7 @@ abstract class RemoteMusicServerSource(
         get() = config.label.ifBlank { baseUrl?.host ?: config.kind.label }
 
     protected val baseUrl: HttpUrl? = config.baseUrl.trim().trimEnd('/').toHttpUrlOrNull()
-        ?.takeIf { it.scheme == "https" || (it.scheme == "http" && config.allowInsecureHttp) }
+        ?.takeIf { it.isHttps }
         ?.takeIf { it.username.isEmpty() && it.password.isEmpty() && it.query == null && it.fragment == null }
 
     // These API responses may contain or be sent alongside credentials. Do

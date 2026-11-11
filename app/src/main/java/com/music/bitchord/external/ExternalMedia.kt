@@ -277,7 +277,8 @@ object ExternalMedia {
 
     private fun readBytes(ctx: Context, u: String): ByteArray? {
         val max = 16 shl 20
-        if (u.startsWith("http://", ignoreCase = true) || u.startsWith("https://", ignoreCase = true)) {
+        if (u.startsWith("http://", ignoreCase = true)) return null
+        if (u.startsWith("https://", ignoreCase = true)) {
             val url = u.toHttpUrlOrNull()?.takeIf {
                 it.isHttps && it.port == 443 && it.encodedUsername.isEmpty() &&
                     it.encodedPassword.isEmpty() && !it.host.isIpLiteral()

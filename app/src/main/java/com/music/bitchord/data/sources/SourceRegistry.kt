@@ -21,6 +21,7 @@ import kotlinx.serialization.builtins.ListSerializer
 import kotlinx.serialization.json.Json
 import kotlinx.serialization.json.jsonArray
 import java.util.UUID
+import java.util.Locale
 import java.util.concurrent.ConcurrentHashMap
 import java.util.concurrent.atomic.AtomicInteger
 
@@ -39,8 +40,6 @@ data class SourceConfig(
     val label: String = "",
     val baseUrl: String = "",
     val enabled: Boolean = true,
-    /** Cleartext HTTP is opt-in because server credentials/audio would be visible on the network. */
-    val allowInsecureHttp: Boolean = false,
 ) {
     /** What the sources screen and the player show. Never blank. */
     val displayName: String
@@ -75,6 +74,7 @@ data class SourceConfig(
 object SourceRegistry {
 
     private const val TAG = "BitChord"
+    private const val KEY_MODULE_SCRIPT_PIN_PREFIX = "module_script_pin_"
 
     private var prefs: SharedPreferences? = null
 
@@ -91,7 +91,6 @@ object SourceRegistry {
      * tracks instead of re-probing on every resolve.
      */
     private var instances: Map<String, MusicSource> = emptyMap()
-    private val temporaryCleartextOrigins = ConcurrentHashMap<String, AtomicInteger>()
     private val temporaryRemoteServerOrigins = ConcurrentHashMap<String, AtomicInteger>()
 
     fun init(context: Context) {
@@ -236,18 +235,6 @@ object SourceRegistry {
         config.enabled && config.kind.isRemoteMusicServer && config.isComplete
     }
 
-    /** Allows cleartext only to an explicitly opted-in server origin. */
-    fun isCleartextAllowed(url: okhttp3.HttpUrl): Boolean {
-        if (url.isHttps) return true
-        if (url.scheme != "http") return false
-        if ((temporaryCleartextOrigins["${url.host}:${url.port}"]?.get() ?: 0) > 0) return true
-        return configs.value.any { config ->
-            if (!config.enabled || !config.allowInsecureHttp || !config.kind.isRemoteMusicServer) return@any false
-            val base = config.baseUrl.toHttpUrlOrNull() ?: return@any false
-            base.scheme == "http" && base.host == url.host && base.port == url.port && config.isComplete
-        }
-    }
-
     /** Limits authenticated Jellyfin/OpenSubsonic requests to their configured origin. */
     fun isRemoteServerOriginAllowed(url: okhttp3.HttpUrl): Boolean {
         val origin = remoteServerOrigin(url)
@@ -272,11 +259,8 @@ object SourceRegistry {
         ) {
             return Result.failure(IllegalArgumentException("Use a server URL without credentials, query, or fragment"))
         }
-        if (parsedUrl.scheme == "http" && !config.allowInsecureHttp) {
-            return Result.failure(IllegalArgumentException("Allow unencrypted HTTP to use this server"))
-        }
-        if (parsedUrl.scheme !in setOf("http", "https")) {
-            return Result.failure(IllegalArgumentException("Server URL must use HTTP or HTTPS"))
+        if (!parsedUrl.isHttps) {
+            return Result.failure(IllegalArgumentException("Server URL must use HTTPS"))
         }
         if (credentials.username.isBlank() || credentials.password.isBlank()) {
             return Result.failure(IllegalArgumentException("Username and password are required"))
@@ -338,6 +322,27 @@ object SourceRegistry {
         publish(configs.value.filterNot { it.id == configId })
     }
 
+    /** TOFU integrity pin for scripts fetched from a user-configured module source. */
+    fun verifyAndPinModuleScript(
+        sourceId: String,
+        moduleId: String,
+        actualSha256: String,
+        declaredSha256: String?,
+    ): Boolean {
+        if (!sourceId.matches(Regex("[A-Za-z0-9_-]{1,128}")) || moduleId.isBlank() || moduleId.length > 256) return false
+        if (!actualSha256.matches(Regex("[0-9a-f]{64}"))) return false
+        val declared = declaredSha256?.trim()?.lowercase(Locale.ROOT)
+        if (declared != null && (!declared.matches(Regex("[0-9a-f]{64}")) || declared != actualSha256)) return false
+        val store = prefs ?: return false
+        val moduleKey = java.security.MessageDigest.getInstance("SHA-256")
+            .digest(moduleId.toByteArray(Charsets.UTF_8))
+            .joinToString("") { "%02x".format(Locale.ROOT, it) }
+        val key = "$KEY_MODULE_SCRIPT_PIN_PREFIX${sourceId}_$moduleKey"
+        val pinned = store.getString(key, null)
+        if (pinned != null) return pinned == actualSha256
+        return store.edit().putString(key, actualSha256).commit()
+    }
+
     /**
      * Turns one source on or off.
      *
@@ -383,11 +388,16 @@ object SourceRegistry {
 
     private fun publish(next: List<SourceConfig>, persist: Boolean = true) {
         val previousConfigs = configs.value
+        previousConfigs.forEach { previousConfig ->
+            val currentConfig = next.firstOrNull { it.id == previousConfig.id }
+            if (currentConfig == null || currentConfig.baseUrl != previousConfig.baseUrl) {
+                clearModuleScriptPins(previousConfig.id)
+            }
+        }
         configs.value = next
         previousConfigs.filter { it.kind.isRemoteMusicServer }.forEach { previous ->
             val current = next.firstOrNull { it.id == previous.id }
-            if (current == null || !current.enabled || current.baseUrl != previous.baseUrl ||
-                current.allowInsecureHttp != previous.allowInsecureHttp
+            if (current == null || !current.enabled || current.baseUrl != previous.baseUrl
             ) {
                 Http.cancelRequestsForOrigin(previous.baseUrl)
             }
@@ -413,6 +423,13 @@ object SourceRegistry {
         if (persist) prefs?.edit()?.apply {
             putString(KEY_SOURCES, json.encodeToString(ListSerializer(SourceConfig.serializer()), next))
         }?.apply()
+    }
+
+    private fun clearModuleScriptPins(sourceId: String) {
+        val store = prefs ?: return
+        val prefix = "$KEY_MODULE_SCRIPT_PIN_PREFIX${sourceId}_"
+        val keys = store.all.keys.filter { it.startsWith(prefix) }
+        if (keys.isNotEmpty()) store.edit().apply { keys.forEach { remove(it) } }.commit()
     }
 
     private fun migrateLegacyPlainSources(context: Context, encrypted: SharedPreferences) {
@@ -528,23 +545,12 @@ object SourceRegistry {
         val temporaryRemoteOrigin = parsed
             ?.takeIf { config.kind.isRemoteMusicServer }
             ?.let(::remoteServerOrigin)
-        val temporaryOrigin = parsed
-            ?.takeIf { it.scheme == "http" && config.allowInsecureHttp }
-            ?.let { "${it.host}:${it.port}" }
         temporaryRemoteOrigin?.let { origin ->
             temporaryRemoteServerOrigins.computeIfAbsent(origin) { AtomicInteger() }.incrementAndGet()
-        }
-        temporaryOrigin?.let { origin ->
-            temporaryCleartextOrigins.computeIfAbsent(origin) { AtomicInteger() }.incrementAndGet()
         }
         return try {
             build(config, credentials).health()
         } finally {
-            temporaryOrigin?.let { origin ->
-                temporaryCleartextOrigins.computeIfPresent(origin) { _, count ->
-                    if (count.decrementAndGet() <= 0) null else count
-                }
-            }
             temporaryRemoteOrigin?.let { origin ->
                 temporaryRemoteServerOrigins.computeIfPresent(origin) { _, count ->
                     if (count.decrementAndGet() <= 0) null else count

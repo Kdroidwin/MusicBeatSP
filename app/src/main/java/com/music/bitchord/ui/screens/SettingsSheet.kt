@@ -1542,7 +1542,6 @@ fun SettingsScreen(
     val playerSideControlScale by AppSettings.playerSideControlScale.collectAsStateWithLifecycle()
     val playerOuterActionControlScale by AppSettings.playerOuterActionControlScale.collectAsStateWithLifecycle()
     val showPlayerTopGrabber by AppSettings.showPlayerTopGrabber.collectAsStateWithLifecycle()
-    val cleartextHttpAllowed by AppSettings.cleartextHttpAllowed.collectAsStateWithLifecycle()
     val parametricEqEnabled by AppSettings.parametricEqEnabled.collectAsStateWithLifecycle()
     val tpdfDitherEnabled by AppSettings.tpdfDitherEnabled.collectAsStateWithLifecycle()
     val channelSwapEnabled by AppSettings.channelSwapEnabled.collectAsStateWithLifecycle()
@@ -2532,12 +2531,6 @@ fun SettingsScreen(
             listOf("library", "remote", "server", "webdav", "jellyfin", "navidrome", "subsonic", "nextcloud", "ライブラリ", "リモート", "サーバー", "音源"),
             includeRemoteSourceMediaInLibrary,
         ) { AppSettings.setIncludeRemoteSourceMediaInLibrary(!includeRemoteSourceMediaInLibrary) },
-        SettingsSearchEntry(
-            stringResource(R.string.allow_cleartext_http),
-            stringResource(R.string.allow_cleartext_http_subtitle),
-            listOf("http", "cleartext", "insecure", "network", "HTTP", "平文", "通信", "セキュリティ", "安全でない"),
-            cleartextHttpAllowed,
-        ) { AppSettings.setCleartextHttpAllowed(!cleartextHttpAllowed) },
         musicFolderRootSearchEntry(localMusicFolderRoot) { musicFolderRootPicker.launch(null) },
         SettingsSearchEntry(
             stringResource(R.string.full_screen_collection_artwork),
@@ -6571,7 +6564,6 @@ fun SettingsScreen(
         if (!context.packageName.endsWith(".nointernet")) {
             MusicServersSettingsGroup(
                 onClick = { showMusicServersSheet = true },
-                cleartextHttpAllowed = cleartextHttpAllowed,
             )
         }
 
@@ -8808,7 +8800,6 @@ private fun SpotifyCanvasSetupDialog(
 @Composable
 private fun MusicServersSettingsGroup(
     onClick: () -> Unit,
-    cleartextHttpAllowed: Boolean,
 ) {
     SettingsGroup(header = stringResource(R.string.music_servers)) {
         SettingsRow(
@@ -8817,23 +8808,6 @@ private fun MusicServersSettingsGroup(
             subtitle = stringResource(R.string.music_servers_subtitle),
             trailing = { Chevron() },
             onClick = onClick,
-        )
-        RowDivider()
-        SettingsRow(
-            icon = Icons.Rounded.Dns,
-            title = stringResource(R.string.allow_cleartext_http),
-            subtitle = stringResource(R.string.allow_cleartext_http_subtitle),
-            trailing = {
-                Switch(
-                    checked = cleartextHttpAllowed,
-                    onCheckedChange = AppSettings::setCleartextHttpAllowed,
-                    colors = SwitchDefaults.colors(
-                        checkedTrackColor = MaterialTheme.colorScheme.primary,
-                        checkedBorderColor = MaterialTheme.colorScheme.primary,
-                    ),
-                )
-            },
-            onClick = { AppSettings.setCleartextHttpAllowed(!cleartextHttpAllowed) },
         )
     }
 }

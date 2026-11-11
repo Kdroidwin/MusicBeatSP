@@ -147,7 +147,7 @@ fun MiniPlayer(
     val localAwareArtworkModel = remember(song, folderArtworkFallbackMode) { song.artworkAt(ROW_ART_PX) }
     val remoteArtworkFallback = remember(song.thumbnailUrl) {
         song.thumbnailUrl
-            ?.takeIf { it.startsWith("http://", ignoreCase = true) || it.startsWith("https://", ignoreCase = true) }
+            ?.takeIf { it.startsWith("https://", ignoreCase = true) }
             .artworkAt(ROW_ART_PX)
     }
     var useRemoteArtworkFallback by remember(song, folderArtworkFallbackMode) {

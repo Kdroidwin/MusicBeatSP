@@ -3,6 +3,7 @@ package com.music.bitchord.data.sources.module
 import android.util.Log
 import com.music.bitchord.data.TrackLog
 import com.music.bitchord.data.Http
+import com.music.bitchord.data.sources.SourceRegistry
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
@@ -43,7 +44,7 @@ internal fun redactModuleUrl(url: String): String =
  * One instance should be held per [ModuleSource] config so that loaded
  * engines survive across successive search calls.
  */
-class ModuleManager {
+class ModuleManager(private val sourceConfigId: String) {
 
     private val json = Json {
         isLenient = true
@@ -226,6 +227,21 @@ class ModuleManager {
                 }
                 readBoundedBody(resp.body, MAX_MODULE_SCRIPT_BYTES)
                     ?: throw Exception("Empty body for module ${module.id}")
+            }
+            val actualSha256 = java.security.MessageDigest.getInstance("SHA-256")
+                .digest(jsCode.toByteArray(StandardCharsets.UTF_8))
+                .joinToString("") { "%02x".format(it) }
+            val declaredHashes = listOfNotNull(module.sha256, module.scriptSha256)
+                .map { it.trim().lowercase(java.util.Locale.ROOT) }
+                .distinct()
+            if (declaredHashes.size > 1 || !SourceRegistry.verifyAndPinModuleScript(
+                    sourceConfigId,
+                    module.id,
+                    actualSha256,
+                    declaredHashes.singleOrNull(),
+                )
+            ) {
+                throw IOException("Module script changed or failed its integrity check; remove and re-add the source to trust it again")
             }
             val baseUrl = downloadUrl.substringBeforeLast("/")
 

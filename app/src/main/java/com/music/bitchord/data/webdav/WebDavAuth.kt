@@ -14,28 +14,25 @@ object WebDavAuth {
     @Volatile var host: String? = null
     @Volatile var authHeader: String? = null
     @Volatile private var configuredRoot: HttpUrl? = null
-    @Volatile private var allowCleartext = false
 
     /** [host] and [header] as WebDavConfig derives them from the saved server. */
     fun update(host: String?, header: String?) {
         this.host = host
         authHeader = header
         configuredRoot = host?.let { "https://$it/".toHttpUrlOrNull() }
-        allowCleartext = false
     }
 
     /** Publish a saved server and scope its credentials to that server root. */
-    fun update(url: String, username: String, password: String, allowInsecureHttp: Boolean = false) {
+    fun update(url: String, username: String, password: String) {
         val normalized = WebDavConfig.normalizeUrl(url)
         val parsed = normalized.toHttpUrlOrNull()
         val root = parsed?.takeIf {
             it.username.isEmpty() && it.password.isEmpty() && it.query == null && it.fragment == null &&
-                (it.isHttps || (it.scheme == "http" && allowInsecureHttp))
+                it.isHttps
         }
         configuredRoot = root
         host = root?.host
         authHeader = if (username.isBlank() && password.isBlank()) null else WebDavConfig.basicAuthHeader(username, password)
-        allowCleartext = allowInsecureHttp && root?.scheme == "http"
     }
 
     /** A URL is in scope only when it stays on the configured origin and path. */
@@ -45,12 +42,8 @@ object WebDavAuth {
         // server-controlled credential. Fragments are never part of a DAV
         // request and can hide misleading path text in diagnostics/UI.
         if (url.username.isNotEmpty() || url.password.isNotEmpty() || url.fragment != null) return false
-        return sameOrigin(root, url) && withinRoot(root, url) &&
-            (url.isHttps || (allowCleartext && url.scheme == "http"))
+        return url.isHttps && sameOrigin(root, url) && withinRoot(root, url)
     }
-
-    fun isCleartextAllowed(url: HttpUrl): Boolean =
-        allowCleartext && url.scheme == "http" && isAllowedUrl(url)
 
     fun authHeaderFor(url: HttpUrl): String? = authHeader?.takeIf { isAllowedUrl(url) }
 

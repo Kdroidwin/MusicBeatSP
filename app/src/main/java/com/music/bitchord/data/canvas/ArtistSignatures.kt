@@ -59,11 +59,11 @@ object ArtistSignatureRepository {
     fun normalizeBaseUrl(raw: String): String =
         raw.trim().trimEnd('/').take(MAX_BASE_URL_LENGTH)
 
-    /** Only http(s) URLs are ever requested. Blank never is. */
+    /** Only HTTPS URLs are ever requested. Blank never is. */
     fun isValidBaseUrl(baseUrl: String): Boolean {
         val base = normalizeBaseUrl(baseUrl)
         if (base.isEmpty()) return false
-        return base.startsWith("http://") || base.startsWith("https://")
+        return base.startsWith("https://", ignoreCase = true)
     }
 
     /** Effective base, or null when the provider is off/unconfigured. */

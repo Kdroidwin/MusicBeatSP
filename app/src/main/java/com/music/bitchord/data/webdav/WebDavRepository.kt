@@ -40,8 +40,7 @@ object WebDavRepository {
         url: String,
         username: String,
         password: String,
-        allowInsecureHttp: Boolean = false,
-    ): Result<Unit> = WebDavClient.testConnection(url, username, password, allowInsecureHttp)
+    ): Result<Unit> = WebDavClient.testConnection(url, username, password)
 
     fun WebDavClient.Entry.toSong(
         artworkUrl: String? = null,

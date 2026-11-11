@@ -36,8 +36,8 @@ object WebDavConfig {
             .trimEnd('/')
     }
 
-    fun isValid(url: String, allowInsecureHttp: Boolean): Boolean =
-        normalizeUrl(url).toHttpUrlOrNull()?.let { it.isHttps || (it.scheme == "http" && allowInsecureHttp) } == true
+    fun isValid(url: String): Boolean =
+        normalizeUrl(url).toHttpUrlOrNull()?.isHttps == true
 
     fun isConfigured(url: String): Boolean =
         normalizeUrl(url).toHttpUrlOrNull()?.let(WebDavAuth::isAllowedUrl) == true

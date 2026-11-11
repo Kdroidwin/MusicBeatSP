@@ -84,14 +84,6 @@ object Http {
         activeNetworkCalls.toList().forEach { call -> runCatching { call.cancel() } }
     }
 
-    /** Stops active cleartext requests when the app-wide HTTP consent is withdrawn. */
-    fun cancelCleartextRequests() {
-        activeNetworkCalls.toList().forEach { call ->
-            val isCleartext = runCatching { !call.request().url.isHttps }.getOrDefault(false)
-            if (isCleartext) runCatching { call.cancel() }
-        }
-    }
-
     /** Stops requests and streams tied to one configured remote-server origin. */
     fun cancelRequestsForOrigin(url: String) {
         val origin = url.trim().toHttpUrlOrNull() ?: return
@@ -249,11 +241,9 @@ object Http {
                 if (!responseBodyOwnsTracking) removeTrackedCall()
             }
         }
-        // Network Security Config permits cleartext at the Android layer so
-        // self-hosted LAN servers can be used when the user explicitly opts
-        // into HTTP for that server. Keep the actual app-wide gate here and
-        // match the exact configured origin; redirects to other HTTP hosts
-        // are denied as each network exchange passes through this interceptor.
+        // Enforce HTTPS at the request boundary as well as in Android's
+        // Network Security Config. This also covers redirects and callers
+        // that build URLs from user-provided source indexes.
         .addNetworkInterceptor { chain ->
             val request = chain.request()
             if (AppSettings.offlineMode.value) throw IOException("Offline mode is enabled")
@@ -277,13 +267,7 @@ object Http {
             ) {
                 throw IOException("Remote-server credentials cannot be sent to an unconfigured host")
             }
-            val cleartextAllowed = AppSettings.cleartextHttpAllowed.value && (
-                com.music.bitchord.data.webdav.WebDavAuth.isCleartextAllowed(request.url) ||
-                    com.music.bitchord.data.sources.SourceRegistry.isCleartextAllowed(request.url)
-                )
-            if (!request.url.isHttps && !cleartextAllowed) {
-                throw IOException("Unencrypted HTTP is not enabled for this server")
-            }
+            if (!request.url.isHttps) throw IOException("Only HTTPS requests are allowed")
             chain.proceed(
                 if (webDavScopedRequest) request.newBuilder().removeHeader(WEB_DAV_SCOPED_AUTH_HEADER).build()
                 else request,
@@ -296,7 +280,7 @@ object Http {
      * Transport for user-configured addons and downloaded source modules.
      * Those scripts can choose request URLs, so they must never inherit the
      * playback client's automatic WebDAV Basic credentials. Keep the same
-     * offline, YouTube opt-in, remote-server credential, and cleartext gates;
+     * offline, YouTube opt-in, remote-server credential, and HTTPS gates;
      * only the implicit WebDAV credential injection is intentionally absent.
      */
     val untrustedClient: OkHttpClient = OkHttpClient.Builder()
@@ -362,13 +346,7 @@ object Http {
             ) {
                 throw IOException("Remote-server credentials cannot be sent to an unconfigured host")
             }
-            val cleartextAllowed = AppSettings.cleartextHttpAllowed.value && (
-                com.music.bitchord.data.webdav.WebDavAuth.isCleartextAllowed(request.url) ||
-                    com.music.bitchord.data.sources.SourceRegistry.isCleartextAllowed(request.url)
-                )
-            if (!request.url.isHttps && !cleartextAllowed) {
-                throw IOException("Unencrypted HTTP is not enabled for this server")
-            }
+            if (!request.url.isHttps) throw IOException("Only HTTPS requests are allowed")
             chain.proceed(
                 if (webDavScopedRequest) request.newBuilder().removeHeader(WEB_DAV_SCOPED_AUTH_HEADER).build()
                 else request,

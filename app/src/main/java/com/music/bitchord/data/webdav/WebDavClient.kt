@@ -55,12 +55,11 @@ object WebDavClient {
         url: String,
         username: String,
         password: String,
-        allowInsecureHttp: Boolean = false,
     ): Result<Unit> =
         withContext(Dispatchers.IO) {
             runCatching {
                 val target = WebDavConfig.normalizeUrl(url)
-                require(WebDavConfig.isValid(target, allowInsecureHttp)) { "Enter a valid HTTPS URL, or explicitly allow HTTP" }
+                require(WebDavConfig.isValid(target)) { "Enter a valid HTTPS URL" }
                 val request = propfindRequest(target, depth = "0", username, password)
                 davClient.newCall(request).execute().use { response ->
                     if (response.code !in 200..299 && response.code != 207) {

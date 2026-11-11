@@ -706,8 +706,6 @@ object AppSettings {
     val whiteCollectionPlayButton = MutableStateFlow(true)
     /** Shows the small drag handle at the top of the expanded player by default. */
     val showPlayerTopGrabber = MutableStateFlow(true)
-    /** App-level second consent for cleartext connections to a configured local server. */
-    val cleartextHttpAllowed = MutableStateFlow(false)
     /** Uses white controls with black glyphs below album and playlist artwork. */
     val whiteCollectionActionButtons = MutableStateFlow(false)
     /** Replaces the settings gear on the main top bar with an overflow glyph. */
@@ -1279,7 +1277,6 @@ object AppSettings {
     val webdavUrl = MutableStateFlow("")
     val webdavUsername = MutableStateFlow("")
     val webdavPassword = MutableStateFlow("")
-    val webdavAllowInsecureHttp = MutableStateFlow(false)
     val smbHost = MutableStateFlow("")
     val smbShare = MutableStateFlow("")
     val smbBasePath = MutableStateFlow("")
@@ -1404,6 +1401,12 @@ object AppSettings {
     fun init(context: Context) {
         appContext = context.applicationContext
         prefs = appContext.getSharedPreferences("bitchord_settings", Context.MODE_PRIVATE)
+        // Clear legacy opt-ins. All app-originated HTTP is now rejected at
+        // the platform and client layers; a restored backup cannot re-enable it.
+        prefs.edit()
+            .remove("cleartext_http_allowed")
+            .remove("webdav_allow_http")
+            .apply()
         authStore = AuthStore(appContext)
         migratePlaintextCredentials()
         migrateScopedMusicAccessBackToAudioPermission()
@@ -1651,7 +1654,6 @@ object AppSettings {
         hidePlaylistPlayButtonLabel.value = prefs.getBoolean(KEY_HIDE_PLAYLIST_PLAY_BUTTON_LABEL, false)
         whiteCollectionPlayButton.value = prefs.getBoolean(KEY_WHITE_COLLECTION_PLAY_BUTTON, true)
         showPlayerTopGrabber.value = prefs.getBoolean(KEY_SHOW_PLAYER_TOP_GRABBER, true)
-        cleartextHttpAllowed.value = prefs.getBoolean(KEY_CLEARTEXT_HTTP_ALLOWED, false)
         whiteCollectionActionButtons.value = prefs.getBoolean(KEY_WHITE_COLLECTION_ACTION_BUTTONS, false)
         settingsTopBarUsesMoreIcon.value = prefs.getBoolean(KEY_SETTINGS_TOP_BAR_MORE_ICON, false)
         hideSettingsIconOnScroll.value = prefs.getBoolean(KEY_HIDE_SETTINGS_ICON_ON_SCROLL, true)
@@ -1963,7 +1965,6 @@ object AppSettings {
         lastOpenedFolderPath.value = prefs.getString(KEY_LAST_OPENED_FOLDER_PATH, "").orEmpty()
         localMusicFolderUri.value = prefs.getString(KEY_LOCAL_MUSIC_FOLDER_PATH, "").orEmpty()
         webdavUrl.value = prefs.getString(KEY_WEBDAV_URL, "").orEmpty()
-        webdavAllowInsecureHttp.value = prefs.getBoolean(KEY_WEBDAV_ALLOW_HTTP, false)
         webdavUsername.value = authStore.getProtectedValue(KEY_WEBDAV_USERNAME).orEmpty()
         webdavPassword.value = authStore.getProtectedValue(KEY_WEBDAV_PASSWORD).orEmpty()
         smbHost.value = prefs.getString(KEY_SMB_HOST, "").orEmpty()
@@ -1975,7 +1976,7 @@ object AppSettings {
             smbHost.value, smbShare.value, smbBasePath.value, smbUsername.value, smbPassword.value,
         )
         com.music.bitchord.data.webdav.WebDavAuth.update(
-            webdavUrl.value, webdavUsername.value, webdavPassword.value, webdavAllowInsecureHttp.value,
+            webdavUrl.value, webdavUsername.value, webdavPassword.value,
         )
         fullScreenCollectionArtwork.value = prefs.getBoolean(KEY_FULL_SCREEN_COLLECTION_ARTWORK, false)
         smartPlaylistsEnabled.value = prefs.getBoolean(KEY_SMART_PLAYLISTS_ENABLED, false)
@@ -2490,12 +2491,6 @@ object AppSettings {
     fun setShowPlayerTopGrabber(value: Boolean) {
         showPlayerTopGrabber.value = value
         prefs.edit().putBoolean(KEY_SHOW_PLAYER_TOP_GRABBER, value).apply()
-    }
-
-    fun setCleartextHttpAllowed(value: Boolean) {
-        cleartextHttpAllowed.value = value
-        prefs.edit().putBoolean(KEY_CLEARTEXT_HTTP_ALLOWED, value).apply()
-        if (!value) com.music.bitchord.data.Http.cancelCleartextRequests()
     }
 
     fun setWhiteCollectionActionButtons(value: Boolean) {
@@ -4399,12 +4394,6 @@ object AppSettings {
         publishWebDavAuth()
     }
 
-    fun setWebDavAllowInsecureHttp(value: Boolean) {
-        webdavAllowInsecureHttp.value = value
-        prefs.edit().putBoolean(KEY_WEBDAV_ALLOW_HTTP, value).apply()
-        publishWebDavAuth()
-    }
-
     fun setWebDavUsername(value: String) {
         val normalized = value.trim()
         webdavUsername.value = normalized
@@ -4454,7 +4443,6 @@ object AppSettings {
 
     fun clearWebDav() {
         setWebDavUrl("")
-        setWebDavAllowInsecureHttp(false)
         setWebDavUsername("")
         setWebDavPassword("")
     }
@@ -4477,7 +4465,7 @@ object AppSettings {
     private fun publishWebDavAuth() {
         if (!this::prefs.isInitialized || !this::authStore.isInitialized) return
         com.music.bitchord.data.webdav.WebDavAuth.update(
-            webdavUrl.value, webdavUsername.value, webdavPassword.value, webdavAllowInsecureHttp.value,
+            webdavUrl.value, webdavUsername.value, webdavPassword.value,
         )
     }
 
@@ -4758,9 +4746,6 @@ object AppSettings {
         KEY_LOCAL_MUSIC_SCOPE_REQUIRED,
         KEY_ALL_FILES_PERMISSION_ASKED,
         KEY_CD_RIPPING_OUTPUT_TREE_URI,
-        // Network trust/cleartext consent is device-specific and should not
-        // silently enable unencrypted requests after restoring a backup.
-        KEY_CLEARTEXT_HTTP_ALLOWED,
     )
 
     private val OBSOLETE_ONLINE_KEYS = setOf(
@@ -4859,7 +4844,6 @@ object AppSettings {
     private const val KEY_HIDE_PLAYLIST_PLAY_BUTTON_LABEL = "hide_playlist_play_button_label"
     private const val KEY_WHITE_COLLECTION_PLAY_BUTTON = "white_collection_play_button"
     private const val KEY_SHOW_PLAYER_TOP_GRABBER = "show_player_top_grabber"
-    private const val KEY_CLEARTEXT_HTTP_ALLOWED = "cleartext_http_allowed"
     private const val KEY_WHITE_COLLECTION_ACTION_BUTTONS = "white_collection_action_buttons"
     private const val KEY_SETTINGS_TOP_BAR_MORE_ICON = "settings_top_bar_more_icon"
     private const val KEY_HIDE_SETTINGS_ICON_ON_SCROLL = "hide_settings_icon_on_scroll"
@@ -5096,7 +5080,6 @@ object AppSettings {
     private const val KEY_WEBDAV_URL = "webdav_url"
     private const val KEY_WEBDAV_USERNAME = "webdav_username"
     private const val KEY_WEBDAV_PASSWORD = "webdav_password"
-    private const val KEY_WEBDAV_ALLOW_HTTP = "webdav_allow_http"
     private const val KEY_SMB_HOST = "smb_host"
     private const val KEY_SMB_SHARE = "smb_share"
     private const val KEY_SMB_BASE_PATH = "smb_base_path"

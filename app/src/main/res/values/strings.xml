@@ -1009,7 +1009,7 @@
     <string name="music_server_username">Username</string>
     <string name="music_server_password">Password</string>
     <string name="music_server_credential_note">Credentials are encrypted on this device and excluded from app backups.</string>
-    <string name="music_server_allow_http">Allow unencrypted HTTP for this server. Credentials and audio will not be encrypted on the network.</string>
+    <string name="https_required">HTTP connections are disabled for security. Enter an HTTPS URL.</string>
     <string name="music_server_test_ok">Connection successful</string>
     <string name="test_connection">Test connection</string>
     <string name="edit">Edit</string>
@@ -1717,8 +1717,6 @@
 <string name="webdav_not_configured">Connect a server under Sources</string>
 <string name="webdav_subtitle">Music on your server</string>
 <string name="webdav_test_failed">Couldn’t reach it: %1$s</string>
-<string name="webdav_allow_insecure_http">Allow unencrypted HTTP</string>
-<string name="webdav_allow_insecure_http_subtitle">Only enable this for a trusted local network. HTTPS remains preferred.</string>
 
     <!-- Wear OS companion -->
     <string name="wear_os_section">MusicBeatSP for Wear OS</string>
@@ -1847,8 +1845,6 @@
     <string name="player_transport_spacing_value">%1$d dp</string>
     <string name="show_player_top_grabber">Show player top handle</string>
     <string name="show_player_top_grabber_subtitle">Show the line used to drag the player closed.</string>
-    <string name="allow_cleartext_http">Allow cleartext HTTP</string>
-    <string name="allow_cleartext_http_subtitle">Off by default. HTTP also requires the server-specific HTTP option. Credentials and media are unencrypted.</string>
     <string name="lyrics_editor_source_embedded">Embedded</string>
     <string name="lyrics_editor_source_downloaded">Downloaded</string>
     <string name="lyrics_editor_source_file">File</string>

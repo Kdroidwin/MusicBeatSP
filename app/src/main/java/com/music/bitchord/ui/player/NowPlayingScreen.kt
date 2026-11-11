@@ -1012,7 +1012,7 @@ fun NowPlayingScreen(
     val folderArtworkFallbackMode by AppSettings.folderArtworkFallbackMode.collectAsStateWithLifecycle()
     val artUrl = remember(song, folderArtworkFallbackMode) { song.artworkAt(ART_PX) }
     val remoteArtFallbackUrl = song.thumbnailUrl?.artworkAt(ART_PX)
-        ?.takeIf { it.startsWith("http://") || it.startsWith("https://") }
+        ?.takeIf { it.startsWith("https://", ignoreCase = true) }
         ?.takeIf { it != artUrl }
     var useRemoteArtworkFallback by remember(song.videoId, artUrl, remoteArtFallbackUrl) {
         mutableStateOf(false)

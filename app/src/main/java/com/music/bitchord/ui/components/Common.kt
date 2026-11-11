@@ -140,7 +140,7 @@ internal fun SongArtworkImage(
     val artworkModel = remember(song, artworkPx, folderArtworkFallbackMode) { song.artworkAt(artworkPx) }
     val remoteFallback = remember(song.thumbnailUrl, artworkPx) {
         song.thumbnailUrl
-            ?.takeIf { it.startsWith("http://") || it.startsWith("https://") }
+            ?.takeIf { it.startsWith("https://", ignoreCase = true) }
             ?.artworkAt(artworkPx)
     }
     var useRemoteFallback by remember(song.videoId, song.localUri, artworkModel, remoteFallback) {

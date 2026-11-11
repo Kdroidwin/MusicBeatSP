@@ -567,7 +567,8 @@ internal object QuickJsExecutor {
     // ── URL resolution ───────────────────────────────────────────────────
 
     private fun resolveUrl(url: String, base: String): String {
-        if (url.startsWith("http://") || url.startsWith("https://")) return url
+        if (url.startsWith("http://", ignoreCase = true)) throw IOException("Module requests must use HTTPS")
+        if (url.startsWith("https://", ignoreCase = true)) return url
         if (base.isEmpty()) return url
         return if (url.startsWith("/")) {
             val scheme = base.substringBefore("://")
@@ -586,7 +587,7 @@ internal object QuickJsExecutor {
     ): Pair<Int, String> {
         if (url.length > MAX_FETCH_URL_CHARS) throw IOException("Module fetch URL is too long")
         val parsedUrl = url.toHttpUrlOrNull() ?: throw IOException("Module fetch URL is invalid")
-        if (parsedUrl.scheme !in setOf("https", "http")) throw IOException("Unsupported module fetch scheme")
+        if (!parsedUrl.isHttps) throw IOException("Module requests must use HTTPS")
         if (headersJson.length > MAX_FETCH_HEADERS_JSON_CHARS) throw IOException("Module fetch headers are too large")
         if ((body?.toByteArray(StandardCharsets.UTF_8)?.size ?: 0) > MAX_FETCH_REQUEST_BODY_BYTES) {
             throw IOException("Module fetch request body is too large")

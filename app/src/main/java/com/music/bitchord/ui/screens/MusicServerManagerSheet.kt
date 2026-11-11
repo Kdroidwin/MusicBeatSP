@@ -24,7 +24,6 @@ import androidx.compose.material.icons.rounded.WifiTethering
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Button
 import androidx.compose.material3.CircularProgressIndicator
-import androidx.compose.material3.Checkbox
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
@@ -164,13 +163,12 @@ private fun RemoteServerEditorDialog(
     val savedCredentials = remember(initial.id) { SourceRegistry.serverCredentials(initial.id) }
     var username by remember(initial.id) { mutableStateOf(savedCredentials?.username.orEmpty()) }
     var password by remember(initial.id) { mutableStateOf(savedCredentials?.password.orEmpty()) }
-    var allowInsecureHttp by remember(initial.id) { mutableStateOf(initial.allowInsecureHttp) }
     var testing by remember(initial.id) { mutableStateOf(false) }
     var status by remember(initial.id) { mutableStateOf<SourceHealth?>(null) }
     var error by remember(initial.id) { mutableStateOf<String?>(null) }
     val scope = rememberCoroutineScope()
     val isJellyfin = initial.kind == SourceKind.JELLYFIN
-    val httpOptInMissing = url.trim().startsWith("http://", ignoreCase = true) && !allowInsecureHttp
+    val cleartextUrl = url.isNotBlank() && !url.trim().startsWith("https://", ignoreCase = true)
 
     AlertDialog(
         onDismissRequest = onDismiss,
@@ -197,21 +195,12 @@ private fun RemoteServerEditorDialog(
                     keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Uri),
                     modifier = Modifier.fillMaxWidth(),
                 )
-                if (url.trim().startsWith("http://", ignoreCase = true)) {
-                    Row(
-                        modifier = Modifier.fillMaxWidth(),
-                        verticalAlignment = Alignment.CenterVertically,
-                    ) {
-                        Checkbox(
-                            checked = allowInsecureHttp,
-                            onCheckedChange = { allowInsecureHttp = it },
-                        )
-                        Text(
-                            stringResource(R.string.music_server_allow_http),
-                            style = MaterialTheme.typography.bodySmall,
-                            color = MaterialTheme.colorScheme.error,
-                        )
-                    }
+                if (cleartextUrl) {
+                    Text(
+                        stringResource(R.string.https_required),
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.error,
+                    )
                 }
                 OutlinedTextField(
                     value = username,
@@ -248,15 +237,15 @@ private fun RemoteServerEditorDialog(
         },
         confirmButton = {
             Button(
-                enabled = url.isNotBlank() && username.isNotBlank() && password.isNotBlank() && !httpOptInMissing && !testing,
+                enabled = url.isNotBlank() && username.isNotBlank() && password.isNotBlank() && !cleartextUrl && !testing,
                 onClick = {
                     error = null
                     val saved = SourceRegistry.saveRemoteServer(
-                        initial.copy(label = label.trim(), baseUrl = url.trim(), allowInsecureHttp = allowInsecureHttp),
+                        initial.copy(label = label.trim(), baseUrl = url.trim()),
                         RemoteServerCredentials(username.trim(), password),
                     )
                     saved.fold(
-                        onSuccess = { onSave(initial.copy(label = label.trim(), baseUrl = url.trim(), allowInsecureHttp = allowInsecureHttp)) },
+                        onSuccess = { onSave(initial.copy(label = label.trim(), baseUrl = url.trim())) },
                         onFailure = { error = it.message ?: "Could not securely save server credentials" },
                     )
                 },
@@ -265,13 +254,13 @@ private fun RemoteServerEditorDialog(
         dismissButton = {
             Row {
                 TextButton(
-                    enabled = url.isNotBlank() && username.isNotBlank() && password.isNotBlank() && !httpOptInMissing && !testing,
+                    enabled = url.isNotBlank() && username.isNotBlank() && password.isNotBlank() && !cleartextUrl && !testing,
                     onClick = {
                         error = null
                         testing = true
                         scope.launch {
                             status = SourceRegistry.probeCandidate(
-                                initial.copy(label = label.trim(), baseUrl = url.trim(), allowInsecureHttp = allowInsecureHttp),
+                                initial.copy(label = label.trim(), baseUrl = url.trim()),
                                 RemoteServerCredentials(username.trim(), password),
                             )
                             testing = false

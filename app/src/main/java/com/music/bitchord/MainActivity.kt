@@ -1169,7 +1169,6 @@ private fun BitChordApp(
     val webdavUrl by AppSettings.webdavUrl.collectAsStateWithLifecycle()
     val webdavUsername by AppSettings.webdavUsername.collectAsStateWithLifecycle()
     val webdavPassword by AppSettings.webdavPassword.collectAsStateWithLifecycle()
-    val webdavAllowInsecureHttp by AppSettings.webdavAllowInsecureHttp.collectAsStateWithLifecycle()
     var remoteLibraryRefresh by remember { mutableIntStateOf(0) }
     var remoteLibrarySongs by remember { mutableStateOf<List<com.music.bitchord.data.model.Song>>(emptyList()) }
     LaunchedEffect(
@@ -1180,7 +1179,6 @@ private fun BitChordApp(
         webdavUrl,
         webdavUsername,
         webdavPassword,
-        webdavAllowInsecureHttp,
         remoteLibraryRefresh,
     ) {
         if (!includeRemoteSourceMedia || offlineMode || context.packageName.endsWith(".nointernet")) {
@@ -5157,11 +5155,11 @@ private fun BitChordApp(
                     FieldConfig(AppSettings.webdavUsername.value, stringResource(R.string.username)),
                     FieldConfig(AppSettings.webdavPassword.value, stringResource(R.string.password), KeyboardType.Password, true),
                 ),
-                canSubmit = { values -> values.firstOrNull()?.isNotBlank() == true },
+                canSubmit = { values -> values.firstOrNull()?.trim()?.startsWith("https://", ignoreCase = true) == true },
                 testFailedRes = R.string.webdav_test_failed,
                 onTest = { values ->
                     com.music.bitchord.data.webdav.WebDavRepository.testConnection(
-                        values[0].trim(), values[1].trim(), values[2], AppSettings.webdavAllowInsecureHttp.value,
+                        values[0].trim(), values[1].trim(), values[2],
                     )
                 },
                 onSave = { values ->

@@ -29,7 +29,7 @@ class ArtistImageFetcher(
         // suppress HTTP(S) fallback URLs too when online lookup is disabled.
         val fallbackUrl = image.fallbackUrl?.takeIf {
             image.allowOnlineLookup ||
-                (!it.startsWith("http://", ignoreCase = true) && !it.startsWith("https://", ignoreCase = true))
+                !it.startsWith("https://", ignoreCase = true)
         }
         val target = image.customArtworkUrl ?: deezerUrl ?: fallbackUrl
 

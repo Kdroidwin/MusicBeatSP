@@ -30,6 +30,9 @@ data class SpineModule(
     @SerialName("size") val size: Long = 0,
     @SerialName("sizeLabel") val sizeLabel: String = "",
     @SerialName("download") val download: String = "",
+    /** Optional publisher-provided script digest; the host also TOFU-pins the first accepted script. */
+    @SerialName("sha256") val sha256: String? = null,
+    @SerialName("script_sha256") val scriptSha256: String? = null,
     @SerialName("logo") val logo: String? = null,
     @SerialName("icon") val icon: String? = null,
     @SerialName("lastUpdated") val lastUpdated: String = "",

@@ -44,7 +44,7 @@ class ModuleSource(
      * what keeps the QuickJS engines alive between a search and the stream
      * call for a result it returned.
      */
-    private val manager = ModuleManager()
+    private val manager = ModuleManager(config.id)
 
     // ── Health ────────────────────────────────────────────────────────────
 
