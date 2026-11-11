@@ -38,6 +38,7 @@ import coil3.request.allowHardware
 import coil3.toBitmap
 import com.music.bitchord.data.model.CARD_ART_PX
 import com.music.bitchord.data.model.PLAYER_ART_PX
+import com.music.bitchord.data.model.ROW_ART_PX
 import com.music.bitchord.data.model.Song
 import com.music.bitchord.data.model.artworkAt
 import com.music.bitchord.data.settings.AppSettings
@@ -72,15 +73,18 @@ fun PlayerArtworkBackdropPreloader(
     }
     val backdropArtworkUrl = localPreviewArtUrl ?: artUrl
 
-    // Keep these at the same resolution and URL identity as NowPlayingScreen.
-    // Palette colours and meshes are cached independently and shared globally.
+    // Palette extraction samples 128px and the backdrop mesh samples 32px, so
+    // warming the row-sized rendition is enough and avoids fetching the large
+    // full-screen copy while a track is starting. Both caches key by artwork
+    // identity rather than requested resolution, so the expanded player can
+    // use these results without changing its sharp cover request.
     rememberArtworkPalette(
         imageUrl = artUrl,
         dark = true,
-        artPx = PLAYER_ART_PX,
+        artPx = ROW_ART_PX,
         animateOnLoad = false,
     )
-    rememberArtworkMesh(backdropArtworkUrl, artPx = PLAYER_ART_PX)
+    rememberArtworkMesh(backdropArtworkUrl, artPx = ROW_ART_PX)
 }
 
 /**
