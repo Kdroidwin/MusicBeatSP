@@ -6165,6 +6165,10 @@ class PlaybackService : MediaLibraryService() {
             session: MediaSession,
             controller: MediaSession.ControllerInfo,
         ): MediaSession.ConnectionResult {
+            // PlaybackService must stay exported for Android Auto/System UI,
+            // but an arbitrary app must not browse the listener's library or
+            // issue transport commands through the media-browser endpoint.
+            if (!controller.isTrusted) return MediaSession.ConnectionResult.reject()
             val sessionCommandsBuilder = MediaSession.ConnectionResult.DEFAULT_SESSION_AND_LIBRARY_COMMANDS
                 .buildUpon()
             // Standard transport/browser commands remain available to Android
