@@ -767,7 +767,6 @@ private fun BitChordApp(
      * question this used to answer on its own: is the player covering the page?
      */
     var showNowPlaying by remember { mutableStateOf(false) }
-    var playerArtworkPreloadSong by remember { mutableStateOf<Song?>(null) }
     var pendingArtworkPlayerOpenSong by remember { mutableStateOf<Song?>(null) }
     var artworkReadyPlayerOpenSong by remember { mutableStateOf<Song?>(null) }
     var revealStatusBarDuringPlayerClose by remember { mutableStateOf(false) }
@@ -830,7 +829,6 @@ private fun BitChordApp(
         if (!showNowPlaying) return
         pendingArtworkPlayerOpenSong = null
         artworkReadyPlayerOpenSong = null
-        playerArtworkPreloadSong = null
         preparePlayerStatusBarReveal()
         if (playerArtworkTransitionEnabled && !widePlayerLayout) {
             playerSheetMotion.close()
@@ -1085,7 +1083,6 @@ private fun BitChordApp(
     val onDismissMusicBar: () -> Unit = {
         pendingArtworkPlayerOpenSong = null
         artworkReadyPlayerOpenSong = null
-        playerArtworkPreloadSong = null
         controller?.stop()
         controller?.clearMediaItems()
     }
@@ -1522,57 +1519,63 @@ private fun BitChordApp(
         playJob?.cancel()
         pendingArtworkPlayerOpenSong = null
         artworkReadyPlayerOpenSong = null
-        playerArtworkPreloadSong = null
         playRequestGeneration++
         activeRadioSeed = null
         playJob = scope.launch {
             if (songs.isEmpty()) return@launch
             var requestedArtworkSong: Song? = null
             try {
-                val resolvedSongs = songs.map { s ->
-                    if (s.localUri != null && !Downloads.isMissingLocalFile(s.localUri)) {
-                        s
-                    } else if (!s.localPath.isNullOrBlank() && java.io.File(s.localPath).isFile) {
-                        s.copy(localUri = android.net.Uri.fromFile(java.io.File(s.localPath)).toString())
-                    } else if (SourceRegistry.parseTrackKey(s.videoId) != null) {
-                        // A server catalogue result has a source-qualified id.
-                        // Preserve it as-is; matching only its title and artist
-                        // here could silently replace it with a different local
-                        // recording before the source stream resolver sees it.
-                        s
-                    } else {
-                        localSongs.firstOrNull { local ->
-                            local.videoId == s.videoId ||
-                            (local.title.equals(s.title, ignoreCase = true) &&
-                             (s.artist.isBlank() || local.artist.equals(s.artist, ignoreCase = true)))
-                        } ?: s
+                // Resolving and checking every item in a large Songs-tab queue
+                // can involve thousands of URI parses and file stats. Keep that
+                // work off the UI thread so it cannot consume frames just before
+                // the player sheet begins its artwork transition.
+                val (playable, startIndex, selectedSong) = withContext(Dispatchers.IO) {
+                    val resolvedSongs = songs.map { s ->
+                        if (s.localUri != null && !Downloads.isMissingLocalFile(s.localUri)) {
+                            s
+                        } else if (!s.localPath.isNullOrBlank() && java.io.File(s.localPath).isFile) {
+                            s.copy(localUri = android.net.Uri.fromFile(java.io.File(s.localPath)).toString())
+                        } else if (SourceRegistry.parseTrackKey(s.videoId) != null) {
+                            // A server catalogue result has a source-qualified id.
+                            // Preserve it as-is; matching only its title and artist
+                            // here could silently replace it with a different local
+                            // recording before the source stream resolver sees it.
+                            s
+                        } else {
+                            localSongs.firstOrNull { local ->
+                                local.videoId == s.videoId ||
+                                    (local.title.equals(s.title, ignoreCase = true) &&
+                                        (s.artist.isBlank() || local.artist.equals(s.artist, ignoreCase = true)))
+                            } ?: s
+                        }
                     }
-                }
 
-                // A stale file:// entry can survive in an imported/saved playlist.
-                // Do not hand that known-missing URI to Media3, where it can fail
-                // while the rest of the queue is being prepared. Keep the clicked
-                // row's position by starting at the next remaining track.
-                val playable = resolvedSongs.mapIndexedNotNull { originalIndex, song ->
-                    val fileUri = song.localUri?.takeIf { it.startsWith("file://") }
-                        ?: song.videoId.takeIf { it.startsWith("file://") }
-                    if (fileUri != null && Downloads.isMissingLocalFile(fileUri)) null
-                    else originalIndex to song
-                }
-                if (playable.isEmpty()) {
+                    // A stale file:// entry can survive in an imported/saved playlist.
+                    // Do not hand that known-missing URI to Media3, where it can fail
+                    // while the rest of the queue is being prepared. Keep the clicked
+                    // row's position by starting at the next remaining track.
+                    val playableSongs = resolvedSongs.mapIndexedNotNull { originalIndex, song ->
+                        val fileUri = song.localUri?.takeIf { it.startsWith("file://") }
+                            ?: song.videoId.takeIf { it.startsWith("file://") }
+                        if (fileUri != null && Downloads.isMissingLocalFile(fileUri)) null
+                        else originalIndex to song
+                    }
+                    if (playableSongs.isEmpty()) null
+                    else {
+                        val requestedIndex = index.coerceIn(songs.indices)
+                        val queueStartIndex = playableSongs.indexOfFirst { (originalIndex, _) -> originalIndex >= requestedIndex }
+                            .takeIf { it >= 0 } ?: 0
+                        Triple(playableSongs, queueStartIndex, playableSongs[queueStartIndex].second)
+                    }
+                } ?: run {
                     Toast.makeText(context, R.string.couldnt_load_tracks, Toast.LENGTH_SHORT).show()
                     return@launch
                 }
-                val requestedIndex = index.coerceIn(songs.indices)
-                val startIndex = playable.indexOfFirst { (originalIndex, _) -> originalIndex >= requestedIndex }
-                    .takeIf { it >= 0 } ?: 0
-                val selectedSong = playable[startIndex].second
                 requestedArtworkSong = selectedSong
                 if (!playerDocked) {
                     // The full player opens as part of this action, so give its
                     // artwork palette a head start before Media3 replaces the
                     // current item and reports a new player state.
-                    playerArtworkPreloadSong = selectedSong
                     pendingArtworkPlayerOpenSong = selectedSong
                     artworkReadyPlayerOpenSong = null
                 }
@@ -1581,7 +1584,6 @@ private fun BitChordApp(
                 if (playerDocked || controller == null) {
                     pendingArtworkPlayerOpenSong = null
                     artworkReadyPlayerOpenSong = null
-                    playerArtworkPreloadSong = null
                     openNowPlaying()
                 }
             } catch (cancelled: CancellationException) {
@@ -1591,9 +1593,6 @@ private fun BitChordApp(
                     if (pendingArtworkPlayerOpenSong?.isSameTrackAs(requested) == true) {
                         pendingArtworkPlayerOpenSong = null
                         artworkReadyPlayerOpenSong = null
-                    }
-                    if (playerArtworkPreloadSong?.isSameTrackAs(requested) == true) {
-                        playerArtworkPreloadSong = null
                     }
                 }
                 TrackLog.e("Player", "Could not start the selected queue", error)
@@ -1625,12 +1624,10 @@ private fun BitChordApp(
         playJob?.cancel()
         pendingArtworkPlayerOpenSong = null
         artworkReadyPlayerOpenSong = null
-        playerArtworkPreloadSong = null
         playRequestGeneration++
         activeRadioSeed = null
         playJob = scope.launch {
             if (!playerDocked) {
-                playerArtworkPreloadSong = song
                 pendingArtworkPlayerOpenSong = song
                 artworkReadyPlayerOpenSong = null
             }
@@ -1638,7 +1635,6 @@ private fun BitChordApp(
             if (playerDocked || controller == null) {
                 pendingArtworkPlayerOpenSong = null
                 artworkReadyPlayerOpenSong = null
-                playerArtworkPreloadSong = null
                 openNowPlaying()
             }
         }
@@ -2460,7 +2456,7 @@ private fun BitChordApp(
             } else null,
         )
     }
-    LaunchedEffect(playerSong, playerArtworkPreloadSong, pendingArtworkPlayerOpenSong, artworkReadyPlayerOpenSong) {
+    LaunchedEffect(playerSong, pendingArtworkPlayerOpenSong, artworkReadyPlayerOpenSong) {
         val pending = pendingArtworkPlayerOpenSong
         val ready = artworkReadyPlayerOpenSong
         if (pending != null && ready?.isSameTrackAs(pending) == true && playerSong?.isSameTrackAs(pending) == true) {
@@ -2468,21 +2464,14 @@ private fun BitChordApp(
             artworkReadyPlayerOpenSong = null
             openNowPlaying()
         }
-        if (
-            pendingArtworkPlayerOpenSong == null &&
-            playerSong != null &&
-            playerArtworkPreloadSong?.isSameTrackAs(playerSong) == true
-        ) {
-            playerArtworkPreloadSong = null
-        }
     }
     // The compact player is visible before the expanded player is opened. Use
     // that time to warm the exact artwork palette and mesh keys the full player
     // will request, without delaying or changing audio playback.
-    val artworkSongToPreload = playerArtworkPreloadSong ?: playerSong
+    val artworkSongToPreload = pendingArtworkPlayerOpenSong ?: playerSong
     PlayerArtworkBackdropPreloader(
         song = artworkSongToPreload,
-        enabled = artworkSongToPreload != null && (playerArtworkPreloadSong != null || !player.isLoading),
+        enabled = artworkSongToPreload != null && (pendingArtworkPlayerOpenSong != null || !player.isLoading),
         onArtworkReady = { readySong ->
             if (pendingArtworkPlayerOpenSong?.isSameTrackAs(readySong) == true) {
                 artworkReadyPlayerOpenSong = readySong
@@ -2803,7 +2792,6 @@ private fun BitChordApp(
         ) {
             pendingArtworkPlayerOpenSong = null
             artworkReadyPlayerOpenSong = null
-            playerArtworkPreloadSong = null
             viewModel.closeDetail()
         }
         BackHandler(enabled = showSources) { showSources = false }
@@ -2817,7 +2805,6 @@ private fun BitChordApp(
         ) {
             pendingArtworkPlayerOpenSong = null
             artworkReadyPlayerOpenSong = null
-            playerArtworkPreloadSong = null
             selectedTab = TAB_SONGS
         }
         BackHandler(enabled = showListenBrainzLogin) { showListenBrainzLogin = false }
@@ -3790,7 +3777,6 @@ private fun BitChordApp(
                     // user has moved to another screen.
                     pendingArtworkPlayerOpenSong = null
                     artworkReadyPlayerOpenSong = null
-                    playerArtworkPreloadSong = null
                     if (index == TAB_SEARCH && selectedTab == TAB_SEARCH) {
                         searchFocusTrigger++
                     } else {
