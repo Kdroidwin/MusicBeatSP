@@ -29,6 +29,10 @@ const val MAX_PLAYER_ARTWORK_BLUR_DP = 128f
 /** Maximum manually requested gap between player controls, in dp. */
 const val MAX_PLAYER_BUTTON_SPACING_DP = 160f
 
+/** Range for the visible side-control icon scale. Touch targets remain unchanged. */
+const val MIN_PLAYER_SIDE_CONTROL_SCALE = 0.5f
+const val MAX_PLAYER_SIDE_CONTROL_SCALE = 1.6f
+
 /** The catalogue AutoPlay uses, or no automatic suggestions. */
 enum class AutoplaySource { OFF, YOUTUBE_MUSIC, DEVICE }
 
@@ -682,6 +686,10 @@ object AppSettings {
     val playerTransportButtonSpacingDp = MutableStateFlow(0f)
     /** Extra spacing between the player action buttons below the volume row. */
     val playerActionButtonSpacingDp = MutableStateFlow(0f)
+    /** Adds a queue-ordered gradient of the distinct album artwork colours behind the player. */
+    val playerQueueRainbowBackdrop = MutableStateFlow(true)
+    /** Scales the visible transport glyphs on either side of the central play button. */
+    val playerSideControlScale = MutableStateFlow(1f)
     /** Strength of the artwork-matched lower blur in the full-screen player. */
     val fullBleedArtworkBottomBlurStrengthDp = MutableStateFlow(42)
     /** Hides only the word label on the play button in collection detail pages. */
@@ -1623,6 +1631,8 @@ object AppSettings {
         playerPlayPauseCornerRadiusPercent.value = prefs.getInt(KEY_PLAYER_PLAY_PAUSE_CORNER_RADIUS_PERCENT, 100).coerceIn(0, 100)
         playerTransportButtonSpacingDp.value = prefs.getFloat(KEY_PLAYER_TRANSPORT_BUTTON_SPACING_DP, 0f).coerceIn(0f, MAX_PLAYER_BUTTON_SPACING_DP)
         playerActionButtonSpacingDp.value = prefs.getFloat(KEY_PLAYER_ACTION_BUTTON_SPACING_DP, 0f).coerceIn(0f, MAX_PLAYER_BUTTON_SPACING_DP)
+        playerQueueRainbowBackdrop.value = prefs.getBoolean(KEY_PLAYER_QUEUE_RAINBOW_BACKDROP, true)
+        playerSideControlScale.value = prefs.getFloat(KEY_PLAYER_SIDE_CONTROL_SCALE, 1f).coerceIn(MIN_PLAYER_SIDE_CONTROL_SCALE, MAX_PLAYER_SIDE_CONTROL_SCALE)
         fullBleedArtworkBottomBlurStrengthDp.value =
             prefs.getInt(KEY_FULL_BLEED_ARTWORK_BOTTOM_BLUR_STRENGTH_DP, 42).coerceIn(0, 96)
         hidePlaylistPlayButtonLabel.value = prefs.getBoolean(KEY_HIDE_PLAYLIST_PLAY_BUTTON_LABEL, false)
@@ -2420,6 +2430,17 @@ object AppSettings {
         val safe = value.coerceIn(0f, MAX_PLAYER_BUTTON_SPACING_DP)
         playerActionButtonSpacingDp.value = safe
         prefs.edit().putFloat(KEY_PLAYER_ACTION_BUTTON_SPACING_DP, safe).apply()
+    }
+
+    fun setPlayerQueueRainbowBackdrop(value: Boolean) {
+        playerQueueRainbowBackdrop.value = value
+        prefs.edit().putBoolean(KEY_PLAYER_QUEUE_RAINBOW_BACKDROP, value).apply()
+    }
+
+    fun setPlayerSideControlScale(value: Float) {
+        val safe = value.coerceIn(MIN_PLAYER_SIDE_CONTROL_SCALE, MAX_PLAYER_SIDE_CONTROL_SCALE)
+        playerSideControlScale.value = safe
+        prefs.edit().putFloat(KEY_PLAYER_SIDE_CONTROL_SCALE, safe).apply()
     }
 
     fun setHidePlaylistPlayButtonLabel(value: Boolean) {
@@ -4795,6 +4816,8 @@ object AppSettings {
     private const val KEY_PLAYER_PLAY_PAUSE_CORNER_RADIUS_PERCENT = "player_play_pause_corner_radius_percent"
     private const val KEY_PLAYER_TRANSPORT_BUTTON_SPACING_DP = "player_transport_button_spacing_dp"
     private const val KEY_PLAYER_ACTION_BUTTON_SPACING_DP = "player_action_button_spacing_dp"
+    private const val KEY_PLAYER_QUEUE_RAINBOW_BACKDROP = "player_queue_rainbow_backdrop"
+    private const val KEY_PLAYER_SIDE_CONTROL_SCALE = "player_side_control_scale"
     private const val KEY_HIDE_PLAYLIST_PLAY_BUTTON_LABEL = "hide_playlist_play_button_label"
     private const val KEY_WHITE_COLLECTION_PLAY_BUTTON = "white_collection_play_button"
     private const val KEY_SHOW_PLAYER_TOP_GRABBER = "show_player_top_grabber"

@@ -1499,6 +1499,8 @@ fun SettingsScreen(
     val playerPlayPauseCornerRadiusPercent by AppSettings.playerPlayPauseCornerRadiusPercent.collectAsStateWithLifecycle()
     val playerTransportButtonSpacingDp by AppSettings.playerTransportButtonSpacingDp.collectAsStateWithLifecycle()
     val playerActionButtonSpacingDp by AppSettings.playerActionButtonSpacingDp.collectAsStateWithLifecycle()
+    val playerQueueRainbowBackdrop by AppSettings.playerQueueRainbowBackdrop.collectAsStateWithLifecycle()
+    val playerSideControlScale by AppSettings.playerSideControlScale.collectAsStateWithLifecycle()
     val showPlayerTopGrabber by AppSettings.showPlayerTopGrabber.collectAsStateWithLifecycle()
     val cleartextHttpAllowed by AppSettings.cleartextHttpAllowed.collectAsStateWithLifecycle()
     val parametricEqEnabled by AppSettings.parametricEqEnabled.collectAsStateWithLifecycle()
@@ -4420,6 +4422,19 @@ fun SettingsScreen(
                     )
                 },
                 onClick = { AppSettings.setCenterPlayerTrackInfo(!centerPlayerTrackInfo) },
+            )
+            RowDivider()
+            SettingsRow(
+                icon = Icons.Rounded.Gradient,
+                title = stringResource(R.string.player_queue_rainbow_backdrop),
+                subtitle = stringResource(R.string.player_queue_rainbow_backdrop_subtitle),
+                trailing = {
+                    Switch(
+                        checked = playerQueueRainbowBackdrop,
+                        onCheckedChange = AppSettings::setPlayerQueueRainbowBackdrop,
+                    )
+                },
+                onClick = { AppSettings.setPlayerQueueRainbowBackdrop(!playerQueueRainbowBackdrop) },
             )
             RowDivider()
             SettingsRow(

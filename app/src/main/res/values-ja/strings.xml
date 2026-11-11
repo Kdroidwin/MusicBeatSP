@@ -1794,6 +1794,11 @@
     <string name="player_play_pause_icon_size">再生・一時停止アイコンのサイズ</string>
     <string name="player_play_pause_icon_size_subtitle">プレイヤー画面中央の再生・一時停止アイコンの大きさを調整します。</string>
     <string name="player_icon_size_value">%1$d dp</string>
+    <string name="player_queue_rainbow_backdrop">キュー内のアートに合わせて背景をグラデーション</string>
+    <string name="player_queue_rainbow_backdrop_subtitle">再生キューの異なるアルバムアートの色を曲順につなぎ、背景だけに反映します。既定でオンです。</string>
+    <string name="player_side_control_size">再生ボタン左右の操作アイコンサイズ</string>
+    <string name="player_side_control_size_subtitle">前へ・次へ・シャッフル・リピートなど、中央の再生ボタン左右にあるアイコンの大きさを調整します。タップ範囲は維持されます。</string>
+    <string name="player_side_control_scale_value">%1$d%%</string>
     <string name="player_play_pause_corner_roundness">再生アイコンの角の丸み</string>
     <string name="player_play_pause_corner_roundness_subtitle">▷の3つの角の丸みを調整します。背景の図形は追加されません。</string>
     <string name="player_corner_roundness_value">%1$d%%</string>

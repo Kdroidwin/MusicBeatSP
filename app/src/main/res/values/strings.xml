@@ -1821,6 +1821,11 @@
     <string name="player_play_pause_icon_size">Play/pause icon size</string>
     <string name="player_play_pause_icon_size_subtitle">Adjust the central play and pause icon size on the player screen.</string>
     <string name="player_icon_size_value">%1$d dp</string>
+    <string name="player_queue_rainbow_backdrop">Gradient the background from queue artwork</string>
+    <string name="player_queue_rainbow_backdrop_subtitle">Blend the colours of distinct album covers in queue order into the background only. On by default.</string>
+    <string name="player_side_control_size">Side transport icon size</string>
+    <string name="player_side_control_size_subtitle">Resize the previous, next, shuffle, repeat, and other icons around the central play button. Tap targets stay the same.</string>
+    <string name="player_side_control_scale_value">%1$d%%</string>
     <string name="player_play_pause_corner_roundness">Play icon corner roundness</string>
     <string name="player_play_pause_corner_roundness_subtitle">Adjust the three corners of the triangular play icon. This does not add a background shape.</string>
     <string name="player_corner_roundness_value">%1$d%%</string>

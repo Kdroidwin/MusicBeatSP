@@ -41,6 +41,7 @@ import androidx.compose.animation.core.spring
 import androidx.compose.animation.core.snap
 import androidx.compose.animation.core.tween
 import androidx.compose.foundation.background
+import androidx.compose.ui.draw.drawBehind
 import androidx.compose.foundation.border
 import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.clickable
@@ -156,6 +157,7 @@ import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberUpdatedState
 import androidx.compose.runtime.rememberCoroutineScope
+import androidx.compose.runtime.key
 import androidx.compose.runtime.setValue
 import androidx.compose.runtime.snapshotFlow
 import kotlinx.coroutines.flow.first
@@ -316,6 +318,8 @@ import kotlin.math.roundToInt
  * large home-screen widget asks for the same copy — see [PLAYER_ART_PX].
  */
 private const val ART_PX = PLAYER_ART_PX
+private const val MAX_QUEUE_BACKDROP_PALETTES = 8
+private const val QUEUE_BACKDROP_TINT_ALPHA = 0.58f
 
 /** Auris' full-bleed artwork stage and crop. */
 private const val AURIS_FULL_BLEED_ZOOM = 1.234f
@@ -352,6 +356,28 @@ private class CenteredPlayerButtonArrangement(private val gapDp: Float) : Arrang
 
 private fun playerButtonArrangement(gapDp: Float): Arrangement.Horizontal =
     if (gapDp <= 0f) Arrangement.SpaceEvenly else CenteredPlayerButtonArrangement(gapDp)
+
+/** Samples a bounded set of distinct covers in queue order for the player-only backdrop. */
+@Composable
+private fun rememberQueueBackdropColors(queue: List<Song>, fallbackSong: Song): List<Color> {
+    val artworkUrls = remember(queue, fallbackSong.videoId) {
+        val candidates = (queue.ifEmpty { listOf(fallbackSong) })
+            .mapNotNull { it.artworkAt(ART_PX) }
+            .distinct()
+        if (candidates.size <= MAX_QUEUE_BACKDROP_PALETTES) {
+            candidates
+        } else {
+            List(MAX_QUEUE_BACKDROP_PALETTES) { index ->
+                candidates[index * (candidates.lastIndex) / (MAX_QUEUE_BACKDROP_PALETTES - 1)]
+            }.distinct()
+        }
+    }
+    return artworkUrls.map { url ->
+        key(url) {
+            rememberArtworkPalette(url, dark = true, artPx = ART_PX).background
+        }
+    }
+}
 
 private fun Modifier.expandPlayerControlsForSpacing(spacingDp: Float): Modifier =
     if (spacingDp > 64f) bleedHorizontally(PLAYER_GUTTER) else this
@@ -994,6 +1020,15 @@ fun NowPlayingScreen(
     val displayedArtUrl = if (useRemoteArtworkFallback) remoteArtFallbackUrl ?: artUrl else artUrl
     val sharedPlayerBackdrop = LocalSharedPlayerBackdrop.current
     val artworkPalette = rememberArtworkPalette(displayedArtUrl, dark = true, artPx = ART_PX)
+    val queueRainbowBackdropEnabled by AppSettings.playerQueueRainbowBackdrop.collectAsStateWithLifecycle()
+    val queueBackdropColors = if (queueRainbowBackdropEnabled) {
+        rememberQueueBackdropColors(queue, song)
+    } else {
+        emptyList()
+    }
+    val queueBackdropTintColors = remember(queueBackdropColors) {
+        queueBackdropColors.map { it.copy(alpha = QUEUE_BACKDROP_TINT_ALPHA) }
+    }
     val playerInkOverrides by AppSettings.playerInkColors.collectAsStateWithLifecycle()
     // Match the sampled artwork hue; contrast-only white/black switching is
     // not the artwork-colour option users selected.
@@ -2016,6 +2051,26 @@ fun NowPlayingScreen(
                 seam = if (heroMode) heroHeight else 0.dp,
                 fallback = artworkPalette.wash,
                 blurRadius = activeBackdropBlur,
+            )
+        }
+        if (queueBackdropTintColors.size > 1 &&
+            !(retroPlayerMode && retroPlayerBackground == RetroPlayerBackground.BLACK)
+        ) {
+            Box(
+                Modifier
+                    .fillMaxSize()
+                    .drawBehind {
+                        val colorStops = queueBackdropTintColors.mapIndexed { index, color ->
+                            (index.toFloat() / queueBackdropTintColors.lastIndex) to color
+                        }.toTypedArray()
+                        drawRect(
+                            Brush.linearGradient(
+                                colorStops = colorStops,
+                                start = Offset.Zero,
+                                end = Offset(size.width, size.height),
+                            ),
+                        )
+                    },
             )
         }
 
