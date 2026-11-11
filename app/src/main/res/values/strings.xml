@@ -1824,10 +1824,12 @@
     <string name="player_queue_rainbow_backdrop">Gradient the player background from queue artwork</string>
     <string name="player_queue_rainbow_backdrop_subtitle">Blend up to 8 distinct album-cover colours in queue order into the player screen background only. This setting changes the player screen background colour; the displayed album art stays the same. Off by default.</string>
     <string name="collection_queue_rainbow_backdrop">Gradient collection backgrounds from album artwork</string>
-    <string name="collection_queue_rainbow_backdrop_subtitle">On playlist, album, and artist song lists, blend up to 8 distinct album-cover colours in track order into the background only. Album art is unchanged. On by default.</string>
-    <string name="player_side_control_size">Side transport icon size</string>
-    <string name="player_side_control_size_subtitle">Resize the previous, next, shuffle, repeat, and other icons around the central play button. Tap targets stay the same.</string>
+    <string name="collection_queue_rainbow_backdrop_subtitle">On playlist, album, and artist song lists, use up to 8 album-art colours in track order as distinct background bands. Keep each colour section flat and fade only where the artwork colour changes. Album art is unchanged. On by default.</string>
+    <string name="player_side_control_size">Previous/next icon size</string>
+    <string name="player_side_control_size_subtitle">Adjust the previous, next, and seek icons beside the central play button. Tap targets stay the same.</string>
     <string name="player_side_control_scale_value">%1$d%%</string>
+    <string name="player_outer_action_control_size">Outer action icon size</string>
+    <string name="player_outer_action_control_size_subtitle">Adjust shuffle, repeat, and other action icons at the outer ends of the player controls. Tap targets stay the same.</string>
     <string name="player_play_pause_corner_roundness">Play icon corner roundness</string>
     <string name="player_play_pause_corner_roundness_subtitle">Adjust the three corners of the triangular play icon. This does not add a background shape.</string>
     <string name="player_corner_roundness_value">%1$d%%</string>

@@ -690,8 +690,10 @@ object AppSettings {
     val playerQueueRainbowBackdrop = MutableStateFlow(false)
     /** Adds a track-order gradient of distinct album artwork colours behind collection song lists. */
     val collectionQueueRainbowBackdrop = MutableStateFlow(true)
-    /** Scales the visible transport glyphs on either side of the central play button. */
+    /** Scales previous/next and seek glyphs next to the central play button. */
     val playerSideControlScale = MutableStateFlow(1f)
+    /** Scales shuffle, repeat, and other action glyphs at the outer ends of the transport row. */
+    val playerOuterActionControlScale = MutableStateFlow(1f)
     /** Strength of the artwork-matched lower blur in the full-screen player. */
     val fullBleedArtworkBottomBlurStrengthDp = MutableStateFlow(42)
     /** Hides only the word label on the play button in collection detail pages. */
@@ -1636,6 +1638,8 @@ object AppSettings {
         playerQueueRainbowBackdrop.value = prefs.getBoolean(KEY_PLAYER_QUEUE_RAINBOW_BACKDROP, false)
         collectionQueueRainbowBackdrop.value = prefs.getBoolean(KEY_COLLECTION_QUEUE_RAINBOW_BACKDROP, true)
         playerSideControlScale.value = prefs.getFloat(KEY_PLAYER_SIDE_CONTROL_SCALE, 1f).coerceIn(MIN_PLAYER_SIDE_CONTROL_SCALE, MAX_PLAYER_SIDE_CONTROL_SCALE)
+        playerOuterActionControlScale.value = prefs.getFloat(KEY_PLAYER_OUTER_ACTION_CONTROL_SCALE, 1f)
+            .coerceIn(MIN_PLAYER_SIDE_CONTROL_SCALE, MAX_PLAYER_SIDE_CONTROL_SCALE)
         fullBleedArtworkBottomBlurStrengthDp.value =
             prefs.getInt(KEY_FULL_BLEED_ARTWORK_BOTTOM_BLUR_STRENGTH_DP, 42).coerceIn(0, 96)
         hidePlaylistPlayButtonLabel.value = prefs.getBoolean(KEY_HIDE_PLAYLIST_PLAY_BUTTON_LABEL, false)
@@ -2449,6 +2453,12 @@ object AppSettings {
         val safe = value.coerceIn(MIN_PLAYER_SIDE_CONTROL_SCALE, MAX_PLAYER_SIDE_CONTROL_SCALE)
         playerSideControlScale.value = safe
         prefs.edit().putFloat(KEY_PLAYER_SIDE_CONTROL_SCALE, safe).apply()
+    }
+
+    fun setPlayerOuterActionControlScale(value: Float) {
+        val safe = value.coerceIn(MIN_PLAYER_SIDE_CONTROL_SCALE, MAX_PLAYER_SIDE_CONTROL_SCALE)
+        playerOuterActionControlScale.value = safe
+        prefs.edit().putFloat(KEY_PLAYER_OUTER_ACTION_CONTROL_SCALE, safe).apply()
     }
 
     fun setHidePlaylistPlayButtonLabel(value: Boolean) {
@@ -4827,6 +4837,7 @@ object AppSettings {
     private const val KEY_PLAYER_QUEUE_RAINBOW_BACKDROP = "player_queue_rainbow_backdrop"
     private const val KEY_COLLECTION_QUEUE_RAINBOW_BACKDROP = "collection_queue_rainbow_backdrop"
     private const val KEY_PLAYER_SIDE_CONTROL_SCALE = "player_side_control_scale"
+    private const val KEY_PLAYER_OUTER_ACTION_CONTROL_SCALE = "player_outer_action_control_scale"
     private const val KEY_HIDE_PLAYLIST_PLAY_BUTTON_LABEL = "hide_playlist_play_button_label"
     private const val KEY_WHITE_COLLECTION_PLAY_BUTTON = "white_collection_play_button"
     private const val KEY_SHOW_PLAYER_TOP_GRABBER = "show_player_top_grabber"

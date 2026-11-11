@@ -1234,6 +1234,7 @@ fun NowPlayingScreen(
     val playerTransportButtonSpacingDp by AppSettings.playerTransportButtonSpacingDp.collectAsStateWithLifecycle()
     val playerActionButtonSpacingDp by AppSettings.playerActionButtonSpacingDp.collectAsStateWithLifecycle()
     val playerSideControlScale by AppSettings.playerSideControlScale.collectAsStateWithLifecycle()
+    val playerOuterActionControlScale by AppSettings.playerOuterActionControlScale.collectAsStateWithLifecycle()
     val autoShowLyricsOnPlayback by AppSettings.autoShowLyricsOnPlayback.collectAsStateWithLifecycle()
     val transportButtonArrangement = remember(playerTransportButtonSpacingDp) {
         playerButtonArrangement(playerTransportButtonSpacingDp)
@@ -3670,7 +3671,7 @@ fun NowPlayingScreen(
                         contentDescription = stringResource(R.string.seek_back_seconds, seekIntervalSeconds),
                         label = stringResource(R.string.seek_seconds_short, seekIntervalSeconds),
                         showLabel = !hideSeekButtonLabels,
-                        glyphScale = playerSideControlScale,
+                        glyphScale = playerOuterActionControlScale,
                         onClick = {
                             onSeek((positionMs - seekIntervalSeconds * 1000L).coerceAtLeast(0L))
                         },
@@ -3678,7 +3679,7 @@ fun NowPlayingScreen(
                 } else if (transportLeftAction != TransportSideAction.NONE) {
                     TransportSideActionGlyph(
                         action = transportLeftAction,
-                        glyphScale = playerSideControlScale,
+                        glyphScale = playerOuterActionControlScale,
                         shuffleEnabled = shuffleEnabled,
                         repeatMode = repeatMode,
                         liked = liked,
@@ -3699,7 +3700,7 @@ fun NowPlayingScreen(
                 WalkmanShuffleGlyph(
                     active = walkmanControlsActive,
                     enabledBySettings = PlayerControl.SHUFFLE in visiblePlayerControls,
-                    glyphScale = playerSideControlScale,
+                    glyphScale = playerOuterActionControlScale,
                     leftAction = transportLeftAction,
                     rightAction = transportRightAction,
                     shuffleEnabled = shuffleEnabled,
@@ -3806,7 +3807,7 @@ fun NowPlayingScreen(
                             else -> Haptic.Select
                         },
                         outlined = true,
-                        glyphScale = playerSideControlScale,
+                        glyphScale = playerOuterActionControlScale,
                     )
                 }
                 if (transportRightAction == TransportSideAction.NONE && seekButtonsVisible && !seekButtonsInsideTrackControls) {
@@ -3815,7 +3816,7 @@ fun NowPlayingScreen(
                         contentDescription = stringResource(R.string.seek_forward_seconds, seekIntervalSeconds),
                         label = stringResource(R.string.seek_seconds_short, seekIntervalSeconds),
                         showLabel = !hideSeekButtonLabels,
-                        glyphScale = playerSideControlScale,
+                        glyphScale = playerOuterActionControlScale,
                         onClick = {
                             val end = effectiveDurationMs.takeIf { it > 0L } ?: Long.MAX_VALUE
                             onSeek((positionMs + seekIntervalSeconds * 1000L).coerceAtMost(end))
@@ -3824,7 +3825,7 @@ fun NowPlayingScreen(
                 } else if (transportRightAction != TransportSideAction.NONE) {
                     TransportSideActionGlyph(
                         action = transportRightAction,
-                        glyphScale = playerSideControlScale,
+                        glyphScale = playerOuterActionControlScale,
                         shuffleEnabled = shuffleEnabled,
                         repeatMode = repeatMode,
                         liked = liked,

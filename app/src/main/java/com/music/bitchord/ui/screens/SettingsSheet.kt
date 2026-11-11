@@ -977,12 +977,25 @@ private fun playerQueueRainbowBackdropSearchEntry(enabled: Boolean) = SettingsSe
 private fun playerSideControlSizeSearchEntry(scale: Float) = SettingsSearchEntry(
     title = stringResource(R.string.player_side_control_size),
     subtitle = stringResource(R.string.player_side_control_size_subtitle),
-    keywords = listOf("player", "transport", "side", "button", "icon", "size", "scale", "プレイヤー", "左右", "操作", "ボタン", "サイズ", "大きさ"),
+    keywords = listOf("player", "transport", "previous", "next", "skip", "button", "icon", "size", "scale", "プレイヤー", "前へ", "次へ", "スキップ", "アイコン", "サイズ", "大きさ"),
     valueLabel = stringResource(R.string.player_side_control_scale_value, (scale * 100f).roundToInt()),
     sliderValue = scale,
     sliderValueRange = MIN_PLAYER_SIDE_CONTROL_SCALE..MAX_PLAYER_SIDE_CONTROL_SCALE,
     sliderSteps = 20,
     onSliderValueChange = AppSettings::setPlayerSideControlScale,
+    activate = {},
+)
+
+@Composable
+private fun playerOuterActionControlSizeSearchEntry(scale: Float) = SettingsSearchEntry(
+    title = stringResource(R.string.player_outer_action_control_size),
+    subtitle = stringResource(R.string.player_outer_action_control_size_subtitle),
+    keywords = listOf("player", "shuffle", "repeat", "outer", "action", "button", "icon", "size", "scale", "プレイヤー", "シャッフル", "リピート", "外側", "操作", "アイコン", "サイズ", "大きさ"),
+    valueLabel = stringResource(R.string.player_side_control_scale_value, (scale * 100f).roundToInt()),
+    sliderValue = scale,
+    sliderValueRange = MIN_PLAYER_SIDE_CONTROL_SCALE..MAX_PLAYER_SIDE_CONTROL_SCALE,
+    sliderSteps = 20,
+    onSliderValueChange = AppSettings::setPlayerOuterActionControlScale,
     activate = {},
 )
 
@@ -1525,6 +1538,7 @@ fun SettingsScreen(
     val playerQueueRainbowBackdrop by AppSettings.playerQueueRainbowBackdrop.collectAsStateWithLifecycle()
     val collectionQueueRainbowBackdrop by AppSettings.collectionQueueRainbowBackdrop.collectAsStateWithLifecycle()
     val playerSideControlScale by AppSettings.playerSideControlScale.collectAsStateWithLifecycle()
+    val playerOuterActionControlScale by AppSettings.playerOuterActionControlScale.collectAsStateWithLifecycle()
     val showPlayerTopGrabber by AppSettings.showPlayerTopGrabber.collectAsStateWithLifecycle()
     val cleartextHttpAllowed by AppSettings.cleartextHttpAllowed.collectAsStateWithLifecycle()
     val parametricEqEnabled by AppSettings.parametricEqEnabled.collectAsStateWithLifecycle()
@@ -2172,6 +2186,7 @@ fun SettingsScreen(
             enabled = collectionQueueRainbowBackdrop,
         ) { AppSettings.setCollectionQueueRainbowBackdrop(!collectionQueueRainbowBackdrop) },
         playerSideControlSizeSearchEntry(playerSideControlScale),
+        playerOuterActionControlSizeSearchEntry(playerOuterActionControlScale),
         playerPlayPauseCornerRoundnessSearchEntry(playerPlayPauseCornerRadiusPercent),
         playerTransportSpacingSearchEntry(playerTransportButtonSpacingDp),
         playerActionSpacingSearchEntry(playerActionButtonSpacingDp),
@@ -4549,6 +4564,23 @@ fun SettingsScreen(
             Slider(
                 value = playerSideControlScale,
                 onValueChange = AppSettings::setPlayerSideControlScale,
+                steps = 20,
+                valueRange = MIN_PLAYER_SIDE_CONTROL_SCALE..MAX_PLAYER_SIDE_CONTROL_SCALE,
+                modifier = Modifier.padding(start = ROW_INSET, end = ROW_INSET, bottom = 14.dp),
+            )
+            RowDivider()
+            SettingsRow(
+                icon = Icons.Rounded.Tune,
+                title = stringResource(R.string.player_outer_action_control_size),
+                subtitle = stringResource(R.string.player_outer_action_control_size_subtitle),
+                value = stringResource(
+                    R.string.player_side_control_scale_value,
+                    (playerOuterActionControlScale * 100f).roundToInt(),
+                ),
+            )
+            Slider(
+                value = playerOuterActionControlScale,
+                onValueChange = AppSettings::setPlayerOuterActionControlScale,
                 steps = 20,
                 valueRange = MIN_PLAYER_SIDE_CONTROL_SCALE..MAX_PLAYER_SIDE_CONTROL_SCALE,
                 modifier = Modifier.padding(start = ROW_INSET, end = ROW_INSET, bottom = 14.dp),

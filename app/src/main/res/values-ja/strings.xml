@@ -1797,10 +1797,12 @@
     <string name="player_queue_rainbow_backdrop">再生キューのアート色をプレイヤー背景に反映</string>
     <string name="player_queue_rainbow_backdrop_subtitle">再生キュー順に最大8種類のアルバムアートの色を、プレイヤー画面の背景だけに重ねます。画面の色が変わりますが、表示中のアルバムアートは変わりません。初期設定はオフです。</string>
     <string name="collection_queue_rainbow_backdrop">曲一覧の背景をアルバムアート色でグラデーション</string>
-    <string name="collection_queue_rainbow_backdrop_subtitle">プレイリスト・アルバム・アーティストの曲一覧で、曲順に最大8種類のアルバムアートの色を背景だけに重ねます。アルバムアートの表示は変わりません。初期設定はオンです。</string>
-    <string name="player_side_control_size">再生ボタン左右の操作アイコンサイズ</string>
-    <string name="player_side_control_size_subtitle">前へ・次へ・シャッフル・リピートなど、中央の再生ボタン左右にあるアイコンの大きさを調整します。タップ範囲は維持されます。</string>
+    <string name="collection_queue_rainbow_backdrop_subtitle">プレイリスト・アルバム・アーティストの曲一覧で、曲順に最大8種類のアート色を背景へ帯状に反映します。同じ色の区間は保ち、色が変わる境目だけグラデーションでつなぎます。アルバムアートは変わりません。初期設定はオンです。</string>
+    <string name="player_side_control_size">前へ・次へアイコンのサイズ</string>
+    <string name="player_side_control_size_subtitle">中央の再生ボタンのすぐ隣にある前へ・次へ・シークアイコンの大きさを調整します。タップ範囲は維持されます。</string>
     <string name="player_side_control_scale_value">%1$d%%</string>
+    <string name="player_outer_action_control_size">外側の操作アイコンサイズ</string>
+    <string name="player_outer_action_control_size_subtitle">再生操作の両端にあるシャッフル・リピートなどのアイコンの大きさを調整します。タップ範囲は維持されます。</string>
     <string name="player_play_pause_corner_roundness">再生アイコンの角の丸み</string>
     <string name="player_play_pause_corner_roundness_subtitle">▷の3つの角の丸みを調整します。背景の図形は追加されません。</string>
     <string name="player_corner_roundness_value">%1$d%%</string>
