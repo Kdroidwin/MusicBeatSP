@@ -1233,6 +1233,7 @@ fun NowPlayingScreen(
     val playerPlayPauseCornerRadiusPercent by AppSettings.playerPlayPauseCornerRadiusPercent.collectAsStateWithLifecycle()
     val playerTransportButtonSpacingDp by AppSettings.playerTransportButtonSpacingDp.collectAsStateWithLifecycle()
     val playerActionButtonSpacingDp by AppSettings.playerActionButtonSpacingDp.collectAsStateWithLifecycle()
+    val playerSideControlScale by AppSettings.playerSideControlScale.collectAsStateWithLifecycle()
     val autoShowLyricsOnPlayback by AppSettings.autoShowLyricsOnPlayback.collectAsStateWithLifecycle()
     val transportButtonArrangement = remember(playerTransportButtonSpacingDp) {
         playerButtonArrangement(playerTransportButtonSpacingDp)
@@ -3669,6 +3670,7 @@ fun NowPlayingScreen(
                         contentDescription = stringResource(R.string.seek_back_seconds, seekIntervalSeconds),
                         label = stringResource(R.string.seek_seconds_short, seekIntervalSeconds),
                         showLabel = !hideSeekButtonLabels,
+                        glyphScale = playerSideControlScale,
                         onClick = {
                             onSeek((positionMs - seekIntervalSeconds * 1000L).coerceAtLeast(0L))
                         },
@@ -3676,6 +3678,7 @@ fun NowPlayingScreen(
                 } else if (transportLeftAction != TransportSideAction.NONE) {
                     TransportSideActionGlyph(
                         action = transportLeftAction,
+                        glyphScale = playerSideControlScale,
                         shuffleEnabled = shuffleEnabled,
                         repeatMode = repeatMode,
                         liked = liked,
@@ -3696,6 +3699,7 @@ fun NowPlayingScreen(
                 WalkmanShuffleGlyph(
                     active = walkmanControlsActive,
                     enabledBySettings = PlayerControl.SHUFFLE in visiblePlayerControls,
+                    glyphScale = playerSideControlScale,
                     leftAction = transportLeftAction,
                     rightAction = transportRightAction,
                     shuffleEnabled = shuffleEnabled,
@@ -3704,7 +3708,7 @@ fun NowPlayingScreen(
                 TransportGlyph(
                     icon = Icons.Rounded.FastRewind,
                     contentDescription = stringResource(R.string.widget_previous),
-                    size = 46.dp,
+                    size = 46.dp * playerSideControlScale,
                     onClick = onPrevious,
                     // Lit whenever back has something to do — either a track to
                     // step to, or enough elapsed for it to restart this one.
@@ -3718,6 +3722,7 @@ fun NowPlayingScreen(
                         contentDescription = stringResource(R.string.seek_back_seconds, seekIntervalSeconds),
                         label = stringResource(R.string.seek_seconds_short, seekIntervalSeconds),
                         showLabel = !hideSeekButtonLabels,
+                        glyphScale = playerSideControlScale,
                         onClick = {
                             onSeek((positionMs - seekIntervalSeconds * 1000L).coerceAtLeast(0L))
                         },
@@ -3765,6 +3770,7 @@ fun NowPlayingScreen(
                         contentDescription = stringResource(R.string.seek_forward_seconds, seekIntervalSeconds),
                         label = stringResource(R.string.seek_seconds_short, seekIntervalSeconds),
                         showLabel = !hideSeekButtonLabels,
+                        glyphScale = playerSideControlScale,
                         onClick = {
                             val end = effectiveDurationMs.takeIf { it > 0L } ?: Long.MAX_VALUE
                             onSeek((positionMs + seekIntervalSeconds * 1000L).coerceAtMost(end))
@@ -3774,7 +3780,7 @@ fun NowPlayingScreen(
                 TransportGlyph(
                     icon = Icons.Rounded.FastForward,
                     contentDescription = stringResource(R.string.widget_next),
-                    size = 46.dp,
+                    size = 46.dp * playerSideControlScale,
                     onClick = onNext,
                     enabled = hasNext,
                     haptic = Haptic.SkipNext,
@@ -3800,6 +3806,7 @@ fun NowPlayingScreen(
                             else -> Haptic.Select
                         },
                         outlined = true,
+                        glyphScale = playerSideControlScale,
                     )
                 }
                 if (transportRightAction == TransportSideAction.NONE && seekButtonsVisible && !seekButtonsInsideTrackControls) {
@@ -3808,6 +3815,7 @@ fun NowPlayingScreen(
                         contentDescription = stringResource(R.string.seek_forward_seconds, seekIntervalSeconds),
                         label = stringResource(R.string.seek_seconds_short, seekIntervalSeconds),
                         showLabel = !hideSeekButtonLabels,
+                        glyphScale = playerSideControlScale,
                         onClick = {
                             val end = effectiveDurationMs.takeIf { it > 0L } ?: Long.MAX_VALUE
                             onSeek((positionMs + seekIntervalSeconds * 1000L).coerceAtMost(end))
@@ -3816,6 +3824,7 @@ fun NowPlayingScreen(
                 } else if (transportRightAction != TransportSideAction.NONE) {
                     TransportSideActionGlyph(
                         action = transportRightAction,
+                        glyphScale = playerSideControlScale,
                         shuffleEnabled = shuffleEnabled,
                         repeatMode = repeatMode,
                         liked = liked,
@@ -5617,7 +5626,7 @@ private fun TransportGlyph(
     )
     Box(
         modifier = Modifier
-            .size(size + 12.dp)
+            .size(maxOf(size + 12.dp, 48.dp))
             .then(
                 if (outlined) Modifier.border(1.dp, ink.copy(alpha = 0.72f), CircleShape)
                 else Modifier,
@@ -5766,6 +5775,7 @@ private fun SeekTransportGlyph(
     contentDescription: String,
     label: String,
     showLabel: Boolean,
+    glyphScale: Float = 1f,
     onClick: () -> Unit,
 ) {
     val ink = LocalPlayerButtonControlInk.current
@@ -5789,7 +5799,7 @@ private fun SeekTransportGlyph(
             imageVector = icon,
             contentDescription = contentDescription,
             tint = ink,
-            modifier = Modifier.size(21.dp),
+            modifier = Modifier.size(21.dp * glyphScale),
         )
         if (showLabel) {
             Text(
@@ -5805,6 +5815,7 @@ private fun SeekTransportGlyph(
 @Composable
 private fun TransportSideActionGlyph(
     action: TransportSideAction,
+    glyphScale: Float,
     shuffleEnabled: Boolean,
     repeatMode: Int,
     liked: Boolean,
@@ -5873,6 +5884,7 @@ private fun TransportSideActionGlyph(
         highlighted = highlighted,
         enabled = enabled,
         haptic = haptic,
+        glyphScale = glyphScale,
         onClick = {
             when (action) {
                 TransportSideAction.NONE -> Unit
@@ -5917,6 +5929,7 @@ private fun WalkmanShuffleGlyph(
     leftAction: TransportSideAction,
     rightAction: TransportSideAction,
     shuffleEnabled: Boolean,
+    glyphScale: Float,
     onToggleShuffle: () -> Unit,
 ) {
     if (!active || !enabledBySettings || leftAction == TransportSideAction.SHUFFLE ||
@@ -5935,6 +5948,7 @@ private fun WalkmanShuffleGlyph(
         haptic = if (shuffleEnabled) Haptic.ToggleOff else Haptic.ToggleOn,
         tapWindowMs = SHUFFLE_TAP_WINDOW_MS,
         outlined = true,
+        glyphScale = glyphScale,
     )
 }
 
@@ -5948,6 +5962,7 @@ private fun BottomGlyph(
     haptic: Haptic = Haptic.Tap,
     label: String? = null,
     outlined: Boolean = false,
+    glyphScale: Float = 1f,
     /**
      * Shortest gap between taps that both reach [onClick]. A tap inside the
      * window of the last one is dropped whole — haptic included, so a swallowed
@@ -6002,13 +6017,13 @@ private fun BottomGlyph(
                 imageVector = icon,
                 contentDescription = null,
                 tint = tint,
-                modifier = Modifier.size(26.dp),
+                modifier = Modifier.size(26.dp * glyphScale),
             )
         } else if (label != null) {
             Text(
                 text = label,
                 color = tint,
-                fontSize = 19.sp,
+                fontSize = 19.sp * glyphScale,
                 fontWeight = FontWeight.Bold,
             )
         }

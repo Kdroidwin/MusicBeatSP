@@ -194,6 +194,8 @@ import com.music.bitchord.data.settings.SeekButtonMode
 import com.music.bitchord.data.settings.TransportSideAction
 import com.music.bitchord.data.settings.MAX_PLAYER_ARTWORK_BLUR_DP
 import com.music.bitchord.data.settings.MAX_PLAYER_BUTTON_SPACING_DP
+import com.music.bitchord.data.settings.MIN_PLAYER_SIDE_CONTROL_SCALE
+import com.music.bitchord.data.settings.MAX_PLAYER_SIDE_CONTROL_SCALE
 import com.music.bitchord.data.settings.MainNavigationTab
 import com.music.bitchord.data.settings.PlayerControl
 import com.music.bitchord.data.settings.PlayerQuickAction
@@ -960,6 +962,27 @@ private fun playerActionSpacingSearchEntry(spacingDp: Float) = SettingsSearchEnt
     sliderValueRange = 0f..MAX_PLAYER_BUTTON_SPACING_DP,
     sliderSteps = MAX_PLAYER_BUTTON_SPACING_DP.toInt() - 1,
     onSliderValueChange = AppSettings::setPlayerActionButtonSpacingDp,
+    activate = {},
+)
+
+@Composable
+private fun playerQueueRainbowBackdropSearchEntry(enabled: Boolean) = SettingsSearchEntry(
+    stringResource(R.string.player_queue_rainbow_backdrop),
+    stringResource(R.string.player_queue_rainbow_backdrop_subtitle),
+    listOf("player", "background", "gradient", "rainbow", "playlist", "album", "player background", "プレイヤー", "背景", "グラデーション", "虹", "プレイリスト", "アルバム"),
+    enabled,
+) { AppSettings.setPlayerQueueRainbowBackdrop(!enabled) }
+
+@Composable
+private fun playerSideControlSizeSearchEntry(scale: Float) = SettingsSearchEntry(
+    title = stringResource(R.string.player_side_control_size),
+    subtitle = stringResource(R.string.player_side_control_size_subtitle),
+    keywords = listOf("player", "transport", "side", "button", "icon", "size", "scale", "プレイヤー", "左右", "操作", "ボタン", "サイズ", "大きさ"),
+    valueLabel = stringResource(R.string.player_side_control_scale_value, (scale * 100f).roundToInt()),
+    sliderValue = scale,
+    sliderValueRange = MIN_PLAYER_SIDE_CONTROL_SCALE..MAX_PLAYER_SIDE_CONTROL_SCALE,
+    sliderSteps = 20,
+    onSliderValueChange = AppSettings::setPlayerSideControlScale,
     activate = {},
 )
 
@@ -2140,6 +2163,8 @@ fun SettingsScreen(
             onSliderValueChange = AppSettings::setPlayerPlayPauseIconSizeDp,
             activate = {},
         ),
+        playerQueueRainbowBackdropSearchEntry(playerQueueRainbowBackdrop),
+        playerSideControlSizeSearchEntry(playerSideControlScale),
         playerPlayPauseCornerRoundnessSearchEntry(playerPlayPauseCornerRadiusPercent),
         playerTransportSpacingSearchEntry(playerTransportButtonSpacingDp),
         playerActionSpacingSearchEntry(playerActionButtonSpacingDp),
@@ -4490,6 +4515,20 @@ fun SettingsScreen(
                 onValueChange = { AppSettings.setPlayerPlayPauseCornerRadiusPercent(it.roundToInt()) },
                 steps = 99,
                 valueRange = 0f..100f,
+                modifier = Modifier.padding(start = ROW_INSET, end = ROW_INSET, bottom = 14.dp),
+            )
+            RowDivider()
+            SettingsRow(
+                icon = Icons.Rounded.Tune,
+                title = stringResource(R.string.player_side_control_size),
+                subtitle = stringResource(R.string.player_side_control_size_subtitle),
+                value = stringResource(R.string.player_side_control_scale_value, (playerSideControlScale * 100f).roundToInt()),
+            )
+            Slider(
+                value = playerSideControlScale,
+                onValueChange = AppSettings::setPlayerSideControlScale,
+                steps = 20,
+                valueRange = MIN_PLAYER_SIDE_CONTROL_SCALE..MAX_PLAYER_SIDE_CONTROL_SCALE,
                 modifier = Modifier.padding(start = ROW_INSET, end = ROW_INSET, bottom = 14.dp),
             )
             RowDivider()
