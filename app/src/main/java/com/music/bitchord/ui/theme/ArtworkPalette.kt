@@ -126,9 +126,19 @@ fun rememberArtworkPalette(
         val bitmap = (result as? SuccessResult)?.image?.toBitmap() ?: return@LaunchedEffect
         // Quantising 128² pixels is not free, and this coroutine is on the main
         // dispatcher — left there it stutters whatever is animating the surface in.
-        val found = withContext(Dispatchers.Default) { seedOf(bitmap) } ?: return@LaunchedEffect
-        seedCache[artworkCacheKey] = found
-        seed = found
+        val extracted = withContext(Dispatchers.Default) {
+            bitmap.artworkFingerprint() to seedOf(bitmap)
+        }
+        val found = extracted.second ?: return@LaunchedEffect
+        // MediaStore can expose one identical album cover through several
+        // track-specific URIs. Reuse the first palette for identical decoded
+        // pixels so those rows cannot switch the page colour just because
+        // their source URI or album id differs.
+        val resolved = pixelSeedCache[extracted.first] ?: found.also {
+            pixelSeedCache[extracted.first] = it
+        }
+        seedCache[artworkCacheKey] = resolved
+        seed = resolved
     }
 
     val target = seed?.toPalette(dark) ?: ArtworkPalette(
@@ -170,6 +180,26 @@ fun rememberArtworkPalette(
  */
 private val seedCache = object : LinkedHashMap<String, Seed>(0, 0.75f, true) {
     override fun removeEldestEntry(eldest: Map.Entry<String, Seed>) = size > SEED_CACHE_ENTRIES
+}
+
+/** Deduplicates palette results when identical artwork is addressed by different track URIs. */
+private val pixelSeedCache = object : LinkedHashMap<String, Seed>(0, 0.75f, true) {
+    override fun removeEldestEntry(eldest: Map.Entry<String, Seed>) = size > SEED_CACHE_ENTRIES
+}
+
+/** Compact, mildly quantised pixel signature for artwork returned at different URLs. */
+private fun Bitmap.artworkFingerprint(): String = buildString(8 * 8 * 3) {
+    val hex = "0123456789abcdef"
+    for (sampleY in 0 until 8) {
+        val y = ((sampleY + 0.5f) * height / 8f).toInt().coerceIn(0, height - 1)
+        for (sampleX in 0 until 8) {
+            val x = ((sampleX + 0.5f) * width / 8f).toInt().coerceIn(0, width - 1)
+            val pixel = getPixel(x, y)
+            append(hex[((pixel shr 16) and 0xFF) ushr 4])
+            append(hex[((pixel shr 8) and 0xFF) ushr 4])
+            append(hex[(pixel and 0xFF) ushr 4])
+        }
+    }
 }
 
 /** Deep enough to cover a session's browsing without holding a screenful of colours. */

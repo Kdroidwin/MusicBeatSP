@@ -233,10 +233,9 @@ fun SystemBarIcons(dark: Boolean) {
     val window = findWindow(view) ?: return
     SideEffect {
         if (android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.Q) {
-            // The platform contrast scrim can recolour the navigation area and
-            // override the requested light glyph appearance on transparent,
-            // edge-to-edge bars. Let the app backdrop provide the contrast.
-            window.isNavigationBarContrastEnforced = !forceWhiteNavigationBar
+            // Let the edge-to-edge app backdrop show through the gesture area;
+            // the system contrast scrim would make artwork pages black at the bottom.
+            window.isNavigationBarContrastEnforced = false
         }
         WindowCompat.getInsetsController(window, window.decorView).apply {
             isAppearanceLightStatusBars = dark
@@ -260,7 +259,7 @@ fun SystemBarVisibility(
     var instantRevealApplied by remember(window) { mutableStateOf(false) }
     SideEffect {
         if (android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.Q) {
-            window.isNavigationBarContrastEnforced = !forceWhiteNavigationBar
+            window.isNavigationBarContrastEnforced = false
         }
         WindowInsetsControllerCompat(window, window.decorView).apply {
             systemBarsBehavior = WindowInsetsControllerCompat.BEHAVIOR_SHOW_TRANSIENT_BARS_BY_SWIPE

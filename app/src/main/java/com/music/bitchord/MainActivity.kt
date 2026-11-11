@@ -553,9 +553,10 @@ class MainActivity : AppCompatActivity() {
     private fun applySystemBarPreferences() {
         val forceWhiteNavigationBar = AppSettings.forceWhiteNavigationBar.value
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
-            // Avoid Android's automatic navigation-bar scrim overriding the
-            // requested white gesture handle / navigation glyphs.
-            window.isNavigationBarContrastEnforced = !forceWhiteNavigationBar
+            // Edge-to-edge collection pages paint their artwork-derived wash
+            // behind the gesture area. Android's automatic contrast scrim
+            // otherwise turns that area black on dark artwork pages.
+            window.isNavigationBarContrastEnforced = false
         }
         val bars = WindowInsetsControllerCompat(window, window.decorView)
         bars.systemBarsBehavior = WindowInsetsControllerCompat.BEHAVIOR_SHOW_TRANSIENT_BARS_BY_SWIPE

@@ -756,7 +756,10 @@ fun DrillDownSongList(
     val pageArtworkUrl = selectionArtworkUrl.takeIf { fullScreenArtwork }
     val artworkPalette = rememberArtworkPalette(
         imageUrl = selectionArtworkUrl,
-        artPx = artworkRequestPx,
+        // Read the same rendition used by the list rows. A higher-resolution
+        // page cover can otherwise produce a different edge sample and make
+        // the background jump even though the visible artwork is identical.
+        artPx = CARD_ART_PX,
     )
     val collectionRainbowBackdropEnabled by AppSettings.collectionQueueRainbowBackdrop.collectAsStateWithLifecycle()
     val collectionArtworkRuns = if (
