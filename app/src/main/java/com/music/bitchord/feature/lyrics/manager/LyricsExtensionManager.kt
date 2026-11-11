@@ -267,6 +267,21 @@ object LyricsExtensionManager {
                 ?: throw IllegalStateException("Could not read a valid lyrics registry")
 
             val remoteRegistry = json.decodeFromString<RemoteLyricsRegistry>(registryJson)
+            val bundledRegistryBytes = ctx.assets.open("$ASSETS_DIR/registry.json").use { it.readBytes() }
+            val bundledRegistry = json.decodeFromString<RemoteLyricsRegistry>(
+                String(bundledRegistryBytes, StandardCharsets.UTF_8),
+            )
+            val isBundledRepository = repoUrl.trimEnd('/') == AppSettings.DEFAULT_LYRICS_EXTENSION_REPO_URL.trimEnd('/')
+            val bundledRegistryById = bundledRegistry.extensions.associateBy { it.id }
+            val bundledHashes = if (isBundledRepository) {
+                bundledRegistryById.keys.associateWith { id ->
+                    val (assetRoot, _) = bundledExtensionAssets(ctx)
+                    val bytes = ctx.assets.open("$assetRoot/$id/index.js").use { it.readBytes() }
+                    sha256(bytes)
+                }
+            } else {
+                emptyMap()
+            }
             require(remoteRegistry.extensions.size <= MAX_EXTENSION_COUNT) { "Registry contains too many extensions" }
             require(remoteRegistry.extensions.map { it.id }.toSet().size == remoteRegistry.extensions.size) {
                 "Registry contains duplicate extension IDs"
@@ -277,8 +292,16 @@ object LyricsExtensionManager {
             require(remoteRegistry.extensions.all { item ->
                 item.name.length in 1..160 && item.version.length in 1..80 &&
                     item.description.length <= 2_048 && item.author.length <= 160 &&
-                    (item.scriptSha256 == null || LyricsExtensionSecurity.isSha256(item.scriptSha256))
+                    (item.scriptSha256 == null || LyricsExtensionSecurity.isSha256(item.scriptSha256)) &&
+                    (isBundledRepository || LyricsExtensionSecurity.isSha256(item.scriptSha256.orEmpty()))
             }) { "Registry contains invalid extension metadata" }
+            if (isBundledRepository) {
+                require(remoteRegistry.extensions.all { item ->
+                    val pinned = bundledRegistryById[item.id]
+                    pinned != null && item.script_url == pinned.script_url && item.manifest_url == pinned.manifest_url &&
+                        (item.scriptSha256 == null || item.scriptSha256.equals(bundledHashes[item.id], ignoreCase = true))
+                }) { "The built-in registry changed outside the APK-pinned extension set" }
+            }
             if (!extensionsEnabled) return@withContext Result.failure(IllegalStateException("Lyrics extensions are disabled"))
             val currentMap = _installedExtensions.value.associateBy { it.id }
             val extDir = File(ctx.filesDir, "$EXTENSIONS_DIR/extensions")
@@ -327,10 +350,17 @@ object LyricsExtensionManager {
                         runCatching { json.decodeFromString<LyricsExtensionManifest>(it) }.getOrNull()
                     }
                     val actualChecksum = downloadedScript?.let(::sha256)
-                    val checksumMatches = remoteItem.scriptSha256
-                        ?.lowercase(Locale.ROOT)
-                        ?.let { expected -> expected == actualChecksum }
-                        ?: true
+                    // For the app's built-in repository, the expected hash
+                    // comes from the APK asset rather than the mutable remote
+                    // registry. A compromised registry cannot substitute both
+                    // the script and its checksum. Custom registries require
+                    // an explicit SHA-256 field in their index.
+                    val expectedChecksum = if (isBundledRepository) {
+                        bundledHashes[remoteItem.id]
+                    } else {
+                        remoteItem.scriptSha256?.lowercase(Locale.ROOT)
+                    }
+                    val checksumMatches = expectedChecksum != null && expectedChecksum == actualChecksum
                     if (downloadedScript != null && downloadedScript.isNotBlank() &&
                         downloadedManifest != null && manifest != null &&
                         runCatching { validateManifest(manifest, remoteItem.id) }.isSuccess &&
