@@ -32,9 +32,11 @@ import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.rememberUpdatedState
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.res.stringResource
@@ -142,7 +144,16 @@ fun MiniPlayer(
     modifier: Modifier = Modifier,
 ) {
     val folderArtworkFallbackMode by AppSettings.folderArtworkFallbackMode.collectAsStateWithLifecycle()
-    val artworkModel = remember(song, folderArtworkFallbackMode) { song.artworkAt(ROW_ART_PX) }
+    val localAwareArtworkModel = remember(song, folderArtworkFallbackMode) { song.artworkAt(ROW_ART_PX) }
+    val remoteArtworkFallback = remember(song.thumbnailUrl) {
+        song.thumbnailUrl
+            ?.takeIf { it.startsWith("http://", ignoreCase = true) || it.startsWith("https://", ignoreCase = true) }
+            .artworkAt(ROW_ART_PX)
+    }
+    var useRemoteArtworkFallback by remember(song, folderArtworkFallbackMode) {
+        mutableStateOf(localAwareArtworkModel == null && remoteArtworkFallback != null)
+    }
+    val artworkModel = if (useRemoteArtworkFallback) remoteArtworkFallback else localAwareArtworkModel
     val reduceDynamicBlur by AppSettings.reduceDynamicBlur.collectAsStateWithLifecycle()
     val useArtworkColor by AppSettings.miniPlayerArtworkColor.collectAsStateWithLifecycle()
     val showArtworkOutline by AppSettings.miniPlayerArtworkOutline.collectAsStateWithLifecycle()
@@ -296,6 +307,15 @@ fun MiniPlayer(
             AsyncImage(
                 model = artworkModel,
                 contentDescription = null,
+                onError = {
+                    if (
+                        !useRemoteArtworkFallback &&
+                        remoteArtworkFallback != null &&
+                        remoteArtworkFallback != localAwareArtworkModel
+                    ) {
+                        useRemoteArtworkFallback = true
+                    }
+                },
                 // The mini-player has a fixed square thumbnail. Keep it square
                 // even when the full player is configured to preserve a sleeve's
                 // original aspect ratio; transition settings must not letterbox
