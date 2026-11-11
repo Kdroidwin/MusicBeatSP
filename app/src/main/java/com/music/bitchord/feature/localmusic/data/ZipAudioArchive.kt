@@ -3,8 +3,11 @@ package com.music.bitchord.feature.localmusic.data
 import android.content.Context
 import android.net.Uri
 import android.os.StatFs
+import android.os.SystemClock
 import com.music.bitchord.data.model.Song
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.currentCoroutineContext
+import kotlinx.coroutines.ensureActive
 import kotlinx.coroutines.withContext
 import java.io.File
 import java.io.IOException
@@ -21,25 +24,34 @@ internal data class ZipAudioEntry(
 
 /** Reads audio entries from a user-selected ZIP and extracts a tapped track to cache for playback. */
 internal object ZipAudioArchive {
-    private const val MAX_AUDIO_ENTRY_BYTES = 1_073_741_824L
-    private const val MAX_ARCHIVE_ENTRIES = 20_000
-    private const val MAX_ARCHIVE_SCAN_BYTES = 4_294_967_296L
+    private const val MAX_AUDIO_ENTRY_BYTES = 512L * 1024L * 1024L
+    private const val MAX_ARCHIVE_ENTRIES = 10_000
+    private const val MAX_ARCHIVE_SCAN_BYTES = 1024L * 1024L * 1024L
+    private const val MAX_ARCHIVE_SCAN_TIME_MS = 45_000L
+    private const val MAX_ENTRY_NAME_CHARS = 4_096
     private const val CACHE_FREE_SPACE_RESERVE_BYTES = 128L * 1024L * 1024L
     private val audioExtensions = setOf(
         "3gp", "aac", "aiff", "alac", "ape", "flac", "m4a", "mp3", "mp4", "oga", "ogg",
         "opus", "wav", "webm", "wma", "wv", "dsf", "dff",
     )
 
-    fun listAudioEntries(context: Context, uri: Uri, archiveName: String): List<ZipAudioEntry> {
+    suspend fun listAudioEntries(context: Context, uri: Uri, archiveName: String): List<ZipAudioEntry> =
+        withContext(Dispatchers.IO) {
         val result = mutableListOf<ZipAudioEntry>()
         var entryCount = 0
         var inflatedBytes = 0L
+        val deadline = SystemClock.elapsedRealtime() + MAX_ARCHIVE_SCAN_TIME_MS
         context.contentResolver.openInputStream(uri)?.use { input ->
             ZipInputStream(input.buffered()).use { zip ->
                 while (true) {
+                    currentCoroutineContext().ensureActive()
+                    if (SystemClock.elapsedRealtime() > deadline) throw IOException("ZIP scan exceeded the time limit")
                     val entry = zip.nextEntry ?: break
                     if (++entryCount > MAX_ARCHIVE_ENTRIES) {
                         throw IOException("ZIP archive contains too many entries")
+                    }
+                    if (entry.name.length > MAX_ENTRY_NAME_CHARS) {
+                        throw IOException("ZIP entry name is too long")
                     }
                     val filename = entry.name.substringAfterLast('/')
                     val extension = filename.substringAfterLast('.', "").lowercase()
@@ -48,6 +60,8 @@ internal object ZipAudioArchive {
                     var entryBytes = 0L
                     val buffer = ByteArray(DEFAULT_BUFFER_SIZE)
                     while (true) {
+                        currentCoroutineContext().ensureActive()
+                        if (SystemClock.elapsedRealtime() > deadline) throw IOException("ZIP scan exceeded the time limit")
                         val count = zip.read(buffer)
                         if (count < 0) break
                         entryBytes += count
@@ -71,10 +85,11 @@ internal object ZipAudioArchive {
                 }
             }
         } ?: error("Could not open ZIP archive")
-        return result
+        result
     }
 
     suspend fun extract(context: Context, uri: Uri, entry: ZipAudioEntry): Song? = withContext(Dispatchers.IO) {
+        if (entry.path.length > MAX_ENTRY_NAME_CHARS) throw IOException("ZIP entry name is too long")
         val id = sha256("${uri}\u0000${entry.path}")
         val directory = File(context.cacheDir, "zip-audio").apply { mkdirs() }
         if (!directory.isDirectory) throw IOException("Could not create audio cache")
@@ -83,6 +98,7 @@ internal object ZipAudioArchive {
             val partial = File(directory, "$id.part")
             partial.delete()
             var copied = false
+            val deadline = SystemClock.elapsedRealtime() + MAX_ARCHIVE_SCAN_TIME_MS
             try {
                 val spaceLimitedMax = (StatFs(directory.absolutePath).availableBytes - CACHE_FREE_SPACE_RESERVE_BYTES)
                     .coerceAtLeast(0L)
@@ -92,9 +108,14 @@ internal object ZipAudioArchive {
                         var entryCount = 0
                         var inflatedBytes = 0L
                         while (true) {
+                            currentCoroutineContext().ensureActive()
+                            if (SystemClock.elapsedRealtime() > deadline) throw IOException("ZIP extraction exceeded the time limit")
                             val current = zip.nextEntry ?: break
                             if (++entryCount > MAX_ARCHIVE_ENTRIES) {
                                 throw IOException("ZIP archive contains too many entries")
+                            }
+                            if (current.name.length > MAX_ENTRY_NAME_CHARS) {
+                                throw IOException("ZIP entry name is too long")
                             }
                             if (current.name == entry.path && !current.isDirectory) {
                                 if (current.size > spaceLimitedMax) {
@@ -104,6 +125,8 @@ internal object ZipAudioArchive {
                                     val buffer = ByteArray(DEFAULT_BUFFER_SIZE)
                                     var total = 0L
                                     while (true) {
+                                        currentCoroutineContext().ensureActive()
+                                        if (SystemClock.elapsedRealtime() > deadline) throw IOException("ZIP extraction exceeded the time limit")
                                         val count = zip.read(buffer)
                                         if (count < 0) break
                                         total += count
@@ -123,6 +146,8 @@ internal object ZipAudioArchive {
                             } else {
                                 val buffer = ByteArray(DEFAULT_BUFFER_SIZE)
                                 while (true) {
+                                    currentCoroutineContext().ensureActive()
+                                    if (SystemClock.elapsedRealtime() > deadline) throw IOException("ZIP extraction exceeded the time limit")
                                     val count = zip.read(buffer)
                                     if (count < 0) break
                                     inflatedBytes += count
