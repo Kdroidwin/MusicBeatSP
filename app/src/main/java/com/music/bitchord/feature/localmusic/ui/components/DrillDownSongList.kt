@@ -1,6 +1,7 @@
 package com.music.bitchord.feature.localmusic.ui.components
 
 import android.os.Build
+import android.net.Uri
 import androidx.compose.foundation.ExperimentalFoundationApi
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
@@ -53,6 +54,7 @@ import androidx.compose.runtime.Composable
 import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.SideEffect
+import androidx.compose.runtime.derivedStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.getValue
@@ -95,6 +97,7 @@ import coil3.request.ImageRequest
 import coil3.request.transformations
 import androidx.compose.ui.platform.LocalContext
 import kotlinx.coroutines.flow.distinctUntilChanged
+import java.util.Locale
 import com.music.bitchord.R
 import com.music.bitchord.data.model.CARD_ART_PX
 import com.music.bitchord.data.model.HEADER_ART_PX
@@ -756,12 +759,17 @@ fun DrillDownSongList(
         artPx = artworkRequestPx,
     )
     val collectionRainbowBackdropEnabled by AppSettings.collectionQueueRainbowBackdrop.collectAsStateWithLifecycle()
-    val collectionBackdropColors = if (
+    val collectionArtworkRuns = if (
         collectionRainbowBackdropEnabled && isCollectionDetail
     ) {
-        rememberCollectionArtworkColors(songs)
+        rememberCollectionArtworkRuns(songs)
     } else {
         emptyList()
+    }
+    val collectionBackdropBaseColor = if (fullScreenArtwork) {
+        artworkPalette.wash
+    } else {
+        MaterialTheme.colorScheme.background
     }
     SideEffect {
         onArtworkPaletteChanged?.invoke(artworkPalette.takeIf { fullScreenArtwork })
@@ -776,7 +784,7 @@ fun DrillDownSongList(
     }
     // Release pages in BitChord leave rows transparent so the artwork-derived
     // wash continues behind the track list instead of snapping back to black.
-    val rowBackground = if (fullScreenArtwork || collectionBackdropColors.size > 1) {
+    val rowBackground = if (fullScreenArtwork || collectionArtworkRuns.size > 1) {
         Color.Transparent
     } else {
         MaterialTheme.colorScheme.background
@@ -818,10 +826,11 @@ fun DrillDownSongList(
         ) {
             val artHeight = (maxWidth / COLLECTION_ART_RATIO).coerceAtMost(maxHeight * 0.6f)
             val artHeightPx = with(LocalDensity.current) { artHeight.toPx() }
-            if (collectionBackdropColors.size > 1) {
+            if (collectionArtworkRuns.size > 1) {
                 CollectionArtworkGradientBackdrop(
-                    colors = collectionBackdropColors,
-                    fallbackColor = if (fullScreenArtwork) artworkPalette.wash else MaterialTheme.colorScheme.background,
+                    artworkRuns = collectionArtworkRuns,
+                    initialColor = collectionBackdropBaseColor,
+                    fallbackColor = collectionBackdropBaseColor,
                     transitionHalfHeightPx = collectionColorTransitionHalfHeightPx,
                     visibleRowsProvider = {
                         gridState.layoutInfo.visibleItemsInfo.mapNotNull { item ->
@@ -979,10 +988,11 @@ fun DrillDownSongList(
         ) {
             val artHeight = (maxWidth / COLLECTION_ART_RATIO).coerceAtMost(maxHeight * 0.6f)
             val artHeightPx = with(LocalDensity.current) { artHeight.toPx() }
-            if (collectionBackdropColors.size > 1) {
+            if (collectionArtworkRuns.size > 1) {
                 CollectionArtworkGradientBackdrop(
-                    colors = collectionBackdropColors,
-                    fallbackColor = if (fullScreenArtwork) artworkPalette.wash else MaterialTheme.colorScheme.background,
+                    artworkRuns = collectionArtworkRuns,
+                    initialColor = collectionBackdropBaseColor,
+                    fallbackColor = collectionBackdropBaseColor,
                     transitionHalfHeightPx = collectionColorTransitionHalfHeightPx,
                     visibleRowsProvider = {
                         listState.layoutInfo.visibleItemsInfo.mapNotNull { item ->
@@ -1199,57 +1209,124 @@ fun DrillDownSongList(
     }
 }
 
+private data class CollectionArtworkRun(val firstTrackIndex: Int, val artworkUrl: String)
 private data class CollectionArtworkColorPoint(val firstTrackIndex: Int, val color: Color)
 private data class CollectionVisibleTrackRow(val trackIndex: Int, val top: Int, val bottom: Int)
 
 @Composable
-private fun rememberCollectionArtworkColors(songs: List<Song>): List<CollectionArtworkColorPoint> {
-    val artworkRuns = remember(songs) {
-        buildList {
-            var previousArtworkUrl: String? = null
-            songs.forEachIndexed { index, song ->
-                val url = song.artworkAt(CARD_ART_PX) ?: return@forEachIndexed
-                if (url != previousArtworkUrl) add(index to url)
-                previousArtworkUrl = url
-            }
+private fun rememberCollectionArtworkRuns(songs: List<Song>): List<CollectionArtworkRun> = remember(songs) {
+    buildList {
+        var previousArtworkIdentity: String? = null
+        songs.forEachIndexed { index, song ->
+            val url = song.artworkAt(CARD_ART_PX) ?: return@forEachIndexed
+            val identity = song.collectionArtworkIdentity(url)
+            if (identity != previousArtworkIdentity) add(CollectionArtworkRun(index, url))
+            previousArtworkIdentity = identity
         }
     }
-    val sampledArtworkUrls = remember(artworkRuns) {
-        val distinctUrls = artworkRuns.map { it.second }.distinct()
-        if (distinctUrls.size <= MAX_COLLECTION_BACKDROP_PALETTES) {
-            distinctUrls
-        } else {
-            List(MAX_COLLECTION_BACKDROP_PALETTES) { index ->
-                distinctUrls[index * distinctUrls.lastIndex / (MAX_COLLECTION_BACKDROP_PALETTES - 1)]
-            }.toSet()
-        }
-    }
-    return artworkRuns
-        .filter { (_, url) -> url in sampledArtworkUrls }
-        .map { (trackIndex, url) ->
-            key(trackIndex) {
-                CollectionArtworkColorPoint(
-                    firstTrackIndex = trackIndex,
-                    color = rememberArtworkPalette(url, artPx = CARD_ART_PX).background,
-                )
+}
+
+/** Uses stable album/art identity instead of MediaStore's track-specific audio URI. */
+private fun Song.collectionArtworkIdentity(artworkUrl: String): String {
+    val mediaStoreAlbumId = thumbnailUrl?.let { raw ->
+        runCatching { Uri.parse(raw) }.getOrNull()
+            ?.takeIf { uri ->
+                uri.scheme.equals("content", ignoreCase = true) &&
+                    (uri.authority?.equals("media", ignoreCase = true) == true ||
+                        uri.authority?.endsWith(".media", ignoreCase = true) == true)
             }
-        }
+            ?.getQueryParameter("albumId")
+            ?.toLongOrNull()
+            ?.takeIf { it > 0L }
+    }
+    if (mediaStoreAlbumId != null) return "media-album:$mediaStoreAlbumId"
+
+    albumId?.trim()?.takeIf(String::isNotEmpty)?.let { return "album:$it" }
+
+    if (!localUri.isNullOrBlank() || !localPath.isNullOrBlank()) {
+        val localAlbum = albumName?.trim()?.takeIf(String::isNotEmpty)
+            ?.let { name ->
+                "local-album:${name.lowercase(Locale.ROOT)}|${(albumArtist ?: artist).trim().lowercase(Locale.ROOT)}"
+            }
+        if (localAlbum != null) return localAlbum
+        val folder = localFolderPath?.trim()?.takeIf(String::isNotEmpty)
+        if (folder != null) return "local-folder:$folder"
+    }
+
+    return thumbnailUrl?.trim()?.takeIf(String::isNotEmpty)?.let { "artwork:$it" }
+        ?: "artwork:$artworkUrl"
 }
 
 /** Paints track-ordered colour bands with a short fade only where artwork changes. */
 @Composable
 private fun CollectionArtworkGradientBackdrop(
-    colors: List<CollectionArtworkColorPoint>,
+    artworkRuns: List<CollectionArtworkRun>,
+    initialColor: Color,
     fallbackColor: Color,
     transitionHalfHeightPx: Float,
     visibleRowsProvider: () -> List<CollectionVisibleTrackRow>,
 ) {
-    if (colors.size < 2) return
+    if (artworkRuns.size < 2) return
+    val rowsProvider = rememberUpdatedState(visibleRowsProvider)
+    val visibleTrackIndices by remember {
+        derivedStateOf {
+            rowsProvider.value()
+                .map { it.trackIndex }
+                .distinct()
+                .sorted()
+        }
+    }
+    val neededArtworkRuns = remember(artworkRuns, visibleTrackIndices) {
+        val firstIndex = visibleTrackIndices.firstOrNull()
+        val lastIndex = visibleTrackIndices.lastOrNull()
+        if (firstIndex == null || lastIndex == null) {
+            emptyList()
+        } else {
+            val previousRun = artworkRuns.lastOrNull { it.firstTrackIndex < firstIndex }
+            val activeRun = artworkRuns.lastOrNull { it.firstTrackIndex <= firstIndex }
+            (listOfNotNull(previousRun, activeRun) + artworkRuns.filter {
+                it.firstTrackIndex > firstIndex && it.firstTrackIndex <= lastIndex
+            }).distinctBy { it.firstTrackIndex }
+        }
+    }
+    val firstRunIndex = artworkRuns.first().firstTrackIndex
+    // Only decode palettes for art around the current viewport. Large playlists
+    // can contain hundreds of different covers, but scrolling should fetch each
+    // palette only when that colour band is approaching the screen.
+    val visibleArtworkPalettes = neededArtworkRuns
+        .filterNot { it.firstTrackIndex == firstRunIndex }
+        .distinctBy { it.artworkUrl }
+        .map { run ->
+            key(run.artworkUrl) {
+                run.artworkUrl to rememberArtworkPalette(
+                    run.artworkUrl,
+                    artPx = CARD_ART_PX,
+                    animateOnLoad = false,
+                )
+            }
+        }
+        .toMap()
+    var lastResolvedColor = initialColor
+    val colorPoints = neededArtworkRuns.map { run ->
+        val resolvedColor = if (run.firstTrackIndex == firstRunIndex) {
+            initialColor
+        } else {
+            visibleArtworkPalettes[run.artworkUrl]
+                ?.takeIf { it.isResolved }
+                ?.wash
+                ?: lastResolvedColor
+        }
+        lastResolvedColor = resolvedColor
+        CollectionArtworkColorPoint(
+            firstTrackIndex = run.firstTrackIndex,
+            color = resolvedColor,
+        )
+    }
     Box(
         Modifier
             .fillMaxSize()
             .drawBehind {
-                val rows = visibleRowsProvider()
+                val rows = rowsProvider.value()
                     .asSequence()
                     .filter { it.bottom > 0 && it.top < size.height }
                     .sortedWith(compareBy<CollectionVisibleTrackRow> { it.top }.thenBy { it.trackIndex })
@@ -1257,8 +1334,21 @@ private fun CollectionArtworkGradientBackdrop(
                     .toList()
                 if (rows.isEmpty()) return@drawBehind
 
-                fun colorForTrack(trackIndex: Int): Color =
-                    colors.lastOrNull { it.firstTrackIndex <= trackIndex }?.color ?: colors.first().color
+                fun colorForTrack(trackIndex: Int): Color {
+                    var low = 0
+                    var high = colorPoints.lastIndex
+                    var found = -1
+                    while (low <= high) {
+                        val middle = (low + high) ushr 1
+                        if (colorPoints[middle].firstTrackIndex <= trackIndex) {
+                            found = middle
+                            low = middle + 1
+                        } else {
+                            high = middle - 1
+                        }
+                    }
+                    return if (found >= 0) colorPoints[found].color else initialColor
+                }
 
                 fun drawBand(color: Color, top: Float, bottom: Float) {
                     if (bottom <= top) return
@@ -1269,16 +1359,51 @@ private fun CollectionArtworkGradientBackdrop(
                     )
                 }
 
-                var currentColor = fallbackColor
+                val firstRow = rows.first()
+                val firstRowColor = colorForTrack(firstRow.trackIndex)
+                // When scrolled, the first visible row may begin above the
+                // viewport. Start with its actual section colour so the top
+                // edge does not snap back to the collection cover's colour.
+                var currentColor = if (firstRow.top <= 0) {
+                    firstRowColor
+                } else if (firstRow.trackIndex > 0) {
+                    colorForTrack(firstRow.trackIndex - 1)
+                } else {
+                    fallbackColor
+                }
                 var cursorY = 0f
-                var previousBottom = rows.first().top.toFloat()
-                rows.forEach { row ->
+                if (firstRow.top > 0 && firstRowColor != currentColor) {
+                    val boundary = firstRow.top - transitionHalfHeightPx * 0.5f
+                    val start = (boundary - transitionHalfHeightPx).coerceAtLeast(cursorY)
+                        .coerceIn(0f, size.height)
+                    val end = (boundary + transitionHalfHeightPx).coerceAtLeast(start)
+                        .coerceIn(0f, size.height)
+                    drawBand(currentColor, cursorY, start)
+                    if (end > start) {
+                        drawRect(
+                            brush = Brush.verticalGradient(
+                                colorStops = arrayOf(0f to currentColor, 1f to firstRowColor),
+                                startY = start,
+                                endY = end,
+                            ),
+                            topLeft = Offset(0f, start),
+                            size = Size(size.width, end - start),
+                        )
+                    }
+                    cursorY = end
+                    currentColor = firstRowColor
+                }
+
+                rows.forEachIndexed { rowIndex, row ->
                     val nextColor = colorForTrack(row.trackIndex)
                     if (nextColor != currentColor) {
-                        val boundary = if (row === rows.first()) {
+                        val boundary = if (rowIndex == 0) {
                             row.top.toFloat()
                         } else {
-                            (previousBottom + row.top) / 2f
+                            // Bias the fade slightly toward the incoming row,
+                            // so the new artwork's colour is already visible
+                            // as its cover appears.
+                            row.top - transitionHalfHeightPx * 0.5f
                         }.coerceIn(0f, size.height)
                         val start = (boundary - transitionHalfHeightPx).coerceAtLeast(cursorY)
                             .coerceIn(0f, size.height)
@@ -1299,7 +1424,6 @@ private fun CollectionArtworkGradientBackdrop(
                         cursorY = end
                         currentColor = nextColor
                     }
-                    previousBottom = row.bottom.toFloat()
                 }
                 drawBand(currentColor, cursorY, size.height)
             },
@@ -1386,8 +1510,7 @@ private val SOFT_FOOT_MASK = Brush.verticalGradient(
 
 private val SOFT_FOOT_BLUR = 48.dp
 private const val FULL_SCREEN_COLLECTION_ART_PX = 1440
-private const val MAX_COLLECTION_BACKDROP_PALETTES = 8
-private const val COLLECTION_COLOR_TRANSITION_HALF_HEIGHT = 24
+private const val COLLECTION_COLOR_TRANSITION_HALF_HEIGHT = 40
 
 /** Drag-to-reorder state for the song section below the two static header rows. */
 @Composable

@@ -1824,7 +1824,7 @@
     <string name="player_queue_rainbow_backdrop">Gradient the player background from queue artwork</string>
     <string name="player_queue_rainbow_backdrop_subtitle">Blend up to 8 distinct album-cover colours in queue order into the player screen background only. This setting changes the player screen background colour; the displayed album art stays the same. Off by default.</string>
     <string name="collection_queue_rainbow_backdrop">Gradient collection backgrounds from album artwork</string>
-    <string name="collection_queue_rainbow_backdrop_subtitle">On playlist, album, and artist song lists, use up to 8 album-art colours in track order as distinct background bands. Keep each colour section flat and fade only where the artwork colour changes. Album art is unchanged. On by default.</string>
+    <string name="collection_queue_rainbow_backdrop_subtitle">Keep the full-screen artwork wash through the first track, then switch to each album-art colour in track order. Fade only at artwork changes; the artwork itself stays unchanged. On by default.</string>
     <string name="player_side_control_size">Previous/next icon size</string>
     <string name="player_side_control_size_subtitle">Adjust the previous, next, and seek icons beside the central play button. Tap targets stay the same.</string>
     <string name="player_side_control_scale_value">%1$d%%</string>

@@ -65,6 +65,8 @@ data class ArtworkPalette(
     val onBackground: Color,
     val onBackgroundVariant: Color,
     val divider: Color,
+    /** Whether the artwork was decoded; false means the caller is still seeing theme fallback colours. */
+    val isResolved: Boolean = true,
 )
 
 /**
@@ -90,6 +92,8 @@ fun rememberArtworkPalette(
      * out of the cache or off the network.
      */
     artPx: Int = CARD_ART_PX,
+    /** Skip the generic theme-colour crossfade when a caller draws its own transition. */
+    animateOnLoad: Boolean = true,
 ): ArtworkPalette {
     val context = LocalContext.current
     val scheme = MaterialTheme.colorScheme
@@ -137,7 +141,7 @@ fun rememberArtworkPalette(
         divider = scheme.outline,
     )
 
-    val spec: AnimationSpec<Color> = if (reduceAnimation || knownUpFront) {
+    val spec: AnimationSpec<Color> = if (!animateOnLoad || reduceAnimation || knownUpFront) {
         snap()
     } else {
         tween(TINT_FADE_MS)
@@ -152,6 +156,7 @@ fun rememberArtworkPalette(
             target.onBackgroundVariant, spec, label = "tintOnVariant",
         ).value,
         divider = animateColorAsState(target.divider, spec, label = "tintDivider").value,
+        isResolved = seed != null,
     )
 }
 
@@ -272,7 +277,7 @@ private fun Seed.toPalette(dark: Boolean): ArtworkPalette = if (dark) {
         // sleeve that ends dark hands over almost invisibly, one that ends
         // bright leaves a page that is visibly lit from under the artwork.
         wash = edge.withHsl(
-            saturation = { it.coerceIn(0.18f, 0.58f) },
+            saturation = { if (it < 0.18f) it else it.coerceIn(0.18f, 0.58f) },
             lightness = { it.coerceIn(0.14f, 0.24f) },
         ),
         elevated = dominant.withHsl(saturation = { it.coerceIn(0.20f, 0.62f) }, lightness = { 0.22f }),
@@ -293,7 +298,7 @@ private fun Seed.toPalette(dark: Boolean): ArtworkPalette = if (dark) {
     ArtworkPalette(
         background = dominant.withHsl(saturation = { it.coerceIn(0.14f, 0.50f) }, lightness = { 0.91f }),
         wash = edge.withHsl(
-            saturation = { it.coerceIn(0.12f, 0.46f) },
+            saturation = { if (it < 0.12f) it else it.coerceIn(0.12f, 0.46f) },
             lightness = { it.coerceIn(0.78f, 0.90f) },
         ),
         elevated = dominant.withHsl(saturation = { it.coerceIn(0.14f, 0.50f) }, lightness = { 0.83f }),
