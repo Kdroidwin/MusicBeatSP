@@ -582,6 +582,8 @@ data class DetailPage(
     val artistArtworkOverride: String? = null,
     /** Number of leading sections which belong to this device's own library. */
     val localSectionsCount: Int = 0,
+    /** Stable remote identity retained when this artist is shown from the local library. */
+    val artistIdentityId: String? = null,
 )
 
 /**

@@ -11,6 +11,7 @@ import com.music.bitchord.data.settings.EqualizerSettings
 import com.music.bitchord.data.settings.SearchHistory
 import com.music.bitchord.feature.localmusic.data.LocalFavoritesStore
 import com.music.bitchord.feature.artistimage.data.ArtistArtworkStore
+import com.music.bitchord.feature.artistimage.data.ArtistPageModeStore
 import com.music.bitchord.feature.localmusic.data.LocalPlaylistStore
 import com.music.bitchord.feature.localmusic.domain.model.LocalPlaylist
 import com.music.bitchord.feature.localsongactions.data.LocalPlayStatsStore
@@ -45,7 +46,7 @@ import java.time.format.DateTimeFormatter
 object Backup {
 
     private const val APP_TAG = "musicbeat"
-    private const val SCHEMA_VERSION = 7
+    private const val SCHEMA_VERSION = 8
     private const val MAX_IMPORT_BYTES = 128 * 1024 * 1024
 
     private val json = Json {
@@ -80,6 +81,7 @@ object Backup {
             }.toMap()
             val savedQueues = SavedQueueStore.exportQueues().map { it.toBackupQueue() }
             val artistArtwork = ArtistArtworkStore.exportBackup(context)
+            val localOnlyArtists = ArtistPageModeStore.exportBackup()
             val radioFavorites = RadioRecordingFavoriteStore.favorites(context).map { BackupRadioFavorite.from(it) }
             require(artistArtwork.sumOf { it.bytes.size.toLong() } <= 90L * 1024 * 1024) {
                 "Artist images are too large to include in one backup"
@@ -106,6 +108,7 @@ object Backup {
                         artistKey = item.artistKey,
                     )
                 },
+                artistLocalOnly = localOnlyArtists.map { ArtistLocalOnlyBackup(it.artistName, it.artistKey) },
                 radioRecordingFavorites = radioFavorites,
             )
             val text = json.encodeToString(BackupFile.serializer(), file)
@@ -169,6 +172,12 @@ object Backup {
                     ArtistArtworkStore.BackupArtwork(item.artistName, item.mimeType, bytes, item.artistKey)
                 }
                 ArtistArtworkStore.importBackup(context, artwork)
+            }
+            if (file.version >= 8) {
+                ArtistPageModeStore.importBackup(
+                    context,
+                    file.artistLocalOnly.map { ArtistPageModeStore.BackupEntry(it.artistName, it.artistKey) },
+                )
             }
             if (file.version >= 7 || file.radioRecordingFavorites.isNotEmpty()) {
                 RadioRecordingFavoriteStore.restore(
@@ -246,7 +255,14 @@ object Backup {
         val listening: List<StoredBucket> = emptyList(),
         val savedQueues: List<BackupQueue> = emptyList(),
         val artistArtwork: List<ArtistArtworkBackup> = emptyList(),
+        val artistLocalOnly: List<ArtistLocalOnlyBackup> = emptyList(),
         val radioRecordingFavorites: List<BackupRadioFavorite> = emptyList(),
+    )
+
+    @Serializable
+    data class ArtistLocalOnlyBackup(
+        val artistName: String,
+        val artistKey: String,
     )
 
     @Serializable

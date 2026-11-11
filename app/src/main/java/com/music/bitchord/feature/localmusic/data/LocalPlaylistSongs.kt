@@ -18,8 +18,20 @@ fun resolvePlaylistSongs(
     }
     return playlist.songIds.mapNotNull { id ->
         val editedMetadata = playlist.editedSongMetadata[id]
+        val storedMetadata = editedMetadata ?: playlist.songMetadata[id]
+        val pathHint = normalizeLocalPath(storedMetadata?.localPath)
+            ?: normalizeLocalPath(filePathFromUri(id))
+        // MediaStore can issue a new content URI after a rescan or tag edit.
+        // The playlist keeps the old URI, so recover its current library row by
+        // the stable file path recorded when the playlist entry was saved.
+        val pathMatch = pathHint?.let { expectedPath ->
+            librarySongs.firstOrNull { song ->
+                (normalizeLocalPath(song.localPath) ?: normalizeLocalPath(filePathFromUri(song.localUri))) == expectedPath
+            }
+        }
         val resolved = librarySongs.firstOrNull { song -> song.localUri == id }
             ?: librarySongs.firstOrNull { song -> song.videoId == id }
+            ?: pathMatch
             ?: id.takeIf { it.startsWith("content://") || it.startsWith("file://") }?.let { uriString ->
                 val uri = runCatching { Uri.parse(uriString) }.getOrNull()
                 if (uri?.scheme == "file") {
@@ -41,6 +53,7 @@ fun resolvePlaylistSongs(
                     artistId = metadata?.artistId,
                     albumId = metadata?.albumId,
                     albumName = metadata?.albumName,
+                    albumArtist = metadata?.albumArtist,
                     isVideo = metadata?.isVideo ?: false,
                     isVideoOrigin = metadata?.isVideoOrigin ?: false,
                     localUri = id,
@@ -61,6 +74,7 @@ fun resolvePlaylistSongs(
                     artistId = metadata.artistId,
                     albumId = metadata.albumId,
                     albumName = metadata.albumName,
+                    albumArtist = metadata.albumArtist,
                     isVideo = metadata.isVideo,
                     isVideoOrigin = metadata.isVideoOrigin,
                 )
@@ -83,3 +97,13 @@ fun resolvePlaylistSongs(
         }
     }
 }
+
+private fun normalizeLocalPath(path: String?): String? = path
+    ?.replace('\\', '/')
+    ?.trim()
+    ?.trimEnd('/')
+    ?.takeIf(String::isNotBlank)
+
+private fun filePathFromUri(uriString: String?): String? = uriString
+    ?.takeIf { it.startsWith("file://") }
+    ?.let { runCatching { Uri.parse(it).path }.getOrNull() }

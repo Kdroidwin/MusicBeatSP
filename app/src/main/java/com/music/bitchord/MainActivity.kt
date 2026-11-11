@@ -330,6 +330,7 @@ import com.music.bitchord.feature.localmusic.ui.components.DrillDownSongList
 import com.music.bitchord.feature.localmusic.data.LocalPlaylistStore
 import com.music.bitchord.feature.localmusic.data.LocalFavoritesStore
 import com.music.bitchord.feature.artistimage.data.ArtistArtworkStore
+import com.music.bitchord.feature.artistimage.data.ArtistPageModeStore
 import com.music.bitchord.feature.tageditor.data.TagLibWriter
 import com.music.bitchord.widget.QuickPlayTileState
 import com.music.bitchord.ui.screens.LocalMusicScreen
@@ -976,9 +977,11 @@ private fun BitChordApp(
 
     val detailStack by viewModel.detailStack.collectAsStateWithLifecycle()
     val artistArtworkUris by ArtistArtworkStore.imageUris.collectAsStateWithLifecycle()
+    val localOnlyArtistKeys by ArtistPageModeStore.localOnlyArtistKeys.collectAsStateWithLifecycle()
     val detail = detailStack.lastOrNull()?.let { page ->
         if (page.type == BrowseType.ARTIST) {
-            ArtistArtworkStore.imageUriFor(page.title, artistArtworkUris, page.browseId)?.let { customArt ->
+            val artistId = page.artistIdentityId ?: page.browseId
+            ArtistArtworkStore.imageUriFor(page.title, artistArtworkUris, artistId)?.let { customArt ->
                 page.copy(thumbnailUrl = customArt, artistArtworkOverride = customArt)
             } ?: page
         } else {
@@ -1790,7 +1793,7 @@ private fun BitChordApp(
         }
     }
 
-    val openLocalArtist: (String, String?) -> Unit = { artistName, art ->
+    fun openLocalArtist(artistName: String, art: String?, artistIdentityId: String? = null) {
         val clean = artistName.trim()
         if (clean.isNotBlank()) {
             viewModel.openDetail(
@@ -1798,31 +1801,8 @@ private fun BitChordApp(
                 title = clean,
                 thumbnailUrl = art,
                 type = BrowseType.ARTIST,
+                artistIdentityId = artistIdentityId,
             )
-        }
-    }
-
-    fun openByName(
-        browseId: String?,
-        name: String,
-        subtitle: String?,
-        type: BrowseType,
-        artwork: String? = null,
-    ) {
-        val cleanName = name.trim()
-        if (cleanName.isBlank()) return
-        if (!browseId.isNullOrBlank() && !browseId.startsWith("local:")) {
-            viewModel.openDetail(
-                browseId = browseId,
-                title = cleanName,
-                subtitle = subtitle.orEmpty(),
-                thumbnailUrl = artwork,
-                type = type,
-            )
-        } else if (type == BrowseType.ARTIST) {
-            openLocalArtist(cleanName, artwork)
-        } else {
-            openLocalAlbum(cleanName, artwork)
         }
     }
 
@@ -1830,17 +1810,25 @@ private fun BitChordApp(
     fun openPlayerArtistPage(name: String, browseId: String? = null) {
         val cleanName = name.trim()
         if (cleanName.isBlank()) return
+        val remoteId = browseId?.takeIf { it.isNotBlank() && !it.startsWith("local:") }
+        if (remoteId != null && ArtistPageModeStore.isLocalOnly(cleanName, remoteId, localOnlyArtistKeys)) {
+            openLocalArtist(cleanName, null, remoteId)
+            return
+        }
         when (AppSettings.playerArtistPageMode.value) {
-            PlayerArtistPageMode.LOCAL -> openLocalArtist(cleanName, null)
+            PlayerArtistPageMode.LOCAL -> openLocalArtist(cleanName, null, remoteId)
             PlayerArtistPageMode.ONLINE,
             PlayerArtistPageMode.HYBRID -> {
                 val mode = AppSettings.playerArtistPageMode.value
                 if (mode == PlayerArtistPageMode.HYBRID && !AppSettings.youtubeMusicNetworkAllowed) {
-                    openLocalArtist(cleanName, null)
+                    openLocalArtist(cleanName, null, remoteId)
                     return
                 }
-                val remoteId = browseId?.takeIf { it.isNotBlank() && !it.startsWith("local:") }
                 fun openResolved(id: String) {
+                    if (ArtistPageModeStore.isLocalOnly(cleanName, id, localOnlyArtistKeys)) {
+                        openLocalArtist(cleanName, null, id)
+                        return
+                    }
                     if (mode == PlayerArtistPageMode.HYBRID) {
                         viewModel.openHybridArtist(id, cleanName)
                     } else {
@@ -1849,6 +1837,7 @@ private fun BitChordApp(
                             title = cleanName,
                             subtitle = context.getString(R.string.artist),
                             type = BrowseType.ARTIST,
+                            artistIdentityId = id,
                         )
                     }
                 }
@@ -1873,6 +1862,45 @@ private fun BitChordApp(
                     }
                 }
             }
+        }
+    }
+
+    fun openByName(
+        browseId: String?,
+        name: String,
+        subtitle: String?,
+        type: BrowseType,
+        artwork: String? = null,
+    ) {
+        val cleanName = name.trim()
+        if (cleanName.isBlank()) return
+        if (!browseId.isNullOrBlank() && !browseId.startsWith("local:")) {
+            if (type == BrowseType.ARTIST) {
+                if (ArtistPageModeStore.isLocalOnly(cleanName, browseId, localOnlyArtistKeys)) {
+                    openLocalArtist(cleanName, null, browseId)
+                } else {
+                    viewModel.openDetail(
+                        browseId = browseId,
+                        title = cleanName,
+                        subtitle = subtitle.orEmpty(),
+                        thumbnailUrl = artwork,
+                        type = type,
+                        artistIdentityId = browseId,
+                    )
+                }
+            } else {
+                viewModel.openDetail(
+                    browseId = browseId,
+                    title = cleanName,
+                    subtitle = subtitle.orEmpty(),
+                    thumbnailUrl = artwork,
+                    type = type,
+                )
+            }
+        } else if (type == BrowseType.ARTIST) {
+            openLocalArtist(cleanName, artwork)
+        } else {
+            openLocalAlbum(cleanName, artwork)
         }
     }
 
@@ -3135,6 +3163,26 @@ private fun BitChordApp(
                         }
                         val pageSongs = (page.songs as? com.music.bitchord.data.model.UiState.Success)
                             ?.data.orEmpty()
+                        val artistIdentityId = page.artistIdentityId
+                        val isLocalOnlyArtist = artistIdentityId != null && ArtistPageModeStore.isLocalOnly(
+                            page.title,
+                            artistIdentityId,
+                            localOnlyArtistKeys,
+                        )
+                        val onToggleLocalOnlyArtist: ((Boolean) -> Unit)? = artistIdentityId?.let { artistId ->
+                            { useLocalOnly ->
+                                if (ArtistPageModeStore.setLocalOnly(context, page.title, artistId, useLocalOnly)) {
+                                    viewModel.closeDetail()
+                                    if (useLocalOnly) {
+                                        openLocalArtist(page.title, null, artistId)
+                                    } else {
+                                        openPlayerArtistPage(page.title, artistId)
+                                    }
+                                } else {
+                                    Toast.makeText(context, R.string.artist_page_mode_save_failed, Toast.LENGTH_SHORT).show()
+                                }
+                            }
+                        }
                         val isEditableLocalArtist = page.browseId.startsWith("local:artist:")
                         val localArtistSongKeys = remember(pageSongs) {
                             pageSongs.mapTo(linkedSetOf()) { it.localUri ?: it.videoId }
@@ -3203,8 +3251,10 @@ private fun BitChordApp(
                                     null
                                 },
                                 contentPadding = listPadding,
-                                onChangeArtistArtwork = { chooseArtistImage(page.title, page.browseId) },
-                                onResetArtistArtwork = { resetArtistImage(page.title, page.browseId) },
+                                onChangeArtistArtwork = { chooseArtistImage(page.title, page.artistIdentityId ?: page.browseId) },
+                                onResetArtistArtwork = { resetArtistImage(page.title, page.artistIdentityId ?: page.browseId) },
+                                isLocalOnlyArtist = isLocalOnlyArtist,
+                                onToggleLocalOnlyArtist = onToggleLocalOnlyArtist,
                                 selectionMode = isEditableLocalArtist && localArtistSelectionMode,
                                 selectionToolbar = if (isEditableLocalArtist && localArtistSelectionMode) {
                                     { contentColor ->

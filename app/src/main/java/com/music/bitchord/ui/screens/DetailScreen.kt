@@ -28,10 +28,13 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.rounded.Check
 import androidx.compose.material.icons.rounded.Delete
 import androidx.compose.material.icons.rounded.Edit
+import androidx.compose.material.icons.rounded.MoreVert
 import androidx.compose.material.icons.rounded.Notifications
 import androidx.compose.material.icons.rounded.PlayArrow
 import androidx.compose.material.icons.rounded.Shuffle
 import androidx.compose.material3.CircularProgressIndicator
+import androidx.compose.material3.DropdownMenu
+import androidx.compose.material3.DropdownMenuItem
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
@@ -95,6 +98,8 @@ fun DetailScreen(
     contentPadding: PaddingValues,
     onChangeArtistArtwork: (() -> Unit)? = null,
     onResetArtistArtwork: (() -> Unit)? = null,
+    isLocalOnlyArtist: Boolean = false,
+    onToggleLocalOnlyArtist: ((Boolean) -> Unit)? = null,
     selectionMode: Boolean = false,
     selectionToolbar: (@Composable (Color) -> Unit)? = null,
     modifier: Modifier = Modifier,
@@ -139,6 +144,8 @@ fun DetailScreen(
                 hasCustomArtwork = page.artistArtworkOverride != null,
                 onChangeArtwork = onChangeArtistArtwork,
                 onResetArtwork = onResetArtistArtwork,
+                isLocalOnlyArtist = isLocalOnlyArtist,
+                onToggleLocalOnlyArtist = onToggleLocalOnlyArtist,
             )
         }
 
@@ -292,9 +299,12 @@ private fun ArtistHero(
     hasCustomArtwork: Boolean,
     onChangeArtwork: (() -> Unit)?,
     onResetArtwork: (() -> Unit)?,
+    isLocalOnlyArtist: Boolean,
+    onToggleLocalOnlyArtist: ((Boolean) -> Unit)?,
 ) {
     BoxWithConstraints(Modifier.fillMaxWidth()) {
         val artHeight = (maxWidth * 1.1f).coerceIn(340.dp, 590.dp)
+        var showArtistOptions by remember(title, heroUrl) { mutableStateOf(false) }
         Box(Modifier.fillMaxWidth().height(artHeight)) {
             AsyncImage(
                 model = heroUrl?.artworkAt(1200),
@@ -319,6 +329,40 @@ private fun ArtistHero(
                     modifier = Modifier.align(Alignment.TopEnd).padding(14.dp),
                     horizontalArrangement = Arrangement.spacedBy(8.dp),
                 ) {
+                    if (onToggleLocalOnlyArtist != null) {
+                        Box {
+                            IconButton(
+                                onClick = { showArtistOptions = true },
+                                modifier = Modifier.size(44.dp).clip(CircleShape).background(Color.Black.copy(alpha = 0.46f)),
+                            ) {
+                                Icon(
+                                    Icons.Rounded.MoreVert,
+                                    contentDescription = stringResource(R.string.artist_page_options),
+                                    tint = Color.White,
+                                    modifier = Modifier.size(21.dp),
+                                )
+                            }
+                            DropdownMenu(
+                                expanded = showArtistOptions,
+                                onDismissRequest = { showArtistOptions = false },
+                            ) {
+                                DropdownMenuItem(
+                                    text = {
+                                        Text(
+                                            stringResource(
+                                                if (isLocalOnlyArtist) R.string.artist_page_use_default_source
+                                                else R.string.artist_page_use_local_only,
+                                            ),
+                                        )
+                                    },
+                                    onClick = {
+                                        showArtistOptions = false
+                                        onToggleLocalOnlyArtist(!isLocalOnlyArtist)
+                                    },
+                                )
+                            }
+                        }
+                    }
                     IconButton(
                         onClick = onChangeArtwork,
                         modifier = Modifier.size(44.dp).clip(CircleShape).background(Color.Black.copy(alpha = 0.46f)),

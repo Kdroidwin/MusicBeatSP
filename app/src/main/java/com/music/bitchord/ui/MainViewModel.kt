@@ -2389,13 +2389,15 @@ class MainViewModel(app: Application) : AndroidViewModel(app) {
         artistName: String,
         thumbnailUrl: String? = null,
         songs: List<Song> = emptyList(),
+        artistIdentityId: String? = null,
     ) {
         val artistSongs = if (songs.isNotEmpty()) {
             songs
         } else {
             val allSongs = (_localSongs.value as? UiState.Success)?.data.orEmpty()
             allSongs.filter {
-                com.music.bitchord.feature.artistimage.util.ArtistSplitter.matchesArtist(it.artist, artistName)
+                com.music.bitchord.feature.artistimage.util.ArtistSplitter.matchesArtist(it.artist, artistName) ||
+                    com.music.bitchord.feature.artistimage.util.ArtistSplitter.matchesArtist(it.albumArtist.orEmpty(), artistName)
             }
         }
         val allLocalSongs = (_localSongs.value as? UiState.Success)?.data ?: artistSongs
@@ -2409,6 +2411,7 @@ class MainViewModel(app: Application) : AndroidViewModel(app) {
             type = BrowseType.ARTIST,
             sections = localSections,
             localSectionsCount = localSections.size,
+            artistIdentityId = artistIdentityId,
         )
     }
 
@@ -2422,7 +2425,8 @@ class MainViewModel(app: Application) : AndroidViewModel(app) {
         favoriteIds: Set<String> = LocalFavoritesStore.favoriteIds.value,
     ): List<HomeShelf> {
         val matchingSongs = librarySongs.filter {
-            com.music.bitchord.feature.artistimage.util.ArtistSplitter.matchesArtist(it.artist, artistName)
+            com.music.bitchord.feature.artistimage.util.ArtistSplitter.matchesArtist(it.artist, artistName) ||
+                com.music.bitchord.feature.artistimage.util.ArtistSplitter.matchesArtist(it.albumArtist.orEmpty(), artistName)
         }
         val releases = matchingSongs
             .filter { !it.albumName.isNullOrBlank() }
@@ -2443,7 +2447,8 @@ class MainViewModel(app: Application) : AndroidViewModel(app) {
         val playlists = LocalPlaylistStore.playlists.value.mapNotNull { playlist ->
             val playlistSongs = resolvePlaylistSongs(playlist, librarySongs, playStats, favoriteIds)
             val matchingPlaylistSongs = playlistSongs.filter {
-                com.music.bitchord.feature.artistimage.util.ArtistSplitter.matchesArtist(it.artist, artistName)
+                com.music.bitchord.feature.artistimage.util.ArtistSplitter.matchesArtist(it.artist, artistName) ||
+                    com.music.bitchord.feature.artistimage.util.ArtistSplitter.matchesArtist(it.albumArtist.orEmpty(), artistName)
             }
             if (matchingPlaylistSongs.isEmpty()) null else ShelfItem(
                 title = playlist.name,
@@ -2473,7 +2478,8 @@ class MainViewModel(app: Application) : AndroidViewModel(app) {
             val localSongs = (_localSongs.value as? UiState.Success)?.data
                 ?: LocalMediaRepository.getLocalMusic(context)
             val matchingSongs = localSongs.filter {
-                com.music.bitchord.feature.artistimage.util.ArtistSplitter.matchesArtist(it.artist, cleanName)
+                com.music.bitchord.feature.artistimage.util.ArtistSplitter.matchesArtist(it.artist, cleanName) ||
+                    com.music.bitchord.feature.artistimage.util.ArtistSplitter.matchesArtist(it.albumArtist.orEmpty(), cleanName)
             }
             val stats = LocalPlayStatsStore.snapshot(context)
             val songStats = matchingSongs.associateWith { LocalPlayStatsStore.getStats(it, stats) }
@@ -2501,6 +2507,7 @@ class MainViewModel(app: Application) : AndroidViewModel(app) {
                 sections = localShelves,
                 hybridArtist = true,
                 localSectionsCount = localShelves.size,
+                artistIdentityId = artistBrowseId,
             )
             _detailStack.value += page
 
@@ -2527,6 +2534,7 @@ class MainViewModel(app: Application) : AndroidViewModel(app) {
         subtitle: String = "",
         thumbnailUrl: String? = null,
         type: BrowseType = BrowseType.OTHER,
+        artistIdentityId: String? = null,
     ) {
         val resolved = browseTypeOf(browseId, type)
         val cachedLocal = (_localSongs.value as? UiState.Success)?.data
@@ -2544,7 +2552,10 @@ class MainViewModel(app: Application) : AndroidViewModel(app) {
             }
             browseId.startsWith("local:artist:") -> {
                 val artist = browseId.removePrefix("local:artist:")
-                val songs = cachedLocal?.filter { com.music.bitchord.feature.artistimage.util.ArtistSplitter.matchesArtist(it.artist, artist) }
+                val songs = cachedLocal?.filter {
+                    com.music.bitchord.feature.artistimage.util.ArtistSplitter.matchesArtist(it.artist, artist) ||
+                        com.music.bitchord.feature.artistimage.util.ArtistSplitter.matchesArtist(it.albumArtist.orEmpty(), artist)
+                }
                 if (!songs.isNullOrEmpty()) UiState.Success(songs) else UiState.Loading
             }
             else -> UiState.Loading
@@ -2563,6 +2574,9 @@ class MainViewModel(app: Application) : AndroidViewModel(app) {
             type = resolved,
             sections = initialLocalArtistSections,
             localSectionsCount = initialLocalArtistSections.size,
+            artistIdentityId = artistIdentityId ?: browseId.takeIf {
+                resolved == BrowseType.ARTIST && !it.startsWith("local:")
+            },
         )
         viewModelScope.launch {
             var sections = emptyList<HomeShelf>()
@@ -2644,7 +2658,8 @@ class MainViewModel(app: Application) : AndroidViewModel(app) {
                         ?: LocalMediaRepository.getLocalMusic(context)
                     sections = localArtistShelves(context, artistName, allSongs)
                     val artistSongs = allSongs.filter {
-                        com.music.bitchord.feature.artistimage.util.ArtistSplitter.matchesArtist(it.artist, artistName)
+                        com.music.bitchord.feature.artistimage.util.ArtistSplitter.matchesArtist(it.artist, artistName) ||
+                            com.music.bitchord.feature.artistimage.util.ArtistSplitter.matchesArtist(it.albumArtist.orEmpty(), artistName)
                     }
                     if (artistSongs.isEmpty()) UiState.Error("No tracks found for this artist")
                     else UiState.Success(artistSongs)

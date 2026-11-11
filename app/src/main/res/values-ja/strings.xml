@@ -1486,6 +1486,10 @@
     <string name="go_to_artist">アーティストを開く</string>
     <string name="change_artist_image">アーティスト画像を変更</string>
     <string name="reset_artist_image">アーティスト画像をリセット</string>
+    <string name="artist_page_options">アーティストページのオプション</string>
+    <string name="artist_page_use_local_only">このアーティストは端末内の曲だけを表示</string>
+    <string name="artist_page_use_default_source">アプリの既定の表示に戻す</string>
+    <string name="artist_page_mode_save_failed">アーティストページの設定を保存できませんでした</string>
     <string name="artist_image_updated">アーティスト画像を変更しました</string>
     <string name="artist_image_reset_done">アーティスト画像をリセットしました</string>
     <string name="artist_image_update_failed">アーティスト画像を保存できませんでした</string>

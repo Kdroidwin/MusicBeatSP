@@ -1593,6 +1593,10 @@
     <string name="go_to_artist">Go to Artist</string>
     <string name="change_artist_image">Change artist image</string>
     <string name="reset_artist_image">Reset artist image</string>
+    <string name="artist_page_options">Artist page options</string>
+    <string name="artist_page_use_local_only">Use this artist’s local library only</string>
+    <string name="artist_page_use_default_source">Use the app’s default artist source</string>
+    <string name="artist_page_mode_save_failed">Couldn’t save this artist’s page setting</string>
     <string name="artist_image_updated">Artist image updated</string>
     <string name="artist_image_reset_done">Artist image reset</string>
     <string name="artist_image_update_failed">Couldn’t save artist image</string>

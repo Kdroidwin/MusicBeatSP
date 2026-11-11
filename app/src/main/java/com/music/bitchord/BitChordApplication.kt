@@ -23,6 +23,7 @@ import com.music.bitchord.data.lyrics.KugeciWebViewFetcher
 import com.music.bitchord.data.scrobbling.LastFM
 import com.music.bitchord.data.settings.AppSettings
 import com.music.bitchord.feature.artistimage.data.ArtistArtworkStore
+import com.music.bitchord.feature.artistimage.data.ArtistPageModeStore
 import com.music.bitchord.data.settings.SearchHistory
 import com.music.bitchord.data.sources.SourceRegistry
 import com.music.bitchord.data.sources.RemoteServerArtworkFetcher
@@ -49,6 +50,7 @@ class BitChordApplication : Application(), SingletonImageLoader.Factory {
         AppSettings.init(this)
         KugeciWebViewFetcher.initialize(this)
         ArtistArtworkStore.init(this)
+        ArtistPageModeStore.init(this)
         // PlaybackService shares this process, so seeding the cookie here means
         // stream resolution is authenticated from the first play onwards.
         authStore = AuthStore(this)
