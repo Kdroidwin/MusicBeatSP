@@ -262,6 +262,7 @@ import com.music.bitchord.playback.rememberPlayerState
 import com.music.bitchord.playback.PlayerState
 import com.music.bitchord.ui.MainViewModel
 import com.music.bitchord.ui.components.BottomFadeScrim
+import com.music.bitchord.ui.player.PlayerArtworkBackdropPreloader
 import com.music.bitchord.ui.components.BottomTab
 import com.music.bitchord.ui.components.FLOATING_BAR_MAX_WIDTH
 import com.music.bitchord.ui.components.FloatingBottomBar
@@ -2409,6 +2410,13 @@ private fun BitChordApp(
             } else null,
         )
     }
+    // The compact player is visible before the expanded player is opened. Use
+    // that time to warm the exact artwork palette and mesh keys the full player
+    // will request, without delaying or changing audio playback.
+    PlayerArtworkBackdropPreloader(
+        song = playerSong,
+        enabled = !player.isLoading,
+    )
     // The three-dot menu snapshots the track into songActions when it's opened,
     // so a menu opened before the lookup above resolves would otherwise be
     // stuck without album/artist rows even after the ids come in. Keep it in
@@ -3687,7 +3695,11 @@ private fun BitChordApp(
                     // Not the wash: by the foot of the screen the page has finished
                     // easing out of it and into this, so this is what is actually
                     // under the tab bar.
-                    pageColor = if (isDetailVisible) detailPalette.background else MaterialTheme.colorScheme.background,
+                    pageColor = when {
+                        isLocalCollectionArtworkVisible -> localCollectionPalette!!.wash
+                        isDetailVisible -> detailPalette.background
+                        else -> MaterialTheme.colorScheme.background
+                    },
                     modifier = Modifier.align(Alignment.BottomCenter),
                 )
 

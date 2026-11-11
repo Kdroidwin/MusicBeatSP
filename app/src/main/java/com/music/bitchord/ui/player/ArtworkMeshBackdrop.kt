@@ -1,5 +1,6 @@
 package com.music.bitchord.ui.player
 
+import android.net.Uri
 import android.graphics.Bitmap
 import android.os.Build
 import androidx.compose.animation.core.Animatable
@@ -36,14 +37,51 @@ import coil3.request.SuccessResult
 import coil3.request.allowHardware
 import coil3.toBitmap
 import com.music.bitchord.data.model.CARD_ART_PX
+import com.music.bitchord.data.model.PLAYER_ART_PX
+import com.music.bitchord.data.model.Song
 import com.music.bitchord.data.model.artworkAt
 import com.music.bitchord.data.settings.AppSettings
+import com.music.bitchord.feature.localmusic.coil.LocalAudioArtworkFetcher
+import com.music.bitchord.ui.theme.rememberArtworkPalette
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.withContext
 import kotlin.math.floor
 import kotlin.math.roundToInt
 import kotlin.random.Random
+
+/**
+ * Reads the still artwork palette and its tiny backdrop mesh while the track
+ * is already playing in the compact player. The expanded player uses the same
+ * request keys, so opening it can paint the artwork colours on its first frame
+ * instead of starting with the dark theme fallback and waiting for a decode.
+ * Nothing in this path touches the media player or delays playback.
+ */
+@Composable
+fun PlayerArtworkBackdropPreloader(
+    song: Song?,
+    enabled: Boolean,
+) {
+    if (song == null || !enabled) return
+
+    val folderArtworkFallbackMode by AppSettings.folderArtworkFallbackMode.collectAsStateWithLifecycle()
+    val artUrl = remember(song, folderArtworkFallbackMode) { song.artworkAt(PLAYER_ART_PX) }
+    val localPreviewArtUrl = remember(song, artUrl) {
+        artUrl?.takeIf { LocalAudioArtworkFetcher.isLocalAudioUri(Uri.parse(it)) }
+            ?.let { song.artworkAt(480) }
+    }
+    val backdropArtworkUrl = localPreviewArtUrl ?: artUrl
+
+    // Keep these at the same resolution and URL identity as NowPlayingScreen.
+    // Palette colours and meshes are cached independently and shared globally.
+    rememberArtworkPalette(
+        imageUrl = artUrl,
+        dark = true,
+        artPx = PLAYER_ART_PX,
+        animateOnLoad = false,
+    )
+    rememberArtworkMesh(backdropArtworkUrl, artPx = PLAYER_ART_PX)
+}
 
 /**
  * The artwork's own colours, upside down and reduced to a mesh, for the player
