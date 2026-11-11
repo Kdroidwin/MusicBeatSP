@@ -756,7 +756,7 @@ fun DrillDownSongList(
     )
     val collectionRainbowBackdropEnabled by AppSettings.collectionQueueRainbowBackdrop.collectAsStateWithLifecycle()
     val collectionBackdropColors = if (
-        collectionRainbowBackdropEnabled && fullScreenArtwork && isCollectionDetail
+        collectionRainbowBackdropEnabled && isCollectionDetail
     ) {
         rememberCollectionArtworkColors(songs)
     } else {
@@ -775,7 +775,11 @@ fun DrillDownSongList(
     }
     // Release pages in BitChord leave rows transparent so the artwork-derived
     // wash continues behind the track list instead of snapping back to black.
-    val rowBackground = if (fullScreenArtwork) Color.Transparent else MaterialTheme.colorScheme.background
+    val rowBackground = if (fullScreenArtwork || collectionBackdropColors.size > 1) {
+        Color.Transparent
+    } else {
+        MaterialTheme.colorScheme.background
+    }
     val rowSubtitleColor = if (fullScreenArtwork) {
         artworkPalette.onBackgroundVariant
     } else {
@@ -809,8 +813,10 @@ fun DrillDownSongList(
         ) {
             val artHeight = (maxWidth / COLLECTION_ART_RATIO).coerceAtMost(maxHeight * 0.6f)
             val artHeightPx = with(LocalDensity.current) { artHeight.toPx() }
-            if (fullScreenArtwork) {
+            if (collectionBackdropColors.size > 1) {
                 CollectionArtworkGradientBackdrop(collectionBackdropColors)
+            }
+            if (fullScreenArtwork) {
                 CollectionPageBackground(
                     imageUrl = pageArtworkUrl,
                     previewImageUrl = previewArtworkUrl,
@@ -953,8 +959,10 @@ fun DrillDownSongList(
         ) {
             val artHeight = (maxWidth / COLLECTION_ART_RATIO).coerceAtMost(maxHeight * 0.6f)
             val artHeightPx = with(LocalDensity.current) { artHeight.toPx() }
-            if (fullScreenArtwork) {
+            if (collectionBackdropColors.size > 1) {
                 CollectionArtworkGradientBackdrop(collectionBackdropColors)
+            }
+            if (fullScreenArtwork) {
                 CollectionPageBackground(
                     imageUrl = pageArtworkUrl,
                     previewImageUrl = previewArtworkUrl,
