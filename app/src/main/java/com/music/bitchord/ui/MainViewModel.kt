@@ -2543,7 +2543,14 @@ class MainViewModel(app: Application) : AndroidViewModel(app) {
                 val id = browseId.removePrefix("local:playlist:")
                 val playlist = LocalPlaylistStore.playlists.value.firstOrNull { it.id == id }
                 if (playlist == null) UiState.Error("Playlist not found")
-                else UiState.Success(resolvePlaylistSongs(playlist, cachedLocal.orEmpty()))
+                else {
+                    // Do not publish an empty Success while the library snapshot
+                    // is still loading. The async resolution below only replaces
+                    // Loading pages, so an empty Success here permanently hid
+                    // this playlist's tracks when opened from an artist shelf.
+                    val resolvedSongs = cachedLocal?.let { resolvePlaylistSongs(playlist, it) }
+                    if (resolvedSongs.isNullOrEmpty()) UiState.Loading else UiState.Success(resolvedSongs)
+                }
             }
             browseId.startsWith("local:album:") -> {
                 val album = browseId.removePrefix("local:album:")

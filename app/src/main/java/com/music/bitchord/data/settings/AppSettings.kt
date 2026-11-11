@@ -1229,7 +1229,7 @@ object AppSettings {
     val rememberLastOpenedFolder = MutableStateFlow(true)
     /** Last folder is device-local because paths and storage permissions are device-specific. */
     val lastOpenedFolderPath = MutableStateFlow("")
-    val fullScreenCollectionArtwork = MutableStateFlow(false)
+    val fullScreenCollectionArtwork = MutableStateFlow(true)
     /** Enables creation of rule-based local smart playlists; kept opt-in. */
     val smartPlaylistsEnabled = MutableStateFlow(false)
     /** On wide layouts, replaces the left page with synced lyrics beside the docked player. */
@@ -1250,6 +1250,8 @@ object AppSettings {
     val playerArtistPageMode = MutableStateFlow(PlayerArtistPageMode.HYBRID)
     /** Artist landing pages include this device's albums and playlists by default. */
     val showLocalArtistSections = MutableStateFlow(true)
+    /** Artist pages show YouTube's recommended artist-channel shelves by default. */
+    val showArtistRecommendations = MutableStateFlow(true)
     /** The artist overview remains visible unless explicitly hidden. */
     val showArtistOverview = MutableStateFlow(true)
     val localMusicViewType = MutableStateFlow(LibraryViewType.LIST)
@@ -1262,7 +1264,7 @@ object AppSettings {
     val visibleLibraryCategories = MutableStateFlow(LibraryCategory.entries.filterNot { it == LibraryCategory.REPLAY }.toSet())
     val libraryCategoryOrder = MutableStateFlow(LibraryCategory.entries.toList())
     /** Show each track's cover in a playlist detail list instead of its number. */
-    val showPlaylistSongArtwork = MutableStateFlow(false)
+    val showPlaylistSongArtwork = MutableStateFlow(true)
     /** Show track covers in album, artist, and album-artist detail lists instead of ordinal numbers. */
     val showCollectionSongArtwork = MutableStateFlow(true)
     /** Show cover thumbnails instead of ordinal numbers in recent/most-played lists. */
@@ -1987,7 +1989,7 @@ object AppSettings {
         com.music.bitchord.data.webdav.WebDavAuth.update(
             webdavUrl.value, webdavUsername.value, webdavPassword.value,
         )
-        fullScreenCollectionArtwork.value = prefs.getBoolean(KEY_FULL_SCREEN_COLLECTION_ARTWORK, false)
+        fullScreenCollectionArtwork.value = prefs.getBoolean(KEY_FULL_SCREEN_COLLECTION_ARTWORK, true)
         smartPlaylistsEnabled.value = prefs.getBoolean(KEY_SMART_PLAYLISTS_ENABLED, false)
         tabletFullscreenPlayer.value = prefs.getBoolean(KEY_TABLET_LYRICS_BESIDE_PLAYER, false)
         savedYoutubeCollections.value = readSavedYoutubeCollections()
@@ -2001,6 +2003,7 @@ object AppSettings {
             ?.let { saved -> PlayerArtistPageMode.entries.firstOrNull { it.name == saved } }
             ?: PlayerArtistPageMode.HYBRID
         showLocalArtistSections.value = prefs.getBoolean(KEY_SHOW_LOCAL_ARTIST_SECTIONS, true)
+        showArtistRecommendations.value = prefs.getBoolean(KEY_SHOW_ARTIST_RECOMMENDATIONS, true)
         showArtistOverview.value = prefs.getBoolean(KEY_SHOW_ARTIST_OVERVIEW, true)
         downloadedMusicViewType.value = readLibraryViewType(KEY_DOWNLOADED_MUSIC_VIEW_TYPE, LibraryViewType.LIST)
         downloadedSongsViewType.value = readLibraryViewType(KEY_DOWNLOADED_SONGS_VIEW_TYPE, downloadedMusicViewType.value)
@@ -2008,7 +2011,7 @@ object AppSettings {
         downloadedArtistsViewType.value = readLibraryViewType(KEY_DOWNLOADED_ARTISTS_VIEW_TYPE, LibraryViewType.GRID)
         libraryPlaylistsViewType.value = readLibraryViewType(KEY_LIBRARY_PLAYLISTS_VIEW_TYPE, LibraryViewType.GRID)
         librarySongsViewType.value = readLibraryViewType(KEY_LIBRARY_SONGS_VIEW_TYPE, LibraryViewType.LIST)
-        showPlaylistSongArtwork.value = prefs.getBoolean(KEY_SHOW_PLAYLIST_SONG_ARTWORK, false)
+        showPlaylistSongArtwork.value = prefs.getBoolean(KEY_SHOW_PLAYLIST_SONG_ARTWORK, true)
         showCollectionSongArtwork.value = prefs.getBoolean(KEY_SHOW_COLLECTION_SONG_ARTWORK, true)
         showPlayHistorySongArtwork.value = prefs.getBoolean(KEY_SHOW_PLAY_HISTORY_SONG_ARTWORK, true)
         localDrillDownSongsViewType.value = readLibraryViewType(KEY_LOCAL_DRILLDOWN_SONGS_VIEW_TYPE, LibraryViewType.LIST)
@@ -4533,6 +4536,11 @@ object AppSettings {
         prefs.edit().putBoolean(KEY_SHOW_LOCAL_ARTIST_SECTIONS, value).apply()
     }
 
+    fun setShowArtistRecommendations(value: Boolean) {
+        showArtistRecommendations.value = value
+        prefs.edit().putBoolean(KEY_SHOW_ARTIST_RECOMMENDATIONS, value).apply()
+    }
+
     fun setShowArtistOverview(value: Boolean) {
         showArtistOverview.value = value
         prefs.edit().putBoolean(KEY_SHOW_ARTIST_OVERVIEW, value).apply()
@@ -5124,6 +5132,7 @@ object AppSettings {
     private const val KEY_ARTIST_DEEZER_ARTWORK_ENABLED = "artist_deezer_artwork_enabled"
     private const val KEY_PLAYER_ARTIST_PAGE_MODE = "player_artist_page_mode"
     private const val KEY_SHOW_LOCAL_ARTIST_SECTIONS = "show_local_artist_sections"
+    private const val KEY_SHOW_ARTIST_RECOMMENDATIONS = "show_artist_recommendations"
     private const val KEY_SHOW_ARTIST_OVERVIEW = "show_artist_overview"
     private const val KEY_LIBRARY_SORT = "library_sort"
     private const val KEY_YOUTUBE_DOWNLOADS_SORT = "youtube_downloads_sort"

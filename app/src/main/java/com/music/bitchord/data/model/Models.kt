@@ -500,6 +500,8 @@ data class HomeShelf(
     val items: List<ShelfItem>,
     /** YouTube's "strapline" — the grey line Apple Music runs under a heading. */
     val subtitle: String = "",
+    /** True for artist-page shelves that contain recommended artist channels. */
+    val isArtistRecommendations: Boolean = false,
 )
 
 /** A page of the Home feed, plus the token for the next one — null once exhausted. */

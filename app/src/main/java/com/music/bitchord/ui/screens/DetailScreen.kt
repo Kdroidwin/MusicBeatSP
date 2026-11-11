@@ -110,6 +110,7 @@ fun DetailScreen(
     val songs = (songsState as? UiState.Success)?.data.orEmpty()
     val showArtistOverview by AppSettings.showArtistOverview.collectAsStateWithLifecycle()
     val showLocalArtistSections by AppSettings.showLocalArtistSections.collectAsStateWithLifecycle()
+    val showArtistRecommendations by AppSettings.showArtistRecommendations.collectAsStateWithLifecycle()
     val subscribed = page.subscription?.subscribed == true
     val subscriptionLabel = page.subscription?.let {
         stringResource(if (it.subscribed) R.string.unsubscribe else R.string.subscribe)
@@ -263,7 +264,10 @@ fun DetailScreen(
             }
         }
 
-        items(remoteSections, key = { "artist-shelf-${it.title}" }) { shelf ->
+        items(
+            remoteSections.filter { showArtistRecommendations || !it.isArtistRecommendations },
+            key = { "artist-shelf-${it.title}" },
+        ) { shelf ->
             ArtistShelf(
                 shelf = shelf,
                 palette = palette,

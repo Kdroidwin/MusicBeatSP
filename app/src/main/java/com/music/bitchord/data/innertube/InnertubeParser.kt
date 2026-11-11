@@ -379,7 +379,14 @@ object InnertubeParser {
                     parseTwoRowItem(it.o("musicTwoRowItemRenderer"))
                 }.filter { it.browseId != null }
                 if (title.isNotBlank() && items.isNotEmpty()) {
-                    shelves += HomeShelf(title, items)
+                    val isArtistRecommendations = items.all { item ->
+                        item.browseId?.startsWith("UC") == true
+                    }
+                    shelves += HomeShelf(
+                        title = title,
+                        items = items,
+                        isArtistRecommendations = isArtistRecommendations,
+                    )
                 }
             }
         }

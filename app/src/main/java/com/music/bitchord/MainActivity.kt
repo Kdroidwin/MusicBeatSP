@@ -1179,6 +1179,8 @@ private fun BitChordApp(
     val localSongs = (localSongsState as? UiState.Success)?.data.orEmpty()
     val localEmptyMessage = (localSongsState as? UiState.Error)?.message
     val includeRemoteSourceMedia by AppSettings.includeRemoteSourceMediaInLibrary.collectAsStateWithLifecycle()
+    val fullScreenCollectionArtwork by AppSettings.fullScreenCollectionArtwork.collectAsStateWithLifecycle()
+    val showPlaylistSongArtwork by AppSettings.showPlaylistSongArtwork.collectAsStateWithLifecycle()
     val showCollectionSongArtwork by AppSettings.showCollectionSongArtwork.collectAsStateWithLifecycle()
     val webdavUrl by AppSettings.webdavUrl.collectAsStateWithLifecycle()
     val webdavUsername by AppSettings.webdavUsername.collectAsStateWithLifecycle()
@@ -3350,6 +3352,9 @@ private fun BitChordApp(
                             songs = pageSongs,
                             isArtist = page.type == BrowseType.ARTIST,
                             isPlaylist = page.type == BrowseType.PLAYLIST,
+                            showArtworkInList = showPlaylistSongArtwork && page.type == BrowseType.PLAYLIST,
+                            fullScreenArtwork = fullScreenCollectionArtwork &&
+                                page.type in setOf(BrowseType.ALBUM, BrowseType.PLAYLIST),
                             selectedIds = selectedLocalArtistSongIds,
                             selectionMode = isEditableLocalArtist && localArtistSelectionMode,
                             onSelectionToggle = if (isEditableLocalArtist) toggleLocalArtistSelection else null,

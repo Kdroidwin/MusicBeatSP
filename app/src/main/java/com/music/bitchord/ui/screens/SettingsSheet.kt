@@ -653,6 +653,7 @@ private fun additionalArtworkSettingsSearchEntries(
     artistDeezerArtworkEnabled: Boolean,
     playerArtistPageModeLabel: String,
     showLocalArtistSections: Boolean,
+    showArtistRecommendations: Boolean,
     showArtistOverview: Boolean,
     onChoosePlayerArtistPageMode: () -> Unit,
     folderArtworkFallbackLabel: String,
@@ -708,6 +709,12 @@ private fun additionalArtworkSettingsSearchEntries(
         listOf("artist", "local", "album", "single", "EP", "playlist", "アーティスト", "端末内", "アルバム", "シングル", "プレイリスト"),
         showLocalArtistSections,
     ) { AppSettings.setShowLocalArtistSections(!showLocalArtistSections) },
+    SettingsSearchEntry(
+        stringResource(R.string.show_artist_recommendations),
+        stringResource(R.string.show_artist_recommendations_subtitle),
+        listOf("artist", "recommendations", "suggested artists", "YouTube Music", "アーティスト", "おすすめ", "推奨"),
+        showArtistRecommendations,
+    ) { AppSettings.setShowArtistRecommendations(!showArtistRecommendations) },
     SettingsSearchEntry(
         stringResource(R.string.show_artist_overview),
         stringResource(R.string.show_artist_overview_subtitle),
@@ -1427,6 +1434,7 @@ fun SettingsScreen(
     val artistDeezerArtworkEnabled by AppSettings.artistDeezerArtworkEnabled.collectAsStateWithLifecycle()
     val playerArtistPageMode by AppSettings.playerArtistPageMode.collectAsStateWithLifecycle()
     val showLocalArtistSections by AppSettings.showLocalArtistSections.collectAsStateWithLifecycle()
+    val showArtistRecommendations by AppSettings.showArtistRecommendations.collectAsStateWithLifecycle()
     val showArtistOverview by AppSettings.showArtistOverview.collectAsStateWithLifecycle()
     val playerArtistPageModeLabel = stringResource(
         when (playerArtistPageMode) {
@@ -2677,6 +2685,7 @@ fun SettingsScreen(
             artistDeezerArtworkEnabled = artistDeezerArtworkEnabled,
             playerArtistPageModeLabel = playerArtistPageModeLabel,
             showLocalArtistSections = showLocalArtistSections,
+            showArtistRecommendations = showArtistRecommendations,
             showArtistOverview = showArtistOverview,
             onChoosePlayerArtistPageMode = { showPlayerArtistPageModeDialog = true },
             folderArtworkFallbackLabel = stringResource(
@@ -6625,6 +6634,7 @@ fun SettingsScreen(
             artistDeezerArtworkEnabled = artistDeezerArtworkEnabled,
             playerArtistPageModeLabel = playerArtistPageModeLabel,
             showLocalArtistSections = showLocalArtistSections,
+            showArtistRecommendations = showArtistRecommendations,
             showArtistOverview = showArtistOverview,
             filterNonMusicAudio = filterNonMusicAudio,
             showPlaylistSongArtwork = showPlaylistSongArtwork,
@@ -8261,6 +8271,7 @@ private fun LocalMusicSettingsGroup(
     artistDeezerArtworkEnabled: Boolean,
     playerArtistPageModeLabel: String,
     showLocalArtistSections: Boolean,
+    showArtistRecommendations: Boolean,
     showArtistOverview: Boolean,
     filterNonMusicAudio: Boolean,
     showPlaylistSongArtwork: Boolean,
@@ -8477,6 +8488,19 @@ SettingsGroup(header = stringResource(R.string.local_music)) {
             )
         },
         onClick = { AppSettings.setShowLocalArtistSections(!showLocalArtistSections) },
+    )
+    RowDivider()
+    SettingsRow(
+        icon = Icons.Rounded.Person,
+        title = stringResource(R.string.show_artist_recommendations),
+        subtitle = stringResource(R.string.show_artist_recommendations_subtitle),
+        trailing = {
+            Switch(
+                checked = showArtistRecommendations,
+                onCheckedChange = AppSettings::setShowArtistRecommendations,
+            )
+        },
+        onClick = { AppSettings.setShowArtistRecommendations(!showArtistRecommendations) },
     )
     RowDivider()
     SettingsRow(

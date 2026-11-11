@@ -1161,8 +1161,8 @@
     <string name="local_library_tabs_subtitle">Show, hide, and reorder the tabs in the local library</string>
     <string name="local_folder_hierarchy">Folder hierarchy</string>
     <string name="local_folder_hierarchy_subtitle">Indent folders to show their parent and child structure</string>
-    <string name="full_screen_collection_artwork">Full-screen album and library artwork</string>
-    <string name="full_screen_collection_artwork_subtitle">Show a full-bleed cover on album and library playlist detail pages</string>
+    <string name="full_screen_collection_artwork">Full-screen album and playlist artwork</string>
+    <string name="full_screen_collection_artwork_subtitle">Show full-screen cover art on album and playlist pages, including YouTube Music and releases opened from artist pages.</string>
     <string name="smart_playlists_enabled">Smart playlists</string>
     <string name="smart_playlists_enabled_subtitle">Enable rule-based playlists for your local music library. Off by default.</string>
     <string name="create_smart_playlist">Create smart playlist</string>
@@ -1295,7 +1295,7 @@
     <string name="drag_to_reorder_song">Drag to reorder song</string>
     <string name="drag_selected_songs_to_reorder">Drag selected songs together to reorder</string>
     <string name="playlist_song_artwork">Show artwork in playlist song lists</string>
-    <string name="playlist_song_artwork_subtitle">Show small album covers instead of track numbers</string>
+    <string name="playlist_song_artwork_subtitle">Show each track’s cover instead of its number in local and YouTube Music playlists.</string>
     <string name="theme_amoled">AMOLED</string>
     <string name="theme_match_artwork">Album art</string>
     <string name="theme_match_artwork_subtitle">Use the playing song’s cover colors for the app accent</string>
@@ -2126,6 +2126,8 @@
     <string name="player_artist_page_mode_hybrid_subtitle">Use your frequently played tracks and releases first, then online artist art and catalogue shelves.</string>
     <string name="show_local_artist_sections">Show this device’s releases and playlists</string>
     <string name="show_local_artist_sections_subtitle">Show albums, singles, EPs, and playlists from this device above the artist’s tracks.</string>
+    <string name="show_artist_recommendations">Show recommended artists</string>
+    <string name="show_artist_recommendations_subtitle">Show or hide YouTube Music’s recommended artist shelves below the artist page.</string>
     <string name="show_artist_overview">Show artist overview</string>
     <string name="show_artist_overview_subtitle">Show the artist description and audience information when available.</string>
     <string name="hybrid_local_releases">Your albums, singles &amp; EPs</string>

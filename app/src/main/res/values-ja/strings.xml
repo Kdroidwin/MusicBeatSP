@@ -1045,8 +1045,8 @@
     <string name="local_library_tabs_subtitle">ローカルライブラリのタブを表示・非表示・並び替え</string>
     <string name="local_folder_hierarchy">フォルダー階層表示</string>
     <string name="local_folder_hierarchy_subtitle">親フォルダーと子フォルダーが分かるようにインデントします</string>
-    <string name="full_screen_collection_artwork">アルバム・ライブラリの全画面アート</string>
-    <string name="full_screen_collection_artwork_subtitle">アルバムとライブラリのプレイリスト詳細を、カバーとグラデーションで表示します</string>
+    <string name="full_screen_collection_artwork">アルバム・プレイリストの全画面アート</string>
+    <string name="full_screen_collection_artwork_subtitle">端末内・YouTube Musicのアルバムやプレイリスト、アーティストから開いたリリースを全画面アートで表示します。</string>
     <string name="smart_playlists_enabled">スマートプレイリスト</string>
     <string name="smart_playlists_enabled_subtitle">端末内の音楽に条件を設定するプレイリスト機能を有効にします。初期設定はオフです。</string>
     <string name="create_smart_playlist">スマートプレイリストを作成</string>
@@ -1179,7 +1179,7 @@
     <string name="drag_to_reorder_song">ドラッグして曲を並び替え</string>
     <string name="drag_selected_songs_to_reorder">選択した曲をまとめてドラッグして並び替え</string>
     <string name="playlist_song_artwork">プレイリストの曲一覧にアートを表示</string>
-    <string name="playlist_song_artwork_subtitle">曲番号の代わりに小さなアルバムアートを表示します</string>
+    <string name="playlist_song_artwork_subtitle">端末内とYouTube Musicのプレイリストで、曲番号の代わりに各曲のアルバムアートを表示します。</string>
     <string name="theme_amoled">AMOLEDブラック</string>
     <string name="theme_match_artwork">アートカラー</string>
     <string name="theme_match_artwork_subtitle">再生中の曲のアートカラーをアプリのアクセントに使います</string>
@@ -2099,6 +2099,8 @@
     <string name="player_artist_page_mode_hybrid_subtitle">よく聴く曲と手元のリリースを優先し、オンラインのアーティスト画像やカタログも表示します。</string>
     <string name="show_local_artist_sections">端末内のリリースとプレイリストを表示</string>
     <string name="show_local_artist_sections_subtitle">アーティストの曲一覧より前に、端末内のアルバム・シングル・EP・プレイリストを表示します。</string>
+    <string name="show_artist_recommendations">おすすめアーティストを表示</string>
+    <string name="show_artist_recommendations_subtitle">アーティストページ下部にあるYouTube Musicのおすすめアーティストを表示または非表示にします。</string>
     <string name="show_artist_overview">アーティストの概要を表示</string>
     <string name="show_artist_overview_subtitle">情報がある場合、アーティストの説明とリスナー情報を表示します。</string>
     <string name="hybrid_local_releases">端末内のアルバム・シングル・EP</string>
