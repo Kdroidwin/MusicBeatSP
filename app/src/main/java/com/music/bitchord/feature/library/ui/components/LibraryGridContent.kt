@@ -74,6 +74,7 @@ fun LibraryGridContent(
                     onClick = onFavoritesClick,
                     onPlay = onFavoritesPlay,
                     useStarIcon = favoriteUsesStar,
+                    showPlayButton = !hidePlaylistPlayButton,
                 )
             }
         }

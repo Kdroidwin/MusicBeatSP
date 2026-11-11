@@ -46,6 +46,7 @@ fun LibraryFavoritesCard(
     onClick: () -> Unit,
     onPlay: () -> Unit,
     useStarIcon: Boolean = false,
+    showPlayButton: Boolean = true,
     modifier: Modifier = Modifier,
 ) {
     Surface(
@@ -85,7 +86,7 @@ fun LibraryFavoritesCard(
                         .align(Alignment.Center),
                 )
 
-                if (songCount > 0) {
+                if (showPlayButton && songCount > 0) {
                     IconButton(
                         onClick = onPlay,
                         modifier = Modifier
