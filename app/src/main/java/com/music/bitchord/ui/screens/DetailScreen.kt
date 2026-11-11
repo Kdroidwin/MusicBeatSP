@@ -1,7 +1,8 @@
 package com.music.bitchord.ui.screens
 
+import androidx.compose.foundation.ExperimentalFoundationApi
 import androidx.compose.foundation.background
-import androidx.compose.foundation.clickable
+import androidx.compose.foundation.combinedClickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.BoxWithConstraints
@@ -100,6 +101,7 @@ fun DetailScreen(
     onResetArtistArtwork: (() -> Unit)? = null,
     isLocalOnlyArtist: Boolean = false,
     onToggleLocalOnlyArtist: ((Boolean) -> Unit)? = null,
+    onLocalSectionItemLongPress: ((ShelfItem) -> Unit)? = null,
     selectionMode: Boolean = false,
     selectionToolbar: (@Composable (Color) -> Unit)? = null,
     modifier: Modifier = Modifier,
@@ -179,7 +181,12 @@ fun DetailScreen(
         val remoteSections = page.sections.drop(localSections.size)
         if (showLocalArtistSections) {
             items(localSections, key = { "local-artist-shelf-${it.title}" }) { shelf ->
-                ArtistShelf(shelf = shelf, palette = palette, onItemClick = onSectionItemClick)
+                ArtistShelf(
+                    shelf = shelf,
+                    palette = palette,
+                    onItemClick = onSectionItemClick,
+                    onItemLongPress = onLocalSectionItemLongPress,
+                )
             }
         }
         if (selectionMode && selectionToolbar != null) {
@@ -470,10 +477,12 @@ private fun SectionTitle(title: String, palette: ArtworkPalette) {
 }
 
 @Composable
+@OptIn(ExperimentalFoundationApi::class)
 private fun ArtistShelf(
     shelf: HomeShelf,
     palette: ArtworkPalette,
     onItemClick: (ShelfItem) -> Unit,
+    onItemLongPress: ((ShelfItem) -> Unit)? = null,
 ) {
     Column(Modifier.fillMaxWidth().padding(top = 12.dp, bottom = 8.dp)) {
         SectionTitle(shelf.title, palette)
@@ -483,7 +492,10 @@ private fun ArtistShelf(
         ) {
             items(shelf.items, key = { "${it.browseId}:${it.videoId}:${it.title}" }) { item ->
                 Column(
-                    modifier = Modifier.width(SHELF_CARD_WIDTH).clip(RoundedCornerShape(10.dp)).clickable { onItemClick(item) },
+                    modifier = Modifier.width(SHELF_CARD_WIDTH).clip(RoundedCornerShape(10.dp)).combinedClickable(
+                        onClick = { onItemClick(item) },
+                        onLongClick = onItemLongPress?.let { callback -> { callback(item) } },
+                    ),
                 ) {
                     AsyncImage(
                         model = item.thumbnailUrl?.artworkAt(CARD_ART_PX),

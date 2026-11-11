@@ -3255,6 +3255,26 @@ private fun BitChordApp(
                                 onResetArtistArtwork = { resetArtistImage(page.title, page.artistIdentityId ?: page.browseId) },
                                 isLocalOnlyArtist = isLocalOnlyArtist,
                                 onToggleLocalOnlyArtist = onToggleLocalOnlyArtist,
+                                onLocalSectionItemLongPress = { item ->
+                                    val localAlbumId = item.browseId
+                                        ?.takeIf { it.startsWith("local:album:") }
+                                    if (localAlbumId != null) {
+                                        val albumName = localAlbumId.removePrefix("local:album:")
+                                        val albumSongs = pageSongs.filter {
+                                            it.albumName.equals(albumName, ignoreCase = true)
+                                        }
+                                        if (albumSongs.isNotEmpty()) {
+                                            browseActions = BrowseTarget(
+                                                browseId = null,
+                                                title = item.title,
+                                                subtitle = item.subtitle,
+                                                thumbnailUrl = item.thumbnailUrl,
+                                                type = BrowseType.ALBUM,
+                                                songs = albumSongs,
+                                            )
+                                        }
+                                    }
+                                },
                                 selectionMode = isEditableLocalArtist && localArtistSelectionMode,
                                 selectionToolbar = if (isEditableLocalArtist && localArtistSelectionMode) {
                                     { contentColor ->
@@ -3647,7 +3667,7 @@ private fun BitChordApp(
                                 onSongTagsOrLyricsSaved = { viewModel.reloadLyrics(it) },
                                 onSongMetadataUpdated = viewModel::updateLocalSongMetadata,
                                 onCollectionNavigationChanged = onCollectionNavigationChanged,
-                                onOpenArtistPage = { artist, _ -> openLocalArtist(artist, null) },
+                                onOpenArtistPage = { artist, _ -> openPlayerArtistPage(artist) },
                             )
                         }
                         TAB_ALBUM_ARTISTS -> if (!hasStoragePermission && catalogSongs.isEmpty()) {
