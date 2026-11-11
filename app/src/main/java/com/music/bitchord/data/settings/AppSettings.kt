@@ -687,7 +687,9 @@ object AppSettings {
     /** Extra spacing between the player action buttons below the volume row. */
     val playerActionButtonSpacingDp = MutableStateFlow(0f)
     /** Adds a queue-ordered gradient of the distinct album artwork colours behind the player. */
-    val playerQueueRainbowBackdrop = MutableStateFlow(true)
+    val playerQueueRainbowBackdrop = MutableStateFlow(false)
+    /** Adds a track-order gradient of distinct album artwork colours behind collection song lists. */
+    val collectionQueueRainbowBackdrop = MutableStateFlow(true)
     /** Scales the visible transport glyphs on either side of the central play button. */
     val playerSideControlScale = MutableStateFlow(1f)
     /** Strength of the artwork-matched lower blur in the full-screen player. */
@@ -1631,7 +1633,8 @@ object AppSettings {
         playerPlayPauseCornerRadiusPercent.value = prefs.getInt(KEY_PLAYER_PLAY_PAUSE_CORNER_RADIUS_PERCENT, 100).coerceIn(0, 100)
         playerTransportButtonSpacingDp.value = prefs.getFloat(KEY_PLAYER_TRANSPORT_BUTTON_SPACING_DP, 0f).coerceIn(0f, MAX_PLAYER_BUTTON_SPACING_DP)
         playerActionButtonSpacingDp.value = prefs.getFloat(KEY_PLAYER_ACTION_BUTTON_SPACING_DP, 0f).coerceIn(0f, MAX_PLAYER_BUTTON_SPACING_DP)
-        playerQueueRainbowBackdrop.value = prefs.getBoolean(KEY_PLAYER_QUEUE_RAINBOW_BACKDROP, true)
+        playerQueueRainbowBackdrop.value = prefs.getBoolean(KEY_PLAYER_QUEUE_RAINBOW_BACKDROP, false)
+        collectionQueueRainbowBackdrop.value = prefs.getBoolean(KEY_COLLECTION_QUEUE_RAINBOW_BACKDROP, true)
         playerSideControlScale.value = prefs.getFloat(KEY_PLAYER_SIDE_CONTROL_SCALE, 1f).coerceIn(MIN_PLAYER_SIDE_CONTROL_SCALE, MAX_PLAYER_SIDE_CONTROL_SCALE)
         fullBleedArtworkBottomBlurStrengthDp.value =
             prefs.getInt(KEY_FULL_BLEED_ARTWORK_BOTTOM_BLUR_STRENGTH_DP, 42).coerceIn(0, 96)
@@ -2435,6 +2438,11 @@ object AppSettings {
     fun setPlayerQueueRainbowBackdrop(value: Boolean) {
         playerQueueRainbowBackdrop.value = value
         prefs.edit().putBoolean(KEY_PLAYER_QUEUE_RAINBOW_BACKDROP, value).apply()
+    }
+
+    fun setCollectionQueueRainbowBackdrop(value: Boolean) {
+        collectionQueueRainbowBackdrop.value = value
+        prefs.edit().putBoolean(KEY_COLLECTION_QUEUE_RAINBOW_BACKDROP, value).apply()
     }
 
     fun setPlayerSideControlScale(value: Float) {
@@ -4817,6 +4825,7 @@ object AppSettings {
     private const val KEY_PLAYER_TRANSPORT_BUTTON_SPACING_DP = "player_transport_button_spacing_dp"
     private const val KEY_PLAYER_ACTION_BUTTON_SPACING_DP = "player_action_button_spacing_dp"
     private const val KEY_PLAYER_QUEUE_RAINBOW_BACKDROP = "player_queue_rainbow_backdrop"
+    private const val KEY_COLLECTION_QUEUE_RAINBOW_BACKDROP = "collection_queue_rainbow_backdrop"
     private const val KEY_PLAYER_SIDE_CONTROL_SCALE = "player_side_control_scale"
     private const val KEY_HIDE_PLAYLIST_PLAY_BUTTON_LABEL = "hide_playlist_play_button_label"
     private const val KEY_WHITE_COLLECTION_PLAY_BUTTON = "white_collection_play_button"

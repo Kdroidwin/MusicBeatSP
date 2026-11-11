@@ -1523,6 +1523,7 @@ fun SettingsScreen(
     val playerTransportButtonSpacingDp by AppSettings.playerTransportButtonSpacingDp.collectAsStateWithLifecycle()
     val playerActionButtonSpacingDp by AppSettings.playerActionButtonSpacingDp.collectAsStateWithLifecycle()
     val playerQueueRainbowBackdrop by AppSettings.playerQueueRainbowBackdrop.collectAsStateWithLifecycle()
+    val collectionQueueRainbowBackdrop by AppSettings.collectionQueueRainbowBackdrop.collectAsStateWithLifecycle()
     val playerSideControlScale by AppSettings.playerSideControlScale.collectAsStateWithLifecycle()
     val showPlayerTopGrabber by AppSettings.showPlayerTopGrabber.collectAsStateWithLifecycle()
     val cleartextHttpAllowed by AppSettings.cleartextHttpAllowed.collectAsStateWithLifecycle()
@@ -2164,6 +2165,12 @@ fun SettingsScreen(
             activate = {},
         ),
         playerQueueRainbowBackdropSearchEntry(playerQueueRainbowBackdrop),
+        SettingsSearchEntry(
+            title = stringResource(R.string.collection_queue_rainbow_backdrop),
+            subtitle = stringResource(R.string.collection_queue_rainbow_backdrop_subtitle),
+            keywords = listOf("playlist", "album", "artist", "collection", "background", "gradient", "rainbow", "プレイリスト", "アルバム", "アーティスト", "曲一覧", "背景", "グラデーション", "虹"),
+            enabled = collectionQueueRainbowBackdrop,
+        ) { AppSettings.setCollectionQueueRainbowBackdrop(!collectionQueueRainbowBackdrop) },
         playerSideControlSizeSearchEntry(playerSideControlScale),
         playerPlayPauseCornerRoundnessSearchEntry(playerPlayPauseCornerRadiusPercent),
         playerTransportSpacingSearchEntry(playerTransportButtonSpacingDp),
@@ -4460,6 +4467,21 @@ fun SettingsScreen(
                     )
                 },
                 onClick = { AppSettings.setPlayerQueueRainbowBackdrop(!playerQueueRainbowBackdrop) },
+            )
+            RowDivider()
+            SettingsRow(
+                icon = Icons.Rounded.Gradient,
+                title = stringResource(R.string.collection_queue_rainbow_backdrop),
+                subtitle = stringResource(R.string.collection_queue_rainbow_backdrop_subtitle),
+                trailing = {
+                    Switch(
+                        checked = collectionQueueRainbowBackdrop,
+                        onCheckedChange = AppSettings::setCollectionQueueRainbowBackdrop,
+                    )
+                },
+                onClick = {
+                    AppSettings.setCollectionQueueRainbowBackdrop(!collectionQueueRainbowBackdrop)
+                },
             )
             RowDivider()
             SettingsRow(

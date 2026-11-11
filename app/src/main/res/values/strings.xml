@@ -1821,8 +1821,10 @@
     <string name="player_play_pause_icon_size">Play/pause icon size</string>
     <string name="player_play_pause_icon_size_subtitle">Adjust the central play and pause icon size on the player screen.</string>
     <string name="player_icon_size_value">%1$d dp</string>
-    <string name="player_queue_rainbow_backdrop">Gradient the background from queue artwork</string>
-    <string name="player_queue_rainbow_backdrop_subtitle">Blend the colours of distinct album covers in queue order into the background only. On by default.</string>
+    <string name="player_queue_rainbow_backdrop">Gradient the player background from queue artwork</string>
+    <string name="player_queue_rainbow_backdrop_subtitle">Blend up to 8 distinct album-cover colours in queue order into the player screen background only. This setting changes the player screen background colour; the displayed album art stays the same. Off by default.</string>
+    <string name="collection_queue_rainbow_backdrop">Gradient collection backgrounds from album artwork</string>
+    <string name="collection_queue_rainbow_backdrop_subtitle">On playlist, album, and artist song lists, blend up to 8 distinct album-cover colours in track order into the background only. Album art is unchanged. On by default.</string>
     <string name="player_side_control_size">Side transport icon size</string>
     <string name="player_side_control_size_subtitle">Resize the previous, next, shuffle, repeat, and other icons around the central play button. Tap targets stay the same.</string>
     <string name="player_side_control_scale_value">%1$d%%</string>

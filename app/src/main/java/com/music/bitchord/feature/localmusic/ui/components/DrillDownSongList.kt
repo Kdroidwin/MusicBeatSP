@@ -57,6 +57,7 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.setValue
+import androidx.compose.runtime.key
 import androidx.compose.runtime.mutableFloatStateOf
 import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.rememberUpdatedState
@@ -64,10 +65,12 @@ import androidx.compose.runtime.snapshotFlow
 import androidx.compose.runtime.withFrameNanos
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.draw.clipToBounds
 import androidx.compose.ui.draw.BlurredEdgeTreatment
 import androidx.compose.ui.draw.blur
+import androidx.compose.ui.draw.drawBehind
 import androidx.compose.ui.draw.drawWithContent
 import androidx.compose.ui.graphics.BlendMode
 import androidx.compose.ui.graphics.CompositingStrategy
@@ -751,6 +754,14 @@ fun DrillDownSongList(
         imageUrl = selectionArtworkUrl,
         artPx = artworkRequestPx,
     )
+    val collectionRainbowBackdropEnabled by AppSettings.collectionQueueRainbowBackdrop.collectAsStateWithLifecycle()
+    val collectionBackdropColors = if (
+        collectionRainbowBackdropEnabled && fullScreenArtwork && isCollectionDetail
+    ) {
+        rememberCollectionArtworkColors(songs)
+    } else {
+        emptyList()
+    }
     SideEffect {
         onArtworkPaletteChanged?.invoke(artworkPalette.takeIf { fullScreenArtwork })
     }
@@ -799,6 +810,7 @@ fun DrillDownSongList(
             val artHeight = (maxWidth / COLLECTION_ART_RATIO).coerceAtMost(maxHeight * 0.6f)
             val artHeightPx = with(LocalDensity.current) { artHeight.toPx() }
             if (fullScreenArtwork) {
+                CollectionArtworkGradientBackdrop(collectionBackdropColors)
                 CollectionPageBackground(
                     imageUrl = pageArtworkUrl,
                     previewImageUrl = previewArtworkUrl,
@@ -942,6 +954,7 @@ fun DrillDownSongList(
             val artHeight = (maxWidth / COLLECTION_ART_RATIO).coerceAtMost(maxHeight * 0.6f)
             val artHeightPx = with(LocalDensity.current) { artHeight.toPx() }
             if (fullScreenArtwork) {
+                CollectionArtworkGradientBackdrop(collectionBackdropColors)
                 CollectionPageBackground(
                     imageUrl = pageArtworkUrl,
                     previewImageUrl = previewArtworkUrl,
@@ -1144,6 +1157,47 @@ fun DrillDownSongList(
 }
 
 @Composable
+private fun rememberCollectionArtworkColors(songs: List<Song>): List<Color> {
+    val artworkUrls = remember(songs) {
+        val candidates = songs.mapNotNull { it.artworkAt(CARD_ART_PX) }.distinct()
+        if (candidates.size <= MAX_COLLECTION_BACKDROP_PALETTES) {
+            candidates
+        } else {
+            List(MAX_COLLECTION_BACKDROP_PALETTES) { index ->
+                candidates[index * candidates.lastIndex / (MAX_COLLECTION_BACKDROP_PALETTES - 1)]
+            }.distinct()
+        }
+    }
+    return artworkUrls.map { url ->
+        key(url) {
+            rememberArtworkPalette(url, artPx = CARD_ART_PX).background
+        }
+    }.distinct()
+}
+
+/** Draws behind the collection cover and rows so the album art stays untouched. */
+@Composable
+private fun CollectionArtworkGradientBackdrop(colors: List<Color>) {
+    if (colors.size < 2) return
+    Box(
+        Modifier
+            .fillMaxSize()
+            .drawBehind {
+                val colorStops = colors.mapIndexed { index, color ->
+                    (index.toFloat() / colors.lastIndex) to color.copy(alpha = COLLECTION_BACKDROP_ALPHA)
+                }.toTypedArray()
+                drawRect(
+                    Brush.linearGradient(
+                        colorStops = colorStops,
+                        start = Offset.Zero,
+                        end = Offset(size.width, size.height),
+                    ),
+                )
+            },
+    )
+}
+
+@Composable
 private fun CollectionPageBackground(
     imageUrl: String?,
     previewImageUrl: String?,
@@ -1223,6 +1277,8 @@ private val SOFT_FOOT_MASK = Brush.verticalGradient(
 
 private val SOFT_FOOT_BLUR = 48.dp
 private const val FULL_SCREEN_COLLECTION_ART_PX = 1440
+private const val MAX_COLLECTION_BACKDROP_PALETTES = 8
+private const val COLLECTION_BACKDROP_ALPHA = 0.58f
 
 /** Drag-to-reorder state for the song section below the two static header rows. */
 @Composable

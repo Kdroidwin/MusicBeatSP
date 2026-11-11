@@ -1794,8 +1794,10 @@
     <string name="player_play_pause_icon_size">再生・一時停止アイコンのサイズ</string>
     <string name="player_play_pause_icon_size_subtitle">プレイヤー画面中央の再生・一時停止アイコンの大きさを調整します。</string>
     <string name="player_icon_size_value">%1$d dp</string>
-    <string name="player_queue_rainbow_backdrop">キュー内のアートに合わせて背景をグラデーション</string>
-    <string name="player_queue_rainbow_backdrop_subtitle">再生キューの異なるアルバムアートの色を曲順につなぎ、背景だけに反映します。既定でオンです。</string>
+    <string name="player_queue_rainbow_backdrop">再生キューのアート色をプレイヤー背景に反映</string>
+    <string name="player_queue_rainbow_backdrop_subtitle">再生キュー順に最大8種類のアルバムアートの色を、プレイヤー画面の背景だけに重ねます。画面の色が変わりますが、表示中のアルバムアートは変わりません。初期設定はオフです。</string>
+    <string name="collection_queue_rainbow_backdrop">曲一覧の背景をアルバムアート色でグラデーション</string>
+    <string name="collection_queue_rainbow_backdrop_subtitle">プレイリスト・アルバム・アーティストの曲一覧で、曲順に最大8種類のアルバムアートの色を背景だけに重ねます。アルバムアートの表示は変わりません。初期設定はオンです。</string>
     <string name="player_side_control_size">再生ボタン左右の操作アイコンサイズ</string>
     <string name="player_side_control_size_subtitle">前へ・次へ・シャッフル・リピートなど、中央の再生ボタン左右にあるアイコンの大きさを調整します。タップ範囲は維持されます。</string>
     <string name="player_side_control_scale_value">%1$d%%</string>
