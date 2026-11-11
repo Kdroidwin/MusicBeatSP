@@ -33,6 +33,7 @@ import org.jsoup.Jsoup
 import org.jsoup.nodes.Element
 import org.jsoup.parser.Parser
 import java.util.Locale
+import java.text.Normalizer
 import java.util.concurrent.ConcurrentHashMap
 
 /** Suspend API over Innertube. Every call returns a Result so the UI can show a real error. */
@@ -383,6 +384,32 @@ object YtMusicRepository {
      */
     suspend fun search(query: String, filter: SearchFilter): Result<List<SearchResult>> =
         searchPage(query, filter).map { it.rows }
+
+    /**
+     * Resolves a credited artist by exact displayed name. Multi-artist tracks
+     * often provide a channel id only for the first credit; searching the
+     * selected name lets the other credits open their own page without
+     * silently landing on a similarly named artist.
+     */
+    suspend fun findArtistPageId(name: String): Result<String> {
+        val wanted = artistSearchKey(name)
+        if (wanted.isBlank()) return Result.failure(IllegalArgumentException("Artist name is empty"))
+        return search(name, SearchFilter.ARTISTS).mapCatching { rows ->
+            rows.asSequence()
+                .filterIsInstance<SearchResult.Browse>()
+                .map { it.item }
+                .filter { it.type == com.music.bitchord.data.model.BrowseType.ARTIST }
+                .firstOrNull { artistSearchKey(it.title) == wanted }
+                ?.browseId
+                ?: throw NoSuchElementException("No exact artist page found for $name")
+        }
+    }
+
+    private fun artistSearchKey(value: String): String = Normalizer.normalize(value, Normalizer.Form.NFKC)
+        .trim()
+        .replace(Regex("\\s+"), " ")
+        .lowercase(Locale.ROOT)
+        .removeSuffix(" - topic")
 
     private fun SearchResult.identityKey(): String = when (this) {
         is SearchResult.TopTrack -> "v:${song.videoId}"

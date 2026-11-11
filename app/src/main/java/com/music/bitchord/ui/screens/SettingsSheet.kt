@@ -180,6 +180,7 @@ import com.music.bitchord.data.scrobbling.LastFM
 import com.music.bitchord.data.settings.AppSettings
 import com.music.bitchord.ui.player.AudioVisualizationPanel
 import com.music.bitchord.data.settings.FolderArtworkFallbackMode
+import com.music.bitchord.data.settings.PlayerArtistPageMode
 import com.music.bitchord.data.settings.PlayerArtworkMode
 import com.music.bitchord.data.settings.PlayerInkGroup
 import com.music.bitchord.data.settings.RetroPlayerBackground
@@ -650,6 +651,8 @@ private fun additionalArtworkSettingsSearchEntries(
     queueHeadingItalicPlayQueue: Boolean,
     smartPlaylistsEnabled: Boolean,
     artistDeezerArtworkEnabled: Boolean,
+    playerArtistPageModeLabel: String,
+    onChoosePlayerArtistPageMode: () -> Unit,
     folderArtworkFallbackLabel: String,
     onChooseFolderArtworkFallback: () -> Unit,
     context: Context,
@@ -690,6 +693,13 @@ private fun additionalArtworkSettingsSearchEntries(
         listOf("smart playlist", "rules", "dynamic", "プレイリスト", "スマート", "条件", "自動"),
         smartPlaylistsEnabled,
     ) { AppSettings.setSmartPlaylistsEnabled(!smartPlaylistsEnabled) },
+    SettingsSearchEntry(
+        title = stringResource(R.string.player_artist_page_mode),
+        subtitle = stringResource(R.string.player_artist_page_mode_subtitle),
+        keywords = listOf("player", "artist", "local", "online", "hybrid", "YouTube Music", "プレイヤー", "アーティスト", "ローカル", "オンライン", "ハイブリッド"),
+        valueLabel = playerArtistPageModeLabel,
+        activate = onChoosePlayerArtistPageMode,
+    ),
     SettingsSearchEntry(
         title = stringResource(R.string.artist_deezer_artwork_enabled),
         subtitle = stringResource(R.string.artist_deezer_artwork_enabled_subtitle),
@@ -1401,6 +1411,14 @@ fun SettingsScreen(
     val shuffleArtistAlbums by AppSettings.shuffleArtistAlbums.collectAsStateWithLifecycle()
     val onlineAlbumArtistArtwork by AppSettings.onlineAlbumArtistArtwork.collectAsStateWithLifecycle()
     val artistDeezerArtworkEnabled by AppSettings.artistDeezerArtworkEnabled.collectAsStateWithLifecycle()
+    val playerArtistPageMode by AppSettings.playerArtistPageMode.collectAsStateWithLifecycle()
+    val playerArtistPageModeLabel = stringResource(
+        when (playerArtistPageMode) {
+            PlayerArtistPageMode.LOCAL -> R.string.player_artist_page_mode_local
+            PlayerArtistPageMode.ONLINE -> R.string.player_artist_page_mode_online
+            PlayerArtistPageMode.HYBRID -> R.string.player_artist_page_mode_hybrid
+        },
+    )
     val signatureApiEnabled by AppSettings.signatureApiEnabled.collectAsStateWithLifecycle()
     val spotifySpdcToken by AppSettings.spotifySpdcToken.collectAsStateWithLifecycle()
     val prioritizeSpotifyCanvas by AppSettings.prioritizeSpotifyCanvas.collectAsStateWithLifecycle()
@@ -1433,6 +1451,7 @@ fun SettingsScreen(
     val persistentLocalArtwork by AppSettings.persistentLocalArtwork.collectAsStateWithLifecycle()
     val folderArtworkFallbackMode by AppSettings.folderArtworkFallbackMode.collectAsStateWithLifecycle()
     var showFolderArtworkFallbackModeDialog by remember { mutableStateOf(false) }
+    var showPlayerArtistPageModeDialog by remember { mutableStateOf(false) }
     val resamplerCutoffHz by AppSettings.resamplerCutoffHz.collectAsStateWithLifecycle()
     val darPcmUpsamplingEnabled by AppSettings.darPcmUpsamplingEnabled.collectAsStateWithLifecycle()
     val dsdPlaybackEnabled by AppSettings.dsdPlaybackEnabled.collectAsStateWithLifecycle()
@@ -2640,6 +2659,8 @@ fun SettingsScreen(
             queueHeadingItalicPlayQueue = queueHeadingItalicPlayQueue,
             smartPlaylistsEnabled = smartPlaylistsEnabled,
             artistDeezerArtworkEnabled = artistDeezerArtworkEnabled,
+            playerArtistPageModeLabel = playerArtistPageModeLabel,
+            onChoosePlayerArtistPageMode = { showPlayerArtistPageModeDialog = true },
             folderArtworkFallbackLabel = stringResource(
                 when (folderArtworkFallbackMode) {
                     FolderArtworkFallbackMode.DISABLED -> R.string.folder_artwork_fallback_disabled
@@ -6584,6 +6605,7 @@ fun SettingsScreen(
             shuffleArtistAlbums = shuffleArtistAlbums,
             onlineAlbumArtistArtwork = onlineAlbumArtistArtwork,
             artistDeezerArtworkEnabled = artistDeezerArtworkEnabled,
+            playerArtistPageModeLabel = playerArtistPageModeLabel,
             filterNonMusicAudio = filterNonMusicAudio,
             showPlaylistSongArtwork = showPlaylistSongArtwork,
             showCollectionSongArtwork = showCollectionSongArtwork,
@@ -6607,6 +6629,7 @@ fun SettingsScreen(
             },
             onOpenArtistSignatureEditor = { showArtistSignatureEditor = true },
             onOpenSpotifyCanvasSetup = { showSpotifyCanvasEditor = true },
+            onChoosePlayerArtistPageMode = { showPlayerArtistPageModeDialog = true },
         )
 
         SettingsGroup(header = stringResource(R.string.storage)) {
@@ -7198,6 +7221,55 @@ fun SettingsScreen(
                 },
                 confirmButton = {
                     TextButton(onClick = { showFolderArtworkFallbackModeDialog = false }) {
+                        Text(stringResource(R.string.cancel))
+                    }
+                },
+            )
+        }
+
+        if (showPlayerArtistPageModeDialog) {
+            AlertDialog(
+                onDismissRequest = { showPlayerArtistPageModeDialog = false },
+                title = { Text(stringResource(R.string.player_artist_page_mode)) },
+                text = {
+                    Column {
+                        PlayerArtistPageMode.entries.forEach { mode ->
+                            val (label, subtitle) = when (mode) {
+                                PlayerArtistPageMode.LOCAL -> R.string.player_artist_page_mode_local to R.string.player_artist_page_mode_local_subtitle
+                                PlayerArtistPageMode.ONLINE -> R.string.player_artist_page_mode_online to R.string.player_artist_page_mode_online_subtitle
+                                PlayerArtistPageMode.HYBRID -> R.string.player_artist_page_mode_hybrid to R.string.player_artist_page_mode_hybrid_subtitle
+                            }
+                            Row(
+                                modifier = Modifier
+                                    .fillMaxWidth()
+                                    .clickable {
+                                        AppSettings.setPlayerArtistPageMode(mode)
+                                        showPlayerArtistPageModeDialog = false
+                                    }
+                                    .padding(vertical = 8.dp),
+                                verticalAlignment = Alignment.CenterVertically,
+                            ) {
+                                RadioButton(
+                                    selected = playerArtistPageMode == mode,
+                                    onClick = {
+                                        AppSettings.setPlayerArtistPageMode(mode)
+                                        showPlayerArtistPageModeDialog = false
+                                    },
+                                )
+                                Column(Modifier.padding(start = 8.dp)) {
+                                    Text(stringResource(label), style = MaterialTheme.typography.bodyLarge)
+                                    Text(
+                                        stringResource(subtitle),
+                                        style = MaterialTheme.typography.bodySmall,
+                                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                                    )
+                                }
+                            }
+                        }
+                    }
+                },
+                confirmButton = {
+                    TextButton(onClick = { showPlayerArtistPageModeDialog = false }) {
                         Text(stringResource(R.string.cancel))
                     }
                 },
@@ -8167,6 +8239,7 @@ private fun LocalMusicSettingsGroup(
     shuffleArtistAlbums: Boolean,
     onlineAlbumArtistArtwork: Boolean,
     artistDeezerArtworkEnabled: Boolean,
+    playerArtistPageModeLabel: String,
     filterNonMusicAudio: Boolean,
     showPlaylistSongArtwork: Boolean,
     showCollectionSongArtwork: Boolean,
@@ -8184,6 +8257,7 @@ private fun LocalMusicSettingsGroup(
     onOpenAllFiles: () -> Unit,
     onOpenArtistSignatureEditor: () -> Unit,
     onOpenSpotifyCanvasSetup: () -> Unit,
+    onChoosePlayerArtistPageMode: () -> Unit,
 ) {
     val context = LocalContext.current
 SettingsGroup(header = stringResource(R.string.local_music)) {
@@ -8355,6 +8429,19 @@ SettingsGroup(header = stringResource(R.string.local_music)) {
             )
         },
         onClick = { AppSettings.setIncludeRemoteSourceMediaInLibrary(!includeRemoteSourceMediaInLibrary) },
+    )
+    RowDivider()
+    SettingsRow(
+        icon = Icons.Rounded.Person,
+        title = stringResource(R.string.player_artist_page_mode),
+        subtitle = stringResource(R.string.player_artist_page_mode_subtitle),
+        trailing = {
+            Row(verticalAlignment = Alignment.CenterVertically) {
+                Text(playerArtistPageModeLabel, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                Chevron()
+            }
+        },
+        onClick = onChoosePlayerArtistPageMode,
     )
     RowDivider()
     SettingsRow(

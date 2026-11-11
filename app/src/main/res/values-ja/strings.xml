@@ -2084,4 +2084,15 @@
     <string name="search_youtube_music_hint">曲名、アーティスト名、アルバム名、プレイリスト名を入力</string>
     <string name="search_clear_search">検索を消去</string>
     <string name="search_no_results">「%1$s」の検索結果はありません</string>
+    <string name="player_artist_page_mode">プレイヤーのアーティストページ</string>
+    <string name="player_artist_page_mode_subtitle">「アーティストを開く」で使うページを、端末内・オンライン・ハイブリッドから選択します。</string>
+    <string name="player_artist_page_mode_local">ローカル</string>
+    <string name="player_artist_page_mode_online">オンライン</string>
+    <string name="player_artist_page_mode_hybrid">ハイブリッド</string>
+    <string name="player_artist_page_mode_local_subtitle">この端末にある曲とリリースだけを表示します。</string>
+    <string name="player_artist_page_mode_online_subtitle">YouTube Musicのアーティストページ、リリース、おすすめを表示します。</string>
+    <string name="player_artist_page_mode_hybrid_subtitle">よく聴く曲と手元のリリースを優先し、オンラインのアーティスト画像やカタログも表示します。</string>
+    <string name="hybrid_local_releases">端末内のアルバム・シングル・EP</string>
+    <string name="hybrid_local_playlists">端末内のプレイリスト</string>
+    <string name="hybrid_playlist_track_count">%1$d曲</string>
 </resources>

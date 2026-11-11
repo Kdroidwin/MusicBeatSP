@@ -36,6 +36,9 @@ const val MAX_PLAYER_SIDE_CONTROL_SCALE = 1.6f
 /** The catalogue AutoPlay uses, or no automatic suggestions. */
 enum class AutoplaySource { OFF, YOUTUBE_MUSIC, DEVICE }
 
+/** Source used by the Player Details "Open artist" action. */
+enum class PlayerArtistPageMode { LOCAL, ONLINE, HYBRID }
+
 /**
  * Stream bitrate ceiling on the YouTube fallback path — MEDIUM, HIGH and
  * LOSSLESS all mean "whatever the best available Opus format is" there; what
@@ -1243,6 +1246,8 @@ object AppSettings {
     val onlineAlbumArtistArtwork = MutableStateFlow(false)
     /** Allows Deezer lookups for artist portraits. Resetting artist art turns this off. */
     val artistDeezerArtworkEnabled = MutableStateFlow(true)
+    /** Player artist navigation defaults to a local/online hybrid. */
+    val playerArtistPageMode = MutableStateFlow(PlayerArtistPageMode.HYBRID)
     val localMusicViewType = MutableStateFlow(LibraryViewType.LIST)
     val downloadedSongsViewType = MutableStateFlow(LibraryViewType.LIST)
     val downloadedAlbumsViewType = MutableStateFlow(LibraryViewType.GRID)
@@ -1988,6 +1993,9 @@ object AppSettings {
         shuffleArtistAlbums.value = prefs.getBoolean(KEY_SHUFFLE_ARTIST_ALBUMS, false)
         onlineAlbumArtistArtwork.value = prefs.getBoolean(KEY_ONLINE_ALBUM_ARTIST_ARTWORK, false)
         artistDeezerArtworkEnabled.value = prefs.getBoolean(KEY_ARTIST_DEEZER_ARTWORK_ENABLED, true)
+        playerArtistPageMode.value = prefs.getString(KEY_PLAYER_ARTIST_PAGE_MODE, null)
+            ?.let { saved -> PlayerArtistPageMode.entries.firstOrNull { it.name == saved } }
+            ?: PlayerArtistPageMode.HYBRID
         downloadedMusicViewType.value = readLibraryViewType(KEY_DOWNLOADED_MUSIC_VIEW_TYPE, LibraryViewType.LIST)
         downloadedSongsViewType.value = readLibraryViewType(KEY_DOWNLOADED_SONGS_VIEW_TYPE, downloadedMusicViewType.value)
         downloadedAlbumsViewType.value = readLibraryViewType(KEY_DOWNLOADED_ALBUMS_VIEW_TYPE, LibraryViewType.GRID)
@@ -4509,6 +4517,11 @@ object AppSettings {
         prefs.edit().putBoolean(KEY_ARTIST_DEEZER_ARTWORK_ENABLED, value).apply()
     }
 
+    fun setPlayerArtistPageMode(value: PlayerArtistPageMode) {
+        playerArtistPageMode.value = value
+        prefs.edit().putString(KEY_PLAYER_ARTIST_PAGE_MODE, value.name).apply()
+    }
+
     fun setLocalMusicViewType(value: LibraryViewType) {
         setLocalSongsViewType(value)
     }
@@ -5093,6 +5106,7 @@ object AppSettings {
     private const val KEY_SHUFFLE_ARTIST_ALBUMS = "shuffle_artist_albums"
     private const val KEY_ONLINE_ALBUM_ARTIST_ARTWORK = "online_album_artist_artwork"
     private const val KEY_ARTIST_DEEZER_ARTWORK_ENABLED = "artist_deezer_artwork_enabled"
+    private const val KEY_PLAYER_ARTIST_PAGE_MODE = "player_artist_page_mode"
     private const val KEY_LIBRARY_SORT = "library_sort"
     private const val KEY_YOUTUBE_DOWNLOADS_SORT = "youtube_downloads_sort"
     private const val KEY_DETAIL_SONG_SORTS = "detail_song_sorts"

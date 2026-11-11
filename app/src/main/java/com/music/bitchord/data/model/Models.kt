@@ -576,6 +576,10 @@ data class DetailPage(
      * fetched with a session; see [SubscriptionState].
      */
     val subscription: SubscriptionState? = null,
+    /** Hybrid artist pages keep their popular tracks and first shelves device-local. */
+    val hybridArtist: Boolean = false,
+    /** A user-selected portrait takes precedence over catalogue artist art in Hybrid mode. */
+    val artistArtworkOverride: String? = null,
 )
 
 /**

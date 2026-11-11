@@ -47,13 +47,13 @@ object ArtistSplitter {
      * - Semicolons: ;
      * - Slashes and backslashes: / or \
      * - Pipes, bullets, dots: |, •, ·
-     * - Commas: ,
+     * - Commas: ASCII comma, Japanese comma, full-width comma
      * - Whitespace-surrounded ampersand: &
      * - Whitespace-surrounded plus: +
      * - Collaboration words: feat., feat, ft., ft, featuring, with, vs., vs, x
      */
     private val DELIMITER_REGEX = Regex(
-        """\s*(?:[;/\\|•·]|,\s*|\s+&\s+|\s+\+\s+|\s+(?:feat\.?|ft\.?|featuring|with|vs\.?|x)\s+)\s*""",
+        """\s*(?:[;/\\|•·、，]|,\s*|\s+&\s+|\s+\+\s+|\s+(?:feat\.?|ft\.?|featuring|with|vs\.?|x)\s+)\s*""",
         RegexOption.IGNORE_CASE,
     )
 

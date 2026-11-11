@@ -2111,4 +2111,15 @@
     <string name="search_youtube_music_hint">Type a song, artist, album, or playlist</string>
     <string name="search_clear_search">Clear search</string>
     <string name="search_no_results">No results found for "%1$s"</string>
+    <string name="player_artist_page_mode">Player artist page</string>
+    <string name="player_artist_page_mode_subtitle">Choose whether Open artist uses only your device library, YouTube Music, or a hybrid page.</string>
+    <string name="player_artist_page_mode_local">Local</string>
+    <string name="player_artist_page_mode_online">Online</string>
+    <string name="player_artist_page_mode_hybrid">Hybrid</string>
+    <string name="player_artist_page_mode_local_subtitle">Show tracks and releases from this device only.</string>
+    <string name="player_artist_page_mode_online_subtitle">Use the YouTube Music artist page, including its releases and recommendations.</string>
+    <string name="player_artist_page_mode_hybrid_subtitle">Use your frequently played tracks and releases first, then online artist art and catalogue shelves.</string>
+    <string name="hybrid_local_releases">Your albums, singles &amp; EPs</string>
+    <string name="hybrid_local_playlists">Your playlists</string>
+    <string name="hybrid_playlist_track_count">%1$d tracks</string>
 </resources>

@@ -215,6 +215,7 @@ import com.music.bitchord.data.model.UiState
 import com.music.bitchord.data.model.durationMillis
 import com.music.bitchord.data.scrobbling.LastFM
 import com.music.bitchord.data.settings.AppSettings
+import com.music.bitchord.data.settings.PlayerArtistPageMode
 import com.music.bitchord.data.settings.SavedYoutubeCollection
 import com.music.bitchord.data.settings.MainNavigationTab
 import com.music.bitchord.data.settings.MainNavigationTabs
@@ -332,6 +333,7 @@ import com.music.bitchord.feature.artistimage.data.ArtistArtworkStore
 import com.music.bitchord.feature.tageditor.data.TagLibWriter
 import com.music.bitchord.widget.QuickPlayTileState
 import com.music.bitchord.ui.screens.LocalMusicScreen
+import com.music.bitchord.ui.screens.DetailScreen
 import com.music.bitchord.ui.replay.ReplayScreen
 import com.music.bitchord.ui.replay.cards
 import com.music.bitchord.ui.replay.ReplayShareSheet
@@ -973,7 +975,16 @@ private fun BitChordApp(
     SystemBarIcons(dark = !darkTheme && !showNowPlaying && !showReplay && replayStory == null)
 
     val detailStack by viewModel.detailStack.collectAsStateWithLifecycle()
-    val detail = detailStack.lastOrNull()
+    val artistArtworkUris by ArtistArtworkStore.imageUris.collectAsStateWithLifecycle()
+    val detail = detailStack.lastOrNull()?.let { page ->
+        if (page.hybridArtist) {
+            ArtistArtworkStore.imageUriFor(page.title, artistArtworkUris)?.let { customArt ->
+                page.copy(thumbnailUrl = customArt, artistArtworkOverride = customArt)
+            } ?: page
+        } else {
+            page
+        }
+    }
     val isLocalArtistDetail = detail?.browseId?.startsWith("local:artist:") == true
     var localArtistSelectionMode by rememberSaveable { mutableStateOf(false) }
     var selectedLocalArtistSongIds by rememberSaveable { mutableStateOf(emptySet<String>()) }
@@ -1801,6 +1812,56 @@ private fun BitChordApp(
             openLocalArtist(cleanName, artwork)
         } else {
             openLocalAlbum(cleanName, artwork)
+        }
+    }
+
+    /** Applies the configured Player Details artist-page source. */
+    fun openPlayerArtistPage(name: String, browseId: String? = null) {
+        val cleanName = name.trim()
+        if (cleanName.isBlank()) return
+        when (AppSettings.playerArtistPageMode.value) {
+            PlayerArtistPageMode.LOCAL -> openLocalArtist(cleanName, null)
+            PlayerArtistPageMode.ONLINE,
+            PlayerArtistPageMode.HYBRID -> {
+                val mode = AppSettings.playerArtistPageMode.value
+                if (mode == PlayerArtistPageMode.HYBRID && !AppSettings.youtubeMusicNetworkAllowed) {
+                    openLocalArtist(cleanName, null)
+                    return
+                }
+                val remoteId = browseId?.takeIf { it.isNotBlank() && !it.startsWith("local:") }
+                fun openResolved(id: String) {
+                    if (mode == PlayerArtistPageMode.HYBRID) {
+                        viewModel.openHybridArtist(id, cleanName)
+                    } else {
+                        viewModel.openDetail(
+                            browseId = id,
+                            title = cleanName,
+                            subtitle = context.getString(R.string.artist),
+                            type = BrowseType.ARTIST,
+                        )
+                    }
+                }
+                if (remoteId != null) {
+                    openResolved(remoteId)
+                } else {
+                    scope.launch {
+                        YtMusicRepository.findArtistPageId(cleanName).fold(
+                            onSuccess = ::openResolved,
+                            onFailure = {
+                                if (mode == PlayerArtistPageMode.HYBRID) {
+                                    openLocalArtist(cleanName, null)
+                                } else {
+                                    Toast.makeText(
+                                        context,
+                                        context.getString(R.string.couldnt_find, cleanName),
+                                        Toast.LENGTH_SHORT,
+                                    ).show()
+                                }
+                            },
+                        )
+                    }
+                }
+            }
         }
     }
 
@@ -2733,14 +2794,12 @@ private fun BitChordApp(
             onOpenArtist = { browseId ->
                 dismissNowPlaying()
                 val artists = com.music.bitchord.feature.artistimage.util.ArtistSplitter.split(song.artist)
-                if (browseId.isNotBlank() && !browseId.startsWith("local:")) {
-                    openByName(browseId, song.artist, null, BrowseType.ARTIST, song.thumbnailUrl)
-                } else if (artists.size > 1) {
+                if (artists.size > 1) {
                     songActions = song
                 } else {
                     val artistName = (artists.firstOrNull() ?: song.artist).trim()
                     if (artistName.isNotBlank()) {
-                        openByName(browseId, artistName, null, BrowseType.ARTIST, null)
+                        openPlayerArtistPage(artistName, browseId?.takeIf(String::isNotBlank))
                     } else {
                         Toast.makeText(context, "No artist information", Toast.LENGTH_SHORT).show()
                     }
@@ -3067,7 +3126,50 @@ private fun BitChordApp(
                                 selectedLocalArtistSongIds + id
                             }
                         }
-                        DrillDownSongList(
+                        if (page.type == BrowseType.ARTIST && !page.browseId.startsWith("local:")) {
+                            DetailScreen(
+                                page = page,
+                                currentSong = player.song,
+                                isPlaying = player.isPlaying,
+                                listState = detailListState,
+                                onSongClick = { songs, index -> play(songs, index) },
+                                onSongLongPress = { openSongMenu(withAlbum(it)) },
+                                onSongSwipe = { onSongSwipe(withAlbum(it)) },
+                                onShuffle = { songs ->
+                                    if (songs.isNotEmpty()) {
+                                        QueueShuffle.enableForNextQueue()
+                                        play(songs, songs.indices.random())
+                                    }
+                                },
+                                onSectionItemClick = { item ->
+                                    val video = shelfSong(item)?.takeIf { item.browseId == null }
+                                    if (video != null) {
+                                        playRadio(video)
+                                    } else {
+                                        item.browseId?.let { id ->
+                                            val type = viewModel.browseTypeOf(id, BrowseType.ALBUM)
+                                            if (type == BrowseType.ARTIST) {
+                                                openPlayerArtistPage(item.title, id)
+                                            } else {
+                                                viewModel.openDetail(
+                                                    browseId = id,
+                                                    title = item.title,
+                                                    subtitle = item.subtitle,
+                                                    thumbnailUrl = item.thumbnailUrl,
+                                                    type = type,
+                                                )
+                                            }
+                                        }
+                                    }
+                                },
+                                onToggleSubscription = if (signedIn) {
+                                    { viewModel.toggleSubscription(page.browseId) }
+                                } else {
+                                    null
+                                },
+                                contentPadding = listPadding,
+                            )
+                        } else DrillDownSongList(
                             label = page.title,
                             artworkUrl = page.thumbnailUrl,
                             songs = pageSongs,
@@ -4299,7 +4401,12 @@ private fun BitChordApp(
                                 chooseArtistImage(cleanArtist)
                             } else {
                                 dismissNowPlaying()
-                                openLocalArtist(cleanArtist, null)
+                                val firstCredit = com.music.bitchord.feature.artistimage.util.ArtistSplitter
+                                    .split(song.artist).firstOrNull()
+                                val artistId = song.artistId.takeIf {
+                                    !firstCredit.isNullOrBlank() && firstCredit.equals(cleanArtist, ignoreCase = true)
+                                }
+                                openPlayerArtistPage(cleanArtist, artistId)
                             }
                         }
                     },
@@ -4344,18 +4451,14 @@ private fun BitChordApp(
                         },
                         onOpenArtist = {
                             val artists = com.music.bitchord.feature.artistimage.util.ArtistSplitter.split(song.artist)
-                            if (!song.artistId.isNullOrBlank() && !song.artistId.startsWith("local:")) {
-                                songActions = null
-                                dismissNowPlaying()
-                                openByName(song.artistId, song.artist, null, BrowseType.ARTIST, song.thumbnailUrl)
-                            } else if (artists.size > 1) {
+                            if (artists.size > 1) {
                                 showArtistPicker = true
                             } else {
                                 songActions = null
                                 dismissNowPlaying()
                                 val artistName = (artists.firstOrNull() ?: song.artist).trim()
                                 if (artistName.isNotBlank()) {
-                                    openByName(song.artistId, artistName, null, BrowseType.ARTIST, null)
+                                    openPlayerArtistPage(artistName, song.artistId)
                                 } else {
                                     Toast.makeText(context, "No artist information", Toast.LENGTH_SHORT).show()
                                 }
@@ -4480,18 +4583,14 @@ private fun BitChordApp(
                     },
                     onGoToArtist = {
                         val artists = com.music.bitchord.feature.artistimage.util.ArtistSplitter.split(song.artist)
-                        if (!song.artistId.isNullOrBlank() && !song.artistId.startsWith("local:")) {
-                            songActions = null
-                            dismissNowPlaying()
-                            openByName(song.artistId, song.artist, null, BrowseType.ARTIST, song.thumbnailUrl)
-                        } else if (artists.size > 1) {
+                        if (artists.size > 1) {
                             showArtistPicker = true
                         } else {
                             songActions = null
                             dismissNowPlaying()
                             val artistName = (artists.firstOrNull() ?: song.artist).trim()
                             if (artistName.isNotBlank()) {
-                                openByName(song.artistId, artistName, null, BrowseType.ARTIST, null)
+                                openPlayerArtistPage(artistName, song.artistId)
                             } else {
                                 Toast.makeText(context, "No artist information", Toast.LENGTH_SHORT).show()
                             }

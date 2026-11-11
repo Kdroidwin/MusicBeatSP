@@ -16,6 +16,9 @@ import com.music.bitchord.data.TrackLog
 import com.music.bitchord.data.LikeState
 import com.music.bitchord.data.YtMusicRepository
 import com.music.bitchord.feature.localmusic.data.LocalFavoritesStore
+import com.music.bitchord.feature.localmusic.data.LocalPlaylistStore
+import com.music.bitchord.feature.localmusic.data.resolvePlaylistSongs
+import com.music.bitchord.feature.localsongactions.data.LocalPlayStatsStore
 import com.music.bitchord.data.lyrics.EmbeddedLyrics
 import com.music.bitchord.data.lyrics.LyricLine
 import com.music.bitchord.data.lyrics.LyricsRepository
@@ -2405,6 +2408,94 @@ class MainViewModel(app: Application) : AndroidViewModel(app) {
         )
     }
 
+    /**
+     * Opens the upstream artist page while keeping Hybrid mode's track list and
+     * first shelves grounded in the user's own library. Online artist metadata
+     * only supplies the header and the remaining catalogue shelves.
+     */
+    fun openHybridArtist(artistBrowseId: String, artistName: String) {
+        val cleanName = artistName.trim()
+        if (artistBrowseId.isBlank() || cleanName.isBlank()) return
+        viewModelScope.launch {
+            val context = getApplication<Application>()
+            val localSongs = (_localSongs.value as? UiState.Success)?.data
+                ?: LocalMediaRepository.getLocalMusic(context)
+            val matchingSongs = localSongs.filter {
+                com.music.bitchord.feature.artistimage.util.ArtistSplitter.matchesArtist(it.artist, cleanName)
+            }
+            val stats = LocalPlayStatsStore.snapshot(context)
+            val songStats = matchingSongs.associateWith { LocalPlayStatsStore.getStats(it, stats) }
+            val popularSongs = matchingSongs.sortedWith(
+                compareByDescending<Song> { songStats[it]?.playedCount ?: 0 }
+                    .thenByDescending { songStats[it]?.lastPlayedTimestamp ?: 0L }
+                    .thenBy { it.title.lowercase(Locale.ROOT) },
+            )
+
+            val localAlbums = matchingSongs
+                .filter { !it.albumName.isNullOrBlank() }
+                .groupBy { it.albumName!!.trim() }
+                .toList()
+                .sortedBy { it.first.lowercase(Locale.ROOT) }
+                .map { (album, tracks) ->
+                    ShelfItem(
+                        title = album,
+                        subtitle = tracks.firstOrNull()?.albumArtist ?: tracks.firstOrNull()?.artist.orEmpty(),
+                        thumbnailUrl = tracks.firstNotNullOfOrNull { it.thumbnailUrl?.takeIf(String::isNotBlank) },
+                        videoId = null,
+                        browseId = "local:album:$album",
+                    )
+                }
+            val userPlaylists = LocalPlaylistStore.playlists.value.mapNotNull { playlist ->
+                val playlistSongs = resolvePlaylistSongs(playlist, localSongs)
+                if (playlistSongs.none {
+                        com.music.bitchord.feature.artistimage.util.ArtistSplitter.matchesArtist(it.artist, cleanName)
+                    }
+                ) {
+                    null
+                } else {
+                    ShelfItem(
+                        title = playlist.name,
+                        subtitle = context.getString(R.string.hybrid_playlist_track_count, playlistSongs.size),
+                        thumbnailUrl = playlist.customCoverUrl ?: playlist.coverUrl
+                            ?: playlistSongs.firstNotNullOfOrNull { it.thumbnailUrl?.takeIf(String::isNotBlank) },
+                        videoId = null,
+                        browseId = "local:playlist:${playlist.id}",
+                    )
+                }
+            }
+            val localShelves = buildList {
+                if (localAlbums.isNotEmpty()) add(HomeShelf(context.getString(R.string.hybrid_local_releases), localAlbums))
+                if (userPlaylists.isNotEmpty()) add(HomeShelf(context.getString(R.string.hybrid_local_playlists), userPlaylists))
+            }
+            val initialArt = popularSongs.firstNotNullOfOrNull { it.thumbnailUrl?.takeIf(String::isNotBlank) }
+            val page = DetailPage(
+                browseId = artistBrowseId,
+                title = cleanName,
+                subtitle = text(R.string.artist),
+                thumbnailUrl = initialArt,
+                songs = UiState.Success(popularSongs),
+                type = BrowseType.ARTIST,
+                sections = localShelves,
+                hybridArtist = true,
+            )
+            _detailStack.value += page
+
+            val result = YtMusicRepository.artistPage(artistBrowseId).getOrNull() ?: return@launch
+            val current = _detailStack.value.lastOrNull()
+            if (current == null || current.browseId != artistBrowseId || !current.hybridArtist) return@launch
+            _detailStack.value = _detailStack.value.dropLast(1) + current.copy(
+                // Keep the credited spelling so a user-selected portrait remains
+                // keyed to the same artist name after the online page arrives.
+                thumbnailUrl = result.thumbnailUrl?.takeIf { it.isNotBlank() } ?: current.thumbnailUrl,
+                sections = localShelves + result.sections,
+                description = result.description,
+                subscriberCountText = result.subscriberCountText,
+                monthlyListenerCount = result.monthlyListenerCount,
+                subscription = result.subscription,
+            )
+        }
+    }
+
     fun openDetail(
         browseId: String,
         title: String,
@@ -2415,6 +2506,12 @@ class MainViewModel(app: Application) : AndroidViewModel(app) {
         val resolved = browseTypeOf(browseId, type)
         val cachedLocal = (_localSongs.value as? UiState.Success)?.data
         val initialSongs: UiState<List<Song>> = when {
+            browseId.startsWith("local:playlist:") -> {
+                val id = browseId.removePrefix("local:playlist:")
+                val playlist = LocalPlaylistStore.playlists.value.firstOrNull { it.id == id }
+                if (playlist == null) UiState.Error("Playlist not found")
+                else UiState.Success(resolvePlaylistSongs(playlist, cachedLocal.orEmpty()))
+            }
             browseId.startsWith("local:album:") -> {
                 val album = browseId.removePrefix("local:album:")
                 val songs = cachedLocal?.filter { it.albumName.equals(album, ignoreCase = true) }
@@ -2496,6 +2593,19 @@ class MainViewModel(app: Application) : AndroidViewModel(app) {
                     val albumSongs = allSongs.filter { it.albumName.equals(albumName, ignoreCase = true) }
                     if (albumSongs.isEmpty()) UiState.Error("No tracks found for this album")
                     else UiState.Success(albumSongs)
+                }
+                browseId.startsWith("local:playlist:") -> {
+                    val id = browseId.removePrefix("local:playlist:")
+                    val playlist = LocalPlaylistStore.playlists.value.firstOrNull { it.id == id }
+                    if (playlist == null) UiState.Error("Playlist not found")
+                    else {
+                        val context = getApplication<Application>()
+                        val allSongs = (_localSongs.value as? UiState.Success)?.data
+                            ?: LocalMediaRepository.getLocalMusic(context)
+                        val playlistSongs = resolvePlaylistSongs(playlist, allSongs)
+                        if (playlistSongs.isEmpty()) UiState.Error("No tracks found in this playlist")
+                        else UiState.Success(playlistSongs)
+                    }
                 }
                 browseId.startsWith("local:artist:") -> {
                     val artistName = browseId.removePrefix("local:artist:")
@@ -2936,6 +3046,7 @@ class MainViewModel(app: Application) : AndroidViewModel(app) {
         // Not one of YouTube's, and the only one of these that says outright what
         // it is rather than being read off a prefix convention.
         browseId.startsWith(Downloads.PLAYLIST_PREFIX) -> BrowseType.PLAYLIST
+        browseId.startsWith("local:playlist:") -> BrowseType.PLAYLIST
         browseId.startsWith("local:album:") -> BrowseType.ALBUM
         browseId.startsWith("local:artist:") -> BrowseType.ARTIST
         browseId.startsWith("MPSP") -> BrowseType.PODCAST
@@ -2981,6 +3092,15 @@ class MainViewModel(app: Application) : AndroidViewModel(app) {
                     }
                     LocalMediaRepository.getLocalMusic(context)
                         .ifEmpty { error(text(R.string.no_local_audio_found)) }
+                }
+                browseId.startsWith("local:playlist:") -> runCatching {
+                    val playlistId = browseId.removePrefix("local:playlist:")
+                    val playlist = LocalPlaylistStore.playlists.value.firstOrNull { it.id == playlistId }
+                        ?: error("Playlist not found")
+                    val librarySongs = (_localSongs.value as? UiState.Success)?.data
+                        ?: LocalMediaRepository.getLocalMusic(context)
+                    resolvePlaylistSongs(playlist, librarySongs)
+                        .ifEmpty { error("No tracks found in this playlist") }
                 }
                 browseTypeOf(browseId) == BrowseType.ARTIST ->
                     YtMusicRepository.artistPage(browseId)
