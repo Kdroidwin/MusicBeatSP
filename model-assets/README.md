@@ -15,8 +15,12 @@ https://arxiv.org/abs/2502.03979.
 ## MERT feature model
 
 `music2emo-mert-layers-5-6.onnx` is a pruned ONNX derivative of the quantized
-MERT-v1-95M model published by M-A-P. It exposes the two hidden states used by
-Music2Emo and omits later transformer layers. MERT-v1-95M is licensed
+MERT-v1-95M model published by M-A-P. The ONNX conversion is based on
+[`xycld/music-align-mert`](https://huggingface.co/xycld/music-align-mert)
+`mert_uint8.onnx` (source SHA-256
+`cf76e2b68fe6373bf5b11cf8eb9696d072e9bfa660f011e2809dc06de41b73`); the graph
+exposes the two hidden states used by Music2Emo and omits later transformer
+layers. MERT-v1-95M and the conversion are licensed
 CC-BY-NC-4.0; this model must only be used for non-commercial purposes, with
 attribution and the license terms at
 https://creativecommons.org/licenses/by-nc/4.0/ .
