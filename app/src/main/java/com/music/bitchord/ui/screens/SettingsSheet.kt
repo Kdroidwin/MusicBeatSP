@@ -1387,6 +1387,7 @@ fun SettingsScreen(
     val settingsBitChordCategoryStyle by AppSettings.settingsBitChordCategoryStyle.collectAsStateWithLifecycle()
     val mainNavigationTabsPopup by AppSettings.mainNavigationTabsPopup.collectAsStateWithLifecycle()
     val settingsTopBarUsesMoreIcon by AppSettings.settingsTopBarUsesMoreIcon.collectAsStateWithLifecycle()
+    val rootTabFloatingSettingsOnly by AppSettings.rootTabFloatingSettingsOnly.collectAsStateWithLifecycle()
     val hideSettingsIconOnScroll by AppSettings.hideSettingsIconOnScroll.collectAsStateWithLifecycle()
     val hideNavBarLabels by AppSettings.hideNavigationBarLabels.collectAsStateWithLifecycle()
     val hideRadioTopLabels by AppSettings.hideRadioTopLabels.collectAsStateWithLifecycle()
@@ -1441,6 +1442,7 @@ fun SettingsScreen(
             PlayerArtistPageMode.LOCAL -> R.string.player_artist_page_mode_local
             PlayerArtistPageMode.ONLINE -> R.string.player_artist_page_mode_online
             PlayerArtistPageMode.HYBRID -> R.string.player_artist_page_mode_hybrid
+            PlayerArtistPageMode.OLD -> R.string.player_artist_page_mode_old
         },
     )
     val signatureApiEnabled by AppSettings.signatureApiEnabled.collectAsStateWithLifecycle()
@@ -2133,6 +2135,7 @@ fun SettingsScreen(
         SettingsSearchEntry(stringResource(R.string.navigation_bar_matches_mini_player_color), stringResource(R.string.navigation_bar_matches_mini_player_color_subtitle), listOf("navigation", "tab bar", "mini player", "artwork", "color", "タブバー", "ミニプレイヤー", "アルバムアート", "色"), navigationBarMatchesMiniPlayerColor) { AppSettings.setNavigationBarMatchesMiniPlayerColor(!navigationBarMatchesMiniPlayerColor) },
         SettingsSearchEntry(stringResource(R.string.main_navigation_popup), stringResource(R.string.main_navigation_popup_subtitle), listOf("navigation", "tabs", "popup", "menu", "bottom bar", "ナビゲーション", "タブ", "ポップアップ", "メニュー"), mainNavigationTabsPopup) { AppSettings.setMainNavigationTabsPopup(!mainNavigationTabsPopup) },
         SettingsSearchEntry(stringResource(R.string.settings_top_bar_more_icon), stringResource(R.string.settings_top_bar_more_icon_subtitle), listOf("settings", "gear", "ellipsis", "more", "歯車", "設定", "三点", "︙"), settingsTopBarUsesMoreIcon) { AppSettings.setSettingsTopBarUsesMoreIcon(!settingsTopBarUsesMoreIcon) },
+        SettingsSearchEntry(stringResource(R.string.root_tab_floating_settings_only), stringResource(R.string.root_tab_floating_settings_only_subtitle), listOf("settings", "floating", "top bar", "header", "title", "gear", "上部バー", "設定アイコン", "フローティング"), rootTabFloatingSettingsOnly) { AppSettings.setRootTabFloatingSettingsOnly(!rootTabFloatingSettingsOnly) },
         hideSettingsIconOnScrollSearchEntry(hideSettingsIconOnScroll),
         SettingsSearchEntry(stringResource(R.string.hide_nav_bar_labels), stringResource(R.string.hide_nav_bar_labels_subtitle), listOf("navigation", "nav bar", "label", "ラベル", "ナビゲーション"), hideNavBarLabels) { AppSettings.setHideNavigationBarLabels(!hideNavBarLabels) },
         SettingsSearchEntry(stringResource(R.string.legacy_mesh_gradient), stringResource(R.string.legacy_mesh_gradient_subtitle), listOf("theme", "gradient", "テーマ", "グラデーション"), legacyMeshGradient) { AppSettings.setLegacyMeshGradient(!legacyMeshGradient) },
@@ -5099,6 +5102,19 @@ fun SettingsScreen(
             RowDivider()
             SettingsRow(
                 icon = Icons.Rounded.Settings,
+                title = stringResource(R.string.root_tab_floating_settings_only),
+                subtitle = stringResource(R.string.root_tab_floating_settings_only_subtitle),
+                trailing = {
+                    Switch(
+                        checked = rootTabFloatingSettingsOnly,
+                        onCheckedChange = AppSettings::setRootTabFloatingSettingsOnly,
+                    )
+                },
+                onClick = { AppSettings.setRootTabFloatingSettingsOnly(!rootTabFloatingSettingsOnly) },
+            )
+            RowDivider()
+            SettingsRow(
+                icon = Icons.Rounded.Settings,
                 title = stringResource(R.string.hide_settings_icon_on_scroll),
                 subtitle = stringResource(R.string.hide_settings_icon_on_scroll_subtitle),
                 trailing = {
@@ -7268,6 +7284,7 @@ fun SettingsScreen(
                                 PlayerArtistPageMode.LOCAL -> R.string.player_artist_page_mode_local to R.string.player_artist_page_mode_local_subtitle
                                 PlayerArtistPageMode.ONLINE -> R.string.player_artist_page_mode_online to R.string.player_artist_page_mode_online_subtitle
                                 PlayerArtistPageMode.HYBRID -> R.string.player_artist_page_mode_hybrid to R.string.player_artist_page_mode_hybrid_subtitle
+                                PlayerArtistPageMode.OLD -> R.string.player_artist_page_mode_old to R.string.player_artist_page_mode_old_subtitle
                             }
                             Row(
                                 modifier = Modifier

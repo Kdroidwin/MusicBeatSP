@@ -37,7 +37,7 @@ const val MAX_PLAYER_SIDE_CONTROL_SCALE = 1.6f
 enum class AutoplaySource { OFF, YOUTUBE_MUSIC, DEVICE }
 
 /** Source used by the Player Details "Open artist" action. */
-enum class PlayerArtistPageMode { LOCAL, ONLINE, HYBRID }
+enum class PlayerArtistPageMode { LOCAL, ONLINE, HYBRID, OLD }
 
 /**
  * Stream bitrate ceiling on the YouTube fallback path — MEDIUM, HIGH and
@@ -713,6 +713,8 @@ object AppSettings {
     val whiteCollectionActionButtons = MutableStateFlow(false)
     /** Replaces the settings gear on the main top bar with an overflow glyph. */
     val settingsTopBarUsesMoreIcon = MutableStateFlow(false)
+    /** Hides the root-tab app bar while leaving its floating Settings action. */
+    val rootTabFloatingSettingsOnly = MutableStateFlow(false)
     /** Hides the floating root-tab Settings action after the page scrolls. */
     val hideSettingsIconOnScroll = MutableStateFlow(true)
     val launcherIcon = MutableStateFlow(LauncherIcon.PINK)
@@ -1667,6 +1669,7 @@ object AppSettings {
         showPlayerTopGrabber.value = prefs.getBoolean(KEY_SHOW_PLAYER_TOP_GRABBER, true)
         whiteCollectionActionButtons.value = prefs.getBoolean(KEY_WHITE_COLLECTION_ACTION_BUTTONS, false)
         settingsTopBarUsesMoreIcon.value = prefs.getBoolean(KEY_SETTINGS_TOP_BAR_MORE_ICON, false)
+        rootTabFloatingSettingsOnly.value = prefs.getBoolean(KEY_ROOT_TAB_FLOATING_SETTINGS_ONLY, false)
         hideSettingsIconOnScroll.value = prefs.getBoolean(KEY_HIDE_SETTINGS_ICON_ON_SCROLL, true)
         launcherIcon.value = runCatching {
             LauncherIcon.valueOf(prefs.getString(KEY_LAUNCHER_ICON, LauncherIcon.PINK.name) ?: LauncherIcon.PINK.name)
@@ -2518,6 +2521,11 @@ object AppSettings {
     fun setSettingsTopBarUsesMoreIcon(value: Boolean) {
         settingsTopBarUsesMoreIcon.value = value
         prefs.edit().putBoolean(KEY_SETTINGS_TOP_BAR_MORE_ICON, value).apply()
+    }
+
+    fun setRootTabFloatingSettingsOnly(value: Boolean) {
+        rootTabFloatingSettingsOnly.value = value
+        prefs.edit().putBoolean(KEY_ROOT_TAB_FLOATING_SETTINGS_ONLY, value).apply()
     }
 
     fun setHideSettingsIconOnScroll(value: Boolean) {
@@ -4883,6 +4891,7 @@ object AppSettings {
     private const val KEY_SHOW_PLAYER_TOP_GRABBER = "show_player_top_grabber"
     private const val KEY_WHITE_COLLECTION_ACTION_BUTTONS = "white_collection_action_buttons"
     private const val KEY_SETTINGS_TOP_BAR_MORE_ICON = "settings_top_bar_more_icon"
+    private const val KEY_ROOT_TAB_FLOATING_SETTINGS_ONLY = "root_tab_floating_settings_only"
     private const val KEY_HIDE_SETTINGS_ICON_ON_SCROLL = "hide_settings_icon_on_scroll"
     private const val KEY_TABLET_LYRICS_BESIDE_PLAYER = "tablet_lyrics_beside_player"
     private const val KEY_SAVED_YOUTUBE_COLLECTIONS = "saved_youtube_music_collections"

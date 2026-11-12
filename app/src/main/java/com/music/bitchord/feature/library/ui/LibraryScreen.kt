@@ -270,6 +270,8 @@ fun LibraryScreen(
     songDropdownMenu: (@Composable (Song) -> Unit)? = null,
     initialFilterRequest: LibraryFilter? = null,
     onInitialFilterApplied: () -> Unit = {},
+    initialPlaylistOpenRequest: String? = null,
+    onInitialPlaylistOpenApplied: () -> Unit = {},
     onArtworkPaletteChanged: ((ArtworkPalette?) -> Unit)? = null,
     onCollectionNavigationChanged: ((Boolean, (() -> Unit)?) -> Unit)? = null,
     onRootListScrollChanged: ((Boolean) -> Unit)? = null,
@@ -619,6 +621,34 @@ fun LibraryScreen(
         val requestedFilter = initialFilterRequest ?: return@LaunchedEffect
         selectedFilter = requestedFilter
         onInitialFilterApplied()
+    }
+
+    var handledPlaylistOpenRequest by remember { mutableStateOf<String?>(null) }
+    LaunchedEffect(initialPlaylistOpenRequest, playlists, songs, smartPlaylistSongs) {
+        val playlistId = initialPlaylistOpenRequest
+        if (playlistId == null) {
+            handledPlaylistOpenRequest = null
+            return@LaunchedEffect
+        }
+        if (handledPlaylistOpenRequest == playlistId) return@LaunchedEffect
+        val playlist = playlists.firstOrNull { it.id == playlistId } ?: return@LaunchedEffect
+
+        handledPlaylistOpenRequest = playlistId
+        playlistReorderEnabled = false
+        playlistSelectionMode = false
+        selectedPlaylistSongIds = emptySet()
+        activePlaylistMenuSong = null
+        drillDownPlaylistId = playlist.id
+        drillDownLabel = playlist.name
+        drillDownSongs = if (playlist.smartDefinition != null) {
+            smartPlaylistSongs[playlist.id].orEmpty()
+        } else {
+            resolvePlaylistSongs(playlist, songs)
+        }
+        drillDownArt = playlist.customCoverUrl
+            ?: playlist.coverUrl
+            ?: drillDownSongs.firstNotNullOfOrNull { it.thumbnailUrl }
+        onInitialPlaylistOpenApplied()
     }
 
     val inDrillDown = drillDownLabel != null

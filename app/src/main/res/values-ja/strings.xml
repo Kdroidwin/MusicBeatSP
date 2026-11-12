@@ -1778,6 +1778,8 @@
     <string name="white_collection_play_button_subtitle">アルバム、アルバムアーティスト、アーティスト、プレイリスト画面の再生ボタンを白背景・黒い再生アイコンにします。初期設定はオンです。</string>
     <string name="settings_top_bar_more_icon">設定に三点アイコンを使う</string>
     <string name="settings_top_bar_more_icon_subtitle">メイン画面上部の歯車を三点メニューのアイコンに変更します。</string>
+    <string name="root_tab_floating_settings_only">メイン画面の上部バーを隠す</string>
+    <string name="root_tab_floating_settings_only_subtitle">曲・アルバム・ライブラリ・ラジオなどの上部バーを隠し、設定アイコンだけをフローティング表示します。初期設定はオフです。</string>
     <string name="hide_settings_icon_on_scroll">設定アイコンをスクロール時に隠す</string>
     <string name="hide_settings_icon_on_scroll_subtitle">どのタブでも、スクロール中は設定アイコンを固定表示しません。初期設定はオンです。</string>
     <string name="tablet_lyrics_beside_player">タブレットでプレイヤーを全画面表示</string>
@@ -2090,13 +2092,15 @@
     <string name="search_clear_search">検索を消去</string>
     <string name="search_no_results">「%1$s」の検索結果はありません</string>
     <string name="player_artist_page_mode">プレイヤーのアーティストページ</string>
-    <string name="player_artist_page_mode_subtitle">「アーティストを開く」で使うページを、端末内・オンライン・ハイブリッドから選択します。</string>
+    <string name="player_artist_page_mode_subtitle">「アーティストを開く」の表示を、ローカル・オンライン・ハイブリッド・従来の曲一覧から選択します。</string>
     <string name="player_artist_page_mode_local">ローカル</string>
     <string name="player_artist_page_mode_online">オンライン</string>
     <string name="player_artist_page_mode_hybrid">ハイブリッド</string>
+    <string name="player_artist_page_mode_old">オールドモード（曲一覧のみ）</string>
     <string name="player_artist_page_mode_local_subtitle">この端末にある曲とリリースだけを表示します。</string>
     <string name="player_artist_page_mode_online_subtitle">YouTube Musicのアーティストページ、リリース、おすすめを表示します。</string>
     <string name="player_artist_page_mode_hybrid_subtitle">よく聴く曲と手元のリリースを優先し、オンラインのアーティスト画像やカタログも表示します。</string>
+    <string name="player_artist_page_mode_old_subtitle">オンラインやハイブリッドのアーティストページを使わず、従来の曲一覧だけを表示します。</string>
     <string name="show_local_artist_sections">端末内のリリースとプレイリストを表示</string>
     <string name="show_local_artist_sections_subtitle">アーティストの曲一覧より前に、端末内のアルバム・シングル・EP・プレイリストを表示します。</string>
     <string name="show_artist_recommendations">おすすめアーティストを表示</string>

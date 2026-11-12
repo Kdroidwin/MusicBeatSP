@@ -944,6 +944,7 @@ private fun BitChordApp(
     var searchFocusTrigger by remember { mutableIntStateOf(0) }
     val searchSaveableStateHolder = rememberSaveableStateHolder()
     var libraryFilterRequest by remember { mutableStateOf<LibraryFilter?>(null) }
+    var libraryPlaylistOpenRequest by remember { mutableStateOf<String?>(null) }
     var requestedMediaPanel by remember { mutableStateOf<MediaControlDestination?>(null) }
     LaunchedEffect(mediaControlRequest) {
         when (mediaControlRequest) {
@@ -1034,6 +1035,7 @@ private fun BitChordApp(
     val lyricsVideoId by viewModel.lyricsVideoId.collectAsStateWithLifecycle()
     val savedYoutubeCollections by AppSettings.savedYoutubeCollections.collectAsStateWithLifecycle()
     val settingsTopBarUsesMoreIcon by AppSettings.settingsTopBarUsesMoreIcon.collectAsStateWithLifecycle()
+    val rootTabFloatingSettingsOnlySetting by AppSettings.rootTabFloatingSettingsOnly.collectAsStateWithLifecycle()
     val hideSettingsIconOnScroll by AppSettings.hideSettingsIconOnScroll.collectAsStateWithLifecycle()
     val searchHistory by viewModel.searchHistory.collectAsStateWithLifecycle()
 
@@ -1340,18 +1342,18 @@ private fun BitChordApp(
             onCollapsedChange = { rootTabTopBarCollapsed = it },
         )
     }
-    val rootTabFloatingSettingsOnly = rootTabTopBarScrollEnabled && rootTabTopBarCollapsed
-    val expandedRootTopPadding = if (showStatusBar) {
-        WindowInsets.statusBarsIgnoringVisibility.asPaddingValues().calculateTopPadding() +
-            TopBarContentHeight + TopBarContentGap
-    } else {
-        TopBarContentHeight + TopBarContentGap
-    }
-    val rootTopPaddingTarget = when {
-        showReplay && showStatusBar -> WindowInsets.statusBarsIgnoringVisibility.asPaddingValues().calculateTopPadding()
-        showReplay || (rootTabTopBarScrollEnabled && rootTabTopBarCollapsed) -> 0.dp
-        else -> expandedRootTopPadding
-    }
+    val rootTopBarPresentation = rootTabTopBarPresentation(
+        persistentSettingsOnly = rootTabFloatingSettingsOnlySetting,
+        scrollEnabled = rootTabTopBarScrollEnabled,
+        collapsed = rootTabTopBarCollapsed,
+        showStatusBar = showStatusBar,
+        showReplay = showReplay,
+        isRootTab = detail == null && !showSettings && !showReplay && !showSources && !showWearOs &&
+            !libraryPlaylistDetailOpen && collectionBackHandlers["$TAB_KEY$selectedTab"] == null,
+        statusBarInset = WindowInsets.statusBarsIgnoringVisibility.asPaddingValues().calculateTopPadding(),
+    )
+    val rootTabFloatingSettingsOnly = rootTopBarPresentation.floatingSettingsOnly
+    val rootTopPaddingTarget = rootTopBarPresentation.contentTopPadding
     val rootTopPaddingState = animateDpAsState(
         targetValue = rootTopPaddingTarget,
         animationSpec = tween(180),
@@ -1812,16 +1814,25 @@ private fun BitChordApp(
     fun openPlayerArtistPage(name: String, browseId: String? = null) {
         val cleanName = name.trim()
         if (cleanName.isBlank()) return
+        val mode = AppSettings.playerArtistPageMode.value
         val remoteId = browseId?.takeIf { it.isNotBlank() && !it.startsWith("local:") }
-        if (remoteId != null && ArtistPageModeStore.isLocalOnly(cleanName, remoteId, localOnlyArtistKeys)) {
+        if (mode != PlayerArtistPageMode.OLD && remoteId != null &&
+            ArtistPageModeStore.isLocalOnly(cleanName, remoteId, localOnlyArtistKeys)
+        ) {
             openLocalArtist(cleanName, null, remoteId)
             return
         }
-        when (AppSettings.playerArtistPageMode.value) {
+        when (mode) {
+            PlayerArtistPageMode.OLD -> {
+                showSettings = false
+                showReplay = false
+                targetArtistDrillDown = cleanName
+                viewModel.clearDetail()
+                selectedTab = TAB_ARTISTS
+            }
             PlayerArtistPageMode.LOCAL -> openLocalArtist(cleanName, null, remoteId)
             PlayerArtistPageMode.ONLINE,
             PlayerArtistPageMode.HYBRID -> {
-                val mode = AppSettings.playerArtistPageMode.value
                 if (mode == PlayerArtistPageMode.HYBRID && !AppSettings.youtubeMusicNetworkAllowed) {
                     openLocalArtist(cleanName, null, remoteId)
                     return
@@ -3227,25 +3238,19 @@ private fun BitChordApp(
                                     }
                                 },
                                 onSectionItemClick = { item ->
-                                    val video = shelfSong(item)?.takeIf { item.browseId == null }
-                                    if (video != null) {
-                                        playRadio(video)
-                                    } else {
-                                        item.browseId?.let { id ->
-                                            val type = viewModel.browseTypeOf(id, BrowseType.ALBUM)
-                                            if (type == BrowseType.ARTIST) {
-                                                openPlayerArtistPage(item.title, id)
-                                            } else {
-                                                viewModel.openDetail(
-                                                    browseId = id,
-                                                    title = item.title,
-                                                    subtitle = item.subtitle,
-                                                    thumbnailUrl = item.thumbnailUrl,
-                                                    type = type,
-                                                )
-                                            }
-                                        }
-                                    }
+                                    handleArtistSectionItemClick(
+                                        item = item,
+                                        shelfSong = shelfSong,
+                                        playRadio = playRadio,
+                                        viewModel = viewModel,
+                                        openPlayerArtistPage = ::openPlayerArtistPage,
+                                        openLocalPlaylist = { playlistId ->
+                                            libraryPlaylistOpenRequest = playlistId
+                                            libraryFilterRequest = LibraryFilter.PLAYLISTS
+                                            viewModel.clearDetail()
+                                            selectedTab = TAB_LIBRARY
+                                        },
+                                    )
                                 },
                                 onToggleSubscription = if (signedIn) {
                                     { viewModel.toggleSubscription(page.browseId) }
@@ -3749,6 +3754,8 @@ private fun BitChordApp(
                                 onLocalMusicChanged = { viewModel.loadLocalMusic() },
                                 initialFilterRequest = libraryFilterRequest,
                                 onInitialFilterApplied = { libraryFilterRequest = null },
+                                initialPlaylistOpenRequest = libraryPlaylistOpenRequest,
+                                onInitialPlaylistOpenApplied = { libraryPlaylistOpenRequest = null },
                                 onArtworkPaletteChanged = onLocalArtworkPaletteChanged,
                                 onCollectionNavigationChanged = onCollectionNavigationChanged,
                                 onRootListScrollChanged = onRootLibraryOrSearchScrolled,
@@ -4025,7 +4032,7 @@ private fun BitChordApp(
                                 }
                                 if (
                                     !hideFloatingCollectionControlsNow &&
-                                    !(rootTabFloatingSettingsOnly && hideSettingsIconOnScroll)
+                                    !(rootTabTopBarCollapsed && hideSettingsIconOnScroll && !rootTabFloatingSettingsOnlySetting)
                                 ) {
                                     IconButton(onClick = { showSettings = true }) {
                                         Icon(
@@ -5940,6 +5947,66 @@ private fun PlaybackTuningDialog(
                 }
             }
         }
+    }
+}
+
+private data class RootTabTopBarPresentation(
+    val floatingSettingsOnly: Boolean,
+    val contentTopPadding: androidx.compose.ui.unit.Dp,
+)
+
+private fun rootTabTopBarPresentation(
+    persistentSettingsOnly: Boolean,
+    scrollEnabled: Boolean,
+    collapsed: Boolean,
+    showStatusBar: Boolean,
+    showReplay: Boolean,
+    isRootTab: Boolean,
+    statusBarInset: androidx.compose.ui.unit.Dp,
+): RootTabTopBarPresentation {
+    val persistentRootMode = persistentSettingsOnly && isRootTab
+    val collapsedByScroll = scrollEnabled && collapsed
+    val contentTopPadding = when {
+        showReplay && showStatusBar -> statusBarInset
+        showReplay || collapsedByScroll -> 0.dp
+        persistentRootMode -> if (showStatusBar) statusBarInset else 0.dp
+        else -> (if (showStatusBar) statusBarInset else 0.dp) + TopBarContentHeight + TopBarContentGap
+    }
+    return RootTabTopBarPresentation(
+        floatingSettingsOnly = persistentRootMode || collapsedByScroll,
+        contentTopPadding = contentTopPadding,
+    )
+}
+
+private fun handleArtistSectionItemClick(
+    item: ShelfItem,
+    shelfSong: (ShelfItem) -> Song?,
+    playRadio: (Song) -> Unit,
+    viewModel: MainViewModel,
+    openPlayerArtistPage: (String, String?) -> Unit,
+    openLocalPlaylist: (String) -> Unit,
+) {
+    val video = shelfSong(item)?.takeIf { item.browseId == null }
+    if (video != null) {
+        playRadio(video)
+        return
+    }
+    val id = item.browseId ?: return
+    if (id.startsWith("local:playlist:")) {
+        openLocalPlaylist(id.removePrefix("local:playlist:"))
+        return
+    }
+    val type = viewModel.browseTypeOf(id, BrowseType.ALBUM)
+    if (type == BrowseType.ARTIST) {
+        openPlayerArtistPage(item.title, id)
+    } else {
+        viewModel.openDetail(
+            browseId = id,
+            title = item.title,
+            subtitle = item.subtitle,
+            thumbnailUrl = item.thumbnailUrl,
+            type = type,
+        )
     }
 }
 

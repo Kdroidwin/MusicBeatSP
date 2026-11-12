@@ -1805,6 +1805,8 @@
     <string name="white_collection_play_button_subtitle">Use a white background with a black play icon on album, album-artist, artist, and playlist pages. On by default.</string>
     <string name="settings_top_bar_more_icon">Use an overflow icon for Settings</string>
     <string name="settings_top_bar_more_icon_subtitle">Show a three-dot icon instead of the gear in the main top bar.</string>
+    <string name="root_tab_floating_settings_only">Show only floating Settings on main tabs</string>
+    <string name="root_tab_floating_settings_only_subtitle">Hide the app icon and tab title bar on main tabs while keeping Settings as a floating action. Off by default.</string>
     <string name="hide_settings_icon_on_scroll">Hide the Settings icon while scrolling</string>
     <string name="hide_settings_icon_on_scroll_subtitle">Do not keep the Settings action pinned while scrolling through tabs. On by default.</string>
     <string name="tablet_lyrics_beside_player">Tablet full-screen player</string>
@@ -2117,13 +2119,15 @@
     <string name="search_clear_search">Clear search</string>
     <string name="search_no_results">No results found for "%1$s"</string>
     <string name="player_artist_page_mode">Player artist page</string>
-    <string name="player_artist_page_mode_subtitle">Choose whether Open artist uses only your device library, YouTube Music, or a hybrid page.</string>
+    <string name="player_artist_page_mode_subtitle">Choose how Open artist works: this device only, YouTube Music, hybrid, or the traditional track list.</string>
     <string name="player_artist_page_mode_local">Local</string>
     <string name="player_artist_page_mode_online">Online</string>
     <string name="player_artist_page_mode_hybrid">Hybrid</string>
+    <string name="player_artist_page_mode_old">Old mode (track list only)</string>
     <string name="player_artist_page_mode_local_subtitle">Show tracks and releases from this device only.</string>
     <string name="player_artist_page_mode_online_subtitle">Use the YouTube Music artist page, including its releases and recommendations.</string>
     <string name="player_artist_page_mode_hybrid_subtitle">Use your frequently played tracks and releases first, then online artist art and catalogue shelves.</string>
+    <string name="player_artist_page_mode_old_subtitle">Show the traditional artist track list without the online or hybrid artist page layout.</string>
     <string name="show_local_artist_sections">Show this device’s releases and playlists</string>
     <string name="show_local_artist_sections_subtitle">Show albums, singles, EPs, and playlists from this device above the artist’s tracks.</string>
     <string name="show_artist_recommendations">Show recommended artists</string>
