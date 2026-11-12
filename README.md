@@ -1,7 +1,7 @@
 # MusicBeatSP
 
 ### A local-first music player for Android
-**Lossless audio · Synchronized lyrics · Customizable library and player · ReplayGain ·AI-powered lyric synchronization·Multiple saved queues·Audio-guided lyric editor · Advanced parametric EQ ·Automix ·  radiko·音泉 · Podcast ·Deep player customization · Google Cast**
+**Lossless audio · Synchronized lyrics · Customizable library and player · ReplayGain ·AI-powered lyric synchronization·Multiple saved queues·Audio-guided lyric editor · Advanced parametric EQ ·Automix ·  radiko·音泉 · Podcast ·Music2Emo · Deep player customization · Google Cast**
 
 <br/>
 
@@ -55,6 +55,7 @@ The standard Android package is `io.pockets.musicbestsp`. Because this differs f
 - Save named queue snapshots, switch between them, replace or remove them, and load their saved current track and position after a restart.
 - Cast supported local tracks to Google Cast receivers on the local network.
 - View audio codec, sample rate, bit depth, bitrate, channels, and buffer information in Stats for Nerds.
+- Music2Emo
 
 ### Player customization
 
