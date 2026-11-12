@@ -92,6 +92,7 @@ private data class MoodAnalysisProgress(
 
 private const val HOME_MOOD_BATCH_SIZE = 4
 private const val HOME_MOOD_TRACK_TIMEOUT_MS = 30_000L
+private const val HOME_MOOD_MIN_SCORE_MARGIN = 0.08f
 
 /** Native Android home feed, using the same personalized shelves as BitChord. */
 @OptIn(ExperimentalMaterial3Api::class, androidx.compose.foundation.ExperimentalFoundationApi::class)
@@ -287,16 +288,37 @@ fun HomeScreen(
                 (if (favorite) 0.17 else 0.0) + dayRotation * 0.13
         }.map { it.first }.take(24)
     }
-    val upliftingSongs = remember(localSongScores) {
+    val moodComparisons = remember(localSongScores) {
         localSongScores.mapNotNull { (song, _, moodAndFavorite) ->
-            moodAndFavorite.first?.let { song to it.uplifting }
-        }.sortedByDescending { it.second }.take(24).map { it.first }
+            moodAndFavorite.first?.let { song to (it.uplifting - it.calm) }
+        }
     }
-    val calmSongs = remember(localSongScores) {
-        localSongScores.mapNotNull { (song, _, moodAndFavorite) ->
-            moodAndFavorite.first?.let { song to it.calm }
-        }.sortedByDescending { it.second }.take(24).map { it.first }
+    // The happy/party and relaxed heads are independent binary classifiers,
+    // not mutually exclusive classes. Only show a song in the shelf whose
+    // score clearly leads, preventing the same analyzed set from appearing in
+    // both shelves with only a different ordering.
+    val upliftingSongs = remember(moodComparisons) {
+        moodComparisons.asSequence()
+            .filter { (_, margin) -> margin >= HOME_MOOD_MIN_SCORE_MARGIN }
+            .sortedByDescending { it.second }
+            .take(24)
+            .map { it.first }
+            .toList()
     }
+    val calmSongs = remember(moodComparisons) {
+        moodComparisons.asSequence()
+            .filter { (_, margin) -> margin <= -HOME_MOOD_MIN_SCORE_MARGIN }
+            .sortedBy { it.second }
+            .take(24)
+            .map { it.first }
+            .toList()
+    }
+    val distinctMoodEmptyMessage = if (
+        currentAnalysisProgress?.finished == true &&
+        !currentAnalysisProgress.hasMore &&
+        currentAnalysisProgress.failed == 0 &&
+        moodComparisons.isNotEmpty()
+    ) androidx.compose.ui.res.stringResource(R.string.home_ai_no_distinct_mood) else moodEmptyMessage
 
     PullToRefresh(
         refreshing = isRefreshing,
@@ -351,7 +373,7 @@ fun HomeScreen(
                 HomeAiShelfRow(
                     title = androidx.compose.ui.res.stringResource(R.string.home_ai_uplifting),
                     songs = upliftingSongs,
-                    emptyMessage = moodEmptyMessage,
+                    emptyMessage = distinctMoodEmptyMessage,
                     onDownloadModel = if (!modelInstalled && allowModelDownload) {{ showModelPrompt = true }} else null,
                     onSongClick = localCatalog.onSongClick,
                     onSongLongPress = localCatalog.onSongLongPress,
@@ -361,7 +383,7 @@ fun HomeScreen(
                 HomeAiShelfRow(
                     title = androidx.compose.ui.res.stringResource(R.string.home_ai_calm),
                     songs = calmSongs,
-                    emptyMessage = moodEmptyMessage,
+                    emptyMessage = distinctMoodEmptyMessage,
                     onDownloadModel = if (!modelInstalled && allowModelDownload) {{ showModelPrompt = true }} else null,
                     onSongClick = localCatalog.onSongClick,
                     onSongLongPress = localCatalog.onSongLongPress,

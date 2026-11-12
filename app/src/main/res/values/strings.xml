@@ -38,6 +38,7 @@
     <string name="home_ai_analysis_skipped">Skipped %1$d tracks that could not be read. Pull down to retry.</string>
     <string name="home_ai_analysis_skipped_more">Skipped %1$d unreadable tracks. Pull down to continue with more tracks.</string>
     <string name="home_ai_low_memory">Analysis paused because memory was low. Close other apps, then pull down to retry.</string>
+    <string name="home_ai_no_distinct_mood">No songs clearly match this mood yet.</string>
     <string name="home_ai_model_needed">Download the optional on-device model to classify local music by mood.</string>
     <string name="home_ai_download_title">Enable local music mood analysis?</string>
     <string name="home_ai_download_message">Download about 19.6 MB for music-specific on-device mood analysis? Audio stays on this device. The Essentia/UPF models are licensed under CC BY-NC-SA 4.0.</string>

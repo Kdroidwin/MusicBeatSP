@@ -38,6 +38,7 @@
     <string name="home_ai_analysis_skipped">読み込めなかった曲を%1$d曲スキップしました。下にスワイプすると再試行します。</string>
     <string name="home_ai_analysis_skipped_more">読み込めなかった曲を%1$d曲スキップしました。下にスワイプすると次の曲の解析を続けます。</string>
     <string name="home_ai_low_memory">メモリ不足のため解析を一時停止しました。他のアプリを閉じてから下にスワイプして再試行してください。</string>
+    <string name="home_ai_no_distinct_mood">このムードにはっきり当てはまる曲はまだありません。</string>
     <string name="home_ai_model_needed">端末内の曲をムード分類するには、任意のオンデバイスモデルをダウンロードしてください。</string>
     <string name="home_ai_download_title">端末内の曲をムード解析しますか？</string>
     <string name="home_ai_download_message">音楽向けの端末内ムード解析モデル約19.6 MBをダウンロードしますか？音源は端末外に送信されません。Essentia/UPFモデルのライセンスはCC BY-NC-SA 4.0です。</string>
