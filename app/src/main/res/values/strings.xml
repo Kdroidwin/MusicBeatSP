@@ -25,12 +25,12 @@
     <string name="home_ai_recommendations">Recommendations</string>
     <string name="home_ai_most_played">Frequently played</string>
     <string name="home_ai_uplifting">Uplifting</string>
-    <string name="home_ai_calm">Calm</string>
+    <string name="home_ai_calm">Restful</string>
     <string name="home_ai_youtube_music">YouTube Music</string>
     <string name="home_ai_no_local_tracks">No local tracks found.</string>
     <string name="home_ai_no_play_history">Frequently played tracks will appear here.</string>
     <string name="home_ai_recommendation_day">Recommendations favor uplifting music during the day.</string>
-    <string name="home_ai_recommendation_night">Recommendations favor calm music in the evening and at night.</string>
+    <string name="home_ai_recommendation_night">Recommendations favor restful music in the evening and at night.</string>
     <string name="home_ai_analyzing">Analyzing local music on this device…</string>
     <string name="home_ai_analysis_progress">Analyzing local tracks (%1$d/%2$d)…</string>
     <string name="home_ai_analysis_finished">This batch is complete. Pull down to analyze more tracks.</string>
@@ -46,6 +46,10 @@
     <string name="home_ai_download_progress">Downloading %1$.1f of %2$.1f MB</string>
     <string name="home_ai_download_failed">Model download failed</string>
     <string name="home_ai_enable_analysis">Download Music2Emo model</string>
+    <string name="home_ai_delete_model">Delete mood analysis model</string>
+    <string name="home_ai_delete_model_title">Delete the model?</string>
+    <string name="home_ai_delete_model_message">This removes the mood analysis model and results created with it from this device. Download the model again if you want to use mood analysis later.</string>
+    <string name="home_ai_delete_model_confirm">Delete</string>
     <string name="home_excluded_folders">Exclude folders from Home</string>
     <string name="home_excluded_folders_subtitle">Hide tracks in selected folders from Home recommendations and mood analysis. They remain in your library.</string>
     <string name="home_excluded_folders_empty">No local music folders were found.</string>

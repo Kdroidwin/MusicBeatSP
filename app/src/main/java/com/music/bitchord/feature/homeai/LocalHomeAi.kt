@@ -13,14 +13,22 @@ import com.music.bitchord.playback.smart.AudioDecoder
 import com.music.bitchord.playback.smart.LocalAudioSource
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.CancellationException
+import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.Job
+import kotlinx.coroutines.SupervisorJob
+import kotlinx.coroutines.cancelAndJoin
 import kotlinx.coroutines.currentCoroutineContext
+import kotlinx.coroutines.delay
 import kotlinx.coroutines.ensureActive
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.isActive
+import kotlinx.coroutines.launch
 import kotlinx.coroutines.sync.Mutex
 import kotlinx.coroutines.sync.withLock
+import kotlinx.coroutines.TimeoutCancellationException
 import kotlinx.coroutines.withContext
+import kotlinx.coroutines.withTimeout
 import java.io.BufferedInputStream
 import java.io.File
 import java.io.FileOutputStream
@@ -69,6 +77,14 @@ object LocalHomeAi {
 
     data class MoodScores(val uplifting: Float, val calm: Float)
     data class DownloadProgress(val bytes: Long, val totalBytes: Long)
+    data class AnalysisProgress(
+        val completed: Int,
+        val total: Int,
+        val failed: Int,
+        val finished: Boolean,
+        val hasMore: Boolean = false,
+        val lowMemory: Boolean = false,
+    )
 
     private data class ModelFile(
         val name: String,
@@ -94,7 +110,19 @@ object LocalHomeAi {
 
     private val _downloadProgress = MutableStateFlow<DownloadProgress?>(null)
     val downloadProgress = _downloadProgress.asStateFlow()
+    private const val ANALYSIS_BATCH_SIZE = 4
+    private const val ANALYSIS_TRACK_TIMEOUT_MS = 30_000L
+    private const val ANALYSIS_BATCH_PAUSE_MS = 500L
+    private val analysisScope = CoroutineScope(SupervisorJob() + Dispatchers.IO)
+    private val analysisLock = Any()
+    private data class AnalysisRequest(val id: Long, val context: Context, val songs: List<Song>)
+    private var analysisRequest: AnalysisRequest? = null
+    private var analysisJob: Job? = null
+    private var analysisRequestId = 0L
+    private val _analysisProgress = MutableStateFlow<AnalysisProgress?>(null)
+    val analysisProgress = _analysisProgress.asStateFlow()
     private val classificationMutex = Mutex()
+    private val modelOperationMutex = Mutex()
     @Volatile private var verificationFingerprint: String? = null
     @Volatile private var verificationResult: Boolean = false
     private val verificationLock = Any()
@@ -129,7 +157,8 @@ object LocalHomeAi {
         }
     }
 
-    suspend fun downloadModels(context: Context) = withContext(Dispatchers.IO) {
+    suspend fun downloadModels(context: Context) = modelOperationMutex.withLock {
+      withContext(Dispatchers.IO) {
         val directory = modelDirectory(context).apply { mkdirs() }
         val total = models.sumOf(ModelFile::bytes)
         var completed = 0L
@@ -212,6 +241,161 @@ object LocalHomeAi {
         } finally {
             _downloadProgress.value = null
         }
+      }
+    }
+
+    /**
+     * Removes the optional model after stopping any analysis that could still
+     * have an ONNX session open. Cached scores from this model are discarded
+     * too, so a later download starts with consistent results.
+     */
+    suspend fun deleteModels(context: Context) {
+        val appContext = context.applicationContext
+        val runningAnalysis = synchronized(analysisLock) {
+            analysisRequest = null
+            analysisRequestId++
+            analysisJob
+        }
+        runningAnalysis?.cancelAndJoin()
+        classificationMutex.withLock {
+            modelOperationMutex.withLock {
+                withContext(Dispatchers.IO) {
+                    releaseRuntimeAfterMemoryPressure()
+                    modelDirectory(appContext).deleteRecursively()
+                    val cache = appContext.getSharedPreferences("local_home_ai_mood_cache", Context.MODE_PRIVATE)
+                    cache.edit().apply {
+                        cache.all.keys.filter { it.startsWith("${MODEL_VERSION}_") }.forEach(::remove)
+                    }.apply()
+                    appContext.getSharedPreferences(PREFS, Context.MODE_PRIVATE).edit()
+                        .remove(KEY_FAILED_TRACKS)
+                        .putBoolean(KEY_MODEL_DECISION, false)
+                        .apply()
+                    synchronized(verificationLock) {
+                        verificationFingerprint = null
+                        verificationResult = false
+                    }
+                }
+            }
+        }
+        _analysisProgress.value = null
+        _downloadProgress.value = null
+    }
+
+    /**
+     * Starts process-scoped analysis. The job belongs to this singleton rather
+     * than HomeScreen's composition, so navigating to another tab no longer
+     * cancels a scan already started by the user.
+     */
+    fun requestAnalysis(context: Context, prioritizedSongs: List<Song>) {
+        if (!isModelInstalled(context)) return
+        synchronized(analysisLock) {
+            val request = AnalysisRequest(
+                id = ++analysisRequestId,
+                context = context.applicationContext,
+                songs = prioritizedSongs.toList(),
+            )
+            analysisRequest = request
+            if (analysisJob?.isActive != true) {
+                analysisJob = analysisScope.launch { runAnalysisRequests() }
+            }
+        }
+    }
+
+    private suspend fun runAnalysisRequests() {
+        try {
+            while (true) {
+                val request = synchronized(analysisLock) {
+                    analysisRequest.also { analysisRequest = null }
+                } ?: break
+                analyzeRequest(request)
+            }
+        } finally {
+            synchronized(analysisLock) {
+                analysisJob = null
+                if (analysisRequest != null) {
+                    analysisJob = analysisScope.launch { runAnalysisRequests() }
+                }
+            }
+        }
+    }
+
+    private suspend fun analyzeRequest(request: AnalysisRequest) {
+        val songs = request.songs.filter { !it.localUri.isNullOrBlank() || !it.localPath.isNullOrBlank() }
+        val pendingSongs = songs.filter {
+            cachedScore(request.context, it) == null && !hasAnalysisFailure(request.context, it)
+        }
+        var completed = 0
+        var failed = songs.count { hasAnalysisFailure(request.context, it) }
+        var lowMemory = false
+        if (pendingSongs.isEmpty()) {
+            if (isCurrentRequest(request.id)) {
+                _analysisProgress.value = AnalysisProgress(0, 0, failed, finished = true)
+            }
+            return
+        }
+        while (completed < pendingSongs.size && !lowMemory && isCurrentRequest(request.id)) {
+            val batchEnd = min(completed + ANALYSIS_BATCH_SIZE, pendingSongs.size)
+            while (completed < batchEnd && isCurrentRequest(request.id)) {
+                val song = pendingSongs[completed]
+                _analysisProgress.value = AnalysisProgress(
+                    completed = completed,
+                    total = pendingSongs.size,
+                    failed = failed,
+                    finished = false,
+                    hasMore = true,
+                )
+                try {
+                    if (withTimeout(ANALYSIS_TRACK_TIMEOUT_MS) { classify(request.context, song) } == null) {
+                        failed++
+                        markAnalysisFailure(request.context, song)
+                    }
+                } catch (timeout: TimeoutCancellationException) {
+                    failed++
+                    markAnalysisFailure(request.context, song)
+                    Log.w(TAG, "Mood analysis timed out for a local track")
+                } catch (cancelled: CancellationException) {
+                    throw cancelled
+                } catch (memoryError: OutOfMemoryError) {
+                    failed++
+                    lowMemory = true
+                    markAnalysisFailure(request.context, song)
+                } catch (error: Exception) {
+                    failed++
+                    markAnalysisFailure(request.context, song)
+                    Log.w(TAG, "Skipping an unprocessable local mood-analysis track", error)
+                }
+                completed++
+                if (isCurrentRequest(request.id)) {
+                    _analysisProgress.value = AnalysisProgress(
+                        completed = completed,
+                        total = pendingSongs.size,
+                        failed = failed,
+                        finished = false,
+                        hasMore = completed < pendingSongs.size,
+                        lowMemory = lowMemory,
+                    )
+                }
+                if (lowMemory) break
+                if (completed < batchEnd) delay(150L)
+            }
+            if (!lowMemory && completed < pendingSongs.size && isCurrentRequest(request.id)) {
+                delay(ANALYSIS_BATCH_PAUSE_MS)
+            }
+        }
+        if (isCurrentRequest(request.id)) {
+            _analysisProgress.value = AnalysisProgress(
+                completed = completed,
+                total = pendingSongs.size,
+                failed = failed,
+                finished = true,
+                hasMore = completed < pendingSongs.size,
+                lowMemory = lowMemory,
+            )
+        }
+    }
+
+    private fun isCurrentRequest(id: Long): Boolean = synchronized(analysisLock) {
+        id == analysisRequestId
     }
 
     /** Returns at most one cached mood record per local song. */

@@ -25,12 +25,12 @@
     <string name="home_ai_recommendations">おすすめ</string>
     <string name="home_ai_most_played">よく聴いた曲</string>
     <string name="home_ai_uplifting">気分が高揚する曲</string>
-    <string name="home_ai_calm">落ち着く曲</string>
+    <string name="home_ai_calm">心が休まる曲</string>
     <string name="home_ai_youtube_music">YouTube Music</string>
     <string name="home_ai_no_local_tracks">端末内の曲が見つかりません。</string>
     <string name="home_ai_no_play_history">再生回数の多い曲がここに表示されます。</string>
     <string name="home_ai_recommendation_day">昼間は気分が高揚する曲を優先しておすすめします。</string>
-    <string name="home_ai_recommendation_night">夕方から夜は落ち着く曲を優先しておすすめします。</string>
+    <string name="home_ai_recommendation_night">夕方から夜は心が休まる曲を優先しておすすめします。</string>
     <string name="home_ai_analyzing">端末内の音楽を解析しています…</string>
     <string name="home_ai_analysis_progress">曲を解析しています（%1$d/%2$d）…</string>
     <string name="home_ai_analysis_finished">今回の解析分が完了しました。下にスワイプすると次の曲を解析します。</string>
@@ -46,6 +46,10 @@
     <string name="home_ai_download_progress">ダウンロード中 %1$.1f / %2$.1f MB</string>
     <string name="home_ai_download_failed">モデルのダウンロードに失敗しました</string>
     <string name="home_ai_enable_analysis">Music2Emoモデルをダウンロード</string>
+    <string name="home_ai_delete_model">ムード解析モデルを削除</string>
+    <string name="home_ai_delete_model_title">モデルを削除しますか？</string>
+    <string name="home_ai_delete_model_message">端末に保存したムード解析モデルと、そのモデルで解析した結果を削除します。再び使うにはモデルをダウンロードしてください。</string>
+    <string name="home_ai_delete_model_confirm">削除</string>
     <string name="home_excluded_folders">ホームから除外するフォルダー</string>
     <string name="home_excluded_folders_subtitle">選択したフォルダーの曲をホームのおすすめとムード解析から除外します。ライブラリには残ります。</string>
     <string name="home_excluded_folders_empty">端末内に音楽フォルダーが見つかりません。</string>

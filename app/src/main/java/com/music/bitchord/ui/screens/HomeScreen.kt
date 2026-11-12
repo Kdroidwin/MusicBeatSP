@@ -64,9 +64,6 @@ import com.music.bitchord.ui.components.MessageState
 import com.music.bitchord.ui.components.PullToRefresh
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.delay
-import kotlinx.coroutines.CancellationException
-import kotlinx.coroutines.TimeoutCancellationException
-import kotlinx.coroutines.withTimeout
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
 import java.time.LocalDateTime
@@ -81,18 +78,6 @@ data class HomeLocalCatalog(
     val excludedFolderPaths: Set<String> = emptySet(),
 )
 
-private data class MoodAnalysisProgress(
-    val completed: Int,
-    val total: Int,
-    val failed: Int,
-    val finished: Boolean,
-    val hasMore: Boolean = false,
-    val lowMemory: Boolean = false,
-)
-
-private const val HOME_MOOD_BATCH_SIZE = 4
-private const val HOME_MOOD_TRACK_TIMEOUT_MS = 30_000L
-private const val HOME_MOOD_BATCH_PAUSE_MS = 500L
 private const val HOME_MOOD_MIN_SCORE_MARGIN = 0.08f
 
 /** Native Android home feed, using the same personalized shelves as BitChord. */
@@ -136,12 +121,13 @@ fun HomeScreen(
     }
     var modelInstalled by remember(context) { mutableStateOf(false) }
     var showModelPrompt by remember { mutableStateOf(false) }
+    var showModelDeleteConfirmation by remember { mutableStateOf(false) }
     var downloadError by remember { mutableStateOf<String?>(null) }
-    var moodRevision by remember { mutableIntStateOf(0) }
+    var modelDeleteError by remember { mutableStateOf<String?>(null) }
     var analysisRetryRevision by remember { mutableIntStateOf(0) }
-    var analysisProgress by remember(context) { mutableStateOf<MoodAnalysisProgress?>(null) }
+    val analysisProgress by LocalHomeAi.analysisProgress.collectAsState()
     var wallClockMinute by remember { mutableLongStateOf(System.currentTimeMillis() / 60_000L) }
-    val cachedMoods = remember(context, localSongs, moodRevision, modelInstalled) {
+    val cachedMoods = remember(context, localSongs, modelInstalled, analysisProgress) {
         LocalHomeAi.cachedScores(context, localSongs)
     }
 
@@ -159,13 +145,19 @@ fun HomeScreen(
         }
     }
 
-    // Analyze all eligible local tracks while Home remains open. Small batches,
-    // per-track timeouts, and pauses keep CPU/memory usage bounded; each score
-    // is persisted immediately so leaving Home or process death resumes safely.
+    // Submit a prioritized snapshot to the process-scoped analyzer. Its job is
+    // independent of this tab's composition, so switching tabs won't cancel it.
     LaunchedEffect(context, localSongs, modelInstalled, favoriteIds, playStatsRevision, analysisRetryRevision) {
-        if (!modelInstalled || localSongs.isEmpty()) return@LaunchedEffect
+        if (!modelInstalled) return@LaunchedEffect
+        if (localSongs.isEmpty()) {
+            // A folder-exclusion change can leave an earlier process-scoped
+            // scan with now-excluded rows. Replace that request so it stops
+            // after its current bounded inference operation.
+            LocalHomeAi.requestAnalysis(context, emptyList())
+            return@LaunchedEffect
+        }
         val maximumPlayed = localSongs.maxOfOrNull { LocalPlayStatsStore.getStats(it, playStats).playedCount } ?: 0
-        val pendingSongs = localSongs
+        val prioritizedSongs = localSongs
             .filter { !it.localUri.isNullOrBlank() || !it.localPath.isNullOrBlank() }
             .sortedByDescending { song ->
                 val stats = LocalPlayStatsStore.getStats(song, playStats)
@@ -173,69 +165,7 @@ fun HomeScreen(
                     (stats.playedCount.toDouble() / (maximumPlayed + 1.0)) * 300.0 +
                     (if (stats.lastPlayedTimestamp > 0L) 100.0 else 0.0)
             }
-            .filter { LocalHomeAi.cachedScore(context, it) == null && !LocalHomeAi.hasAnalysisFailure(context, it) }
-        var completed = 0
-        var failed = localSongs.count { LocalHomeAi.hasAnalysisFailure(context, it) }
-        var lowMemory = false
-        if (pendingSongs.isEmpty()) {
-            analysisProgress = MoodAnalysisProgress(0, 0, failed, finished = true)
-            return@LaunchedEffect
-        }
-        while (completed < pendingSongs.size && !lowMemory) {
-            val batchEnd = minOf(completed + HOME_MOOD_BATCH_SIZE, pendingSongs.size)
-            while (completed < batchEnd) {
-                val song = pendingSongs[completed]
-                analysisProgress = MoodAnalysisProgress(
-                    completed = completed,
-                    total = pendingSongs.size,
-                    failed = failed,
-                    finished = false,
-                    hasMore = true,
-                )
-                try {
-                    if (withTimeout(HOME_MOOD_TRACK_TIMEOUT_MS) { LocalHomeAi.classify(context, song) } != null) {
-                        moodRevision++
-                    } else {
-                        failed++
-                        LocalHomeAi.markAnalysisFailure(context, song)
-                    }
-                } catch (timeout: TimeoutCancellationException) {
-                    failed++
-                    LocalHomeAi.markAnalysisFailure(context, song)
-                    android.util.Log.w("HomeScreen", "Mood analysis timed out for a local track")
-                } catch (cancelled: CancellationException) {
-                    throw cancelled
-                } catch (memoryError: OutOfMemoryError) {
-                    failed++
-                    lowMemory = true
-                    LocalHomeAi.markAnalysisFailure(context, song)
-                } catch (error: Exception) {
-                    failed++
-                    LocalHomeAi.markAnalysisFailure(context, song)
-                    android.util.Log.w("HomeScreen", "Skipping an unprocessable local mood-analysis track", error)
-                }
-                completed++
-                analysisProgress = MoodAnalysisProgress(
-                    completed = completed,
-                    total = pendingSongs.size,
-                    failed = failed,
-                    finished = false,
-                    hasMore = completed < pendingSongs.size,
-                    lowMemory = lowMemory,
-                )
-                if (lowMemory) break
-                if (completed < batchEnd) delay(150L)
-            }
-            if (!lowMemory && completed < pendingSongs.size) delay(HOME_MOOD_BATCH_PAUSE_MS)
-        }
-        analysisProgress = MoodAnalysisProgress(
-            completed = completed,
-            total = pendingSongs.size,
-            failed = failed,
-            finished = true,
-            hasMore = completed < pendingSongs.size,
-            lowMemory = lowMemory,
-        )
+        LocalHomeAi.requestAnalysis(context, prioritizedSongs)
     }
 
     val currentAnalysisProgress = analysisProgress
@@ -394,14 +324,25 @@ fun HomeScreen(
                     onSongLongPress = localCatalog.onSongLongPress,
                 )
             }
-            if (modelInstalled && localSongs.isNotEmpty()) {
+            if (modelInstalled) {
                 item(key = "home-local-mood-analysis-status") {
-                    Text(
-                        text = moodEmptyMessage,
-                        style = MaterialTheme.typography.bodySmall,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    Column(
                         modifier = Modifier.padding(start = 20.dp, end = 20.dp, top = 0.dp, bottom = 12.dp),
-                    )
+                    ) {
+                        Text(
+                            text = moodEmptyMessage,
+                            style = MaterialTheme.typography.bodySmall,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant,
+                        )
+                        if (downloadProgress == null) {
+                            TextButton(
+                                onClick = { showModelDeleteConfirmation = true },
+                                modifier = Modifier.align(Alignment.Start),
+                            ) {
+                                Text(androidx.compose.ui.res.stringResource(R.string.home_ai_delete_model))
+                            }
+                        }
+                    }
                 }
             }
             if (onlineFeedEnabled) {
@@ -515,6 +456,44 @@ fun HomeScreen(
                 }
             },
             confirmButton = {},
+        )
+    }
+
+    if (showModelDeleteConfirmation) {
+        AlertDialog(
+            onDismissRequest = { showModelDeleteConfirmation = false },
+            title = { Text(androidx.compose.ui.res.stringResource(R.string.home_ai_delete_model_title)) },
+            text = { Text(androidx.compose.ui.res.stringResource(R.string.home_ai_delete_model_message)) },
+            confirmButton = {
+                TextButton(
+                    onClick = {
+                        showModelDeleteConfirmation = false
+                        scope.launch {
+                            runCatching { LocalHomeAi.deleteModels(context) }
+                                .onSuccess { modelInstalled = false }
+                                .onFailure { modelDeleteError = it.message }
+                        }
+                    },
+                ) { Text(androidx.compose.ui.res.stringResource(R.string.home_ai_delete_model_confirm)) }
+            },
+            dismissButton = {
+                TextButton(onClick = { showModelDeleteConfirmation = false }) {
+                    Text(androidx.compose.ui.res.stringResource(R.string.cancel))
+                }
+            },
+        )
+    }
+
+    modelDeleteError?.let { message ->
+        AlertDialog(
+            onDismissRequest = { modelDeleteError = null },
+            title = { Text(androidx.compose.ui.res.stringResource(R.string.home_ai_delete_model_title)) },
+            text = { Text(message) },
+            confirmButton = {
+                TextButton(onClick = { modelDeleteError = null }) {
+                    Text(androidx.compose.ui.res.stringResource(R.string.close))
+                }
+            },
         )
     }
 

@@ -609,7 +609,7 @@ object Innertube {
     }
 
     suspend fun search(query: String, params: String? = null): JsonObject =
-        postMusic("search") {
+        postMusic("search", language = currentLanguage) {
             put("query", query)
             params?.let { put("params", it) }
         }
@@ -618,6 +618,7 @@ object Innertube {
     suspend fun searchContinuation(token: String): JsonObject = postMusic(
         endpoint = "search",
         query = mapOf("ctoken" to token, "continuation" to token, "type" to "next"),
+        language = currentLanguage,
     ) {
         put("continuation", token)
     }
@@ -632,7 +633,7 @@ object Innertube {
      * it affordable per keystroke where a search is not.
      */
     suspend fun searchSuggestions(input: String): JsonObject =
-        postMusic("music/get_search_suggestions") {
+        postMusic("music/get_search_suggestions", language = currentLanguage) {
             put("input", input)
         }
 
