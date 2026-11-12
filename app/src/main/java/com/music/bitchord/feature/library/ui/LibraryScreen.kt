@@ -624,6 +624,43 @@ fun LibraryScreen(
     }
 
     var handledPlaylistOpenRequest by remember { mutableStateOf<String?>(null) }
+    // Resolve an artist-page request into the playlist route during the first
+    // composition. The previous effect-only setup briefly rendered the
+    // Library root, then animated into the playlist, which looked like a flash
+    // while moving from an artist page to one of its device playlists.
+    val requestedPlaylist = remember(initialPlaylistOpenRequest, playlists) {
+        initialPlaylistOpenRequest?.let { id -> playlists.firstOrNull { it.id == id } }
+    }
+    val directPlaylistOpen = requestedPlaylist != null &&
+        requestedPlaylist.id != handledPlaylistOpenRequest
+    val visibleDrillDownPlaylistId = if (directPlaylistOpen) requestedPlaylist?.id else drillDownPlaylistId
+    val visibleDrillDownLabel = if (directPlaylistOpen) requestedPlaylist?.name else drillDownLabel
+    val visibleDrillDownSongs = remember(
+        directPlaylistOpen,
+        requestedPlaylist,
+        songs,
+        smartPlaylistSongs,
+        drillDownSongs,
+    ) {
+        when {
+            !directPlaylistOpen -> drillDownSongs
+            requestedPlaylist?.smartDefinition != null -> smartPlaylistSongs[requestedPlaylist.id].orEmpty()
+            requestedPlaylist != null -> resolvePlaylistSongs(requestedPlaylist, songs)
+            else -> drillDownSongs
+        }
+    }
+    val visibleDrillDownArt = if (directPlaylistOpen) {
+        requestedPlaylist?.customCoverUrl
+            ?: requestedPlaylist?.coverUrl
+            ?: visibleDrillDownSongs.firstNotNullOfOrNull { it.thumbnailUrl }
+    } else {
+        drillDownArt
+    }
+    val visibleDrillDownIsSmartPlaylist = remember(playlists, visibleDrillDownPlaylistId) {
+        playlists.firstOrNull { it.id == visibleDrillDownPlaylistId }?.smartDefinition != null
+    }
+    val visibleDrillDownIsFavorites = visibleDrillDownPlaylistId == null &&
+        !directPlaylistOpen && visibleDrillDownArt == "favorites"
     LaunchedEffect(initialPlaylistOpenRequest, playlists, songs, smartPlaylistSongs) {
         val playlistId = initialPlaylistOpenRequest
         if (playlistId == null) {
@@ -651,9 +688,9 @@ fun LibraryScreen(
         onInitialPlaylistOpenApplied()
     }
 
-    val inDrillDown = drillDownLabel != null
+    val inDrillDown = visibleDrillDownLabel != null
     SideEffect {
-        onPlaylistDetailVisibilityChanged?.invoke(drillDownPlaylistId != null)
+        onPlaylistDetailVisibilityChanged?.invoke(visibleDrillDownPlaylistId != null)
     }
     SideEffect {
         if (!inDrillDown || !fullScreenCollectionArtwork) {
@@ -690,8 +727,8 @@ fun LibraryScreen(
         }
         rootListScrollFlow.distinctUntilChanged().collect { reportRootLibraryScroll(it) }
     }
-    val selectedPlaylistSongs = remember(drillDownSongs, selectedPlaylistSongIds) {
-        drillDownSongs.filter { (it.localUri ?: it.videoId) in selectedPlaylistSongIds }
+    val selectedPlaylistSongs = remember(visibleDrillDownSongs, selectedPlaylistSongIds) {
+        visibleDrillDownSongs.filter { (it.localUri ?: it.videoId) in selectedPlaylistSongIds }
     }
 
     suspend fun applyBulkArtwork(targets: List<Song>, artwork: TagLibWriter.PreparedArtwork) {
@@ -1083,7 +1120,7 @@ fun LibraryScreen(
             },
     ) {
         AnimatedContent(
-            targetState = if (inDrillDown) "drill:$drillDownLabel" else when (selectedFilter) {
+            targetState = if (inDrillDown) "drill:$visibleDrillDownLabel" else when (selectedFilter) {
                 LibraryFilter.RECENTLY_PLAYED -> "history:recent"
                 LibraryFilter.MOST_PLAYED -> "history:most"
                 LibraryFilter.YOUTUBE_MUSIC -> "library:youtube"
@@ -1094,6 +1131,7 @@ fun LibraryScreen(
                 val enteringOrLeavingHistory =
                     targetState.startsWith("history:") || initialState.startsWith("history:")
                 when {
+                    directPlaylistOpen -> EnterTransition.None togetherWith ExitTransition.None
                     enteringOrLeavingHistory -> EnterTransition.None togetherWith ExitTransition.None
                     targetState.startsWith("drill:") ->
                         (slideInHorizontally { it } + fadeIn()) togetherWith
@@ -1107,14 +1145,14 @@ fun LibraryScreen(
         ) { key ->
             if (key.startsWith("drill:")) {
                 DrillDownSongList(
-                    label = drillDownLabel.orEmpty(),
-                    artworkUrl = drillDownArt,
-                    songs = drillDownSongs,
+                    label = visibleDrillDownLabel.orEmpty(),
+                    artworkUrl = visibleDrillDownArt,
+                    songs = visibleDrillDownSongs,
                     isArtist = false,
                     // Favorites use the same saved, draggable song ordering as a playlist.
-                    isPlaylist = drillDownPlaylistId != null || drillDownIsFavorites,
+                    isPlaylist = visibleDrillDownPlaylistId != null || visibleDrillDownIsFavorites,
                     showArtworkInList = showPlaylistSongArtwork,
-                    showCollectionArtworkInList = drillDownPlaylistId == null && showCollectionSongArtwork,
+                    showCollectionArtworkInList = visibleDrillDownPlaylistId == null && showCollectionSongArtwork,
                     fullScreenArtwork = fullScreenCollectionArtwork,
                     preserveArtworkAspectRatioInCollections = keepCollectionArtworkAspectRatio,
                     viewType = songsViewType,
@@ -1123,21 +1161,21 @@ fun LibraryScreen(
                         val next = if (songsViewType == LibraryViewType.GRID) LibraryViewType.LIST else LibraryViewType.GRID
                         AppSettings.setLibrarySongsViewType(next)
                     },
-                    selectionMode = playlistSelectionMode && (drillDownPlaylistId != null || drillDownIsFavorites),
+                    selectionMode = playlistSelectionMode && (visibleDrillDownPlaylistId != null || visibleDrillDownIsFavorites),
                     onSelectionToggle = ::togglePlaylistSongSelection,
-                    selectionToolbar = if (playlistSelectionMode && (drillDownPlaylistId != null || drillDownIsFavorites)) {
+                    selectionToolbar = if (playlistSelectionMode && (visibleDrillDownPlaylistId != null || visibleDrillDownIsFavorites)) {
                         { contentColor ->
                             PlaylistSelectionToolbar(
                                 count = selectedPlaylistSongIds.size,
-                                allSelected = drillDownSongs.isNotEmpty() && drillDownSongs.all(::isPlaylistSongSelected),
+                                allSelected = visibleDrillDownSongs.isNotEmpty() && visibleDrillDownSongs.all(::isPlaylistSongSelected),
                                 contentColor = contentColor,
                                 onSelectAll = {
-                                    val allSelected = drillDownSongs.isNotEmpty() && drillDownSongs.all(::isPlaylistSongSelected)
+                                    val allSelected = visibleDrillDownSongs.isNotEmpty() && visibleDrillDownSongs.all(::isPlaylistSongSelected)
                                     if (allSelected) {
                                         selectedPlaylistSongIds = emptySet()
                                         playlistSelectionMode = false
                                     } else {
-                                        selectedPlaylistSongIds = drillDownSongs.mapTo(mutableSetOf()) { it.localUri ?: it.videoId }
+                                        selectedPlaylistSongIds = visibleDrillDownSongs.mapTo(mutableSetOf()) { it.localUri ?: it.videoId }
                                         playlistSelectionMode = true
                                     }
                                 },
@@ -1159,9 +1197,9 @@ fun LibraryScreen(
                                 },
                                 onShare = { LocalSongActionsHelper.shareSongs(context, selectedPlaylistSongs) },
                                 onDeleteFromPlaylist = { showDeleteFromPlaylistDialog = true },
-                                allowRemove = drillDownIsFavorites || !drillDownIsSmartPlaylist,
-                                removeLabelRes = if (drillDownIsFavorites) R.string.remove_from_favorites else R.string.remove_from_playlist,
-                                allowReorder = drillDownIsFavorites || !drillDownIsSmartPlaylist,
+                                allowRemove = visibleDrillDownIsFavorites || !visibleDrillDownIsSmartPlaylist,
+                                removeLabelRes = if (visibleDrillDownIsFavorites) R.string.remove_from_favorites else R.string.remove_from_playlist,
+                                allowReorder = visibleDrillDownIsFavorites || !visibleDrillDownIsSmartPlaylist,
                                 onMoveUp = { moveSelectedSongsByOne(-1) },
                                 onMoveDown = { moveSelectedSongsByOne(1) },
                                 onMoveToTop = { persistSelectedOrder(toTop = true) },
@@ -1189,7 +1227,7 @@ fun LibraryScreen(
                     isPlaying = isPlaying,
                     onSongClick = { list, idx -> onSongClick(list, idx) },
                     onSongLongPress = { song ->
-                        if (drillDownPlaylistId != null || drillDownIsFavorites) {
+                        if (visibleDrillDownPlaylistId != null || visibleDrillDownIsFavorites) {
                             val key = song.localUri ?: song.videoId
                             if (!playlistSelectionMode) {
                                 playlistReorderEnabled = false
@@ -1204,14 +1242,14 @@ fun LibraryScreen(
                     },
                     // Selection changes the row tap and long-press behavior,
                     // but the trailing details/actions button stays available.
-                    onSongMore = if (drillDownPlaylistId != null || drillDownIsFavorites) {
+                    onSongMore = if (visibleDrillDownPlaylistId != null || visibleDrillDownIsFavorites) {
                         { song -> activePlaylistMenuSong = song }
                     } else onSongLongPress,
                     onSongSwipe = onSongSwipe,
                     onShuffle = onShuffle,
-                    onMore = if (drillDownIsFavorites) ({ showFavoriteSortDialog = true }) else null,
-                    reorderEnabled = playlistReorderEnabled && (drillDownIsFavorites || (drillDownPlaylistId != null && !drillDownIsSmartPlaylist)),
-                    onReorderToggle = if (drillDownIsFavorites || (drillDownPlaylistId != null && !drillDownIsSmartPlaylist)) {
+                    onMore = if (visibleDrillDownIsFavorites) ({ showFavoriteSortDialog = true }) else null,
+                    reorderEnabled = playlistReorderEnabled && (visibleDrillDownIsFavorites || (visibleDrillDownPlaylistId != null && !visibleDrillDownIsSmartPlaylist)),
+                    onReorderToggle = if (visibleDrillDownIsFavorites || (visibleDrillDownPlaylistId != null && !visibleDrillDownIsSmartPlaylist)) {
                         {
                             if (playlistReorderEnabled) {
                                 playlistReorderEnabled = false
@@ -1236,7 +1274,7 @@ fun LibraryScreen(
                     },
                     onBack = leaveDrillDown,
                     contentPadding = contentPadding,
-                    songDropdownMenu = if (drillDownPlaylistId != null || drillDownIsFavorites) playlistSongDropdownMenu else songDropdownMenu,
+                    songDropdownMenu = if (visibleDrillDownPlaylistId != null || visibleDrillDownIsFavorites) playlistSongDropdownMenu else songDropdownMenu,
                     onArtworkPaletteChanged = onArtworkPaletteChanged,
                     onRootListScrollChanged = reportRootLibraryScroll,
                 )
