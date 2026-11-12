@@ -423,14 +423,19 @@ val DEFAULT_PLAYER_DETAILS_ACTION_ORDER = listOf(
 )
 
 object MainNavigationTabs {
-    /** Newly introduced destinations stay opt-in unless the user enables them. */
+    /** Keep Home opt-in, matching its existing navigation setting. */
     fun defaultVisibleTabs(): Set<MainNavigationTab> =
         MainNavigationTab.entries.toSet() - setOf(MainNavigationTab.HOME, MainNavigationTab.GENRES, MainNavigationTab.SERVICES)
 
-    fun normalizeOrder(order: List<MainNavigationTab>): List<MainNavigationTab> =
-        (order.filterNot { it == MainNavigationTab.SERVICES } + MainNavigationTab.entries.filterNot {
-            it == MainNavigationTab.SERVICES
-        }).distinct()
+    fun normalizeOrder(order: List<MainNavigationTab>): List<MainNavigationTab> {
+        val saved = order.filterNot { it == MainNavigationTab.SERVICES }.distinct()
+        val completed = saved + MainNavigationTab.entries.filter {
+            it != MainNavigationTab.SERVICES && it !in saved
+        }
+        // An older saved order has no Home entry. Add the new destination at
+        // the leading edge once, while retaining any explicit user position.
+        return if (MainNavigationTab.HOME in saved) completed else listOf(MainNavigationTab.HOME) + completed
+    }
 
     fun move(
         order: List<MainNavigationTab>,
@@ -3314,7 +3319,20 @@ object AppSettings {
             ?.split(",")
             ?.mapNotNull { name -> MainNavigationTab.entries.firstOrNull { it.name == name } }
             .orEmpty()
-        return MainNavigationTabs.normalizeOrder(saved)
+        val normalized = MainNavigationTabs.normalizeOrder(saved)
+        if (!prefs.getBoolean(KEY_HOME_TAB_ORDER_MIGRATED, false)) {
+            val homeFirst = if (MainNavigationTab.HOME in saved) {
+                normalized
+            } else {
+                listOf(MainNavigationTab.HOME) + normalized.filterNot { it == MainNavigationTab.HOME }
+            }
+            prefs.edit()
+                .putBoolean(KEY_HOME_TAB_ORDER_MIGRATED, true)
+                .putString(KEY_MAIN_NAVIGATION_TAB_ORDER, homeFirst.joinToString(",") { it.name })
+                .apply()
+            return homeFirst
+        }
+        return normalized
     }
 
     private fun readVisibleMainNavigationTabs(): Set<MainNavigationTab> {
@@ -4972,6 +4990,7 @@ object AppSettings {
     private const val KEY_MAIN_NAVIGATION_TABS_POPUP = "main_navigation_tabs_popup"
     private const val KEY_VISIBLE_MAIN_NAVIGATION_TABS = "visible_main_navigation_tabs"
     private const val KEY_MAIN_NAVIGATION_TAB_ORDER = "main_navigation_tab_order"
+    private const val KEY_HOME_TAB_ORDER_MIGRATED = "home_tab_order_migrated"
     private const val KEY_MAIN_FOLDER_TAB_MIGRATED = "main_folder_tab_migrated"
     private const val KEY_STARTUP_TAB = "startup_tab"
     private const val KEY_SHOW_STATUS_BAR = "show_status_bar"

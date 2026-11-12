@@ -732,8 +732,10 @@ private fun BitChordApp(
             visibleMainNavigationTabs - MainNavigationTab.ALBUM_ARTISTS
         }
         val withRadio = if (radioAvailable) tabs else tabs - MainNavigationTab.RADIO
-        val withHome = if (homeAvailable) withRadio else withRadio - MainNavigationTab.HOME
-        withHome - MainNavigationTab.SERVICES
+        // Home now also contains the on-device music view, so it remains
+        // usable with YouTube Music disabled, in offline mode, and in the
+        // no-internet variant. Only its legacy online shelves are conditional.
+        withRadio - MainNavigationTab.SERVICES
     }
     val visibleTabIndices = remember(effectiveVisibleMainTabs, mainNavigationTabOrder) {
         mainNavigationTabOrder
@@ -1270,8 +1272,8 @@ private fun BitChordApp(
     val homeState by viewModel.home.collectAsStateWithLifecycle()
     val homeLoadingMore by viewModel.homeLoadingMore.collectAsStateWithLifecycle()
     val refreshingFeeds by viewModel.refreshing.collectAsStateWithLifecycle()
-    LaunchedEffect(selectedTab, homeState, homeLoadingMore) {
-        if (selectedTab == TAB_HOME) {
+    LaunchedEffect(selectedTab, homeState, homeLoadingMore, homeAvailable) {
+        if (selectedTab == TAB_HOME && homeAvailable) {
             viewModel.onHomeShown()
             if (homeState is UiState.Loading && !homeLoadingMore) viewModel.loadHome()
         }
@@ -3888,6 +3890,13 @@ private fun BitChordApp(
                             onRetry = viewModel::loadHome,
                             onLoadMore = viewModel::loadMoreHome,
                             loadingMore = homeLoadingMore,
+                            localCatalog = com.music.bitchord.ui.screens.HomeLocalCatalog(
+                                songs = localSongs,
+                                onSongClick = play,
+                                onSongLongPress = openSongMenu,
+                                onlineFeedEnabled = homeAvailable,
+                                allowModelDownload = !offlineMode && !context.packageName.endsWith(".nointernet"),
+                            ),
                         )
                         TAB_GENRES -> if (!hasStoragePermission && localSongs.isEmpty()) {
                             Box(modifier = Modifier.fillMaxSize().padding(listPadding), contentAlignment = Alignment.Center) {
