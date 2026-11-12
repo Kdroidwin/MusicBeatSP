@@ -134,7 +134,7 @@ object ArtistArtworkStore {
             totalBytes += item.bytes.size
             require(totalBytes <= 96L * 1024 * 1024) { "Artist images exceed the backup size limit" }
             val extension = if (item.mimeType == "image/png") "png" else "jpg"
-            prepared[key] = Entry(name, key, item.mimeType, "${digest(key)}.$extension") to item.bytes
+            prepared[key] = Entry(name, key, item.mimeType, fileName(key, item.bytes, extension)) to item.bytes
         }
 
         synchronized(lock) {
@@ -165,13 +165,20 @@ object ArtistArtworkStore {
             runCatching { validateImage(bytes) }.getOrElse { return false }
             val key = artistKey
             val extension = if (mimeType == "image/png") "png" else "jpg"
-            val entry = Entry(artistName, key, mimeType, "${digest(key)}.$extension")
+            // Give changed image bytes a new URI. Coil caches by URI, so
+            // rewriting a stable artist.jpg path left the old portrait on
+            // screen even though the new file had been saved successfully.
+            val entry = Entry(artistName, key, mimeType, fileName(key, bytes, extension))
             val dir = directory(context).apply { mkdirs() }
             runCatching { writeAtomically(File(dir, entry.fileName), bytes) }.getOrElse { return false }
             val updated = entries + (key to entry)
             persist(context, updated)
+            val previous = entries[key]
             entries = updated
             publishEntries(context)
+            if (previous != null && previous.fileName != entry.fileName) {
+                File(dir, previous.fileName).delete()
+            }
             true
         }
 
@@ -243,6 +250,14 @@ object ArtistArtworkStore {
     private fun digest(value: String): String = MessageDigest.getInstance("SHA-256")
         .digest(value.toByteArray(Charsets.UTF_8))
         .joinToString("") { "%02x".format(it) }
+
+    private fun fileName(artistKey: String, bytes: ByteArray, extension: String): String {
+        val contentHash = MessageDigest.getInstance("SHA-256")
+            .digest(bytes)
+            .joinToString("") { "%02x".format(it) }
+            .take(24)
+        return "${digest(artistKey)}-$contentHash.$extension"
+    }
 
     private suspend fun <T> withContextIO(block: () -> T): T = withContext(Dispatchers.IO) { block() }
 }

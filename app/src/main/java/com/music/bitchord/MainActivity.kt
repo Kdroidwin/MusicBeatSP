@@ -2979,7 +2979,7 @@ private fun BitChordApp(
                             collectionBackHandlers.remove(routeKey)
                         }
                     }
-                    val live = detailStack.lastOrNull()?.takeIf {
+                    val live = detail?.takeIf {
                         it.browseId == key && key != "settings" && key != "replay" && key != "sources" && key != "wear_os"
                     }
                     // Held for the same reason, one step further on: a popped
