@@ -16,7 +16,7 @@
     <string name="library">Библиотека</string>
     <string name="play">Играть</string>
     <string name="explore">Обзор</string>
-    <string name="listen_now">Слушать сейчас</string>
+    <string name="listen_now">Главная</string>
     <string name="downloads">Загрузки</string>
     <string name="downloaded_songs">Загруженные песни</string>
     <string name="local_music">Локальная музыка</string>

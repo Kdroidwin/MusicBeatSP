@@ -5,7 +5,6 @@ import android.net.Uri
 import ai.onnxruntime.OnnxTensor
 import ai.onnxruntime.OrtEnvironment
 import ai.onnxruntime.OrtSession
-import ai.onnxruntime.TensorInfo
 import com.music.bitchord.data.lyrics.CtcFfmpegDecoder
 import com.music.bitchord.data.model.Song
 import com.music.bitchord.data.model.durationMillis
@@ -26,9 +25,7 @@ import java.net.URL
 import java.nio.FloatBuffer
 import java.security.MessageDigest
 import kotlin.math.PI
-import kotlin.math.ceil
 import kotlin.math.cos
-import kotlin.math.ln
 import kotlin.math.max
 import kotlin.math.min
 import kotlin.math.roundToInt
@@ -36,27 +33,29 @@ import kotlin.math.sin
 import kotlin.math.sqrt
 
 /**
- * Optional, on-device-only music mood analysis for Home. The model pair is
+ * Optional, on-device-only music mood analysis for Home. The model set is
  * fetched only after the listener opts in; no audio is sent off-device.
  *
- * The 14.2 MB YAMNet embedding model plus the two small MTG mood heads are
- * published by Essentia/UPF under CC BY-NC-SA 4.0. Their metadata describes a
- * 96x64 log-mel input, a 1024-wide embedding, and the two mood probabilities.
+ * Discogs-EffNet is trained on music rather than environmental audio. The
+ * model and MTG mood heads are published by Essentia/UPF under CC BY-NC-SA 4.0.
+ * Its music features use a 128x96 MusiCNN mel patch and produce 1280-wide
+ * embeddings for the happy, party, and relaxed classification heads.
  */
 object LocalHomeAi {
     private const val PREFS = "local_home_ai"
     private const val KEY_MODEL_DECISION = "model_download_decision"
-    private const val MODEL_VERSION = "essentia-yamnet-mood-v1"
+    private const val MODEL_VERSION = "essentia-discogs-effnet-moods-v2"
+    private const val LEGACY_MODEL_VERSION = "essentia-yamnet-mood-v1"
     private const val MODEL_HOST = "essentia.upf.edu"
-    private const val MAX_AUDIO_SECONDS = 18.0
-    private const val MAX_PATCHES_PER_TRACK = 8
+    private const val ANALYSIS_WINDOW_SECONDS = 4.2
     private const val SAMPLE_RATE = 16_000
     private const val FFT_SIZE = 512
-    private const val FRAME_SIZE = 400
-    private const val FRAME_STEP = 160
-    private const val MEL_BANDS = 64
-    private const val PATCH_FRAMES = 96
-    private const val DOWNLOAD_LIMIT_BYTES = 16_000_000L
+    private const val FRAME_SIZE = 512
+    private const val FRAME_STEP = 256
+    private const val MEL_BANDS = 96
+    private const val PATCH_FRAMES = 128
+    private const val PATCH_HOP_FRAMES = 62
+    private const val DOWNLOAD_LIMIT_BYTES = 20_000_000L
 
     data class MoodScores(val uplifting: Float, val calm: Float)
     data class DownloadProgress(val bytes: Long, val totalBytes: Long)
@@ -70,22 +69,28 @@ object LocalHomeAi {
 
     private val models = listOf(
         ModelFile(
-            name = "audioset-yamnet-1.onnx",
-            url = "https://essentia.upf.edu/models/audio-event-recognition/yamnet/audioset-yamnet-1.onnx",
-            bytes = 14_934_724L,
-            sha256 = "9bc15ac91426e431527196ee6663de78dffcc7db53ac002d5afbda61429b456f",
+            name = "discogs-effnet-bsdynamic-1.onnx",
+            url = "https://essentia.upf.edu/models/music-style-classification/discogs-effnet/discogs-effnet-bsdynamic-1.onnx",
+            bytes = 18_027_718L,
+            sha256 = "a280825b334797cf677939db8cd5762c0392aedd0ca6415dbc1cd083f045e43c",
         ),
         ModelFile(
-            name = "mood_happy-audioset-yamnet-1.onnx",
-            url = "https://essentia.upf.edu/models/classification-heads/mood_happy/mood_happy-audioset-yamnet-1.onnx",
-            bytes = 411_698L,
-            sha256 = "58a98eb81697410b42fbc62f24aca8e682b0401d5d327bf95e9737590a7cd6b3",
+            name = "mood_happy-discogs-effnet-1.onnx",
+            url = "https://essentia.upf.edu/models/classification-heads/mood_happy/mood_happy-discogs-effnet-1.onnx",
+            bytes = 514_097L,
+            sha256 = "0ca322819ef137b4b87e9866bffe7370a630e6f1165184ec106326cef6f81e06",
         ),
         ModelFile(
-            name = "mood_relaxed-audioset-yamnet-1.onnx",
-            url = "https://essentia.upf.edu/models/classification-heads/mood_relaxed/mood_relaxed-audioset-yamnet-1.onnx",
-            bytes = 411_702L,
-            sha256 = "fc0e5303c7b6c6d706c195b56badf2e2b46a5c859fad83c96e6e060af2423157",
+            name = "mood_party-discogs-effnet-1.onnx",
+            url = "https://essentia.upf.edu/models/classification-heads/mood_party/mood_party-discogs-effnet-1.onnx",
+            bytes = 514_097L,
+            sha256 = "c50ac2106ec2f209dd04ad48756582df0e3f3512235310d1a4a3fcc453745f04",
+        ),
+        ModelFile(
+            name = "mood_relaxed-discogs-effnet-1.onnx",
+            url = "https://essentia.upf.edu/models/classification-heads/mood_relaxed/mood_relaxed-discogs-effnet-1.onnx",
+            bytes = 514_101L,
+            sha256 = "8ba6515a1e5943a72b3b475e3a25fc7a2ff04142c3eaa6aa0716fca371efdfff",
         ),
     )
 
@@ -191,6 +196,8 @@ object LocalHomeAi {
                 }
             }
             check(isModelInstalled(context)) { "The model set is incomplete" }
+            File(context.noBackupFilesDir, "home_ai_models/$LEGACY_MODEL_VERSION")
+                .deleteRecursively()
         } catch (error: Throwable) {
             models.forEach { File(directory, "${it.name}.part").delete() }
             throw error
@@ -232,25 +239,36 @@ object LocalHomeAi {
 
         val operationContext = currentCoroutineContext()
         val start = (song.localStartMs ?: 0L).coerceAtLeast(0L) / 1000.0
+        val cueEnd = song.localEndMs?.takeIf { it > (song.localStartMs ?: 0L) }?.div(1000.0)
         val metadataDuration = song.durationMillis().takeIf { it > 0L }?.div(1000.0)
-        val endHint = min(start + MAX_AUDIO_SECONDS, metadataDuration?.plus(start) ?: (start + MAX_AUDIO_SECONDS))
         val source = LocalAudioSource.open(context.contentResolver, audioUri)
-        val pcmAndStart = if (source != null) {
+        val audioSegments = if (source != null) {
             source.use { dataSource ->
-                val duration = AudioDecoder.containerDurationSeconds(dataSource) ?: endHint
-                val end = min(endHint, duration)
-                val platform = AudioDecoder.decodeRegion(dataSource, start, end) { !operationContext.isActive }
-                operationContext.ensureActive()
-                platform ?: CtcFfmpegDecoder.decode(context, song, audioUri, start, end)
+                val containerDuration = AudioDecoder.containerDurationSeconds(dataSource)
+                val end = listOfNotNull(containerDuration, cueEnd, metadataDuration?.let { start + it })
+                    .minOrNull() ?: (start + ANALYSIS_WINDOW_SECONDS)
+                analysisWindows(start, end).mapNotNull { (regionStart, regionEnd) ->
+                    operationContext.ensureActive()
+                    val decoded = AudioDecoder.decodeRegion(dataSource, regionStart, regionEnd) { !operationContext.isActive }
+                        ?: CtcFfmpegDecoder.decode(context, song, audioUri, regionStart, regionEnd)
+                        ?: return@mapNotNull null
+                    resample(decoded.first.samples, decoded.first.sampleRate)
+                }
             }
         } else {
-            val duration = metadataDuration?.plus(start) ?: return@withContext null
-            CtcFfmpegDecoder.decode(context, song, audioUri, start, min(start + MAX_AUDIO_SECONDS, duration))
+            val end = min(
+                cueEnd ?: (metadataDuration?.let { start + it } ?: (start + ANALYSIS_WINDOW_SECONDS)),
+                metadataDuration?.let { start + it } ?: Double.POSITIVE_INFINITY,
+            )
+            analysisWindows(start, end).mapNotNull { (regionStart, regionEnd) ->
+                operationContext.ensureActive()
+                val decoded = CtcFfmpegDecoder.decode(context, song, audioUri, regionStart, regionEnd)
+                    ?: return@mapNotNull null
+                resample(decoded.first.samples, decoded.first.sampleRate)
+            }
         }
         operationContext.ensureActive()
-        val pcm16k = resample(pcmAndStart.first.samples, pcmAndStart.first.sampleRate)
-        if (pcm16k.size < FRAME_SIZE) return@withContext null
-        val patches = melPatches(pcm16k)
+        val patches = audioSegments.flatMap(::melPatches)
         if (patches.isEmpty()) return@withContext null
         val score = withModels(context) { runtime -> runtime.predict(patches) }
         saveScore(context, song, score)
@@ -258,6 +276,22 @@ object LocalHomeAi {
     }
 
     private fun modelDirectory(context: Context) = File(context.noBackupFilesDir, "home_ai_models/$MODEL_VERSION")
+
+    /** Samples distinct sections so a long intro or outro cannot dominate the mood estimate. */
+    private fun analysisWindows(start: Double, end: Double): List<Pair<Double, Double>> {
+        val duration = (end - start).takeIf { it.isFinite() && it > 0.0 } ?: return emptyList()
+        val length = min(ANALYSIS_WINDOW_SECONDS, duration)
+        val latestStart = (end - length).coerceAtLeast(start)
+        val ratios = when {
+            duration >= 30.0 -> listOf(0.02, 0.50, 0.96)
+            duration > length * 1.7 -> listOf(0.02, 0.96)
+            else -> listOf(0.02)
+        }
+        return ratios.map { ratio ->
+            val regionStart = start + (latestStart - start) * ratio
+            regionStart to min(regionStart + length, end)
+        }.distinctBy { (regionStart, _) -> (regionStart * 10.0).roundToInt() }
+    }
 
     private fun cacheKey(song: Song): String {
         val identity = song.localUri?.takeIf(String::isNotBlank)
@@ -284,42 +318,43 @@ object LocalHomeAi {
         .joinToString("") { "%02x".format(it) }
 
     private data class Runtime(
-        val yamnet: OrtSession,
+        val effnet: OrtSession,
         val happy: OrtSession,
+        val party: OrtSession,
         val relaxed: OrtSession,
     ) {
         fun predict(patches: List<FloatArray>): MoodScores {
             val env = OrtEnvironment.getEnvironment()
-            var happyTotal = 0.0
+            var upliftingTotal = 0.0
             var calmTotal = 0.0
             var count = 0
             patches.forEach { patch ->
                 val embeddings = OnnxTensor.createTensor(
                     env,
                     FloatBuffer.wrap(patch),
-                    longArrayOf(1L, PATCH_FRAMES.toLong(), MEL_BANDS.toLong()),
+                    longArrayOf(1L, 1L, PATCH_FRAMES.toLong(), MEL_BANDS.toLong()),
                 ).use { input ->
-                    yamnet.run(mapOf(yamnet.inputNames.first() to input)).use { output ->
-                        val embeddingName = yamnet.outputInfo.entries.firstOrNull { (_, info) ->
-                            val tensor = info.info as? TensorInfo
-                            tensor?.shape?.lastOrNull() == 1024L
-                        }?.key ?: yamnet.outputNames.first()
-                        val embeddingIndex = yamnet.outputNames.indexOf(embeddingName).coerceAtLeast(0)
+                    effnet.run(mapOf(effnet.inputNames.first() to input)).use { output ->
+                        val embeddingIndex = effnet.outputNames.indexOfFirst { name ->
+                            (effnet.outputInfo[name]?.info as? ai.onnxruntime.TensorInfo)
+                                ?.shape?.lastOrNull() == 1280L
+                        }.coerceAtLeast(0)
                         flattenFloat(output[embeddingIndex].value)
                     }
                 }
-                if (embeddings.size < 1024) return@forEach
-                val feature = embeddings.copyOf(1024)
+                if (embeddings.size < 1280) return@forEach
+                val feature = embeddings.copyOf(1280)
                 val happyScore = inferMoodHead(happy, feature, 0)
+                val partyScore = inferMoodHead(party, feature, 1)
                 val calmScore = inferMoodHead(relaxed, feature, 1)
-                if (happyScore.isFinite() && calmScore.isFinite()) {
-                    happyTotal += happyScore
+                if (happyScore.isFinite() && partyScore.isFinite() && calmScore.isFinite()) {
+                    upliftingTotal += (happyScore + partyScore) / 2.0
                     calmTotal += calmScore
                     count++
                 }
             }
             return if (count == 0) MoodScores(0.5f, 0.5f) else MoodScores(
-                uplifting = (happyTotal / count).toFloat().coerceIn(0f, 1f),
+                uplifting = (upliftingTotal / count).toFloat().coerceIn(0f, 1f),
                 calm = (calmTotal / count).toFloat().coerceIn(0f, 1f),
             )
         }
@@ -360,10 +395,11 @@ object LocalHomeAi {
                 val environment = OrtEnvironment.getEnvironment()
                 val opened = ArrayList<OrtSession>(models.size)
                 try {
-                    val yamnet = environment.createSession(File(directory, models[0].name).absolutePath, options).also(opened::add)
+                    val effnet = environment.createSession(File(directory, models[0].name).absolutePath, options).also(opened::add)
                     val happy = environment.createSession(File(directory, models[1].name).absolutePath, options).also(opened::add)
-                    val relaxed = environment.createSession(File(directory, models[2].name).absolutePath, options).also(opened::add)
-                    Runtime(yamnet, happy, relaxed).also { runtime = it }
+                    val party = environment.createSession(File(directory, models[2].name).absolutePath, options).also(opened::add)
+                    val relaxed = environment.createSession(File(directory, models[3].name).absolutePath, options).also(opened::add)
+                    Runtime(effnet, happy, party, relaxed).also { runtime = it }
                 } catch (error: Throwable) {
                     opened.forEach { runCatching(it::close) }
                     throw error
@@ -388,75 +424,76 @@ object LocalHomeAi {
         }
     }
 
-    /** Converts 16 kHz mono PCM to YAMNet's 96x64 log-mel input patches. */
+    /** Converts 16 kHz mono PCM into the 128x96 MusiCNN mel patches EffNet was trained on. */
     private fun melPatches(samples: FloatArray): List<FloatArray> {
-        val frameCount = max(PATCH_FRAMES, ceil(samples.size.toDouble() / FRAME_STEP).toInt())
-        val framesToUse = min(frameCount, 2_000)
-        val filter = melFilters()
-        val spectrogram = FloatArray(framesToUse * MEL_BANDS)
+        if (samples.isEmpty()) return emptyList()
+        val frameCount = max(PATCH_FRAMES, 1 + kotlin.math.ceil((samples.size - FRAME_SIZE / 2.0) / FRAME_STEP).toInt())
+        val filter = slaneyMelFilters()
+        val spectrogram = FloatArray(frameCount * MEL_BANDS)
         val real = DoubleArray(FFT_SIZE)
         val imaginary = DoubleArray(FFT_SIZE)
-        for (frame in 0 until framesToUse) {
+        for (frame in 0 until frameCount) {
             real.fill(0.0)
             imaginary.fill(0.0)
-            val start = frame * FRAME_STEP
+            // Essentia's FrameCutter centers the first frame, padding 256 samples at the front.
+            val start = frame * FRAME_STEP - FRAME_SIZE / 2
             for (index in 0 until FRAME_SIZE) {
                 val sampleIndex = start + index
-                val sample = if (sampleIndex < samples.size) samples[sampleIndex] else 0f
-                // TensorFlow's STFT uses a periodic Hann window.
-                val window = 0.5 - 0.5 * cos(2.0 * PI * index / FRAME_SIZE)
+                val sample = if (sampleIndex in samples.indices) samples[sampleIndex] else 0f
+                val window = 0.5 - 0.5 * cos(2.0 * PI * index / (FRAME_SIZE - 1))
                 real[index] = sample * window
             }
             fft(real, imaginary)
-            val magnitude = DoubleArray(FFT_SIZE / 2 + 1) { bin -> sqrt(real[bin] * real[bin] + imaginary[bin] * imaginary[bin]) }
+            val power = DoubleArray(FFT_SIZE / 2 + 1) { bin ->
+                val magnitude = sqrt(real[bin] * real[bin] + imaginary[bin] * imaginary[bin])
+                magnitude * magnitude
+            }
             for (band in 0 until MEL_BANDS) {
                 var energy = 0.0
                 val weights = filter[band]
-                for (bin in weights.indices) energy += magnitude[bin] * weights[bin]
-                spectrogram[frame * MEL_BANDS + band] = ln(max(0.0, energy) + 0.001).toFloat()
+                for (bin in weights.indices) energy += power[bin] * weights[bin]
+                spectrogram[frame * MEL_BANDS + band] = kotlin.math.log10(max(0.0, energy) * 10_000.0 + 1.0).toFloat()
             }
         }
         val patches = ArrayList<FloatArray>()
         var patchStart = 0
-        while (patchStart < framesToUse && patches.size < MAX_PATCHES_PER_TRACK) {
+        while (patchStart + PATCH_FRAMES <= frameCount) {
             val patch = FloatArray(PATCH_FRAMES * MEL_BANDS)
-            val availableFrames = min(PATCH_FRAMES, framesToUse - patchStart)
-            spectrogram.copyInto(
-                destination = patch,
-                destinationOffset = 0,
-                startIndex = patchStart * MEL_BANDS,
-                endIndex = (patchStart + availableFrames) * MEL_BANDS,
-            )
+            spectrogram.copyInto(destination = patch, startIndex = patchStart * MEL_BANDS, endIndex = (patchStart + PATCH_FRAMES) * MEL_BANDS)
             patches += patch
-            patchStart += PATCH_FRAMES / 2
+            patchStart += PATCH_HOP_FRAMES
         }
+        if (patches.isEmpty()) patches += spectrogram.copyOf(PATCH_FRAMES * MEL_BANDS)
         return patches
     }
 
-    private fun melFilters(): Array<DoubleArray> {
-        val lowMel = hzToMel(125.0)
-        val highMel = hzToMel(7_500.0)
-        val edgeMels = DoubleArray(MEL_BANDS + 2) { index ->
-            lowMel + (highMel - lowMel) * index / (MEL_BANDS + 1)
+    /** Essentia uses Slaney mel bands, unit-area triangles, power, and log10(10000*x+1). */
+    private fun slaneyMelFilters(): Array<DoubleArray> {
+        val lowMel = hzToSlaneyMel(0.0)
+        val highMel = hzToSlaneyMel(SAMPLE_RATE / 2.0)
+        val edges = DoubleArray(MEL_BANDS + 2) { index ->
+            slaneyMelToHz(lowMel + (highMel - lowMel) * index / (MEL_BANDS + 1))
         }
-        val binMels = DoubleArray(FFT_SIZE / 2 + 1) { bin ->
-            hzToMel(bin * SAMPLE_RATE.toDouble() / FFT_SIZE)
-        }
+        val frequencies = DoubleArray(FFT_SIZE / 2 + 1) { bin -> bin * SAMPLE_RATE.toDouble() / FFT_SIZE }
         return Array(MEL_BANDS) { band ->
-            DoubleArray(FFT_SIZE / 2 + 1) { bin ->
-                val mel = binMels[bin]
+            val triangle = DoubleArray(FFT_SIZE / 2 + 1) { bin ->
+                val frequency = frequencies[bin]
                 when {
-                    mel < edgeMels[band] || mel > edgeMels[band + 2] -> 0.0
-                    mel <= edgeMels[band + 1] -> (mel - edgeMels[band]) / (edgeMels[band + 1] - edgeMels[band])
-                    else -> (edgeMels[band + 2] - mel) / (edgeMels[band + 2] - edgeMels[band + 1])
+                    frequency < edges[band] || frequency > edges[band + 2] -> 0.0
+                    frequency <= edges[band + 1] -> (frequency - edges[band]) / max(1e-12, edges[band + 1] - edges[band])
+                    else -> (edges[band + 2] - frequency) / max(1e-12, edges[band + 2] - edges[band + 1])
                 }.coerceAtLeast(0.0)
             }
+            val area = triangle.sum()
+            if (area > 0.0) DoubleArray(triangle.size) { triangle[it] / area } else triangle
         }
     }
 
-    private fun hzToMel(hz: Double) = 1_127.0 * ln(1.0 + hz / 700.0)
+    private fun hzToSlaneyMel(hz: Double): Double = if (hz < 1_000.0) hz / (200.0 / 3.0) else 15.0 + kotlin.math.ln(hz / 1_000.0) / (kotlin.math.ln(6.4) / 27.0)
 
-    /** In-place radix-2 FFT; the YAMNet patch only needs 257 real bins. */
+    private fun slaneyMelToHz(mel: Double): Double = if (mel < 15.0) mel * (200.0 / 3.0) else 1_000.0 * kotlin.math.exp((kotlin.math.ln(6.4) / 27.0) * (mel - 15.0))
+
+    /** In-place radix-2 FFT; EffNet input uses the 257 non-negative frequency bins. */
     private fun fft(real: DoubleArray, imaginary: DoubleArray) {
         val size = real.size
         var j = 0

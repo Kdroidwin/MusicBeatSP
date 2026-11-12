@@ -21,7 +21,7 @@
     <string name="library">Library</string>
     <string name="play">Play</string>
     <string name="explore">Explore</string>
-    <string name="listen_now">Listen Now</string>
+    <string name="listen_now">Home</string>
     <string name="home_ai_recommendations">Recommendations</string>
     <string name="home_ai_most_played">Frequently played</string>
     <string name="home_ai_uplifting">Uplifting</string>
@@ -34,11 +34,15 @@
     <string name="home_ai_analyzing">Analyzing local music on this device…</string>
     <string name="home_ai_model_needed">Download the optional on-device model to classify local music by mood.</string>
     <string name="home_ai_download_title">Enable local music mood analysis?</string>
-    <string name="home_ai_download_message">Download about 15.8 MB for on-device mood analysis? Audio stays on this device. The Essentia/UPF models are licensed under CC BY-NC-SA 4.0.</string>
+    <string name="home_ai_download_message">Download about 19.6 MB for music-specific on-device mood analysis? Audio stays on this device. The Essentia/UPF models are licensed under CC BY-NC-SA 4.0.</string>
     <string name="home_ai_download_action">Download model</string>
     <string name="home_ai_download_progress">Downloading %1$.1f of %2$.1f MB</string>
     <string name="home_ai_download_failed">Model download failed</string>
     <string name="home_ai_enable_analysis">Download local AI model</string>
+    <string name="home_excluded_folders">Exclude folders from Home</string>
+    <string name="home_excluded_folders_subtitle">Hide tracks in selected folders from Home recommendations and mood analysis. They remain in your library.</string>
+    <string name="home_excluded_folders_empty">No local music folders were found.</string>
+    <string name="home_excluded_folder_details">%1$d tracks • %2$s</string>
     <string name="downloads">Downloads</string>
     <string name="downloaded_songs">Downloaded songs</string>
     <string name="local_music">Local Music</string>

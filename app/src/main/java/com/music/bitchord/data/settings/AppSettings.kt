@@ -1307,6 +1307,9 @@ object AppSettings {
     /** Normalized paths of folders blacklisted/excluded from local music scanning. */
     val blacklistedFolders = MutableStateFlow<Set<String>>(emptySet())
 
+    /** Home-only folder exclusions. These do not remove tracks from the library or scanner. */
+    val homeExcludedFolders = MutableStateFlow<Set<String>>(emptySet())
+
     /**
      * Browse ids of the playlists pinned to the top of the Library tab, in the
      * order they were pinned.
@@ -2036,6 +2039,9 @@ object AppSettings {
             ?: FavoriteSongSort.DEFAULT
         LauncherIconManager.apply(appContext, launcherIcon.value)
         blacklistedFolders.value = prefs.getStringSet(KEY_BLACKLISTED_FOLDERS, emptySet()).orEmpty()
+            .mapTo(mutableSetOf(), ::normalizeFolderPath)
+        homeExcludedFolders.value = prefs.getStringSet(KEY_HOME_EXCLUDED_FOLDERS, emptySet()).orEmpty()
+            .mapTo(mutableSetOf(), ::normalizeFolderPath)
         pinnedPlaylists.value = readPinnedPlaylists()
         discordToken.value = authStore.discordToken.orEmpty()
         discordUsername.value = prefs.getString(KEY_DISCORD_USERNAME, "").orEmpty()
@@ -4649,6 +4655,41 @@ object AppSettings {
         }
     }
 
+    fun setHomeFolderExcluded(folderPath: String, excluded: Boolean) {
+        val normalized = normalizeFolderPath(folderPath)
+        if (normalized.isBlank()) return
+        val current = homeExcludedFolders.value
+        val updated = if (excluded) {
+            // Keep child choices so disabling a parent restores their previous state.
+            current + normalized
+        } else {
+            current - normalized
+        }
+        homeExcludedFolders.value = updated
+        prefs.edit().putStringSet(KEY_HOME_EXCLUDED_FOLDERS, updated).apply()
+    }
+
+    /** True when this directory or one of its parent directories is excluded from Home. */
+    fun isHomeFolderExcluded(folderPath: String?): Boolean {
+        if (folderPath.isNullOrBlank()) return false
+        val normalized = normalizeFolderPath(folderPath)
+        return homeExcludedFolders.value.any { excluded ->
+            normalized == excluded || normalized.startsWith("$excluded/")
+        }
+    }
+
+    /** True when an ancestor is excluded, so its inherited state can be shown without a redundant toggle. */
+    fun isHomeFolderExcludedByParent(folderPath: String?): Boolean {
+        if (folderPath.isNullOrBlank()) return false
+        val normalized = normalizeFolderPath(folderPath)
+        return homeExcludedFolders.value.any { excluded ->
+            normalized.startsWith("$excluded/")
+        }
+    }
+
+    private fun normalizeFolderPath(folderPath: String): String =
+        folderPath.replace('\\', '/').trimEnd('/').lowercase(Locale.ROOT)
+
     private fun readLocalMusicSort(key: String): LocalMusicSort =
         prefs.getString(key, null)
             ?.let { saved -> LocalMusicSort.entries.firstOrNull { it.name == saved } }
@@ -5184,6 +5225,7 @@ object AppSettings {
     private const val KEY_LOCAL_DRILLDOWN_SONGS_VIEW_TYPE = "local_drilldown_songs_view_type"
     private const val KEY_DOWNLOADED_DRILLDOWN_SONGS_VIEW_TYPE = "downloaded_drilldown_songs_view_type"
     private const val KEY_BLACKLISTED_FOLDERS = "blacklisted_folders"
+    private const val KEY_HOME_EXCLUDED_FOLDERS = "home_excluded_folders"
     private const val KEY_PINNED_PLAYLISTS = "pinned_playlists"
     private const val KEY_ALL_FILES_PERMISSION_ASKED = "all_files_permission_asked"
 

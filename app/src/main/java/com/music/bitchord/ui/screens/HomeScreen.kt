@@ -75,6 +75,7 @@ data class HomeLocalCatalog(
     val onSongLongPress: (Song) -> Unit,
     val onlineFeedEnabled: Boolean,
     val allowModelDownload: Boolean,
+    val excludedFolderPaths: Set<String> = emptySet(),
 )
 
 /** Native Android home feed, using the same personalized shelves as BitChord. */
@@ -96,7 +97,17 @@ fun HomeScreen(
     modifier: Modifier = Modifier,
 ) {
     val context = LocalContext.current.applicationContext
-    val localSongs = localCatalog.songs
+    val localSongs = remember(localCatalog.songs, localCatalog.excludedFolderPaths) {
+        val exclusions = localCatalog.excludedFolderPaths
+            .map { it.replace('\\', '/').trimEnd('/').lowercase(java.util.Locale.ROOT) }
+        localCatalog.songs.filterNot { song ->
+            val path = song.localPath?.substringBeforeLast('/')
+                ?: song.localFolderPath
+                ?: return@filterNot false
+            val normalized = path.replace('\\', '/').trimEnd('/').lowercase(java.util.Locale.ROOT)
+            exclusions.any { normalized == it || normalized.startsWith("$it/") }
+        }
+    }
     val onlineFeedEnabled = localCatalog.onlineFeedEnabled
     val allowModelDownload = localCatalog.allowModelDownload && !context.packageName.endsWith(".nointernet")
     val scope = rememberCoroutineScope()
@@ -118,7 +129,7 @@ fun HomeScreen(
     LaunchedEffect(context, allowModelDownload) {
         val installed = withContext(Dispatchers.IO) { LocalHomeAi.isModelInstalled(context) }
         modelInstalled = installed
-        if (allowModelDownload && !installed && LocalHomeAi.modelDecision(context) == null) {
+        if (allowModelDownload && !installed && LocalHomeAi.modelDecision(context) != false) {
             showModelPrompt = true
         }
     }
@@ -200,7 +211,7 @@ fun HomeScreen(
 
     PullToRefresh(
         refreshing = isRefreshing,
-        onRefresh = { if (onlineFeedEnabled) onRefresh() },
+        onRefresh = onRefresh,
         state = pullState,
         modifier = modifier,
     ) {

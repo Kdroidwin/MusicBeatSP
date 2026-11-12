@@ -21,7 +21,7 @@
     <string name="library">ライブラリ</string>
     <string name="play">再生</string>
     <string name="explore">見つける</string>
-    <string name="listen_now">今すぐ聴く</string>
+    <string name="listen_now">ホーム</string>
     <string name="home_ai_recommendations">おすすめ</string>
     <string name="home_ai_most_played">よく聴いた曲</string>
     <string name="home_ai_uplifting">気分が高揚する曲</string>
@@ -34,11 +34,15 @@
     <string name="home_ai_analyzing">端末内の音楽を解析しています…</string>
     <string name="home_ai_model_needed">端末内の曲をムード分類するには、任意のオンデバイスモデルをダウンロードしてください。</string>
     <string name="home_ai_download_title">端末内の曲をムード解析しますか？</string>
-    <string name="home_ai_download_message">端末内でムードを解析するモデル約15.8 MBをダウンロードしますか？音源は端末外に送信されません。Essentia/UPFモデルのライセンスはCC BY-NC-SA 4.0です。</string>
+    <string name="home_ai_download_message">音楽向けの端末内ムード解析モデル約19.6 MBをダウンロードしますか？音源は端末外に送信されません。Essentia/UPFモデルのライセンスはCC BY-NC-SA 4.0です。</string>
     <string name="home_ai_download_action">モデルをダウンロード</string>
     <string name="home_ai_download_progress">ダウンロード中 %1$.1f / %2$.1f MB</string>
     <string name="home_ai_download_failed">モデルのダウンロードに失敗しました</string>
     <string name="home_ai_enable_analysis">ローカルAIモデルをダウンロード</string>
+    <string name="home_excluded_folders">ホームから除外するフォルダー</string>
+    <string name="home_excluded_folders_subtitle">選択したフォルダーの曲をホームのおすすめとムード解析から除外します。ライブラリには残ります。</string>
+    <string name="home_excluded_folders_empty">端末内に音楽フォルダーが見つかりません。</string>
+    <string name="home_excluded_folder_details">%1$d曲 • %2$s</string>
     <string name="downloads">ダウンロード</string>
     <string name="downloaded_songs">ダウンロード済みの曲</string>
     <string name="local_music">ローカルの音楽</string>

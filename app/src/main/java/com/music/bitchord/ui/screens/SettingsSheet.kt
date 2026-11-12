@@ -64,6 +64,7 @@ import androidx.compose.material.icons.rounded.FileDownload
 import androidx.compose.material.icons.rounded.FileUpload
 import androidx.compose.material.icons.rounded.FilterAlt
 import androidx.compose.material.icons.rounded.Folder
+import androidx.compose.material.icons.rounded.FolderOff
 import androidx.compose.material.icons.rounded.Fullscreen
 import androidx.compose.material.icons.rounded.Gradient
 import androidx.compose.material.icons.rounded.GraphicEq
@@ -117,6 +118,7 @@ import androidx.compose.material3.rememberModalBottomSheetState
 import androidx.compose.material3.OutlinedTextField
 import com.music.bitchord.feature.localmusic.domain.model.LocalFolder
 import com.music.bitchord.feature.localmusic.ui.components.BlacklistedFoldersSheet
+import com.music.bitchord.feature.homeai.HomeExcludedFoldersSheet
 import androidx.compose.material3.Slider
 import androidx.compose.material3.SliderDefaults
 import androidx.compose.material3.Switch
@@ -2869,6 +2871,7 @@ fun SettingsScreen(
     var confirmImport by remember { mutableStateOf(false) }
     var showPerformanceConfirmation by remember { mutableStateOf(false) }
     var showManageFoldersSheet by remember { mutableStateOf(false) }
+    var showHomeExcludedFoldersSheet by remember { mutableStateOf(false) }
     var showMusicServersSheet by rememberSaveable { mutableStateOf(false) }
     var showPlaylistOrderDialog by remember { mutableStateOf(false) }
     var preparedM3uImport by remember { mutableStateOf<PreparedM3uImport?>(null) }
@@ -2878,6 +2881,8 @@ fun SettingsScreen(
     var pendingMusicoletBackupUri by rememberSaveable { mutableStateOf<String?>(null) }
     var showStartupTabPicker by remember { mutableStateOf(false) }
     val manageFoldersSheetState = rememberModalBottomSheetState()
+    val homeExcludedFoldersSheetState = rememberModalBottomSheetState()
+    val homeExcludedFolders by AppSettings.homeExcludedFolders.collectAsStateWithLifecycle()
     var discoveredFolders by remember { mutableStateOf<List<LocalFolder>>(emptyList()) }
     val lifecycleOwner = LocalLifecycleOwner.current
     // SAF result callbacks can arrive after this composable's remembered scope has
@@ -2885,8 +2890,8 @@ fun SettingsScreen(
     // Use the screen owner's lifecycle scope for the work they start.
     val backupScope = lifecycleOwner.lifecycleScope
 
-    LaunchedEffect(showManageFoldersSheet) {
-        if (showManageFoldersSheet) {
+    LaunchedEffect(showManageFoldersSheet, showHomeExcludedFoldersSheet) {
+        if (showManageFoldersSheet || showHomeExcludedFoldersSheet) {
             discoveredFolders = LocalMediaRepository.getAllDiscoveredFolders(context)
         }
     }
@@ -3226,6 +3231,12 @@ fun SettingsScreen(
             subtitle = stringResource(R.string.music_folders_subtitle),
             keywords = listOf("music folders", "folder management", "フォルダ管理", "音楽フォルダ"),
             activate = { showManageFoldersSheet = true },
+        ),
+        SettingsSearchEntry(
+            title = stringResource(R.string.home_excluded_folders),
+            subtitle = stringResource(R.string.home_excluded_folders_subtitle),
+            keywords = listOf("home", "recommendations", "exclude folder", "folder filter", "ホーム", "おすすめ", "除外", "フォルダー"),
+            activate = { showHomeExcludedFoldersSheet = true },
         ),
         SettingsSearchEntry(
             title = stringResource(R.string.all_files_access),
@@ -6664,6 +6675,7 @@ fun SettingsScreen(
             hidePlaylistPlayButtonLabel = hidePlaylistPlayButtonLabel,
             hasAllFiles = hasAllFiles,
             onManageFolders = { showManageFoldersSheet = true },
+            onManageHomeExcludedFolders = { showHomeExcludedFoldersSheet = true },
             onChooseMusicFolder = { musicFolderRootPicker.launch(null) },
             onClearMusicFolder = { AppSettings.setLocalMusicFolderPath("") },
             onOpenAllFiles = {
@@ -8024,6 +8036,16 @@ fun SettingsScreen(
         )
     }
 
+    if (showHomeExcludedFoldersSheet) {
+        HomeExcludedFoldersSheet(
+            folders = discoveredFolders,
+            excludedFolderPaths = homeExcludedFolders,
+            onToggle = AppSettings::setHomeFolderExcluded,
+            sheetState = homeExcludedFoldersSheetState,
+            onDismiss = { showHomeExcludedFoldersSheet = false },
+        )
+    }
+
     MusicServerManagerSheetHost(
         visible = showMusicServersSheet,
         onDismiss = { showMusicServersSheet = false },
@@ -8302,6 +8324,7 @@ private fun LocalMusicSettingsGroup(
     hidePlaylistPlayButtonLabel: Boolean,
     hasAllFiles: Boolean,
     onManageFolders: () -> Unit,
+    onManageHomeExcludedFolders: () -> Unit,
     onChooseMusicFolder: () -> Unit,
     onClearMusicFolder: () -> Unit,
     onOpenAllFiles: () -> Unit,
@@ -8378,6 +8401,14 @@ SettingsGroup(header = stringResource(R.string.local_music)) {
         subtitle = stringResource(R.string.music_folders_subtitle),
         trailing = { Chevron() },
         onClick = onManageFolders,
+    )
+    RowDivider()
+    SettingsRow(
+        icon = Icons.Rounded.FolderOff,
+        title = stringResource(R.string.home_excluded_folders),
+        subtitle = stringResource(R.string.home_excluded_folders_subtitle),
+        trailing = { Chevron() },
+        onClick = onManageHomeExcludedFolders,
     )
     RowDivider()
     SettingsRow(

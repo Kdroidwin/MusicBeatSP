@@ -3866,13 +3866,15 @@ private fun BitChordApp(
                             contentPadding = listPadding,
                             onDownloadRssEpisode = downloadSong,
                         )
-                        TAB_HOME -> HomeScreen(
+                        TAB_HOME -> HomeTabRoute(
                             state = homeState,
                             listState = homeListState,
-                            isRefreshing = MainViewModel.Feed.HOME in refreshingFeeds,
-                            onRefresh = { viewModel.refresh(MainViewModel.Feed.HOME) },
                             pullState = homePullState,
                             contentPadding = listPadding,
+                            viewModel = viewModel,
+                            homeAvailable = homeAvailable,
+                            onlineRefreshing = MainViewModel.Feed.HOME in refreshingFeeds,
+                            localRefreshing = isRefreshingLocalMusic,
                             onItemClick = { item, shelfTitle ->
                                 val song = shelfSong(item)
                                 val browseId = item.browseId
@@ -3890,13 +3892,10 @@ private fun BitChordApp(
                             onRetry = viewModel::loadHome,
                             onLoadMore = viewModel::loadMoreHome,
                             loadingMore = homeLoadingMore,
-                            localCatalog = com.music.bitchord.ui.screens.HomeLocalCatalog(
-                                songs = localSongs,
-                                onSongClick = play,
-                                onSongLongPress = openSongMenu,
-                                onlineFeedEnabled = homeAvailable,
-                                allowModelDownload = !offlineMode && !context.packageName.endsWith(".nointernet"),
-                            ),
+                            songs = localSongs,
+                            onSongClick = play,
+                            onSongLongPress = openSongMenu,
+                            allowModelDownload = !offlineMode && !context.packageName.endsWith(".nointernet"),
                         )
                         TAB_GENRES -> if (!hasStoragePermission && localSongs.isEmpty()) {
                             Box(modifier = Modifier.fillMaxSize().padding(listPadding), contentAlignment = Alignment.Center) {
@@ -5555,6 +5554,54 @@ private fun BitChordApp(
 
 private fun tween(durationMillis: Int) =
     androidx.compose.animation.core.tween<Float>(durationMillis)
+
+@OptIn(ExperimentalMaterial3Api::class)
+@Composable
+private fun HomeTabRoute(
+    state: UiState<List<HomeShelf>>,
+    listState: LazyListState,
+    pullState: androidx.compose.material3.pulltorefresh.PullToRefreshState,
+    contentPadding: PaddingValues,
+    viewModel: MainViewModel,
+    homeAvailable: Boolean,
+    onlineRefreshing: Boolean,
+    localRefreshing: Boolean,
+    onItemClick: (ShelfItem, String) -> Unit,
+    onItemLongPress: (ShelfItem) -> Unit,
+    onRetry: () -> Unit,
+    onLoadMore: () -> Unit,
+    loadingMore: Boolean,
+    songs: List<Song>,
+    onSongClick: (List<Song>, Int) -> Unit,
+    onSongLongPress: (Song) -> Unit,
+    allowModelDownload: Boolean,
+) {
+    val homeExcludedFolders by AppSettings.homeExcludedFolders.collectAsStateWithLifecycle()
+    HomeScreen(
+        state = state,
+        listState = listState,
+        isRefreshing = onlineRefreshing || localRefreshing,
+        onRefresh = {
+            viewModel.loadLocalMusic(isPullToRefresh = true)
+            if (homeAvailable) viewModel.refresh(MainViewModel.Feed.HOME)
+        },
+        pullState = pullState,
+        contentPadding = contentPadding,
+        onItemClick = onItemClick,
+        onItemLongPress = onItemLongPress,
+        onRetry = onRetry,
+        onLoadMore = onLoadMore,
+        loadingMore = loadingMore,
+        localCatalog = com.music.bitchord.ui.screens.HomeLocalCatalog(
+            songs = songs,
+            onSongClick = onSongClick,
+            onSongLongPress = onSongLongPress,
+            onlineFeedEnabled = homeAvailable,
+            allowModelDownload = allowModelDownload,
+            excludedFolderPaths = homeExcludedFolders,
+        ),
+    )
+}
 
 /**
  * The track-list sort menu, styled after the account switcher: a full-screen
