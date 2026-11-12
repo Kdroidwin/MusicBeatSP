@@ -60,7 +60,9 @@ object LocalHomeAi {
     private const val PATCH_FRAMES = 128
     private const val PATCH_HOP_FRAMES = 62
     private const val DOWNLOAD_LIMIT_BYTES = 20_000_000L
-    private const val KEY_FAILED_TRACKS = "${MODEL_VERSION}_failed_tracks"
+    // Bump this when the inference pipeline changes so tracks skipped by a
+    // previous broken tensor shape are retried automatically.
+    private const val KEY_FAILED_TRACKS = "${MODEL_VERSION}_failed_tracks_v2"
     private const val MAX_FAILED_TRACKS = 512
     private const val TAG = "LocalHomeAi"
 
@@ -415,8 +417,10 @@ object LocalHomeAi {
         private fun inferEffnetBatch(env: OrtEnvironment, patches: List<FloatArray>): List<FloatArray> {
             val inputName = effnet.inputNames.first()
             val inputShape = (effnet.inputInfo[inputName]?.info as? ai.onnxruntime.TensorInfo)?.shape
+            val inputRank = inputShape?.size ?: error("EffNet input shape is unavailable")
+            check(inputRank == 3 || inputRank == 4) { "Unexpected EffNet input rank: $inputRank" }
             val fixedBatchSize = inputShape?.firstOrNull()
-            val canBatch = inputShape?.size == 4 && (fixedBatchSize == null || fixedBatchSize < 0L || fixedBatchSize == patches.size.toLong())
+            val canBatch = fixedBatchSize == null || fixedBatchSize < 0L || fixedBatchSize == patches.size.toLong()
             if (!canBatch || patches.size == 1) return patches.mapNotNull { inferEffnetSingle(env, it) }
 
             val inputValues = FloatArray(patches.size * PATCH_FRAMES * MEL_BANDS)
@@ -426,7 +430,11 @@ object LocalHomeAi {
             return OnnxTensor.createTensor(
                 env,
                 FloatBuffer.wrap(inputValues),
-                longArrayOf(patches.size.toLong(), 1L, PATCH_FRAMES.toLong(), MEL_BANDS.toLong()),
+                if (inputRank == 3) {
+                    longArrayOf(patches.size.toLong(), PATCH_FRAMES.toLong(), MEL_BANDS.toLong())
+                } else {
+                    longArrayOf(patches.size.toLong(), 1L, PATCH_FRAMES.toLong(), MEL_BANDS.toLong())
+                },
             ).use { input ->
                 effnet.run(mapOf(inputName to input)).use { output ->
                     val embeddingIndex = effnet.outputNames.indexOfFirst { name ->
@@ -442,10 +450,17 @@ object LocalHomeAi {
 
         private fun inferEffnetSingle(env: OrtEnvironment, patch: FloatArray): FloatArray? {
             val inputName = effnet.inputNames.first()
+            val inputRank = (effnet.inputInfo[inputName]?.info as? ai.onnxruntime.TensorInfo)?.shape?.size
+                ?: error("EffNet input shape is unavailable")
+            check(inputRank == 3 || inputRank == 4) { "Unexpected EffNet input rank: $inputRank" }
             return OnnxTensor.createTensor(
                 env,
                 FloatBuffer.wrap(patch),
-                longArrayOf(1L, 1L, PATCH_FRAMES.toLong(), MEL_BANDS.toLong()),
+                if (inputRank == 3) {
+                    longArrayOf(1L, PATCH_FRAMES.toLong(), MEL_BANDS.toLong())
+                } else {
+                    longArrayOf(1L, 1L, PATCH_FRAMES.toLong(), MEL_BANDS.toLong())
+                },
             ).use { input ->
                 effnet.run(mapOf(inputName to input)).use { output ->
                     val embeddingIndex = effnet.outputNames.indexOfFirst { name ->
