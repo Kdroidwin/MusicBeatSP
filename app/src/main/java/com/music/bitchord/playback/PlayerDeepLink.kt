@@ -30,12 +30,14 @@ object PlayerDeepLink {
 
     /** Reads an incoming intent, and reports whether it asked for the player. */
     fun consume(intent: Intent?): Boolean {
-        if (intent == null || !intent.getBooleanExtra(EXTRA_OPEN_PLAYER, false)) return false
+        if (intent == null || !runCatching { intent.getBooleanExtra(EXTRA_OPEN_PLAYER, false) }.getOrDefault(false)) {
+            return false
+        }
         // Cleared off the intent as well. A singleTask activity keeps the intent
         // that launched it, and getIntent() returns the same one after every
         // configuration change — left in place, a widget tap would reopen the
         // sheet each time the device changed theme or font size.
-        intent.removeExtra(EXTRA_OPEN_PLAYER)
+        runCatching { intent.removeExtra(EXTRA_OPEN_PLAYER) }
         _pending.value = true
         return true
     }

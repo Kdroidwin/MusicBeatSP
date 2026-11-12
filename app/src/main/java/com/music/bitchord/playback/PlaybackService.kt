@@ -6238,6 +6238,14 @@ class PlaybackService : MediaLibraryService() {
             browser: MediaSession.ControllerInfo,
             params: LibraryParams?,
         ): ListenableFuture<LibraryResult<MediaItem>> {
+            // Keep the boundary check here as well as in onConnect: library
+            // callbacks must never disclose data if a future Media3 path or
+            // OEM browser reaches them without the expected connection flow.
+            if (!browser.isTrusted) {
+                return Futures.immediateFuture(
+                    LibraryResult.ofError(LibraryResult.RESULT_ERROR_PERMISSION_DENIED, params),
+                )
+            }
             val isRecent = params?.isRecent == true ||
                 params?.extras?.getBoolean("android.service.media.extra.RECENT") == true ||
                 params?.extras?.getBoolean("androidx.media.MediaBrowserCompat.EXTRA_RECENT") == true
@@ -6289,6 +6297,15 @@ class PlaybackService : MediaLibraryService() {
             pageSize: Int,
             params: LibraryParams?,
         ): ListenableFuture<LibraryResult<ImmutableList<MediaItem>>> = scope.future(Dispatchers.IO) {
+            if (!browser.isTrusted) {
+                return@future LibraryResult.ofError(LibraryResult.RESULT_ERROR_PERMISSION_DENIED, params)
+            }
+            if (parentId.length > MAX_EXTERNAL_MEDIA_ID_LENGTH + 16 || page < 0 || pageSize <= 0 ||
+                (parentId.startsWith("playlist:") && !isSafeExternalMediaId(parentId.removePrefix("playlist:"))) ||
+                (parentId.startsWith("browse:") && !isSafeExternalMediaId(parentId.removePrefix("browse:")))
+            ) {
+                return@future LibraryResult.ofError(LibraryResult.RESULT_ERROR_BAD_VALUE, params)
+            }
             val isGridFolder = parentId == MEDIA_RECENTS_ID || parentId == MEDIA_QUICK_PICKS_ID
             val items: List<MediaItem> = when (parentId) {
                 MEDIA_ROOT_ID -> listOf(
@@ -6451,6 +6468,15 @@ class PlaybackService : MediaLibraryService() {
             browser: MediaSession.ControllerInfo,
             mediaId: String,
         ): ListenableFuture<LibraryResult<MediaItem>> = scope.future(Dispatchers.IO) {
+            if (!browser.isTrusted) {
+                return@future LibraryResult.ofError(LibraryResult.RESULT_ERROR_PERMISSION_DENIED)
+            }
+            if (mediaId.length > MAX_EXTERNAL_MEDIA_ID_LENGTH + 16 ||
+                (mediaId.startsWith("playlist:") && !isSafeExternalMediaId(mediaId.removePrefix("playlist:"))) ||
+                (mediaId.startsWith("browse:") && !isSafeExternalMediaId(mediaId.removePrefix("browse:")))
+            ) {
+                return@future LibraryResult.ofError(LibraryResult.RESULT_ERROR_BAD_VALUE)
+            }
             val item = when (mediaId) {
                 MEDIA_ROOT_ID -> MediaItem.Builder()
                     .setMediaId(MEDIA_ROOT_ID)
@@ -6501,6 +6527,9 @@ class PlaybackService : MediaLibraryService() {
             mediaSession: MediaSession,
             controller: MediaSession.ControllerInfo,
         ): ListenableFuture<MediaSession.MediaItemsWithStartPosition> = scope.future(Dispatchers.IO) {
+            if (!controller.isTrusted) {
+                return@future MediaSession.MediaItemsWithStartPosition(ImmutableList.of(), 0, 0L)
+            }
             // 1. If player currently holds items in its queue, resume from it
             val activePlayer = player
             if (activePlayer != null && activePlayer.mediaItemCount > 0) {
@@ -6570,8 +6599,15 @@ class PlaybackService : MediaLibraryService() {
             query: String,
             params: LibraryParams?,
         ): ListenableFuture<LibraryResult<Void>> {
+            if (!browser.isTrusted) {
+                return Futures.immediateFuture(
+                    LibraryResult.ofError(LibraryResult.RESULT_ERROR_PERMISSION_DENIED, params),
+                )
+            }
             if (query.length > MAX_EXTERNAL_SEARCH_QUERY_LENGTH) {
-                return Futures.immediateFuture(LibraryResult.ofVoid(params))
+                return Futures.immediateFuture(
+                    LibraryResult.ofError(LibraryResult.RESULT_ERROR_BAD_VALUE, params),
+                )
             }
             return scope.future(Dispatchers.IO) {
                 val results = try {
@@ -6597,8 +6633,11 @@ class PlaybackService : MediaLibraryService() {
             pageSize: Int,
             params: LibraryParams?,
         ): ListenableFuture<LibraryResult<ImmutableList<MediaItem>>> = scope.future(Dispatchers.IO) {
+            if (!browser.isTrusted) {
+                return@future LibraryResult.ofError(LibraryResult.RESULT_ERROR_PERMISSION_DENIED, params)
+            }
             if (query.length > MAX_EXTERNAL_SEARCH_QUERY_LENGTH || page < 0 || pageSize <= 0) {
-                return@future LibraryResult.ofItemList(ImmutableList.of(), params)
+                return@future LibraryResult.ofError(LibraryResult.RESULT_ERROR_BAD_VALUE, params)
             }
             val songs = searchResults[query] ?: try {
                 withTimeoutOrNull(3000L) {
@@ -6626,6 +6665,7 @@ class PlaybackService : MediaLibraryService() {
             startIndex: Int,
             startPositionMs: Long,
         ): ListenableFuture<MediaSession.MediaItemsWithStartPosition> = scope.future(Dispatchers.IO) {
+            if (!controller.isTrusted) throw SecurityException("Untrusted media controller")
             val resolved = resolveMediaItems(mediaItems, controller.isTrusted)
             val validIndex = startIndex.coerceIn(0, (resolved.size - 1).coerceAtLeast(0))
             MediaSession.MediaItemsWithStartPosition(
@@ -6640,6 +6680,7 @@ class PlaybackService : MediaLibraryService() {
             controller: MediaSession.ControllerInfo,
             mediaItems: List<MediaItem>,
         ): ListenableFuture<List<MediaItem>> = scope.future(Dispatchers.IO) {
+            if (!controller.isTrusted) throw SecurityException("Untrusted media controller")
             resolveMediaItems(mediaItems, controller.isTrusted)
         }
 

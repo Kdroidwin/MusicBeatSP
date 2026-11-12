@@ -16,9 +16,9 @@ object MediaControlDeepLink {
     val pending: StateFlow<MediaControlDestination?> = _pending.asStateFlow()
 
     fun consume(intent: Intent?): Boolean {
-        val value = intent?.getStringExtra(EXTRA_DESTINATION) ?: return false
+        val value = intent?.let { runCatching { it.getStringExtra(EXTRA_DESTINATION) }.getOrNull() } ?: return false
         val destination = runCatching { MediaControlDestination.valueOf(value) }.getOrNull() ?: return false
-        intent.removeExtra(EXTRA_DESTINATION)
+        runCatching { intent.removeExtra(EXTRA_DESTINATION) }
         _pending.value = destination
         return true
     }

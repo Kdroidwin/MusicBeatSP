@@ -60,6 +60,8 @@ class ModuleManager(private val sourceConfigId: String) {
      * resizing under two of those at once corrupts quietly rather than loudly.
      */
     private val loadedModules = java.util.concurrent.ConcurrentHashMap<String, LoadedModule>()
+    /** QuickJS has process-wide module IDs; include the owning source in every engine key. */
+    private val executorModuleIds = java.util.concurrent.ConcurrentHashMap.newKeySet<String>()
 
     data class LoadedModule(
         val module: SpineModule,
@@ -197,16 +199,20 @@ class ModuleManager(private val sourceConfigId: String) {
         module: SpineModule,
         resolveBaseUrl: suspend (String) -> String,
     ): Result<LoadedModule> = withContext(Dispatchers.IO) {
+        val executorId = executorId(module.id)
         val cached = loadedModules[module.id]
         if (cached != null) {
-            if (QuickJsExecutor.isLoaded(module.id)) {
+            if (QuickJsExecutor.isLoaded(executorId)) {
                 TrackLog.d(TAG, "▶ loadModule(${module.id}) — CACHE HIT")
                 return@withContext Result.success(cached)
             }
             val revived = QuickJsExecutor
-                .loadModule(module.id, cached.jsCode, cached.baseUrl)
+                .loadModule(executorId, cached.jsCode, cached.baseUrl)
                 .map { cached }
-            if (revived.isSuccess) return@withContext revived
+            if (revived.isSuccess) {
+                executorModuleIds += executorId
+                return@withContext revived
+            }
             loadedModules.remove(module.id)
         }
 
@@ -245,7 +251,8 @@ class ModuleManager(private val sourceConfigId: String) {
             }
             val baseUrl = downloadUrl.substringBeforeLast("/")
 
-            QuickJsExecutor.loadModule(module.id, jsCode, baseUrl).getOrThrow()
+            QuickJsExecutor.loadModule(executorId, jsCode, baseUrl).getOrThrow()
+            executorModuleIds += executorId
 
             val loaded = LoadedModule(module = module, jsCode = jsCode, baseUrl = baseUrl)
             loadedModules[module.id] = loaded
@@ -284,7 +291,7 @@ class ModuleManager(private val sourceConfigId: String) {
         TrackLog.d(TAG, "▶ searchTracks() module=${loaded.module.id} queryLength=${query.length} limit=$limit")
         runCatching {
             val result = QuickJsExecutor.callExport(
-                moduleId = loaded.module.id,
+                moduleId = executorId(loaded.module.id),
                 functionName = "searchTracks",
                 args = listOf(JSONObject.quote(query), limit.toString(), contextArg),
             ).getOrThrow()
@@ -330,7 +337,7 @@ class ModuleManager(private val sourceConfigId: String) {
         TrackLog.d(TAG, "▶ getStreamUrl() module=${loaded.module.id} quality=$quality")
         runCatching {
             val result = QuickJsExecutor.callExport(
-                moduleId = loaded.module.id,
+                moduleId = executorId(loaded.module.id),
                 functionName = "getTrackStreamUrl",
                 args = listOf(JSONObject.quote(trackId), JSONObject.quote(quality), contextArg),
             ).getOrThrow()
@@ -414,7 +421,9 @@ class ModuleManager(private val sourceConfigId: String) {
 
     fun unloadModule(moduleId: String) {
         loadedModules.remove(moduleId)
-        QuickJsExecutor.unload(moduleId)
+        val executorId = executorId(moduleId)
+        executorModuleIds.remove(executorId)
+        QuickJsExecutor.unload(executorId)
     }
 
     /**
@@ -431,7 +440,18 @@ class ModuleManager(private val sourceConfigId: String) {
         loads.clear()
         searches.clear()
         streams.clear()
-        QuickJsExecutor.unloadAll()
+        executorModuleIds.toList().forEach { executorId ->
+            QuickJsExecutor.unload(executorId)
+            executorModuleIds.remove(executorId)
+        }
+    }
+
+    private fun executorId(moduleId: String): String {
+        val ownerAndModule = "${sourceConfigId.length}:$sourceConfigId$moduleId"
+        val digest = java.security.MessageDigest.getInstance("SHA-256")
+            .digest(ownerAndModule.toByteArray(StandardCharsets.UTF_8))
+            .joinToString("") { "%02x".format(java.util.Locale.ROOT, it) }
+        return "source-$digest"
     }
 
     private companion object {

@@ -26,7 +26,7 @@ import java.io.File
 import java.nio.charset.StandardCharsets
 import java.util.concurrent.Executors
 import java.util.concurrent.TimeUnit
-import java.util.concurrent.atomic.AtomicLong
+import java.util.UUID
 
 /**
  * Sandboxed QuickJS VM executor for dynamic lyrics extensions.
@@ -41,6 +41,7 @@ object LyricsExtensionExecutor {
     private const val MAX_EXTENSION_RESULT_CHARS = 1_048_576
     private const val MAX_EXTENSION_TIMER_MS = 30_000L
     private const val MAX_EXTENSION_JS_MEMORY_BYTES = 32L * 1024L * 1024L
+    private const val UUID_STRING_LENGTH = 36
 
     // QuickJS' Android JNI layer keeps process-global references. Creating or
     // disposing contexts concurrently (or from different Default dispatcher
@@ -59,7 +60,6 @@ object LyricsExtensionExecutor {
     @Volatile private var extensionsEnabled = false
     @Volatile private var activeExtensionId: String? = null
     @Volatile private var activeRequest: ActiveRequest? = null
-    private val requestIds = AtomicLong()
 
     /** Stops extension execution and any network requests as soon as the user opts out. */
     fun setExtensionsEnabled(enabled: Boolean) {
@@ -72,7 +72,7 @@ object LyricsExtensionExecutor {
     }
 
     private data class ActiveRequest(
-        val id: Long,
+        val id: String,
         val extensionId: String,
         val result: CompletableDeferred<String?>,
     )
@@ -122,7 +122,7 @@ object LyricsExtensionExecutor {
 
                     LyricsLog.i(extensionId, "Running lyrics lookup")
 
-                    val request = ActiveRequest(requestIds.incrementAndGet(), extensionId, CompletableDeferred())
+                    val request = ActiveRequest(UUID.randomUUID().toString(), extensionId, CompletableDeferred())
                     activeExtensionId = extensionId
                     activeRequest = request
 
@@ -133,14 +133,14 @@ object LyricsExtensionExecutor {
                                 try {
                                     if (__lyricsExtensionModule && typeof __lyricsExtensionModule.getLyrics === 'function') {
                                         var r = await __lyricsExtensionModule.getLyrics($trackJson);
-                                        __native_bridge.sendResult((r !== undefined && r !== null) ? String(r) : 'null', ${request.id});
+                                        __native_bridge.sendResult((r !== undefined && r !== null) ? String(r) : 'null', ${JSONObject.quote(request.id)});
                                     } else {
                                         console.warn('[LyricsExt] getLyrics not found on module.exports');
-                                        __native_bridge.sendResult('null', ${request.id});
+                                        __native_bridge.sendResult('null', ${JSONObject.quote(request.id)});
                                     }
                                 } catch(e) {
                                     console.error('[LyricsExt Error] ' + (e && e.message ? e.message : String(e)));
-                                    __native_bridge.sendResult('null', ${request.id});
+                                    __native_bridge.sendResult('null', ${JSONObject.quote(request.id)});
                                 }
                             })();
                             'ok';
@@ -186,7 +186,7 @@ object LyricsExtensionExecutor {
 
                     LyricsLog.i(extensionId, "Running lyrics search")
 
-                    val request = ActiveRequest(requestIds.incrementAndGet(), extensionId, CompletableDeferred())
+                    val request = ActiveRequest(UUID.randomUUID().toString(), extensionId, CompletableDeferred())
                     activeExtensionId = extensionId
                     activeRequest = request
 
@@ -197,14 +197,14 @@ object LyricsExtensionExecutor {
                                 try {
                                     if (__lyricsExtensionModule && typeof __lyricsExtensionModule.searchLyrics === 'function') {
                                         var r = await __lyricsExtensionModule.searchLyrics($queryJson);
-                                        __native_bridge.sendResult((r !== undefined && r !== null) ? JSON.stringify(r) : '[]', ${request.id});
+                                        __native_bridge.sendResult((r !== undefined && r !== null) ? JSON.stringify(r) : '[]', ${JSONObject.quote(request.id)});
                                     } else {
                                         console.warn('[LyricsExt] searchLyrics not found on module.exports');
-                                        __native_bridge.sendResult('[]', ${request.id});
+                                        __native_bridge.sendResult('[]', ${JSONObject.quote(request.id)});
                                     }
                                 } catch(e) {
                                     console.error('[LyricsExt search error] ' + (e && e.message ? e.message : String(e)));
-                                    __native_bridge.sendResult('[]', ${request.id});
+                                    __native_bridge.sendResult('[]', ${JSONObject.quote(request.id)});
                                 }
                             })();
                             'ok';
@@ -332,9 +332,13 @@ object LyricsExtensionExecutor {
             function("sendResult", object : FunctionBinding<Unit> {
                 override fun invoke(args: Array<Any?>) {
                     val result = args.firstOrNull()?.toString()
-                    val requestId = args.getOrNull(1)?.toString()?.toLongOrNull() ?: return
+                    val requestId = args.getOrNull(1)?.toString()
+                        ?.takeIf { it.length == UUID_STRING_LENGTH } ?: return
                     if (result != null && result.length > MAX_EXTENSION_RESULT_CHARS) return
-                    activeRequest?.takeIf { it.id == requestId }?.result?.complete(result)
+                    activeRequest
+                        ?.takeIf { it.id == requestId && it.extensionId == activeExtensionId }
+                        ?.result
+                        ?.complete(result)
                 }
             })
         }

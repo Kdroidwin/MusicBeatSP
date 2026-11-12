@@ -70,39 +70,51 @@ object MusicLink {
 
     /** Reads an incoming intent, and reports whether it carried a request. */
     fun consume(intent: Intent?): Boolean {
-        if (intent == null || intent.getBooleanExtra(EXTRA_CONSUMED, false)) return false
-        val request = when (intent.action) {
-            Intent.ACTION_VIEW -> {
-                val uri = intent.data
-                when {
-                    uri != null && uri.scheme in setOf("content", "file") && isZipArchiveIntent(intent.type, uri) ->
-                        LinkRequest.ExternalZip(uri.toString())
-                    uri != null && uri.scheme in setOf("content", "file") && isAudioFileIntent(intent.type, uri) ->
-                        LinkRequest.ExternalAudio(uri.toString())
-                    else -> uri?.let(::parse)
+        if (intent == null) return false
+        // This Activity has to be exported for file managers, share sheets,
+        // widgets and YouTube links. Treat every parcel supplied by another
+        // app as hostile: malformed Parcelable extras must not crash launch.
+        val alreadyConsumed = runCatching { intent.getBooleanExtra(EXTRA_CONSUMED, false) }.getOrDefault(true)
+        if (alreadyConsumed) return false
+        val request = runCatching {
+            when (intent.action) {
+                Intent.ACTION_VIEW -> {
+                    val uri = intent.data
+                    when {
+                        uri != null && isSafeLocalUri(uri) && isZipArchiveIntent(intent.type, uri) ->
+                            LinkRequest.ExternalZip(uri.toString())
+                        uri != null && isSafeLocalUri(uri) && isAudioFileIntent(intent.type, uri) ->
+                            LinkRequest.ExternalAudio(uri.toString())
+                        else -> uri?.let(::parse)
+                    }
                 }
-            }
-            Intent.ACTION_SEND -> {
-                @Suppress("DEPRECATION")
-                val sharedUri = (intent.getParcelableExtra(Intent.EXTRA_STREAM) as? Uri)
-                    ?: intent.clipData?.getItemAt(0)?.uri
-                if (sharedUri != null && isZipArchiveIntent(intent.type, sharedUri)) {
-                    LinkRequest.ExternalZip(sharedUri.toString())
-                } else {
-                    intent.getStringExtra(Intent.EXTRA_TEXT)
-                        ?.let(::firstUrl)
-                        ?.let { parse(Uri.parse(it)) }
+                Intent.ACTION_SEND -> {
+                    val mimeType = normalizedMimeType(intent.type)
+                    val sharedUri = sharedUri(intent)
+                    if (sharedUri != null && isSafeLocalUri(sharedUri) && isZipArchiveIntent(mimeType, sharedUri)) {
+                        LinkRequest.ExternalZip(sharedUri.toString())
+                    } else if (mimeType == "text/plain") {
+                        intent.getStringExtra(Intent.EXTRA_TEXT)
+                            ?.takeIf { it.length <= MAX_SHARED_TEXT_CHARS }
+                            ?.let(::firstUrl)
+                            ?.let { runCatching { Uri.parse(it) }.getOrNull() }
+                            ?.let(::parse)
+                    } else {
+                        null
+                    }
                 }
+                // The assistant's "play <something>". An empty query is the
+                // whole point of Resume: carry on with the current queue.
+                MediaStore.INTENT_ACTION_MEDIA_PLAY_FROM_SEARCH -> {
+                    val rawQuery = intent.getStringExtra(SearchManager.QUERY).orEmpty()
+                    if (rawQuery.length > MAX_SEARCH_QUERY_LENGTH) null else {
+                        val query = rawQuery.filterNot { it.isISOControl() }.trim()
+                        if (query.isEmpty()) LinkRequest.Resume else LinkRequest.Search(query, play = true)
+                    }
+                }
+                else -> null
             }
-            // The assistant's "play <something>". An empty query is the whole
-            // point of the Resume case: "play music" names nothing, and the
-            // useful answer is to carry on with what was already on.
-            MediaStore.INTENT_ACTION_MEDIA_PLAY_FROM_SEARCH -> {
-                val query = intent.getStringExtra(SearchManager.QUERY).orEmpty().trim()
-                if (query.isEmpty()) LinkRequest.Resume else LinkRequest.Search(query, play = true)
-            }
-            else -> null
-        } ?: return false
+        }.getOrNull() ?: return false
         intent.putExtra(EXTRA_CONSUMED, true)
         _pending.value = request
         return true
@@ -124,11 +136,12 @@ object MusicLink {
     fun retainPersistableAudioPermission(context: Context, intent: Intent?) {
         intent ?: return
         @Suppress("DEPRECATION")
-        val uri = intent.data
-            ?: (intent.getParcelableExtra(Intent.EXTRA_STREAM) as? Uri)
-            ?: intent.clipData?.getItemAt(0)?.uri
-            ?: return
-        val supported = isAudioFileIntent(intent.type, uri) || isZipArchiveIntent(intent.type, uri)
+        val uri = runCatching {
+            intent.data ?: sharedUri(intent)
+        }.getOrNull() ?: return
+        if (!isSafeLocalUri(uri)) return
+        val mimeType = normalizedMimeType(intent.type)
+        val supported = isAudioFileIntent(mimeType, uri) || isZipArchiveIntent(mimeType, uri)
         if (!supported || uri.scheme != "content") return
         val persistable = intent.flags and Intent.FLAG_GRANT_PERSISTABLE_URI_PERMISSION != 0
         val readable = intent.flags and Intent.FLAG_GRANT_READ_URI_PERMISSION != 0
@@ -156,7 +169,7 @@ object MusicLink {
         // MainActivity is exported for Android's link and file-manager flows.
         // Only interpret real web links here; a custom scheme with a forged
         // YouTube-looking host must not be treated as a playback command.
-        if (uri.toString().length > MAX_LINK_LENGTH ||
+        if (uri.toString().length > MAX_LINK_LENGTH || uri.userInfo != null ||
             uri.scheme?.lowercase() !in setOf("http", "https")
         ) return null
         val host = uri.host?.lowercase()?.removePrefix("www.") ?: return null
@@ -211,6 +224,27 @@ object MusicLink {
     private fun isSafeRemoteId(value: String): Boolean =
         value.length in 1..MAX_REMOTE_ID_LENGTH && value.all { it.isLetterOrDigit() || it == '_' || it == '-' }
 
+    private fun sharedUri(intent: Intent): Uri? = runCatching {
+        @Suppress("DEPRECATION")
+        (intent.getParcelableExtra(Intent.EXTRA_STREAM) as? Uri)
+            ?: intent.clipData?.takeIf { it.itemCount > 0 }?.getItemAt(0)?.uri
+    }.getOrNull()
+
+    private fun normalizedMimeType(mimeType: String?): String? = mimeType
+        ?.takeIf { it.length <= MAX_MIME_TYPE_CHARS }
+        ?.substringBefore(';')
+        ?.trim()
+        ?.lowercase()
+
+    private fun isSafeLocalUri(uri: Uri): Boolean {
+        if (uri.toString().length > MAX_LOCAL_URI_LENGTH) return false
+        return when (uri.scheme?.lowercase()) {
+            "content" -> !uri.authority.isNullOrBlank() && uri.authority!!.length <= MAX_AUTHORITY_CHARS
+            "file" -> uri.path?.startsWith('/') == true && uri.authority.isNullOrEmpty()
+            else -> false
+        }
+    }
+
     /**
      * A playlist id as the browse id its page is fetched under.
      *
@@ -225,6 +259,10 @@ object MusicLink {
     }
 
     private const val MAX_LINK_LENGTH = 8_192
+    private const val MAX_LOCAL_URI_LENGTH = 8_192
+    private const val MAX_AUTHORITY_CHARS = 255
+    private const val MAX_MIME_TYPE_CHARS = 128
+    private const val MAX_SHARED_TEXT_CHARS = 16 * 1024
     private const val MAX_REMOTE_ID_LENGTH = 256
     private const val MAX_SEARCH_QUERY_LENGTH = 500
 

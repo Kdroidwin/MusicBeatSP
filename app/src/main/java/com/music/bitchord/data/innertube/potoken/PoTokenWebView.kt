@@ -54,6 +54,7 @@ class PoTokenWebView private constructor(
     private val initResumed = AtomicBoolean(false)
     private val botguardCreateStarted = AtomicBoolean(false)
     private val botguardResultStarted = AtomicBoolean(false)
+    private val integrityTokenReceived = AtomicBoolean(false)
 
     @Volatile
     private var closed = false
@@ -213,6 +214,7 @@ class PoTokenWebView private constructor(
      */
     @JavascriptInterface
     fun onJsInitializationError(error: String) {
+        if (closed) return
         if (BuildConfig.DEBUG) {
             TrackLog.e(TAG, "PO-token JavaScript initialization failed")
         }
@@ -225,7 +227,7 @@ class PoTokenWebView private constructor(
      */
     @JavascriptInterface
     fun onRunBotguardResult(botguardResponse: String) {
-        if (closed) return
+        if (closed || !botguardCreateStarted.get()) return
         if (botguardResponse.length > MAX_BOTGUARD_RESPONSE_CHARS) {
             onInitializationErrorCloseAndCancel(PoTokenException("Botguard result exceeded the size limit"))
             return
@@ -243,6 +245,7 @@ class PoTokenWebView private constructor(
 
                 // leave 10 minutes of margin just to be sure
                 expirationInstant = Instant.now().plusSeconds(expirationTimeInSeconds).minus(10, ChronoUnit.MINUTES)
+                integrityTokenReceived.set(true)
 
                 // Store integrityToken and create the minter callback ONCE
                 // NOTE: createPoTokenMinter is now async, so we use .then()
@@ -276,6 +279,7 @@ class PoTokenWebView private constructor(
      */
     @JavascriptInterface
     fun onMinterCreated() {
+        if (closed || !integrityTokenReceived.get()) return
         TrackLog.d(TAG, "poToken minter created successfully, initialization complete")
         if (initResumed.compareAndSet(false, true)) {
             continuation.resume(this)
@@ -395,9 +399,11 @@ class PoTokenWebView private constructor(
     }
 
     private fun popAllPoTokenContinuations(): Map<String, Continuation<String>> {
-        val result = poTokenContinuations.toMap()
-        poTokenContinuations.clear()
-        return result
+        synchronized(poTokenContinuations) {
+            val result = poTokenContinuations.toMap()
+            poTokenContinuations.clear()
+            return result
+        }
     }
     //endregion
 
