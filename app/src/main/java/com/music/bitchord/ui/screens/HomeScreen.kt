@@ -92,6 +92,7 @@ private data class MoodAnalysisProgress(
 
 private const val HOME_MOOD_BATCH_SIZE = 4
 private const val HOME_MOOD_TRACK_TIMEOUT_MS = 30_000L
+private const val HOME_MOOD_BATCH_PAUSE_MS = 500L
 private const val HOME_MOOD_MIN_SCORE_MARGIN = 0.08f
 
 /** Native Android home feed, using the same personalized shelves as BitChord. */
@@ -158,9 +159,9 @@ fun HomeScreen(
         }
     }
 
-    // Work through a small batch of high-priority tracks while Home is open.
-    // Persisted scores mean later visits continue with the next unheard tracks
-    // instead of repeatedly decoding the same audio.
+    // Analyze all eligible local tracks while Home remains open. Small batches,
+    // per-track timeouts, and pauses keep CPU/memory usage bounded; each score
+    // is persisted immediately so leaving Home or process death resumes safely.
     LaunchedEffect(context, localSongs, modelInstalled, favoriteIds, playStatsRevision, analysisRetryRevision) {
         if (!modelInstalled || localSongs.isEmpty()) return@LaunchedEffect
         val maximumPlayed = localSongs.maxOfOrNull { LocalPlayStatsStore.getStats(it, playStats).playedCount } ?: 0
@@ -173,61 +174,66 @@ fun HomeScreen(
                     (if (stats.lastPlayedTimestamp > 0L) 100.0 else 0.0)
             }
             .filter { LocalHomeAi.cachedScore(context, it) == null && !LocalHomeAi.hasAnalysisFailure(context, it) }
-        val prioritized = pendingSongs.take(HOME_MOOD_BATCH_SIZE)
-        val failedBeforeBatch = localSongs.count { LocalHomeAi.hasAnalysisFailure(context, it) }
-        if (prioritized.isEmpty()) {
-            analysisProgress = MoodAnalysisProgress(0, 0, failedBeforeBatch, finished = true)
+        var completed = 0
+        var failed = localSongs.count { LocalHomeAi.hasAnalysisFailure(context, it) }
+        var lowMemory = false
+        if (pendingSongs.isEmpty()) {
+            analysisProgress = MoodAnalysisProgress(0, 0, failed, finished = true)
             return@LaunchedEffect
         }
-        var failed = failedBeforeBatch
-        var lowMemory = false
-        for ((index, song) in prioritized.withIndex()) {
-            analysisProgress = MoodAnalysisProgress(
-                completed = index,
-                total = prioritized.size,
-                failed = failed,
-                finished = false,
-                hasMore = pendingSongs.size > prioritized.size,
-            )
-            try {
-                if (withTimeout(HOME_MOOD_TRACK_TIMEOUT_MS) { LocalHomeAi.classify(context, song) } != null) {
-                    moodRevision++
-                } else {
+        while (completed < pendingSongs.size && !lowMemory) {
+            val batchEnd = minOf(completed + HOME_MOOD_BATCH_SIZE, pendingSongs.size)
+            while (completed < batchEnd) {
+                val song = pendingSongs[completed]
+                analysisProgress = MoodAnalysisProgress(
+                    completed = completed,
+                    total = pendingSongs.size,
+                    failed = failed,
+                    finished = false,
+                    hasMore = true,
+                )
+                try {
+                    if (withTimeout(HOME_MOOD_TRACK_TIMEOUT_MS) { LocalHomeAi.classify(context, song) } != null) {
+                        moodRevision++
+                    } else {
+                        failed++
+                        LocalHomeAi.markAnalysisFailure(context, song)
+                    }
+                } catch (timeout: TimeoutCancellationException) {
                     failed++
                     LocalHomeAi.markAnalysisFailure(context, song)
+                    android.util.Log.w("HomeScreen", "Mood analysis timed out for a local track")
+                } catch (cancelled: CancellationException) {
+                    throw cancelled
+                } catch (memoryError: OutOfMemoryError) {
+                    failed++
+                    lowMemory = true
+                    LocalHomeAi.markAnalysisFailure(context, song)
+                } catch (error: Exception) {
+                    failed++
+                    LocalHomeAi.markAnalysisFailure(context, song)
+                    android.util.Log.w("HomeScreen", "Skipping an unprocessable local mood-analysis track", error)
                 }
-            } catch (timeout: TimeoutCancellationException) {
-                failed++
-                LocalHomeAi.markAnalysisFailure(context, song)
-                android.util.Log.w("HomeScreen", "Mood analysis timed out for a local track")
-            } catch (cancelled: CancellationException) {
-                throw cancelled
-            } catch (memoryError: OutOfMemoryError) {
-                failed++
-                lowMemory = true
-                LocalHomeAi.markAnalysisFailure(context, song)
-            } catch (error: Exception) {
-                failed++
-                LocalHomeAi.markAnalysisFailure(context, song)
-                android.util.Log.w("HomeScreen", "Skipping an unprocessable local mood-analysis track", error)
+                completed++
+                analysisProgress = MoodAnalysisProgress(
+                    completed = completed,
+                    total = pendingSongs.size,
+                    failed = failed,
+                    finished = false,
+                    hasMore = completed < pendingSongs.size,
+                    lowMemory = lowMemory,
+                )
+                if (lowMemory) break
+                if (completed < batchEnd) delay(150L)
             }
-            analysisProgress = MoodAnalysisProgress(
-                completed = index + 1,
-                total = prioritized.size,
-                failed = failed,
-                finished = false,
-                hasMore = pendingSongs.size > prioritized.size,
-                lowMemory = lowMemory,
-            )
-            if (lowMemory) break
-            if (index < prioritized.lastIndex) delay(150L)
+            if (!lowMemory && completed < pendingSongs.size) delay(HOME_MOOD_BATCH_PAUSE_MS)
         }
         analysisProgress = MoodAnalysisProgress(
-            completed = if (lowMemory) analysisProgress?.completed ?: 0 else prioritized.size,
-            total = prioritized.size,
+            completed = completed,
+            total = pendingSongs.size,
             failed = failed,
             finished = true,
-            hasMore = pendingSongs.size > prioritized.size,
+            hasMore = completed < pendingSongs.size,
             lowMemory = lowMemory,
         )
     }
@@ -293,10 +299,9 @@ fun HomeScreen(
             moodAndFavorite.first?.let { song to (it.uplifting - it.calm) }
         }
     }
-    // The happy/party and relaxed heads are independent binary classifiers,
-    // not mutually exclusive classes. Only show a song in the shelf whose
-    // score clearly leads, preventing the same analyzed set from appearing in
-    // both shelves with only a different ordering.
+    // Valence/arousal dimensions can still describe overlapping emotional
+    // qualities. Only show a song in the shelf whose derived mood score clearly
+    // leads, preventing the same analyzed set from appearing in both shelves.
     val upliftingSongs = remember(moodComparisons) {
         moodComparisons.asSequence()
             .filter { (_, margin) -> margin >= HOME_MOOD_MIN_SCORE_MARGIN }
@@ -388,6 +393,16 @@ fun HomeScreen(
                     onSongClick = localCatalog.onSongClick,
                     onSongLongPress = localCatalog.onSongLongPress,
                 )
+            }
+            if (modelInstalled && localSongs.isNotEmpty()) {
+                item(key = "home-local-mood-analysis-status") {
+                    Text(
+                        text = moodEmptyMessage,
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                        modifier = Modifier.padding(start = 20.dp, end = 20.dp, top = 0.dp, bottom = 12.dp),
+                    )
+                }
             }
             if (onlineFeedEnabled) {
                 item(key = "home-online-heading") {

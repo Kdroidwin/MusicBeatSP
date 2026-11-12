@@ -28,43 +28,44 @@ import java.net.HttpURLConnection
 import java.net.URL
 import java.nio.FloatBuffer
 import java.security.MessageDigest
-import kotlin.math.PI
-import kotlin.math.cos
-import kotlin.math.max
 import kotlin.math.min
 import kotlin.math.roundToInt
-import kotlin.math.sin
-import kotlin.math.sqrt
 
 /**
  * Optional, on-device-only music mood analysis for Home. The model set is
  * fetched only after the listener opts in; no audio is sent off-device.
  *
- * Discogs-EffNet is trained on music rather than environmental audio. The
- * model and MTG mood heads are published by Essentia/UPF under CC BY-NC-SA 4.0.
- * Its music features use a 128x96 MusiCNN mel patch and produce 1280-wide
- * embeddings for the happy, party, and relaxed classification heads.
+ * Music2Emo's valence/arousal head consumes layer-5/6 pooled embeddings from
+ * MERT-v1-95M. Its optional chord/key context is represented as unknown/no
+ * chord here; audio is never sent off-device.
  */
 object LocalHomeAi {
     private const val PREFS = "local_home_ai"
-    private const val KEY_MODEL_DECISION = "model_download_decision"
-    private const val MODEL_VERSION = "essentia-discogs-effnet-moods-v2"
-    private const val LEGACY_MODEL_VERSION = "essentia-yamnet-mood-v1"
-    private const val MODEL_HOST = "essentia.upf.edu"
+    private const val MODEL_VERSION = "music2emo-mert95m-jall-v1"
+    private const val KEY_MODEL_DECISION = "${MODEL_VERSION}_model_download_decision"
+    private val LEGACY_MODEL_VERSIONS = listOf(
+        "essentia-discogs-effnet-moods-v2",
+        "essentia-yamnet-mood-v1",
+        "essentia-deam-msd-musicnn-v1",
+    )
+    private const val MODEL_HOST = "raw.githubusercontent.com"
     private const val ANALYSIS_WINDOW_SECONDS = 4.2
-    private const val SAMPLE_RATE = 16_000
-    private const val FFT_SIZE = 512
-    private const val FRAME_SIZE = 512
-    private const val FRAME_STEP = 256
-    private const val MEL_BANDS = 96
-    private const val PATCH_FRAMES = 128
-    private const val PATCH_HOP_FRAMES = 62
-    private const val DOWNLOAD_LIMIT_BYTES = 20_000_000L
+    private const val SAMPLE_RATE = 24_000
+    private const val MERT_FEATURE_SIZE = 768
+    private const val MERT_LAYER_COUNT = 2
+    private const val M2E_CHORD_SEQUENCE_LENGTH = 100
+    private const val UNKNOWN_CHORD_ROOT = 0L // Music2Emo's chord_root.json maps N -> 0.
+    private const val UNKNOWN_CHORD_ATTRIBUTE = 0L
+    private const val MAJOR_MODE = 0f
+    private const val DOWNLOAD_LIMIT_BYTES = 128_000_000L
     // Bump this when the inference pipeline changes so tracks skipped by a
     // previous broken tensor shape are retried automatically.
     private const val KEY_FAILED_TRACKS = "${MODEL_VERSION}_failed_tracks_v2"
     private const val MAX_FAILED_TRACKS = 512
     private const val TAG = "LocalHomeAi"
+    // Official Music2Emo tag_list.npy mood/theme slice indices (127..182).
+    private val UPLIFTING_TAG_INDICES = intArrayOf(18, 26, 29, 30, 35, 38, 39, 54, 55)
+    private val CALM_TAG_INDICES = intArrayOf(5, 16, 32, 37, 41, 46, 47)
 
     data class MoodScores(val uplifting: Float, val calm: Float)
     data class DownloadProgress(val bytes: Long, val totalBytes: Long)
@@ -78,28 +79,16 @@ object LocalHomeAi {
 
     private val models = listOf(
         ModelFile(
-            name = "discogs-effnet-bsdynamic-1.onnx",
-            url = "https://essentia.upf.edu/models/music-style-classification/discogs-effnet/discogs-effnet-bsdynamic-1.onnx",
-            bytes = 18_027_718L,
-            sha256 = "a280825b334797cf677939db8cd5762c0392aedd0ca6415dbc1cd083f045e43c",
+            name = "music2emo-mert-layers-5-6.onnx",
+            url = "https://raw.githubusercontent.com/Kdroidwin/MusicBeatSP/main/model-assets/music2emo-mert-layers-5-6.onnx",
+            bytes = 86_839_269L,
+            sha256 = "2f35ec389db172fb3d6279b0650f59d0171229b62bd23df7b3cc0fe000b09a36",
         ),
         ModelFile(
-            name = "mood_happy-discogs-effnet-1.onnx",
-            url = "https://essentia.upf.edu/models/classification-heads/mood_happy/mood_happy-discogs-effnet-1.onnx",
-            bytes = 514_097L,
-            sha256 = "0ca322819ef137b4b87e9866bffe7370a630e6f1165184ec106326cef6f81e06",
-        ),
-        ModelFile(
-            name = "mood_party-discogs-effnet-1.onnx",
-            url = "https://essentia.upf.edu/models/classification-heads/mood_party/mood_party-discogs-effnet-1.onnx",
-            bytes = 514_097L,
-            sha256 = "c50ac2106ec2f209dd04ad48756582df0e3f3512235310d1a4a3fcc453745f04",
-        ),
-        ModelFile(
-            name = "mood_relaxed-discogs-effnet-1.onnx",
-            url = "https://essentia.upf.edu/models/classification-heads/mood_relaxed/mood_relaxed-discogs-effnet-1.onnx",
-            bytes = 514_101L,
-            sha256 = "8ba6515a1e5943a72b3b475e3a25fc7a2ff04142c3eaa6aa0716fca371efdfff",
+            name = "music2emo-j-all-head.onnx",
+            url = "https://raw.githubusercontent.com/Kdroidwin/MusicBeatSP/main/model-assets/music2emo-j-all-head.onnx",
+            bytes = 4_327_266L,
+            sha256 = "256c20d2af88c7fb15796ab0bc4a9d2775c164bc262c654bde5ae247dad782dc",
         ),
     )
 
@@ -158,8 +147,8 @@ object LocalHomeAi {
                 val connection = URL(model.url).openConnection() as HttpURLConnection
                 try {
                     connection.connectTimeout = 20_000
-                    connection.readTimeout = 45_000
-                    // Keep downloads pinned to the fixed official host.
+                    connection.readTimeout = 120_000
+                    // Keep downloads pinned to the fixed project asset host.
                     connection.instanceFollowRedirects = false
                     connection.setRequestProperty("User-Agent", "MusicBeatSP-LocalMood/1")
                     connection.connect()
@@ -167,7 +156,7 @@ object LocalHomeAi {
                         "Model download returned HTTP ${connection.responseCode}"
                     }
                     check(connection.url.host.equals(MODEL_HOST, ignoreCase = true)) {
-                        "Model URL is not hosted by Essentia"
+                        "Model URL is not hosted by the pinned MusicBeatSP model-assets host"
                     }
                     val contentLength = connection.contentLengthLong
                     check(contentLength < 0L || contentLength == model.bytes) { "Unexpected model size" }
@@ -206,8 +195,17 @@ object LocalHomeAi {
                 }
             }
             check(isModelInstalled(context)) { "The model set is incomplete" }
-            File(context.noBackupFilesDir, "home_ai_models/$LEGACY_MODEL_VERSION")
-                .deleteRecursively()
+            LEGACY_MODEL_VERSIONS.forEach { version ->
+                File(context.noBackupFilesDir, "home_ai_models/$version").deleteRecursively()
+            }
+            context.getSharedPreferences("local_home_ai_mood_cache", Context.MODE_PRIVATE)
+                .edit().clear().apply()
+            context.getSharedPreferences(PREFS, Context.MODE_PRIVATE)
+                .edit()
+                .remove("essentia-discogs-effnet-moods-v2_failed_tracks_v2")
+                .remove("essentia-yamnet-mood-v1_failed_tracks_v2")
+                .remove("essentia-deam-msd-musicnn-v1_failed_tracks_v2")
+                .apply()
         } catch (error: Throwable) {
             models.forEach { File(directory, "${it.name}.part").delete() }
             throw error
@@ -302,17 +300,13 @@ object LocalHomeAi {
             }
         }
         operationContext.ensureActive()
-        // Keep the three sampled song regions, but use one center patch from
-        // each region. A 4.2 second window can produce three overlapping
-        // patches; analyzing all of them multiplied native ONNX work by 3.
-        val patches = audioSegments.mapNotNull { samples ->
-            melPatches(samples).let { candidates -> candidates.getOrNull(candidates.size / 2) }
-        }
-        if (patches.isEmpty()) {
+        // Music2Emo pools MERT layer 5 and 6 over each audio segment, then
+        // averages the segment embeddings before its emotion head.
+        if (audioSegments.isEmpty()) {
             markAnalysisFailure(context, song)
             return@withContext null
         }
-        val score = withModels(context) { runtime -> runtime.predict(patches) }
+        val score = withModels(context) { runtime -> runtime.predict(audioSegments) }
         saveScore(context, song, score)
         clearAnalysisFailure(context, song)
         score
@@ -373,141 +367,125 @@ object LocalHomeAi {
         .joinToString("") { "%02x".format(it) }
 
     private data class Runtime(
-        val effnet: OrtSession,
-        val happy: OrtSession,
-        val party: OrtSession,
-        val relaxed: OrtSession,
+        val mert: OrtSession,
+        val music2emo: OrtSession,
     ) {
         fun close() {
-            runCatching(effnet::close)
-            runCatching(happy::close)
-            runCatching(party::close)
-            runCatching(relaxed::close)
+            runCatching(mert::close)
+            runCatching(music2emo::close)
         }
 
-        fun predict(patches: List<FloatArray>): MoodScores {
+        fun predict(segments: List<FloatArray>): MoodScores {
             val env = OrtEnvironment.getEnvironment()
-            var upliftingTotal = 0.0
-            var calmTotal = 0.0
-            var count = 0
-            patches.chunked(MAX_INFERENCE_BATCH).forEach { patchBatch ->
-                val features = inferEffnetBatch(env, patchBatch)
-                if (features.isEmpty()) return@forEach
-                val happyScores = inferMoodHeadBatch(env, happy, features, 0)
-                val partyScores = inferMoodHeadBatch(env, party, features, 1)
-                val calmScores = inferMoodHeadBatch(env, relaxed, features, 1)
-                features.indices.forEach { index ->
-                    val happyScore = happyScores.getOrElse(index) { Float.NaN }
-                    val partyScore = partyScores.getOrElse(index) { Float.NaN }
-                    val calmScore = calmScores.getOrElse(index) { Float.NaN }
-                    if (happyScore.isFinite() && partyScore.isFinite() && calmScore.isFinite()) {
-                        upliftingTotal += (happyScore + partyScore) / 2.0
-                        calmTotal += calmScore
-                        count++
-                    }
-                }
-            }
-            check(count > 0) { "Mood model returned no usable scores" }
+            val mertEmbedding = meanMertSegments(env, segments)
+            val output = inferMusic2Emo(env, mertEmbedding)
+            val valence = output.valenceArousal.getOrNull(0)?.takeIf { it.isFinite() } ?: error("Music2Emo valence is invalid")
+            val arousal = output.valenceArousal.getOrNull(1)?.takeIf { it.isFinite() } ?: error("Music2Emo arousal is invalid")
+            val normalizedValence = ((valence.coerceIn(1f, 9f) - 1f) / 8f)
+            val normalizedArousal = ((arousal.coerceIn(1f, 9f) - 1f) / 8f)
+            val valenceArousalUplifting = (normalizedValence * 0.55f + normalizedArousal * 0.45f).coerceIn(0f, 1f)
+            val valenceArousalCalm = ((1f - normalizedArousal) * 0.75f + normalizedValence * 0.25f).coerceIn(0f, 1f)
+            val classUplifting = strongestTagMean(output.moodLogits, UPLIFTING_TAG_INDICES)
+            val classCalm = strongestTagMean(output.moodLogits, CALM_TAG_INDICES)
             return MoodScores(
-                uplifting = (upliftingTotal / count).toFloat().coerceIn(0f, 1f),
-                calm = (calmTotal / count).toFloat().coerceIn(0f, 1f),
+                uplifting = (valenceArousalUplifting * 0.6f + classUplifting * 0.4f).coerceIn(0f, 1f),
+                calm = (valenceArousalCalm * 0.6f + classCalm * 0.4f).coerceIn(0f, 1f),
             )
         }
 
-        private fun inferEffnetBatch(env: OrtEnvironment, patches: List<FloatArray>): List<FloatArray> {
-            val inputName = effnet.inputNames.first()
-            val inputShape = (effnet.inputInfo[inputName]?.info as? ai.onnxruntime.TensorInfo)?.shape
-            val inputRank = inputShape?.size ?: error("EffNet input shape is unavailable")
-            check(inputRank == 3 || inputRank == 4) { "Unexpected EffNet input rank: $inputRank" }
-            val fixedBatchSize = inputShape?.firstOrNull()
-            val canBatch = fixedBatchSize == null || fixedBatchSize < 0L || fixedBatchSize == patches.size.toLong()
-            if (!canBatch || patches.size == 1) return patches.mapNotNull { inferEffnetSingle(env, it) }
+        private fun strongestTagMean(logits: FloatArray, indices: IntArray): Float {
+            val probabilities = indices.asSequence().mapNotNull { index ->
+                logits.getOrNull(index)?.takeIf(Float::isFinite)?.let { logit ->
+                    (1f / (1f + kotlin.math.exp(-logit))).coerceIn(0f, 1f)
+                }
+            }.sortedDescending()
+            if (probabilities.none()) return 0f
+            return probabilities.take(3).average().toFloat()
+        }
 
-            val inputValues = FloatArray(patches.size * PATCH_FRAMES * MEL_BANDS)
-            patches.forEachIndexed { index, patch ->
-                patch.copyInto(inputValues, index * patch.size, endIndex = min(patch.size, PATCH_FRAMES * MEL_BANDS))
+        private fun meanMertSegments(env: OrtEnvironment, segments: List<FloatArray>): FloatArray {
+            val sum = FloatArray(MERT_FEATURE_SIZE * MERT_LAYER_COUNT)
+            var count = 0
+            segments.forEach { samples ->
+                val embedding = inferMert(env, samples) ?: return@forEach
+                for (index in sum.indices) sum[index] += embedding[index]
+                count++
             }
-            return OnnxTensor.createTensor(
-                env,
-                FloatBuffer.wrap(inputValues),
-                if (inputRank == 3) {
-                    longArrayOf(patches.size.toLong(), PATCH_FRAMES.toLong(), MEL_BANDS.toLong())
-                } else {
-                    longArrayOf(patches.size.toLong(), 1L, PATCH_FRAMES.toLong(), MEL_BANDS.toLong())
-                },
-            ).use { input ->
-                effnet.run(mapOf(inputName to input)).use { output ->
-                    val embeddingIndex = effnet.outputNames.indexOfFirst { name ->
-                        (effnet.outputInfo[name]?.info as? ai.onnxruntime.TensorInfo)
-                            ?.shape?.lastOrNull() == 1280L
-                    }.coerceAtLeast(0)
-                    val embeddings = flattenFloat(output[embeddingIndex].value)
-                    if (embeddings.size < patches.size * 1280) emptyList()
-                    else List(patches.size) { index -> embeddings.copyOfRange(index * 1280, (index + 1) * 1280) }
+            check(count > 0) { "MERT returned no usable embeddings" }
+            return FloatArray(sum.size) { sum[it] / count }
+        }
+
+        private fun inferMert(env: OrtEnvironment, samples: FloatArray): FloatArray? {
+            if (samples.isEmpty()) return null
+            val normalized = normalizeWaveform(samples)
+            return OnnxTensor.createTensor(env, FloatBuffer.wrap(normalized), longArrayOf(1L, normalized.size.toLong())).use { input ->
+                mert.run(mapOf("input_values" to input)).use { result ->
+                    val layer5Index = mert.outputNames.indexOf("layer_norm_13")
+                    val layer6Index = mert.outputNames.indexOf("layer_norm_15")
+                    check(layer5Index >= 0 && layer6Index >= 0) { "MERT output layer order is invalid" }
+                    val first = meanFrameEmbedding(result[layer5Index].value)
+                    val second = meanFrameEmbedding(result[layer6Index].value)
+                    if (first == null || second == null) null else first + second
                 }
             }
         }
 
-        private fun inferEffnetSingle(env: OrtEnvironment, patch: FloatArray): FloatArray? {
-            val inputName = effnet.inputNames.first()
-            val inputRank = (effnet.inputInfo[inputName]?.info as? ai.onnxruntime.TensorInfo)?.shape?.size
-                ?: error("EffNet input shape is unavailable")
-            check(inputRank == 3 || inputRank == 4) { "Unexpected EffNet input rank: $inputRank" }
-            return OnnxTensor.createTensor(
-                env,
-                FloatBuffer.wrap(patch),
-                if (inputRank == 3) {
-                    longArrayOf(1L, PATCH_FRAMES.toLong(), MEL_BANDS.toLong())
-                } else {
-                    longArrayOf(1L, 1L, PATCH_FRAMES.toLong(), MEL_BANDS.toLong())
-                },
-            ).use { input ->
-                effnet.run(mapOf(inputName to input)).use { output ->
-                    val embeddingIndex = effnet.outputNames.indexOfFirst { name ->
-                        (effnet.outputInfo[name]?.info as? ai.onnxruntime.TensorInfo)
-                            ?.shape?.lastOrNull() == 1280L
-                    }.coerceAtLeast(0)
-                    flattenFloat(output[embeddingIndex].value).takeIf { it.size >= 1280 }?.copyOf(1280)
+        private data class Music2EmoOutput(val moodLogits: FloatArray, val valenceArousal: FloatArray)
+
+        private fun inferMusic2Emo(env: OrtEnvironment, mertEmbedding: FloatArray): Music2EmoOutput {
+            check(mertEmbedding.size == MERT_FEATURE_SIZE * MERT_LAYER_COUNT) { "Music2Emo expects pooled MERT layers 5 and 6" }
+            val roots = LongArray(M2E_CHORD_SEQUENCE_LENGTH) { UNKNOWN_CHORD_ROOT }
+            val attributes = LongArray(M2E_CHORD_SEQUENCE_LENGTH) { UNKNOWN_CHORD_ATTRIBUTE }
+            val mode = floatArrayOf(MAJOR_MODE)
+            val input = OnnxTensor.createTensor(env, FloatBuffer.wrap(mertEmbedding), longArrayOf(1L, mertEmbedding.size.toLong()))
+            val rootInput = OnnxTensor.createTensor(env, java.nio.LongBuffer.wrap(roots), longArrayOf(1L, roots.size.toLong()))
+            val attrInput = OnnxTensor.createTensor(env, java.nio.LongBuffer.wrap(attributes), longArrayOf(1L, attributes.size.toLong()))
+            val modeInput = OnnxTensor.createTensor(env, FloatBuffer.wrap(mode), longArrayOf(1L, 1L))
+            return input.use { mertTensor -> rootInput.use { rootTensor -> attrInput.use { attrTensor -> modeInput.use { modeTensor ->
+                music2emo.run(mapOf(
+                    "mert_embedding" to mertTensor,
+                    "chord_root" to rootTensor,
+                    "chord_attr" to attrTensor,
+                    "key_mode" to modeTensor,
+                )).use { result ->
+                    val moodsIndex = music2emo.outputNames.indexOf("mood_logits")
+                    check(moodsIndex >= 0) { "Music2Emo mood output is missing" }
+                    val outputIndex = music2emo.outputNames.indexOf("valence_arousal")
+                    check(outputIndex >= 0) { "Music2Emo valence/arousal output is missing" }
+                    val moods = flattenFloat(result[moodsIndex].value)
+                    check(moods.size == 56) { "Music2Emo mood output has an unexpected number of labels" }
+                    val valenceArousal = flattenFloat(result[outputIndex].value)
+                    check(valenceArousal.size >= 2) { "Music2Emo returned no valence/arousal scores" }
+                    Music2EmoOutput(moods, valenceArousal)
                 }
-            }
+            } } } }
         }
 
-        private fun inferMoodHeadBatch(
-            env: OrtEnvironment,
-            session: OrtSession,
-            embeddings: List<FloatArray>,
-            classIndex: Int,
-        ): FloatArray {
-            val inputName = session.inputNames.first()
-            val inputShape = (session.inputInfo[inputName]?.info as? ai.onnxruntime.TensorInfo)?.shape
-            val fixedBatchSize = inputShape?.firstOrNull()
-            val canBatch = inputShape?.size == 2 && (fixedBatchSize == null || fixedBatchSize < 0L || fixedBatchSize == embeddings.size.toLong())
-            if (!canBatch || embeddings.size == 1) {
-                return FloatArray(embeddings.size) { index -> inferMoodHeadSingle(env, session, embeddings[index], classIndex) }
+        private fun meanFrameEmbedding(value: Any?): FloatArray? {
+            val flattened = flattenFloat(value)
+            if (flattened.isEmpty() || flattened.size % MERT_FEATURE_SIZE != 0) return null
+            val frames = flattened.size / MERT_FEATURE_SIZE
+            if (frames <= 0) return null
+            val mean = FloatArray(MERT_FEATURE_SIZE)
+            for (frame in 0 until frames) {
+                val offset = frame * MERT_FEATURE_SIZE
+                for (dimension in 0 until MERT_FEATURE_SIZE) mean[dimension] += flattened[offset + dimension]
             }
-
-            val inputValues = FloatArray(embeddings.size * 1280)
-            embeddings.forEachIndexed { index, embedding -> embedding.copyInto(inputValues, index * 1280, endIndex = min(embedding.size, 1280)) }
-            return OnnxTensor.createTensor(env, FloatBuffer.wrap(inputValues), longArrayOf(embeddings.size.toLong(), 1280L)).use { input ->
-                session.run(mapOf(inputName to input)).use { result ->
-                    val values = flattenFloat(result[0].value)
-                    val classesPerRow = (values.size / embeddings.size).takeIf { it > classIndex } ?: return@use FloatArray(embeddings.size) { Float.NaN }
-                    FloatArray(embeddings.size) { index -> values.getOrElse(index * classesPerRow + classIndex) { Float.NaN } }
-                }
-            }
-        }
-
-        private fun inferMoodHeadSingle(env: OrtEnvironment, session: OrtSession, embedding: FloatArray, classIndex: Int): Float {
-            val inputName = session.inputNames.first()
-            return OnnxTensor.createTensor(env, FloatBuffer.wrap(embedding), longArrayOf(1L, embedding.size.toLong())).use { input ->
-                session.run(mapOf(inputName to input)).use { result ->
-                    flattenFloat(result[0].value).getOrElse(classIndex) { Float.NaN }
-                }
-            }
+            for (dimension in mean.indices) mean[dimension] /= frames
+            return mean
         }
 
         companion object {
-            private const val MAX_INFERENCE_BATCH = 3
+            private fun normalizeWaveform(samples: FloatArray): FloatArray {
+                val mean = samples.average().toFloat()
+                var variance = 0.0
+                samples.forEach { sample ->
+                    val centered = sample - mean
+                    variance += centered * centered
+                }
+                val scale = kotlin.math.sqrt(variance / samples.size + 1e-7).toFloat()
+                return FloatArray(samples.size) { (samples[it] - mean) / scale }
+            }
 
             private fun flattenFloat(value: Any?): FloatArray = when (value) {
                 is FloatArray -> value
@@ -542,11 +520,15 @@ object LocalHomeAi {
                 val environment = OrtEnvironment.getEnvironment()
                 val opened = ArrayList<OrtSession>(models.size)
                 try {
-                    val effnet = environment.createSession(File(directory, models[0].name).absolutePath, options).also(opened::add)
-                    val happy = environment.createSession(File(directory, models[1].name).absolutePath, options).also(opened::add)
-                    val party = environment.createSession(File(directory, models[2].name).absolutePath, options).also(opened::add)
-                    val relaxed = environment.createSession(File(directory, models[3].name).absolutePath, options).also(opened::add)
-                    Runtime(effnet, happy, party, relaxed).also { runtime = it }
+                    val mert = environment.createSession(File(directory, models[0].name).absolutePath, options).also(opened::add)
+                    val music2emo = environment.createSession(File(directory, models[1].name).absolutePath, options).also(opened::add)
+                    check(mert.inputNames.contains("input_values") && mert.outputNames.containsAll(listOf("layer_norm_13", "layer_norm_15"))) {
+                        "The downloaded MERT graph does not expose Music2Emo's required hidden layers"
+                    }
+                    check(music2emo.inputNames.containsAll(listOf("mert_embedding", "chord_root", "chord_attr", "key_mode")) && music2emo.outputNames.contains("valence_arousal")) {
+                        "The downloaded Music2Emo head has unexpected inputs or outputs"
+                    }
+                    Runtime(mert, music2emo).also { runtime = it }
                 } catch (error: Throwable) {
                     opened.forEach { runCatching(it::close) }
                     throw error
@@ -571,118 +553,4 @@ object LocalHomeAi {
         }
     }
 
-    /** Converts 16 kHz mono PCM into the 128x96 MusiCNN mel patches EffNet was trained on. */
-    private fun melPatches(samples: FloatArray): List<FloatArray> {
-        if (samples.isEmpty()) return emptyList()
-        val frameCount = max(PATCH_FRAMES, 1 + kotlin.math.ceil((samples.size - FRAME_SIZE / 2.0) / FRAME_STEP).toInt())
-        val filter = slaneyMelFilters()
-        val spectrogram = FloatArray(frameCount * MEL_BANDS)
-        val real = DoubleArray(FFT_SIZE)
-        val imaginary = DoubleArray(FFT_SIZE)
-        for (frame in 0 until frameCount) {
-            real.fill(0.0)
-            imaginary.fill(0.0)
-            // Essentia's FrameCutter centers the first frame, padding 256 samples at the front.
-            val start = frame * FRAME_STEP - FRAME_SIZE / 2
-            for (index in 0 until FRAME_SIZE) {
-                val sampleIndex = start + index
-                val sample = if (sampleIndex in samples.indices) samples[sampleIndex] else 0f
-                val window = 0.5 - 0.5 * cos(2.0 * PI * index / (FRAME_SIZE - 1))
-                real[index] = sample * window
-            }
-            fft(real, imaginary)
-            val power = DoubleArray(FFT_SIZE / 2 + 1) { bin ->
-                val magnitude = sqrt(real[bin] * real[bin] + imaginary[bin] * imaginary[bin])
-                magnitude * magnitude
-            }
-            for (band in 0 until MEL_BANDS) {
-                var energy = 0.0
-                val weights = filter[band]
-                for (bin in weights.indices) energy += power[bin] * weights[bin]
-                spectrogram[frame * MEL_BANDS + band] = kotlin.math.log10(max(0.0, energy) * 10_000.0 + 1.0).toFloat()
-            }
-        }
-        val patches = ArrayList<FloatArray>()
-        var patchStart = 0
-        while (patchStart + PATCH_FRAMES <= frameCount) {
-            val patch = FloatArray(PATCH_FRAMES * MEL_BANDS)
-            spectrogram.copyInto(destination = patch, startIndex = patchStart * MEL_BANDS, endIndex = (patchStart + PATCH_FRAMES) * MEL_BANDS)
-            patches += patch
-            patchStart += PATCH_HOP_FRAMES
-        }
-        if (patches.isEmpty()) patches += spectrogram.copyOf(PATCH_FRAMES * MEL_BANDS)
-        return patches
-    }
-
-    /** Essentia uses Slaney mel bands, unit-area triangles, power, and log10(10000*x+1). */
-    private fun slaneyMelFilters(): Array<DoubleArray> {
-        val lowMel = hzToSlaneyMel(0.0)
-        val highMel = hzToSlaneyMel(SAMPLE_RATE / 2.0)
-        val edges = DoubleArray(MEL_BANDS + 2) { index ->
-            slaneyMelToHz(lowMel + (highMel - lowMel) * index / (MEL_BANDS + 1))
-        }
-        val frequencies = DoubleArray(FFT_SIZE / 2 + 1) { bin -> bin * SAMPLE_RATE.toDouble() / FFT_SIZE }
-        return Array(MEL_BANDS) { band ->
-            val triangle = DoubleArray(FFT_SIZE / 2 + 1) { bin ->
-                val frequency = frequencies[bin]
-                when {
-                    frequency < edges[band] || frequency > edges[band + 2] -> 0.0
-                    frequency <= edges[band + 1] -> (frequency - edges[band]) / max(1e-12, edges[band + 1] - edges[band])
-                    else -> (edges[band + 2] - frequency) / max(1e-12, edges[band + 2] - edges[band + 1])
-                }.coerceAtLeast(0.0)
-            }
-            val area = triangle.sum()
-            if (area > 0.0) DoubleArray(triangle.size) { triangle[it] / area } else triangle
-        }
-    }
-
-    private fun hzToSlaneyMel(hz: Double): Double = if (hz < 1_000.0) hz / (200.0 / 3.0) else 15.0 + kotlin.math.ln(hz / 1_000.0) / (kotlin.math.ln(6.4) / 27.0)
-
-    private fun slaneyMelToHz(mel: Double): Double = if (mel < 15.0) mel * (200.0 / 3.0) else 1_000.0 * kotlin.math.exp((kotlin.math.ln(6.4) / 27.0) * (mel - 15.0))
-
-    /** In-place radix-2 FFT; EffNet input uses the 257 non-negative frequency bins. */
-    private fun fft(real: DoubleArray, imaginary: DoubleArray) {
-        val size = real.size
-        var j = 0
-        for (i in 1 until size) {
-            var bit = size shr 1
-            while (j and bit != 0) {
-                j = j xor bit
-                bit = bit shr 1
-            }
-            j = j xor bit
-            if (i < j) {
-                val realSwap = real[i]
-                real[i] = real[j]
-                real[j] = realSwap
-                val imaginarySwap = imaginary[i]
-                imaginary[i] = imaginary[j]
-                imaginary[j] = imaginarySwap
-            }
-        }
-        var length = 2
-        while (length <= size) {
-            val angle = -2.0 * PI / length
-            val stepReal = cos(angle)
-            val stepImaginary = sin(angle)
-            for (offset in 0 until size step length) {
-                var twiddleReal = 1.0
-                var twiddleImaginary = 0.0
-                for (index in 0 until length / 2) {
-                    val even = offset + index
-                    val odd = even + length / 2
-                    val oddReal = real[odd] * twiddleReal - imaginary[odd] * twiddleImaginary
-                    val oddImaginary = real[odd] * twiddleImaginary + imaginary[odd] * twiddleReal
-                    real[odd] = real[even] - oddReal
-                    imaginary[odd] = imaginary[even] - oddImaginary
-                    real[even] += oddReal
-                    imaginary[even] += oddImaginary
-                    val nextReal = twiddleReal * stepReal - twiddleImaginary * stepImaginary
-                    twiddleImaginary = twiddleReal * stepImaginary + twiddleImaginary * stepReal
-                    twiddleReal = nextReal
-                }
-            }
-            length = length shl 1
-        }
-    }
 }

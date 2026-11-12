@@ -40,12 +40,12 @@
     <string name="home_ai_low_memory">Analysis paused because memory was low. Close other apps, then pull down to retry.</string>
     <string name="home_ai_no_distinct_mood">No songs clearly match this mood yet.</string>
     <string name="home_ai_model_needed">Download the optional on-device model to classify local music by mood.</string>
-    <string name="home_ai_download_title">Enable local music mood analysis?</string>
-    <string name="home_ai_download_message">Download about 19.6 MB for music-specific on-device mood analysis? Audio stays on this device. The Essentia/UPF models are licensed under CC BY-NC-SA 4.0.</string>
+    <string name="home_ai_download_title">Analyze local music with Music2Emo?</string>
+    <string name="home_ai_download_message">Download about 91 MB for AMAAI-Lab\'s Music2Emo and M-A-P\'s MERT model. Audio stays on this device. This mobile port omits chord-progression estimation. Music2Emo is Apache-2.0; MERT is CC BY-NC 4.0 (non-commercial use only).</string>
     <string name="home_ai_download_action">Download model</string>
     <string name="home_ai_download_progress">Downloading %1$.1f of %2$.1f MB</string>
     <string name="home_ai_download_failed">Model download failed</string>
-    <string name="home_ai_enable_analysis">Download local AI model</string>
+    <string name="home_ai_enable_analysis">Download Music2Emo model</string>
     <string name="home_excluded_folders">Exclude folders from Home</string>
     <string name="home_excluded_folders_subtitle">Hide tracks in selected folders from Home recommendations and mood analysis. They remain in your library.</string>
     <string name="home_excluded_folders_empty">No local music folders were found.</string>

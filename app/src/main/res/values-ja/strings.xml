@@ -40,12 +40,12 @@
     <string name="home_ai_low_memory">メモリ不足のため解析を一時停止しました。他のアプリを閉じてから下にスワイプして再試行してください。</string>
     <string name="home_ai_no_distinct_mood">このムードにはっきり当てはまる曲はまだありません。</string>
     <string name="home_ai_model_needed">端末内の曲をムード分類するには、任意のオンデバイスモデルをダウンロードしてください。</string>
-    <string name="home_ai_download_title">端末内の曲をムード解析しますか？</string>
-    <string name="home_ai_download_message">音楽向けの端末内ムード解析モデル約19.6 MBをダウンロードしますか？音源は端末外に送信されません。Essentia/UPFモデルのライセンスはCC BY-NC-SA 4.0です。</string>
+    <string name="home_ai_download_title">Music2Emoで端末内の曲をムード解析しますか？</string>
+    <string name="home_ai_download_message">AMAAI-LabのMusic2EmoとM-A-PのMERTモデル約91 MBをダウンロードします。音源は端末外に送信されません。このモバイル版はコード進行推定を省略します。Music2EmoはApache-2.0、MERTはCC BY-NC 4.0（非営利利用のみ）です。</string>
     <string name="home_ai_download_action">モデルをダウンロード</string>
     <string name="home_ai_download_progress">ダウンロード中 %1$.1f / %2$.1f MB</string>
     <string name="home_ai_download_failed">モデルのダウンロードに失敗しました</string>
-    <string name="home_ai_enable_analysis">ローカルAIモデルをダウンロード</string>
+    <string name="home_ai_enable_analysis">Music2Emoモデルをダウンロード</string>
     <string name="home_excluded_folders">ホームから除外するフォルダー</string>
     <string name="home_excluded_folders_subtitle">選択したフォルダーの曲をホームのおすすめとムード解析から除外します。ライブラリには残ります。</string>
     <string name="home_excluded_folders_empty">端末内に音楽フォルダーが見つかりません。</string>
