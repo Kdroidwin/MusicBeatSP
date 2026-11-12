@@ -64,6 +64,9 @@ import com.music.bitchord.ui.components.MessageState
 import com.music.bitchord.ui.components.PullToRefresh
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.delay
+import kotlinx.coroutines.CancellationException
+import kotlinx.coroutines.TimeoutCancellationException
+import kotlinx.coroutines.withTimeout
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
 import java.time.LocalDateTime
@@ -77,6 +80,18 @@ data class HomeLocalCatalog(
     val allowModelDownload: Boolean,
     val excludedFolderPaths: Set<String> = emptySet(),
 )
+
+private data class MoodAnalysisProgress(
+    val completed: Int,
+    val total: Int,
+    val failed: Int,
+    val finished: Boolean,
+    val hasMore: Boolean = false,
+    val lowMemory: Boolean = false,
+)
+
+private const val HOME_MOOD_BATCH_SIZE = 4
+private const val HOME_MOOD_TRACK_TIMEOUT_MS = 30_000L
 
 /** Native Android home feed, using the same personalized shelves as BitChord. */
 @OptIn(ExperimentalMaterial3Api::class, androidx.compose.foundation.ExperimentalFoundationApi::class)
@@ -121,6 +136,8 @@ fun HomeScreen(
     var showModelPrompt by remember { mutableStateOf(false) }
     var downloadError by remember { mutableStateOf<String?>(null) }
     var moodRevision by remember { mutableIntStateOf(0) }
+    var analysisRetryRevision by remember { mutableIntStateOf(0) }
+    var analysisProgress by remember(context) { mutableStateOf<MoodAnalysisProgress?>(null) }
     var wallClockMinute by remember { mutableLongStateOf(System.currentTimeMillis() / 60_000L) }
     val cachedMoods = remember(context, localSongs, moodRevision, modelInstalled) {
         LocalHomeAi.cachedScores(context, localSongs)
@@ -143,10 +160,10 @@ fun HomeScreen(
     // Work through a small batch of high-priority tracks while Home is open.
     // Persisted scores mean later visits continue with the next unheard tracks
     // instead of repeatedly decoding the same audio.
-    LaunchedEffect(context, localSongs, modelInstalled, favoriteIds, playStatsRevision) {
+    LaunchedEffect(context, localSongs, modelInstalled, favoriteIds, playStatsRevision, analysisRetryRevision) {
         if (!modelInstalled || localSongs.isEmpty()) return@LaunchedEffect
         val maximumPlayed = localSongs.maxOfOrNull { LocalPlayStatsStore.getStats(it, playStats).playedCount } ?: 0
-        val prioritized = localSongs
+        val pendingSongs = localSongs
             .filter { !it.localUri.isNullOrBlank() || !it.localPath.isNullOrBlank() }
             .sortedByDescending { song ->
                 val stats = LocalPlayStatsStore.getStats(song, playStats)
@@ -154,11 +171,83 @@ fun HomeScreen(
                     (stats.playedCount.toDouble() / (maximumPlayed + 1.0)) * 300.0 +
                     (if (stats.lastPlayedTimestamp > 0L) 100.0 else 0.0)
             }
-            .filter { LocalHomeAi.cachedScore(context, it) == null }
-            .take(16)
-        prioritized.forEach { song ->
-            if (LocalHomeAi.classify(context, song) != null) moodRevision++
+            .filter { LocalHomeAi.cachedScore(context, it) == null && !LocalHomeAi.hasAnalysisFailure(context, it) }
+        val prioritized = pendingSongs.take(HOME_MOOD_BATCH_SIZE)
+        val failedBeforeBatch = localSongs.count { LocalHomeAi.hasAnalysisFailure(context, it) }
+        if (prioritized.isEmpty()) {
+            analysisProgress = MoodAnalysisProgress(0, 0, failedBeforeBatch, finished = true)
+            return@LaunchedEffect
         }
+        var failed = failedBeforeBatch
+        var lowMemory = false
+        for ((index, song) in prioritized.withIndex()) {
+            analysisProgress = MoodAnalysisProgress(
+                completed = index,
+                total = prioritized.size,
+                failed = failed,
+                finished = false,
+                hasMore = pendingSongs.size > prioritized.size,
+            )
+            try {
+                if (withTimeout(HOME_MOOD_TRACK_TIMEOUT_MS) { LocalHomeAi.classify(context, song) } != null) {
+                    moodRevision++
+                } else {
+                    failed++
+                    LocalHomeAi.markAnalysisFailure(context, song)
+                }
+            } catch (timeout: TimeoutCancellationException) {
+                failed++
+                LocalHomeAi.markAnalysisFailure(context, song)
+                android.util.Log.w("HomeScreen", "Mood analysis timed out for a local track")
+            } catch (cancelled: CancellationException) {
+                throw cancelled
+            } catch (memoryError: OutOfMemoryError) {
+                failed++
+                lowMemory = true
+                LocalHomeAi.markAnalysisFailure(context, song)
+            } catch (error: Exception) {
+                failed++
+                LocalHomeAi.markAnalysisFailure(context, song)
+                android.util.Log.w("HomeScreen", "Skipping an unprocessable local mood-analysis track", error)
+            }
+            analysisProgress = MoodAnalysisProgress(
+                completed = index + 1,
+                total = prioritized.size,
+                failed = failed,
+                finished = false,
+                hasMore = pendingSongs.size > prioritized.size,
+                lowMemory = lowMemory,
+            )
+            if (lowMemory) break
+            if (index < prioritized.lastIndex) delay(150L)
+        }
+        analysisProgress = MoodAnalysisProgress(
+            completed = if (lowMemory) analysisProgress?.completed ?: 0 else prioritized.size,
+            total = prioritized.size,
+            failed = failed,
+            finished = true,
+            hasMore = pendingSongs.size > prioritized.size,
+            lowMemory = lowMemory,
+        )
+    }
+
+    val currentAnalysisProgress = analysisProgress
+    val moodEmptyMessage = when {
+        localSongs.isEmpty() -> androidx.compose.ui.res.stringResource(R.string.home_ai_no_local_tracks)
+        !modelInstalled -> androidx.compose.ui.res.stringResource(R.string.home_ai_model_needed)
+        currentAnalysisProgress?.lowMemory == true -> androidx.compose.ui.res.stringResource(R.string.home_ai_low_memory)
+        currentAnalysisProgress?.finished == true && currentAnalysisProgress.failed > 0 -> androidx.compose.ui.res.stringResource(
+            if (currentAnalysisProgress.hasMore) R.string.home_ai_analysis_skipped_more else R.string.home_ai_analysis_skipped,
+            currentAnalysisProgress.failed,
+        )
+        currentAnalysisProgress?.finished == true && currentAnalysisProgress.hasMore -> androidx.compose.ui.res.stringResource(R.string.home_ai_analysis_finished)
+        currentAnalysisProgress?.finished == true -> androidx.compose.ui.res.stringResource(R.string.home_ai_analysis_all_done)
+        currentAnalysisProgress?.total?.let { it > 0 } == true -> androidx.compose.ui.res.stringResource(
+            R.string.home_ai_analysis_progress,
+            currentAnalysisProgress.completed.coerceAtMost(currentAnalysisProgress.total),
+            currentAnalysisProgress.total,
+        )
+        else -> androidx.compose.ui.res.stringResource(R.string.home_ai_analyzing)
     }
 
     val localSongScores = remember(localSongs, playStats, favoriteIds, cachedMoods) {
@@ -211,7 +300,11 @@ fun HomeScreen(
 
     PullToRefresh(
         refreshing = isRefreshing,
-        onRefresh = onRefresh,
+        onRefresh = {
+            if (analysisProgress?.hasMore != true) LocalHomeAi.clearAnalysisFailures(context)
+            analysisRetryRevision++
+            onRefresh()
+        },
         state = pullState,
         modifier = modifier,
     ) {
@@ -258,9 +351,7 @@ fun HomeScreen(
                 HomeAiShelfRow(
                     title = androidx.compose.ui.res.stringResource(R.string.home_ai_uplifting),
                     songs = upliftingSongs,
-                    emptyMessage = androidx.compose.ui.res.stringResource(
-                        if (modelInstalled) R.string.home_ai_analyzing else R.string.home_ai_model_needed,
-                    ),
+                    emptyMessage = moodEmptyMessage,
                     onDownloadModel = if (!modelInstalled && allowModelDownload) {{ showModelPrompt = true }} else null,
                     onSongClick = localCatalog.onSongClick,
                     onSongLongPress = localCatalog.onSongLongPress,
@@ -270,9 +361,7 @@ fun HomeScreen(
                 HomeAiShelfRow(
                     title = androidx.compose.ui.res.stringResource(R.string.home_ai_calm),
                     songs = calmSongs,
-                    emptyMessage = androidx.compose.ui.res.stringResource(
-                        if (modelInstalled) R.string.home_ai_analyzing else R.string.home_ai_model_needed,
-                    ),
+                    emptyMessage = moodEmptyMessage,
                     onDownloadModel = if (!modelInstalled && allowModelDownload) {{ showModelPrompt = true }} else null,
                     onSongClick = localCatalog.onSongClick,
                     onSongLongPress = localCatalog.onSongLongPress,

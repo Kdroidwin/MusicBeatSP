@@ -32,6 +32,12 @@
     <string name="home_ai_recommendation_day">昼間は気分が高揚する曲を優先しておすすめします。</string>
     <string name="home_ai_recommendation_night">夕方から夜は落ち着く曲を優先しておすすめします。</string>
     <string name="home_ai_analyzing">端末内の音楽を解析しています…</string>
+    <string name="home_ai_analysis_progress">曲を解析しています（%1$d/%2$d）…</string>
+    <string name="home_ai_analysis_finished">今回の解析分が完了しました。下にスワイプすると次の曲を解析します。</string>
+    <string name="home_ai_analysis_all_done">読み込み可能な端末内の曲はすべて解析済みです。</string>
+    <string name="home_ai_analysis_skipped">読み込めなかった曲を%1$d曲スキップしました。下にスワイプすると再試行します。</string>
+    <string name="home_ai_analysis_skipped_more">読み込めなかった曲を%1$d曲スキップしました。下にスワイプすると次の曲の解析を続けます。</string>
+    <string name="home_ai_low_memory">メモリ不足のため解析を一時停止しました。他のアプリを閉じてから下にスワイプして再試行してください。</string>
     <string name="home_ai_model_needed">端末内の曲をムード分類するには、任意のオンデバイスモデルをダウンロードしてください。</string>
     <string name="home_ai_download_title">端末内の曲をムード解析しますか？</string>
     <string name="home_ai_download_message">音楽向けの端末内ムード解析モデル約19.6 MBをダウンロードしますか？音源は端末外に送信されません。Essentia/UPFモデルのライセンスはCC BY-NC-SA 4.0です。</string>

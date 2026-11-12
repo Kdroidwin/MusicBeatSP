@@ -32,6 +32,12 @@
     <string name="home_ai_recommendation_day">Recommendations favor uplifting music during the day.</string>
     <string name="home_ai_recommendation_night">Recommendations favor calm music in the evening and at night.</string>
     <string name="home_ai_analyzing">Analyzing local music on this device…</string>
+    <string name="home_ai_analysis_progress">Analyzing local tracks (%1$d/%2$d)…</string>
+    <string name="home_ai_analysis_finished">This batch is complete. Pull down to analyze more tracks.</string>
+    <string name="home_ai_analysis_all_done">All readable local tracks have been analyzed.</string>
+    <string name="home_ai_analysis_skipped">Skipped %1$d tracks that could not be read. Pull down to retry.</string>
+    <string name="home_ai_analysis_skipped_more">Skipped %1$d unreadable tracks. Pull down to continue with more tracks.</string>
+    <string name="home_ai_low_memory">Analysis paused because memory was low. Close other apps, then pull down to retry.</string>
     <string name="home_ai_model_needed">Download the optional on-device model to classify local music by mood.</string>
     <string name="home_ai_download_title">Enable local music mood analysis?</string>
     <string name="home_ai_download_message">Download about 19.6 MB for music-specific on-device mood analysis? Audio stays on this device. The Essentia/UPF models are licensed under CC BY-NC-SA 4.0.</string>

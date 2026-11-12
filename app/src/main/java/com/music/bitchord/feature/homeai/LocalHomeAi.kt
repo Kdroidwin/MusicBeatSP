@@ -2,6 +2,7 @@ package com.music.bitchord.feature.homeai
 
 import android.content.Context
 import android.net.Uri
+import android.util.Log
 import ai.onnxruntime.OnnxTensor
 import ai.onnxruntime.OrtEnvironment
 import ai.onnxruntime.OrtSession
@@ -11,11 +12,14 @@ import com.music.bitchord.data.model.durationMillis
 import com.music.bitchord.playback.smart.AudioDecoder
 import com.music.bitchord.playback.smart.LocalAudioSource
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.currentCoroutineContext
 import kotlinx.coroutines.ensureActive
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.isActive
+import kotlinx.coroutines.sync.Mutex
+import kotlinx.coroutines.sync.withLock
 import kotlinx.coroutines.withContext
 import java.io.BufferedInputStream
 import java.io.File
@@ -56,6 +60,9 @@ object LocalHomeAi {
     private const val PATCH_FRAMES = 128
     private const val PATCH_HOP_FRAMES = 62
     private const val DOWNLOAD_LIMIT_BYTES = 20_000_000L
+    private const val KEY_FAILED_TRACKS = "${MODEL_VERSION}_failed_tracks"
+    private const val MAX_FAILED_TRACKS = 512
+    private const val TAG = "LocalHomeAi"
 
     data class MoodScores(val uplifting: Float, val calm: Float)
     data class DownloadProgress(val bytes: Long, val totalBytes: Long)
@@ -96,6 +103,7 @@ object LocalHomeAi {
 
     private val _downloadProgress = MutableStateFlow<DownloadProgress?>(null)
     val downloadProgress = _downloadProgress.asStateFlow()
+    private val classificationMutex = Mutex()
     @Volatile private var verificationFingerprint: String? = null
     @Volatile private var verificationResult: Boolean = false
     private val verificationLock = Any()
@@ -230,7 +238,31 @@ object LocalHomeAi {
             .apply()
     }
 
-    suspend fun classify(context: Context, song: Song): MoodScores? = withContext(Dispatchers.IO) {
+    fun hasAnalysisFailure(context: Context, song: Song): Boolean =
+        cacheKey(song) in context.getSharedPreferences(PREFS, Context.MODE_PRIVATE)
+            .getStringSet(KEY_FAILED_TRACKS, emptySet()).orEmpty()
+
+    fun markAnalysisFailure(context: Context, song: Song) {
+        val prefs = context.getSharedPreferences(PREFS, Context.MODE_PRIVATE)
+        val updated = LinkedHashSet(prefs.getStringSet(KEY_FAILED_TRACKS, emptySet()).orEmpty())
+        updated.add(cacheKey(song))
+        while (updated.size > MAX_FAILED_TRACKS) updated.remove(updated.first())
+        prefs.edit().putStringSet(KEY_FAILED_TRACKS, updated).apply()
+    }
+
+    fun clearAnalysisFailure(context: Context, song: Song) {
+        val prefs = context.getSharedPreferences(PREFS, Context.MODE_PRIVATE)
+        val updated = prefs.getStringSet(KEY_FAILED_TRACKS, emptySet()).orEmpty() - cacheKey(song)
+        prefs.edit().putStringSet(KEY_FAILED_TRACKS, updated).apply()
+    }
+
+    fun clearAnalysisFailures(context: Context) {
+        context.getSharedPreferences(PREFS, Context.MODE_PRIVATE).edit().remove(KEY_FAILED_TRACKS).apply()
+    }
+
+    suspend fun classify(context: Context, song: Song): MoodScores? = classificationMutex.withLock {
+      withContext(Dispatchers.IO) {
+       try {
         cachedScore(context, song)?.let { return@withContext it }
         val audioUri = song.localUri?.takeIf(String::isNotBlank)?.let { runCatching { Uri.parse(it) }.getOrNull() }
             ?: song.localPath?.takeIf(String::isNotBlank)?.let { Uri.fromFile(File(it)) }
@@ -268,11 +300,32 @@ object LocalHomeAi {
             }
         }
         operationContext.ensureActive()
-        val patches = audioSegments.flatMap(::melPatches)
-        if (patches.isEmpty()) return@withContext null
+        // Keep the three sampled song regions, but use one center patch from
+        // each region. A 4.2 second window can produce three overlapping
+        // patches; analyzing all of them multiplied native ONNX work by 3.
+        val patches = audioSegments.mapNotNull { samples ->
+            melPatches(samples).let { candidates -> candidates.getOrNull(candidates.size / 2) }
+        }
+        if (patches.isEmpty()) {
+            markAnalysisFailure(context, song)
+            return@withContext null
+        }
         val score = withModels(context) { runtime -> runtime.predict(patches) }
         saveScore(context, song, score)
+        clearAnalysisFailure(context, song)
         score
+       } catch (cancelled: CancellationException) {
+            throw cancelled
+       } catch (memoryError: OutOfMemoryError) {
+            Log.e(TAG, "Mood analysis ran out of memory for ${song.title}; releasing ONNX sessions", memoryError)
+            releaseRuntimeAfterMemoryPressure()
+            throw memoryError
+       } catch (error: Exception) {
+            Log.w(TAG, "Skipping mood analysis for ${song.title}", error)
+            markAnalysisFailure(context, song)
+            null
+       }
+      }
     }
 
     private fun modelDirectory(context: Context) = File(context.noBackupFilesDir, "home_ai_models/$MODEL_VERSION")
@@ -323,44 +376,113 @@ object LocalHomeAi {
         val party: OrtSession,
         val relaxed: OrtSession,
     ) {
+        fun close() {
+            runCatching(effnet::close)
+            runCatching(happy::close)
+            runCatching(party::close)
+            runCatching(relaxed::close)
+        }
+
         fun predict(patches: List<FloatArray>): MoodScores {
             val env = OrtEnvironment.getEnvironment()
             var upliftingTotal = 0.0
             var calmTotal = 0.0
             var count = 0
-            patches.forEach { patch ->
-                val embeddings = OnnxTensor.createTensor(
-                    env,
-                    FloatBuffer.wrap(patch),
-                    longArrayOf(1L, 1L, PATCH_FRAMES.toLong(), MEL_BANDS.toLong()),
-                ).use { input ->
-                    effnet.run(mapOf(effnet.inputNames.first() to input)).use { output ->
-                        val embeddingIndex = effnet.outputNames.indexOfFirst { name ->
-                            (effnet.outputInfo[name]?.info as? ai.onnxruntime.TensorInfo)
-                                ?.shape?.lastOrNull() == 1280L
-                        }.coerceAtLeast(0)
-                        flattenFloat(output[embeddingIndex].value)
+            patches.chunked(MAX_INFERENCE_BATCH).forEach { patchBatch ->
+                val features = inferEffnetBatch(env, patchBatch)
+                if (features.isEmpty()) return@forEach
+                val happyScores = inferMoodHeadBatch(env, happy, features, 0)
+                val partyScores = inferMoodHeadBatch(env, party, features, 1)
+                val calmScores = inferMoodHeadBatch(env, relaxed, features, 1)
+                features.indices.forEach { index ->
+                    val happyScore = happyScores.getOrElse(index) { Float.NaN }
+                    val partyScore = partyScores.getOrElse(index) { Float.NaN }
+                    val calmScore = calmScores.getOrElse(index) { Float.NaN }
+                    if (happyScore.isFinite() && partyScore.isFinite() && calmScore.isFinite()) {
+                        upliftingTotal += (happyScore + partyScore) / 2.0
+                        calmTotal += calmScore
+                        count++
                     }
                 }
-                if (embeddings.size < 1280) return@forEach
-                val feature = embeddings.copyOf(1280)
-                val happyScore = inferMoodHead(happy, feature, 0)
-                val partyScore = inferMoodHead(party, feature, 1)
-                val calmScore = inferMoodHead(relaxed, feature, 1)
-                if (happyScore.isFinite() && partyScore.isFinite() && calmScore.isFinite()) {
-                    upliftingTotal += (happyScore + partyScore) / 2.0
-                    calmTotal += calmScore
-                    count++
-                }
             }
-            return if (count == 0) MoodScores(0.5f, 0.5f) else MoodScores(
+            check(count > 0) { "Mood model returned no usable scores" }
+            return MoodScores(
                 uplifting = (upliftingTotal / count).toFloat().coerceIn(0f, 1f),
                 calm = (calmTotal / count).toFloat().coerceIn(0f, 1f),
             )
         }
 
-        private fun inferMoodHead(session: OrtSession, embedding: FloatArray, classIndex: Int): Float {
-            val env = OrtEnvironment.getEnvironment()
+        private fun inferEffnetBatch(env: OrtEnvironment, patches: List<FloatArray>): List<FloatArray> {
+            val inputName = effnet.inputNames.first()
+            val inputShape = (effnet.inputInfo[inputName]?.info as? ai.onnxruntime.TensorInfo)?.shape
+            val fixedBatchSize = inputShape?.firstOrNull()
+            val canBatch = inputShape?.size == 4 && (fixedBatchSize == null || fixedBatchSize < 0L || fixedBatchSize == patches.size.toLong())
+            if (!canBatch || patches.size == 1) return patches.mapNotNull { inferEffnetSingle(env, it) }
+
+            val inputValues = FloatArray(patches.size * PATCH_FRAMES * MEL_BANDS)
+            patches.forEachIndexed { index, patch ->
+                patch.copyInto(inputValues, index * patch.size, endIndex = min(patch.size, PATCH_FRAMES * MEL_BANDS))
+            }
+            return OnnxTensor.createTensor(
+                env,
+                FloatBuffer.wrap(inputValues),
+                longArrayOf(patches.size.toLong(), 1L, PATCH_FRAMES.toLong(), MEL_BANDS.toLong()),
+            ).use { input ->
+                effnet.run(mapOf(inputName to input)).use { output ->
+                    val embeddingIndex = effnet.outputNames.indexOfFirst { name ->
+                        (effnet.outputInfo[name]?.info as? ai.onnxruntime.TensorInfo)
+                            ?.shape?.lastOrNull() == 1280L
+                    }.coerceAtLeast(0)
+                    val embeddings = flattenFloat(output[embeddingIndex].value)
+                    if (embeddings.size < patches.size * 1280) emptyList()
+                    else List(patches.size) { index -> embeddings.copyOfRange(index * 1280, (index + 1) * 1280) }
+                }
+            }
+        }
+
+        private fun inferEffnetSingle(env: OrtEnvironment, patch: FloatArray): FloatArray? {
+            val inputName = effnet.inputNames.first()
+            return OnnxTensor.createTensor(
+                env,
+                FloatBuffer.wrap(patch),
+                longArrayOf(1L, 1L, PATCH_FRAMES.toLong(), MEL_BANDS.toLong()),
+            ).use { input ->
+                effnet.run(mapOf(inputName to input)).use { output ->
+                    val embeddingIndex = effnet.outputNames.indexOfFirst { name ->
+                        (effnet.outputInfo[name]?.info as? ai.onnxruntime.TensorInfo)
+                            ?.shape?.lastOrNull() == 1280L
+                    }.coerceAtLeast(0)
+                    flattenFloat(output[embeddingIndex].value).takeIf { it.size >= 1280 }?.copyOf(1280)
+                }
+            }
+        }
+
+        private fun inferMoodHeadBatch(
+            env: OrtEnvironment,
+            session: OrtSession,
+            embeddings: List<FloatArray>,
+            classIndex: Int,
+        ): FloatArray {
+            val inputName = session.inputNames.first()
+            val inputShape = (session.inputInfo[inputName]?.info as? ai.onnxruntime.TensorInfo)?.shape
+            val fixedBatchSize = inputShape?.firstOrNull()
+            val canBatch = inputShape?.size == 2 && (fixedBatchSize == null || fixedBatchSize < 0L || fixedBatchSize == embeddings.size.toLong())
+            if (!canBatch || embeddings.size == 1) {
+                return FloatArray(embeddings.size) { index -> inferMoodHeadSingle(env, session, embeddings[index], classIndex) }
+            }
+
+            val inputValues = FloatArray(embeddings.size * 1280)
+            embeddings.forEachIndexed { index, embedding -> embedding.copyInto(inputValues, index * 1280, endIndex = min(embedding.size, 1280)) }
+            return OnnxTensor.createTensor(env, FloatBuffer.wrap(inputValues), longArrayOf(embeddings.size.toLong(), 1280L)).use { input ->
+                session.run(mapOf(inputName to input)).use { result ->
+                    val values = flattenFloat(result[0].value)
+                    val classesPerRow = (values.size / embeddings.size).takeIf { it > classIndex } ?: return@use FloatArray(embeddings.size) { Float.NaN }
+                    FloatArray(embeddings.size) { index -> values.getOrElse(index * classesPerRow + classIndex) { Float.NaN } }
+                }
+            }
+        }
+
+        private fun inferMoodHeadSingle(env: OrtEnvironment, session: OrtSession, embedding: FloatArray, classIndex: Int): Float {
             val inputName = session.inputNames.first()
             return OnnxTensor.createTensor(env, FloatBuffer.wrap(embedding), longArrayOf(1L, embedding.size.toLong())).use { input ->
                 session.run(mapOf(inputName to input)).use { result ->
@@ -370,6 +492,8 @@ object LocalHomeAi {
         }
 
         companion object {
+            private const val MAX_INFERENCE_BATCH = 3
+
             private fun flattenFloat(value: Any?): FloatArray = when (value) {
                 is FloatArray -> value
                 is Array<*> -> value.flatMap { flattenFloat(it).asIterable() }.toFloatArray()
@@ -381,13 +505,21 @@ object LocalHomeAi {
     @Volatile private var runtime: Runtime? = null
     private val runtimeLock = Any()
 
+    private fun releaseRuntimeAfterMemoryPressure() {
+        synchronized(runtimeLock) {
+            runtime?.close()
+            runtime = null
+        }
+    }
+
     private suspend fun <T> withModels(context: Context, block: (Runtime) -> T): T = withContext(Dispatchers.IO) {
         check(isModelInstalled(context)) { "AI model files are missing or failed verification" }
         val active = runtime ?: synchronized(runtimeLock) {
             runtime ?: run {
                 val directory = modelDirectory(context)
                 val options = OrtSession.SessionOptions().apply {
-                    setIntraOpNumThreads(2)
+                    // Keep background inference from multiplying native worker stacks on lower-memory phones.
+                    setIntraOpNumThreads(1)
                     setOptimizationLevel(OrtSession.SessionOptions.OptLevel.ALL_OPT)
                     setCPUArenaAllocator(false)
                     setMemoryPatternOptimization(false)
