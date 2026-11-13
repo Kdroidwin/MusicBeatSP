@@ -27,6 +27,7 @@ object NativeLyricsProviders {
         "utaten",
         "jlyric",
         "joysound",
+        "lyricstranslate",
         "genius",
         "ctc_align",
         "ctc_align_character",
@@ -58,6 +59,7 @@ object NativeLyricsProviders {
             "utaten" -> UtaTenLyricsClient.getLyrics(title, artist)
             "jlyric" -> JLyricClient.getLyrics(title, artist)
             "joysound" -> JoysoundLyricsClient.getLyrics(title, artist)
+            "lyricstranslate" -> LyricsTranslateClient.getLyrics(title, artist)
             "genius" -> GeniusLyricsClient.getLyrics(title, artist)
             "ctc_align" -> fetchCtcAlignedLyrics(title, artist, durationSec, characterByCharacter = false)
             "ctc_align_character" -> fetchCtcAlignedLyrics(title, artist, durationSec, characterByCharacter = true)
@@ -88,6 +90,7 @@ object NativeLyricsProviders {
             "utaten" -> UtaTenLyricsClient.searchLyrics(title, artist, album, durationSec)
             "jlyric" -> JLyricClient.searchLyrics(title, artist, album, durationSec)
             "joysound" -> JoysoundLyricsClient.searchLyrics(title, artist, album, durationSec)
+            "lyricstranslate" -> LyricsTranslateClient.searchLyrics(title, artist, album, durationSec)
             "genius" -> GeniusLyricsClient.searchLyrics(title, artist, album, durationSec)
             "ctc_align" -> searchCtcAlignedLyrics(title, artist, album, durationSec, characterByCharacter = false)
             "ctc_align_character" -> searchCtcAlignedLyrics(title, artist, album, durationSec, characterByCharacter = true)

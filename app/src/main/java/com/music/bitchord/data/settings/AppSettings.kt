@@ -3840,6 +3840,7 @@ object AppSettings {
                 .putBoolean(KEY_QQ_MUSIC_LYRICS_SOURCE_MIGRATED, true)
                 .putBoolean(KEY_KUGECI_FOLLOWLYRICS_SOURCE_MIGRATED, true)
                 .putBoolean(KEY_JOYSOUND_LYRICS_SOURCE_MIGRATED, true)
+                .putBoolean(KEY_LYRICSTRANSLATE_SOURCE_MIGRATED, true)
                 .putBoolean(KEY_HEURISTIC_CHARACTER_SYNC_SOURCE_MIGRATED, true)
                 .apply()
             return allSources.toSet()
@@ -3878,6 +3879,12 @@ object AppSettings {
             changed = ids.add("joysound") || changed
             edit.putBoolean(KEY_JOYSOUND_LYRICS_SOURCE_MIGRATED, true)
         }
+        if (allSources.any { it.id == "lyricstranslate" } &&
+            !prefs.getBoolean(KEY_LYRICSTRANSLATE_SOURCE_MIGRATED, false)
+        ) {
+            changed = ids.add("lyricstranslate") || changed
+            edit.putBoolean(KEY_LYRICSTRANSLATE_SOURCE_MIGRATED, true)
+        }
         if (allSources.any { it.id == "ctc_align_character" } &&
             !prefs.getBoolean(KEY_HEURISTIC_CHARACTER_SYNC_SOURCE_MIGRATED, false)
         ) {
@@ -3889,6 +3896,7 @@ object AppSettings {
             !prefs.getBoolean(KEY_QQ_MUSIC_LYRICS_SOURCE_MIGRATED, false) ||
             !prefs.getBoolean(KEY_KUGECI_FOLLOWLYRICS_SOURCE_MIGRATED, false) ||
             !prefs.getBoolean(KEY_JOYSOUND_LYRICS_SOURCE_MIGRATED, false) ||
+            !prefs.getBoolean(KEY_LYRICSTRANSLATE_SOURCE_MIGRATED, false) ||
             !prefs.getBoolean(KEY_HEURISTIC_CHARACTER_SYNC_SOURCE_MIGRATED, false)
         ) {
             if (changed) edit.putString(KEY_LYRICS_SOURCES, ids.joinToString(","))
@@ -5217,6 +5225,7 @@ object AppSettings {
     private const val KEY_QQ_MUSIC_LYRICS_SOURCE_MIGRATED = "qq_music_lyrics_source_migrated"
     private const val KEY_KUGECI_FOLLOWLYRICS_SOURCE_MIGRATED = "kugeci_followlyrics_source_migrated"
     private const val KEY_JOYSOUND_LYRICS_SOURCE_MIGRATED = "joysound_lyrics_source_migrated"
+    private const val KEY_LYRICSTRANSLATE_SOURCE_MIGRATED = "lyricstranslate_source_migrated"
     private const val KEY_HEURISTIC_CHARACTER_SYNC_SOURCE_MIGRATED = "heuristic_character_sync_source_migrated"
     private const val KEY_PRIORITIZE_SYLLABLE_SYNC = "prioritize_syllable_sync"
     private const val KEY_SHOW_LYRICS_LOGS = "show_lyrics_logs"
