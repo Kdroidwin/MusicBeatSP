@@ -35,8 +35,7 @@ internal object PlamoLyricsTranslation {
     private const val MODEL_NAME = "plamo-3-translate-0.8b-Q4_K_M.gguf"
     private const val MODEL_URL =
         "https://huggingface.co/pfnet/plamo-3-translate-0.8b-GGUF/resolve/1cf96ae02133958a20074bfdfab76517bb737d00/$MODEL_NAME?download=true"
-    private const val MODEL_VERSION = "plamo3-translate-0.8b-q4km-b11960-v1"
-    private const val CHUNK_UNITS = 8
+    private const val MODEL_VERSION = "plamo3-translate-0.8b-q4km-b11960-v2"
     private const val MAX_RESPONSE_BYTES = 256 * 1024
 
     private val operationMutex = Mutex()
@@ -151,15 +150,15 @@ internal object PlamoLyricsTranslation {
             val total = units.size
             var completed = cached.size
             onProgress(completed, total)
-            for (chunk in pending.chunked(CHUNK_UNITS)) {
+            for (unit in pending) {
                 currentCoroutineContext().ensureActive()
-                val prompt = translationPrompt(chunk, normalizedLanguage)
+                val prompt = translationPrompt(unit.text, normalizedLanguage)
                 val response = withContext(Dispatchers.Default) {
-                    PlamoNativeBridge.nativeGenerate(handle, prompt, 768).orEmpty()
+                    PlamoNativeBridge.nativeGenerate(handle, prompt, 512).orEmpty()
                 }
-                val translated = parseResponse(response, chunk)
-                if (translated.isNotEmpty()) {
-                    cached.putAll(translated)
+                val translated = parseTranslationResponse(response)
+                if (translated != null) {
+                    cached[unit.cacheKey] = translated
                     withContext(Dispatchers.IO) { writeCache(cacheFile, cached) }
                 }
                 completed = cached.size
@@ -476,43 +475,40 @@ internal object PlamoLyricsTranslation {
     private fun isHuggingFaceHost(host: String): Boolean =
         host == "huggingface.co" || host.endsWith(".huggingface.co") || host == "hf.co" || host.endsWith(".hf.co")
 
-    private data class TranslationUnit(val id: String, val cacheKey: String, val text: String)
+    private data class TranslationUnit(val cacheKey: String, val text: String)
 
     private fun buildUnits(lines: List<LyricLine>): List<TranslationUnit> = buildList {
         lines.forEachIndexed { index, line ->
             if (line.text.isNotBlank() && !LrcParser.isSectionHeader(line.text)) {
-                add(TranslationUnit("L${index.toString().padStart(4, '0')}", "line:$index", line.text))
+                add(TranslationUnit("line:$index", line.text))
             }
             line.background?.takeIf { it.text.isNotBlank() }?.let { backing ->
-                add(TranslationUnit("B${index.toString().padStart(4, '0')}", "backing:$index", backing.text))
+                add(TranslationUnit("backing:$index", backing.text))
             }
         }
     }
 
-    private fun translationPrompt(units: List<TranslationUnit>, language: String): String {
-        val input = units.joinToString("\n") { "[[LYRIC_${it.id}]] ${it.text.replace('\n', ' ')}" }
-        return "<|plamo:tag|>dataset<|plamo:msg|>translation" +
-            "<|plamo:tag|>input<|plamo:msg|>Translate these song lyric lines into the language with code '$language'. " +
-            "Keep every supplied line marker exactly as written and preserve one output line per marker, " +
-            "translate only the text after each marker, and do not add explanations.\n$input" +
-            "<|plamo:tag|>output<|plamo:key|>lang<|plamo:val|>$language<|plamo:msg|>"
+    /** PFML3 is a translation task format, not an instruction-following chat format. */
+    private fun translationPrompt(text: String, language: String): String = buildString {
+        append("<|plamo:tag|>dataset<|plamo:msg|>translation")
+        append("<|plamo:tag|>input<|plamo:msg|>")
+        append(text.replace('\n', ' '))
+        append("<|plamo:tag|>output<|plamo:key|>lang<|plamo:val|>")
+        append(language)
+        if (language == "ja") append("<|plamo:key|>form<|plamo:val|>plain")
+        append("<|plamo:msg|>")
     }
 
-    private fun parseResponse(response: String, units: List<TranslationUnit>): Map<String, String> {
-        if (response.isBlank() || response.length > MAX_RESPONSE_BYTES) return emptyMap()
-        val expected = units.associateBy { it.id }
-        val pattern = Regex("^\\[\\[LYRIC_([LB]\\d{4})]]\\s*(.*)$")
-        val output = linkedMapOf<String, String>()
-        response.lineSequence().forEach { raw ->
-            val match = pattern.matchEntire(raw) ?: return@forEach
-            val unit = expected[match.groupValues[1]] ?: return@forEach
-            val text = match.groupValues[2].trim().takeIf { it.isNotBlank() && it.length < 2_000 }
-                ?: return@forEach
-            if (output.put(unit.id, text) != null) return emptyMap()
+    private fun parseTranslationResponse(response: String): String? {
+        // llama.cpp may return the PFML3 boundary token when generation reaches
+        // its limit. It is metadata, not part of the translated lyric.
+        val text = response.trim()
+            .substringBefore("<|plamo:tag|")
+            .substringBefore("<|plamo:bos|")
+            .trim()
+        return text.takeIf {
+            it.isNotEmpty() && it.length <= 2_000 && it.toByteArray(Charsets.UTF_8).size <= MAX_RESPONSE_BYTES
         }
-        return output.takeIf { it.keys == expected.keys }
-            ?.mapKeys { (id, _) -> expected.getValue(id).cacheKey }
-            .orEmpty()
     }
 
     private fun translationCacheFile(context: Context, lines: List<LyricLine>, language: String): File {

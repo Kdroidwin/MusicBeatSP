@@ -1608,6 +1608,7 @@ fun SettingsScreen(
     val convertFollowLyricsToJapaneseKanji by AppSettings.convertFollowLyricsToJapaneseKanji.collectAsStateWithLifecycle()
     val convertKugouToJapaneseKanji by AppSettings.convertKugouToJapaneseKanji.collectAsStateWithLifecycle()
     val translateLyricsWithPlamo by AppSettings.translateLyricsWithPlamo.collectAsStateWithLifecycle()
+    val hideLyricsTranslationProgress by AppSettings.hideLyricsTranslationProgress.collectAsStateWithLifecycle()
     val showLyricsCloseButton by AppSettings.showLyricsCloseButton.collectAsStateWithLifecycle()
     val hideLyricsStatusText by AppSettings.hideLyricsStatusText.collectAsStateWithLifecycle()
     val hideLyricsSavedMessage by AppSettings.hideLyricsSavedMessage.collectAsStateWithLifecycle()
@@ -2180,6 +2181,7 @@ fun SettingsScreen(
         SettingsSearchEntry(stringResource(R.string.lyrics_furigana), stringResource(R.string.lyrics_furigana_subtitle), listOf("lyrics", "furigana", "ruby", "ふりがな", "ルビ"), showLyricsFurigana) { AppSettings.setShowLyricsFurigana(!showLyricsFurigana) },
         SettingsSearchEntry(stringResource(R.string.lyrics_auto_fit), stringResource(R.string.lyrics_auto_fit_subtitle), listOf("lyrics", "one line", "fit", "歌詞", "一行", "文字サイズ"), autoFitOneLineLyrics) { AppSettings.setAutoFitOneLineLyrics(!autoFitOneLineLyrics) },
         SettingsSearchEntry(stringResource(R.string.lyrics_translation_plamo), stringResource(R.string.lyrics_translation_plamo_subtitle), stringResource(R.string.lyrics_translation_plamo_search_keywords).split(' '), translateLyricsWithPlamo) { AppSettings.setTranslateLyricsWithPlamo(!translateLyricsWithPlamo) },
+        SettingsSearchEntry(stringResource(R.string.hide_lyrics_translation_progress), stringResource(R.string.hide_lyrics_translation_progress_subtitle), listOf("lyrics", "translation", "progress", "status", "歌詞", "翻訳", "進捗", "翻訳中"), hideLyricsTranslationProgress) { AppSettings.setHideLyricsTranslationProgress(!hideLyricsTranslationProgress) },
         compactLyricsSearchSourcesSearchEntry(compactLyricsSearchSources),
         SettingsSearchEntry(stringResource(R.string.spatial_audio), stringResource(R.string.spatial_audio_subtitle), listOf("spatial", "空間オーディオ"), spatialAudio) { AppSettings.setSpatialAudio(!spatialAudio) },
         SettingsSearchEntry(stringResource(R.string.parametric_eq), stringResource(R.string.parametric_eq_subtitle), listOf("parametric", "equalizer", "frequency", "Q", "gain", "パラメトリック", "イコライザー", "周波数"), parametricEqEnabled) { AppSettings.setParametricEqEnabled(!parametricEqEnabled) },
@@ -5279,6 +5281,19 @@ fun SettingsScreen(
             )
             RowDivider()
             SettingsRow(
+                icon = Icons.Rounded.VisibilityOff,
+                title = stringResource(R.string.hide_lyrics_translation_progress),
+                subtitle = stringResource(R.string.hide_lyrics_translation_progress_subtitle),
+                trailing = {
+                    Switch(
+                        checked = hideLyricsTranslationProgress,
+                        onCheckedChange = AppSettings::setHideLyricsTranslationProgress,
+                    )
+                },
+                onClick = { AppSettings.setHideLyricsTranslationProgress(!hideLyricsTranslationProgress) },
+            )
+            RowDivider()
+            SettingsRow(
                 icon = Icons.AutoMirrored.Rounded.Notes,
                 title = stringResource(R.string.compact_lyrics_search_sources),
                 subtitle = stringResource(R.string.compact_lyrics_search_sources_subtitle),
@@ -6359,6 +6374,23 @@ fun SettingsScreen(
                 progressPercent = plamoDownloadPercent,
                 canDownload = PlamoLyricsTranslation.canDownload(context),
                 onClick = { showPlamoModelDialog = true },
+            )
+            RowDivider()
+            SettingsRow(
+                icon = Icons.Rounded.VisibilityOff,
+                title = stringResource(R.string.hide_lyrics_translation_progress),
+                subtitle = stringResource(R.string.hide_lyrics_translation_progress_subtitle),
+                trailing = {
+                    Switch(
+                        checked = hideLyricsTranslationProgress,
+                        onCheckedChange = AppSettings::setHideLyricsTranslationProgress,
+                        colors = SwitchDefaults.colors(
+                            checkedTrackColor = MaterialTheme.colorScheme.primary,
+                            checkedBorderColor = MaterialTheme.colorScheme.primary,
+                        ),
+                    )
+                },
+                onClick = { AppSettings.setHideLyricsTranslationProgress(!hideLyricsTranslationProgress) },
             )
             RowDivider()
             SettingsRow(

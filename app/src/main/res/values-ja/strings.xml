@@ -1925,8 +1925,8 @@
     <string name="lyrics_ctc_model_delete_failed">CTCモデルを削除できませんでした。</string>
     <string name="lyrics_ctc_model_deleting">削除中…</string>
     <string name="lyrics_ctc_model_search_keywords">CTC モデル 同期歌詞 容量 削除</string>
-    <string name="lyrics_translation_plamo">PLaMoで歌詞を翻訳</string>
-    <string name="lyrics_translation_plamo_subtitle">原文とtimestampはそのままに、各行の下へ端末の言語で翻訳を表示します。下から任意のPLaMo 3 Translate Q4_K_Mモデル（約573 MB）をダウンロードしてください。</string>
+    <string name="lyrics_translation_plamo">歌詞翻訳ボタンを表示</string>
+    <string name="lyrics_translation_plamo_subtitle">有効にすると歌詞画面に地球儀アイコンを表示します。タップすると原文と並べて端末の言語で翻訳を表示します。下からPLaMo 3 Translate Q4_K_Mモデル（約573 MB）をダウンロードしてください。</string>
     <string name="lyrics_translation_plamo_model">PLaMo 3 Translateモデル</string>
     <string name="lyrics_translation_plamo_model_subtitle">公式の0.8B Q4_K_M GGUFモデル（約573 MB）をダウンロードします。翻訳は端末内で行い、モデルはAPKに含めません。</string>
     <string name="lyrics_translation_plamo_model_requires_network">標準版でオンラインモードのときにモデルをダウンロードできます。</string>
@@ -1946,6 +1946,10 @@
     <string name="lyrics_translation_plamo_working">端末内で歌詞を翻訳中… %1$d%%</string>
     <string name="lyrics_translation_plamo_failed">歌詞を翻訳できませんでした。原文は変更されていません。</string>
     <string name="lyrics_translation_plamo_search_keywords">PLaMo 翻訳 歌詞 モデル ダウンロード 削除 原文 二言語</string>
+    <string name="lyrics_show_translation">翻訳した歌詞を表示</string>
+    <string name="lyrics_show_original">原文の歌詞を表示</string>
+    <string name="hide_lyrics_translation_progress">翻訳中ステータスを非表示</string>
+    <string name="hide_lyrics_translation_progress_subtitle">端末内で翻訳している間に表示される進捗メッセージを隠します。</string>
     <string name="lyrics_shift_all_timestamps">全行のtimestampをずらす</string>
     <string name="lyrics_shift_all_timestamps_help">全timestampに加える時間を入力し、timestampを進めるか戻すか選択してください。</string>
     <string name="lyrics_set_first_timestamp">最初の行のtimestampを設定</string>

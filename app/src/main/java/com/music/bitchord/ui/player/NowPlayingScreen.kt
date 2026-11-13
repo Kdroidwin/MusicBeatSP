@@ -120,6 +120,7 @@ import androidx.compose.material.icons.rounded.GraphicEq
 import androidx.compose.material.icons.rounded.Headphones
 import androidx.compose.material.icons.rounded.History
 import androidx.compose.material.icons.rounded.Info
+import androidx.compose.material.icons.rounded.Language
 import androidx.compose.material.icons.rounded.MoreHoriz
 import androidx.compose.material.icons.rounded.MoreVert
 import androidx.compose.material.icons.rounded.MusicNote
@@ -4605,6 +4606,7 @@ private fun LyricsPanel(
     val clock = rememberLyricClock(positionMs, isPlaying)
     val context = LocalContext.current
     val translateLyrics by AppSettings.translateLyricsWithPlamo.collectAsStateWithLifecycle()
+    val hideTranslationProgress by AppSettings.hideLyricsTranslationProgress.collectAsStateWithLifecycle()
     val targetLanguage = remember {
         AppCompatDelegate.getApplicationLocales().get(0)?.toLanguageTag()
             ?.takeIf(String::isNotBlank)
@@ -4613,14 +4615,24 @@ private fun LyricsPanel(
     var translatedLyrics by remember(trackKey, lines, targetLanguage) { mutableStateOf<Map<String, String>>(emptyMap()) }
     var plamoStatus by remember(trackKey, lines, targetLanguage) { mutableStateOf(PlamoLyricsStatus.Idle) }
     var translationProgress by remember(trackKey, lines, targetLanguage) { mutableIntStateOf(0) }
+    var translationAttempt by remember(trackKey, lines, targetLanguage) { mutableIntStateOf(0) }
+    var showTranslatedLyrics by remember(trackKey, lines, targetLanguage) { mutableStateOf(false) }
 
-    LaunchedEffect(trackKey, lines, targetLanguage, translateLyrics) {
-        translatedLyrics = emptyMap()
-        translationProgress = 0
-        if (!translateLyrics || lines.isEmpty()) {
+    LaunchedEffect(trackKey, lines, targetLanguage, translateLyrics, translationAttempt) {
+        if (!translateLyrics) {
+            translatedLyrics = emptyMap()
+            plamoStatus = PlamoLyricsStatus.Idle
+            translationProgress = 0
+            translationAttempt = 0
+            showTranslatedLyrics = false
+            return@LaunchedEffect
+        }
+        if (translationAttempt == 0 || lines.isEmpty()) {
             plamoStatus = PlamoLyricsStatus.Idle
             return@LaunchedEffect
         }
+        if (translatedLyrics.isNotEmpty()) return@LaunchedEffect
+        translationProgress = 0
         if (!withContext(Dispatchers.IO) { PlamoLyricsTranslation.hasModel(context) }) {
             plamoStatus = PlamoLyricsStatus.MissingModel
             return@LaunchedEffect
@@ -4740,6 +4752,35 @@ private fun LyricsPanel(
     }
 
     Box(modifier) {
+        if (translateLyrics) {
+            IconButton(
+                onClick = {
+                    val willShowTranslation = !showTranslatedLyrics
+                    showTranslatedLyrics = willShowTranslation
+                    if (willShowTranslation &&
+                        (translationAttempt == 0 || plamoStatus == PlamoLyricsStatus.MissingModel || plamoStatus == PlamoLyricsStatus.Failed)
+                    ) {
+                        translatedLyrics = emptyMap()
+                        translationAttempt += 1
+                    }
+                },
+                modifier = Modifier
+                    .align(Alignment.TopEnd)
+                    .padding(top = 4.dp, end = 4.dp)
+                    .zIndex(1f),
+            ) {
+                Icon(
+                    imageVector = Icons.Rounded.Language,
+                    contentDescription = stringResource(
+                        if (showTranslatedLyrics) R.string.lyrics_show_original
+                        else R.string.lyrics_show_translation,
+                    ),
+                    tint = LocalPlayerLyricInk.current.copy(
+                        alpha = if (showTranslatedLyrics) 1f else 0.82f,
+                    ),
+                )
+            }
+        }
         LazyColumn(
             state = listState,
             modifier = Modifier
@@ -4898,7 +4939,7 @@ private fun LyricsPanel(
                         textAlign = lyricTextAlign,
                         modifier = Modifier.fillMaxWidth(),
                     )
-                    translatedLyrics["line:$index"]?.takeIf { it != line.text }?.let { translation ->
+                    translatedLyrics["line:$index"]?.takeIf { showTranslatedLyrics && it != line.text }?.let { translation ->
                         Text(
                             text = translation,
                             style = style.copy(
@@ -4939,7 +4980,7 @@ private fun LyricsPanel(
                                 .padding(start = GLOW_ROOM, end = GLOW_ROOM, bottom = GLOW_ROOM)
                                 .graphicsLayer { alpha = BACKING_ALPHA },
                         )
-                        translatedLyrics["backing:$index"]?.takeIf { it != backing.text }?.let { translation ->
+                        translatedLyrics["backing:$index"]?.takeIf { showTranslatedLyrics && it != backing.text }?.let { translation ->
                             Text(
                                 text = translation,
                                 style = style.copy(
@@ -4965,7 +5006,7 @@ private fun LyricsPanel(
             PlamoLyricsStatus.Translating -> stringResource(R.string.lyrics_translation_plamo_working, translationProgress)
             PlamoLyricsStatus.Failed -> stringResource(R.string.lyrics_translation_plamo_failed)
         }
-        if (statusText != null) {
+        if (statusText != null && !(hideTranslationProgress && plamoStatus == PlamoLyricsStatus.Translating)) {
             Text(
                 text = statusText,
                 style = MaterialTheme.typography.labelSmall,
