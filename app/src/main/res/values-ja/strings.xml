@@ -1930,12 +1930,16 @@
     <string name="lyrics_translation_plamo_model">PLaMo 3 Translateモデル</string>
     <string name="lyrics_translation_plamo_model_subtitle">公式の0.8B Q4_K_M GGUFモデル（約573 MB）をダウンロードします。翻訳は端末内で行い、モデルはAPKに含めません。</string>
     <string name="lyrics_translation_plamo_model_requires_network">標準版でオンラインモードのときにモデルをダウンロードできます。</string>
+    <string name="lyrics_translation_plamo_partial_available">未完了のダウンロード（%1$s）があります。タップして再開または削除できます。</string>
+    <string name="lyrics_translation_plamo_partial_message">未完了のモデルファイル（%1$s）が残っています。ダウンロードを再開するか、削除してストレージ容量を戻せます。</string>
+    <string name="lyrics_translation_plamo_resume">ダウンロードを再開</string>
+    <string name="lyrics_translation_plamo_delete_partial">未完了ファイルを削除</string>
     <string name="lyrics_translation_plamo_download">モデルをダウンロード</string>
     <string name="lyrics_translation_plamo_downloading">モデルをダウンロード中… %1$d%%</string>
     <string name="lyrics_translation_plamo_ready">ダウンロード済み・タップで削除</string>
     <string name="lyrics_translation_plamo_delete_title">PLaMoモデルを削除しますか？</string>
     <string name="lyrics_translation_plamo_delete_message">ダウンロードした約573 MBのモデルと保存済み翻訳を削除します。原文の歌詞や音源ファイルは変更しません。</string>
-    <string name="lyrics_translation_plamo_delete_success">PLaMoモデルを削除しました。</string>
+    <string name="lyrics_translation_plamo_delete_success">PLaMoモデルデータを削除しました。</string>
     <string name="lyrics_translation_plamo_delete_failed">PLaMoモデルを削除できませんでした。</string>
     <string name="lyrics_translation_plamo_download_failed">PLaMoモデルをダウンロードできませんでした。</string>
     <string name="lyrics_translation_plamo_model_missing">翻訳表示には設定からPLaMoモデルをダウンロードしてください。</string>

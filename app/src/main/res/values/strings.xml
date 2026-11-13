@@ -1957,12 +1957,16 @@
     <string name="lyrics_translation_plamo_model">PLaMo 3 Translate model</string>
     <string name="lyrics_translation_plamo_model_subtitle">Downloads the official 0.8B Q4_K_M GGUF model (about 573 MB). Translation runs on this device; the model is not included in the APK.</string>
     <string name="lyrics_translation_plamo_model_requires_network">The model can be downloaded in the standard build when online mode is available.</string>
+    <string name="lyrics_translation_plamo_partial_available">An incomplete download (%1$s) is available. Tap to resume or delete it.</string>
+    <string name="lyrics_translation_plamo_partial_message">An incomplete model file (%1$s) remains. You can resume the download or delete it to reclaim storage.</string>
+    <string name="lyrics_translation_plamo_resume">Resume download</string>
+    <string name="lyrics_translation_plamo_delete_partial">Delete partial file</string>
     <string name="lyrics_translation_plamo_download">Download model</string>
     <string name="lyrics_translation_plamo_downloading">Downloading model… %1$d%%</string>
     <string name="lyrics_translation_plamo_ready">Model downloaded · tap to delete</string>
     <string name="lyrics_translation_plamo_delete_title">Delete the PLaMo model?</string>
     <string name="lyrics_translation_plamo_delete_message">This deletes the downloaded 573 MB model and its saved lyric translations. Your original lyrics and audio files are not changed.</string>
-    <string name="lyrics_translation_plamo_delete_success">PLaMo model deleted.</string>
+    <string name="lyrics_translation_plamo_delete_success">PLaMo model data deleted.</string>
     <string name="lyrics_translation_plamo_delete_failed">Could not delete the PLaMo model.</string>
     <string name="lyrics_translation_plamo_download_failed">Could not download the PLaMo model.</string>
     <string name="lyrics_translation_plamo_model_missing">Download the PLaMo model in Settings to show translated lyrics.</string>

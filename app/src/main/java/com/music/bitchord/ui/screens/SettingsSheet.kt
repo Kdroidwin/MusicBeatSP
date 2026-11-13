@@ -1660,12 +1660,17 @@ fun SettingsScreen(
     var showDeleteCtcModelDialog by remember { mutableStateOf(false) }
     var deletingCtcModel by remember { mutableStateOf(false) }
     var plamoModelPresent by remember(context) { mutableStateOf(false) }
+    var plamoPartialBytes by remember(context) { mutableStateOf(0L) }
     var plamoDownloadPercent by remember(context) { mutableStateOf(-1) }
     var plamoDownloadCanceled by remember(context) { mutableStateOf(false) }
     var showPlamoModelDialog by remember { mutableStateOf(false) }
     var deletingPlamoModel by remember { mutableStateOf(false) }
     LaunchedEffect(context) {
-        plamoModelPresent = withContext(Dispatchers.IO) { PlamoLyricsTranslation.hasModel(context) }
+        val modelState = withContext(Dispatchers.IO) {
+            PlamoLyricsTranslation.hasModel(context) to PlamoLyricsTranslation.downloadPartialBytes(context)
+        }
+        plamoModelPresent = modelState.first
+        plamoPartialBytes = modelState.second
     }
     var showLyricsWebSearchQueryDialog by remember { mutableStateOf(false) }
     var lyricsWebSearchQueryDraft by remember(lyricsWebSearchQuery) { mutableStateOf(lyricsWebSearchQuery) }
@@ -3236,6 +3241,7 @@ fun SettingsScreen(
                 }
             } finally {
                 plamoModelPresent = PlamoLyricsTranslation.hasModel(context)
+                plamoPartialBytes = PlamoLyricsTranslation.downloadPartialBytes(context)
                 plamoDownloadPercent = -1
                 plamoDownloadCanceled = false
             }
@@ -3244,6 +3250,24 @@ fun SettingsScreen(
     val cancelPlamoModelDownload: () -> Unit = {
         plamoDownloadCanceled = true
         PlamoLyricsTranslation.cancelDownload()
+    }
+    val deletePlamoModelData: () -> Unit = {
+        deletingPlamoModel = true
+        settingsScope.launch {
+            try {
+                PlamoLyricsTranslation.deleteModel(context)
+                plamoModelPresent = false
+                plamoPartialBytes = 0L
+                showPlamoModelDialog = false
+                Toast.makeText(context, R.string.lyrics_translation_plamo_delete_success, Toast.LENGTH_SHORT).show()
+            } catch (cancelled: CancellationException) {
+                throw cancelled
+            } catch (_: Exception) {
+                Toast.makeText(context, R.string.lyrics_translation_plamo_delete_failed, Toast.LENGTH_LONG).show()
+            } finally {
+                deletingPlamoModel = false
+            }
+        }
     }
 
     val version = remember(context) {
@@ -3287,12 +3311,16 @@ fun SettingsScreen(
         ),
         SettingsSearchEntry(
             title = stringResource(R.string.lyrics_translation_plamo_model),
-            subtitle = stringResource(
-                if (plamoModelPresent) R.string.lyrics_translation_plamo_ready
-                else R.string.lyrics_translation_plamo_model_subtitle,
-            ),
+            subtitle = when {
+                plamoModelPresent -> stringResource(R.string.lyrics_translation_plamo_ready)
+                plamoPartialBytes > 0L -> stringResource(
+                    R.string.lyrics_translation_plamo_partial_available,
+                    android.text.format.Formatter.formatShortFileSize(context, plamoPartialBytes),
+                )
+                else -> stringResource(R.string.lyrics_translation_plamo_model_subtitle)
+            },
             keywords = stringResource(R.string.lyrics_translation_plamo_search_keywords).split(' '),
-            enabled = plamoModelPresent || PlamoLyricsTranslation.canDownload(context) || plamoDownloadPercent >= 0,
+            enabled = plamoModelPresent || plamoPartialBytes > 0L || PlamoLyricsTranslation.canDownload(context) || plamoDownloadPercent >= 0,
             activate = { showPlamoModelDialog = true },
         ),
         SettingsSearchEntry(
@@ -5244,6 +5272,7 @@ fun SettingsScreen(
             RowDivider()
             PlamoModelSettingsRow(
                 downloaded = plamoModelPresent,
+                partialBytes = plamoPartialBytes,
                 progressPercent = plamoDownloadPercent,
                 canDownload = PlamoLyricsTranslation.canDownload(context),
                 onClick = { showPlamoModelDialog = true },
@@ -6326,6 +6355,7 @@ fun SettingsScreen(
             RowDivider()
             PlamoModelSettingsRow(
                 downloaded = plamoModelPresent,
+                partialBytes = plamoPartialBytes,
                 progressPercent = plamoDownloadPercent,
                 canDownload = PlamoLyricsTranslation.canDownload(context),
                 onClick = { showPlamoModelDialog = true },
@@ -8504,16 +8534,18 @@ fun SettingsScreen(
             title = { Text(stringResource(R.string.lyrics_translation_plamo_model)) },
             text = {
                 Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
-                    Text(
-                        stringResource(
-                            when {
-                                plamoDownloadPercent >= 0 -> R.string.lyrics_translation_plamo_downloading
-                                plamoModelPresent -> R.string.lyrics_translation_plamo_delete_message
-                                else -> R.string.lyrics_translation_plamo_model_subtitle
-                            },
-                            plamoDownloadPercent.coerceAtLeast(0),
-                        ),
-                    )
+                    Text(when {
+                        plamoDownloadPercent >= 0 -> stringResource(
+                            R.string.lyrics_translation_plamo_downloading,
+                            plamoDownloadPercent,
+                        )
+                        plamoModelPresent -> stringResource(R.string.lyrics_translation_plamo_delete_message)
+                        plamoPartialBytes > 0L -> stringResource(
+                            R.string.lyrics_translation_plamo_partial_message,
+                            android.text.format.Formatter.formatShortFileSize(context, plamoPartialBytes),
+                        )
+                        else -> stringResource(R.string.lyrics_translation_plamo_model_subtitle)
+                    })
                     if (plamoDownloadPercent >= 0) {
                         androidx.compose.material3.LinearProgressIndicator(
                             progress = { plamoDownloadPercent / 100f },
@@ -8524,30 +8556,15 @@ fun SettingsScreen(
             },
             confirmButton = {
                 TextButton(
-                    enabled = !deletingPlamoModel,
+                    enabled = !deletingPlamoModel && (plamoDownloadPercent >= 0 || plamoModelPresent ||
+                        plamoPartialBytes == 0L || PlamoLyricsTranslation.canDownload(context)),
                     onClick = {
                         when {
                             plamoDownloadPercent >= 0 -> {
                                 cancelPlamoModelDownload()
                                 showPlamoModelDialog = false
                             }
-                            plamoModelPresent -> {
-                                deletingPlamoModel = true
-                                settingsScope.launch {
-                                    try {
-                                        PlamoLyricsTranslation.deleteModel(context)
-                                        plamoModelPresent = false
-                                        showPlamoModelDialog = false
-                                        Toast.makeText(context, R.string.lyrics_translation_plamo_delete_success, Toast.LENGTH_SHORT).show()
-                                    } catch (cancelled: CancellationException) {
-                                        throw cancelled
-                                    } catch (_: Exception) {
-                                        Toast.makeText(context, R.string.lyrics_translation_plamo_delete_failed, Toast.LENGTH_LONG).show()
-                                    } finally {
-                                        deletingPlamoModel = false
-                                    }
-                                }
-                            }
+                            plamoModelPresent -> deletePlamoModelData()
                             PlamoLyricsTranslation.canDownload(context) -> startPlamoModelDownload()
                         }
                     },
@@ -8558,6 +8575,7 @@ fun SettingsScreen(
                                 deletingPlamoModel -> R.string.lyrics_ctc_model_deleting
                                 plamoDownloadPercent >= 0 -> R.string.cancel
                                 plamoModelPresent -> R.string.delete
+                                plamoPartialBytes > 0L -> R.string.lyrics_translation_plamo_resume
                                 else -> R.string.lyrics_translation_plamo_download
                             },
                         ),
@@ -8565,10 +8583,17 @@ fun SettingsScreen(
                 }
             },
             dismissButton = {
-                TextButton(
-                    enabled = !deletingPlamoModel,
-                    onClick = { showPlamoModelDialog = false },
-                ) { Text(stringResource(R.string.close)) }
+                if (!plamoModelPresent && plamoPartialBytes > 0L && plamoDownloadPercent < 0) {
+                    TextButton(
+                        enabled = !deletingPlamoModel,
+                        onClick = deletePlamoModelData,
+                    ) { Text(stringResource(R.string.lyrics_translation_plamo_delete_partial)) }
+                } else {
+                    TextButton(
+                        enabled = !deletingPlamoModel,
+                        onClick = { showPlamoModelDialog = false },
+                    ) { Text(stringResource(R.string.close)) }
+                }
             },
         )
     }
@@ -9922,6 +9947,7 @@ internal fun SettingsRow(
 @Composable
 private fun PlamoModelSettingsRow(
     downloaded: Boolean,
+    partialBytes: Long,
     progressPercent: Int,
     canDownload: Boolean,
     onClick: () -> Unit,
@@ -9929,24 +9955,28 @@ private fun PlamoModelSettingsRow(
     val subtitle = when {
         progressPercent >= 0 -> stringResource(R.string.lyrics_translation_plamo_downloading, progressPercent)
         downloaded -> stringResource(R.string.lyrics_translation_plamo_ready)
+        partialBytes > 0L -> stringResource(
+            R.string.lyrics_translation_plamo_partial_available,
+            android.text.format.Formatter.formatShortFileSize(LocalContext.current, partialBytes),
+        )
         !canDownload -> stringResource(R.string.lyrics_translation_plamo_model_requires_network)
         else -> stringResource(R.string.lyrics_translation_plamo_model_subtitle)
     }
     SettingsRow(
-        icon = if (downloaded) Icons.Rounded.DeleteSweep else Icons.Rounded.FileDownload,
+        icon = if (downloaded || partialBytes > 0L) Icons.Rounded.DeleteSweep else Icons.Rounded.FileDownload,
         title = stringResource(R.string.lyrics_translation_plamo_model),
         subtitle = subtitle,
-        enabled = downloaded || canDownload || progressPercent >= 0,
+        enabled = downloaded || partialBytes > 0L || canDownload || progressPercent >= 0,
         onClick = onClick,
         trailing = {
             if (progressPercent >= 0) {
                 CircularProgressIndicator(modifier = Modifier.size(20.dp), strokeWidth = 2.dp)
             } else {
-                IconButton(onClick = onClick, enabled = downloaded || canDownload) {
+                IconButton(onClick = onClick, enabled = downloaded || partialBytes > 0L || canDownload) {
                     Icon(
-                        imageVector = if (downloaded) Icons.Rounded.DeleteSweep else Icons.Rounded.FileDownload,
+                        imageVector = if (downloaded || partialBytes > 0L) Icons.Rounded.DeleteSweep else Icons.Rounded.FileDownload,
                         contentDescription = stringResource(
-                            if (downloaded) R.string.delete else R.string.lyrics_translation_plamo_download,
+                            if (downloaded || partialBytes > 0L) R.string.delete else R.string.lyrics_translation_plamo_download,
                         ),
                     )
                 }

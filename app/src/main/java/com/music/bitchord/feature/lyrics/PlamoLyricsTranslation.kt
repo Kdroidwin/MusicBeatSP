@@ -30,10 +30,11 @@ import kotlin.coroutines.resumeWithException
 
 /** Optional, on-device PLaMo 3 Translate Q4_K_M runtime and line-preserving lyric translator. */
 internal object PlamoLyricsTranslation {
-    const val MODEL_BYTES = 573_116_288L
+    // Exact size of the official Q4_K_M artifact at the pinned Hugging Face revision.
+    const val MODEL_BYTES = 573_126_848L
     private const val MODEL_NAME = "plamo-3-translate-0.8b-Q4_K_M.gguf"
     private const val MODEL_URL =
-        "https://huggingface.co/pfnet/plamo-3-translate-0.8b-GGUF/resolve/main/$MODEL_NAME?download=true"
+        "https://huggingface.co/pfnet/plamo-3-translate-0.8b-GGUF/resolve/1cf96ae02133958a20074bfdfab76517bb737d00/$MODEL_NAME?download=true"
     private const val MODEL_VERSION = "plamo3-translate-0.8b-q4km-b11960-v1"
     private const val CHUNK_UNITS = 8
     private const val MAX_RESPONSE_BYTES = 256 * 1024
@@ -426,8 +427,13 @@ internal object PlamoLyricsTranslation {
                             val append = offset > 0L && res.code == 206
                             if (append) {
                                 val range = res.header("Content-Range") ?: throw IOException("再開位置を検証できませんでした。")
-                                val rangeStart = Regex("bytes (\\d+)-").find(range)?.groupValues?.getOrNull(1)?.toLongOrNull()
-                                if (rangeStart != offset) throw IOException("モデルの再開位置が一致しません。")
+                                val rangeMatch = Regex("bytes (\\d+)-(\\d+)/(\\d+)").matchEntire(range)
+                                val rangeStart = rangeMatch?.groupValues?.getOrNull(1)?.toLongOrNull()
+                                val rangeEnd = rangeMatch?.groupValues?.getOrNull(2)?.toLongOrNull()
+                                val rangeTotal = rangeMatch?.groupValues?.getOrNull(3)?.toLongOrNull()
+                                if (rangeStart != offset || rangeTotal != MODEL_BYTES || rangeEnd == null || rangeEnd >= MODEL_BYTES) {
+                                    throw IOException("モデルの再開位置または全体サイズが一致しません。")
+                                }
                             }
                             val startingBytes = if (append) offset else 0L
                             val body = res.body ?: throw IOException("モデルの応答が空です。")
