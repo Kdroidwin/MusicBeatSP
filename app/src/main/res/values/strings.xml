@@ -242,6 +242,8 @@
     <string name="widget_pill_description">A rounded-square cover with the current title and previous, play or pause, and next controls.</string>
     <string name="widget_now_playing_4x1_label">Now playing 4×1</string>
     <string name="widget_now_playing_4x1_description">BitChord-style 4×1 player with round album art, Like, previous, play or pause, next, and Shuffle controls.</string>
+    <string name="widget_now_playing_rounded_4x1_label">Now playing 4×1 (rounded)</string>
+    <string name="widget_now_playing_rounded_4x1_description">4×1 player with a rounded-rectangle panel and a rounded-square album cover.</string>
     <string name="widget_shuffle">Shuffle</string>
     <string name="widget_shuffle_on">Shuffle on</string>
     <string name="widget_play">Play</string>

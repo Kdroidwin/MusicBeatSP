@@ -162,9 +162,36 @@ internal object MediaWidgetArt {
     fun peekCircle(key: String, sizePx: Int): Bitmap? =
         composites[circleKey(key, sizePx)]?.takeIf { !it.isRecycled }
 
+    /** The second BitChord 4×1 choice: the cover clipped to a rounded square. */
+    suspend fun roundedSquare(context: Context, artworkUrl: String?, sizePx: Int, key: String): Bitmap? {
+        peekRoundedSquare(key, sizePx)?.let { return it }
+        if (isCoolingOff(key)) return null
+        val cover = loadArtwork(context, artworkUrl, sizePx)
+        if (cover == null) {
+            if (!artworkUrl.isNullOrBlank()) failures[key] = SystemClock.elapsedRealtime()
+            return null
+        }
+        val square = Bitmap.createBitmap(sizePx, sizePx, Bitmap.Config.ARGB_8888)
+        Canvas(square).fillCentreCropped(cover)
+        val rounded = square.withRoundedCorners(sizePx * ROUNDED_SQUARE_CORNER_FRACTION)
+        square.recycle()
+        composites.put(roundedSquareKey(key, sizePx), rounded)
+        return rounded
+    }
+
+    fun peekRoundedSquare(key: String, sizePx: Int): Bitmap? =
+        composites[roundedSquareKey(key, sizePx)]?.takeIf { !it.isRecycled }
+
     /** Draws the upstream BitChord 4×1 blurred album-art capsule. */
-    suspend fun pill(context: Context, artworkUrl: String?, widthPx: Int, heightPx: Int, key: String?): Bitmap {
-        key?.let { peekPill(it, widthPx, heightPx) }?.let { return it }
+    suspend fun pill(
+        context: Context,
+        artworkUrl: String?,
+        widthPx: Int,
+        heightPx: Int,
+        key: String?,
+        cornerRadiusPx: Float = heightPx / 2f,
+    ): Bitmap {
+        key?.let { peekPill(it, widthPx, heightPx, cornerRadiusPx) }?.let { return it }
         val cover = if (key == null || isCoolingOff(key)) null else loadArtwork(context, artworkUrl, ROW_ART_PX)
         val failed = cover == null && !artworkUrl.isNullOrBlank()
         if (failed && key != null) failures[key] = SystemClock.elapsedRealtime()
@@ -212,18 +239,21 @@ internal object MediaWidgetArt {
                 )
             },
         )
-        val rounded = composed.withRoundedCorners(heightPx / 2f, PILL_ALPHA)
+        val rounded = composed.withRoundedCorners(cornerRadiusPx, PILL_ALPHA)
         composed.recycle()
-        if (!failed && key != null) composites.put(pillKey(key, widthPx, heightPx), rounded)
+        if (!failed && key != null) composites.put(pillKey(key, widthPx, heightPx, cornerRadiusPx), rounded)
         return rounded
     }
 
-    fun peekPill(key: String, widthPx: Int, heightPx: Int): Bitmap? =
-        composites[pillKey(key, widthPx, heightPx)]?.takeIf { !it.isRecycled }
+    fun peekPill(key: String, widthPx: Int, heightPx: Int, cornerRadiusPx: Float = heightPx / 2f): Bitmap? =
+        composites[pillKey(key, widthPx, heightPx, cornerRadiusPx)]?.takeIf { !it.isRecycled }
 
     private fun circleKey(key: String, sizePx: Int) = "circle|$key|$sizePx"
 
-    private fun pillKey(key: String, widthPx: Int, heightPx: Int) = "pill|$key|$widthPx|$heightPx"
+    private fun roundedSquareKey(key: String, sizePx: Int) = "rounded-square|$key|$sizePx"
+
+    private fun pillKey(key: String, widthPx: Int, heightPx: Int, cornerRadiusPx: Float) =
+        "pill|$key|$widthPx|$heightPx|${cornerRadiusPx.roundToInt()}"
 
     /** Drops every remembered composite — the last widget has just been removed. */
     fun clear() {
@@ -663,6 +693,7 @@ internal object MediaWidgetArt {
     private const val PILL_ALPHA = 210
     private const val PILL_WORKING_WIDTH_PX = 64
     private const val PILL_BLUR_FRACTION = 0.1f
+    private const val ROUNDED_SQUARE_CORNER_FRACTION = 0.16f
 
     /** Alpha channel for the opaque pixels [boxPass] writes. */
     private const val OPAQUE = 0xFF shl 24

@@ -212,6 +212,8 @@
     <string name="widget_pill_description">角丸四角のアルバムアート、曲名、前の曲・再生／一時停止・次の曲の操作を表示します。</string>
     <string name="widget_now_playing_4x1_label">再生中 4×1</string>
     <string name="widget_now_playing_4x1_description">丸いアルバムアートと高評価・前の曲・再生／一時停止・次の曲・シャッフルを備えたBitChord風ウィジェットです。</string>
+    <string name="widget_now_playing_rounded_4x1_label">再生中 4×1（角丸）</string>
+    <string name="widget_now_playing_rounded_4x1_description">角丸の四角い本体と角丸四角のアルバムアートを使う4×1再生ウィジェットです。</string>
     <string name="widget_shuffle">シャッフル</string>
     <string name="widget_shuffle_on">シャッフル中</string>
     <string name="widget_play">再生</string>

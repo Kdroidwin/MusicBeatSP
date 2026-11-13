@@ -35,4 +35,5 @@
     <dimen name="widget_pill_height">78dp</dimen>
     <dimen name="widget_pill_art">64dp</dimen>
     <dimen name="widget_button_pill">38dp</dimen>
+    <dimen name="widget_now_playing_corner_radius">16dp</dimen>
 </resources>
