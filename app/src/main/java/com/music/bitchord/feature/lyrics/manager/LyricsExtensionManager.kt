@@ -318,6 +318,7 @@ object LyricsExtensionManager {
             }
 
             var updatedCount = 0
+            var blockedScriptUpdateCount = 0
 
             for (remoteItem in remoteRegistry.extensions) {
                 if (!extensionsEnabled) return@withContext Result.failure(IllegalStateException("Lyrics extensions are disabled"))
@@ -360,21 +361,40 @@ object LyricsExtensionManager {
                     } else {
                         remoteItem.scriptSha256?.lowercase(Locale.ROOT)
                     }
-                    val checksumMatches = expectedChecksum != null && expectedChecksum == actualChecksum
+                    val matchingChecksum = actualChecksum?.takeIf { it == expectedChecksum }
+                    val checksumMatches = matchingChecksum != null
+                    // A custom registry controls both its script and the hash
+                    // in its index. The hash proves the download matches that
+                    // index, but by itself does not protect an installed user
+                    // from a compromised registry changing both values. Keep
+                    // the existing installed script as the trust pin during
+                    // background sync. Replacing code or adding a new custom
+                    // extension is allowed only from the explicit Sync Now
+                    // action (force=true). The built-in registry is separately
+                    // pinned to hashes compiled into this APK above.
+                    val currentInstalledChecksum = current?.scriptFile
+                        ?.takeIf(File::isFile)
+                        ?.let { runCatching { sha256(it.readBytes()) }.getOrNull() }
+                    val customCodeChangeNeedsApproval = !isBundledRepository &&
+                        currentInstalledChecksum != matchingChecksum && !force
                     if (downloadedScript != null && downloadedScript.isNotBlank() &&
                         downloadedManifest != null && manifest != null &&
                         runCatching { validateManifest(manifest, remoteItem.id) }.isSuccess &&
-                        checksumMatches && actualChecksum != null
+                        matchingChecksum != null && !customCodeChangeNeedsApproval
                     ) {
                         val scriptFile = File(itemDir, "index.js")
                         val manifestFile = File(itemDir, "manifest.json")
                         val checksumFile = File(itemDir, SCRIPT_CHECKSUM_FILE)
                         writeAtomically(scriptFile, downloadedScript)
                         writeAtomically(manifestFile, downloadedManifest)
-                        writeAtomically(checksumFile, actualChecksum)
+                        writeAtomically(checksumFile, matchingChecksum)
                         LyricsExtensionExecutor.unload(remoteItem.id)
                         updatedCount++
                     } else {
+                        if (customCodeChangeNeedsApproval && checksumMatches) {
+                            blockedScriptUpdateCount++
+                            LyricsLog.w(TAG, "Blocked unapproved script change for ${remoteItem.id}; use Sync Now to trust the new code")
+                        }
                         LyricsLog.w(TAG, "Skipping ${remoteItem.id}: downloaded extension data was invalid")
                     }
                 }
@@ -382,7 +402,12 @@ object LyricsExtensionManager {
 
             AppSettings.setLastLyricsExtensionSync(System.currentTimeMillis())
             loadInstalledExtensions(ctx)
-            _syncMessage.value = if (updatedCount > 0) "$updatedCount extension(s) updated" else "All extensions up to date"
+            _syncMessage.value = when {
+                blockedScriptUpdateCount > 0 ->
+                    "$blockedScriptUpdateCount script update(s) need approval. Tap Sync Now to trust the new code."
+                updatedCount > 0 -> "$updatedCount extension(s) updated"
+                else -> "All extensions up to date"
+            }
             Result.success(updatedCount)
         } catch (e: Throwable) {
             if (extensionsEnabled) {

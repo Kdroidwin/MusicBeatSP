@@ -194,6 +194,12 @@ fun LyricsRepoSettingsDialog(
                 )
             }
 
+            Text(
+                text = "Automatic sync keeps custom script code pinned. Use Sync Now to approve a code change.",
+                style = MaterialTheme.typography.labelSmall,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+            )
+
             if (lastSyncMs > 0L) {
                 Spacer(modifier = Modifier.height(8.dp))
                 val formatted = remember(lastSyncMs) {
