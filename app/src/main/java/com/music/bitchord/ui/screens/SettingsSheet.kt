@@ -1229,6 +1229,79 @@ private fun hideSettingsIconOnScrollSearchEntry(enabled: Boolean) = SettingsSear
 ) { AppSettings.setHideSettingsIconOnScroll(!enabled) }
 
 @Composable
+private fun musicLibraryTopBarSettingsSearchEntries(
+    pinned: Boolean,
+    hiddenUntilTop: Boolean,
+): List<SettingsSearchEntry> = listOf(
+    SettingsSearchEntry(
+        stringResource(R.string.pin_music_library_top_bar),
+        stringResource(R.string.pin_music_library_top_bar_subtitle),
+        listOf("songs", "albums", "artists", "top bar", "header", "sticky", "スクロール", "固定", "曲", "アルバム", "アーティスト", "上部バー"),
+        pinned,
+    ) { AppSettings.setPinMusicLibraryTopBar(!pinned) },
+    SettingsSearchEntry(
+        stringResource(R.string.keep_music_library_top_bar_hidden_until_top),
+        stringResource(R.string.keep_music_library_top_bar_hidden_until_top_subtitle),
+        listOf("songs", "albums", "artists", "top bar", "header", "scroll up", "top", "スクロール", "上部", "一番上", "曲", "アルバム", "アーティスト"),
+        hiddenUntilTop,
+    ) { AppSettings.setKeepMusicLibraryTopBarHiddenUntilTop(!hiddenUntilTop) },
+)
+
+@Composable
+private fun crossfadeSettingsSearchEntries(
+    durationMs: Int,
+    sliderIndex: Int,
+    maximumIndex: Int,
+    smartFade: Boolean,
+    audioOffloadEnabled: Boolean,
+    darPcmUpsamplingEnabled: Boolean,
+): List<SettingsSearchEntry> = listOf(
+    SettingsSearchEntry(
+        title = stringResource(R.string.crossfade),
+        subtitle = stringResource(if (smartFade) R.string.crossfade_disabled_by_automix else R.string.crossfade_subtitle),
+        keywords = listOf("crossfade", "fade", "transition", "クロスフェード", "曲間"),
+        valueLabel = if (durationMs == 0) stringResource(R.string.off)
+            else stringResource(R.string.crossfade_value_precise, formatCrossfadeSeconds(durationMs)),
+        sliderValue = sliderIndex.toFloat(),
+        sliderValueRange = 0f..maximumIndex.toFloat(),
+        sliderSteps = maximumIndex - 1,
+        onSliderValueChange = { AppSettings.setCrossfadeFromSlider(it.roundToInt()) },
+        enabled = !smartFade,
+        activate = {},
+    ),
+    SettingsSearchEntry(
+        title = stringResource(R.string.audio_offload),
+        subtitle = stringResource(
+            when {
+                durationMs > 0 || smartFade -> R.string.audio_offload_disabled_by_transition
+                darPcmUpsamplingEnabled -> R.string.audio_offload_disabled_by_dsp
+                else -> R.string.audio_offload_subtitle
+            },
+        ),
+        keywords = listOf("audio offload", "offload", "hardware playback", "省電力", "オフロード再生"),
+        checked = audioOffloadEnabled && durationMs == 0 && !smartFade && !darPcmUpsamplingEnabled,
+        enabled = durationMs == 0 && !smartFade && !darPcmUpsamplingEnabled,
+        activate = {
+            if (durationMs == 0 && !smartFade && !darPcmUpsamplingEnabled) {
+                AppSettings.setAudioOffloadEnabled(!audioOffloadEnabled)
+            }
+        },
+    ),
+)
+
+@Composable
+private fun widgetOpacitySearchEntry(opacity: Float): SettingsSearchEntry = SettingsSearchEntry(
+    title = stringResource(R.string.pill_widget_opacity),
+    subtitle = stringResource(R.string.pill_widget_opacity_subtitle),
+    keywords = listOf("widget", "opacity", "transparency", "ウィジェット", "透明度"),
+    valueLabel = stringResource(R.string.pill_widget_opacity_value, opacity.roundToInt()),
+    sliderValue = opacity,
+    sliderValueRange = 0f..100f,
+    onSliderValueChange = AppSettings::setWidgetOpacity,
+    activate = {},
+)
+
+@Composable
 private fun PlayerActionButtonStyleRow(
     icon: ImageVector,
     titleRes: Int,
@@ -1959,33 +2032,6 @@ fun SettingsScreen(
             activate = { showAutomixPerformanceSheet = true },
         ),
         SettingsSearchEntry(
-            title = stringResource(R.string.crossfade),
-            subtitle = stringResource(if (smartFade) R.string.crossfade_disabled_by_automix else R.string.crossfade_subtitle),
-            keywords = listOf("crossfade", "fade", "transition", "クロスフェード", "曲間"),
-            valueLabel = if (crossfadeDurationMs == 0) stringResource(R.string.off)
-                else stringResource(R.string.crossfade_value_precise, formatCrossfadeSeconds(crossfadeDurationMs)),
-            sliderValue = crossfadeSliderIndex.toFloat(),
-            sliderValueRange = 0f..crossfadeOptions.lastIndex.toFloat(),
-            sliderSteps = crossfadeOptions.size - 2,
-            onSliderValueChange = { AppSettings.setCrossfadeFromSlider(it.roundToInt()) },
-            enabled = !smartFade,
-            activate = {},
-        ),
-        SettingsSearchEntry(
-            title = stringResource(R.string.audio_offload),
-            subtitle = stringResource(
-                when {
-                    crossfadeDurationMs > 0 || smartFade -> R.string.audio_offload_disabled_by_transition
-                    darPcmUpsamplingEnabled -> R.string.audio_offload_disabled_by_dsp
-                    else -> R.string.audio_offload_subtitle
-                },
-            ),
-            keywords = listOf("audio offload", "offload", "hardware playback", "省電力", "オフロード再生"),
-            checked = audioOffloadEnabled && crossfadeDurationMs == 0 && !smartFade && !darPcmUpsamplingEnabled,
-            enabled = crossfadeDurationMs == 0 && !smartFade && !darPcmUpsamplingEnabled,
-            activate = { if (crossfadeDurationMs == 0 && !smartFade && !darPcmUpsamplingEnabled) AppSettings.setAudioOffloadEnabled(!audioOffloadEnabled) },
-        ),
-        SettingsSearchEntry(
             stringResource(R.string.dolby_atmos),
             stringResource(R.string.dolby_atmos_subtitle),
             listOf("dolby", "atmos", "eac3", "ドルビー", "空間オーディオ"),
@@ -2152,18 +2198,6 @@ fun SettingsScreen(
         SettingsSearchEntry(stringResource(R.string.settings_top_bar_more_icon), stringResource(R.string.settings_top_bar_more_icon_subtitle), listOf("settings", "gear", "ellipsis", "more", "歯車", "設定", "三点", "︙"), settingsTopBarUsesMoreIcon) { AppSettings.setSettingsTopBarUsesMoreIcon(!settingsTopBarUsesMoreIcon) },
         SettingsSearchEntry(stringResource(R.string.root_tab_floating_settings_only), stringResource(R.string.root_tab_floating_settings_only_subtitle), listOf("settings", "floating", "top bar", "header", "title", "gear", "上部バー", "設定アイコン", "フローティング"), rootTabFloatingSettingsOnly) { AppSettings.setRootTabFloatingSettingsOnly(!rootTabFloatingSettingsOnly) },
         hideSettingsIconOnScrollSearchEntry(hideSettingsIconOnScroll),
-        SettingsSearchEntry(
-            stringResource(R.string.pin_music_library_top_bar),
-            stringResource(R.string.pin_music_library_top_bar_subtitle),
-            listOf("songs", "albums", "artists", "top bar", "header", "sticky", "スクロール", "固定", "曲", "アルバム", "アーティスト", "上部バー"),
-            pinMusicLibraryTopBar,
-        ) { AppSettings.setPinMusicLibraryTopBar(!pinMusicLibraryTopBar) },
-        SettingsSearchEntry(
-            stringResource(R.string.keep_music_library_top_bar_hidden_until_top),
-            stringResource(R.string.keep_music_library_top_bar_hidden_until_top_subtitle),
-            listOf("songs", "albums", "artists", "top bar", "header", "scroll up", "top", "スクロール", "上部", "一番上", "曲", "アルバム", "アーティスト"),
-            keepMusicLibraryTopBarHiddenUntilTop,
-        ) { AppSettings.setKeepMusicLibraryTopBarHiddenUntilTop(!keepMusicLibraryTopBarHiddenUntilTop) },
         SettingsSearchEntry(stringResource(R.string.hide_nav_bar_labels), stringResource(R.string.hide_nav_bar_labels_subtitle), listOf("navigation", "nav bar", "label", "ラベル", "ナビゲーション"), hideNavBarLabels) { AppSettings.setHideNavigationBarLabels(!hideNavBarLabels) },
         SettingsSearchEntry(stringResource(R.string.legacy_mesh_gradient), stringResource(R.string.legacy_mesh_gradient_subtitle), listOf("theme", "gradient", "テーマ", "グラデーション"), legacyMeshGradient) { AppSettings.setLegacyMeshGradient(!legacyMeshGradient) },
         SettingsSearchEntry(
@@ -2178,16 +2212,6 @@ fun SettingsScreen(
             listOf("mini player", "album art", "color", "ミニプレイヤー", "アルバムアート", "色"),
             miniPlayerArtworkColor,
         ) { AppSettings.setMiniPlayerArtworkColor(!miniPlayerArtworkColor) },
-        SettingsSearchEntry(
-            title = stringResource(R.string.pill_widget_opacity),
-            subtitle = stringResource(R.string.pill_widget_opacity_subtitle),
-            keywords = listOf("widget", "opacity", "transparency", "ウィジェット", "透明度", "ピル型"),
-            valueLabel = stringResource(R.string.pill_widget_opacity_value, widgetOpacity.roundToInt()),
-            sliderValue = widgetOpacity,
-            sliderValueRange = 0f..100f,
-            onSliderValueChange = AppSettings::setWidgetOpacity,
-            activate = {},
-        ),
         SettingsSearchEntry(
             stringResource(R.string.mini_player_artwork_outline),
             stringResource(R.string.mini_player_artwork_outline_subtitle),
@@ -2670,6 +2694,19 @@ fun SettingsScreen(
         )
     }
     val settingsSearchEntries = buildSettingsSearchEntries() +
+        musicLibraryTopBarSettingsSearchEntries(
+            pinned = pinMusicLibraryTopBar,
+            hiddenUntilTop = keepMusicLibraryTopBarHiddenUntilTop,
+        ) +
+        crossfadeSettingsSearchEntries(
+            durationMs = crossfadeDurationMs,
+            sliderIndex = crossfadeSliderIndex,
+            maximumIndex = crossfadeOptions.lastIndex,
+            smartFade = smartFade,
+            audioOffloadEnabled = audioOffloadEnabled,
+            darPcmUpsamplingEnabled = darPcmUpsamplingEnabled,
+        ) +
+        widgetOpacitySearchEntry(widgetOpacity) +
         navigationTabSettingsSearchEntries(
             mainTabOrder = mainTabOrder,
             visibleMainTabs = visibleMainTabs,
