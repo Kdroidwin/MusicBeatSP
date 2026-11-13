@@ -5,12 +5,15 @@ import android.content.BroadcastReceiver
 import android.content.ComponentName
 import android.content.Context
 import android.content.Intent
+import android.os.Bundle
 import android.os.Handler
 import android.os.Looper
 import androidx.core.content.ContextCompat
 import androidx.media3.common.Player
 import androidx.media3.session.MediaController
+import androidx.media3.session.SessionCommand
 import androidx.media3.session.SessionToken
+import com.music.bitchord.playback.ACTION_TOGGLE_FAVORITE
 import com.music.bitchord.playback.PlaybackService
 import java.util.concurrent.atomic.AtomicBoolean
 
@@ -72,6 +75,10 @@ class MediaWidgetActions : BroadcastReceiver() {
         // No live or restored queue means the buttons have nothing to control.
         if (mediaItemCount == 0) return
         when (action) {
+            ACTION_LIKE -> sendCustomCommand(
+                SessionCommand(ACTION_TOGGLE_FAVORITE, Bundle.EMPTY),
+                Bundle.EMPTY,
+            )
             ACTION_TOGGLE -> if (playWhenReady) {
                 pause()
             } else {
@@ -108,6 +115,7 @@ class MediaWidgetActions : BroadcastReceiver() {
         const val ACTION_NEXT = "com.music.bitchord.widget.NEXT"
         const val ACTION_PREVIOUS = "com.music.bitchord.widget.PREVIOUS"
         const val ACTION_SHUFFLE = "com.music.bitchord.widget.SHUFFLE"
+        const val ACTION_LIKE = "com.music.bitchord.widget.LIKE"
 
         fun pendingIntent(context: Context, action: String): PendingIntent =
             PendingIntent.getBroadcast(
@@ -120,7 +128,7 @@ class MediaWidgetActions : BroadcastReceiver() {
                 PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE,
             )
 
-        private val ACTIONS = listOf(ACTION_TOGGLE, ACTION_NEXT, ACTION_PREVIOUS, ACTION_SHUFFLE)
+        private val ACTIONS = listOf(ACTION_TOGGLE, ACTION_NEXT, ACTION_PREVIOUS, ACTION_SHUFFLE, ACTION_LIKE)
 
         private const val REQUEST_BASE = 100
 

@@ -485,6 +485,18 @@
                 android:resource="@xml/widget_media_pill" />
         </receiver>
 
+        <receiver
+            android:name=".widget.MediaWidgetNowPlaying"
+            android:exported="false"
+            android:label="@string/widget_now_playing_4x1_label">
+            <intent-filter>
+                <action android:name="android.appwidget.action.APPWIDGET_UPDATE" />
+            </intent-filter>
+            <meta-data
+                android:name="android.appwidget.provider"
+                android:resource="@xml/widget_media_now_playing" />
+        </receiver>
+
         <!-- The transport buttons. Reached only by this app's own PendingIntents. -->
         <receiver
             android:name=".widget.MediaWidgetActions"

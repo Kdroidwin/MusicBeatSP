@@ -142,6 +142,89 @@ internal object MediaWidgetArt {
     suspend fun loadSquareCover(context: Context, artworkUrl: String?, sizePx: Int): Bitmap? =
         loadArtwork(context, artworkUrl, sizePx.coerceAtLeast(1))
 
+    /** The BitChord 4×1 provider's circular cover, shared with the widget art cache. */
+    suspend fun circle(context: Context, artworkUrl: String?, sizePx: Int, key: String): Bitmap? {
+        peekCircle(key, sizePx)?.let { return it }
+        if (isCoolingOff(key)) return null
+        val cover = loadArtwork(context, artworkUrl, sizePx)
+        if (cover == null) {
+            if (!artworkUrl.isNullOrBlank()) failures[key] = SystemClock.elapsedRealtime()
+            return null
+        }
+        val square = Bitmap.createBitmap(sizePx, sizePx, Bitmap.Config.ARGB_8888)
+        Canvas(square).fillCentreCropped(cover)
+        val round = square.withRoundedCorners(sizePx / 2f)
+        square.recycle()
+        composites.put(circleKey(key, sizePx), round)
+        return round
+    }
+
+    fun peekCircle(key: String, sizePx: Int): Bitmap? =
+        composites[circleKey(key, sizePx)]?.takeIf { !it.isRecycled }
+
+    /** Draws the upstream BitChord 4×1 blurred album-art capsule. */
+    suspend fun pill(context: Context, artworkUrl: String?, widthPx: Int, heightPx: Int, key: String?): Bitmap {
+        key?.let { peekPill(it, widthPx, heightPx) }?.let { return it }
+        val cover = if (key == null || isCoolingOff(key)) null else loadArtwork(context, artworkUrl, ROW_ART_PX)
+        val failed = cover == null && !artworkUrl.isNullOrBlank()
+        if (failed && key != null) failures[key] = SystemClock.elapsedRealtime()
+
+        val composed = Bitmap.createBitmap(widthPx, heightPx, Bitmap.Config.ARGB_8888)
+        val canvas = Canvas(composed)
+        if (cover == null) {
+            canvas.fillPlaceholder()
+        } else {
+            val workW = PILL_WORKING_WIDTH_PX
+            val workH = (workW * heightPx / widthPx.coerceAtLeast(1)).coerceAtLeast(4)
+            val crop = Bitmap.createBitmap(workW * 4, workH * 4, Bitmap.Config.ARGB_8888)
+            Canvas(crop).fillCentreCropped(cover)
+            val small = crop.halvedTo(workH.toFloat())
+            if (small !== crop) crop.recycle()
+            val w = small.width
+            val h = small.height
+            val pixels = IntArray(w * h)
+            small.getPixels(pixels, 0, w, 0, 0, w, h)
+            blurInPlace(
+                pixels,
+                IntArray(pixels.size),
+                w,
+                h,
+                (w * PILL_BLUR_FRACTION).roundToInt().coerceAtLeast(1),
+            )
+            small.setPixels(pixels, 0, w, 0, 0, w, h)
+            canvas.drawBitmap(
+                small,
+                Rect(0, 0, w, h),
+                Rect(0, 0, widthPx, heightPx),
+                Paint().apply { isFilterBitmap = true },
+            )
+            small.recycle()
+        }
+        canvas.drawRect(
+            0f,
+            0f,
+            widthPx.toFloat(),
+            heightPx.toFloat(),
+            Paint().apply {
+                shader = LinearGradient(
+                    0f, 0f, 0f, heightPx.toFloat(),
+                    0x40000000, 0x70000000, Shader.TileMode.CLAMP,
+                )
+            },
+        )
+        val rounded = composed.withRoundedCorners(heightPx / 2f, PILL_ALPHA)
+        composed.recycle()
+        if (!failed && key != null) composites.put(pillKey(key, widthPx, heightPx), rounded)
+        return rounded
+    }
+
+    fun peekPill(key: String, widthPx: Int, heightPx: Int): Bitmap? =
+        composites[pillKey(key, widthPx, heightPx)]?.takeIf { !it.isRecycled }
+
+    private fun circleKey(key: String, sizePx: Int) = "circle|$key|$sizePx"
+
+    private fun pillKey(key: String, widthPx: Int, heightPx: Int) = "pill|$key|$widthPx|$heightPx"
+
     /** Drops every remembered composite — the last widget has just been removed. */
     fun clear() {
         composites.evictAll()
@@ -513,7 +596,7 @@ internal object MediaWidgetArt {
      * arc. Drawn through a shader instead, the round rect's own antialiasing
      * does the work.
      */
-    private fun Bitmap.withRoundedCorners(radiusPx: Float): Bitmap {
+    private fun Bitmap.withRoundedCorners(radiusPx: Float, alpha: Int = 255): Bitmap {
         if (radiusPx <= 0f) return this
         val out = Bitmap.createBitmap(width, height, Bitmap.Config.ARGB_8888)
         Canvas(out).drawRoundRect(
@@ -522,6 +605,7 @@ internal object MediaWidgetArt {
             radiusPx,
             Paint().apply {
                 isAntiAlias = true
+                this.alpha = alpha.coerceIn(0, 255)
                 shader = BitmapShader(this@withRoundedCorners, Shader.TileMode.CLAMP, Shader.TileMode.CLAMP)
             },
         )
@@ -574,6 +658,11 @@ internal object MediaWidgetArt {
      * highlight.
      */
     private const val BLUR_PASSES = 3
+
+    /** 4×1 pill rendering constants carried over from BitChord. */
+    private const val PILL_ALPHA = 210
+    private const val PILL_WORKING_WIDTH_PX = 64
+    private const val PILL_BLUR_FRACTION = 0.1f
 
     /** Alpha channel for the opaque pixels [boxPass] writes. */
     private const val OPAQUE = 0xFF shl 24
