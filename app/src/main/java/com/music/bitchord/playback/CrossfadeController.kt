@@ -171,6 +171,8 @@ class CrossfadeController(
      * a later gapless boundary without waiting on the service.
      */
     private val onArmIncoming: (MediaItem, String?) -> Unit = { _, _ -> },
+    /** Completes any per-track DSP lookup before the standby decoder starts filling its PCM sink. */
+    private val awaitIncomingReady: suspend (MediaItem) -> Unit = { _ -> },
     /**
      * A smooth headroom trim for both players while two tracks overlap:
      * `1 / sqrt(incomingGain + outgoingGain)`, 1 otherwise.
@@ -275,6 +277,7 @@ class CrossfadeController(
     /** Which player this class's own listener is currently attached to. */
     private var listeningTo: ExoPlayer? = null
     private var tickerJob: Job? = null
+    private var incomingPreparationJob: Job? = null
 
     /** Length of the transition in flight, in ms. Fixed when it begins. */
     private var fadeMs = 0L
@@ -1239,19 +1242,35 @@ class CrossfadeController(
         into.setMediaItems(items, nextIndex, incomingCueTimeMs)
         val setDurationUs = (SystemClock.elapsedRealtimeNanos() - setNanos0) / 1000L
         Log.d(TAG, "standby setMediaItems: ${items.size} tracks in ${setDurationUs}µs")
-        // Before `prepare`, so the standby's per-player audio state is right
-        // for the incoming track from its very first decoded frame rather than
-        // from the handoff, which is half a blend too late.
-        items.getOrNull(nextIndex)?.let { item ->
-            val after = into.nextMediaItemIndex
-            val afterId = if (after == C.INDEX_UNSET) null else items.getOrNull(after)?.mediaId
-            onArmIncoming(item, afterId)
-        }
-        // Buffers without sounding. Started for real in [startFade].
         into.playWhenReady = false
-        into.prepare()
-
         phase = Phase.ARMING
+        // ReplayGain and other per-track audio state has to be ready before
+        // prepare(): even a paused ExoPlayer can decode and queue PCM into its
+        // sink, so applying the gain later would leave the standby track's
+        // first buffered samples at unity gain.
+        val incomingItem = items.getOrNull(nextIndex)
+        val after = into.nextMediaItemIndex
+        val afterId = if (after == C.INDEX_UNSET) null else items.getOrNull(after)?.mediaId
+        incomingPreparationJob?.cancel()
+        incomingPreparationJob = scope.launch {
+            try {
+                incomingItem?.let { item ->
+                    onArmIncoming(item, afterId)
+                    awaitIncomingReady(item)
+                }
+                if (phase == Phase.ARMING && incoming === into &&
+                    into.currentMediaItem?.mediaId == incomingItem?.mediaId
+                ) {
+                    // Buffers without sounding. Started for real in [startFade].
+                    into.prepare()
+                }
+            } catch (cancelled: kotlinx.coroutines.CancellationException) {
+                throw cancelled
+            } catch (error: Exception) {
+                Log.w(TAG, "incoming audio preparation failed; transition will fall back", error)
+                if (phase == Phase.ARMING && incoming === into) bail()
+            }
+        }
         return true
     }
 
@@ -1797,6 +1816,8 @@ class CrossfadeController(
 
     private fun finish() {
         val wasTransitioning = phase != Phase.IDLE
+        incomingPreparationJob?.cancel()
+        incomingPreparationJob = null
         if (phase != Phase.IDLE) {
             Log.d(TAG, "finish from $phase")
             // Stamped under this guard rather than beside the assignment at the

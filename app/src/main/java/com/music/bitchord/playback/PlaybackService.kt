@@ -515,7 +515,7 @@ class PlaybackService : MediaLibraryService() {
             AudioManager.AUDIOFOCUS_GAIN -> {
                 if (resumeAfterAudioFocus && active.mediaItemCount > 0) {
                     resumeAfterAudioFocus = false
-                    active.play()
+                    if (prepareReplayGainBeforePlayback(active)) active.play()
                 }
             }
             AudioManager.AUDIOFOCUS_LOSS_TRANSIENT,
@@ -552,6 +552,12 @@ class PlaybackService : MediaLibraryService() {
     private var replayGainLookupJob: Job? = null
     private var spareReplayGainJob: Job? = null
     private var replayGainConfigToken: String? = null
+    private var replayGainTrackKey: String? = null
+    private var replayGainPendingMediaId: String? = null
+    private var replayGainGatePlayer: ExoPlayer? = null
+    private var replayGainResumeRequested = false
+    private var spareReplayGainGeneration = 0L
+    private var spareReplayGainPendingMediaId: String? = null
 
     /**
      * Whether the format currently arriving at the active player's decoder
@@ -863,6 +869,22 @@ class PlaybackService : MediaLibraryService() {
                 eachPlayer { candidate -> if (candidate.playWhenReady) candidate.pause() }
                 return
             }
+            if (playWhenReady && !speakers.active) {
+                val active = player
+                if (active != null) {
+                    // MediaSession, notification, widget and app play requests
+                    // all converge here before the renderer is allowed to run.
+                    // If this is the first local buffer for a track, make sure
+                    // its tag lookup has completed before sound can leave the
+                    // sink at unity gain.
+                    updateReplayGainForCurrentTrack()
+                    if (replayGainPendingMediaId == active.currentMediaItem?.mediaId) {
+                        replayGainResumeRequested = true
+                        pauseForReplayGainLookup(active)
+                        return
+                    }
+                }
+            }
             handleAudioFocusPlaybackChange(playWhenReady)
             var anyAudible = false
             eachPlayer {
@@ -1113,7 +1135,7 @@ class PlaybackService : MediaLibraryService() {
                     // the ordinary Media3 transition path after finalizing the
                     // last track's history and scrobble state.
                     exoPlayer.seekToDefaultPosition(0)
-                    exoPlayer.play()
+                    if (prepareReplayGainBeforePlayback(exoPlayer)) exoPlayer.play()
                 }
             }
         }
@@ -2055,7 +2077,9 @@ class PlaybackService : MediaLibraryService() {
         target,
         { lastPublishedSubtitle },
         ::canStartPlaybackAtCurrentVolume,
+        ::prepareReplayGainBeforePlayback,
         { savePlaybackState(target) },
+        { cancelReplayGainResumeRequest(target) },
         speakers,
         ::closeLocalCastServers,
         onBeforeManualNavigation = { crossfade?.cancelTransition() },
@@ -2065,6 +2089,9 @@ class PlaybackService : MediaLibraryService() {
     private fun prepareCrossfadeIncoming(item: MediaItem) {
         val target = spare ?: return
         if (target.currentMediaItem?.mediaId != item.mediaId) return
+        spareReplayGainJob?.cancel()
+        val generation = ++spareReplayGainGeneration
+        spareReplayGainPendingMediaId = item.mediaId
         val chain = spareAudioChain
         val bitPerfect = BitPerfectOutput.ready.value
         chain.replayGain.normalizationMediaId = item.mediaId
@@ -2088,22 +2115,35 @@ class PlaybackService : MediaLibraryService() {
         val song = item.toSong()
         if (bitPerfect || !AppSettings.replayGainEnabled.value ||
             (song.localUri.isNullOrBlank() && song.localPath.isNullOrBlank())
-        ) return
+        ) {
+            spareReplayGainPendingMediaId = null
+            return
+        }
 
-        spareReplayGainJob?.cancel()
         spareReplayGainJob = scope.launch {
-            val gain = withContext(Dispatchers.IO) {
-                ReplayGainReader.readGainDb(
-                    context = applicationContext,
-                    song = song,
-                    useAlbumGain = AppSettings.replayGainAlbumMode.value,
-                    preampDb = AppSettings.replayGainPreampDb.value,
-                    preventClipping = preventClipping,
-                )
-            }
-            if (isActive && spare === target && target.currentMediaItem?.mediaId == item.mediaId) {
+            val gain = ReplayGainReader.readGainDb(
+                context = applicationContext,
+                song = song,
+                useAlbumGain = AppSettings.replayGainAlbumMode.value,
+                preampDb = AppSettings.replayGainPreampDb.value,
+                preventClipping = preventClipping,
+            )
+            if (isActive && generation == spareReplayGainGeneration && spare === target &&
+                target.currentMediaItem?.mediaId == item.mediaId
+            ) {
                 chain.replayGain.gainDb = gain
+                spareReplayGainPendingMediaId = null
             }
+        }
+    }
+
+    /** The crossfade decoder is kept idle until its tag-based gain is ready. */
+    private suspend fun awaitCrossfadeIncomingReady(item: MediaItem) {
+        val target = spare ?: return
+        if (target.currentMediaItem?.mediaId != item.mediaId) return
+        if (spareReplayGainPendingMediaId == item.mediaId) spareReplayGainJob?.join()
+        if (target.currentMediaItem?.mediaId == item.mediaId && spareReplayGainPendingMediaId == item.mediaId) {
+            throw IllegalStateException("ReplayGain lookup did not finish for the incoming track")
         }
     }
 
@@ -2142,6 +2182,7 @@ class PlaybackService : MediaLibraryService() {
         },
         analysisRunningFor = { item -> trackAnalyzer.isAnalysing(item.mediaId) },
         onArmIncoming = { item, _ -> prepareCrossfadeIncoming(item) },
+        awaitIncomingReady = ::awaitCrossfadeIncomingReady,
         onBlendHeadroom = { trim ->
             activeAudioChain.replayGain.blendTrim = trim
             spareAudioChain.replayGain.blendTrim = trim
@@ -2280,8 +2321,75 @@ class PlaybackService : MediaLibraryService() {
     }
 
     /** Reads local tags off the playback thread and applies the result only if this track is still current. */
-    private fun updateReplayGainForCurrentTrack(force: Boolean = false) {
-        val mediaItem = player?.currentMediaItem
+    private fun replayGainTrackKey(mediaId: String?, song: Song?): String =
+        listOf(mediaId, song?.localUri, song?.localPath).joinToString("|")
+
+    private fun replayGainConfigToken(
+        mediaId: String?,
+        song: Song?,
+        enabled: Boolean,
+        bitPerfect: Boolean,
+        albumMode: Boolean,
+        preampDb: Float,
+        preventClipping: Boolean,
+    ): String = listOf(
+        mediaId,
+        song?.localUri,
+        song?.localPath,
+        enabled,
+        bitPerfect,
+        albumMode,
+        preampDb,
+        preventClipping,
+    ).joinToString("|")
+
+    private fun pauseForReplayGainLookup(target: ExoPlayer) {
+        if (target.playWhenReady) target.playWhenReady = false
+    }
+
+    private fun releaseReplayGainGate(target: ExoPlayer, mediaId: String?) {
+        if (replayGainGatePlayer !== target || replayGainPendingMediaId != null) return
+        val shouldResume = replayGainResumeRequested
+        replayGainGatePlayer = null
+        replayGainResumeRequested = false
+        if (shouldResume && !speakers.active && target.currentMediaItem?.mediaId == mediaId &&
+            canStartPlaybackAtCurrentVolume()
+        ) {
+            target.playWhenReady = true
+        }
+    }
+
+    private fun cancelReplayGainResumeRequest(target: ExoPlayer) {
+        if (replayGainGatePlayer === target) replayGainResumeRequested = false
+    }
+
+    /** Carries the already-applied gain from a crossfade's preloaded PCM chain. */
+    private fun adoptPreparedReplayGainForCurrentTrack(mediaItem: MediaItem?) {
+        val song = mediaItem?.toSong()
+        val mediaId = mediaItem?.mediaId
+        val enabled = AppSettings.replayGainEnabled.value
+        val bitPerfect = BitPerfectOutput.ready.value
+        val albumMode = AppSettings.replayGainAlbumMode.value
+        val preampDb = AppSettings.replayGainPreampDb.value
+        val preventClipping = AppSettings.replayGainPreventClipping.value
+        replayGainLookupJob?.cancel()
+        replayGainConfigToken = replayGainConfigToken(
+            mediaId, song, enabled, bitPerfect, albumMode, preampDb, preventClipping,
+        )
+        replayGainTrackKey = replayGainTrackKey(mediaId, song)
+        replayGainPendingMediaId = null
+        replayGainGatePlayer = null
+        replayGainResumeRequested = false
+    }
+
+    /** Reads local tags before the active renderer is allowed to emit a track's first PCM buffer. */
+    private fun updateReplayGainForCurrentTrack(
+        force: Boolean = false,
+        gatePlayback: Boolean = true,
+        playbackRequested: Boolean = false,
+    ) {
+        val target = player
+        val mediaItem = target?.currentMediaItem
         val song = mediaItem?.toSong()
         val mediaId = mediaItem?.mediaId
         activeAudioChain.replayGain.normalizationMediaId = mediaId
@@ -2290,28 +2398,110 @@ class PlaybackService : MediaLibraryService() {
         val albumMode = AppSettings.replayGainAlbumMode.value
         val preampDb = AppSettings.replayGainPreampDb.value
         val preventClipping = AppSettings.replayGainPreventClipping.value
-        val token = listOf(mediaId, song?.localUri, song?.localPath, enabled, bitPerfect, albumMode, preampDb, preventClipping)
-            .joinToString("|")
-        if (!force && token == replayGainConfigToken) return
+        val token = replayGainConfigToken(
+            mediaId, song, enabled, bitPerfect, albumMode, preampDb, preventClipping,
+        )
+        val trackKey = replayGainTrackKey(mediaId, song)
+        val trackChanged = trackKey != replayGainTrackKey
+        val previousGateWantedPlayback = replayGainGatePlayer === target && replayGainResumeRequested
+        val playbackIntent = previousGateWantedPlayback || target?.playWhenReady == true || playbackRequested
+        if (!force && token == replayGainConfigToken) {
+            if (gatePlayback && !speakers.active && mediaId != null &&
+                replayGainPendingMediaId == mediaId && target?.playWhenReady == true
+            ) {
+                replayGainResumeRequested = true
+                if (target != null) pauseForReplayGainLookup(target)
+            }
+            return
+        }
 
         replayGainConfigToken = token
+        if (trackChanged) {
+            replayGainTrackKey = trackKey
+            replayGainLookupJob?.cancel()
+            replayGainPendingMediaId = null
+            replayGainGatePlayer = null
+            replayGainResumeRequested = false
+            if (previousGateWantedPlayback && target != null) {
+                // A manual next/seek while the old track was held for its tags
+                // should keep playing the newly selected track after its own
+                // tags are ready.
+                replayGainGatePlayer = target
+                replayGainResumeRequested = true
+            }
+            activeAudioChain.replayGain.gainDb = 0f
+        } else {
+            // A settings change for the same track should not momentarily
+            // remove the gain already being heard. Keep it until the refreshed
+            // tag calculation replaces it.
+            replayGainLookupJob?.cancel()
+        }
         replayGainLookupJob?.cancel()
-        activeAudioChain.replayGain.gainDb = 0f
         activeAudioChain.replayGain.preventClipping = preventClipping
-        if (!enabled || bitPerfect || song == null || (song.localUri.isNullOrBlank() && song.localPath.isNullOrBlank())) return
+        if (!enabled || bitPerfect || song == null ||
+            (song.localUri.isNullOrBlank() && song.localPath.isNullOrBlank())
+        ) {
+            activeAudioChain.replayGain.gainDb = 0f
+            replayGainPendingMediaId = null
+            if (target != null && replayGainGatePlayer === target) releaseReplayGainGate(target, mediaId)
+            return
+        }
+
+        val wasAlreadyPending = replayGainPendingMediaId == mediaId && replayGainGatePlayer === target
+        val shouldGate = gatePlayback && !speakers.active && target != null && mediaId != null &&
+            (trackChanged || wasAlreadyPending || playbackIntent)
+        if (shouldGate) {
+            replayGainGatePlayer = target
+            replayGainResumeRequested = playbackIntent
+            replayGainPendingMediaId = mediaId
+            if (target.playWhenReady) pauseForReplayGainLookup(target)
+        } else if (wasAlreadyPending) {
+            // A forced settings refresh can replace a pending read while its
+            // playback gate is already holding the first buffer.
+            replayGainGatePlayer = target
+            replayGainResumeRequested = previousGateWantedPlayback
+        }
+        replayGainPendingMediaId = mediaId
 
         replayGainLookupJob = scope.launch {
-            val gain = ReplayGainReader.readGainDb(
-                context = applicationContext,
-                song = song,
-                useAlbumGain = albumMode,
-                preampDb = preampDb,
-                preventClipping = preventClipping,
-            )
-            if (isActive && player?.currentMediaItem?.mediaId == mediaId && replayGainConfigToken == token) {
+            val gain = try {
+                ReplayGainReader.readGainDb(
+                    context = applicationContext,
+                    song = song,
+                    useAlbumGain = albumMode,
+                    preampDb = preampDb,
+                    preventClipping = preventClipping,
+                )
+            } catch (cancelled: CancellationException) {
+                throw cancelled
+            } catch (error: Exception) {
+                TrackLog.w("BitChord", "ReplayGain metadata lookup failed; using unity gain", error, about = mediaId)
+                0f
+            }
+            if (isActive && player === target && target?.currentMediaItem?.mediaId == mediaId &&
+                replayGainConfigToken == token
+            ) {
                 activeAudioChain.replayGain.gainDb = gain
+                replayGainPendingMediaId = null
+                if (target != null) releaseReplayGainGate(target, mediaId)
             }
         }
+    }
+
+    /**
+     * Called before a play command reaches ExoPlayer. If local ReplayGain tags
+     * are still being read, the asynchronous lookup resumes this player only
+     * after its processor has received the final gain.
+     */
+    private fun prepareReplayGainBeforePlayback(target: ExoPlayer): Boolean {
+        if (target !== player || speakers.active) return true
+        updateReplayGainForCurrentTrack(playbackRequested = true)
+        val mediaId = target.currentMediaItem?.mediaId ?: return true
+        if (replayGainPendingMediaId != mediaId) return true
+        replayGainGatePlayer = target
+        replayGainResumeRequested = true
+        if (target.playWhenReady) pauseForReplayGainLookup(target)
+        return false
     }
 
     /**
@@ -2342,7 +2532,11 @@ class PlaybackService : MediaLibraryService() {
     ) {
         val exoPlayer = player ?: return
         resetCurrentLocalPlayStatsForTrackChange()
-        updateReplayGainForCurrentTrack()
+        if (alreadyAudible) {
+            adoptPreparedReplayGainForCurrentTrack(mediaItem)
+        } else {
+            updateReplayGainForCurrentTrack()
+        }
 
         // A crossfade handoff never fires [formatListener] for the entering
         // track — [CrossfadeController] starts its decoder during ARMING,
@@ -4166,7 +4360,7 @@ class PlaybackService : MediaLibraryService() {
                 restoreExternalPreview(active)
                 return@launch
             }
-            active.play()
+            if (prepareReplayGainBeforePlayback(active)) active.play()
             updateExternalAudioPopup(active)
         }
     }
@@ -4202,7 +4396,7 @@ class PlaybackService : MediaLibraryService() {
         if (active.isPlaying) {
             active.pause()
         } else if (canStartPlaybackAtCurrentVolume()) {
-            active.play()
+            if (prepareReplayGainBeforePlayback(active)) active.play()
         }
     }
 
@@ -5889,14 +6083,16 @@ class PlaybackService : MediaLibraryService() {
      * restarts, since that path asks for `COMMAND_SEEK_TO_PREVIOUS`.
      */
     private class SessionPlayer(
-        player: Player,
+        private val localPlayer: ExoPlayer,
         private val getSubtitle: () -> String?,
         private val canStartPlayback: () -> Boolean,
+        private val preparePlaybackWithReplayGain: (ExoPlayer) -> Boolean,
         private val beforeStop: () -> Unit,
+        private val onExplicitPause: () -> Unit,
         private val cast: RemoteSpeaker,
         private val onCastEnded: () -> Unit,
         private val onBeforeManualNavigation: () -> Unit,
-    ) : ForwardingPlayer(player), CastSink {
+    ) : ForwardingPlayer(localPlayer), CastSink {
 
         private val listeners = CopyOnWriteArraySet<Player.Listener>()
         private var reportedPlayWhenReady = false
@@ -5988,21 +6184,25 @@ class PlaybackService : MediaLibraryService() {
                 cast.play()
             } else {
                 prepareOnsenAfterFailure()
-                wrappedPlayer.play()
+                if (preparePlaybackWithReplayGain(localPlayer)) localPlayer.play()
             }
         }
 
         override fun pause() {
+            onExplicitPause()
             if (cast.active) cast.pause() else wrappedPlayer.pause()
         }
 
         override fun setPlayWhenReady(playWhenReady: Boolean) {
             if (playWhenReady && !canStartPlayback()) return
+            if (!playWhenReady) onExplicitPause()
             if (cast.active) {
                 if (playWhenReady) cast.play() else cast.pause()
             } else {
                 if (playWhenReady) prepareOnsenAfterFailure()
-                wrappedPlayer.playWhenReady = playWhenReady
+                if (!playWhenReady || preparePlaybackWithReplayGain(localPlayer)) {
+                    localPlayer.playWhenReady = playWhenReady
+                }
             }
         }
 
@@ -6019,6 +6219,7 @@ class PlaybackService : MediaLibraryService() {
 
         override fun stop() {
             onBeforeManualNavigation()
+            onExplicitPause()
             beforeStop()
             if (cast.active) cast.pause()
             wrappedPlayer.stop()
