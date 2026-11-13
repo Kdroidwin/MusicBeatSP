@@ -97,22 +97,30 @@ object LyricsRepository {
                     }
             }
         ) ?: return null
-        return when (result.source.id) {
-            "qq_music" -> if (com.music.bitchord.data.settings.AppSettings.removeQqMusicLyricMetadata.value) {
-                result.copy(lines = QQMusicLyrics.cleanLines(result.lines, title, artist.split(Regex("[,，、/&＆]+"))))
-            } else result
-            "followlyrics" -> if (com.music.bitchord.data.settings.AppSettings
-                    .convertFollowLyricsToJapaneseKanji.value
-            ) {
-                result.copy(lines = result.lines.map(::convertFollowLyricsLine))
-            } else result
-            "kugou" -> if (com.music.bitchord.data.settings.AppSettings
-                    .convertKugouToJapaneseKanji.value
-            ) {
-                result.copy(lines = result.lines.map(::convertKugouLine))
-            } else result
-            else -> result
-        }
+        return result.copy(lines = applySourceDisplayOptions(result.source, result.lines, title, artist))
+    }
+
+    /** Applies provider display options consistently to automatic and manual-search results. */
+    internal fun applySourceDisplayOptions(
+        source: LyricsSource,
+        lines: List<LyricLine>,
+        title: String = "",
+        artist: String = "",
+    ): List<LyricLine> = when (source.id) {
+        "qq_music" -> if (com.music.bitchord.data.settings.AppSettings.removeQqMusicLyricMetadata.value) {
+            QQMusicLyrics.cleanLines(lines, title, artist.split(Regex("[,，、/&＆]+")))
+        } else lines
+        "followlyrics" -> if (com.music.bitchord.data.settings.AppSettings
+                .convertFollowLyricsToJapaneseKanji.value
+        ) {
+            lines.map(::convertFollowLyricsLine)
+        } else lines
+        "kugou" -> if (com.music.bitchord.data.settings.AppSettings
+                .convertKugouToJapaneseKanji.value
+        ) {
+            lines.map(::convertKugouLine)
+        } else lines
+        else -> lines
     }
 
     /** Reapply source-specific display options to entries cached by older releases. */

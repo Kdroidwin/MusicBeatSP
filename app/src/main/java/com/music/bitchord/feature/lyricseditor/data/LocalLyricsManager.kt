@@ -351,7 +351,11 @@ object LocalLyricsManager {
                 durationMs = durationMs,
                 album = album,
             )
-        }.getOrNull()
+        }.getOrNull()?.let { fetched ->
+            // The single-result fallback used by manual search must use the
+            // same source options as the normal repository lookup path.
+            LyricsRepository.applySourceDisplayOptions(source, fetched, title, artist)
+        }
         return if (!lines.isNullOrEmpty()) {
             val syncedLyrics = lines.toLrc().takeIf { it.length <= MAX_SEARCH_LYRICS_CHARS } ?: return emptyList()
             val plainLyrics = lines.joinToString("\n") { it.text }

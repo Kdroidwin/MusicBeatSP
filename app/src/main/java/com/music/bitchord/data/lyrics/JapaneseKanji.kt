@@ -60,7 +60,10 @@ internal object JapaneseKanji {
             // Lyrics sources are queried concurrently; ICU transliterators are stateful.
             synchronized(transliterator) { transliterator.transliterate(text) }
         }
-        return convert(traditional)
+        // A few KuGou lyrics contain Japanese phrases whose simplified glyphs
+        // are not reliably transliterated when Android's ICU data is missing
+        // or older. Apply safe phrase-level repairs after the general pass.
+        return convert(traditional).replace("言叶", "言葉")
     }
 
     // A small safe fallback for Android builds where the ICU transform is absent.
@@ -75,5 +78,7 @@ internal object JapaneseKanji {
         '听' to '聽', '为' to '爲', '无' to '無', '现' to '現', '学' to '學',
         '样' to '樣', '艺' to '藝', '应' to '應', '与' to '與', '约' to '約',
         '云' to '雲', '这' to '這', '转' to '轉', '总' to '總',
+        '远' to '遠', '离' to '離', '进' to '進', '驯' to '馴',
+        '仆' to '僕', '辉' to '輝', '动' to '動',
     )
 }
