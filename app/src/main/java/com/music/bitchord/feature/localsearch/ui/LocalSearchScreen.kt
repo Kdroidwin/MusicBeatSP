@@ -126,6 +126,7 @@ fun LocalSearchScreen(
     modifier: Modifier = Modifier,
 ) {
     val context = LocalContext.current
+    val pinRootFilters by AppSettings.pinMusicLibraryTopBar.collectAsStateWithLifecycle()
     val folderHierarchy by AppSettings.localFolderHierarchy.collectAsStateWithLifecycle()
     val youtubeMusicEnabled by AppSettings.youtubeMusicEnabled.collectAsStateWithLifecycle()
     val youtubeMusicSearchDefault by AppSettings.youtubeMusicSearchDefault.collectAsStateWithLifecycle()
@@ -354,7 +355,7 @@ fun LocalSearchScreen(
                 // Keep the search field with the source chips so the whole
                 // search header scrolls away above the results.
                 AnimatedVisibility(
-                    visible = !rootResultsScrolled,
+                    visible = pinRootFilters || !rootResultsScrolled,
                     enter = expandVertically(
                         animationSpec = androidx.compose.animation.core.tween(180),
                         expandFrom = Alignment.Top,

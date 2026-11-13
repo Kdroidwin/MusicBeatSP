@@ -1236,13 +1236,13 @@ private fun musicLibraryTopBarSettingsSearchEntries(
     SettingsSearchEntry(
         stringResource(R.string.pin_music_library_top_bar),
         stringResource(R.string.pin_music_library_top_bar_subtitle),
-        listOf("songs", "albums", "artists", "top bar", "header", "sticky", "スクロール", "固定", "曲", "アルバム", "アーティスト", "上部バー"),
+        listOf("songs", "albums", "artists", "library", "search", "all", "recently played", "filters", "sources", "top bar", "header", "sticky", "スクロール", "固定", "曲", "アルバム", "アーティスト", "ライブラリ", "検索", "すべて", "最近再生した曲", "音源", "絞り込み", "上部バー"),
         pinned,
     ) { AppSettings.setPinMusicLibraryTopBar(!pinned) },
     SettingsSearchEntry(
         stringResource(R.string.keep_music_library_top_bar_hidden_until_top),
         stringResource(R.string.keep_music_library_top_bar_hidden_until_top_subtitle),
-        listOf("songs", "albums", "artists", "top bar", "header", "scroll up", "top", "スクロール", "上部", "一番上", "曲", "アルバム", "アーティスト"),
+        listOf("songs", "albums", "artists", "library", "search", "all", "recently played", "filters", "sources", "top bar", "header", "scroll up", "top", "スクロール", "上部", "一番上", "曲", "アルバム", "アーティスト", "ライブラリ", "検索", "すべて", "最近再生した曲", "音源", "絞り込み"),
         hiddenUntilTop,
     ) { AppSettings.setKeepMusicLibraryTopBarHiddenUntilTop(!hiddenUntilTop) },
 )
@@ -3470,7 +3470,56 @@ fun SettingsScreen(
                 ),
             )
         } else emptyList()
-        val allSettingsSearchEntries = settingsSearchEntries +
+        val scrobblingSearchEntries = listOf(
+            SettingsSearchEntry(
+                title = stringResource(R.string.lastfm_login),
+                subtitle = if (lastfmSessionKey.isNotBlank()) lastfmUsername else stringResource(R.string.lastfm_login_description),
+                keywords = listOf("Last.fm", "lastfm", "scrobble", "scrobbling", "connect", "ログイン", "連携", "スクロブル", "スクロブリング"),
+                valueLabel = stringResource(if (lastfmSessionKey.isNotBlank()) R.string.connected else R.string.not_connected),
+                activate = { showLastfmLoginDialog = true },
+            ),
+            SettingsSearchEntry(
+                title = stringResource(R.string.scrobble_tracks),
+                subtitle = stringResource(R.string.scrobble_tracks_subtitle),
+                keywords = listOf("Last.fm", "lastfm", "scrobble", "scrobbling", "track", "送信", "再生履歴"),
+                checked = lastfmScrobbleEnabled,
+                enabled = lastfmSessionKey.isNotBlank(),
+                activate = {
+                    if (lastfmSessionKey.isBlank()) showLastfmLoginDialog = true
+                    else {
+                        if (!lastfmScrobbleEnabled) AppSettings.setLastfmEnabled(true)
+                        AppSettings.setLastfmScrobbleEnabled(!lastfmScrobbleEnabled)
+                    }
+                },
+            ),
+            SettingsSearchEntry(
+                title = stringResource(R.string.listenbrainz_token),
+                subtitle = if (listenBrainzToken.isNotBlank()) stringResource(R.string.connected) else stringResource(R.string.listenbrainz_token_description),
+                keywords = listOf("ListenBrainz", "listen brainz", "token", "scrobble", "スクロブル", "トークン", "連携"),
+                valueLabel = stringResource(if (listenBrainzToken.isNotBlank()) R.string.connected else R.string.not_connected),
+                activate = { showListenBrainzTokenDialog = true },
+            ),
+            SettingsSearchEntry(
+                title = stringResource(R.string.listenbrainz_scrobbling_enabled),
+                subtitle = stringResource(R.string.scrobbling_footer),
+                keywords = listOf("ListenBrainz", "scrobble", "scrobbling", "enable", "送信", "スクロブル", "有効"),
+                checked = listenBrainzEnabled,
+                enabled = listenBrainzToken.isNotBlank(),
+                activate = {
+                    if (listenBrainzToken.isBlank()) showListenBrainzTokenDialog = true
+                    else AppSettings.setListenBrainzEnabled(!listenBrainzEnabled)
+                },
+            ),
+            SettingsSearchEntry(
+                title = stringResource(R.string.lastfm_now_playing),
+                subtitle = stringResource(R.string.lastfm_now_playing_subtitle),
+                keywords = listOf("Last.fm", "lastfm", "now playing", "現在再生中", "プレゼンス"),
+                checked = lastfmNowPlayingEnabled,
+                enabled = lastfmSessionKey.isNotBlank() && lastfmScrobbleEnabled,
+                activate = { AppSettings.setLastfmNowPlaying(!lastfmNowPlayingEnabled) },
+            ),
+        )
+        val allSettingsSearchEntries = settingsSearchEntries + scrobblingSearchEntries +
             audioVisualizationSearchEntries(
                 analogPeakEnabled = showAnalogDigitalPeakMeter,
                 spectrumEnabled = showSpectrumAnalyzer,
@@ -4330,6 +4379,91 @@ fun SettingsScreen(
                 canHearConnections = volumeHandoffBluetoothGranted,
                 onRequestBluetoothPermission = {
                     volumeHandoffBluetoothPermissionLauncher.launch(Manifest.permission.BLUETOOTH_CONNECT)
+                },
+            )
+        }
+
+        SettingsGroup(
+            header = stringResource(R.string.scrobbling),
+            footer = stringResource(R.string.scrobbling_footer),
+        ) {
+            SettingsRow(
+                icon = Icons.Rounded.MusicNote,
+                title = stringResource(R.string.lastfm_login),
+                subtitle = if (lastfmSessionKey.isNotBlank()) lastfmUsername else stringResource(R.string.lastfm_login_description),
+                value = if (lastfmSessionKey.isNotBlank()) stringResource(R.string.connected) else null,
+                onClick = { showLastfmLoginDialog = true },
+            )
+            RowDivider()
+            SettingsRow(
+                icon = Icons.Rounded.GraphicEq,
+                title = stringResource(R.string.scrobble_tracks),
+                subtitle = stringResource(R.string.scrobble_tracks_subtitle),
+                trailing = {
+                    Switch(
+                        checked = lastfmScrobbleEnabled,
+                        enabled = lastfmSessionKey.isNotBlank(),
+                        onCheckedChange = { enabled ->
+                            if (enabled && lastfmSessionKey.isBlank()) showLastfmLoginDialog = true
+                            else {
+                                if (enabled) AppSettings.setLastfmEnabled(true)
+                                AppSettings.setLastfmScrobbleEnabled(enabled)
+                            }
+                        },
+                    )
+                },
+                onClick = {
+                    if (lastfmSessionKey.isBlank()) showLastfmLoginDialog = true
+                    else {
+                        if (!lastfmScrobbleEnabled) AppSettings.setLastfmEnabled(true)
+                        AppSettings.setLastfmScrobbleEnabled(!lastfmScrobbleEnabled)
+                    }
+                },
+            )
+            RowDivider()
+            SettingsRow(
+                icon = Icons.Rounded.GraphicEq,
+                title = stringResource(R.string.lastfm_now_playing),
+                subtitle = stringResource(R.string.lastfm_now_playing_subtitle),
+                trailing = {
+                    Switch(
+                        checked = lastfmNowPlayingEnabled,
+                        enabled = lastfmSessionKey.isNotBlank() && lastfmScrobbleEnabled,
+                        onCheckedChange = AppSettings::setLastfmNowPlaying,
+                    )
+                },
+                onClick = {
+                    if (lastfmSessionKey.isNotBlank() && lastfmScrobbleEnabled) {
+                        AppSettings.setLastfmNowPlaying(!lastfmNowPlayingEnabled)
+                    }
+                },
+            )
+            RowDivider()
+            SettingsRow(
+                icon = Icons.Rounded.GraphicEq,
+                title = stringResource(R.string.listenbrainz_token),
+                subtitle = if (listenBrainzToken.isNotBlank()) stringResource(R.string.connected) else stringResource(R.string.listenbrainz_token_description),
+                value = if (listenBrainzToken.isNotBlank()) stringResource(R.string.connected) else null,
+                onClick = { showListenBrainzTokenDialog = true },
+            )
+            RowDivider()
+            SettingsRow(
+                icon = Icons.Rounded.GraphicEq,
+                title = stringResource(R.string.listenbrainz_scrobbling_enabled),
+                subtitle = stringResource(R.string.listenbrainz_token_description),
+                trailing = {
+                    Switch(
+                        checked = listenBrainzEnabled,
+                        enabled = listenBrainzToken.isNotBlank(),
+                        onCheckedChange = { enabled ->
+                            if (enabled && listenBrainzToken.isBlank()) showListenBrainzTokenDialog = true
+                            else AppSettings.setListenBrainzEnabled(enabled)
+                        },
+                    )
+                },
+                onClick = {
+                    if (listenBrainzToken.isBlank()) showListenBrainzTokenDialog = true
+                    else AppSettings.setListenBrainzEnabled(!listenBrainzEnabled)
                 },
             )
         }
@@ -8022,6 +8156,7 @@ fun SettingsScreen(
             confirmButton = {
                 TextButton(onClick = {
                     AppSettings.setListenBrainzToken(tokenInput.trim())
+                    AppSettings.setListenBrainzEnabled(tokenInput.trim().isNotEmpty())
                     showListenBrainzTokenDialog = false
                 }) {
                     Text(stringResource(R.string.save))
@@ -8087,6 +8222,7 @@ fun SettingsScreen(
                                         AppSettings.setLastfmSessionKey(auth.session.key)
                                         AppSettings.setLastfmUsername(auth.session.name)
                                         AppSettings.setLastfmEnabled(true)
+                                        AppSettings.setLastfmScrobbleEnabled(true)
                                         showLastfmLoginDialog = false
                                     }
                                     .onFailure { e ->

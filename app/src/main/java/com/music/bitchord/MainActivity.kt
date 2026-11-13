@@ -1316,46 +1316,17 @@ private fun BitChordApp(
         }
     }
 
-    val rootTabTopBarScrollEnabled = detail == null && !showSettings && !showReplay && !showSources && !showWearOs
-    val rootTabUsesListScrollState = selectedTab == TAB_LIBRARY || selectedTab == TAB_SEARCH
-    val musicLibraryTopBarOptionsApply = selectedTab == TAB_SONGS || selectedTab == TAB_ALBUMS || selectedTab == TAB_ARTISTS
-    val musicLibraryTopBarPinned = musicLibraryTopBarOptionsApply && pinMusicLibraryTopBarSetting
-    val holdMusicLibraryTopBarHiddenUntilTop =
-        musicLibraryTopBarOptionsApply && keepMusicLibraryTopBarHiddenUntilTopSetting
-    var rootTabTopBarCollapsed by remember(selectedTab) { mutableStateOf(false) }
-    LaunchedEffect(selectedTab, musicLibraryTopBarPinned) {
-        if (musicLibraryTopBarPinned) rootTabTopBarCollapsed = false
-    }
-    val onRootLibraryOrSearchScrolled: (Boolean) -> Unit = { contentScrolled ->
-        if (
-            detail == null && !showSettings && !showReplay && !showSources && !showWearOs &&
-            (selectedTab == TAB_LIBRARY || selectedTab == TAB_SEARCH)
-        ) {
-            rootTabTopBarCollapsed = contentScrolled
-        }
-    }
-    // Collapse the root bar on the first real content movement so a brief
-    // scroll does not leave its Settings action pinned at the top.
-    val rootTabTopBarScrollThreshold = 0f
-    val rootTabTopBarScroll = remember(
-        selectedTab,
-        rootTabTopBarScrollEnabled,
-        rootTabUsesListScrollState,
-        rootTabTopBarScrollThreshold,
-        musicLibraryTopBarPinned,
-        holdMusicLibraryTopBarHiddenUntilTop,
-    ) {
-        RootTabTopBarScrollConnection(
-            // Library and Search report their actual scroll position below.
-            // The direction-based parent connection would expand the bar as
-            // soon as a user scrolls back toward the top, even mid-list.
-            enabled = rootTabTopBarScrollEnabled && !rootTabUsesListScrollState && !musicLibraryTopBarPinned,
-            initiallyCollapsed = rootTabTopBarCollapsed,
-            thresholdPx = rootTabTopBarScrollThreshold,
-            holdHiddenUntilTop = holdMusicLibraryTopBarHiddenUntilTop,
-            onCollapsedChange = { rootTabTopBarCollapsed = it },
-        )
-    }
+    val rootTabTopBarState = rememberRootTabTopBarState(
+        selectedTab = selectedTab,
+        isRootScreen = detail == null && !showSettings && !showReplay && !showSources && !showWearOs,
+        pinSetting = pinMusicLibraryTopBarSetting,
+        keepHiddenUntilTopSetting = keepMusicLibraryTopBarHiddenUntilTopSetting,
+    )
+    val rootTabTopBarScrollEnabled = rootTabTopBarState.scrollEnabled
+    val musicLibraryTopBarPinned = rootTabTopBarState.pinned
+    val rootTabTopBarCollapsed = rootTabTopBarState.collapsed
+    val onRootLibraryOrSearchScrolled = rootTabTopBarState.onListScrollChanged
+    val rootTabTopBarScroll = rootTabTopBarState.scrollConnection
     val rootTopBarPresentation = rootTabTopBarPresentation(
         persistentSettingsOnly = rootTabFloatingSettingsOnlySetting,
         scrollEnabled = rootTabTopBarScrollEnabled,
@@ -6109,6 +6080,64 @@ private const val TAB_HOME = 8
 private const val TAB_GENRES = 9
 private const val TAB_SERVICES = 10
 
+private data class RootTabTopBarState(
+    val scrollEnabled: Boolean,
+    val pinned: Boolean,
+    val collapsed: Boolean,
+    val onListScrollChanged: (Boolean) -> Unit,
+    val scrollConnection: NestedScrollConnection,
+)
+
+@Composable
+private fun rememberRootTabTopBarState(
+    selectedTab: Int,
+    isRootScreen: Boolean,
+    pinSetting: Boolean,
+    keepHiddenUntilTopSetting: Boolean,
+): RootTabTopBarState {
+    val scrollEnabled = isRootScreen
+    val listOwnsScrollState = selectedTab == TAB_LIBRARY || selectedTab == TAB_SEARCH
+    val optionApplies = selectedTab == TAB_SONGS || selectedTab == TAB_ALBUMS ||
+        selectedTab == TAB_ARTISTS || selectedTab == TAB_LIBRARY || selectedTab == TAB_SEARCH
+    val pinned = optionApplies && pinSetting
+    val holdHiddenUntilTop = optionApplies && keepHiddenUntilTopSetting
+    var collapsed by remember(selectedTab) { mutableStateOf(false) }
+
+    LaunchedEffect(selectedTab, pinned) {
+        if (pinned) collapsed = false
+    }
+
+    val onListScrollChanged: (Boolean) -> Unit = { contentScrolled ->
+        if (isRootScreen && listOwnsScrollState) collapsed = contentScrolled && !pinned
+    }
+
+    // Collapse on the first real content movement. Library and Search report
+    // their list state directly so reversing direction mid-list cannot reveal
+    // their category/source labels before they reach the top.
+    val scrollConnection = remember(
+        selectedTab,
+        scrollEnabled,
+        listOwnsScrollState,
+        pinned,
+        holdHiddenUntilTop,
+    ) {
+        RootTabTopBarScrollConnection(
+            enabled = scrollEnabled && !listOwnsScrollState && !pinned,
+            initiallyCollapsed = collapsed,
+            thresholdPx = 0f,
+            holdHiddenUntilTop = holdHiddenUntilTop,
+            onCollapsedChange = { collapsed = it },
+        )
+    }
+
+    return RootTabTopBarState(
+        scrollEnabled = scrollEnabled,
+        pinned = pinned,
+        collapsed = collapsed,
+        onListScrollChanged = onListScrollChanged,
+        scrollConnection = scrollConnection,
+    )
+}
 
 /** Keep only the floating settings action visible while a root tab scrolls. */
 private class RootTabTopBarScrollConnection(

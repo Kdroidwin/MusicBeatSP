@@ -280,6 +280,7 @@ fun LibraryScreen(
     onOpenReplay: (() -> Unit)? = null,
 ) {
     val context = LocalContext.current.applicationContext
+    val pinRootFilters by AppSettings.pinMusicLibraryTopBar.collectAsStateWithLifecycle()
     val playlists by LocalPlaylistStore.playlists.collectAsStateWithLifecycle()
     val favoriteIds by LocalFavoritesStore.favoriteIds.collectAsStateWithLifecycle()
     val favoriteOrder by LocalFavoritesStore.favoriteOrder.collectAsStateWithLifecycle()
@@ -1285,7 +1286,7 @@ fun LibraryScreen(
                         .padding(top = contentPadding.calculateTopPadding()),
                 ) {
                     AnimatedVisibility(
-                        visible = !rootLibraryContentScrolled,
+                        visible = pinRootFilters || !rootLibraryContentScrolled,
                         enter = expandVertically(
                             animationSpec = androidx.compose.animation.core.tween(180),
                             expandFrom = Alignment.Top,
@@ -1404,7 +1405,7 @@ fun LibraryScreen(
                         .padding(top = contentPadding.calculateTopPadding()),
                 ) {
                     AnimatedVisibility(
-                        visible = !rootLibraryContentScrolled,
+                        visible = pinRootFilters || !rootLibraryContentScrolled,
                         enter = expandVertically(
                             animationSpec = androidx.compose.animation.core.tween(180),
                             expandFrom = Alignment.Top,
@@ -1477,7 +1478,7 @@ fun LibraryScreen(
                         .padding(top = contentPadding.calculateTopPadding()),
                 ) {
                     AnimatedVisibility(
-                        visible = !rootLibraryContentScrolled,
+                        visible = pinRootFilters || !rootLibraryContentScrolled,
                         enter = expandVertically(
                             animationSpec = androidx.compose.animation.core.tween(180),
                             expandFrom = Alignment.Top,
@@ -1546,7 +1547,7 @@ fun LibraryScreen(
                         .padding(top = contentPadding.calculateTopPadding()),
                 ) {
                     AnimatedVisibility(
-                        visible = !rootLibraryContentScrolled,
+                        visible = pinRootFilters || !rootLibraryContentScrolled,
                         enter = expandVertically(
                             animationSpec = androidx.compose.animation.core.tween(180),
                             expandFrom = Alignment.Top,
