@@ -258,8 +258,20 @@ object LocalLyricsManager {
                                     album = candidate.album?.take(MAX_SEARCH_METADATA_CHARS),
                                     durationSeconds = candidate.durationSeconds,
                                     provider = candidate.provider.ifBlank { source.label }.take(MAX_SEARCH_METADATA_CHARS),
-                                    syncedLyrics = candidate.syncedLyrics?.takeIf { it.length <= MAX_SEARCH_LYRICS_CHARS },
-                                    plainLyrics = candidate.plainLyrics?.takeIf { it.length <= MAX_SEARCH_LYRICS_CHARS },
+                                    syncedLyrics = candidate.syncedLyrics
+                                        ?.takeIf { it.length <= MAX_SEARCH_LYRICS_CHARS }
+                                        ?.let { lyrics ->
+                                            if (source.id == "kugou" && AppSettings.convertKugouToJapaneseKanji.value) {
+                                                com.music.bitchord.data.lyrics.JapaneseKanji.convertSimplifiedToJapanese(lyrics)
+                                            } else lyrics
+                                        },
+                                    plainLyrics = candidate.plainLyrics
+                                        ?.takeIf { it.length <= MAX_SEARCH_LYRICS_CHARS }
+                                        ?.let { lyrics ->
+                                            if (source.id == "kugou" && AppSettings.convertKugouToJapaneseKanji.value) {
+                                                com.music.bitchord.data.lyrics.JapaneseKanji.convertSimplifiedToJapanese(lyrics)
+                                            } else lyrics
+                                        },
                                 )
                                 rawResult.copy(
                                     title = rawResult.title.ifBlank { safeTitle }.take(MAX_SEARCH_METADATA_CHARS),

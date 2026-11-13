@@ -1482,6 +1482,8 @@
     <string name="remove_qq_music_lyric_metadata_subtitle">Remove the opening title and empty timestamp rows, plus Chinese composer/arranger credits</string>
     <string name="followlyrics_japanese_kanji">Convert FollowLyrics to Japanese kanji</string>
     <string name="followlyrics_japanese_kanji_subtitle">Convert common Traditional Chinese characters to Japanese shinjitai forms. On by default.</string>
+    <string name="kugou_japanese_kanji">Convert KuGou lyrics to Japanese kanji</string>
+    <string name="kugou_japanese_kanji_subtitle">Convert simplified Chinese glyphs to Japanese kanji forms. On by default.</string>
     <string name="lyrics_sync_seek_back_5">Seek back 5 seconds</string>
     <string name="lyrics_sync_seek_forward_5">Seek forward 5 seconds</string>
     <string name="lyrics_sync_five_second_seek">Use 5-second skip buttons in lyrics sync editor</string>

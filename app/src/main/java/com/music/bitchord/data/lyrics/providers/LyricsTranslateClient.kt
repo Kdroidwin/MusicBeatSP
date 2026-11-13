@@ -45,12 +45,23 @@ internal object LyricsTranslateClient {
     ): List<NativeSearchCandidate> = withContext(Dispatchers.IO) {
         val cleanTitle = NativeLyricsHttp.cleanQueryText(title).take(180)
         val cleanArtist = NativeLyricsHttp.primaryArtist(artist).take(180)
-        val query = listOf(cleanTitle, cleanArtist)
-            .filter(String::isNotBlank)
-            .joinToString(" ")
-        if (query.isBlank()) return@withContext emptyList()
+        val queries = listOf(
+            cleanTitle,
+            listOf(cleanTitle, cleanArtist).filter(String::isNotBlank).joinToString(" "),
+            listOf(cleanArtist, cleanTitle).filter(String::isNotBlank).joinToString(" "),
+        ).filter(String::isNotBlank).distinct()
+        if (queries.isEmpty()) return@withContext emptyList()
 
-        val hits = searchSongs(query)
+        // LyricsTranslate's search page supports broad title searches. A combined
+        // title/artist query can return no server-side results even when a title
+        // search finds the song, so merge both forms instead of relying on one.
+        val searchedHits = coroutineScope {
+            queries.map { query -> async(Dispatchers.IO) { searchSongs(query) } }
+                .awaitAll()
+                .flatten()
+        }
+        val hits = searchedHits
+            .distinctBy(SongHit::url)
             .map { hit -> hit to titleSimilarity(cleanTitle, hit.title) }
             .filter { (_, similarity) -> similarity >= MIN_SEARCH_TITLE_SIMILARITY }
             .sortedWith(
@@ -97,13 +108,13 @@ internal object LyricsTranslateClient {
             val html = NativeLyricsHttp.readBoundedBody(response.body) ?: return emptyList()
             val document = Jsoup.parse(html, response.request.url.toString())
 
-            // The HAR shows separate server-rendered "songs" and full-text
-            // "lyrics" groups. Prefer the song catalogue; use full-text matches
-            // only when the catalogue has no candidate for this query.
-            val songItems = document.select(".search-res__block._songs .block-search-res__item")
-            val items = songItems.ifEmpty {
-                document.select(".search-res__block._lyrics .block-search-res__item")
-            }
+            // The HAR shows independent server-rendered "songs" and full-text
+            // "lyrics" groups. Both can contain useful matches even when the
+            // other group is present, so collect both and deduplicate by URL.
+            val items = document.select(
+                ".search-res__block._songs .block-search-res__item, " +
+                    ".search-res__block._lyrics .block-search-res__item",
+            )
             val seen = HashSet<String>()
             items.mapNotNull { item ->
                 val titleLink = item.selectFirst("a.block-1-table__title[href]") ?: return@mapNotNull null

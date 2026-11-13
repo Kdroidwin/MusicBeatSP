@@ -106,6 +106,11 @@ object LyricsRepository {
             ) {
                 result.copy(lines = result.lines.map(::convertFollowLyricsLine))
             } else result
+            "kugou" -> if (com.music.bitchord.data.settings.AppSettings
+                    .convertKugouToJapaneseKanji.value
+            ) {
+                result.copy(lines = result.lines.map(::convertKugouLine))
+            } else result
             else -> result
         }
     }
@@ -115,6 +120,12 @@ object LyricsRepository {
         text = JapaneseKanji.convert(line.text),
         words = line.words.map { word -> word.copy(text = JapaneseKanji.convert(word.text)) },
         background = line.background?.let(::convertFollowLyricsLine),
+    )
+
+    private fun convertKugouLine(line: LyricLine): LyricLine = line.copy(
+        text = JapaneseKanji.convertSimplifiedToJapanese(line.text),
+        words = line.words.map { word -> word.copy(text = JapaneseKanji.convertSimplifiedToJapanese(word.text)) },
+        background = line.background?.let(::convertKugouLine),
     )
 
     suspend fun fetch(

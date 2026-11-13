@@ -926,6 +926,9 @@ object AppSettings {
     /** Converts common Traditional Chinese forms in FollowLyrics to Japanese shinjitai. */
     val convertFollowLyricsToJapaneseKanji = MutableStateFlow(true)
 
+    /** Converts KuGou's simplified Chinese lyric glyphs to Japanese kanji forms. */
+    val convertKugouToJapaneseKanji = MutableStateFlow(true)
+
     /** Optional close control for the lyrics panel; hidden by default. */
     val showLyricsCloseButton = MutableStateFlow(false)
 
@@ -1828,6 +1831,7 @@ object AppSettings {
         removeNeteaseLeadingBraceCredits.value = prefs.getBoolean(KEY_REMOVE_NETEASE_LEADING_BRACE_CREDITS, true)
         removeQqMusicLyricMetadata.value = prefs.getBoolean(KEY_REMOVE_QQ_MUSIC_LYRIC_METADATA, true)
         convertFollowLyricsToJapaneseKanji.value = prefs.getBoolean(KEY_CONVERT_FOLLOWLYRICS_TO_JAPANESE_KANJI, true)
+        convertKugouToJapaneseKanji.value = prefs.getBoolean(KEY_CONVERT_KUGOU_TO_JAPANESE_KANJI, true)
         showLyricsCloseButton.value = prefs.getBoolean(KEY_SHOW_LYRICS_CLOSE_BUTTON, false)
         hideLyricsStatusText.value = prefs.getBoolean(KEY_HIDE_LYRICS_STATUS_TEXT, false)
         hideLyricsSavedMessage.value = prefs.getBoolean(KEY_HIDE_LYRICS_SAVED_MESSAGE, false)
@@ -3476,6 +3480,11 @@ object AppSettings {
     fun setConvertFollowLyricsToJapaneseKanji(value: Boolean) {
         convertFollowLyricsToJapaneseKanji.value = value
         prefs.edit().putBoolean(KEY_CONVERT_FOLLOWLYRICS_TO_JAPANESE_KANJI, value).apply()
+    }
+
+    fun setConvertKugouToJapaneseKanji(value: Boolean) {
+        convertKugouToJapaneseKanji.value = value
+        prefs.edit().putBoolean(KEY_CONVERT_KUGOU_TO_JAPANESE_KANJI, value).apply()
     }
 
     fun setShowLyricsCloseButton(value: Boolean) {
@@ -5135,6 +5144,7 @@ object AppSettings {
     private const val KEY_REMOVE_NETEASE_LEADING_BRACE_CREDITS = "remove_netease_leading_brace_credits"
     private const val KEY_REMOVE_QQ_MUSIC_LYRIC_METADATA = "remove_qq_music_lyric_metadata"
     private const val KEY_CONVERT_FOLLOWLYRICS_TO_JAPANESE_KANJI = "convert_followlyrics_to_japanese_kanji"
+    private const val KEY_CONVERT_KUGOU_TO_JAPANESE_KANJI = "convert_kugou_to_japanese_kanji"
     private const val KEY_SHOW_LYRICS_CLOSE_BUTTON = "show_lyrics_close_button"
     private const val KEY_HIDE_LYRICS_STATUS_TEXT = "hide_lyrics_status_text"
     private const val KEY_HIDE_LYRICS_SAVED_MESSAGE = "hide_lyrics_saved_message"

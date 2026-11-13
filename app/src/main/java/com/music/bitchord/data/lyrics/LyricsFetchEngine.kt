@@ -75,6 +75,10 @@ object LyricsFetchEngine {
                 append(";followLyricsJapaneseKanji=")
                     .append(com.music.bitchord.data.settings.AppSettings.convertFollowLyricsToJapaneseKanji.value)
             }
+            if (sources.any { it.id == "kugou" }) {
+                append(";kugouJapaneseKanji=")
+                    .append(com.music.bitchord.data.settings.AppSettings.convertKugouToJapaneseKanji.value)
+            }
         }
         val flightKey = "${artist.lowercase().trim()}|${title.lowercase().trim()}|${durationMs / 1000}|$cacheVariant"
 

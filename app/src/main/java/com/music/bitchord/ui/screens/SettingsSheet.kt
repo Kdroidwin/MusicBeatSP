@@ -372,6 +372,7 @@ private fun supplementalSettingsSearchEntries(
     removeNeteaseBraceCredits: Boolean,
     removeQqMusicMetadata: Boolean,
     convertFollowLyricsToJapaneseKanji: Boolean,
+    convertKugouToJapaneseKanji: Boolean,
     lyricsDebugLogs: Boolean,
     bitPerfectMode: BitPerfectMode,
     convertForLimitedDac: Boolean,
@@ -437,6 +438,12 @@ private fun supplementalSettingsSearchEntries(
         keywords = listOf("lyrics", "followlyrics", "traditional chinese", "japanese", "繁体字", "日本語漢字", "歌詞"),
         checked = convertFollowLyricsToJapaneseKanji,
     ) { AppSettings.setConvertFollowLyricsToJapaneseKanji(!convertFollowLyricsToJapaneseKanji) },
+    SettingsSearchEntry(
+        title = stringResource(R.string.kugou_japanese_kanji),
+        subtitle = stringResource(R.string.kugou_japanese_kanji_subtitle),
+        keywords = listOf("lyrics", "kugou", "simplified chinese", "japanese kanji", "簡体字", "日本語漢字", "歌詞"),
+        checked = convertKugouToJapaneseKanji,
+    ) { AppSettings.setConvertKugouToJapaneseKanji(!convertKugouToJapaneseKanji) },
     SettingsSearchEntry(
         title = stringResource(R.string.lyrics_debug_logs),
         subtitle = stringResource(R.string.lyrics_debug_logs_subtitle),
@@ -1587,6 +1594,7 @@ fun SettingsScreen(
     val removeNeteaseLeadingBraceCredits by AppSettings.removeNeteaseLeadingBraceCredits.collectAsStateWithLifecycle()
     val removeQqMusicLyricMetadata by AppSettings.removeQqMusicLyricMetadata.collectAsStateWithLifecycle()
     val convertFollowLyricsToJapaneseKanji by AppSettings.convertFollowLyricsToJapaneseKanji.collectAsStateWithLifecycle()
+    val convertKugouToJapaneseKanji by AppSettings.convertKugouToJapaneseKanji.collectAsStateWithLifecycle()
     val showLyricsCloseButton by AppSettings.showLyricsCloseButton.collectAsStateWithLifecycle()
     val hideLyricsStatusText by AppSettings.hideLyricsStatusText.collectAsStateWithLifecycle()
     val hideLyricsSavedMessage by AppSettings.hideLyricsSavedMessage.collectAsStateWithLifecycle()
@@ -2728,6 +2736,7 @@ fun SettingsScreen(
             removeNeteaseBraceCredits = removeNeteaseLeadingBraceCredits,
             removeQqMusicMetadata = removeQqMusicLyricMetadata,
             convertFollowLyricsToJapaneseKanji = convertFollowLyricsToJapaneseKanji,
+            convertKugouToJapaneseKanji = convertKugouToJapaneseKanji,
             lyricsDebugLogs = showLyricsLogs,
             bitPerfectMode = bitPerfectMode,
             convertForLimitedDac = convertForLimitedDac,
@@ -6684,6 +6693,23 @@ fun SettingsScreen(
                     onClick = {
                         AppSettings.setConvertFollowLyricsToJapaneseKanji(!convertFollowLyricsToJapaneseKanji)
                     },
+                )
+                RowDivider()
+                SettingsRow(
+                    icon = Icons.Rounded.Language,
+                    title = stringResource(R.string.kugou_japanese_kanji),
+                    subtitle = stringResource(R.string.kugou_japanese_kanji_subtitle),
+                    trailing = {
+                        Switch(
+                            checked = convertKugouToJapaneseKanji,
+                            onCheckedChange = AppSettings::setConvertKugouToJapaneseKanji,
+                            colors = SwitchDefaults.colors(
+                                checkedTrackColor = MaterialTheme.colorScheme.primary,
+                                checkedBorderColor = MaterialTheme.colorScheme.primary,
+                            ),
+                        )
+                    },
+                    onClick = { AppSettings.setConvertKugouToJapaneseKanji(!convertKugouToJapaneseKanji) },
                 )
             }
         }

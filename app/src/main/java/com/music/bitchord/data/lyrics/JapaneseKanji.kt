@@ -1,7 +1,13 @@
 package com.music.bitchord.data.lyrics
 
+import android.icu.text.Transliterator
+
 /** Maps common Traditional Chinese glyphs to the Japanese shinjitai forms. */
 internal object JapaneseKanji {
+    private val simplifiedToTraditional by lazy(LazyThreadSafetyMode.PUBLICATION) {
+        runCatching { Transliterator.getInstance("Simplified-Traditional") }.getOrNull()
+    }
+
     private val variants = mapOf(
         '亞' to '亜', '俠' to '侠', '來' to '来', '兩' to '両', '兒' to '児',
         '亂' to '乱', '產' to '産', '藝' to '芸',
@@ -44,4 +50,30 @@ internal object JapaneseKanji {
     fun convert(text: String): String = buildString(text.length) {
         text.forEach { character -> append(variants[character] ?: character) }
     }
+
+    /** Converts simplified Chinese glyphs through Traditional Chinese, then Japanese shinjitai. */
+    fun convertSimplifiedToJapanese(text: String): String {
+        val transliterator = simplifiedToTraditional
+        val traditional = if (transliterator == null) {
+            text.map { simplifiedFallback[it] ?: it }.joinToString("")
+        } else {
+            // Lyrics sources are queried concurrently; ICU transliterators are stateful.
+            synchronized(transliterator) { transliterator.transliterate(text) }
+        }
+        return convert(traditional)
+    }
+
+    // A small safe fallback for Android builds where the ICU transform is absent.
+    private val simplifiedFallback = mapOf(
+        '爱' to '愛', '边' to '邊', '变' to '變', '车' to '車', '长' to '長',
+        '传' to '傳', '从' to '從', '东' to '東', '对' to '對', '发' to '發',
+        '风' to '風', '国' to '國', '还' to '還', '欢' to '歡', '会' to '會',
+        '记' to '記', '间' to '間', '见' to '見', '经' to '經', '开' to '開',
+        '来' to '來', '两' to '兩', '灵' to '靈', '乱' to '亂', '马' to '馬',
+        '门' to '門', '难' to '難', '脑' to '腦', '气' to '氣', '请' to '請',
+        '让' to '讓', '认' to '認', '时' to '時', '实' to '實', '说' to '說',
+        '听' to '聽', '为' to '爲', '无' to '無', '现' to '現', '学' to '學',
+        '样' to '樣', '艺' to '藝', '应' to '應', '与' to '與', '约' to '約',
+        '云' to '雲', '这' to '這', '转' to '轉', '总' to '總',
+    )
 }
