@@ -1925,6 +1925,23 @@
     <string name="lyrics_ctc_model_delete_failed">CTCモデルを削除できませんでした。</string>
     <string name="lyrics_ctc_model_deleting">削除中…</string>
     <string name="lyrics_ctc_model_search_keywords">CTC モデル 同期歌詞 容量 削除</string>
+    <string name="lyrics_translation_plamo">PLaMoで歌詞を翻訳</string>
+    <string name="lyrics_translation_plamo_subtitle">原文とtimestampはそのままに、各行の下へ端末の言語で翻訳を表示します。下から任意のPLaMo 3 Translate Q4_K_Mモデル（約573 MB）をダウンロードしてください。</string>
+    <string name="lyrics_translation_plamo_model">PLaMo 3 Translateモデル</string>
+    <string name="lyrics_translation_plamo_model_subtitle">公式の0.8B Q4_K_M GGUFモデル（約573 MB）をダウンロードします。翻訳は端末内で行い、モデルはAPKに含めません。</string>
+    <string name="lyrics_translation_plamo_model_requires_network">標準版でオンラインモードのときにモデルをダウンロードできます。</string>
+    <string name="lyrics_translation_plamo_download">モデルをダウンロード</string>
+    <string name="lyrics_translation_plamo_downloading">モデルをダウンロード中… %1$d%%</string>
+    <string name="lyrics_translation_plamo_ready">ダウンロード済み・タップで削除</string>
+    <string name="lyrics_translation_plamo_delete_title">PLaMoモデルを削除しますか？</string>
+    <string name="lyrics_translation_plamo_delete_message">ダウンロードした約573 MBのモデルと保存済み翻訳を削除します。原文の歌詞や音源ファイルは変更しません。</string>
+    <string name="lyrics_translation_plamo_delete_success">PLaMoモデルを削除しました。</string>
+    <string name="lyrics_translation_plamo_delete_failed">PLaMoモデルを削除できませんでした。</string>
+    <string name="lyrics_translation_plamo_download_failed">PLaMoモデルをダウンロードできませんでした。</string>
+    <string name="lyrics_translation_plamo_model_missing">翻訳表示には設定からPLaMoモデルをダウンロードしてください。</string>
+    <string name="lyrics_translation_plamo_working">端末内で歌詞を翻訳中… %1$d%%</string>
+    <string name="lyrics_translation_plamo_failed">歌詞を翻訳できませんでした。原文は変更されていません。</string>
+    <string name="lyrics_translation_plamo_search_keywords">PLaMo 翻訳 歌詞 モデル ダウンロード 削除 原文 二言語</string>
     <string name="lyrics_shift_all_timestamps">全行のtimestampをずらす</string>
     <string name="lyrics_shift_all_timestamps_help">全timestampに加える時間を入力し、timestampを進めるか戻すか選択してください。</string>
     <string name="lyrics_set_first_timestamp">最初の行のtimestampを設定</string>
@@ -2161,4 +2178,12 @@
     <string name="hybrid_local_releases">端末内のアルバム・シングル・EP</string>
     <string name="hybrid_local_playlists">端末内のプレイリスト</string>
     <string name="hybrid_playlist_track_count">%1$d曲</string>
+    <string name="lyrics_correct_japanese_orthography">日本語の歌詞表記を補正</string>
+    <string name="lyrics_correct_japanese_orthography_subtitle">ダウンロード済みのPLaMoモデルを端末内で使い、日本語歌詞に混じった簡体字表記を補正します。適用前に結果を確認できます。</string>
+    <string name="lyrics_correct_japanese_orthography_preview">歌詞の補正結果を確認</string>
+    <string name="lyrics_correct_japanese_orthography_unchanged">補正候補はありませんでした。</string>
+    <string name="lyrics_correct_japanese_orthography_failed">安全に補正できませんでした。元の歌詞は変更されていません。</string>
+    <string name="lyrics_original_text">補正前</string>
+    <string name="lyrics_corrected_text">補正後</string>
+    <string name="lyrics_no_text_to_correct">補正する歌詞がありません。</string>
 </resources>

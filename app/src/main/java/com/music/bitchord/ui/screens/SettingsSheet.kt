@@ -108,6 +108,7 @@ import androidx.appcompat.app.AppCompatDelegate
 import androidx.core.content.ContextCompat
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Checkbox
+import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.RadioButton
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.HorizontalDivider
@@ -212,6 +213,7 @@ import com.music.bitchord.data.settings.BitPerfectMode
 import com.music.bitchord.data.canvas.ArtistSignatureRepository
 import com.music.bitchord.data.settings.LyricsTextAlignment
 import com.music.bitchord.data.lyrics.CtcModelStore
+import com.music.bitchord.feature.lyrics.PlamoLyricsTranslation
 import com.music.bitchord.playback.AudioOutputStatus
 import com.music.bitchord.R
 import com.music.bitchord.data.settings.ThemeMode
@@ -234,6 +236,8 @@ import com.music.bitchord.ui.screens.WearOsSettingsRow
 import com.music.bitchord.wear.WatchInstaller
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.CancellationException
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.withContext
 import java.util.Locale
 import kotlin.math.roundToInt
 
@@ -1603,6 +1607,7 @@ fun SettingsScreen(
     val removeQqMusicLyricMetadata by AppSettings.removeQqMusicLyricMetadata.collectAsStateWithLifecycle()
     val convertFollowLyricsToJapaneseKanji by AppSettings.convertFollowLyricsToJapaneseKanji.collectAsStateWithLifecycle()
     val convertKugouToJapaneseKanji by AppSettings.convertKugouToJapaneseKanji.collectAsStateWithLifecycle()
+    val translateLyricsWithPlamo by AppSettings.translateLyricsWithPlamo.collectAsStateWithLifecycle()
     val showLyricsCloseButton by AppSettings.showLyricsCloseButton.collectAsStateWithLifecycle()
     val hideLyricsStatusText by AppSettings.hideLyricsStatusText.collectAsStateWithLifecycle()
     val hideLyricsSavedMessage by AppSettings.hideLyricsSavedMessage.collectAsStateWithLifecycle()
@@ -1654,6 +1659,14 @@ fun SettingsScreen(
     var ctcModelFilesPresent by remember(context) { mutableStateOf(CtcModelStore.hasAnyFiles(context)) }
     var showDeleteCtcModelDialog by remember { mutableStateOf(false) }
     var deletingCtcModel by remember { mutableStateOf(false) }
+    var plamoModelPresent by remember(context) { mutableStateOf(false) }
+    var plamoDownloadPercent by remember(context) { mutableStateOf(-1) }
+    var plamoDownloadCanceled by remember(context) { mutableStateOf(false) }
+    var showPlamoModelDialog by remember { mutableStateOf(false) }
+    var deletingPlamoModel by remember { mutableStateOf(false) }
+    LaunchedEffect(context) {
+        plamoModelPresent = withContext(Dispatchers.IO) { PlamoLyricsTranslation.hasModel(context) }
+    }
     var showLyricsWebSearchQueryDialog by remember { mutableStateOf(false) }
     var lyricsWebSearchQueryDraft by remember(lyricsWebSearchQuery) { mutableStateOf(lyricsWebSearchQuery) }
     val lyricsExtensionsEnabled by AppSettings.lyricsExtensionsEnabled.collectAsStateWithLifecycle()
@@ -2161,6 +2174,7 @@ fun SettingsScreen(
         ) { AppSettings.setSpeakerPlaybackAllowed(!speakerPlaybackAllowed) },
         SettingsSearchEntry(stringResource(R.string.lyrics_furigana), stringResource(R.string.lyrics_furigana_subtitle), listOf("lyrics", "furigana", "ruby", "ふりがな", "ルビ"), showLyricsFurigana) { AppSettings.setShowLyricsFurigana(!showLyricsFurigana) },
         SettingsSearchEntry(stringResource(R.string.lyrics_auto_fit), stringResource(R.string.lyrics_auto_fit_subtitle), listOf("lyrics", "one line", "fit", "歌詞", "一行", "文字サイズ"), autoFitOneLineLyrics) { AppSettings.setAutoFitOneLineLyrics(!autoFitOneLineLyrics) },
+        SettingsSearchEntry(stringResource(R.string.lyrics_translation_plamo), stringResource(R.string.lyrics_translation_plamo_subtitle), stringResource(R.string.lyrics_translation_plamo_search_keywords).split(' '), translateLyricsWithPlamo) { AppSettings.setTranslateLyricsWithPlamo(!translateLyricsWithPlamo) },
         compactLyricsSearchSourcesSearchEntry(compactLyricsSearchSources),
         SettingsSearchEntry(stringResource(R.string.spatial_audio), stringResource(R.string.spatial_audio_subtitle), listOf("spatial", "空間オーディオ"), spatialAudio) { AppSettings.setSpatialAudio(!spatialAudio) },
         SettingsSearchEntry(stringResource(R.string.parametric_eq), stringResource(R.string.parametric_eq_subtitle), listOf("parametric", "equalizer", "frequency", "Q", "gain", "パラメトリック", "イコライザー", "周波数"), parametricEqEnabled) { AppSettings.setParametricEqEnabled(!parametricEqEnabled) },
@@ -3205,6 +3219,32 @@ fun SettingsScreen(
     var showLastfmLoginDialog by remember { mutableStateOf(false) }
     val scrobbleScope = rememberCoroutineScope()
     val settingsScope = rememberCoroutineScope()
+    val startPlamoModelDownload: () -> Unit = {
+        plamoDownloadCanceled = false
+        plamoDownloadPercent = 0
+        settingsScope.launch {
+            try {
+                PlamoLyricsTranslation.download(context) { received, total ->
+                    plamoDownloadPercent = if (total > 0L) (received * 100L / total).toInt().coerceIn(0, 100) else 0
+                }
+                plamoModelPresent = true
+            } catch (cancelled: CancellationException) {
+                throw cancelled
+            } catch (_: Exception) {
+                if (!plamoDownloadCanceled) {
+                    Toast.makeText(context, R.string.lyrics_translation_plamo_download_failed, Toast.LENGTH_LONG).show()
+                }
+            } finally {
+                plamoModelPresent = PlamoLyricsTranslation.hasModel(context)
+                plamoDownloadPercent = -1
+                plamoDownloadCanceled = false
+            }
+        }
+    }
+    val cancelPlamoModelDownload: () -> Unit = {
+        plamoDownloadCanceled = true
+        PlamoLyricsTranslation.cancelDownload()
+    }
 
     val version = remember(context) {
         runCatching {
@@ -3244,6 +3284,16 @@ fun SettingsScreen(
             keywords = stringResource(R.string.lyrics_ctc_model_search_keywords).split(' '),
             enabled = ctcModelFilesPresent,
             activate = { showDeleteCtcModelDialog = true },
+        ),
+        SettingsSearchEntry(
+            title = stringResource(R.string.lyrics_translation_plamo_model),
+            subtitle = stringResource(
+                if (plamoModelPresent) R.string.lyrics_translation_plamo_ready
+                else R.string.lyrics_translation_plamo_model_subtitle,
+            ),
+            keywords = stringResource(R.string.lyrics_translation_plamo_search_keywords).split(' '),
+            enabled = plamoModelPresent || PlamoLyricsTranslation.canDownload(context) || plamoDownloadPercent >= 0,
+            activate = { showPlamoModelDialog = true },
         ),
         SettingsSearchEntry(
             title = stringResource(R.string.import_musicolet_backup),
@@ -5180,6 +5230,26 @@ fun SettingsScreen(
             )
             RowDivider()
             SettingsRow(
+                icon = Icons.Rounded.Language,
+                title = stringResource(R.string.lyrics_translation_plamo),
+                subtitle = stringResource(R.string.lyrics_translation_plamo_subtitle),
+                trailing = {
+                    Switch(
+                        checked = translateLyricsWithPlamo,
+                        onCheckedChange = AppSettings::setTranslateLyricsWithPlamo,
+                    )
+                },
+                onClick = { AppSettings.setTranslateLyricsWithPlamo(!translateLyricsWithPlamo) },
+            )
+            RowDivider()
+            PlamoModelSettingsRow(
+                downloaded = plamoModelPresent,
+                progressPercent = plamoDownloadPercent,
+                canDownload = PlamoLyricsTranslation.canDownload(context),
+                onClick = { showPlamoModelDialog = true },
+            )
+            RowDivider()
+            SettingsRow(
                 icon = Icons.AutoMirrored.Rounded.Notes,
                 title = stringResource(R.string.compact_lyrics_search_sources),
                 subtitle = stringResource(R.string.compact_lyrics_search_sources_subtitle),
@@ -6235,6 +6305,30 @@ fun SettingsScreen(
                     )
                 },
                 onClick = { AppSettings.setSyncedLyrics(!syncedLyrics) },
+            )
+            RowDivider()
+            SettingsRow(
+                icon = Icons.Rounded.Language,
+                title = stringResource(R.string.lyrics_translation_plamo),
+                subtitle = stringResource(R.string.lyrics_translation_plamo_subtitle),
+                trailing = {
+                    Switch(
+                        checked = translateLyricsWithPlamo,
+                        onCheckedChange = AppSettings::setTranslateLyricsWithPlamo,
+                        colors = SwitchDefaults.colors(
+                            checkedTrackColor = MaterialTheme.colorScheme.primary,
+                            checkedBorderColor = MaterialTheme.colorScheme.primary,
+                        ),
+                    )
+                },
+                onClick = { AppSettings.setTranslateLyricsWithPlamo(!translateLyricsWithPlamo) },
+            )
+            RowDivider()
+            PlamoModelSettingsRow(
+                downloaded = plamoModelPresent,
+                progressPercent = plamoDownloadPercent,
+                canDownload = PlamoLyricsTranslation.canDownload(context),
+                onClick = { showPlamoModelDialog = true },
             )
             RowDivider()
             SettingsRow(
@@ -8404,6 +8498,81 @@ fun SettingsScreen(
         )
     }
 
+    if (showPlamoModelDialog) {
+        AlertDialog(
+            onDismissRequest = { if (!deletingPlamoModel) showPlamoModelDialog = false },
+            title = { Text(stringResource(R.string.lyrics_translation_plamo_model)) },
+            text = {
+                Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
+                    Text(
+                        stringResource(
+                            when {
+                                plamoDownloadPercent >= 0 -> R.string.lyrics_translation_plamo_downloading
+                                plamoModelPresent -> R.string.lyrics_translation_plamo_delete_message
+                                else -> R.string.lyrics_translation_plamo_model_subtitle
+                            },
+                            plamoDownloadPercent.coerceAtLeast(0),
+                        ),
+                    )
+                    if (plamoDownloadPercent >= 0) {
+                        androidx.compose.material3.LinearProgressIndicator(
+                            progress = { plamoDownloadPercent / 100f },
+                            modifier = Modifier.fillMaxWidth(),
+                        )
+                    }
+                }
+            },
+            confirmButton = {
+                TextButton(
+                    enabled = !deletingPlamoModel,
+                    onClick = {
+                        when {
+                            plamoDownloadPercent >= 0 -> {
+                                cancelPlamoModelDownload()
+                                showPlamoModelDialog = false
+                            }
+                            plamoModelPresent -> {
+                                deletingPlamoModel = true
+                                settingsScope.launch {
+                                    try {
+                                        PlamoLyricsTranslation.deleteModel(context)
+                                        plamoModelPresent = false
+                                        showPlamoModelDialog = false
+                                        Toast.makeText(context, R.string.lyrics_translation_plamo_delete_success, Toast.LENGTH_SHORT).show()
+                                    } catch (cancelled: CancellationException) {
+                                        throw cancelled
+                                    } catch (_: Exception) {
+                                        Toast.makeText(context, R.string.lyrics_translation_plamo_delete_failed, Toast.LENGTH_LONG).show()
+                                    } finally {
+                                        deletingPlamoModel = false
+                                    }
+                                }
+                            }
+                            PlamoLyricsTranslation.canDownload(context) -> startPlamoModelDownload()
+                        }
+                    },
+                ) {
+                    Text(
+                        stringResource(
+                            when {
+                                deletingPlamoModel -> R.string.lyrics_ctc_model_deleting
+                                plamoDownloadPercent >= 0 -> R.string.cancel
+                                plamoModelPresent -> R.string.delete
+                                else -> R.string.lyrics_translation_plamo_download
+                            },
+                        ),
+                    )
+                }
+            },
+            dismissButton = {
+                TextButton(
+                    enabled = !deletingPlamoModel,
+                    onClick = { showPlamoModelDialog = false },
+                ) { Text(stringResource(R.string.close)) }
+            },
+        )
+    }
+
     if (showDeleteCtcModelDialog) {
         AlertDialog(
             onDismissRequest = { if (!deletingCtcModel) showDeleteCtcModelDialog = false },
@@ -9748,6 +9917,42 @@ internal fun SettingsRow(
             Chevron()
         }
     }
+}
+
+@Composable
+private fun PlamoModelSettingsRow(
+    downloaded: Boolean,
+    progressPercent: Int,
+    canDownload: Boolean,
+    onClick: () -> Unit,
+) {
+    val subtitle = when {
+        progressPercent >= 0 -> stringResource(R.string.lyrics_translation_plamo_downloading, progressPercent)
+        downloaded -> stringResource(R.string.lyrics_translation_plamo_ready)
+        !canDownload -> stringResource(R.string.lyrics_translation_plamo_model_requires_network)
+        else -> stringResource(R.string.lyrics_translation_plamo_model_subtitle)
+    }
+    SettingsRow(
+        icon = if (downloaded) Icons.Rounded.DeleteSweep else Icons.Rounded.FileDownload,
+        title = stringResource(R.string.lyrics_translation_plamo_model),
+        subtitle = subtitle,
+        enabled = downloaded || canDownload || progressPercent >= 0,
+        onClick = onClick,
+        trailing = {
+            if (progressPercent >= 0) {
+                CircularProgressIndicator(modifier = Modifier.size(20.dp), strokeWidth = 2.dp)
+            } else {
+                IconButton(onClick = onClick, enabled = downloaded || canDownload) {
+                    Icon(
+                        imageVector = if (downloaded) Icons.Rounded.DeleteSweep else Icons.Rounded.FileDownload,
+                        contentDescription = stringResource(
+                            if (downloaded) R.string.delete else R.string.lyrics_translation_plamo_download,
+                        ),
+                    )
+                }
+            }
+        },
+    )
 }
 
 /**

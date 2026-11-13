@@ -929,6 +929,9 @@ object AppSettings {
     /** Converts KuGou's simplified Chinese lyric glyphs to Japanese kanji forms. */
     val convertKugouToJapaneseKanji = MutableStateFlow(true)
 
+    /** Adds an optional on-device translation below each original lyric line. */
+    val translateLyricsWithPlamo = MutableStateFlow(false)
+
     /** Optional close control for the lyrics panel; hidden by default. */
     val showLyricsCloseButton = MutableStateFlow(false)
 
@@ -1838,6 +1841,7 @@ object AppSettings {
         removeQqMusicLyricMetadata.value = prefs.getBoolean(KEY_REMOVE_QQ_MUSIC_LYRIC_METADATA, true)
         convertFollowLyricsToJapaneseKanji.value = prefs.getBoolean(KEY_CONVERT_FOLLOWLYRICS_TO_JAPANESE_KANJI, true)
         convertKugouToJapaneseKanji.value = prefs.getBoolean(KEY_CONVERT_KUGOU_TO_JAPANESE_KANJI, true)
+        translateLyricsWithPlamo.value = prefs.getBoolean(KEY_TRANSLATE_LYRICS_WITH_PLAMO, false)
         showLyricsCloseButton.value = prefs.getBoolean(KEY_SHOW_LYRICS_CLOSE_BUTTON, false)
         hideLyricsStatusText.value = prefs.getBoolean(KEY_HIDE_LYRICS_STATUS_TEXT, false)
         hideLyricsSavedMessage.value = prefs.getBoolean(KEY_HIDE_LYRICS_SAVED_MESSAGE, false)
@@ -3494,6 +3498,11 @@ object AppSettings {
     fun setConvertKugouToJapaneseKanji(value: Boolean) {
         convertKugouToJapaneseKanji.value = value
         prefs.edit().putBoolean(KEY_CONVERT_KUGOU_TO_JAPANESE_KANJI, value).apply()
+    }
+
+    fun setTranslateLyricsWithPlamo(value: Boolean) {
+        translateLyricsWithPlamo.value = value
+        prefs.edit().putBoolean(KEY_TRANSLATE_LYRICS_WITH_PLAMO, value).apply()
     }
 
     fun setShowLyricsCloseButton(value: Boolean) {
@@ -5161,6 +5170,7 @@ object AppSettings {
     private const val KEY_REMOVE_QQ_MUSIC_LYRIC_METADATA = "remove_qq_music_lyric_metadata"
     private const val KEY_CONVERT_FOLLOWLYRICS_TO_JAPANESE_KANJI = "convert_followlyrics_to_japanese_kanji"
     private const val KEY_CONVERT_KUGOU_TO_JAPANESE_KANJI = "convert_kugou_to_japanese_kanji"
+    private const val KEY_TRANSLATE_LYRICS_WITH_PLAMO = "translate_lyrics_with_plamo"
     private const val KEY_SHOW_LYRICS_CLOSE_BUTTON = "show_lyrics_close_button"
     private const val KEY_HIDE_LYRICS_STATUS_TEXT = "hide_lyrics_status_text"
     private const val KEY_HIDE_LYRICS_SAVED_MESSAGE = "hide_lyrics_saved_message"

@@ -1952,6 +1952,23 @@
     <string name="lyrics_ctc_model_delete_failed">Could not delete the CTC model.</string>
     <string name="lyrics_ctc_model_deleting">Deleting…</string>
     <string name="lyrics_ctc_model_search_keywords">CTC model alignment lyrics storage delete</string>
+    <string name="lyrics_translation_plamo">Translate lyrics with PLaMo</string>
+    <string name="lyrics_translation_plamo_subtitle">Show a translation in your device language below each original line. The original lyrics and timestamps stay unchanged. Download the optional PLaMo 3 Translate Q4_K_M model (about 573 MB) below.</string>
+    <string name="lyrics_translation_plamo_model">PLaMo 3 Translate model</string>
+    <string name="lyrics_translation_plamo_model_subtitle">Downloads the official 0.8B Q4_K_M GGUF model (about 573 MB). Translation runs on this device; the model is not included in the APK.</string>
+    <string name="lyrics_translation_plamo_model_requires_network">The model can be downloaded in the standard build when online mode is available.</string>
+    <string name="lyrics_translation_plamo_download">Download model</string>
+    <string name="lyrics_translation_plamo_downloading">Downloading model… %1$d%%</string>
+    <string name="lyrics_translation_plamo_ready">Model downloaded · tap to delete</string>
+    <string name="lyrics_translation_plamo_delete_title">Delete the PLaMo model?</string>
+    <string name="lyrics_translation_plamo_delete_message">This deletes the downloaded 573 MB model and its saved lyric translations. Your original lyrics and audio files are not changed.</string>
+    <string name="lyrics_translation_plamo_delete_success">PLaMo model deleted.</string>
+    <string name="lyrics_translation_plamo_delete_failed">Could not delete the PLaMo model.</string>
+    <string name="lyrics_translation_plamo_download_failed">Could not download the PLaMo model.</string>
+    <string name="lyrics_translation_plamo_model_missing">Download the PLaMo model in Settings to show translated lyrics.</string>
+    <string name="lyrics_translation_plamo_working">Translating lyrics on this device… %1$d%%</string>
+    <string name="lyrics_translation_plamo_failed">Could not translate these lyrics. Original text is unchanged.</string>
+    <string name="lyrics_translation_plamo_search_keywords">PLaMo translate translation lyrics model download delete bilingual</string>
     <string name="lyrics_shift_all_timestamps">Shift all timestamps</string>
     <string name="lyrics_shift_all_timestamps_help">Enter an offset for every timestamp, then move the timestamp values forward or back.</string>
     <string name="lyrics_set_first_timestamp">Set the first timestamp</string>
@@ -2188,4 +2205,12 @@
     <string name="hybrid_local_releases">Your albums, singles &amp; EPs</string>
     <string name="hybrid_local_playlists">Your playlists</string>
     <string name="hybrid_playlist_track_count">%1$d tracks</string>
+    <string name="lyrics_correct_japanese_orthography">Correct Japanese lyric spelling</string>
+    <string name="lyrics_correct_japanese_orthography_subtitle">Use the downloaded PLaMo model on this device to correct Simplified Chinese forms in Japanese lyrics. Review the preview before applying.</string>
+    <string name="lyrics_correct_japanese_orthography_preview">Review lyric correction</string>
+    <string name="lyrics_correct_japanese_orthography_unchanged">No spelling changes were suggested.</string>
+    <string name="lyrics_correct_japanese_orthography_failed">Could not safely correct these lyrics. The original text is unchanged.</string>
+    <string name="lyrics_original_text">Original</string>
+    <string name="lyrics_corrected_text">Corrected</string>
+    <string name="lyrics_no_text_to_correct">There are no lyrics to correct.</string>
 </resources>

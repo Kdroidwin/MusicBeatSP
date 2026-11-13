@@ -17,6 +17,7 @@ import android.view.View
 import android.window.OnBackInvokedCallback
 import android.window.OnBackInvokedDispatcher
 import androidx.activity.compose.BackHandler
+import androidx.appcompat.app.AppCompatDelegate
 import androidx.annotation.RequiresApi
 import androidx.compose.animation.animateColorAsState
 import androidx.compose.animation.AnimatedContent
@@ -64,6 +65,7 @@ import androidx.compose.ui.draw.BlurredEdgeTreatment
 import androidx.compose.ui.draw.blur
 import androidx.compose.animation.core.animateDpAsState
 import kotlinx.coroutines.delay
+import kotlinx.coroutines.CancellationException
 import kotlin.math.abs
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.IntrinsicSize
@@ -272,6 +274,7 @@ import com.music.bitchord.data.lyrics.LrcParser
 import com.music.bitchord.data.lyrics.LyricLine
 import com.music.bitchord.data.lyrics.LyricsStripText
 import com.music.bitchord.data.lyrics.LyricsSource
+import com.music.bitchord.feature.lyrics.PlamoLyricsTranslation
 import com.music.bitchord.ui.components.LyricsLogConsole
 import com.music.bitchord.ui.player.components.DoubleTapSeekArea
 import com.music.bitchord.data.settings.AppSettings
@@ -4587,6 +4590,8 @@ fun TabletPlayerBackdrop(
     }
 }
 
+private enum class PlamoLyricsStatus { Idle, MissingModel, Translating, Failed }
+
 @Composable
 private fun LyricsPanel(
     lines: List<LyricLine>,
@@ -4598,6 +4603,48 @@ private fun LyricsPanel(
     isLoading: Boolean = false,
 ) {
     val clock = rememberLyricClock(positionMs, isPlaying)
+    val context = LocalContext.current
+    val translateLyrics by AppSettings.translateLyricsWithPlamo.collectAsStateWithLifecycle()
+    val targetLanguage = remember {
+        AppCompatDelegate.getApplicationLocales().get(0)?.toLanguageTag()
+            ?.takeIf(String::isNotBlank)
+            ?: Locale.getDefault().toLanguageTag()
+    }
+    var translatedLyrics by remember(trackKey, lines, targetLanguage) { mutableStateOf<Map<String, String>>(emptyMap()) }
+    var plamoStatus by remember(trackKey, lines, targetLanguage) { mutableStateOf(PlamoLyricsStatus.Idle) }
+    var translationProgress by remember(trackKey, lines, targetLanguage) { mutableIntStateOf(0) }
+
+    LaunchedEffect(trackKey, lines, targetLanguage, translateLyrics) {
+        translatedLyrics = emptyMap()
+        translationProgress = 0
+        if (!translateLyrics || lines.isEmpty()) {
+            plamoStatus = PlamoLyricsStatus.Idle
+            return@LaunchedEffect
+        }
+        if (!withContext(Dispatchers.IO) { PlamoLyricsTranslation.hasModel(context) }) {
+            plamoStatus = PlamoLyricsStatus.MissingModel
+            return@LaunchedEffect
+        }
+        plamoStatus = PlamoLyricsStatus.Translating
+        try {
+            translatedLyrics = PlamoLyricsTranslation.translate(
+                context = context,
+                lines = lines,
+                targetLanguage = targetLanguage,
+            ) { completed, total ->
+                translationProgress = if (total > 0) completed * 100 / total else 0
+            }
+            plamoStatus = if (translatedLyrics.isEmpty()) PlamoLyricsStatus.Failed else PlamoLyricsStatus.Idle
+        } catch (cancelled: CancellationException) {
+            throw cancelled
+        } catch (_: LinkageError) {
+            translatedLyrics = emptyMap()
+            plamoStatus = PlamoLyricsStatus.Failed
+        } catch (_: Exception) {
+            translatedLyrics = emptyMap()
+            plamoStatus = PlamoLyricsStatus.Failed
+        }
+    }
 
     val isSynced = remember(lines) { lines.any { it.timeMs > 0L } }
 
@@ -4692,21 +4739,23 @@ private fun LyricsPanel(
         return
     }
 
-    LazyColumn(
-        state = listState,
-        modifier = modifier
-            .bleedHorizontally(PLAYER_GUTTER)
-            .nestedScroll(keepScroll)
-            .fadingEdges(),
-        // Each row carries GLOW_ROOM of its own inset for the halo, so the
-        // list hands that much back — otherwise the lines would sit a glow's
-        // width further apart and further in than they used to.
-        contentPadding = PaddingValues(
-            vertical = 40.dp - GLOW_ROOM,
-            horizontal = PLAYER_GUTTER - GLOW_ROOM,
-        ),
-        verticalArrangement = Arrangement.spacedBy(0.dp),
-    ) {
+    Box(modifier) {
+        LazyColumn(
+            state = listState,
+            modifier = Modifier
+                .fillMaxSize()
+                .bleedHorizontally(PLAYER_GUTTER)
+                .nestedScroll(keepScroll)
+                .fadingEdges(),
+            // Each row carries GLOW_ROOM of its own inset for the halo, so the
+            // list hands that much back — otherwise the lines would sit a glow's
+            // width further apart and further in than they used to.
+            contentPadding = PaddingValues(
+                vertical = 40.dp - GLOW_ROOM,
+                horizontal = PLAYER_GUTTER - GLOW_ROOM,
+            ),
+            verticalArrangement = Arrangement.spacedBy(0.dp),
+        ) {
         itemsIndexed(lines) { index, line ->
             if (!isSynced && LrcParser.isSectionHeader(line.text)) {
                 val sectionTitle = line.text.removePrefix("[").removeSuffix("]").trim()
@@ -4849,6 +4898,22 @@ private fun LyricsPanel(
                         textAlign = lyricTextAlign,
                         modifier = Modifier.fillMaxWidth(),
                     )
+                    translatedLyrics["line:$index"]?.takeIf { it != line.text }?.let { translation ->
+                        Text(
+                            text = translation,
+                            style = style.copy(
+                                fontSize = (style.fontSize.value * 0.66f).sp,
+                                lineHeight = (style.lineHeight.value * 0.78f).sp,
+                                fontWeight = FontWeight.Normal,
+                                textAlign = lyricTextAlign,
+                            ),
+                            color = LocalPlayerLyricInk.current.copy(alpha = 0.78f),
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .padding(start = GLOW_ROOM, end = GLOW_ROOM, bottom = GLOW_ROOM),
+                            textAlign = lyricTextAlign,
+                        )
+                    }
                     line.background?.takeIf { lineWithRubyRestored == null }?.let { backing ->
                         PanelVoice(
                             line = backing.withoutBracketPunctuation(),
@@ -4874,9 +4939,44 @@ private fun LyricsPanel(
                                 .padding(start = GLOW_ROOM, end = GLOW_ROOM, bottom = GLOW_ROOM)
                                 .graphicsLayer { alpha = BACKING_ALPHA },
                         )
+                        translatedLyrics["backing:$index"]?.takeIf { it != backing.text }?.let { translation ->
+                            Text(
+                                text = translation,
+                                style = style.copy(
+                                    fontSize = (BACKING_FONT_SIZE.value * lyricsFontScale * 0.72f).sp,
+                                    lineHeight = (BACKING_LINE_HEIGHT.value * lyricsFontScale * 0.82f).sp,
+                                    fontWeight = FontWeight.Normal,
+                                    textAlign = lyricTextAlign,
+                                ),
+                                color = LocalPlayerLyricInk.current.copy(alpha = BACKING_ALPHA * 0.78f),
+                                modifier = Modifier
+                                    .fillMaxWidth()
+                                    .padding(start = GLOW_ROOM, end = GLOW_ROOM, bottom = GLOW_ROOM),
+                            )
+                        }
                     }
                 }
             }
+        }
+        }
+        val statusText = when (plamoStatus) {
+            PlamoLyricsStatus.Idle -> null
+            PlamoLyricsStatus.MissingModel -> stringResource(R.string.lyrics_translation_plamo_model_missing)
+            PlamoLyricsStatus.Translating -> stringResource(R.string.lyrics_translation_plamo_working, translationProgress)
+            PlamoLyricsStatus.Failed -> stringResource(R.string.lyrics_translation_plamo_failed)
+        }
+        if (statusText != null) {
+            Text(
+                text = statusText,
+                style = MaterialTheme.typography.labelSmall,
+                color = LocalPlayerLyricInk.current.copy(alpha = 0.8f),
+                modifier = Modifier
+                    .align(Alignment.TopCenter)
+                    .padding(top = 4.dp)
+                    .clip(RoundedCornerShape(10.dp))
+                    .background(Color.Black.copy(alpha = 0.42f))
+                    .padding(horizontal = 10.dp, vertical = 5.dp),
+            )
         }
     }
 }

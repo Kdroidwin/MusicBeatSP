@@ -19,6 +19,7 @@ import androidx.compose.material.icons.rounded.Add
 import androidx.compose.material.icons.rounded.ClearAll
 import androidx.compose.material.icons.rounded.ContentPaste
 import androidx.compose.material.icons.rounded.Download
+import androidx.compose.material.icons.rounded.Edit
 import androidx.compose.material.icons.rounded.MoreVert
 import androidx.compose.material.icons.rounded.RestartAlt
 import androidx.compose.material.icons.rounded.Save
@@ -66,6 +67,7 @@ fun LyricsEditorBottomBar(
     onSearchEngineClick: (() -> Unit)? = null,
     onGenerateSyncedLyricsClick: (() -> Unit)? = null,
     onGenerateCharacterSyncedLyricsClick: (() -> Unit)? = null,
+    onCorrectJapaneseOrthographyClick: (() -> Unit)? = null,
     modifier: Modifier = Modifier,
 ) {
     var menuExpanded by remember { mutableStateOf(false) }
@@ -328,6 +330,23 @@ fun LyricsEditorBottomBar(
                                 onClick = {
                                     menuExpanded = false
                                     onSetFirstTimestampClick()
+                                },
+                            )
+                        }
+
+                        if (onCorrectJapaneseOrthographyClick != null) {
+                            DropdownMenuItem(
+                                text = { Text(stringResource(R.string.lyrics_correct_japanese_orthography)) },
+                                leadingIcon = {
+                                    Icon(
+                                        imageVector = Icons.Rounded.Edit,
+                                        contentDescription = null,
+                                        modifier = Modifier.size(20.dp),
+                                    )
+                                },
+                                onClick = {
+                                    menuExpanded = false
+                                    onCorrectJapaneseOrthographyClick()
                                 },
                             )
                         }

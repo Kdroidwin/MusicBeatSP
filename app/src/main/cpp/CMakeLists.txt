@@ -5,6 +5,7 @@ get_filename_component(BITCHORD_NATIVE_DIR "${CMAKE_CURRENT_SOURCE_DIR}/../../..
 
 set(CMAKE_CXX_STANDARD 17)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
+set(CMAKE_POSITION_INDEPENDENT_CODE ON)
 
 add_library(bitchord_analysis SHARED
     ${BITCHORD_NATIVE_DIR}/analyzer/audio_analysis.cpp
@@ -31,6 +32,41 @@ target_link_libraries(bitchord_analysis ${log-lib})
 # USB Audio Class driver. Keep both native dependencies pinned to upstream's
 # verified releases so a normal build remains reproducible.
 include(FetchContent)
+
+# PLaMo 3 Translate's GGUF chat template requires llama.cpp b11960 or newer.
+# Keep the model runtime out of the APK weights; only the optional CPU inference
+# engine is compiled here. The exact upstream archive is checksum-pinned so a
+# tag or transport change cannot silently change native code.
+set(GGML_NATIVE OFF CACHE BOOL "" FORCE)
+set(GGML_OPENMP OFF CACHE BOOL "" FORCE)
+set(GGML_LLAMAFILE OFF CACHE BOOL "" FORCE)
+set(GGML_VULKAN OFF CACHE BOOL "" FORCE)
+set(GGML_OPENCL OFF CACHE BOOL "" FORCE)
+set(LLAMA_OPENSSL OFF CACHE BOOL "" FORCE)
+set(LLAMA_BUILD_COMMON OFF CACHE BOOL "" FORCE)
+set(LLAMA_BUILD_TESTS OFF CACHE BOOL "" FORCE)
+set(LLAMA_BUILD_TOOLS OFF CACHE BOOL "" FORCE)
+set(LLAMA_BUILD_EXAMPLES OFF CACHE BOOL "" FORCE)
+set(LLAMA_BUILD_SERVER OFF CACHE BOOL "" FORCE)
+set(LLAMA_BUILD_APP OFF CACHE BOOL "" FORCE)
+set(LLAMA_BUILD_UI OFF CACHE BOOL "" FORCE)
+# Allow CI/developers to point at a previously verified source archive without
+# baking a workstation path into the project. Normal builds use the pinned URL.
+if(DEFINED ENV{MUSICBEAT_LLAMA_CPP_SOURCE_DIR} AND
+   EXISTS "$ENV{MUSICBEAT_LLAMA_CPP_SOURCE_DIR}/CMakeLists.txt")
+    set(FETCHCONTENT_SOURCE_DIR_LLAMA_CPP
+        "$ENV{MUSICBEAT_LLAMA_CPP_SOURCE_DIR}" CACHE PATH "" FORCE)
+endif()
+FetchContent_Declare(llama_cpp
+    URL https://github.com/ggml-org/llama.cpp/archive/refs/tags/b11960.tar.gz
+    URL_HASH SHA256=2b37ffa871595f90b94164f6c510ad9a34bd7f94da21557cc9878587e163af37)
+FetchContent_MakeAvailable(llama_cpp)
+
+add_library(bitchord_plamo SHARED jni/plamo_jni.cpp)
+target_compile_options(bitchord_plamo PRIVATE -O2 -fvisibility=hidden)
+target_link_libraries(bitchord_plamo PRIVATE llama ${log-lib})
+target_link_options(bitchord_plamo PRIVATE "-Wl,-z,max-page-size=16384")
+
 set(OBOE_DISABLE_CONVERSION ON CACHE BOOL "" FORCE)
 FetchContent_Declare(oboe
     URL https://github.com/google/oboe/archive/refs/tags/1.11.0.tar.gz

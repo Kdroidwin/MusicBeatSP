@@ -19,3 +19,6 @@
 # If you keep the line number information, uncomment this to
 # hide the original source file name.
 #-renamesourcefileattribute SourceFile
+
+# The PLaMo JNI bridge uses name-based JNI exports instead of RegisterNatives.
+-keep class com.music.bitchord.feature.lyrics.PlamoNativeBridge { *; }

@@ -26,10 +26,13 @@ import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.imePadding
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.Spacer
+import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.verticalScroll
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.itemsIndexed
 import androidx.compose.foundation.shape.RoundedCornerShape
@@ -63,6 +66,7 @@ import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -81,6 +85,7 @@ import androidx.lifecycle.viewmodel.compose.viewModel
 import com.music.bitchord.data.model.Song
 import com.music.bitchord.data.lyrics.LyricsStrictness
 import com.music.bitchord.data.settings.AppSettings
+import com.music.bitchord.feature.lyrics.PlamoLyricsTranslation
 import com.music.bitchord.R
 import com.music.bitchord.feature.lyricseditor.domain.model.LyricsEditorSource
 import com.music.bitchord.feature.lyricseditor.ui.components.LyricsDownloadDialog
@@ -96,6 +101,10 @@ import com.music.bitchord.feature.lyricseditor.ui.viewmodel.AutoSyncStage
 import com.music.bitchord.feature.lyricseditor.ui.viewmodel.LyricsEditorViewModel
 import androidx.compose.ui.graphics.luminance
 import com.music.bitchord.ui.theme.SystemBarIcons
+import kotlinx.coroutines.CancellationException
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.launch
+import kotlinx.coroutines.withContext
 
 @Composable
 fun LyricsEditorScreen(
@@ -137,6 +146,9 @@ fun LyricsEditorScreen(
     }
     var showShiftTimestampsDialog by remember { mutableStateOf(false) }
     var showSetFirstTimestampDialog by remember { mutableStateOf(false) }
+    var proposedOrthography by remember { mutableStateOf<String?>(null) }
+    var isCorrectingOrthography by remember { mutableStateOf(false) }
+    val lyricsEditorScope = rememberCoroutineScope()
     var timestampInput by remember { mutableStateOf("[00:00.0]") }
     var shiftTimestampsForward by remember { mutableStateOf(true) }
     var syncMode by remember(song.videoId) { mutableStateOf(false) }
@@ -304,7 +316,7 @@ fun LyricsEditorScreen(
                     onSeek = { onSyncSeek?.invoke(it) },
                 )
             } else LyricsEditorBottomBar(
-                enabled = !isLoading && !isSaving && autoSyncProgress == null,
+                enabled = !isLoading && !isSaving && autoSyncProgress == null && !isCorrectingOrthography,
                 onSearchClick = ::searchLyricsOnWeb,
                 onDownloadClick = {
                     if (searchResults.isNotEmpty()) {
@@ -366,6 +378,36 @@ fun LyricsEditorScreen(
                 },
                 onGenerateCharacterSyncedLyricsClick = {
                     viewModel.generateSyncedLyrics(song, textFieldValue.text, characterByCharacter = true)
+                },
+                onCorrectJapaneseOrthographyClick = {
+                    val source = textFieldValue.text
+                    if (source.isBlank()) {
+                        Toast.makeText(context, R.string.lyrics_no_text_to_correct, Toast.LENGTH_SHORT).show()
+                    } else {
+                        lyricsEditorScope.launch {
+                            isCorrectingOrthography = true
+                            try {
+                                if (!withContext(Dispatchers.IO) { PlamoLyricsTranslation.hasModel(context) }) {
+                                    Toast.makeText(context, R.string.lyrics_translation_plamo_model_missing, Toast.LENGTH_LONG).show()
+                                    return@launch
+                                }
+                                val result = PlamoLyricsTranslation.correctJapaneseOrthography(context, source)
+                                if (result == null) {
+                                    Toast.makeText(context, R.string.lyrics_correct_japanese_orthography_failed, Toast.LENGTH_LONG).show()
+                                } else if (result == source) {
+                                    Toast.makeText(context, R.string.lyrics_correct_japanese_orthography_unchanged, Toast.LENGTH_SHORT).show()
+                                } else {
+                                    proposedOrthography = result
+                                }
+                            } catch (cancelled: CancellationException) {
+                                throw cancelled
+                            } catch (_: Exception) {
+                                Toast.makeText(context, R.string.lyrics_correct_japanese_orthography_failed, Toast.LENGTH_LONG).show()
+                            } finally {
+                                isCorrectingOrthography = false
+                            }
+                        }
+                    }
                 },
             )
         },
@@ -705,6 +747,75 @@ fun LyricsEditorScreen(
             },
             dismissButton = {
                 TextButton(onClick = { showSetFirstTimestampDialog = false }) { Text(stringResource(R.string.cancel)) }
+            },
+        )
+    }
+
+    if (isCorrectingOrthography) {
+        AlertDialog(
+            onDismissRequest = {},
+            title = { Text(stringResource(R.string.lyrics_correct_japanese_orthography)) },
+            text = {
+                Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
+                    Text(stringResource(R.string.lyrics_correct_japanese_orthography_subtitle))
+                    LinearProgressIndicator(modifier = Modifier.fillMaxWidth())
+                }
+            },
+            confirmButton = {},
+        )
+    }
+
+    proposedOrthography?.let { proposed ->
+        val changes = remember(textFieldValue.text, proposed) {
+            val originalRows = textFieldValue.text.split('\n')
+            val correctedRows = proposed.split('\n')
+            originalRows.zip(correctedRows).mapIndexedNotNull { index, (original, corrected) ->
+                if (original == corrected) null else Triple(index + 1, original, corrected)
+            }
+        }
+        AlertDialog(
+            onDismissRequest = { proposedOrthography = null },
+            title = { Text(stringResource(R.string.lyrics_correct_japanese_orthography_preview)) },
+            text = {
+                Column(
+                    modifier = Modifier
+                        .heightIn(max = 420.dp)
+                        .verticalScroll(rememberScrollState()),
+                    verticalArrangement = Arrangement.spacedBy(12.dp),
+                ) {
+                    Text(stringResource(R.string.lyrics_correct_japanese_orthography_subtitle))
+                    changes.forEach { (lineNumber, original, corrected) ->
+                        Surface(
+                            shape = RoundedCornerShape(12.dp),
+                            color = MaterialTheme.colorScheme.surfaceContainer,
+                        ) {
+                            Column(
+                                modifier = Modifier
+                                    .fillMaxWidth()
+                                    .padding(12.dp),
+                                verticalArrangement = Arrangement.spacedBy(6.dp),
+                            ) {
+                                Text("#$lineNumber", style = MaterialTheme.typography.labelSmall)
+                                Text(stringResource(R.string.lyrics_original_text), style = MaterialTheme.typography.labelMedium)
+                                Text(original, style = MaterialTheme.typography.bodySmall)
+                                Text(stringResource(R.string.lyrics_corrected_text), style = MaterialTheme.typography.labelMedium)
+                                Text(corrected, style = MaterialTheme.typography.bodySmall)
+                            }
+                        }
+                    }
+                }
+            },
+            confirmButton = {
+                TextButton(
+                    onClick = {
+                        textFieldValue = TextFieldValue(proposed, selection = TextRange(proposed.length))
+                        viewModel.updateText(proposed)
+                        proposedOrthography = null
+                    },
+                ) { Text(stringResource(R.string.lyrics_timestamp_apply)) }
+            },
+            dismissButton = {
+                TextButton(onClick = { proposedOrthography = null }) { Text(stringResource(R.string.cancel)) }
             },
         )
     }
