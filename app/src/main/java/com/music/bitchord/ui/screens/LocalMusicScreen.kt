@@ -1226,7 +1226,9 @@ fun LocalMusicScreen(
                     }
                     ArtistsTab(
                         artists = visibleArtists,
-                        allowRemoteArtwork = artistDeezerArtworkEnabled,
+                        // Respect the user's Deezer artwork setting and offline mode;
+                        // selected local portraits remain preferred by ArtistImageFetcher.
+                        allowRemoteArtwork = artistDeezerArtworkEnabled && !offlineMode,
                         viewType = artistsViewType,
                         onViewTypeToggle = {
                             val next = if (artistsViewType == LibraryViewType.GRID) LibraryViewType.LIST else LibraryViewType.GRID

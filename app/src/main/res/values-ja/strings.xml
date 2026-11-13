@@ -1166,7 +1166,7 @@
     <string name="online_album_artist_artwork">アルバムアーティスト画像のオンライン取得</string>
     <string name="online_album_artist_artwork_subtitle">オンにするとDeezerから画像を検索します。オフではローカル音源のアルバムアートだけを使います。初期設定はオフです。</string>
     <string name="artist_deezer_artwork_enabled">Deezerのアーティスト画像を使う</string>
-    <string name="artist_deezer_artwork_enabled_subtitle">Deezerからアーティスト画像を検索します。オフにするとローカル画像か標準アイコンを使います。</string>
+    <string name="artist_deezer_artwork_enabled_subtitle">アーティストタブの丸型サムネイルにオンラインの画像を使います。ユーザーが指定した画像は優先され、オフでは端末内アルバムアートか標準アイコンを使います。</string>
     <string name="artist_signatures">アーティストの署名</string>
     <string name="artist_signatures_subtitle">ローカルライブラリのアーティスト詳細に手書き署名を表示します。署名API URLを設定してください。</string>
     <string name="artist_signatures_url">署名APIのURL</string>
@@ -1706,6 +1706,10 @@
     <string name="redesigned_saved_queue_manager_subtitle">保存済みキューを、保存・読み込み・置き換え・削除できるシンプルな一覧で表示します。初期設定はオンです。</string>
     <string name="collection_song_artwork">アルバムなどの曲一覧にアートを表示</string>
     <string name="collection_song_artwork_subtitle">アルバム、アーティスト、アルバムアーティスト内で、曲番号の代わりに各曲のアルバムアートを表示します。初期設定はオンです。</string>
+    <string name="local_search_collection_song_artwork">検索結果の曲一覧にアートを表示</string>
+    <string name="local_search_collection_song_artwork_subtitle">「この端末」の検索結果から開いたアーティスト・アルバム・フォルダーで、曲番号の代わりにアルバムアートを表示します。初期設定はオンです。</string>
+    <string name="local_search_full_screen_artwork">検索結果を全画面アートで表示</string>
+    <string name="local_search_full_screen_artwork_subtitle">「この端末」の検索結果からアーティスト・アルバム・フォルダーを開いたときに全画面アートを表示します。初期設定はオンです。</string>
     <string name="play_history_song_artwork">再生履歴にアルバムアートを表示</string>
     <string name="play_history_song_artwork_subtitle">「最近再生した曲」と「よく再生する曲」で、曲番号の代わりにアルバムアートを表示します。初期設定はオンです。</string>
     <string name="library_categories">ライブラリ項目</string>
@@ -2152,6 +2156,8 @@
     <string name="show_artist_recommendations_subtitle">アーティストページ下部にあるYouTube Musicのおすすめアーティストを表示または非表示にします。</string>
     <string name="show_artist_overview">アーティストの概要を表示</string>
     <string name="show_artist_overview_subtitle">情報がある場合、アーティストの説明とリスナー情報を表示します。</string>
+    <string name="hide_artist_audience_stats">アーティストの視聴者数を非表示</string>
+    <string name="hide_artist_audience_stats_subtitle">登録者数と月間視聴者数だけを隠し、アーティストの説明は表示します。初期設定はオフです。</string>
     <string name="hybrid_local_releases">端末内のアルバム・シングル・EP</string>
     <string name="hybrid_local_playlists">端末内のプレイリスト</string>
     <string name="hybrid_playlist_track_count">%1$d曲</string>

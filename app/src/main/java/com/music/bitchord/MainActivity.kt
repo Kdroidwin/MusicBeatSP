@@ -1188,6 +1188,8 @@ private fun BitChordApp(
     val fullScreenCollectionArtwork by AppSettings.fullScreenCollectionArtwork.collectAsStateWithLifecycle()
     val showPlaylistSongArtwork by AppSettings.showPlaylistSongArtwork.collectAsStateWithLifecycle()
     val showCollectionSongArtwork by AppSettings.showCollectionSongArtwork.collectAsStateWithLifecycle()
+    val localSearchCollectionSongArtwork by AppSettings.localSearchCollectionSongArtwork.collectAsStateWithLifecycle()
+    val localSearchFullScreenArtwork by AppSettings.localSearchFullScreenArtwork.collectAsStateWithLifecycle()
     val webdavUrl by AppSettings.webdavUrl.collectAsStateWithLifecycle()
     val webdavUsername by AppSettings.webdavUsername.collectAsStateWithLifecycle()
     val webdavPassword by AppSettings.webdavPassword.collectAsStateWithLifecycle()
@@ -3768,6 +3770,8 @@ private fun BitChordApp(
                             } else {
                                 LocalSearchScreen(
                                 songs = localSongs,
+                                showLocalCollectionSongArtwork = localSearchCollectionSongArtwork,
+                                showLocalFullScreenArtwork = localSearchFullScreenArtwork,
                                 currentSong = player.song,
                                 isPlaying = player.isPlaying,
                                 onSongClick = play,

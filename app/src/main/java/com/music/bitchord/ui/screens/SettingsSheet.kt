@@ -673,6 +673,7 @@ private fun additionalArtworkSettingsSearchEntries(
     showLocalArtistSections: Boolean,
     showArtistRecommendations: Boolean,
     showArtistOverview: Boolean,
+    hideArtistAudienceStats: Boolean,
     onChoosePlayerArtistPageMode: () -> Unit,
     folderArtworkFallbackLabel: String,
     onChooseFolderArtworkFallback: () -> Unit,
@@ -739,6 +740,12 @@ private fun additionalArtworkSettingsSearchEntries(
         listOf("artist", "overview", "about", "description", "アーティスト", "概要", "説明"),
         showArtistOverview,
     ) { AppSettings.setShowArtistOverview(!showArtistOverview) },
+    SettingsSearchEntry(
+        stringResource(R.string.hide_artist_audience_stats),
+        stringResource(R.string.hide_artist_audience_stats_subtitle),
+        listOf("artist", "subscriber", "monthly listeners", "audience", "アーティスト", "登録者数", "月間視聴者数", "リスナー数"),
+        hideArtistAudienceStats,
+    ) { AppSettings.setHideArtistAudienceStats(!hideArtistAudienceStats) },
     SettingsSearchEntry(
         title = stringResource(R.string.artist_deezer_artwork_enabled),
         subtitle = stringResource(R.string.artist_deezer_artwork_enabled_subtitle),
@@ -1532,6 +1539,7 @@ fun SettingsScreen(
     val showLocalArtistSections by AppSettings.showLocalArtistSections.collectAsStateWithLifecycle()
     val showArtistRecommendations by AppSettings.showArtistRecommendations.collectAsStateWithLifecycle()
     val showArtistOverview by AppSettings.showArtistOverview.collectAsStateWithLifecycle()
+    val hideArtistAudienceStats by AppSettings.hideArtistAudienceStats.collectAsStateWithLifecycle()
     val playerArtistPageModeLabel = stringResource(
         when (playerArtistPageMode) {
             PlayerArtistPageMode.LOCAL -> R.string.player_artist_page_mode_local
@@ -1756,6 +1764,8 @@ fun SettingsScreen(
     val showPlaylistSongArtwork by AppSettings.showPlaylistSongArtwork.collectAsStateWithLifecycle()
     val hidePlaylistPlayButtonLabel by AppSettings.hidePlaylistPlayButtonLabel.collectAsStateWithLifecycle()
     val showCollectionSongArtwork by AppSettings.showCollectionSongArtwork.collectAsStateWithLifecycle()
+    val localSearchCollectionSongArtwork by AppSettings.localSearchCollectionSongArtwork.collectAsStateWithLifecycle()
+    val localSearchFullScreenArtwork by AppSettings.localSearchFullScreenArtwork.collectAsStateWithLifecycle()
     val showPlayHistorySongArtwork by AppSettings.showPlayHistorySongArtwork.collectAsStateWithLifecycle()
     val keepCollectionArtworkAspectRatio by AppSettings.keepCollectionArtworkAspectRatio.collectAsStateWithLifecycle()
     val localizeLibraryCollectionCount by AppSettings.localizeLibraryCollectionCount.collectAsStateWithLifecycle()
@@ -2311,6 +2321,18 @@ fun SettingsScreen(
             listOf("album", "artist", "album artist", "artwork", "アルバム", "アーティスト", "アルバムアーティスト", "アートワーク"),
             showCollectionSongArtwork,
         ) { AppSettings.setShowCollectionSongArtwork(!showCollectionSongArtwork) },
+        SettingsSearchEntry(
+            stringResource(R.string.local_search_collection_song_artwork),
+            stringResource(R.string.local_search_collection_song_artwork_subtitle),
+            listOf("search", "this device", "artist", "album", "artwork", "検索", "この端末", "アーティスト", "アルバム", "画像", "曲番号"),
+            localSearchCollectionSongArtwork,
+        ) { AppSettings.setLocalSearchCollectionSongArtwork(!localSearchCollectionSongArtwork) },
+        SettingsSearchEntry(
+            stringResource(R.string.local_search_full_screen_artwork),
+            stringResource(R.string.local_search_full_screen_artwork_subtitle),
+            listOf("search", "this device", "artist", "album", "full screen", "検索", "この端末", "アーティスト", "アルバム", "全画面アート"),
+            localSearchFullScreenArtwork,
+        ) { AppSettings.setLocalSearchFullScreenArtwork(!localSearchFullScreenArtwork) },
         SettingsSearchEntry(stringResource(R.string.keep_collection_artwork_aspect_ratio), stringResource(R.string.keep_collection_artwork_aspect_ratio_subtitle), listOf("playlist", "album", "artwork", "aspect ratio", "cover", "プレイリスト", "アルバム", "アート", "縦横比"), keepCollectionArtworkAspectRatio) { AppSettings.setKeepCollectionArtworkAspectRatio(!keepCollectionArtworkAspectRatio) },
         SettingsSearchEntry(stringResource(R.string.localize_library_collection_count), stringResource(R.string.localize_library_collection_count_subtitle), listOf("library", "collections", "count", "language", "ライブラリ", "コレクション", "件数", "日本語"), localizeLibraryCollectionCount) { AppSettings.setLocalizeLibraryCollectionCount(!localizeLibraryCollectionCount) },
         localizeLibraryAllLabelSearchEntry(localizeLibraryAllLabel),
@@ -2763,6 +2785,7 @@ fun SettingsScreen(
             showLocalArtistSections = showLocalArtistSections,
             showArtistRecommendations = showArtistRecommendations,
             showArtistOverview = showArtistOverview,
+            hideArtistAudienceStats = hideArtistAudienceStats,
             onChoosePlayerArtistPageMode = { showPlayerArtistPageModeDialog = true },
             folderArtworkFallbackLabel = stringResource(
                 when (folderArtworkFallbackMode) {
@@ -6913,9 +6936,12 @@ fun SettingsScreen(
             showLocalArtistSections = showLocalArtistSections,
             showArtistRecommendations = showArtistRecommendations,
             showArtistOverview = showArtistOverview,
+            hideArtistAudienceStats = hideArtistAudienceStats,
             filterNonMusicAudio = filterNonMusicAudio,
             showPlaylistSongArtwork = showPlaylistSongArtwork,
             showCollectionSongArtwork = showCollectionSongArtwork,
+            localSearchCollectionSongArtwork = localSearchCollectionSongArtwork,
+            localSearchFullScreenArtwork = localSearchFullScreenArtwork,
             showPlayHistorySongArtwork = showPlayHistorySongArtwork,
             keepCollectionArtworkAspectRatio = keepCollectionArtworkAspectRatio,
             localizeLibraryCollectionCount = localizeLibraryCollectionCount,
@@ -8564,9 +8590,12 @@ private fun LocalMusicSettingsGroup(
     showLocalArtistSections: Boolean,
     showArtistRecommendations: Boolean,
     showArtistOverview: Boolean,
+    hideArtistAudienceStats: Boolean,
     filterNonMusicAudio: Boolean,
     showPlaylistSongArtwork: Boolean,
     showCollectionSongArtwork: Boolean,
+    localSearchCollectionSongArtwork: Boolean,
+    localSearchFullScreenArtwork: Boolean,
     showPlayHistorySongArtwork: Boolean,
     keepCollectionArtworkAspectRatio: Boolean,
     localizeLibraryCollectionCount: Boolean,
@@ -8818,6 +8847,19 @@ SettingsGroup(header = stringResource(R.string.local_music)) {
     RowDivider()
     SettingsRow(
         icon = Icons.Rounded.Person,
+        title = stringResource(R.string.hide_artist_audience_stats),
+        subtitle = stringResource(R.string.hide_artist_audience_stats_subtitle),
+        trailing = {
+            Switch(
+                checked = hideArtistAudienceStats,
+                onCheckedChange = AppSettings::setHideArtistAudienceStats,
+            )
+        },
+        onClick = { AppSettings.setHideArtistAudienceStats(!hideArtistAudienceStats) },
+    )
+    RowDivider()
+    SettingsRow(
+        icon = Icons.Rounded.Person,
         title = stringResource(R.string.artist_deezer_artwork_enabled),
         subtitle = stringResource(R.string.artist_deezer_artwork_enabled_subtitle),
         trailing = {
@@ -9045,6 +9087,32 @@ SettingsGroup(header = stringResource(R.string.local_music)) {
             )
         },
         onClick = { AppSettings.setShowCollectionSongArtwork(!showCollectionSongArtwork) },
+    )
+    RowDivider()
+    SettingsRow(
+        icon = Icons.Rounded.Search,
+        title = stringResource(R.string.local_search_collection_song_artwork),
+        subtitle = stringResource(R.string.local_search_collection_song_artwork_subtitle),
+        trailing = {
+            Switch(
+                checked = localSearchCollectionSongArtwork,
+                onCheckedChange = AppSettings::setLocalSearchCollectionSongArtwork,
+            )
+        },
+        onClick = { AppSettings.setLocalSearchCollectionSongArtwork(!localSearchCollectionSongArtwork) },
+    )
+    RowDivider()
+    SettingsRow(
+        icon = Icons.Rounded.Search,
+        title = stringResource(R.string.local_search_full_screen_artwork),
+        subtitle = stringResource(R.string.local_search_full_screen_artwork_subtitle),
+        trailing = {
+            Switch(
+                checked = localSearchFullScreenArtwork,
+                onCheckedChange = AppSettings::setLocalSearchFullScreenArtwork,
+            )
+        },
+        onClick = { AppSettings.setLocalSearchFullScreenArtwork(!localSearchFullScreenArtwork) },
     )
     RowDivider()
     SettingsRow(

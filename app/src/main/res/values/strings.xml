@@ -1282,7 +1282,7 @@
     <string name="online_album_artist_artwork">Online album-artist artwork</string>
     <string name="online_album_artist_artwork_subtitle">Allow album-artist images to be searched on Deezer. When off, only local album artwork is used. Off by default.</string>
     <string name="artist_deezer_artwork_enabled">Use Deezer artist images</string>
-    <string name="artist_deezer_artwork_enabled_subtitle">Allow Deezer lookups for artist covers. Turn this off to use local artwork or the default icon.</string>
+    <string name="artist_deezer_artwork_enabled_subtitle">Use online portraits in the Artists tab’s round thumbnails. User-selected artist images take priority; turn this off to use local album art or the default icon.</string>
     <string name="artist_signatures">Artist signatures</string>
     <string name="artist_signatures_subtitle">Show handwritten signatures on local artist pages. Configure a signature API URL to use this feature.</string>
     <string name="artist_signatures_url">Signature API URL</string>
@@ -1808,6 +1808,10 @@
     <string name="redesigned_saved_queue_manager_subtitle">Use a compact list layout for saving, loading, replacing, and deleting saved queues. On by default.</string>
     <string name="collection_song_artwork">Show album art in artist and album song lists</string>
     <string name="collection_song_artwork_subtitle">Show each track’s album cover instead of its number in album, artist, and album-artist lists. On by default.</string>
+    <string name="local_search_collection_song_artwork">Search results: show track artwork</string>
+    <string name="local_search_collection_song_artwork_subtitle">In local search results from This device, show each track’s album cover instead of its track number. On by default.</string>
+    <string name="local_search_full_screen_artwork">Search results: full-screen artwork</string>
+    <string name="local_search_full_screen_artwork_subtitle">Open local artist, album, and folder results from This device with full-screen artwork. On by default.</string>
     <string name="play_history_song_artwork">Show album art in play history</string>
     <string name="play_history_song_artwork_subtitle">Show each track’s album cover instead of its number in Recently played and Most played. On by default.</string>
     <string name="library_categories">Library categories</string>
@@ -2179,6 +2183,8 @@
     <string name="show_artist_recommendations_subtitle">Show or hide YouTube Music’s recommended artist shelves below the artist page.</string>
     <string name="show_artist_overview">Show artist overview</string>
     <string name="show_artist_overview_subtitle">Show the artist description and audience information when available.</string>
+    <string name="hide_artist_audience_stats">Hide artist audience statistics</string>
+    <string name="hide_artist_audience_stats_subtitle">Hide subscriber and monthly listener counts while keeping the artist description. Off by default.</string>
     <string name="hybrid_local_releases">Your albums, singles &amp; EPs</string>
     <string name="hybrid_local_playlists">Your playlists</string>
     <string name="hybrid_playlist_track_count">%1$d tracks</string>

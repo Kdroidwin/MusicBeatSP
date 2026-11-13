@@ -34,7 +34,6 @@ internal object BuiltinLyricsSources {
         LyricsSource("utaten", "UtaTen", "Japanese lyrics with native furigana support"),
         LyricsSource("utanet", "歌ネット (Uta-Net)", "Japanese lyrics from Uta-Net"),
         LyricsSource("joysound", "JOYSOUND", "Japanese plain-text lyrics from JOYSOUND"),
-        LyricsSource("lyricstranslate", "LyricsTranslate", "Original song lyrics from LyricsTranslate"),
         LyricsSource("ctc_align", "Heuristic Sync", "Estimated timing generated from plain lyrics"),
         LyricsSource("ctc_align_character", "Heuristic Sync · 1文字", "Estimated character timing generated from plain lyrics", wordSynced = true),
         LyricsSource("genius", "Genius", "Plain-text fallback from Genius"),
@@ -70,7 +69,7 @@ internal object BuiltinLyricsSources {
         "netease" -> NetEaseLyrics.lyrics(title, artist, durationMs, album)
         "lrclib" -> LrcLib.lyrics(title, artist, durationMs)
         "musixmatch" -> Musixmatch.lyrics(title, artist, durationMs)
-        "jlyric", "utaten", "utanet", "joysound", "lyricstranslate", "ctc_align", "ctc_align_character" ->
+        "jlyric", "utaten", "utanet", "joysound", "ctc_align", "ctc_align_character" ->
             com.music.bitchord.data.lyrics.providers.NativeLyricsProviders
                 .getLyrics(id, title, artist, album, durationMs)
                 ?.let(ProviderLyrics::parse)
@@ -80,7 +79,7 @@ internal object BuiltinLyricsSources {
 
     /** Search routes ported from Tinque. Playback keeps the existing provider implementations. */
     fun nativeSearchId(id: String): String? = when (id) {
-        "netease", "kugou", "musixmatch", "jlyric", "utaten", "utanet", "joysound", "lyricstranslate", "ctc_align", "ctc_align_character" -> id
+        "netease", "kugou", "musixmatch", "jlyric", "utaten", "utanet", "joysound", "ctc_align", "ctc_align_character" -> id
         "petit_lyrics" -> "petitlyrics"
         else -> null
     }

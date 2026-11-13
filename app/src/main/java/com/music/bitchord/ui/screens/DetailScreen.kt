@@ -109,6 +109,7 @@ fun DetailScreen(
     val songsState = page.songs
     val songs = (songsState as? UiState.Success)?.data.orEmpty()
     val showArtistOverview by AppSettings.showArtistOverview.collectAsStateWithLifecycle()
+    val hideArtistAudienceStats by AppSettings.hideArtistAudienceStats.collectAsStateWithLifecycle()
     val showLocalArtistSections by AppSettings.showLocalArtistSections.collectAsStateWithLifecycle()
     val showArtistRecommendations by AppSettings.showArtistRecommendations.collectAsStateWithLifecycle()
     val subscribed = page.subscription?.subscribed == true
@@ -152,7 +153,12 @@ fun DetailScreen(
             )
         }
 
-        if (showArtistOverview && (page.description?.isNotBlank() == true || page.subscriberCountText != null || page.monthlyListenerCount != null)) {
+        val audienceStats = if (hideArtistAudienceStats) {
+            emptyList()
+        } else {
+            listOfNotNull(page.subscriberCountText, page.monthlyListenerCount)
+        }
+        if (showArtistOverview && (page.description?.isNotBlank() == true || audienceStats.isNotEmpty())) {
             item(key = "artist-about") {
                 Column(Modifier.fillMaxWidth().padding(horizontal = PAGE_GUTTER, vertical = 14.dp)) {
                     SectionTitle(stringResource(R.string.about_artist), palette)
@@ -165,11 +171,10 @@ fun DetailScreen(
                             overflow = TextOverflow.Ellipsis,
                         )
                     }
-                    val stats = listOfNotNull(page.subscriberCountText, page.monthlyListenerCount)
-                    if (stats.isNotEmpty()) {
+                    if (audienceStats.isNotEmpty()) {
                         Spacer(Modifier.height(8.dp))
                         Text(
-                            text = stats.joinToString("  ·  "),
+                            text = audienceStats.joinToString("  ·  "),
                             color = palette.onBackgroundVariant,
                             style = MaterialTheme.typography.labelLarge,
                         )

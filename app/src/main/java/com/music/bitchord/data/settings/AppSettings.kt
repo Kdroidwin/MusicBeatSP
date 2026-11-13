@@ -1275,6 +1275,8 @@ object AppSettings {
     val showArtistRecommendations = MutableStateFlow(true)
     /** The artist overview remains visible unless explicitly hidden. */
     val showArtistOverview = MutableStateFlow(true)
+    /** Hides subscriber and monthly-listener counts without hiding the artist description. */
+    val hideArtistAudienceStats = MutableStateFlow(false)
     val localMusicViewType = MutableStateFlow(LibraryViewType.LIST)
     val downloadedSongsViewType = MutableStateFlow(LibraryViewType.LIST)
     val downloadedAlbumsViewType = MutableStateFlow(LibraryViewType.GRID)
@@ -1288,6 +1290,10 @@ object AppSettings {
     val showPlaylistSongArtwork = MutableStateFlow(true)
     /** Show track covers in album, artist, and album-artist detail lists instead of ordinal numbers. */
     val showCollectionSongArtwork = MutableStateFlow(true)
+    /** Search-tab local artist/album/folder result lists show track covers instead of numbers. */
+    val localSearchCollectionSongArtwork = MutableStateFlow(true)
+    /** Search-tab local artist/album/folder drill-down pages use full-screen cover artwork. */
+    val localSearchFullScreenArtwork = MutableStateFlow(true)
     /** Show cover thumbnails instead of ordinal numbers in recent/most-played lists. */
     val showPlayHistorySongArtwork = MutableStateFlow(true)
     val localDrillDownSongsViewType = MutableStateFlow(LibraryViewType.LIST)
@@ -2045,6 +2051,7 @@ object AppSettings {
         showLocalArtistSections.value = prefs.getBoolean(KEY_SHOW_LOCAL_ARTIST_SECTIONS, true)
         showArtistRecommendations.value = prefs.getBoolean(KEY_SHOW_ARTIST_RECOMMENDATIONS, true)
         showArtistOverview.value = prefs.getBoolean(KEY_SHOW_ARTIST_OVERVIEW, true)
+        hideArtistAudienceStats.value = prefs.getBoolean(KEY_HIDE_ARTIST_AUDIENCE_STATS, false)
         downloadedMusicViewType.value = readLibraryViewType(KEY_DOWNLOADED_MUSIC_VIEW_TYPE, LibraryViewType.LIST)
         downloadedSongsViewType.value = readLibraryViewType(KEY_DOWNLOADED_SONGS_VIEW_TYPE, downloadedMusicViewType.value)
         downloadedAlbumsViewType.value = readLibraryViewType(KEY_DOWNLOADED_ALBUMS_VIEW_TYPE, LibraryViewType.GRID)
@@ -2053,6 +2060,8 @@ object AppSettings {
         librarySongsViewType.value = readLibraryViewType(KEY_LIBRARY_SONGS_VIEW_TYPE, LibraryViewType.LIST)
         showPlaylistSongArtwork.value = prefs.getBoolean(KEY_SHOW_PLAYLIST_SONG_ARTWORK, true)
         showCollectionSongArtwork.value = prefs.getBoolean(KEY_SHOW_COLLECTION_SONG_ARTWORK, true)
+        localSearchCollectionSongArtwork.value = prefs.getBoolean(KEY_LOCAL_SEARCH_COLLECTION_SONG_ARTWORK, true)
+        localSearchFullScreenArtwork.value = prefs.getBoolean(KEY_LOCAL_SEARCH_FULL_SCREEN_ARTWORK, true)
         showPlayHistorySongArtwork.value = prefs.getBoolean(KEY_SHOW_PLAY_HISTORY_SONG_ARTWORK, true)
         localDrillDownSongsViewType.value = readLibraryViewType(KEY_LOCAL_DRILLDOWN_SONGS_VIEW_TYPE, LibraryViewType.LIST)
         downloadedDrillDownSongsViewType.value = readLibraryViewType(KEY_DOWNLOADED_DRILLDOWN_SONGS_VIEW_TYPE, LibraryViewType.LIST)
@@ -3849,7 +3858,6 @@ object AppSettings {
                 .putBoolean(KEY_QQ_MUSIC_LYRICS_SOURCE_MIGRATED, true)
                 .putBoolean(KEY_KUGECI_FOLLOWLYRICS_SOURCE_MIGRATED, true)
                 .putBoolean(KEY_JOYSOUND_LYRICS_SOURCE_MIGRATED, true)
-                .putBoolean(KEY_LYRICSTRANSLATE_SOURCE_MIGRATED, true)
                 .putBoolean(KEY_HEURISTIC_CHARACTER_SYNC_SOURCE_MIGRATED, true)
                 .apply()
             return allSources.toSet()
@@ -3888,12 +3896,6 @@ object AppSettings {
             changed = ids.add("joysound") || changed
             edit.putBoolean(KEY_JOYSOUND_LYRICS_SOURCE_MIGRATED, true)
         }
-        if (allSources.any { it.id == "lyricstranslate" } &&
-            !prefs.getBoolean(KEY_LYRICSTRANSLATE_SOURCE_MIGRATED, false)
-        ) {
-            changed = ids.add("lyricstranslate") || changed
-            edit.putBoolean(KEY_LYRICSTRANSLATE_SOURCE_MIGRATED, true)
-        }
         if (allSources.any { it.id == "ctc_align_character" } &&
             !prefs.getBoolean(KEY_HEURISTIC_CHARACTER_SYNC_SOURCE_MIGRATED, false)
         ) {
@@ -3905,7 +3907,6 @@ object AppSettings {
             !prefs.getBoolean(KEY_QQ_MUSIC_LYRICS_SOURCE_MIGRATED, false) ||
             !prefs.getBoolean(KEY_KUGECI_FOLLOWLYRICS_SOURCE_MIGRATED, false) ||
             !prefs.getBoolean(KEY_JOYSOUND_LYRICS_SOURCE_MIGRATED, false) ||
-            !prefs.getBoolean(KEY_LYRICSTRANSLATE_SOURCE_MIGRATED, false) ||
             !prefs.getBoolean(KEY_HEURISTIC_CHARACTER_SYNC_SOURCE_MIGRATED, false)
         ) {
             if (changed) edit.putString(KEY_LYRICS_SOURCES, ids.joinToString(","))
@@ -4654,6 +4655,11 @@ object AppSettings {
         prefs.edit().putBoolean(KEY_SHOW_ARTIST_OVERVIEW, value).apply()
     }
 
+    fun setHideArtistAudienceStats(value: Boolean) {
+        hideArtistAudienceStats.value = value
+        prefs.edit().putBoolean(KEY_HIDE_ARTIST_AUDIENCE_STATS, value).apply()
+    }
+
     fun setLocalMusicViewType(value: LibraryViewType) {
         setLocalSongsViewType(value)
     }
@@ -4696,6 +4702,16 @@ object AppSettings {
     fun setShowCollectionSongArtwork(value: Boolean) {
         showCollectionSongArtwork.value = value
         prefs.edit().putBoolean(KEY_SHOW_COLLECTION_SONG_ARTWORK, value).apply()
+    }
+
+    fun setLocalSearchCollectionSongArtwork(value: Boolean) {
+        localSearchCollectionSongArtwork.value = value
+        prefs.edit().putBoolean(KEY_LOCAL_SEARCH_COLLECTION_SONG_ARTWORK, value).apply()
+    }
+
+    fun setLocalSearchFullScreenArtwork(value: Boolean) {
+        localSearchFullScreenArtwork.value = value
+        prefs.edit().putBoolean(KEY_LOCAL_SEARCH_FULL_SCREEN_ARTWORK, value).apply()
     }
 
     fun setShowPlayHistorySongArtwork(value: Boolean) {
@@ -5235,7 +5251,6 @@ object AppSettings {
     private const val KEY_QQ_MUSIC_LYRICS_SOURCE_MIGRATED = "qq_music_lyrics_source_migrated"
     private const val KEY_KUGECI_FOLLOWLYRICS_SOURCE_MIGRATED = "kugeci_followlyrics_source_migrated"
     private const val KEY_JOYSOUND_LYRICS_SOURCE_MIGRATED = "joysound_lyrics_source_migrated"
-    private const val KEY_LYRICSTRANSLATE_SOURCE_MIGRATED = "lyricstranslate_source_migrated"
     private const val KEY_HEURISTIC_CHARACTER_SYNC_SOURCE_MIGRATED = "heuristic_character_sync_source_migrated"
     private const val KEY_PRIORITIZE_SYLLABLE_SYNC = "prioritize_syllable_sync"
     private const val KEY_SHOW_LYRICS_LOGS = "show_lyrics_logs"
@@ -5286,6 +5301,7 @@ object AppSettings {
     private const val KEY_SHOW_LOCAL_ARTIST_SECTIONS = "show_local_artist_sections"
     private const val KEY_SHOW_ARTIST_RECOMMENDATIONS = "show_artist_recommendations"
     private const val KEY_SHOW_ARTIST_OVERVIEW = "show_artist_overview"
+    private const val KEY_HIDE_ARTIST_AUDIENCE_STATS = "hide_artist_audience_stats"
     private const val KEY_LIBRARY_SORT = "library_sort"
     private const val KEY_YOUTUBE_DOWNLOADS_SORT = "youtube_downloads_sort"
     private const val KEY_DETAIL_SONG_SORTS = "detail_song_sorts"
@@ -5302,6 +5318,8 @@ object AppSettings {
     private const val KEY_LIBRARY_SONGS_VIEW_TYPE = "library_songs_view_type"
     private const val KEY_SHOW_PLAYLIST_SONG_ARTWORK = "show_playlist_song_artwork"
     private const val KEY_SHOW_COLLECTION_SONG_ARTWORK = "show_collection_song_artwork"
+    private const val KEY_LOCAL_SEARCH_COLLECTION_SONG_ARTWORK = "local_search_collection_song_artwork"
+    private const val KEY_LOCAL_SEARCH_FULL_SCREEN_ARTWORK = "local_search_full_screen_artwork"
     private const val KEY_SHOW_PLAY_HISTORY_SONG_ARTWORK = "show_play_history_song_artwork"
     private const val KEY_VISIBLE_LIBRARY_CATEGORIES = "visible_library_categories"
     private const val KEY_LIBRARY_CATEGORY_ORDER = "library_category_order"

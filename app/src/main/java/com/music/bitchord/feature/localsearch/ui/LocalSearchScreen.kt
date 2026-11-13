@@ -92,6 +92,8 @@ import kotlinx.coroutines.flow.distinctUntilChanged
 @Composable
 fun LocalSearchScreen(
     songs: List<Song>,
+    showLocalCollectionSongArtwork: Boolean = true,
+    showLocalFullScreenArtwork: Boolean = true,
     currentSong: Song? = null,
     isPlaying: Boolean = false,
     onSongClick: (List<Song>, Int) -> Unit,
@@ -319,6 +321,8 @@ fun LocalSearchScreen(
                 artworkUrl = drillDownArt,
                 songs = drillDownSongs,
                 isArtist = isDrillDownArtist,
+                showCollectionArtworkInList = showLocalCollectionSongArtwork,
+                fullScreenArtwork = showLocalFullScreenArtwork,
                 selectedIds = selectedSongIds,
                 currentSong = currentSong,
                 isPlaying = isPlaying,
