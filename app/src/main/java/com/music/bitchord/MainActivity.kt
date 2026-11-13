@@ -1039,6 +1039,8 @@ private fun BitChordApp(
     val settingsTopBarUsesMoreIcon by AppSettings.settingsTopBarUsesMoreIcon.collectAsStateWithLifecycle()
     val rootTabFloatingSettingsOnlySetting by AppSettings.rootTabFloatingSettingsOnly.collectAsStateWithLifecycle()
     val hideSettingsIconOnScroll by AppSettings.hideSettingsIconOnScroll.collectAsStateWithLifecycle()
+    val pinMusicLibraryTopBarSetting by AppSettings.pinMusicLibraryTopBar.collectAsStateWithLifecycle()
+    val keepMusicLibraryTopBarHiddenUntilTopSetting by AppSettings.keepMusicLibraryTopBarHiddenUntilTop.collectAsStateWithLifecycle()
     val searchHistory by viewModel.searchHistory.collectAsStateWithLifecycle()
 
     // Settings has no tab of its own — it sits on top of whatever tab was
@@ -1316,7 +1318,14 @@ private fun BitChordApp(
 
     val rootTabTopBarScrollEnabled = detail == null && !showSettings && !showReplay && !showSources && !showWearOs
     val rootTabUsesListScrollState = selectedTab == TAB_LIBRARY || selectedTab == TAB_SEARCH
+    val musicLibraryTopBarOptionsApply = selectedTab == TAB_SONGS || selectedTab == TAB_ALBUMS || selectedTab == TAB_ARTISTS
+    val musicLibraryTopBarPinned = musicLibraryTopBarOptionsApply && pinMusicLibraryTopBarSetting
+    val holdMusicLibraryTopBarHiddenUntilTop =
+        musicLibraryTopBarOptionsApply && keepMusicLibraryTopBarHiddenUntilTopSetting
     var rootTabTopBarCollapsed by remember(selectedTab) { mutableStateOf(false) }
+    LaunchedEffect(selectedTab, musicLibraryTopBarPinned) {
+        if (musicLibraryTopBarPinned) rootTabTopBarCollapsed = false
+    }
     val onRootLibraryOrSearchScrolled: (Boolean) -> Unit = { contentScrolled ->
         if (
             detail == null && !showSettings && !showReplay && !showSources && !showWearOs &&
@@ -1333,21 +1342,24 @@ private fun BitChordApp(
         rootTabTopBarScrollEnabled,
         rootTabUsesListScrollState,
         rootTabTopBarScrollThreshold,
+        musicLibraryTopBarPinned,
+        holdMusicLibraryTopBarHiddenUntilTop,
     ) {
         RootTabTopBarScrollConnection(
             // Library and Search report their actual scroll position below.
             // The direction-based parent connection would expand the bar as
             // soon as a user scrolls back toward the top, even mid-list.
-            enabled = rootTabTopBarScrollEnabled && !rootTabUsesListScrollState,
+            enabled = rootTabTopBarScrollEnabled && !rootTabUsesListScrollState && !musicLibraryTopBarPinned,
             initiallyCollapsed = rootTabTopBarCollapsed,
             thresholdPx = rootTabTopBarScrollThreshold,
+            holdHiddenUntilTop = holdMusicLibraryTopBarHiddenUntilTop,
             onCollapsedChange = { rootTabTopBarCollapsed = it },
         )
     }
     val rootTopBarPresentation = rootTabTopBarPresentation(
         persistentSettingsOnly = rootTabFloatingSettingsOnlySetting,
         scrollEnabled = rootTabTopBarScrollEnabled,
-        collapsed = rootTabTopBarCollapsed,
+        collapsed = rootTabTopBarCollapsed && !musicLibraryTopBarPinned,
         showStatusBar = showStatusBar,
         showReplay = showReplay,
         isRootTab = detail == null && !showSettings && !showReplay && !showSources && !showWearOs &&
@@ -1361,8 +1373,8 @@ private fun BitChordApp(
         animationSpec = tween(180),
         label = "rootTopPadding",
     )
-    LaunchedEffect(rootTabTopBarScrollEnabled, rootTabTopBarCollapsed, rootTopPaddingTarget) {
-        val hideStatusBar = rootTabTopBarScrollEnabled && rootTabTopBarCollapsed
+    LaunchedEffect(rootTabTopBarScrollEnabled, rootTabTopBarCollapsed, musicLibraryTopBarPinned, rootTopPaddingTarget) {
+        val hideStatusBar = rootTabTopBarScrollEnabled && rootTabTopBarCollapsed && !musicLibraryTopBarPinned
         // Let the content clear the header space first. Hiding a system bar
         // while a finger is dragging also changes window insets mid-gesture,
         // which causes a one-time scroll hitch.
@@ -2919,7 +2931,6 @@ private fun BitChordApp(
         BackHandler(enabled = showWearOs) { showWearOs = false }
         BackHandler(enabled = showSettings && !showWearOs) {
             showSettings = false
-            if (detail == null && !showReplay) selectedTab = TAB_SONGS
         }
         BackHandler(
             enabled = detail == null && !showSettings && !showReplay && selectedTab != TAB_SONGS,
@@ -6104,6 +6115,7 @@ private class RootTabTopBarScrollConnection(
     private val enabled: Boolean,
     initiallyCollapsed: Boolean,
     private val thresholdPx: Float,
+    private val holdHiddenUntilTop: Boolean,
     private val onCollapsedChange: (Boolean) -> Unit,
 ) : NestedScrollConnection {
     private var collapsed = initiallyCollapsed
@@ -6124,6 +6136,11 @@ private class RootTabTopBarScrollConnection(
 
         val direction = if (delta < 0f) -1 else 1
         val shouldCollapse = direction < 0
+        if (holdHiddenUntilTop && collapsed && !shouldCollapse) {
+            accumulatedDistance = 0f
+            lastDirection = 0
+            return Offset.Zero
+        }
         if (shouldCollapse == collapsed) {
             accumulatedDistance = 0f
             lastDirection = 0
@@ -6138,6 +6155,22 @@ private class RootTabTopBarScrollConnection(
             accumulatedDistance = 0f
             lastDirection = 0
             onCollapsedChange(collapsed)
+        }
+        return Offset.Zero
+    }
+
+    override fun onPostScroll(
+        consumed: Offset,
+        available: Offset,
+        source: NestedScrollSource,
+    ): Offset {
+        // A positive unconsumed delta means the child list has reached its
+        // first item. Until then upward scrolling must not reveal the bar.
+        if (enabled && holdHiddenUntilTop && collapsed && available.y > 0f) {
+            collapsed = false
+            accumulatedDistance = 0f
+            lastDirection = 0
+            onCollapsedChange(false)
         }
         return Offset.Zero
     }

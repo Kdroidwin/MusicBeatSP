@@ -19,7 +19,6 @@ import androidx.core.graphics.ColorUtils
 import androidx.palette.graphics.Palette
 import com.music.bitchord.MainActivity
 import com.music.bitchord.R
-import com.music.bitchord.data.settings.AppSettings
 import com.music.bitchord.playback.PlayerDeepLink
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
@@ -113,7 +112,6 @@ class MediaWidgetPill : AppWidgetProvider() {
                 // Retry on the next refresh after a transient/missing cover.
                 if (it.bitmap != null || key == NO_ARTWORK) artworkCache.put(key, it)
             }
-            val opacity = AppSettings.pillWidgetOpacity.value.roundToInt().coerceIn(0, 100)
             ids.forEach { id ->
                 val size = measure(context, manager, id)
                 val views = RemoteViews(context.packageName, R.layout.widget_media_pill)
@@ -121,7 +119,6 @@ class MediaWidgetPill : AppWidgetProvider() {
                     R.id.widget_pill_surface,
                     roundedSurface(size.widthPx, size.heightPx, artwork.surface),
                 )
-                views.setImageAlpha(R.id.widget_pill_surface, (opacity * 255 / 100).coerceIn(0, 255))
                 artwork.bitmap?.let { views.setImageViewBitmap(R.id.widget_pill_art, it) }
                 views.setTextViewText(
                     R.id.widget_pill_title,
@@ -161,6 +158,7 @@ class MediaWidgetPill : AppWidgetProvider() {
                         views.setOnClickPendingIntent(it, openPlayer)
                     }
                 }
+                WidgetOpacity.apply(views, R.id.widget_pill_root)
                 runCatching { manager.updateAppWidget(id, views) }
             }
         }
@@ -184,10 +182,11 @@ class MediaWidgetPill : AppWidgetProvider() {
 
         private fun roundedSurface(width: Int, height: Int, color: Int): Bitmap {
             val bitmap = Bitmap.createBitmap(width.coerceAtLeast(1), height.coerceAtLeast(1), Bitmap.Config.ARGB_8888)
+            val radius = height / 4f
             Canvas(bitmap).drawRoundRect(
                 RectF(0f, 0f, width.toFloat(), height.toFloat()),
-                height / 2f,
-                height / 2f,
+                radius,
+                radius,
                 Paint(Paint.ANTI_ALIAS_FLAG).apply { this.color = color },
             )
             return bitmap

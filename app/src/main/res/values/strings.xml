@@ -254,8 +254,8 @@
     <string name="volume_boost">Volume boost</string>
     <string name="volume_boost_subtitle">Raises decoded PCM by the selected amount. Peaks are limited to the PCM range; unavailable in bit-perfect mode.</string>
     <string name="volume_boost_value">%1$.1f dB</string>
-    <string name="pill_widget_opacity">Now playing pill background opacity</string>
-    <string name="pill_widget_opacity_subtitle">Changes only the tint behind the artwork and controls; lower values reveal more of the wallpaper.</string>
+    <string name="pill_widget_opacity">Widget opacity</string>
+    <string name="pill_widget_opacity_subtitle">Adjusts transparency for every MusicBeatSP home-screen widget.</string>
     <string name="pill_widget_opacity_value">%1$d%%</string>
     <string name="download_quality">Download quality</string>
     <string name="download_wifi_only">Download over Wi-Fi only</string>
@@ -332,8 +332,9 @@
     <string name="skip_silence">Skip silence</string>
     <string name="skip_silence_subtitle">Trim gaps longer than a second</string>
     <string name="crossfade">Crossfade</string>
-    <string name="crossfade_subtitle">Overlap consecutive tracks for a smoother transition. Off by default.</string>
+    <string name="crossfade_subtitle">Overlap consecutive tracks for a smoother transition. Adjust from 0.01 seconds up to 12 seconds. Off by default.</string>
     <string name="crossfade_value">%1$d sec</string>
+    <string name="crossfade_value_precise">%1$s sec</string>
     <string name="automix">Automix [BETA]</string>
     <string name="automix_enabled_subtitle">Times and blends every transition from the tracks themselves. Turn it off if the phone gets hot or playback stutters.</string>
     <string name="automix_disabled_subtitle">Times and blends transitions automatically, without a slider. Performance may vary on slower devices.</string>
@@ -1841,6 +1842,10 @@
     <string name="root_tab_floating_settings_only_subtitle">Hide the app icon and tab title bar on main tabs while keeping Settings as a floating action. Off by default.</string>
     <string name="hide_settings_icon_on_scroll">Hide the Settings icon while scrolling</string>
     <string name="hide_settings_icon_on_scroll_subtitle">Do not keep the Settings action pinned while scrolling through tabs. On by default.</string>
+    <string name="pin_music_library_top_bar">Keep Songs, Albums and Artists bars pinned</string>
+    <string name="pin_music_library_top_bar_subtitle">Keep the title bar visible while scrolling these tabs. Off by default.</string>
+    <string name="keep_music_library_top_bar_hidden_until_top">Show the hidden bar only at the top</string>
+    <string name="keep_music_library_top_bar_hidden_until_top_subtitle">After the bar hides, scrolling upward keeps it hidden until the list reaches the first item. On by default.</string>
     <string name="tablet_lyrics_beside_player">Tablet full-screen player</string>
     <string name="tablet_lyrics_beside_player_subtitle">On wide screens, expand the bottom player across the full window, with playback controls on the left and synced lyrics on the right. Swipe down from the top handle to return.</string>
     <string name="youtube_music_saved">YouTube Music</string>

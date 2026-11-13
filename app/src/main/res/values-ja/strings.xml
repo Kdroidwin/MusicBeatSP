@@ -224,8 +224,8 @@
     <string name="volume_boost">音量ブースト</string>
     <string name="volume_boost_subtitle">デコード後の音声を指定量だけ増幅します。ピークをPCMの範囲に制限し、ビットパーフェクト再生中は無効です。</string>
     <string name="volume_boost_value">%1$.1f dB</string>
-    <string name="pill_widget_opacity">再生中ピル型ウィジェットの背景透明度</string>
-    <string name="pill_widget_opacity_subtitle">アルバムアートや操作ボタンではなく背景だけを調整します。値を下げると壁紙が見えやすくなります。</string>
+    <string name="pill_widget_opacity">ウィジェットの透明度</string>
+    <string name="pill_widget_opacity_subtitle">MusicBeatSPのすべてのホーム画面ウィジェットの透明度を調整します。</string>
     <string name="pill_widget_opacity_value">%1$d%%</string>
     <string name="download_quality">ダウンロード品質</string>
     <string name="download_wifi_only">Wi-Fi接続時のみダウンロード</string>
@@ -297,8 +297,9 @@
     <string name="skip_silence">無音をスキップ</string>
     <string name="skip_silence_subtitle">1秒より長い無音部分をカットします</string>
     <string name="crossfade">クロスフェード</string>
-    <string name="crossfade_subtitle">次の曲と重ねて再生し、曲間を滑らかにします。初期設定ではオフです。</string>
+    <string name="crossfade_subtitle">次の曲と重ねて再生し、曲間を滑らかにします。0.01秒から12秒まで調整できます。初期設定ではオフです。</string>
     <string name="crossfade_value">%1$d秒</string>
+    <string name="crossfade_value_precise">%1$s秒</string>
     <string name="automix">オートミックス [BETA]</string>
     <string name="automix_enabled_subtitle">曲の特徴から切り替えのタイミングとブレンドを計算します。端末が熱くなったり再生が途切れたりする場合はオフにしてください。</string>
     <string name="automix_disabled_subtitle">スライダーなしで切り替えのタイミングとブレンドを自動計算します。端末によっては再生性能が変わる場合があります。</string>
@@ -1814,6 +1815,10 @@
     <string name="root_tab_floating_settings_only_subtitle">曲・アルバム・ライブラリ・ラジオなどの上部バーを隠し、設定アイコンだけをフローティング表示します。初期設定はオフです。</string>
     <string name="hide_settings_icon_on_scroll">設定アイコンをスクロール時に隠す</string>
     <string name="hide_settings_icon_on_scroll_subtitle">どのタブでも、スクロール中は設定アイコンを固定表示しません。初期設定はオンです。</string>
+    <string name="pin_music_library_top_bar">曲・アルバム・アーティストのバーを固定</string>
+    <string name="pin_music_library_top_bar_subtitle">曲、アルバム、アーティストの一覧をスクロールしても上部バーを表示します。初期設定はオフです。</string>
+    <string name="keep_music_library_top_bar_hidden_until_top">一覧の先頭で上部バーを再表示</string>
+    <string name="keep_music_library_top_bar_hidden_until_top_subtitle">バーが隠れた後、上方向へスクロールしても一覧の先頭に戻るまで再表示しません。初期設定はオンです。</string>
     <string name="tablet_lyrics_beside_player">タブレットでプレイヤーを全画面表示</string>
     <string name="tablet_lyrics_beside_player_subtitle">横長画面ではプレイヤーを下部バーから全画面に広げ、左に再生操作、右に同期歌詞を表示します。上端を下へスワイプすると戻ります。</string>
     <string name="youtube_music_saved">YouTube Music</string>

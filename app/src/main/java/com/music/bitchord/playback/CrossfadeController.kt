@@ -293,7 +293,7 @@ class CrossfadeController(
      * Which setting armed the fade in flight, so [driveFade] knows which one
      * being switched off mid-blend means "stop now" rather than misreading the
      * other mode's control as the fade having been turned off. Automix
-     * doesn't need [AppSettings.crossfadeSeconds] to be above zero at all —
+     * doesn't need [AppSettings.crossfadeDurationMs] to be above zero at all —
      * see [considerSmartTransition] — so treating that as still-zero as a
      * reason to cut a Automix short would end every one of them on its
      * first tick.
@@ -830,7 +830,7 @@ class CrossfadeController(
 
         // Automix is its own on/off, independent of the manual crossfade
         // length: it decides its own duration from each pair of tracks (beats,
-        // tempo, structure), so requiring a nonzero [AppSettings.crossfadeSeconds]
+        // tempo, structure), so requiring a nonzero [AppSettings.crossfadeDurationMs]
         // first would tie an automatic feature to a manual one it doesn't use.
         if (smartFadeIsEnabled()) {
             considerSmartTransition(duration)
@@ -1900,7 +1900,7 @@ class CrossfadeController(
     private fun configuredFadeMs(): Long = if (BitPerfectOutput.ready.value || AppSettings.audioOffloadEnabled.value) {
         0L
     } else {
-        AppSettings.crossfadeSeconds.value * 1000L
+        AppSettings.crossfadeDurationMs.value.toLong()
     }
 
     /**

@@ -81,6 +81,7 @@ import androidx.compose.material.icons.rounded.MoreVert
 import androidx.compose.material.icons.rounded.MoreHoriz
 import androidx.compose.material.icons.rounded.MotionPhotosOff
 import androidx.compose.material.icons.rounded.Person
+import androidx.compose.material.icons.rounded.PushPin
 import androidx.compose.material.icons.rounded.PlaylistPlay
 import androidx.compose.material.icons.rounded.Pause
 import androidx.compose.material.icons.rounded.PlayArrow
@@ -97,6 +98,7 @@ import androidx.compose.material.icons.rounded.Speed
 import androidx.compose.material.icons.rounded.SurroundSound
 import androidx.compose.material.icons.rounded.Tune
 import androidx.compose.material.icons.rounded.ViewStream
+import androidx.compose.material.icons.rounded.VerticalAlignTop
 import androidx.compose.material.icons.rounded.VisibilityOff
 import androidx.compose.material.icons.rounded.VolumeOff
 import androidx.compose.material.icons.rounded.Waves
@@ -234,6 +236,13 @@ import kotlinx.coroutines.launch
 import kotlinx.coroutines.CancellationException
 import java.util.Locale
 import kotlin.math.roundToInt
+
+private fun formatCrossfadeSeconds(durationMs: Int): String {
+    val wholeSeconds = durationMs / 1_000
+    val hundredths = (durationMs % 1_000) / 10
+    if (hundredths == 0) return wholeSeconds.toString()
+    return "$wholeSeconds.${hundredths.toString().padStart(2, '0')}".trimEnd('0').trimEnd('.')
+}
 
 private data class SettingsSearchEntry(
     val title: String,
@@ -1357,7 +1366,9 @@ fun SettingsScreen(
 
     val skipSilence by AppSettings.skipSilence.collectAsStateWithLifecycle()
     val audioOffloadEnabled by AppSettings.audioOffloadEnabled.collectAsStateWithLifecycle()
-    val crossfadeSeconds by AppSettings.crossfadeSeconds.collectAsStateWithLifecycle()
+    val crossfadeDurationMs by AppSettings.crossfadeDurationMs.collectAsStateWithLifecycle()
+    val crossfadeOptions = AppSettings.crossfadeDurationOptionsMs
+    val crossfadeSliderIndex = AppSettings.crossfadeSliderIndex(crossfadeDurationMs)
     val smartFade by AppSettings.smartFadeEnabled.collectAsStateWithLifecycle()
     val automixPerformance by AppSettings.automixPerformanceMode.collectAsStateWithLifecycle()
     val dolbyAtmos by AppSettings.dolbyAtmos.collectAsStateWithLifecycle()
@@ -1391,6 +1402,8 @@ fun SettingsScreen(
     val settingsTopBarUsesMoreIcon by AppSettings.settingsTopBarUsesMoreIcon.collectAsStateWithLifecycle()
     val rootTabFloatingSettingsOnly by AppSettings.rootTabFloatingSettingsOnly.collectAsStateWithLifecycle()
     val hideSettingsIconOnScroll by AppSettings.hideSettingsIconOnScroll.collectAsStateWithLifecycle()
+    val pinMusicLibraryTopBar by AppSettings.pinMusicLibraryTopBar.collectAsStateWithLifecycle()
+    val keepMusicLibraryTopBarHiddenUntilTop by AppSettings.keepMusicLibraryTopBarHiddenUntilTop.collectAsStateWithLifecycle()
     val hideNavBarLabels by AppSettings.hideNavigationBarLabels.collectAsStateWithLifecycle()
     val hideRadioTopLabels by AppSettings.hideRadioTopLabels.collectAsStateWithLifecycle()
     val navigationBarMatchesMiniPlayerColor by AppSettings.navigationBarMatchesMiniPlayerColor.collectAsStateWithLifecycle()
@@ -1487,7 +1500,7 @@ fun SettingsScreen(
     val loudnessOffOnSpeaker by AppSettings.loudnessOffOnSpeaker.collectAsStateWithLifecycle()
     val volumeBoostEnabled by AppSettings.volumeBoostEnabled.collectAsStateWithLifecycle()
     val volumeBoostDb by AppSettings.volumeBoostDb.collectAsStateWithLifecycle()
-    val pillWidgetOpacity by AppSettings.pillWidgetOpacity.collectAsStateWithLifecycle()
+    val widgetOpacity by AppSettings.widgetOpacity.collectAsStateWithLifecycle()
     val liquidGlassSupported = isGlassSupported()
     val lyricsBlur by AppSettings.lyricsBlur.collectAsStateWithLifecycle()
     val lyricsFontScale by AppSettings.lyricsFontScale.collectAsStateWithLifecycle()
@@ -1949,12 +1962,12 @@ fun SettingsScreen(
             title = stringResource(R.string.crossfade),
             subtitle = stringResource(if (smartFade) R.string.crossfade_disabled_by_automix else R.string.crossfade_subtitle),
             keywords = listOf("crossfade", "fade", "transition", "クロスフェード", "曲間"),
-            valueLabel = if (crossfadeSeconds == 0) stringResource(R.string.off)
-                else stringResource(R.string.crossfade_value, crossfadeSeconds),
-            sliderValue = crossfadeSeconds.toFloat(),
-            sliderValueRange = 0f..AppSettings.MAX_CROSSFADE_SECONDS.toFloat(),
-            sliderSteps = AppSettings.MAX_CROSSFADE_SECONDS - 1,
-            onSliderValueChange = { AppSettings.setCrossfadeSeconds(it.roundToInt()) },
+            valueLabel = if (crossfadeDurationMs == 0) stringResource(R.string.off)
+                else stringResource(R.string.crossfade_value_precise, formatCrossfadeSeconds(crossfadeDurationMs)),
+            sliderValue = crossfadeSliderIndex.toFloat(),
+            sliderValueRange = 0f..crossfadeOptions.lastIndex.toFloat(),
+            sliderSteps = crossfadeOptions.size - 2,
+            onSliderValueChange = { AppSettings.setCrossfadeFromSlider(it.roundToInt()) },
             enabled = !smartFade,
             activate = {},
         ),
@@ -1962,15 +1975,15 @@ fun SettingsScreen(
             title = stringResource(R.string.audio_offload),
             subtitle = stringResource(
                 when {
-                    crossfadeSeconds > 0 || smartFade -> R.string.audio_offload_disabled_by_transition
+                    crossfadeDurationMs > 0 || smartFade -> R.string.audio_offload_disabled_by_transition
                     darPcmUpsamplingEnabled -> R.string.audio_offload_disabled_by_dsp
                     else -> R.string.audio_offload_subtitle
                 },
             ),
             keywords = listOf("audio offload", "offload", "hardware playback", "省電力", "オフロード再生"),
-            checked = audioOffloadEnabled && crossfadeSeconds == 0 && !smartFade && !darPcmUpsamplingEnabled,
-            enabled = crossfadeSeconds == 0 && !smartFade && !darPcmUpsamplingEnabled,
-            activate = { if (crossfadeSeconds == 0 && !smartFade && !darPcmUpsamplingEnabled) AppSettings.setAudioOffloadEnabled(!audioOffloadEnabled) },
+            checked = audioOffloadEnabled && crossfadeDurationMs == 0 && !smartFade && !darPcmUpsamplingEnabled,
+            enabled = crossfadeDurationMs == 0 && !smartFade && !darPcmUpsamplingEnabled,
+            activate = { if (crossfadeDurationMs == 0 && !smartFade && !darPcmUpsamplingEnabled) AppSettings.setAudioOffloadEnabled(!audioOffloadEnabled) },
         ),
         SettingsSearchEntry(
             stringResource(R.string.dolby_atmos),
@@ -2139,6 +2152,18 @@ fun SettingsScreen(
         SettingsSearchEntry(stringResource(R.string.settings_top_bar_more_icon), stringResource(R.string.settings_top_bar_more_icon_subtitle), listOf("settings", "gear", "ellipsis", "more", "歯車", "設定", "三点", "︙"), settingsTopBarUsesMoreIcon) { AppSettings.setSettingsTopBarUsesMoreIcon(!settingsTopBarUsesMoreIcon) },
         SettingsSearchEntry(stringResource(R.string.root_tab_floating_settings_only), stringResource(R.string.root_tab_floating_settings_only_subtitle), listOf("settings", "floating", "top bar", "header", "title", "gear", "上部バー", "設定アイコン", "フローティング"), rootTabFloatingSettingsOnly) { AppSettings.setRootTabFloatingSettingsOnly(!rootTabFloatingSettingsOnly) },
         hideSettingsIconOnScrollSearchEntry(hideSettingsIconOnScroll),
+        SettingsSearchEntry(
+            stringResource(R.string.pin_music_library_top_bar),
+            stringResource(R.string.pin_music_library_top_bar_subtitle),
+            listOf("songs", "albums", "artists", "top bar", "header", "sticky", "スクロール", "固定", "曲", "アルバム", "アーティスト", "上部バー"),
+            pinMusicLibraryTopBar,
+        ) { AppSettings.setPinMusicLibraryTopBar(!pinMusicLibraryTopBar) },
+        SettingsSearchEntry(
+            stringResource(R.string.keep_music_library_top_bar_hidden_until_top),
+            stringResource(R.string.keep_music_library_top_bar_hidden_until_top_subtitle),
+            listOf("songs", "albums", "artists", "top bar", "header", "scroll up", "top", "スクロール", "上部", "一番上", "曲", "アルバム", "アーティスト"),
+            keepMusicLibraryTopBarHiddenUntilTop,
+        ) { AppSettings.setKeepMusicLibraryTopBarHiddenUntilTop(!keepMusicLibraryTopBarHiddenUntilTop) },
         SettingsSearchEntry(stringResource(R.string.hide_nav_bar_labels), stringResource(R.string.hide_nav_bar_labels_subtitle), listOf("navigation", "nav bar", "label", "ラベル", "ナビゲーション"), hideNavBarLabels) { AppSettings.setHideNavigationBarLabels(!hideNavBarLabels) },
         SettingsSearchEntry(stringResource(R.string.legacy_mesh_gradient), stringResource(R.string.legacy_mesh_gradient_subtitle), listOf("theme", "gradient", "テーマ", "グラデーション"), legacyMeshGradient) { AppSettings.setLegacyMeshGradient(!legacyMeshGradient) },
         SettingsSearchEntry(
@@ -2157,10 +2182,10 @@ fun SettingsScreen(
             title = stringResource(R.string.pill_widget_opacity),
             subtitle = stringResource(R.string.pill_widget_opacity_subtitle),
             keywords = listOf("widget", "opacity", "transparency", "ウィジェット", "透明度", "ピル型"),
-            valueLabel = stringResource(R.string.pill_widget_opacity_value, pillWidgetOpacity.roundToInt()),
-            sliderValue = pillWidgetOpacity,
+            valueLabel = stringResource(R.string.pill_widget_opacity_value, widgetOpacity.roundToInt()),
+            sliderValue = widgetOpacity,
             sliderValueRange = 0f..100f,
-            onSliderValueChange = AppSettings::setPillWidgetOpacity,
+            onSliderValueChange = AppSettings::setWidgetOpacity,
             activate = {},
         ),
         SettingsSearchEntry(
@@ -3784,14 +3809,14 @@ fun SettingsScreen(
                     icon = Icons.Rounded.FastForward,
                     title = stringResource(R.string.crossfade),
                     subtitle = stringResource(R.string.crossfade_subtitle),
-                    value = if (crossfadeSeconds == 0) stringResource(R.string.off)
-                        else stringResource(R.string.crossfade_value, crossfadeSeconds),
+                    value = if (crossfadeDurationMs == 0) stringResource(R.string.off)
+                        else stringResource(R.string.crossfade_value_precise, formatCrossfadeSeconds(crossfadeDurationMs)),
                 )
                 Slider(
-                    value = crossfadeSeconds.toFloat(),
-                    onValueChange = { AppSettings.setCrossfadeSeconds(it.roundToInt()) },
-                    steps = AppSettings.MAX_CROSSFADE_SECONDS - 1,
-                    valueRange = 0f..AppSettings.MAX_CROSSFADE_SECONDS.toFloat(),
+                    value = crossfadeSliderIndex.toFloat(),
+                    onValueChange = { AppSettings.setCrossfadeFromSlider(it.roundToInt()) },
+                    steps = crossfadeOptions.size - 2,
+                    valueRange = 0f..crossfadeOptions.lastIndex.toFloat(),
                     modifier = Modifier.padding(start = ROW_INSET, end = ROW_INSET, bottom = 14.dp),
                 )
             }
@@ -3801,19 +3826,19 @@ fun SettingsScreen(
                 title = stringResource(R.string.audio_offload),
                 subtitle = stringResource(
                     when {
-                        crossfadeSeconds > 0 || smartFade -> R.string.audio_offload_disabled_by_transition
+                        crossfadeDurationMs > 0 || smartFade -> R.string.audio_offload_disabled_by_transition
                         darPcmUpsamplingEnabled -> R.string.audio_offload_disabled_by_dsp
                         else -> R.string.audio_offload_subtitle
                     },
                 ),
-                enabled = crossfadeSeconds == 0 && !smartFade && !darPcmUpsamplingEnabled,
+                enabled = crossfadeDurationMs == 0 && !smartFade && !darPcmUpsamplingEnabled,
                 trailing = {
                     Switch(
-                        checked = audioOffloadEnabled && crossfadeSeconds == 0 && !smartFade && !darPcmUpsamplingEnabled,
+                        checked = audioOffloadEnabled && crossfadeDurationMs == 0 && !smartFade && !darPcmUpsamplingEnabled,
                         onCheckedChange = { enabled ->
-                            if (crossfadeSeconds == 0 && !smartFade && !darPcmUpsamplingEnabled) AppSettings.setAudioOffloadEnabled(enabled)
+                            if (crossfadeDurationMs == 0 && !smartFade && !darPcmUpsamplingEnabled) AppSettings.setAudioOffloadEnabled(enabled)
                         },
-                        enabled = crossfadeSeconds == 0 && !smartFade && !darPcmUpsamplingEnabled,
+                        enabled = crossfadeDurationMs == 0 && !smartFade && !darPcmUpsamplingEnabled,
                         colors = SwitchDefaults.colors(
                             checkedTrackColor = MaterialTheme.colorScheme.primary,
                             checkedBorderColor = MaterialTheme.colorScheme.primary,
@@ -3821,7 +3846,7 @@ fun SettingsScreen(
                     )
                 },
                 onClick = {
-                    if (crossfadeSeconds == 0 && !smartFade && !darPcmUpsamplingEnabled) AppSettings.setAudioOffloadEnabled(!audioOffloadEnabled)
+                    if (crossfadeDurationMs == 0 && !smartFade && !darPcmUpsamplingEnabled) AppSettings.setAudioOffloadEnabled(!audioOffloadEnabled)
                 },
             )
             RowDivider()
@@ -5013,15 +5038,15 @@ fun SettingsScreen(
                 subtitle = stringResource(R.string.pill_widget_opacity_subtitle),
                 trailing = {
                     Text(
-                        text = stringResource(R.string.pill_widget_opacity_value, pillWidgetOpacity.roundToInt()),
+                        text = stringResource(R.string.pill_widget_opacity_value, widgetOpacity.roundToInt()),
                         color = MaterialTheme.colorScheme.primary,
                         style = MaterialTheme.typography.labelLarge,
                     )
                 },
             )
             Slider(
-                value = pillWidgetOpacity,
-                onValueChange = AppSettings::setPillWidgetOpacity,
+                value = widgetOpacity,
+                onValueChange = AppSettings::setWidgetOpacity,
                 valueRange = 0f..100f,
                 modifier = Modifier.padding(start = ROW_INSET, end = ROW_INSET, bottom = 14.dp),
             )
@@ -5135,6 +5160,34 @@ fun SettingsScreen(
                     )
                 },
                 onClick = { AppSettings.setHideSettingsIconOnScroll(!hideSettingsIconOnScroll) },
+            )
+            RowDivider()
+            SettingsRow(
+                icon = Icons.Rounded.PushPin,
+                title = stringResource(R.string.pin_music_library_top_bar),
+                subtitle = stringResource(R.string.pin_music_library_top_bar_subtitle),
+                trailing = {
+                    Switch(
+                        checked = pinMusicLibraryTopBar,
+                        onCheckedChange = AppSettings::setPinMusicLibraryTopBar,
+                    )
+                },
+                onClick = { AppSettings.setPinMusicLibraryTopBar(!pinMusicLibraryTopBar) },
+            )
+            RowDivider()
+            SettingsRow(
+                icon = Icons.Rounded.VerticalAlignTop,
+                title = stringResource(R.string.keep_music_library_top_bar_hidden_until_top),
+                subtitle = stringResource(R.string.keep_music_library_top_bar_hidden_until_top_subtitle),
+                trailing = {
+                    Switch(
+                        checked = keepMusicLibraryTopBarHiddenUntilTop,
+                        onCheckedChange = AppSettings::setKeepMusicLibraryTopBarHiddenUntilTop,
+                    )
+                },
+                onClick = {
+                    AppSettings.setKeepMusicLibraryTopBarHiddenUntilTop(!keepMusicLibraryTopBarHiddenUntilTop)
+                },
             )
             RowDivider()
             SettingsRow(

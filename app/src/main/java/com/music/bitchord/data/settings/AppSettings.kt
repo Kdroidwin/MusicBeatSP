@@ -560,8 +560,13 @@ object AppSettings {
     // [SourceResolver.requestForNow][com.music.bitchord.data.sources.SourceResolver.requestForNow],
     // which now reads [effectiveAudioQuality] and nothing else.
 
-    /** Equal-power overlap between consecutive tracks; zero keeps current transitions unchanged. */
-    val crossfadeSeconds = MutableStateFlow(0)
+    /** Equal-power overlap between consecutive tracks in milliseconds; zero keeps transitions unchanged. */
+    val crossfadeDurationMs = MutableStateFlow(0)
+    val crossfadeDurationOptionsMs: List<Int> = buildList {
+        add(0)
+        addAll((10..90 step 10).toList())
+        addAll((100..MAX_CROSSFADE_DURATION_MS step 100).toList())
+    }
 
     /** Settings for optional USB CD-DA ripping. The SAF folder URI is device-local. */
     val cdRippingOutputTreeUri = MutableStateFlow<String?>(null)
@@ -722,6 +727,10 @@ object AppSettings {
     val rootTabFloatingSettingsOnly = MutableStateFlow(false)
     /** Hides the floating root-tab Settings action after the page scrolls. */
     val hideSettingsIconOnScroll = MutableStateFlow(true)
+    /** Keeps the Songs, Albums and Artists title bar visible while scrolling. */
+    val pinMusicLibraryTopBar = MutableStateFlow(false)
+    /** After a music-library title bar hides, wait until the list reaches its top before showing it again. */
+    val keepMusicLibraryTopBarHiddenUntilTop = MutableStateFlow(true)
     val launcherIcon = MutableStateFlow(LauncherIcon.PINK)
     val frostedQueueManager = MutableStateFlow(true)
     val frostedPlayerDetails = MutableStateFlow(true)
@@ -1005,8 +1014,10 @@ object AppSettings {
     val volumeBoostEnabled = MutableStateFlow(false)
     val volumeBoostDb = MutableStateFlow(6f)
 
-    /** Opacity of the background surface on the dedicated wide pill widget. */
-    val pillWidgetOpacity = MutableStateFlow(65f)
+    /** Whole-widget opacity shared by every home-screen widget. */
+    val widgetOpacity = MutableStateFlow(65f)
+    @Deprecated("Use widgetOpacity")
+    val pillWidgetOpacity: MutableStateFlow<Float> = widgetOpacity
 
     /** Normalizes YouTube-origin tracks from the loudness metadata already returned by StreamResolver. */
     val loudnessNormalization = MutableStateFlow(true)
@@ -1535,12 +1546,20 @@ object AppSettings {
         cdRippingRetries.value = prefs.getInt(KEY_CD_RIPPING_RETRIES, 2).coerceIn(0, 5)
         cdRippingSpeedX.value = prefs.getInt(KEY_CD_RIPPING_SPEED_X, 4).coerceIn(1, 12)
         skipSilence.value = prefs.getBoolean(KEY_SKIP_SILENCE, false)
-        crossfadeSeconds.value = prefs.getInt(KEY_CROSSFADE_SECONDS, 0).coerceIn(0, MAX_CROSSFADE_SECONDS)
+        val savedCrossfadeMs = if (prefs.contains(KEY_CROSSFADE_DURATION_MS)) {
+            prefs.getInt(KEY_CROSSFADE_DURATION_MS, 0)
+        } else {
+            prefs.getInt(KEY_CROSSFADE_SECONDS, 0).coerceIn(0, MAX_CROSSFADE_SECONDS) * 1000
+        }
+        crossfadeDurationMs.value = nearestCrossfadeDuration(savedCrossfadeMs)
+        if (!prefs.contains(KEY_CROSSFADE_DURATION_MS)) {
+            prefs.edit().putInt(KEY_CROSSFADE_DURATION_MS, crossfadeDurationMs.value).apply()
+        }
         smartFadeEnabled.value = prefs.getBoolean(KEY_SMART_FADE, false)
         // Older backups can contain both. Keep the requested fade mode and
         // clear the incompatible offload switch before the player is rebuilt.
         val savedAudioOffload = prefs.getBoolean(KEY_AUDIO_OFFLOAD_ENABLED, false)
-        audioOffloadEnabled.value = savedAudioOffload && crossfadeSeconds.value == 0 && !smartFadeEnabled.value
+        audioOffloadEnabled.value = savedAudioOffload && crossfadeDurationMs.value == 0 && !smartFadeEnabled.value
         if (savedAudioOffload && !audioOffloadEnabled.value) {
             prefs.edit().putBoolean(KEY_AUDIO_OFFLOAD_ENABLED, false).apply()
         }
@@ -1679,6 +1698,9 @@ object AppSettings {
         settingsTopBarUsesMoreIcon.value = prefs.getBoolean(KEY_SETTINGS_TOP_BAR_MORE_ICON, false)
         rootTabFloatingSettingsOnly.value = prefs.getBoolean(KEY_ROOT_TAB_FLOATING_SETTINGS_ONLY, false)
         hideSettingsIconOnScroll.value = prefs.getBoolean(KEY_HIDE_SETTINGS_ICON_ON_SCROLL, true)
+        pinMusicLibraryTopBar.value = prefs.getBoolean(KEY_PIN_MUSIC_LIBRARY_TOP_BAR, false)
+        keepMusicLibraryTopBarHiddenUntilTop.value =
+            prefs.getBoolean(KEY_MUSIC_LIBRARY_TOP_BAR_HIDDEN_UNTIL_TOP, true)
         launcherIcon.value = runCatching {
             LauncherIcon.valueOf(prefs.getString(KEY_LAUNCHER_ICON, LauncherIcon.PINK.name) ?: LauncherIcon.PINK.name)
         }.getOrDefault(LauncherIcon.PINK)
@@ -1851,7 +1873,10 @@ object AppSettings {
         replayGainPreventClipping.value = prefs.getBoolean(KEY_REPLAYGAIN_PREVENT_CLIPPING, true)
         volumeBoostEnabled.value = prefs.getBoolean(KEY_VOLUME_BOOST_ENABLED, false)
         volumeBoostDb.value = prefs.getFloat(KEY_VOLUME_BOOST_DB, 6f).coerceIn(0f, 12f)
-        pillWidgetOpacity.value = prefs.getFloat(KEY_PILL_WIDGET_OPACITY, 65f).coerceIn(0f, 100f)
+        widgetOpacity.value = prefs.getFloat(
+            KEY_WIDGET_OPACITY,
+            prefs.getFloat(KEY_PILL_WIDGET_OPACITY, 65f),
+        ).coerceIn(0f, 100f)
         loudnessNormalization.value = prefs.getBoolean(KEY_LOUDNESS_NORMALIZATION, true)
         loudnessOffOnSpeaker.value = prefs.getBoolean(KEY_LOUDNESS_OFF_ON_SPEAKER, true)
         favoriteBesideTrackMenu.value = prefs.getBoolean(KEY_FAVORITE_BESIDE_TRACK_MENU, false)
@@ -2279,16 +2304,34 @@ object AppSettings {
     }
 
     fun setAudioOffloadEnabled(value: Boolean) {
-        val allowed = value && crossfadeSeconds.value == 0 && !smartFadeEnabled.value
+        val allowed = value && crossfadeDurationMs.value == 0 && !smartFadeEnabled.value
         audioOffloadEnabled.value = allowed
         prefs.edit().putBoolean(KEY_AUDIO_OFFLOAD_ENABLED, allowed).apply()
     }
 
-    fun setCrossfadeSeconds(value: Int) {
-        val normalized = value.coerceIn(0, MAX_CROSSFADE_SECONDS)
+    fun setCrossfadeDurationMs(value: Int) {
+        val normalized = nearestCrossfadeDuration(value)
         if (normalized > 0) setAudioOffloadEnabled(false)
-        crossfadeSeconds.value = normalized
-        prefs.edit().putInt(KEY_CROSSFADE_SECONDS, normalized).apply()
+        crossfadeDurationMs.value = normalized
+        prefs.edit()
+            .putInt(KEY_CROSSFADE_DURATION_MS, normalized)
+            .putInt(KEY_CROSSFADE_SECONDS, ((normalized + 500) / 1000).coerceIn(0, MAX_CROSSFADE_SECONDS))
+            .apply()
+    }
+
+    @Deprecated("Use setCrossfadeDurationMs")
+    fun setCrossfadeSeconds(value: Int) = setCrossfadeDurationMs(value.coerceIn(0, MAX_CROSSFADE_SECONDS) * 1000)
+
+    fun crossfadeSliderIndex(durationMs: Int = crossfadeDurationMs.value): Int =
+        crossfadeDurationOptionsMs.indexOf(nearestCrossfadeDuration(durationMs)).coerceAtLeast(0)
+
+    fun setCrossfadeFromSlider(index: Int) {
+        setCrossfadeDurationMs(crossfadeDurationOptionsMs[index.coerceIn(crossfadeDurationOptionsMs.indices)])
+    }
+
+    private fun nearestCrossfadeDuration(value: Int): Int {
+        val normalized = value.coerceIn(0, MAX_CROSSFADE_DURATION_MS)
+        return crossfadeDurationOptionsMs.minByOrNull { kotlin.math.abs(it - normalized) } ?: 0
     }
 
     fun setCdRippingOutputTreeUri(value: String?) {
@@ -2542,6 +2585,16 @@ object AppSettings {
     fun setHideSettingsIconOnScroll(value: Boolean) {
         hideSettingsIconOnScroll.value = value
         prefs.edit().putBoolean(KEY_HIDE_SETTINGS_ICON_ON_SCROLL, value).apply()
+    }
+
+    fun setPinMusicLibraryTopBar(value: Boolean) {
+        pinMusicLibraryTopBar.value = value
+        prefs.edit().putBoolean(KEY_PIN_MUSIC_LIBRARY_TOP_BAR, value).apply()
+    }
+
+    fun setKeepMusicLibraryTopBarHiddenUntilTop(value: Boolean) {
+        keepMusicLibraryTopBarHiddenUntilTop.value = value
+        prefs.edit().putBoolean(KEY_MUSIC_LIBRARY_TOP_BAR_HIDDEN_UNTIL_TOP, value).apply()
     }
 
     fun setTabletFullscreenPlayer(value: Boolean) {
@@ -3597,14 +3650,20 @@ object AppSettings {
         prefs.edit().putFloat(KEY_VOLUME_BOOST_DB, normalized).apply()
     }
 
-    fun setPillWidgetOpacity(value: Float) {
+    fun setWidgetOpacity(value: Float) {
         val normalized = value.coerceIn(0f, 100f)
-        pillWidgetOpacity.value = normalized
-        prefs.edit().putFloat(KEY_PILL_WIDGET_OPACITY, normalized).apply()
+        widgetOpacity.value = normalized
+        prefs.edit()
+            .putFloat(KEY_WIDGET_OPACITY, normalized)
+            .putFloat(KEY_PILL_WIDGET_OPACITY, normalized)
+            .apply()
         if (this::appContext.isInitialized) {
-            com.music.bitchord.widget.MediaWidgetPill.refresh(appContext)
+            com.music.bitchord.widget.MediaWidget.refreshForOpacity(appContext)
         }
     }
+
+    @Deprecated("Use setWidgetOpacity")
+    fun setPillWidgetOpacity(value: Float) = setWidgetOpacity(value)
 
     fun setLoudnessNormalization(value: Boolean) {
         loudnessNormalization.value = value
@@ -4874,7 +4933,8 @@ object AppSettings {
 
     private const val DEFAULT_PERFORMANCE_REFRESH_RATE = 120
     private const val MAX_LYRICS_TRANSPORT_CONTROL_SIZE = 64f
-    const val MAX_CROSSFADE_SECONDS = 12
+    const val MAX_CROSSFADE_DURATION_MS = 12_000
+    const val MAX_CROSSFADE_SECONDS = MAX_CROSSFADE_DURATION_MS / 1000
     const val MAX_RECENT_PLAY_THRESHOLD_SECONDS = 300
     private const val DEFAULT_RECENT_PLAY_THRESHOLD_SECONDS = 30
 
@@ -4894,6 +4954,7 @@ object AppSettings {
     private const val KEY_SKIP_SILENCE = "skip_silence"
     private const val KEY_AUDIO_OFFLOAD_ENABLED = "audio_offload_enabled"
     private const val KEY_CROSSFADE_SECONDS = "crossfade_seconds"
+    private const val KEY_CROSSFADE_DURATION_MS = "crossfade_duration_ms"
     private const val KEY_CD_RIPPING_OUTPUT_TREE_URI = "cd_ripping_output_tree_uri"
     private const val KEY_CD_RIPPING_RETRIES = "cd_ripping_retries"
     private const val KEY_CD_RIPPING_SPEED_X = "cd_ripping_speed_x"
@@ -4952,6 +5013,8 @@ object AppSettings {
     private const val KEY_SETTINGS_TOP_BAR_MORE_ICON = "settings_top_bar_more_icon"
     private const val KEY_ROOT_TAB_FLOATING_SETTINGS_ONLY = "root_tab_floating_settings_only"
     private const val KEY_HIDE_SETTINGS_ICON_ON_SCROLL = "hide_settings_icon_on_scroll"
+    private const val KEY_PIN_MUSIC_LIBRARY_TOP_BAR = "pin_music_library_top_bar"
+    private const val KEY_MUSIC_LIBRARY_TOP_BAR_HIDDEN_UNTIL_TOP = "music_library_top_bar_hidden_until_top"
     private const val KEY_TABLET_LYRICS_BESIDE_PLAYER = "tablet_lyrics_beside_player"
     private const val KEY_SAVED_YOUTUBE_COLLECTIONS = "saved_youtube_music_collections"
     private const val MAX_SAVED_YOUTUBE_COLLECTIONS = 500
@@ -5098,6 +5161,7 @@ object AppSettings {
     private const val KEY_VOLUME_BOOST_ENABLED = "volume_boost_enabled"
     private const val KEY_VOLUME_BOOST_DB = "volume_boost_db"
     private const val KEY_PILL_WIDGET_OPACITY = "pill_widget_opacity"
+    private const val KEY_WIDGET_OPACITY = "widget_opacity"
     private const val KEY_LOUDNESS_NORMALIZATION = "loudness_normalization"
     private const val KEY_LOUDNESS_OFF_ON_SPEAKER = "loudness_off_on_speaker"
     private const val KEY_FAVORITE_BESIDE_TRACK_MENU = "favorite_beside_track_menu"

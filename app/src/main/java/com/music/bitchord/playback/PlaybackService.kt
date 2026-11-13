@@ -1052,6 +1052,11 @@ class PlaybackService : MediaLibraryService() {
         // Nothing follows the last track, so there is no transition to
         // pause on — the queue simply runs out and the timer is spent.
         override fun onPlaybackStateChanged(state: Int) {
+            // A restored queue can become ready without another item
+            // transition. Recheck ReplayGain before the renderer starts its
+            // first audible buffer; the token guard makes this a no-op for an
+            // already prepared track.
+            if (state == Player.STATE_READY) updateReplayGainForCurrentTrack()
             // The player this fired on, which is by definition the one the
             // session is currently pointed at.
             val exoPlayer = player ?: return
@@ -1663,6 +1668,9 @@ class PlaybackService : MediaLibraryService() {
         observeScrobbling()
         observeDiscord()
         watchSleepTimer()
+        // Register before restoring the queue so its first media-item
+        // transition can begin the ReplayGain lookup before playback starts.
+        exoPlayer.addListener(playbackListener)
         if (restoreLastQueue(exoPlayer)) {
             publishWidgetState()
         } else {
@@ -1674,7 +1682,6 @@ class PlaybackService : MediaLibraryService() {
         // History pings fire once a track is actually audible — both when
         // playback starts and when the queue moves on while already playing.
         lastRepeatMode = exoPlayer.repeatMode
-        exoPlayer.addListener(playbackListener)
         loadAutoplayForCurrentTrack()
 
         // Only the analytics listener reports the format the audio renderer was
@@ -5038,11 +5045,11 @@ class PlaybackService : MediaLibraryService() {
         scope.launch {
             combine(
                 AppSettings.audioOffloadEnabled,
-                AppSettings.crossfadeSeconds,
+                AppSettings.crossfadeDurationMs,
                 AppSettings.showAnalogDigitalPeakMeter,
                 AppSettings.showSpectrumAnalyzer,
-            ) { enabled, crossfadeSeconds, peakMeter, spectrumAnalyzer ->
-                enabled && crossfadeSeconds == 0 && !peakMeter && !spectrumAnalyzer
+            ) { enabled, crossfadeDurationMs, peakMeter, spectrumAnalyzer ->
+                enabled && crossfadeDurationMs == 0 && !peakMeter && !spectrumAnalyzer
             }.distinctUntilChanged().collect { effectiveOffload ->
                 eachPlayer(::applyAudioOffloadPreference)
                 // Do not let an already armed overlap run after offload becomes
@@ -5283,7 +5290,7 @@ class PlaybackService : MediaLibraryService() {
     /** Requests Android audio offload only when the two-player crossfade is idle. */
     private fun applyAudioOffloadPreference(target: ExoPlayer) {
         val enabled = AppSettings.audioOffloadEnabled.value &&
-            AppSettings.crossfadeSeconds.value == 0 &&
+            AppSettings.crossfadeDurationMs.value == 0 &&
             !AppSettings.darPcmUpsamplingEnabled.value &&
             !AppSettings.showAnalogDigitalPeakMeter.value &&
             !AppSettings.showSpectrumAnalyzer.value

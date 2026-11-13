@@ -164,6 +164,7 @@ class MediaWidgetAlbumSquare : AppWidgetProvider() {
                     views.setOnClickPendingIntent(button, openPlayer(context))
                 }
             }
+            WidgetOpacity.apply(views, R.id.widget_album_root)
             return views
         }
 

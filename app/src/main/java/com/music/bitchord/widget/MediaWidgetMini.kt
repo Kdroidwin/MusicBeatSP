@@ -166,6 +166,7 @@ class MediaWidgetMini : AppWidgetProvider() {
                         views.setOnClickPendingIntent(button, openPlayer)
                     }
                 }
+                WidgetOpacity.apply(views, R.id.widget_mini_root)
                 runCatching { manager.updateAppWidget(id, views) }
             }
         }

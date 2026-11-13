@@ -17,7 +17,9 @@ import com.music.bitchord.R
 import com.music.bitchord.playback.PlayerDeepLink
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.Job
 import kotlinx.coroutines.SupervisorJob
+import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withTimeoutOrNull
 import java.util.concurrent.ConcurrentHashMap
@@ -303,6 +305,7 @@ abstract class MediaWidget : AppWidgetProvider() {
                     views.setOnClickPendingIntent(button, open)
                 }
             }
+            WidgetOpacity.apply(views, R.id.widget_root)
             return views
         }
 
@@ -430,6 +433,20 @@ abstract class MediaWidget : AppWidgetProvider() {
          * [refresh] is not called from a receiver at all.
          */
         private val scope = CoroutineScope(SupervisorJob() + Dispatchers.Default)
+        private val opacityRefreshLock = Any()
+        private var opacityRefreshJob: Job? = null
+
+        /** Coalesces the all-widget redraw while the shared opacity slider is moving. */
+        fun refreshForOpacity(context: Context) {
+            val app = context.applicationContext
+            synchronized(opacityRefreshLock) {
+                opacityRefreshJob?.cancel()
+                opacityRefreshJob = scope.launch {
+                    delay(180L)
+                    refresh(app)
+                }
+            }
+        }
 
         /** How long any one widget's artwork may take before it is given up on. */
         private const val RENDER_TIMEOUT_MS = 8_000L
