@@ -9879,6 +9879,7 @@ private fun ThemeMode.localizedLabel(): String = stringResource(
         ThemeMode.AMOLED -> R.string.theme_amoled
         ThemeMode.ARTWORK -> R.string.theme_match_artwork
         ThemeMode.PLAYER_COLORS -> R.string.theme_player_screen_colors
+        ThemeMode.PLAYER_BACKGROUND -> R.string.theme_player_background
         ThemeMode.CUSTOM_IMAGE -> R.string.theme_custom_image
     },
 )

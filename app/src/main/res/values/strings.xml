@@ -1339,6 +1339,7 @@
     <string name="theme_match_artwork">Album art</string>
     <string name="theme_match_artwork_subtitle">Use the playing song’s cover colors for the app accent</string>
     <string name="theme_player_screen_colors">Player screen colors</string>
+    <string name="theme_player_background">Player background</string>
     <string name="match_button_accent_to_artwork">Match button accents to album art</string>
     <string name="match_button_accent_to_artwork_subtitle">Use the current song’s artwork color for buttons and selected controls without changing the app background</string>
     <string name="mini_player_artwork_color">Tint mini player with album art</string>

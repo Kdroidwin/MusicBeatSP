@@ -324,7 +324,7 @@ import kotlin.math.roundToInt
  */
 private const val ART_PX = PLAYER_ART_PX
 private const val MAX_QUEUE_BACKDROP_PALETTES = 8
-private const val QUEUE_BACKDROP_TINT_ALPHA = 0.58f
+internal const val QUEUE_BACKDROP_TINT_ALPHA = 0.58f
 
 /** Auris' full-bleed artwork stage and crop. */
 private const val AURIS_FULL_BLEED_ZOOM = 1.234f
@@ -364,7 +364,7 @@ private fun playerButtonArrangement(gapDp: Float): Arrangement.Horizontal =
 
 /** Samples a bounded set of distinct covers in queue order for the player-only backdrop. */
 @Composable
-private fun rememberQueueBackdropColors(queue: List<Song>, fallbackSong: Song): List<Color> {
+internal fun rememberQueueBackdropColors(queue: List<Song>, fallbackSong: Song): List<Color> {
     val artworkUrls = remember(queue, fallbackSong.videoId) {
         val candidates = (queue.ifEmpty { listOf(fallbackSong) })
             .mapNotNull { it.artworkAt(ART_PX) }

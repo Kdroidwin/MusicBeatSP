@@ -236,6 +236,7 @@ enum class ThemeMode(val label: String) {
     AMOLED("AMOLED black"),
     ARTWORK("Album art"),
     PLAYER_COLORS("Player screen colors"),
+    PLAYER_BACKGROUND("Player background"),
     CUSTOM_IMAGE("Custom image"),
 }
 

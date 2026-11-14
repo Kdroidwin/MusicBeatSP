@@ -304,6 +304,7 @@ import com.music.bitchord.ui.player.NowPlayingScreen
 import com.music.bitchord.ui.player.shareNowPlayingPoster
 import com.music.bitchord.ui.player.TabletLyricsPane
 import com.music.bitchord.ui.player.TabletPlayerBackdrop
+import com.music.bitchord.ui.player.PlayerBackgroundThemeBackdrop
 import com.music.bitchord.ui.player.LocalSharedPlayerBackdrop
 import com.music.bitchord.ui.player.LocalPlayerDock
 import com.music.bitchord.ui.player.PlayerDock
@@ -458,7 +459,7 @@ class MainActivity : AppCompatActivity() {
             val darkTheme = when (theme) {
                 ThemeMode.SYSTEM -> isSystemInDarkTheme()
                 ThemeMode.LIGHT -> false
-                ThemeMode.DARK, ThemeMode.AMOLED, ThemeMode.PLAYER_COLORS -> true
+                ThemeMode.DARK, ThemeMode.AMOLED, ThemeMode.PLAYER_COLORS, ThemeMode.PLAYER_BACKGROUND -> true
                 ThemeMode.ARTWORK -> isSystemInDarkTheme()
                 ThemeMode.CUSTOM_IMAGE -> true
             }
@@ -505,6 +506,13 @@ class MainActivity : AppCompatActivity() {
                 // A measured constraint cannot be stale — it is the very width
                 // the split is about to be laid out in.
                 Box(Modifier.fillMaxSize()) {
+                    if (theme == ThemeMode.PLAYER_BACKGROUND) {
+                        PlayerBackgroundThemeBackdrop(
+                            song = player.song,
+                            queue = player.queue,
+                            modifier = Modifier.matchParentSize(),
+                        )
+                    }
                     if (theme == ThemeMode.CUSTOM_IMAGE && !customThemeImageUri.isNullOrBlank()) {
                         AsyncImage(
                             model = customThemeImageUri,
