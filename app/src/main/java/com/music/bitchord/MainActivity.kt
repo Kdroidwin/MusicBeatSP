@@ -344,6 +344,8 @@ import com.music.bitchord.ui.replay.ReplayStoryPage
 import com.music.bitchord.ui.replay.rememberReplayState
 import com.music.bitchord.ui.theme.BitChordTheme
 import com.music.bitchord.ui.theme.ArtworkPalette
+import com.music.bitchord.ui.theme.LocalPlayerBackdropThemeEnabled
+import com.music.bitchord.ui.theme.pageBackgroundColor
 import com.music.bitchord.ui.theme.rememberArtworkPalette
 import com.music.bitchord.ui.theme.SystemBarIcons
 import com.music.bitchord.ui.utils.rememberIosOverscrollFactory
@@ -401,7 +403,10 @@ class MainActivity : AppCompatActivity() {
             ) {
                 when {
                     theme == ThemeMode.CUSTOM_IMAGE -> customThemeImageUri
-                    theme == ThemeMode.ARTWORK || theme == ThemeMode.PLAYER_COLORS || matchButtonAccentToArtwork ->
+                    theme == ThemeMode.ARTWORK ||
+                        theme == ThemeMode.PLAYER_COLORS ||
+                        theme == ThemeMode.PLAYER_BACKGROUND ||
+                        matchButtonAccentToArtwork ->
                         player.song?.artworkAt(PLAYER_ART_PX)
                     else -> null
                 }
@@ -468,7 +473,8 @@ class MainActivity : AppCompatActivity() {
                 amoledBlack = theme == ThemeMode.AMOLED,
                 artworkUrl = currentArtwork,
                 matchArtwork = theme == ThemeMode.ARTWORK || theme == ThemeMode.CUSTOM_IMAGE,
-                playerScreenColors = theme == ThemeMode.PLAYER_COLORS,
+                playerScreenColors = theme == ThemeMode.PLAYER_COLORS || theme == ThemeMode.PLAYER_BACKGROUND,
+                playerBackgroundTheme = theme == ThemeMode.PLAYER_BACKGROUND,
                 matchButtonAccentToArtwork = matchButtonAccentToArtwork,
             ) {
                 // The glass surfaces sample this layer, and a layer records only
@@ -3968,7 +3974,10 @@ private fun BitChordApp(
                     (detail != null && !isLocalDetail && detail.type in setOf(BrowseType.ALBUM, BrowseType.PLAYLIST))
                 val hideFloatingCollectionControlsNow =
                     hideFloatingCollectionControls && hideCollectionHeaderNow && isAlbumOrPlaylistArtworkDetail
-                if (!showReplay && !hideCollectionHeaderNow && !isRadioScreenVisible && !rootTabFloatingSettingsOnly) {
+                if (
+                    !LocalPlayerBackdropThemeEnabled.current &&
+                    !showReplay && !hideCollectionHeaderNow && !isRadioScreenVisible && !rootTabFloatingSettingsOnly
+                ) {
                     TopFadeBlur(
                         hazeState = hazeState,
                         // Replay paints its own full-bleed black backdrop up under the
@@ -3977,7 +3986,7 @@ private fun BitChordApp(
                             showReplay -> Color.Black
                             isDetailVisible -> detailPalette.wash
                             isLocalCollectionArtworkVisible -> localCollectionPalette!!.wash
-                            else -> MaterialTheme.colorScheme.background
+                            else -> pageBackgroundColor()
                         },
                         scrimColor = when {
                             showReplay -> Color.Black
@@ -4063,7 +4072,7 @@ private fun BitChordApp(
                     pageColor = when {
                         isLocalCollectionArtworkVisible -> localCollectionPalette!!.wash
                         isDetailVisible -> detailPalette.background
-                        else -> MaterialTheme.colorScheme.background
+                        else -> pageBackgroundColor()
                     },
                     modifier = Modifier.align(Alignment.BottomCenter),
                 )

@@ -31,6 +31,7 @@ import androidx.compose.ui.layout.onSizeChanged
 import androidx.compose.ui.layout.ContentScale
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.music.bitchord.data.settings.AppSettings
+import com.music.bitchord.ui.theme.pageBackgroundColor
 import coil3.compose.AsyncImagePainter
 import coil3.compose.AsyncImage
 import com.music.bitchord.download.Downloads
@@ -304,7 +305,7 @@ fun SongRow(
      * background — an album page tinted from its sleeve would otherwise drag a
      * black band across itself on every swipe.
      */
-    rowBackground: Color = MaterialTheme.colorScheme.background,
+    rowBackground: Color = pageBackgroundColor(),
     /**
      * Drawn in place of the artwork, for lists where every row would otherwise
      * repeat the same cover — an album's own track listing.

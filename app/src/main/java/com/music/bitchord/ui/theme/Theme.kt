@@ -13,7 +13,9 @@ import androidx.compose.material3.darkColorScheme
 import androidx.compose.material3.lightColorScheme
 import androidx.compose.material3.Typography
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.runtime.SideEffect
+import androidx.compose.runtime.compositionLocalOf
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
@@ -40,6 +42,17 @@ import com.music.bitchord.ui.player.rememberArtworkColors
 // Apple Music's signature red. No longer the primary accent, but kept for the
 // spots (Replay's rank badge) that want that specific red regardless of theme.
 val AccentRed = Color(0xFFFA2D48)
+
+/** True when the animated player artwork is also the app's page background. */
+val LocalPlayerBackdropThemeEnabled = compositionLocalOf { false }
+
+/** Page surfaces should let the player backdrop show through in its theme. */
+@Composable
+fun pageBackgroundColor(): Color = if (LocalPlayerBackdropThemeEnabled.current) {
+    Color.Transparent
+} else {
+    MaterialTheme.colorScheme.background
+}
 
 private val DarkColors = darkColorScheme(
     primary = Color.White,
@@ -136,6 +149,7 @@ fun BitChordTheme(
     artworkUrl: String? = null,
     matchArtwork: Boolean = false,
     playerScreenColors: Boolean = false,
+    playerBackgroundTheme: Boolean = false,
     matchButtonAccentToArtwork: Boolean = false,
     content: @Composable () -> Unit,
 ) {
@@ -226,7 +240,9 @@ fun BitChordTheme(
                 surfaceTint = accent,
             )
         } else base
-        MaterialTheme(colorScheme = colors, typography = typography, content = content)
+        CompositionLocalProvider(LocalPlayerBackdropThemeEnabled provides playerBackgroundTheme) {
+            MaterialTheme(colorScheme = colors, typography = typography, content = content)
+        }
     }
 }
 

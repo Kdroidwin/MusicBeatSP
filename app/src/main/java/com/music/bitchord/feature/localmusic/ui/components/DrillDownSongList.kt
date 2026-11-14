@@ -130,6 +130,7 @@ import com.music.bitchord.ui.components.SongRow
 import com.music.bitchord.ui.components.thumbnailBorder
 import com.music.bitchord.ui.icons.BitChordIcons
 import com.music.bitchord.ui.theme.ArtworkPalette
+import com.music.bitchord.ui.theme.pageBackgroundColor
 import com.music.bitchord.ui.theme.rememberArtworkPalette
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import kotlin.math.abs
@@ -825,7 +826,7 @@ fun DrillDownSongList(
         BoxWithConstraints(
             modifier = modifier
                 .fillMaxSize()
-                .background(if (fullScreenArtwork) artworkPalette.wash else MaterialTheme.colorScheme.background),
+                .background(if (fullScreenArtwork) artworkPalette.wash else pageBackgroundColor()),
         ) {
             val artHeight = (maxWidth / COLLECTION_ART_RATIO).coerceAtMost(maxHeight * 0.6f)
             val artHeightPx = with(LocalDensity.current) { artHeight.toPx() }
@@ -987,7 +988,7 @@ fun DrillDownSongList(
         BoxWithConstraints(
             modifier = modifier
                 .fillMaxSize()
-                .background(if (fullScreenArtwork) artworkPalette.wash else MaterialTheme.colorScheme.background),
+                .background(if (fullScreenArtwork) artworkPalette.wash else pageBackgroundColor()),
         ) {
             val artHeight = (maxWidth / COLLECTION_ART_RATIO).coerceAtMost(maxHeight * 0.6f)
             val artHeightPx = with(LocalDensity.current) { artHeight.toPx() }

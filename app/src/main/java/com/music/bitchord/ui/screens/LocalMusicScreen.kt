@@ -175,6 +175,7 @@ import com.music.bitchord.ui.components.ExplicitSongTitle
 import com.music.bitchord.data.model.artworkAt
 import com.music.bitchord.data.model.isSameTrackAs
 import com.music.bitchord.data.settings.AppSettings
+import com.music.bitchord.ui.theme.pageBackgroundColor
 import com.music.bitchord.data.settings.LibraryViewType
 import com.music.bitchord.ui.theme.ArtworkPalette
 import com.music.bitchord.data.settings.LocalMusicSort
@@ -946,7 +947,7 @@ fun LocalMusicScreen(
         if (showTabRow) {
             ScrollableTabRow(
                 selectedTabIndex = selectedTabIndex,
-                containerColor = MaterialTheme.colorScheme.background,
+                containerColor = pageBackgroundColor(),
                 contentColor = MaterialTheme.colorScheme.primary,
                 edgePadding = PAGE_GUTTER,
                 divider = {},

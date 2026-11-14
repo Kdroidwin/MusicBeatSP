@@ -59,6 +59,7 @@ import com.music.bitchord.BuildConfig
 import com.music.bitchord.R
 import com.music.bitchord.data.model.Account
 import com.music.bitchord.data.settings.AppSettings
+import com.music.bitchord.ui.theme.LocalPlayerBackdropThemeEnabled
 
 /**
  * The bar's own height, above whatever inset it is sitting under.
@@ -132,6 +133,7 @@ fun FrostedTopBar(
     solidBackground: Boolean = false,
 ) {
     val reduceDynamicBlur by AppSettings.reduceDynamicBlur.collectAsStateWithLifecycle()
+    val playerBackdropTheme = LocalPlayerBackdropThemeEnabled.current
     val titleAlpha by animateFloatAsState(
         targetValue = if (alwaysShowTitle || scrolled) 1f else 0f,
         animationSpec = tween(220),
@@ -157,7 +159,8 @@ fun FrostedTopBar(
                     solidBackground -> Modifier.background(MaterialTheme.colorScheme.background)
                     artworkTint != null && reduceDynamicBlur -> Modifier.background(artworkTint)
                     artworkTint != null -> Modifier.background(Color.Transparent)
-                    reduceDynamicBlur -> Modifier.background(MaterialTheme.colorScheme.surface)
+                    reduceDynamicBlur && !playerBackdropTheme -> Modifier.background(MaterialTheme.colorScheme.surface)
+                    playerBackdropTheme -> Modifier.background(Color.Transparent)
                     else -> Modifier.background(MaterialTheme.colorScheme.background.copy(alpha = 0.92f))
                 },
             ),
