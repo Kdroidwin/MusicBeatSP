@@ -29,7 +29,7 @@ The standard Android package is `io.pockets.musicbestsp`. Because this differs f
   <img src="https://github.com/user-attachments/assets/4efcc926-dcba-4c3f-b715-df88d307d97c" width="180" alt="スクリーンショット 3">
   <img src="https://github.com/user-attachments/assets/09efc84f-04dc-4e32-8340-32baeae1986d" width="180" alt="スクリーンショット 4">
   <img src="https://github.com/user-attachments/assets/cc14a50e-4b7a-4f8b-ab16-f4de9a063572" width="180" alt="スクリーンショット 5">
-    <img src="https://github.com/user-attachments/assets/5b704239-5753-483b-ab56-91d31e802b50" width="180" alt="スクリーンショット 6">
+    <img src="https://raw.githubusercontent.com/Kdroidwin/MusicBeatSP/9c6d2044608a41f73e8acdbe7f4ddba27793572d/Images/Screenshot_20261114-162601.png" width="180" alt="スクリーンショット 6">
 </p>
 
 </div>
