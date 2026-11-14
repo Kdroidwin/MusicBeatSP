@@ -68,6 +68,7 @@ import com.music.bitchord.data.model.artworkAt
 import com.music.bitchord.data.settings.AppSettings
 import com.music.bitchord.ui.components.thumbnailBorder
 import com.music.bitchord.ui.theme.ArtworkPalette
+import com.music.bitchord.ui.theme.LocalPlayerMenuPalette
 import com.music.bitchord.ui.icons.BitChordIcons
 import java.util.Locale
 
@@ -101,7 +102,8 @@ fun PlaylistPickerSheet(
 ) {
     val folderArtworkFallbackMode by AppSettings.folderArtworkFallbackMode.collectAsStateWithLifecycle()
     var creating by remember { mutableStateOf(startCreating) }
-    val palette = artworkPalette.takeIf { useArtworkColor }
+    val playerMenuPalette = LocalPlayerMenuPalette.current
+    val palette = playerMenuPalette ?: artworkPalette.takeIf { useArtworkColor }
     val baseColors = MaterialTheme.colorScheme
     val sheetColors = if (palette != null) {
         baseColors.copy(
@@ -131,7 +133,7 @@ fun PlaylistPickerSheet(
         if (palette != null) {
             ArtworkBackdrop(
                 palette = palette,
-                imageUrl = artworkUrl ?: song?.thumbnailUrl ?: songs.firstOrNull()?.thumbnailUrl,
+                imageUrl = if (playerMenuPalette != null) null else artworkUrl ?: song?.thumbnailUrl ?: songs.firstOrNull()?.thumbnailUrl,
                 modifier = Modifier.matchParentSize(),
                 washFraction = 0.75f,
                 artPx = ROW_ART_PX,

@@ -465,7 +465,7 @@
     <string name="navigation_bar_matches_mini_player_color">Match navigation bar to mini player color</string>
     <string name="navigation_bar_matches_mini_player_color_subtitle">Use the same artwork tint and content colors as the mini player. Off by default.</string>
     <string name="navigation_bar_player_background_color">Match bottom tabs to player background</string>
-    <string name="navigation_bar_player_background_color_subtitle">Use the current player’s artwork-derived background color for the bottom tabs, independently of the app theme and other artwork color settings. Off by default.</string>
+    <string name="navigation_bar_player_background_color_subtitle">Show the same multicolour mesh backdrop as the player screen on the bottom tabs, independently of the app theme and other artwork color settings. Off by default.</string>
     <string name="main_navigation_popup">Show navigation tabs in a popup menu</string>
     <string name="main_navigation_popup_subtitle">Replace the bottom tab bar with one button that opens the available screens. Off by default.</string>
     <string name="hide_nav_bar_labels">Hide navigation bar labels</string>
@@ -1268,6 +1268,8 @@
     <string name="frosted_player_details_subtitle">Use BitChord’s blurred artwork and color backdrop</string>
     <string name="player_popups_artwork_color">Match player pop-ups to album artwork</string>
     <string name="player_popups_artwork_color_subtitle">Use current-track colors for player details, sleep timer, speed and pitch, queue management, and playlist sheets. On by default.</string>
+    <string name="player_menus_player_background_color">Match menus to player background</string>
+    <string name="player_menus_player_background_color_subtitle">Use colors derived from the current player background for song, album, artist, queue, speed, sleep timer, and other action menus, independently of the artwork-color option. Off by default.</string>
     <string name="hide_player_popup_handles">Hide player pop-up handles and their space</string>
     <string name="hide_player_popup_handles_subtitle">Remove the handle and its reserved space from player details, artist selection, sleep timer, queue management, and speed and pitch. On by default.</string>
     <string name="app_icon">App icon</string>
@@ -1347,7 +1349,7 @@
     <string name="mini_player_artwork_color">Tint mini player with album art</string>
     <string name="mini_player_artwork_color_subtitle">Use the current song’s artwork colors for the mini player. Off by default.</string>
     <string name="mini_player_player_background_color">Match mini player to player background</string>
-    <string name="mini_player_player_background_color_subtitle">Use the current player’s artwork-derived background color for the mini player, independently of the app theme and other artwork color settings. Off by default.</string>
+    <string name="mini_player_player_background_color_subtitle">Show the same multicolour mesh backdrop as the player screen on the mini player, independently of the app theme and other artwork color settings. Off by default.</string>
     <string name="mini_player_artwork_outline">Show mini player outline with artwork colors</string>
     <string name="mini_player_artwork_outline_subtitle">Show the mini-player edge when artwork colors are enabled. Off by default.</string>
     <string name="mini_player_previous_button">Show previous-track button in mini player</string>

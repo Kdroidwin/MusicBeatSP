@@ -721,6 +721,7 @@ private fun resetDeezerArtistArtwork(context: Context) {
 @Composable
 private fun additionalArtworkSettingsSearchEntries(
     playerPopupsUseArtworkColor: Boolean,
+    playerMenusUsePlayerBackgroundColor: Boolean,
     hidePlayerPopupHandles: Boolean,
     hideUnknownMiniPlayerArtist: Boolean,
     queueHeadingMusicNoteIcon: Boolean,
@@ -743,6 +744,12 @@ private fun additionalArtworkSettingsSearchEntries(
         listOf("player", "popup", "artwork", "color", "プレーヤー", "ポップアップ", "アルバムアート", "色"),
         playerPopupsUseArtworkColor,
     ) { AppSettings.setPlayerPopupsUseArtworkColor(!playerPopupsUseArtworkColor) },
+    SettingsSearchEntry(
+        stringResource(R.string.player_menus_player_background_color),
+        stringResource(R.string.player_menus_player_background_color_subtitle),
+        listOf("player", "menu", "popup", "player background", "color", "再生画面", "プレイヤー", "メニュー", "ポップアップ", "背景色", "色"),
+        playerMenusUsePlayerBackgroundColor,
+    ) { AppSettings.setPlayerMenusUsePlayerBackgroundColor(!playerMenusUsePlayerBackgroundColor) },
     SettingsSearchEntry(
         stringResource(R.string.hide_player_popup_handles),
         stringResource(R.string.hide_player_popup_handles_subtitle),
@@ -1579,6 +1586,7 @@ fun SettingsScreen(
     val hideQueueManagerTitle by AppSettings.hideQueueManagerTitle.collectAsStateWithLifecycle()
     val frostedPlayerDetails by AppSettings.frostedPlayerDetails.collectAsStateWithLifecycle()
     val playerPopupsUseArtworkColor by AppSettings.playerPopupsUseArtworkColor.collectAsStateWithLifecycle()
+    val playerMenusUsePlayerBackgroundColor by AppSettings.playerMenusUsePlayerBackgroundColor.collectAsStateWithLifecycle()
     val hidePlayerPopupHandles by AppSettings.hidePlayerPopupHandles.collectAsStateWithLifecycle()
     val detailsSheetArtworkBackdrop by AppSettings.detailsSheetArtworkBackdrop.collectAsStateWithLifecycle()
     val showEmbeddedComment by AppSettings.showEmbeddedComment.collectAsStateWithLifecycle()
@@ -2866,6 +2874,7 @@ fun SettingsScreen(
         ) +
         additionalArtworkSettingsSearchEntries(
             playerPopupsUseArtworkColor = playerPopupsUseArtworkColor,
+            playerMenusUsePlayerBackgroundColor = playerMenusUsePlayerBackgroundColor,
             hidePlayerPopupHandles = hidePlayerPopupHandles,
             hideUnknownMiniPlayerArtist = hideUnknownMiniPlayerArtist,
             queueHeadingMusicNoteIcon = queueHeadingMusicNoteIcon,
@@ -5808,6 +5817,21 @@ fun SettingsScreen(
                     )
                 },
                 onClick = { AppSettings.setPlayerPopupsUseArtworkColor(!playerPopupsUseArtworkColor) },
+            )
+            RowDivider()
+            SettingsRow(
+                icon = Icons.Rounded.AutoAwesome,
+                title = stringResource(R.string.player_menus_player_background_color),
+                subtitle = stringResource(R.string.player_menus_player_background_color_subtitle),
+                trailing = {
+                    Switch(
+                        checked = playerMenusUsePlayerBackgroundColor,
+                        onCheckedChange = AppSettings::setPlayerMenusUsePlayerBackgroundColor,
+                    )
+                },
+                onClick = {
+                    AppSettings.setPlayerMenusUsePlayerBackgroundColor(!playerMenusUsePlayerBackgroundColor)
+                },
             )
             RowDivider()
             SettingsRow(

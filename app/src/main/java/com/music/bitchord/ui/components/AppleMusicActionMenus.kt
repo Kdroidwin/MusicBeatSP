@@ -364,12 +364,18 @@ private fun MenuHeading(title: String, subtitle: String, artwork: String?) {
             )
         }
         Column(modifier = Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(2.dp)) {
-            Text(title, style = MaterialTheme.typography.titleMedium, maxLines = 1, overflow = TextOverflow.Ellipsis)
+            Text(
+                title,
+                style = MaterialTheme.typography.titleMedium,
+                color = iosMenuColors().label,
+                maxLines = 1,
+                overflow = TextOverflow.Ellipsis,
+            )
             if (subtitle.isNotBlank()) {
                 Text(
                     subtitle,
                     style = MaterialTheme.typography.bodySmall,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    color = iosMenuColors().secondaryLabel,
                     maxLines = 1,
                     overflow = TextOverflow.Ellipsis,
                 )

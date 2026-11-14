@@ -70,6 +70,7 @@ import com.music.bitchord.data.settings.AppSettings
 import com.music.bitchord.data.settings.ThemeMode
 import com.music.bitchord.ui.player.LocalPlayerDock
 import com.music.bitchord.ui.player.playerDockArt
+import com.music.bitchord.ui.player.rememberPlayerBackdropSurfaceModifier
 import com.music.bitchord.ui.components.floatingtabbar.FloatingTabBar
 import com.music.bitchord.ui.components.floatingtabbar.FloatingTabBarDefaults
 import com.music.bitchord.ui.components.floatingtabbar.FloatingTabBarScrollConnection
@@ -120,6 +121,7 @@ fun GlassNavBar(
     modifier: Modifier = Modifier,
     useGlass: Boolean = false,
     hazeState: HazeState? = null,
+    queue: List<Song> = emptyList(),
 ) {
     val pillShape = remember { RoundedCornerShape(percent = 50) }
     val isDark = isSystemInDarkTheme()
@@ -146,9 +148,22 @@ fun GlassNavBar(
     } else {
         null
     }
+    val playerBackdropSurfaceModifier = if (playerBackgroundColors != null) {
+        rememberPlayerBackdropSurfaceModifier(song, queue)
+    } else {
+        null
+    }
     val contentColor = if (useGlass) glassContentColor() else MaterialTheme.colorScheme.onSurface
-    val miniContentColor = if (useArtworkColor) miniArtworkPalette.onBackground else contentColor
-    val miniSecondaryColor = if (useArtworkColor) miniArtworkPalette.onBackgroundVariant else null
+    val miniContentColor = when {
+        playerBackgroundColors != null -> playerBackgroundColors.onBackground
+        useArtworkColor -> miniArtworkPalette.onBackground
+        else -> contentColor
+    }
+    val miniSecondaryColor = when {
+        playerBackgroundColors != null -> playerBackgroundColors.onSurfaceVariant
+        useArtworkColor -> miniArtworkPalette.onBackgroundVariant
+        else -> null
+    }
     val selectedColor = when {
         playerBackgroundColors != null -> playerBackgroundColors.primary
         matchMiniPlayerColor && useArtworkColor -> miniArtworkPalette.onBackground
@@ -200,63 +215,39 @@ fun GlassNavBar(
             }
         }
     }
-    val miniSurfaceModifier: @Composable () -> Modifier = if (!useArtworkColor) {
-        surfaceModifier
-    } else {
-        {
-            when {
-                useGlass -> Modifier
-                    .liquidGlass(shape = pillShape, drawEdge = showMiniArtworkOutline)
-                    .background(miniArtworkPalette.background.copy(alpha = 0.24f), pillShape)
-                    .then(if (showMiniArtworkOutline) Modifier.border(GLASS_EDGE_WIDTH, miniArtworkPalette.divider.copy(alpha = 0.55f), pillShape) else Modifier)
-                reduceDynamicBlur || hazeState == null -> Modifier
-                    .background(miniArtworkPalette.background.copy(alpha = 0.90f), pillShape)
-                    .then(if (showMiniArtworkOutline) Modifier.border(GLASS_EDGE_WIDTH, miniArtworkPalette.divider.copy(alpha = 0.55f), pillShape) else Modifier)
-                else -> Modifier
-                    .optimizedHazeEffect(
-                        state = hazeState,
-                        style = HazeMaterials.regular(miniArtworkPalette.background),
-                    )
-                    .then(if (showMiniArtworkOutline) Modifier.border(GLASS_EDGE_WIDTH, miniArtworkPalette.divider.copy(alpha = 0.55f), pillShape) else Modifier)
-            }
-        }
-    }
     val playerBackgroundSurfaceModifier: @Composable () -> Modifier = if (playerBackgroundColors == null) {
         surfaceModifier
     } else {
         {
-            when {
-                useGlass -> Modifier
-                    .liquidGlass(shape = pillShape, drawEdge = showMiniArtworkOutline)
-                    .background(playerBackgroundColors.background.copy(alpha = 0.24f), pillShape)
-                    .then(
-                        if (showMiniArtworkOutline) Modifier.border(
-                            GLASS_EDGE_WIDTH,
-                            playerBackgroundColors.outline.copy(alpha = 0.55f),
-                            pillShape,
-                        ) else Modifier,
-                    )
-                reduceDynamicBlur || hazeState == null -> Modifier
-                    .background(playerBackgroundColors.background.copy(alpha = 0.90f), pillShape)
-                    .then(
-                        if (showMiniArtworkOutline) Modifier.border(
-                            GLASS_EDGE_WIDTH,
-                            playerBackgroundColors.outline.copy(alpha = 0.55f),
-                            pillShape,
-                        ) else Modifier,
-                    )
-                else -> Modifier
-                    .optimizedHazeEffect(
-                        state = hazeState,
-                        style = HazeMaterials.thin(playerBackgroundColors.background),
-                    )
-                    .then(
-                        if (showMiniArtworkOutline) Modifier.border(
-                            GLASS_EDGE_WIDTH,
-                            playerBackgroundColors.outline.copy(alpha = 0.55f),
-                            pillShape,
-                        ) else Modifier,
-                    )
+            (playerBackdropSurfaceModifier ?: Modifier).then(
+                if (showMiniArtworkOutline) Modifier.border(
+                    GLASS_EDGE_WIDTH,
+                    playerBackgroundColors.outline.copy(alpha = 0.55f),
+                    pillShape,
+                ) else Modifier,
+            )
+        }
+    }
+    val miniSurfaceModifier: @Composable () -> Modifier = when {
+        playerBackgroundColors != null -> playerBackgroundSurfaceModifier
+        !useArtworkColor -> surfaceModifier
+        else -> {
+            {
+                when {
+                    useGlass -> Modifier
+                        .liquidGlass(shape = pillShape, drawEdge = showMiniArtworkOutline)
+                        .background(miniArtworkPalette.background.copy(alpha = 0.24f), pillShape)
+                        .then(if (showMiniArtworkOutline) Modifier.border(GLASS_EDGE_WIDTH, miniArtworkPalette.divider.copy(alpha = 0.55f), pillShape) else Modifier)
+                    reduceDynamicBlur || hazeState == null -> Modifier
+                        .background(miniArtworkPalette.background.copy(alpha = 0.90f), pillShape)
+                        .then(if (showMiniArtworkOutline) Modifier.border(GLASS_EDGE_WIDTH, miniArtworkPalette.divider.copy(alpha = 0.55f), pillShape) else Modifier)
+                    else -> Modifier
+                        .optimizedHazeEffect(
+                            state = hazeState,
+                            style = HazeMaterials.regular(miniArtworkPalette.background),
+                        )
+                        .then(if (showMiniArtworkOutline) Modifier.border(GLASS_EDGE_WIDTH, miniArtworkPalette.divider.copy(alpha = 0.55f), pillShape) else Modifier)
+                }
             }
         }
     }

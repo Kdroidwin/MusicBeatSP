@@ -345,7 +345,9 @@ import com.music.bitchord.ui.replay.rememberReplayState
 import com.music.bitchord.ui.theme.BitChordTheme
 import com.music.bitchord.ui.theme.ArtworkPalette
 import com.music.bitchord.ui.theme.LocalPlayerBackdropThemeEnabled
+import com.music.bitchord.ui.theme.LocalPlayerMenuPalette
 import com.music.bitchord.ui.theme.pageBackgroundColor
+import com.music.bitchord.ui.theme.rememberPlayerMenuPalette
 import com.music.bitchord.ui.theme.rememberArtworkPalette
 import com.music.bitchord.ui.theme.SystemBarIcons
 import com.music.bitchord.ui.utils.rememberIosOverscrollFactory
@@ -412,6 +414,7 @@ class MainActivity : AppCompatActivity() {
                 }
             }
             val highPerformance by AppSettings.highPerformanceMode.collectAsStateWithLifecycle()
+            val playerMenusUsePlayerBackgroundColor by AppSettings.playerMenusUsePlayerBackgroundColor.collectAsStateWithLifecycle()
             val liquidGlassEnabled by AppSettings.liquidGlass.collectAsStateWithLifecycle()
             val liquidGlassLegacyEnabled by AppSettings.liquidGlassLegacy.collectAsStateWithLifecycle()
             val keepScreenOn by AppSettings.keepScreenOn.collectAsStateWithLifecycle()
@@ -477,6 +480,10 @@ class MainActivity : AppCompatActivity() {
                 playerBackgroundTheme = theme == ThemeMode.PLAYER_BACKGROUND,
                 matchButtonAccentToArtwork = matchButtonAccentToArtwork,
             ) {
+                val playerMenuPalette = if (playerMenusUsePlayerBackgroundColor && player.song != null) {
+                    rememberPlayerMenuPalette(player.song?.artworkAt(ROW_ART_PX))
+                } else null
+                CompositionLocalProvider(LocalPlayerMenuPalette provides playerMenuPalette) {
                 // The glass surfaces sample this layer, and a layer records only
                 // what is drawn into it — which, for BitChord, is a page that
                 // paints no background of its own. Everywhere a page is not
@@ -557,6 +564,7 @@ class MainActivity : AppCompatActivity() {
                             onLibraryPlaylistStatusBarChanged = ::setLibraryPlaylistStatusBarHidden,
                         )
                     }
+                }
                 }
                 }
             }
@@ -4128,6 +4136,7 @@ private fun BitChordApp(
                                 onExpand = ::openNowPlaying,
                                 onDismiss = onDismissMusicBar,
                                 modifier = Modifier.fillMaxWidth(),
+                                queue = player.queue,
                             )
                         }
                         PopupNavigationBar(
@@ -4137,6 +4146,7 @@ private fun BitChordApp(
                             onTabSelected = onTabSelected,
                             modifier = Modifier.fillMaxWidth(),
                             song = player.song?.takeUnless { playerDocked },
+                            queue = player.queue,
                         )
                     }
                 } else if (useCollapsibleNavBar) {
@@ -4160,6 +4170,7 @@ private fun BitChordApp(
                         onDismiss = onDismissMusicBar,
                         useGlass = glassActive,
                         hazeState = hazeState,
+                        queue = player.queue,
                         modifier = Modifier
                             .align(Alignment.BottomCenter)
                             .widthIn(max = FLOATING_BAR_MAX_WIDTH)
@@ -4196,6 +4207,7 @@ private fun BitChordApp(
                             onExpand = ::openNowPlaying,
                             onDismiss = onDismissMusicBar,
                             modifier = Modifier.fillMaxWidth(),
+                            queue = player.queue,
                         )
                     }
                     FloatingBottomBar(
@@ -4204,6 +4216,7 @@ private fun BitChordApp(
                         hazeState = hazeState,
                         onTabSelected = onTabSelected,
                         song = player.song?.takeUnless { playerDocked },
+                        queue = player.queue,
                     )
                 }
                 }
@@ -5866,10 +5879,11 @@ private fun PlaybackTuningDialog(
 ) {
     var speed by remember { mutableStateOf(AppSettings.playbackSpeed.value) }
     var pitch by remember { mutableStateOf(AppSettings.playbackPitch.value) }
-    val palette = rememberArtworkPalette(song?.thumbnailUrl, dark = true, artPx = ROW_ART_PX)
+    val playerMenuPalette = LocalPlayerMenuPalette.current
+    val palette = playerMenuPalette ?: rememberArtworkPalette(song?.thumbnailUrl, dark = true, artPx = ROW_ART_PX)
     val frostedPlayerDetails by AppSettings.frostedPlayerDetails.collectAsStateWithLifecycle()
     val playerPopupsUseArtworkColor by AppSettings.playerPopupsUseArtworkColor.collectAsStateWithLifecycle()
-    val useArtworkBackdrop = frostedPlayerDetails && playerPopupsUseArtworkColor
+    val useArtworkBackdrop = playerMenuPalette != null || (frostedPlayerDetails && playerPopupsUseArtworkColor)
     val hidePlayerPopupHandles by AppSettings.hidePlayerPopupHandles.collectAsStateWithLifecycle()
     val hideTitle by AppSettings.hidePlaybackTuningTitle.collectAsStateWithLifecycle()
     val useThinSliders by AppSettings.playbackTuningThinSliders.collectAsStateWithLifecycle()
@@ -5891,7 +5905,7 @@ private fun PlaybackTuningDialog(
             if (useArtworkBackdrop) {
                 ArtworkBackdrop(
                     palette = palette,
-                    imageUrl = song?.thumbnailUrl,
+                    imageUrl = if (playerMenuPalette != null) null else song?.thumbnailUrl,
                     modifier = Modifier.matchParentSize(),
                     washFraction = 0.75f,
                     artPx = ROW_ART_PX,

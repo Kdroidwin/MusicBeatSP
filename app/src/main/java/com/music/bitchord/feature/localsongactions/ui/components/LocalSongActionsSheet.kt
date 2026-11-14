@@ -66,6 +66,7 @@ import com.music.bitchord.feature.artistimage.util.ArtistSplitter
 import com.music.bitchord.ui.components.ArtworkBackdrop
 import com.music.bitchord.ui.components.PlayerPopupSystemBars
 import com.music.bitchord.ui.theme.rememberArtworkPalette
+import com.music.bitchord.ui.theme.LocalPlayerMenuPalette
 import java.util.Locale
 
 /**
@@ -107,12 +108,15 @@ fun LocalSongActionsSheet(
     // Use the same source resolution, palette, and backdrop as the player's
     // details sheet so playlist-row details keep the color of that selected
     // track instead of falling back to the app's AMOLED surface.
-    val artworkPalette = rememberArtworkPalette(song.thumbnailUrl, dark = true, artPx = CARD_ART_PX)
+    val playerMenuPalette = LocalPlayerMenuPalette.current
+    val artworkPalette = playerMenuPalette ?: rememberArtworkPalette(song.thumbnailUrl, dark = true, artPx = CARD_ART_PX)
     val frostedPlayerDetails by AppSettings.frostedPlayerDetails.collectAsStateWithLifecycle()
     val playerPopupsUseArtworkColor by AppSettings.playerPopupsUseArtworkColor.collectAsStateWithLifecycle()
     val hidePlayerPopupHandles by AppSettings.hidePlayerPopupHandles.collectAsStateWithLifecycle()
-    val useArtworkBackdrop = frostedPlayerDetails && (showPlayerActions || song.localUri != null) &&
-        (!showPlayerActions || playerPopupsUseArtworkColor)
+    val useArtworkBackdrop = playerMenuPalette != null || (
+        frostedPlayerDetails && (showPlayerActions || song.localUri != null) &&
+            (!showPlayerActions || playerPopupsUseArtworkColor)
+        )
     val embedDragHandle = showPlayerActions || useArtworkBackdrop
     val hideEmbeddedDragHandle = showPlayerActions && hidePlayerPopupHandles
     var pickingSleepTimer by remember { mutableStateOf(false) }
@@ -181,7 +185,7 @@ fun LocalSongActionsSheet(
                 // mode and did not carry the artwork colour into the sheet.
                 ArtworkBackdrop(
                     palette = artworkPalette,
-                    imageUrl = song.thumbnailUrl,
+                    imageUrl = if (playerMenuPalette != null) null else song.thumbnailUrl,
                     modifier = Modifier.matchParentSize(),
                     washFraction = 0.75f,
                     artPx = CARD_ART_PX,

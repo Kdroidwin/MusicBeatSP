@@ -260,6 +260,7 @@ import com.music.bitchord.ui.theme.SystemBarIcons
 import com.music.bitchord.ui.theme.SystemBarVisibility
 import com.music.bitchord.ui.rememberIsForeground
 import com.music.bitchord.ui.theme.rememberArtworkPalette
+import com.music.bitchord.ui.theme.LocalPlayerMenuPalette
 import com.music.bitchord.ui.components.ArtworkBackdrop
 import com.music.bitchord.ui.components.PlayerPopupSystemBars
 import com.music.bitchord.ui.components.thumbnailBorder
@@ -1026,6 +1027,8 @@ fun NowPlayingScreen(
     val displayedArtUrl = if (useRemoteArtworkFallback) remoteArtFallbackUrl ?: artUrl else artUrl
     val sharedPlayerBackdrop = LocalSharedPlayerBackdrop.current
     val artworkPalette = rememberArtworkPalette(displayedArtUrl, dark = true, artPx = ART_PX)
+    val playerMenuPalette = LocalPlayerMenuPalette.current
+    val popupPalette = playerMenuPalette ?: artworkPalette
     val queueRainbowBackdropEnabled by AppSettings.playerQueueRainbowBackdrop.collectAsStateWithLifecycle()
     val queueBackdropColors = if (queueRainbowBackdropEnabled) {
         rememberQueueBackdropColors(queue, song)
@@ -1537,16 +1540,16 @@ fun NowPlayingScreen(
             onDismissRequest = { quickSleepTimerOpen = false },
             sheetState = rememberModalBottomSheetState(skipPartiallyExpanded = true),
             shape = sleepTimerShape,
-            containerColor = if (playerPopupsUseArtworkColor) Color.Transparent else MaterialTheme.colorScheme.surfaceContainerHigh,
+            containerColor = if (playerPopupsUseArtworkColor || playerMenuPalette != null) Color.Transparent else MaterialTheme.colorScheme.surfaceContainerHigh,
             dragHandle = null,
             contentWindowInsets = { WindowInsets(0, 0, 0, 0) },
         ) {
             PlayerPopupSystemBars(true)
             Box(Modifier.fillMaxWidth().clip(sleepTimerShape)) {
-                if (playerPopupsUseArtworkColor) {
+                if (playerPopupsUseArtworkColor || playerMenuPalette != null) {
                     ArtworkBackdrop(
-                        palette = artworkPalette,
-                        imageUrl = song.thumbnailUrl,
+                        palette = popupPalette,
+                        imageUrl = if (playerMenuPalette != null) null else song.thumbnailUrl,
                         modifier = Modifier.matchParentSize(),
                         washFraction = 0.75f,
                         artPx = ROW_ART_PX,
@@ -1563,7 +1566,7 @@ fun NowPlayingScreen(
                                     .size(width = 48.dp, height = 6.dp)
                                     .clip(CircleShape)
                                     .background(
-                                        (if (playerPopupsUseArtworkColor) artworkPalette.onBackground else MaterialTheme.colorScheme.onSurfaceVariant)
+                                        (if (playerPopupsUseArtworkColor || playerMenuPalette != null) popupPalette.onBackground else MaterialTheme.colorScheme.onSurfaceVariant)
                                             .copy(alpha = 0.38f),
                                     ),
                             )
@@ -1574,8 +1577,8 @@ fun NowPlayingScreen(
                     } else {
                         LocalSleepTimerPicker(
                             onBack = { quickSleepTimerOpen = false },
-                            artworkPalette = artworkPalette,
-                            useArtworkColor = playerPopupsUseArtworkColor,
+                            artworkPalette = popupPalette,
+                            useArtworkColor = playerPopupsUseArtworkColor || playerMenuPalette != null,
                         )
                     }
                 }

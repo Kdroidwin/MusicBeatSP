@@ -74,6 +74,7 @@ import androidx.compose.ui.unit.sp
 import androidx.compose.ui.util.lerp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.music.bitchord.data.settings.AppSettings
+import com.music.bitchord.ui.theme.LocalPlayerMenuPalette
 import dev.chrisbanes.haze.HazeState
 import dev.chrisbanes.haze.materials.ExperimentalHazeMaterialsApi
 import dev.chrisbanes.haze.materials.HazeMaterials
@@ -120,7 +121,17 @@ private val LightMenu = IosMenuColors(
 /** The panel colours for the theme in force. */
 @Composable
 fun iosMenuColors(): IosMenuColors =
-    if (MaterialTheme.colorScheme.background.luminance() < 0.5f) DarkMenu else LightMenu
+    LocalPlayerMenuPalette.current?.let { palette ->
+        IosMenuColors(
+            dark = true,
+            fill = palette.background,
+            rim = palette.divider.copy(alpha = 0.38f),
+            label = palette.onBackground,
+            secondaryLabel = palette.onBackgroundVariant,
+            separator = palette.divider.copy(alpha = 0.52f),
+            pressed = palette.elevated.copy(alpha = 0.62f),
+        )
+    } ?: if (MaterialTheme.colorScheme.background.luminance() < 0.5f) DarkMenu else LightMenu
 
 /** The panel's silhouette: a large, continuously curved corner. */
 val IosMenuShape: Shape = RoundedCornerShape(30.dp)
@@ -470,7 +481,7 @@ fun <T : Any> IosMenuPopover(
     // sheet's own dismiss, and back would take the player down under the menu.
     BackHandler(enabled = open, onBack = onDismiss)
 
-    val dark = MaterialTheme.colorScheme.background.luminance() < 0.5f
+    val dark = LocalPlayerMenuPalette.current != null || MaterialTheme.colorScheme.background.luminance() < 0.5f
     val scrim = Color.Black.copy(alpha = if (dark) 0.30f else 0.14f)
     val insets = WindowInsets.safeDrawing
     var overlayOffset by remember { mutableStateOf(Offset.Zero) }

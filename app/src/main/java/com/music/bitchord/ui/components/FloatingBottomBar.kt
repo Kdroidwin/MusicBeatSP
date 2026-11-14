@@ -64,6 +64,7 @@ import com.music.bitchord.data.model.Song
 import com.music.bitchord.data.model.artworkAt
 import com.music.bitchord.ui.theme.rememberArtworkPalette
 import com.music.bitchord.ui.theme.rememberPlayerBackdropColorScheme
+import com.music.bitchord.ui.player.rememberPlayerBackdropSurfaceModifier
 import com.music.bitchord.ui.haptics.Haptic
 import com.music.bitchord.ui.haptics.rememberHaptics
 import dev.chrisbanes.haze.HazeState
@@ -135,6 +136,7 @@ fun PopupNavigationBar(
     hazeState: HazeState,
     modifier: Modifier = Modifier,
     song: Song? = null,
+    queue: List<Song> = emptyList(),
 ) {
     if (tabs.isEmpty()) return
     var expanded by remember { mutableStateOf(false) }
@@ -145,6 +147,11 @@ fun PopupNavigationBar(
     val matchArtwork = matchMiniPlayerColor && useMiniPlayerArtworkColor
     val playerBackgroundColors = if (usePlayerBackgroundColor && song != null) {
         rememberPlayerBackdropColorScheme(song.artworkAt(ROW_ART_PX))
+    } else {
+        null
+    }
+    val playerBackdropSurfaceModifier = if (playerBackgroundColors != null) {
+        rememberPlayerBackdropSurfaceModifier(song, queue)
     } else {
         null
     }
@@ -195,6 +202,7 @@ fun PopupNavigationBar(
                 .clip(shape)
                 .then(
                     when {
+                        playerBackdropSurfaceModifier != null -> playerBackdropSurfaceModifier
                         // Glass must win over artwork/Haze matching. Otherwise
                         // the common "match mini-player color" setting bypasses
                         // both Liquid Glass renderers and makes old/new identical.
@@ -357,6 +365,7 @@ fun FloatingBottomBar(
     hazeState: HazeState,
     modifier: Modifier = Modifier,
     song: Song? = null,
+    queue: List<Song> = emptyList(),
 ) {
     val pillShape = RoundedCornerShape(percent = 50)
     val reduceDynamicBlur by AppSettings.reduceDynamicBlur.collectAsStateWithLifecycle()
@@ -366,6 +375,11 @@ fun FloatingBottomBar(
     val matchArtwork = matchMiniPlayerColor && useMiniPlayerArtworkColor
     val playerBackgroundColors = if (usePlayerBackgroundColor && song != null) {
         rememberPlayerBackdropColorScheme(song.artworkAt(ROW_ART_PX))
+    } else {
+        null
+    }
+    val playerBackdropSurfaceModifier = if (playerBackgroundColors != null) {
+        rememberPlayerBackdropSurfaceModifier(song, queue)
     } else {
         null
     }
@@ -441,7 +455,9 @@ fun FloatingBottomBar(
             .fillMaxWidth()
             .clip(pillShape)
             .then(
-                if (useGlass) {
+                if (playerBackdropSurfaceModifier != null) {
+                    playerBackdropSurfaceModifier
+                } else if (useGlass) {
                     Modifier
                         .liquidGlass(shape = pillShape)
                         .then(

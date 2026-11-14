@@ -43,6 +43,7 @@ import com.music.bitchord.data.settings.AppSettings
 import com.music.bitchord.ui.components.ArtworkBackdrop
 import com.music.bitchord.ui.components.PlayerPopupSystemBars
 import com.music.bitchord.ui.theme.rememberArtworkPalette
+import com.music.bitchord.ui.theme.LocalPlayerMenuPalette
 
 /**
  * Separate modal bottom sheet presenting individual contributing artists for selection.
@@ -59,10 +60,11 @@ fun LocalArtistPickerSheet(
     modifier: Modifier = Modifier,
 ) {
     val sheetState = rememberModalBottomSheetState(skipPartiallyExpanded = true)
-    val palette = rememberArtworkPalette(song.thumbnailUrl, dark = true, artPx = ROW_ART_PX)
+    val playerMenuPalette = LocalPlayerMenuPalette.current
+    val palette = playerMenuPalette ?: rememberArtworkPalette(song.thumbnailUrl, dark = true, artPx = ROW_ART_PX)
     val frostedPlayerDetails by AppSettings.frostedPlayerDetails.collectAsStateWithLifecycle()
     val hidePlayerPopupHandles by AppSettings.hidePlayerPopupHandles.collectAsStateWithLifecycle()
-    val useArtworkBackdrop = frostedPlayerDetails && allowArtworkColor
+    val useArtworkBackdrop = playerMenuPalette != null || (frostedPlayerDetails && allowArtworkColor)
     val sheetShape = RoundedCornerShape(topStart = 24.dp, topEnd = 24.dp)
     val foreground = if (useArtworkBackdrop) palette.onBackground else MaterialTheme.colorScheme.onSurface
     val secondary = if (useArtworkBackdrop) palette.onBackgroundVariant else MaterialTheme.colorScheme.onSurfaceVariant
@@ -84,7 +86,7 @@ fun LocalArtistPickerSheet(
             if (useArtworkBackdrop) {
                 ArtworkBackdrop(
                     palette = palette,
-                    imageUrl = song.thumbnailUrl,
+                    imageUrl = if (playerMenuPalette != null) null else song.thumbnailUrl,
                     modifier = Modifier.matchParentSize(),
                     washFraction = 0.75f,
                     artPx = ROW_ART_PX,

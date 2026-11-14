@@ -51,6 +51,7 @@ import com.music.bitchord.data.model.ROW_ART_PX
 import com.music.bitchord.ui.components.ArtworkBackdrop
 import com.music.bitchord.ui.components.PlayerPopupSystemBars
 import com.music.bitchord.ui.theme.ArtworkPalette
+import com.music.bitchord.ui.theme.LocalPlayerMenuPalette
 import com.music.bitchord.feature.localmusic.data.LocalPlaylistStore
 import com.music.bitchord.feature.localmusic.domain.model.LocalPlaylistSongMetadata
 import com.music.bitchord.feature.localmusic.ui.components.CreatePlaylistDialog
@@ -95,7 +96,8 @@ fun LocalAddToPlaylistSheet(
         }
     }
     val coverUrl = distinctSongs.firstNotNullOfOrNull { it.thumbnailUrl }
-    val palette = artworkPalette.takeIf { useArtworkColor }
+    val playerMenuPalette = LocalPlayerMenuPalette.current
+    val palette = playerMenuPalette ?: artworkPalette.takeIf { useArtworkColor }
     val baseColors = MaterialTheme.colorScheme
     val sheetColors = if (palette != null) {
         baseColors.copy(
@@ -157,7 +159,7 @@ fun LocalAddToPlaylistSheet(
             if (palette != null) {
                 ArtworkBackdrop(
                     palette = palette,
-                    imageUrl = artworkUrl ?: coverUrl,
+                    imageUrl = if (playerMenuPalette != null) null else artworkUrl ?: coverUrl,
                     modifier = Modifier.matchParentSize(),
                     washFraction = 0.75f,
                     artPx = ROW_ART_PX,

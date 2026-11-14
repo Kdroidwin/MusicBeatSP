@@ -81,6 +81,7 @@ import com.music.bitchord.download.Downloads
 import com.music.bitchord.playback.SleepTimer
 import com.music.bitchord.ui.components.thumbnailBorder
 import com.music.bitchord.ui.theme.ArtworkPalette
+import com.music.bitchord.ui.theme.LocalPlayerMenuPalette
 import com.music.bitchord.ui.theme.rememberArtworkPalette
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
@@ -166,14 +167,19 @@ fun SongActionsSheet(
     // showing, not a larger copy of it: the tint is a blur and a handful of
     // swatches, neither of which a bigger image improves, and going back for
     // one is what had the sheet opening grey and colouring in afterwards.
-    val palette = rememberArtworkPalette(song.thumbnailUrl, artPx = CARD_ART_PX)
+    val playerMenuPalette = LocalPlayerMenuPalette.current
+    val palette = playerMenuPalette ?: rememberArtworkPalette(song.thumbnailUrl, artPx = CARD_ART_PX)
     val liked = likeStatus == LikeStatus.LIKE
     val disliked = likeStatus == LikeStatus.DISLIKE
     // A local file or a finished download has no YouTube identity behind it to
     // rate, save, queue into a playlist, fetch again, or share a link for.
     val isOffline = song.localUri != null
 
-    TintedSheet(palette = palette, imageUrl = song.thumbnailUrl, modifier = modifier) {
+    TintedSheet(
+        palette = palette,
+        imageUrl = if (playerMenuPalette != null) null else song.thumbnailUrl,
+        modifier = modifier,
+    ) {
         if (pickingSleepTimer) {
             SleepTimerPicker(palette = palette, onBack = { pickingSleepTimer = false })
             return@TintedSheet

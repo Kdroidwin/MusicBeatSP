@@ -57,6 +57,7 @@ import com.music.bitchord.data.settings.AppSettings
 import com.music.bitchord.ui.components.thumbnailBorder
 import com.music.bitchord.ui.player.LocalPlayerDock
 import com.music.bitchord.ui.player.playerDockArt
+import com.music.bitchord.ui.player.rememberPlayerBackdropSurfaceModifier
 import com.music.bitchord.ui.theme.rememberArtworkPalette
 import com.music.bitchord.ui.theme.rememberPlayerBackdropColorScheme
 import com.music.bitchord.ui.haptics.Haptic
@@ -143,6 +144,7 @@ fun MiniPlayer(
     onExpand: () -> Unit,
     onDismiss: () -> Unit = {},
     modifier: Modifier = Modifier,
+    queue: List<Song> = emptyList(),
 ) {
     val folderArtworkFallbackMode by AppSettings.folderArtworkFallbackMode.collectAsStateWithLifecycle()
     val localAwareArtworkModel = remember(song, folderArtworkFallbackMode) { song.artworkAt(ROW_ART_PX) }
@@ -170,6 +172,11 @@ fun MiniPlayer(
     )
     val playerBackgroundColors = if (usePlayerBackgroundColor) {
         rememberPlayerBackdropColorScheme(song.artworkAt(ROW_ART_PX))
+    } else {
+        null
+    }
+    val playerBackdropSurfaceModifier = if (playerBackgroundColors != null) {
+        rememberPlayerBackdropSurfaceModifier(song, queue)
     } else {
         null
     }
@@ -277,7 +284,9 @@ fun MiniPlayer(
             }
             .clip(shape)
             .then(
-                if (useGlass) {
+                if (playerBackdropSurfaceModifier != null) {
+                    playerBackdropSurfaceModifier
+                } else if (useGlass) {
                     Modifier
                         .liquidGlass(
                             shape = shape,

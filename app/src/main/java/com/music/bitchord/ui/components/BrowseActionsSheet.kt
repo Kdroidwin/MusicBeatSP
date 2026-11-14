@@ -50,6 +50,7 @@ import com.music.bitchord.download.DownloadState
 import com.music.bitchord.download.Downloads
 import com.music.bitchord.ui.icons.BitChordIcons
 import com.music.bitchord.ui.theme.rememberArtworkPalette
+import com.music.bitchord.ui.theme.LocalPlayerMenuPalette
 import java.util.Locale
 
 /**
@@ -170,7 +171,8 @@ fun BrowseActionsSheet(
     var confirmingDeleteDownload by remember { mutableStateOf(false) }
 
     val playlist = target.playlist
-    val palette = rememberArtworkPalette(target.thumbnailUrl, artPx = ROW_ART_PX)
+    val playerMenuPalette = LocalPlayerMenuPalette.current
+    val palette = playerMenuPalette ?: rememberArtworkPalette(target.thumbnailUrl, artPx = ROW_ART_PX)
     if (renaming && playlist != null && onRename != null) {
         Box(modifier.fillMaxWidth().background(palette.background)) {
             RenamePlaylistForm(
@@ -190,7 +192,7 @@ fun BrowseActionsSheet(
     ) {
         ArtworkBackdrop(
             palette = palette,
-            imageUrl = target.thumbnailUrl,
+            imageUrl = if (playerMenuPalette != null) null else target.thumbnailUrl,
             modifier = Modifier.matchParentSize(),
             washFraction = 0.78f,
             artPx = ROW_ART_PX,

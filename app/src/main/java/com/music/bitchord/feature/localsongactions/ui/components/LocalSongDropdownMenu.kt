@@ -39,6 +39,7 @@ import com.music.bitchord.data.model.Song
 import com.music.bitchord.data.model.CARD_ART_PX
 import com.music.bitchord.feature.artistimage.util.ArtistSplitter
 import com.music.bitchord.ui.theme.rememberArtworkPalette
+import com.music.bitchord.ui.theme.LocalPlayerMenuPalette
 
 /**
  * Material 3 DropdownMenu displaying the 8 local song options matching the reference player.
@@ -69,11 +70,11 @@ fun LocalSongDropdownMenu(
     // Keep the usual track-specific palette. Playlist drill-downs may pass the
     // collection cover so their menu matches the full-screen collection menu.
     val paletteArtworkUrl = artworkUrlForPalette?.takeIf(String::isNotBlank) ?: song.thumbnailUrl
-    val palette = if (expanded && !disableArtworkPalette) {
-        rememberArtworkPalette(paletteArtworkUrl, artPx = CARD_ART_PX)
-    } else {
-        null
-    }
+    val palette = if (expanded) {
+        LocalPlayerMenuPalette.current ?: if (!disableArtworkPalette) {
+            rememberArtworkPalette(paletteArtworkUrl, artPx = CARD_ART_PX)
+        } else null
+    } else null
     val menuForeground = palette?.onBackground ?: MaterialTheme.colorScheme.onSurface
 
     CompositionLocalProvider(LocalContentColor provides menuForeground) {

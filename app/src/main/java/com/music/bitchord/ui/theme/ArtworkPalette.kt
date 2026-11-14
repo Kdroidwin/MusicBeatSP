@@ -6,7 +6,9 @@ import androidx.compose.animation.core.AnimationSpec
 import androidx.compose.animation.core.snap
 import androidx.compose.animation.core.tween
 import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.ColorScheme
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.compositionLocalOf
 import androidx.compose.runtime.Immutable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
@@ -30,6 +32,9 @@ import com.music.bitchord.data.settings.AppSettings
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
 import kotlin.math.sqrt
+
+/** Present only while the user has enabled player-coloured action menus. */
+val LocalPlayerMenuPalette = compositionLocalOf<ArtworkPalette?> { null }
 
 /**
  * The colours an album, playlist or artist page paints itself in.
@@ -168,6 +173,23 @@ fun rememberArtworkPalette(
         divider = animateColorAsState(target.divider, spec, label = "tintDivider").value,
         isResolved = seed != null,
     )
+}
+
+/** Adapts the exact mesh-derived player backdrop colours to the shared menu palette. */
+@Composable
+fun rememberPlayerMenuPalette(imageUrl: String?): ArtworkPalette {
+    val scheme: ColorScheme = rememberPlayerBackdropColorScheme(imageUrl)
+    return remember(scheme) {
+        ArtworkPalette(
+            background = scheme.background,
+            wash = scheme.surfaceVariant,
+            elevated = scheme.surfaceContainerHigh,
+            accent = scheme.primary,
+            onBackground = scheme.onBackground,
+            onBackgroundVariant = scheme.onSurfaceVariant,
+            divider = scheme.outlineVariant,
+        )
+    }
 }
 
 /**

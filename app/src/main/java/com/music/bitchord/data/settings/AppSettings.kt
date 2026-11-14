@@ -747,6 +747,8 @@ object AppSettings {
     val frostedPlayerDetails = MutableStateFlow(true)
     /** Master switch for artwork colours on sheets opened from the player. */
     val playerPopupsUseArtworkColor = MutableStateFlow(true)
+    /** Uses the current player's mesh-derived background palette for action menus and pop-up sheets. */
+    val playerMenusUsePlayerBackgroundColor = MutableStateFlow(false)
     /** Removes player popup drag handles and their dedicated top spacing. */
     val hidePlayerPopupHandles = MutableStateFlow(true)
     /** Artwork-colored background for local track metadata and file details. */
@@ -1750,6 +1752,7 @@ object AppSettings {
         frostedQueueManager.value = prefs.getBoolean(KEY_FROSTED_QUEUE_MANAGER, true)
         frostedPlayerDetails.value = prefs.getBoolean(KEY_FROSTED_PLAYER_DETAILS, true)
         playerPopupsUseArtworkColor.value = prefs.getBoolean(KEY_PLAYER_POPUPS_ARTWORK_COLOR, true)
+        playerMenusUsePlayerBackgroundColor.value = prefs.getBoolean(KEY_PLAYER_MENUS_PLAYER_BACKGROUND_COLOR, false)
         hidePlayerPopupHandles.value = prefs.getBoolean(KEY_PLAYER_POPUP_HANDLES_HIDDEN, true)
         detailsSheetArtworkBackdrop.value = prefs.getBoolean(KEY_DETAILS_SHEET_ARTWORK_BACKDROP, true)
         showEmbeddedComment.value = prefs.getBoolean(KEY_SHOW_EMBEDDED_COMMENT, true)
@@ -2927,6 +2930,11 @@ object AppSettings {
     fun setPlayerPopupsUseArtworkColor(value: Boolean) {
         playerPopupsUseArtworkColor.value = value
         prefs.edit().putBoolean(KEY_PLAYER_POPUPS_ARTWORK_COLOR, value).apply()
+    }
+
+    fun setPlayerMenusUsePlayerBackgroundColor(value: Boolean) {
+        playerMenusUsePlayerBackgroundColor.value = value
+        prefs.edit().putBoolean(KEY_PLAYER_MENUS_PLAYER_BACKGROUND_COLOR, value).apply()
     }
 
     fun setHidePlayerPopupHandles(value: Boolean) {
@@ -5157,6 +5165,7 @@ object AppSettings {
     private const val KEY_FROSTED_QUEUE_MANAGER = "frosted_queue_manager"
     private const val KEY_FROSTED_PLAYER_DETAILS = "frosted_player_details"
     private const val KEY_PLAYER_POPUPS_ARTWORK_COLOR = "player_popups_artwork_color"
+    private const val KEY_PLAYER_MENUS_PLAYER_BACKGROUND_COLOR = "player_menus_player_background_color"
     // Keep the existing key so the option retains its value across the 2.9.8 correction.
     private const val KEY_PLAYER_POPUP_HANDLES_HIDDEN = "clip_player_popup_handles"
     private const val KEY_DETAILS_SHEET_ARTWORK_BACKDROP = "details_sheet_artwork_backdrop"

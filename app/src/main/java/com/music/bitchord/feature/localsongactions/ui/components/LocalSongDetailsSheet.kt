@@ -68,6 +68,7 @@ import com.music.bitchord.data.model.ROW_ART_PX
 import com.music.bitchord.ui.components.ArtworkBackdrop
 import com.music.bitchord.ui.components.PlayerPopupSystemBars
 import com.music.bitchord.ui.theme.rememberArtworkPalette
+import com.music.bitchord.ui.theme.LocalPlayerMenuPalette
 import com.music.bitchord.feature.localsongactions.data.LocalSongMetadataRetriever
 import com.music.bitchord.feature.localsongactions.domain.model.LocalSongFullMetadata
 
@@ -92,11 +93,12 @@ fun LocalSongDetailsSheet(
     val sheetState = rememberModalBottomSheetState(skipPartiallyExpanded = true)
     val audioCutterEnabled by AppSettings.audioCutterEnabled.collectAsStateWithLifecycle()
     val artworkBackdropEnabled by AppSettings.detailsSheetArtworkBackdrop.collectAsStateWithLifecycle()
-    val useArtworkBackdrop = artworkBackdropEnabled && allowArtworkColor
+    val playerMenuPalette = LocalPlayerMenuPalette.current
+    val useArtworkBackdrop = playerMenuPalette != null || (artworkBackdropEnabled && allowArtworkColor)
     val showEmbeddedComment by AppSettings.showEmbeddedComment.collectAsStateWithLifecycle()
     val hidePlayerPopupHandles by AppSettings.hidePlayerPopupHandles.collectAsStateWithLifecycle()
     val hideDetailsHandle = showPlayerActions && hidePlayerPopupHandles
-    val palette = rememberArtworkPalette(song.artworkAt(ROW_ART_PX), dark = true, artPx = ROW_ART_PX)
+    val palette = playerMenuPalette ?: rememberArtworkPalette(song.artworkAt(ROW_ART_PX), dark = true, artPx = ROW_ART_PX)
     val baseColors = MaterialTheme.colorScheme
     val sheetColors = if (useArtworkBackdrop) {
         baseColors.copy(
@@ -167,7 +169,7 @@ fun LocalSongDetailsSheet(
                 if (useArtworkBackdrop) {
                     ArtworkBackdrop(
                         palette = palette,
-                        imageUrl = song.thumbnailUrl,
+                        imageUrl = if (playerMenuPalette != null) null else song.thumbnailUrl,
                         modifier = Modifier.matchParentSize(),
                         washFraction = 0.75f,
                         artPx = ROW_ART_PX,

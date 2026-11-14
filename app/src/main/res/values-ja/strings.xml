@@ -132,7 +132,7 @@
     <string name="navigation_bar_matches_mini_player_color">タブバーをミニプレイヤーと同じ色にする</string>
     <string name="navigation_bar_matches_mini_player_color_subtitle">ミニプレイヤーと同じアルバムアートの色と文字色を使います。初期設定はオフです。</string>
     <string name="navigation_bar_player_background_color">下部タブをプレイヤー背景色に合わせる</string>
-    <string name="navigation_bar_player_background_color_subtitle">アプリテーマや他のアルバムアート色設定とは独立して、再生中の曲から生成したプレイヤー背景色を下部タブに使います。初期設定はオフです。</string>
+    <string name="navigation_bar_player_background_color_subtitle">アプリテーマや他のアルバムアート色設定とは独立して、プレイヤー画面と同じ多色メッシュ背景を下部タブに表示します。初期設定はオフです。</string>
     <string name="include_remote_source_media_in_library">リモート音源をライブラリに表示</string>
     <string name="include_remote_source_media_in_library_subtitle">WebDAV、Jellyfin、Navidrome、OpenSubsonicの曲を曲・アルバム・アーティスト・アルバムアーティストに含めます。初期設定はオフです。</string>
     <string name="no_album_metadata">これらの曲はどのアルバムに属するか示されていません。</string>
@@ -1152,6 +1152,8 @@
     <string name="frosted_player_details_subtitle">BitChordと同じぼかしたアートと色の背景で表示します</string>
     <string name="player_popups_artwork_color">プレーヤーのポップアップをアルバムアートの色に合わせる</string>
     <string name="player_popups_artwork_color_subtitle">詳細、スリープタイマー、速度とピッチ、キュー管理、プレイリストの各画面に再生中の曲の色を使います。初期設定はオンです。</string>
+    <string name="player_menus_player_background_color">メニューをプレイヤー背景色に合わせる</string>
+    <string name="player_menus_player_background_color_subtitle">曲・アルバム・アーティストの操作メニュー、キュー管理、速度調整、スリープタイマーなどに、現在のプレイヤー背景と同じ配色を使います。既存のアルバムアート色設定とは独立しています。初期設定はオフです。</string>
     <string name="hide_player_popup_handles">プレーヤーポップアップのハンドルと枠を削除</string>
     <string name="hide_player_popup_handles_subtitle">詳細、アーティスト選択、スリープタイマー、キュー管理、再生速度とピッチの各シートから、ハンドルと専用スペースを取り除きます。初期設定はオンです。</string>
     <string name="app_icon">アプリアイコン</string>
@@ -1231,7 +1233,7 @@
     <string name="mini_player_artwork_color">ミニプレイヤーをアートワークの色に合わせる</string>
     <string name="mini_player_artwork_color_subtitle">現在の曲のアートワーク色をミニプレイヤーに使います。初期設定はオフです</string>
     <string name="mini_player_player_background_color">ミニプレイヤーをプレイヤー背景色に合わせる</string>
-    <string name="mini_player_player_background_color_subtitle">アプリテーマや他のアルバムアート色設定とは独立して、再生中の曲から生成したプレイヤー背景色をミニプレイヤーに使います。初期設定はオフです。</string>
+    <string name="mini_player_player_background_color_subtitle">アプリテーマや他のアルバムアート色設定とは独立して、プレイヤー画面と同じ多色メッシュ背景をミニプレイヤーに表示します。初期設定はオフです。</string>
     <string name="mini_player_artwork_outline">アート色テーマでミニプレイヤーの枠線を表示</string>
     <string name="mini_player_artwork_outline_subtitle">アートワーク色を使うときの縁取りを表示します。初期設定はオフです</string>
     <string name="mini_player_previous_button">ミニプレイヤーに前の曲ボタンを表示</string>

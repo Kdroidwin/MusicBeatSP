@@ -57,6 +57,7 @@ import com.music.bitchord.data.model.Song
 import com.music.bitchord.data.model.artworkAt
 import com.music.bitchord.playback.SavedQueue
 import com.music.bitchord.ui.theme.ArtworkPalette
+import com.music.bitchord.ui.theme.LocalPlayerMenuPalette
 import com.music.bitchord.ui.components.ArtworkBackdrop
 import com.music.bitchord.ui.components.PlayerPopupSystemBars
 import com.music.bitchord.data.model.ROW_ART_PX
@@ -83,14 +84,18 @@ internal fun SavedQueuesDialog(
     onDismiss: () -> Unit,
 ) {
     val hidePlayerPopupHandles by AppSettings.hidePlayerPopupHandles.collectAsStateWithLifecycle()
+    val playerMenuPalette = LocalPlayerMenuPalette.current
+    val menuPalette = playerMenuPalette ?: artworkPalette
+    val menuArtworkUrl = if (playerMenuPalette != null) null else artworkUrl
+    val useMenuColor = useFrostedGlass || playerMenuPalette != null
     if (redesigned) {
         ModernSavedQueuesDialog(
             hideSaveCurrentQueueHeading = hideSaveCurrentQueueHeading,
             hideManageQueueTitle = hideManageQueueTitle,
             queues = queues,
-            artworkPalette = artworkPalette,
-            artworkUrl = artworkUrl,
-            useFrostedGlass = useFrostedGlass,
+            artworkPalette = menuPalette,
+            artworkUrl = menuArtworkUrl,
+            useFrostedGlass = useMenuColor,
             hidePlayerPopupHandles = hidePlayerPopupHandles,
             currentSongs = currentSongs,
             currentIndex = currentIndex,
@@ -105,9 +110,9 @@ internal fun SavedQueuesDialog(
         LegacySavedQueuesDialog(
             hideManageQueueTitle = hideManageQueueTitle,
             queues = queues,
-            artworkPalette = artworkPalette,
-            artworkUrl = artworkUrl,
-            useFrostedGlass = useFrostedGlass,
+            artworkPalette = menuPalette,
+            artworkUrl = menuArtworkUrl,
+            useFrostedGlass = useMenuColor,
             hidePlayerPopupHandles = hidePlayerPopupHandles,
             currentSongs = currentSongs,
             currentIndex = currentIndex,
