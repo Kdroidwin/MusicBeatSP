@@ -568,6 +568,25 @@ private fun miniPlayerSwipeDownDismissSearchEntry(): SettingsSearchEntry {
 }
 
 @Composable
+private fun playerBackdropColorSearchEntries(
+    miniPlayerEnabled: Boolean,
+    navigationBarEnabled: Boolean,
+): List<SettingsSearchEntry> = listOf(
+    SettingsSearchEntry(
+        stringResource(R.string.mini_player_player_background_color),
+        stringResource(R.string.mini_player_player_background_color_subtitle),
+        listOf("mini player", "player background", "color", "ミニプレイヤー", "再生画面", "プレイヤー背景", "色"),
+        miniPlayerEnabled,
+    ) { AppSettings.setMiniPlayerPlayerBackgroundColor(!miniPlayerEnabled) },
+    SettingsSearchEntry(
+        stringResource(R.string.navigation_bar_player_background_color),
+        stringResource(R.string.navigation_bar_player_background_color_subtitle),
+        listOf("navigation", "tab bar", "player background", "color", "下部タブ", "タブバー", "再生画面", "プレイヤー背景", "色"),
+        navigationBarEnabled,
+    ) { AppSettings.setNavigationBarPlayerBackgroundColor(!navigationBarEnabled) },
+)
+
+@Composable
 private fun SettingsSearchEntryRows(entries: List<SettingsSearchEntry>) {
     entries.forEachIndexed { index, entry ->
         if (index > 0) RowDivider()
@@ -1533,6 +1552,7 @@ fun SettingsScreen(
     val hideNavBarLabels by AppSettings.hideNavigationBarLabels.collectAsStateWithLifecycle()
     val hideRadioTopLabels by AppSettings.hideRadioTopLabels.collectAsStateWithLifecycle()
     val navigationBarMatchesMiniPlayerColor by AppSettings.navigationBarMatchesMiniPlayerColor.collectAsStateWithLifecycle()
+    val navigationBarPlayerBackgroundColor by AppSettings.navigationBarPlayerBackgroundColor.collectAsStateWithLifecycle()
     val forceWhiteNavigationBar by AppSettings.forceWhiteNavigationBar.collectAsStateWithLifecycle()
     val playerInkColors by AppSettings.playerInkColors.collectAsStateWithLifecycle()
     val includeRemoteSourceMediaInLibrary by AppSettings.includeRemoteSourceMediaInLibrary.collectAsStateWithLifecycle()
@@ -1733,6 +1753,7 @@ fun SettingsScreen(
     val customThemeImageUri by AppSettings.customThemeImageUri.collectAsStateWithLifecycle()
     val matchButtonAccentToArtwork by AppSettings.matchButtonAccentToArtwork.collectAsStateWithLifecycle()
     val miniPlayerArtworkColor by AppSettings.miniPlayerArtworkColor.collectAsStateWithLifecycle()
+    val miniPlayerPlayerBackgroundColor by AppSettings.miniPlayerPlayerBackgroundColor.collectAsStateWithLifecycle()
     val miniPlayerArtworkOutline by AppSettings.miniPlayerArtworkOutline.collectAsStateWithLifecycle()
     val miniPlayerPreviousButton by AppSettings.miniPlayerPreviousButton.collectAsStateWithLifecycle()
     val miniPlayerSwipeChangesTrack by AppSettings.miniPlayerSwipeChangesTrack.collectAsStateWithLifecycle()
@@ -2785,6 +2806,10 @@ fun SettingsScreen(
         )
     }
     val settingsSearchEntries = buildSettingsSearchEntries() +
+        playerBackdropColorSearchEntries(
+            miniPlayerEnabled = miniPlayerPlayerBackgroundColor,
+            navigationBarEnabled = navigationBarPlayerBackgroundColor,
+        ) +
         musicLibraryTopBarSettingsSearchEntries(
             pinned = pinMusicLibraryTopBar,
             hiddenUntilTop = keepMusicLibraryTopBarHiddenUntilTop,
@@ -5570,6 +5595,25 @@ fun SettingsScreen(
             )
             RowDivider()
             SettingsRow(
+                icon = Icons.Rounded.AutoAwesome,
+                title = stringResource(R.string.mini_player_player_background_color),
+                subtitle = stringResource(R.string.mini_player_player_background_color_subtitle),
+                trailing = {
+                    Switch(
+                        checked = miniPlayerPlayerBackgroundColor,
+                        onCheckedChange = AppSettings::setMiniPlayerPlayerBackgroundColor,
+                        colors = SwitchDefaults.colors(
+                            checkedTrackColor = MaterialTheme.colorScheme.primary,
+                            checkedBorderColor = MaterialTheme.colorScheme.primary,
+                        ),
+                    )
+                },
+                onClick = {
+                    AppSettings.setMiniPlayerPlayerBackgroundColor(!miniPlayerPlayerBackgroundColor)
+                },
+            )
+            RowDivider()
+            SettingsRow(
                 icon = Icons.Rounded.ViewStream,
                 title = stringResource(R.string.mini_player_artwork_outline),
                 subtitle = stringResource(R.string.mini_player_artwork_outline_subtitle),
@@ -6198,6 +6242,25 @@ fun SettingsScreen(
                     )
                 },
                 onClick = { AppSettings.setNavigationBarMatchesMiniPlayerColor(!navigationBarMatchesMiniPlayerColor) },
+            )
+            RowDivider()
+            SettingsRow(
+                icon = Icons.Rounded.AutoAwesome,
+                title = stringResource(R.string.navigation_bar_player_background_color),
+                subtitle = stringResource(R.string.navigation_bar_player_background_color_subtitle),
+                trailing = {
+                    Switch(
+                        checked = navigationBarPlayerBackgroundColor,
+                        onCheckedChange = AppSettings::setNavigationBarPlayerBackgroundColor,
+                        colors = SwitchDefaults.colors(
+                            checkedTrackColor = MaterialTheme.colorScheme.primary,
+                            checkedBorderColor = MaterialTheme.colorScheme.primary,
+                        ),
+                    )
+                },
+                onClick = {
+                    AppSettings.setNavigationBarPlayerBackgroundColor(!navigationBarPlayerBackgroundColor)
+                },
             )
             RowDivider()
             SettingsRow(

@@ -74,6 +74,7 @@ import com.music.bitchord.ui.components.floatingtabbar.FloatingTabBar
 import com.music.bitchord.ui.components.floatingtabbar.FloatingTabBarDefaults
 import com.music.bitchord.ui.components.floatingtabbar.FloatingTabBarScrollConnection
 import com.music.bitchord.ui.theme.rememberArtworkPalette
+import com.music.bitchord.ui.theme.rememberPlayerBackdropColorScheme
 import com.music.bitchord.ui.haptics.Haptic
 import com.music.bitchord.ui.haptics.rememberHaptics
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
@@ -127,6 +128,7 @@ fun GlassNavBar(
     val hideNavigationBarLabels by AppSettings.hideNavigationBarLabels.collectAsStateWithLifecycle()
     val matchMiniPlayerColor by AppSettings.navigationBarMatchesMiniPlayerColor.collectAsStateWithLifecycle()
     val useArtworkColor by AppSettings.miniPlayerArtworkColor.collectAsStateWithLifecycle()
+    val usePlayerBackgroundColor by AppSettings.navigationBarPlayerBackgroundColor.collectAsStateWithLifecycle()
     val showMiniArtworkOutline by AppSettings.miniPlayerArtworkOutline.collectAsStateWithLifecycle()
     val themeMode by AppSettings.themeMode.collectAsStateWithLifecycle()
     val artworkThemeActive = themeMode == ThemeMode.ARTWORK && song?.thumbnailUrl != null
@@ -139,22 +141,30 @@ fun GlassNavBar(
         imageUrl = song?.thumbnailUrl?.takeIf { useArtworkColor },
         artPx = ROW_ART_PX,
     )
+    val playerBackgroundColors = if (usePlayerBackgroundColor && song != null) {
+        rememberPlayerBackdropColorScheme(song.artworkAt(ROW_ART_PX))
+    } else {
+        null
+    }
     val contentColor = if (useGlass) glassContentColor() else MaterialTheme.colorScheme.onSurface
     val miniContentColor = if (useArtworkColor) miniArtworkPalette.onBackground else contentColor
     val miniSecondaryColor = if (useArtworkColor) miniArtworkPalette.onBackgroundVariant else null
     val selectedColor = when {
+        playerBackgroundColors != null -> playerBackgroundColors.primary
         matchMiniPlayerColor && useArtworkColor -> miniArtworkPalette.onBackground
         artworkThemeActive -> navigationArtworkPalette.accent
         useGlass -> contentColor
         else -> MaterialTheme.colorScheme.primary
     }
     val unselectedColor = when {
+        playerBackgroundColors != null -> playerBackgroundColors.onSurfaceVariant
         matchMiniPlayerColor && useArtworkColor -> miniArtworkPalette.onBackgroundVariant
         artworkThemeActive -> navigationArtworkPalette.onBackgroundVariant
         useGlass -> contentColor.copy(alpha = 0.65f)
         else -> MaterialTheme.colorScheme.onSurfaceVariant
     }
     val indicatorColor = when {
+        playerBackgroundColors != null -> playerBackgroundColors.primary.copy(alpha = 0.18f)
         matchMiniPlayerColor && useArtworkColor -> miniArtworkPalette.accent.copy(alpha = 0.18f)
         artworkThemeActive -> navigationArtworkPalette.accent.copy(alpha = 0.18f)
         useGlass -> glassIndicatorColor()
@@ -211,9 +221,52 @@ fun GlassNavBar(
             }
         }
     }
+    val playerBackgroundSurfaceModifier: @Composable () -> Modifier = if (playerBackgroundColors == null) {
+        surfaceModifier
+    } else {
+        {
+            when {
+                useGlass -> Modifier
+                    .liquidGlass(shape = pillShape, drawEdge = showMiniArtworkOutline)
+                    .background(playerBackgroundColors.background.copy(alpha = 0.24f), pillShape)
+                    .then(
+                        if (showMiniArtworkOutline) Modifier.border(
+                            GLASS_EDGE_WIDTH,
+                            playerBackgroundColors.outline.copy(alpha = 0.55f),
+                            pillShape,
+                        ) else Modifier,
+                    )
+                reduceDynamicBlur || hazeState == null -> Modifier
+                    .background(playerBackgroundColors.background.copy(alpha = 0.90f), pillShape)
+                    .then(
+                        if (showMiniArtworkOutline) Modifier.border(
+                            GLASS_EDGE_WIDTH,
+                            playerBackgroundColors.outline.copy(alpha = 0.55f),
+                            pillShape,
+                        ) else Modifier,
+                    )
+                else -> Modifier
+                    .optimizedHazeEffect(
+                        state = hazeState,
+                        style = HazeMaterials.thin(playerBackgroundColors.background),
+                    )
+                    .then(
+                        if (showMiniArtworkOutline) Modifier.border(
+                            GLASS_EDGE_WIDTH,
+                            playerBackgroundColors.outline.copy(alpha = 0.55f),
+                            pillShape,
+                        ) else Modifier,
+                    )
+            }
+        }
+    }
     // Reuse the mini-player's exact surface/material branch so the tab bar
     // follows it in artwork tint, blur, and liquid-glass modes alike.
-    val navigationSurfaceModifier = if (matchMiniPlayerColor) miniSurfaceModifier else surfaceModifier
+    val navigationSurfaceModifier = when {
+        playerBackgroundColors != null -> playerBackgroundSurfaceModifier
+        matchMiniPlayerColor -> miniSurfaceModifier
+        else -> surfaceModifier
+    }
 
     FloatingTabBar(
         selectedTabKey = selectedIndex,

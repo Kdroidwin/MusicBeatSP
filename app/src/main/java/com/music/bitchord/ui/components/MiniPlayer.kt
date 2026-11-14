@@ -58,6 +58,7 @@ import com.music.bitchord.ui.components.thumbnailBorder
 import com.music.bitchord.ui.player.LocalPlayerDock
 import com.music.bitchord.ui.player.playerDockArt
 import com.music.bitchord.ui.theme.rememberArtworkPalette
+import com.music.bitchord.ui.theme.rememberPlayerBackdropColorScheme
 import com.music.bitchord.ui.haptics.Haptic
 import com.music.bitchord.ui.haptics.rememberHaptics
 import dev.chrisbanes.haze.HazeState
@@ -156,6 +157,7 @@ fun MiniPlayer(
     val artworkModel = if (useRemoteArtworkFallback) remoteArtworkFallback else localAwareArtworkModel
     val reduceDynamicBlur by AppSettings.reduceDynamicBlur.collectAsStateWithLifecycle()
     val useArtworkColor by AppSettings.miniPlayerArtworkColor.collectAsStateWithLifecycle()
+    val usePlayerBackgroundColor by AppSettings.miniPlayerPlayerBackgroundColor.collectAsStateWithLifecycle()
     val showArtworkOutline by AppSettings.miniPlayerArtworkOutline.collectAsStateWithLifecycle()
     val hideUnknownArtist by AppSettings.hideUnknownMiniPlayerArtist.collectAsStateWithLifecycle()
     val showPreviousButton by AppSettings.miniPlayerPreviousButton.collectAsStateWithLifecycle()
@@ -166,10 +168,28 @@ fun MiniPlayer(
         imageUrl = song.thumbnailUrl.takeIf { useArtworkColor },
         artPx = ROW_ART_PX,
     )
+    val playerBackgroundColors = if (usePlayerBackgroundColor) {
+        rememberPlayerBackdropColorScheme(song.artworkAt(ROW_ART_PX))
+    } else {
+        null
+    }
+    val useArtworkSurface = useArtworkColor || playerBackgroundColors != null
     val useGlass = LocalLiquidGlassEnabled.current && isGlassSupported()
-    val surfaceColor = if (useArtworkColor) artworkPalette.background else MaterialTheme.colorScheme.surface
-    val primaryContentColor = if (useArtworkColor) artworkPalette.onBackground else MaterialTheme.colorScheme.onBackground
-    val secondaryContentColor = if (useArtworkColor) artworkPalette.onBackgroundVariant else MaterialTheme.colorScheme.onSurfaceVariant
+    val surfaceColor = when {
+        playerBackgroundColors != null -> playerBackgroundColors.background
+        useArtworkColor -> artworkPalette.background
+        else -> MaterialTheme.colorScheme.surface
+    }
+    val primaryContentColor = when {
+        playerBackgroundColors != null -> playerBackgroundColors.onBackground
+        useArtworkColor -> artworkPalette.onBackground
+        else -> MaterialTheme.colorScheme.onBackground
+    }
+    val secondaryContentColor = when {
+        playerBackgroundColors != null -> playerBackgroundColors.onSurfaceVariant
+        useArtworkColor -> artworkPalette.onBackgroundVariant
+        else -> MaterialTheme.colorScheme.onSurfaceVariant
+    }
     val normalizedArtist = remember(song.artist) { song.artist.trim().lowercase(Locale.ROOT) }
     val showArtist = !(hideUnknownArtist && normalizedArtist in HIDDEN_UNKNOWN_ARTISTS)
     val haptics = rememberHaptics()
@@ -261,10 +281,10 @@ fun MiniPlayer(
                     Modifier
                         .liquidGlass(
                             shape = shape,
-                            drawEdge = !useArtworkColor || showArtworkOutline,
+                            drawEdge = !useArtworkSurface || showArtworkOutline,
                         )
                         .then(
-                            if (useArtworkColor) {
+                            if (useArtworkSurface) {
                                 Modifier.background(surfaceColor.copy(alpha = 0.24f), shape)
                             } else {
                                 Modifier
@@ -280,10 +300,12 @@ fun MiniPlayer(
                 },
             )
             .then(
-                if (!useArtworkColor || showArtworkOutline) {
+                if (!useArtworkSurface || showArtworkOutline) {
                     Modifier.border(
                         0.5.dp,
-                        if (useArtworkColor) artworkPalette.divider.copy(alpha = 0.55f) else Color.White.copy(alpha = 0.10f),
+                        if (playerBackgroundColors != null) playerBackgroundColors.outline.copy(alpha = 0.55f)
+                        else if (useArtworkColor) artworkPalette.divider.copy(alpha = 0.55f)
+                        else Color.White.copy(alpha = 0.10f),
                         shape,
                     )
                 } else {

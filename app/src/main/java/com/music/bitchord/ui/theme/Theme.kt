@@ -246,6 +246,19 @@ fun BitChordTheme(
     }
 }
 
+/**
+ * The same artwork-derived Material colors used by Player Colors / Player background,
+ * available to optional surfaces without changing the app's selected theme.
+ */
+@Composable
+fun rememberPlayerBackdropColorScheme(artworkUrl: String?): ColorScheme {
+    val mesh = rememberArtworkColors(artworkUrl)
+    val base = MaterialTheme.colorScheme
+    return remember(base, mesh) {
+        playerScreenColorScheme(base, mesh.colors)
+    }
+}
+
 /** Material surfaces tinted from the four swatches used by the player backdrop. */
 private fun playerScreenColorScheme(base: ColorScheme, swatches: List<Color>): ColorScheme {
     val colors = (swatches + DarkColors.primary).take(4)

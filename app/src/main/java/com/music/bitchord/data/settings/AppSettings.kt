@@ -671,8 +671,12 @@ object AppSettings {
     val matchButtonAccentToArtwork = MutableStateFlow(false)
     /** Tints the mini-player surface from the current song sleeve. */
     val miniPlayerArtworkColor = MutableStateFlow(false)
+    /** Uses the player screen's mesh-derived background color for the mini-player, independent of the app theme. */
+    val miniPlayerPlayerBackgroundColor = MutableStateFlow(false)
     /** Lets the main navigation surface use the mini-player's artwork tint. */
     val navigationBarMatchesMiniPlayerColor = MutableStateFlow(false)
+    /** Uses the player screen's mesh-derived background color for the bottom navigation, independent of the app theme. */
+    val navigationBarPlayerBackgroundColor = MutableStateFlow(false)
     /** Forces Android's navigation controls / gesture handle to use light ink. */
     val forceWhiteNavigationBar = MutableStateFlow(false)
     /** Artwork colour or a validated #RRGGBB override; each group defaults to white. */
@@ -1681,7 +1685,9 @@ object AppSettings {
         customThemeImageUri.value = prefs.getString(KEY_CUSTOM_THEME_IMAGE_URI, null)
         matchButtonAccentToArtwork.value = prefs.getBoolean(KEY_MATCH_BUTTON_ACCENT_TO_ARTWORK, false)
         miniPlayerArtworkColor.value = prefs.getBoolean(KEY_MINI_PLAYER_ARTWORK_COLOR, false)
+        miniPlayerPlayerBackgroundColor.value = prefs.getBoolean(KEY_MINI_PLAYER_PLAYER_BACKGROUND_COLOR, false)
         navigationBarMatchesMiniPlayerColor.value = prefs.getBoolean(KEY_NAVIGATION_BAR_MATCHES_MINI_PLAYER_COLOR, false)
+        navigationBarPlayerBackgroundColor.value = prefs.getBoolean(KEY_NAVIGATION_BAR_PLAYER_BACKGROUND_COLOR, false)
         forceWhiteNavigationBar.value = runCatching {
             prefs.getBoolean(KEY_FORCE_WHITE_NAVIGATION_BAR, false)
         }.getOrDefault(false)
@@ -2489,9 +2495,19 @@ object AppSettings {
         prefs.edit().putBoolean(KEY_MINI_PLAYER_ARTWORK_COLOR, value).apply()
     }
 
+    fun setMiniPlayerPlayerBackgroundColor(value: Boolean) {
+        miniPlayerPlayerBackgroundColor.value = value
+        prefs.edit().putBoolean(KEY_MINI_PLAYER_PLAYER_BACKGROUND_COLOR, value).apply()
+    }
+
     fun setNavigationBarMatchesMiniPlayerColor(value: Boolean) {
         navigationBarMatchesMiniPlayerColor.value = value
         prefs.edit().putBoolean(KEY_NAVIGATION_BAR_MATCHES_MINI_PLAYER_COLOR, value).apply()
+    }
+
+    fun setNavigationBarPlayerBackgroundColor(value: Boolean) {
+        navigationBarPlayerBackgroundColor.value = value
+        prefs.edit().putBoolean(KEY_NAVIGATION_BAR_PLAYER_BACKGROUND_COLOR, value).apply()
     }
 
     fun setForceWhiteNavigationBar(value: Boolean) {
@@ -5085,7 +5101,9 @@ object AppSettings {
     private const val KEY_CUSTOM_THEME_IMAGE_URI = "custom_theme_image_uri"
     private const val KEY_MATCH_BUTTON_ACCENT_TO_ARTWORK = "match_button_accent_to_artwork"
     private const val KEY_MINI_PLAYER_ARTWORK_COLOR = "mini_player_artwork_color"
+    private const val KEY_MINI_PLAYER_PLAYER_BACKGROUND_COLOR = "mini_player_player_background_color"
     private const val KEY_NAVIGATION_BAR_MATCHES_MINI_PLAYER_COLOR = "navigation_bar_matches_mini_player_color"
+    private const val KEY_NAVIGATION_BAR_PLAYER_BACKGROUND_COLOR = "navigation_bar_player_background_color"
     private const val KEY_FORCE_WHITE_NAVIGATION_BAR = "force_white_navigation_bar"
     private const val KEY_MINI_PLAYER_ARTWORK_OUTLINE = "mini_player_artwork_outline"
     private const val KEY_MINI_PLAYER_PREVIOUS_BUTTON = "mini_player_previous_button"

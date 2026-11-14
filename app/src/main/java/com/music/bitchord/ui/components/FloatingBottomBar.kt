@@ -61,7 +61,9 @@ import androidx.compose.ui.semantics.semantics
 import com.music.bitchord.data.settings.AppSettings
 import com.music.bitchord.data.model.ROW_ART_PX
 import com.music.bitchord.data.model.Song
+import com.music.bitchord.data.model.artworkAt
 import com.music.bitchord.ui.theme.rememberArtworkPalette
+import com.music.bitchord.ui.theme.rememberPlayerBackdropColorScheme
 import com.music.bitchord.ui.haptics.Haptic
 import com.music.bitchord.ui.haptics.rememberHaptics
 import dev.chrisbanes.haze.HazeState
@@ -139,7 +141,15 @@ fun PopupNavigationBar(
     val reduceDynamicBlur by AppSettings.reduceDynamicBlur.collectAsStateWithLifecycle()
     val matchMiniPlayerColor by AppSettings.navigationBarMatchesMiniPlayerColor.collectAsStateWithLifecycle()
     val useMiniPlayerArtworkColor by AppSettings.miniPlayerArtworkColor.collectAsStateWithLifecycle()
+    val usePlayerBackgroundColor by AppSettings.navigationBarPlayerBackgroundColor.collectAsStateWithLifecycle()
     val matchArtwork = matchMiniPlayerColor && useMiniPlayerArtworkColor
+    val playerBackgroundColors = if (usePlayerBackgroundColor && song != null) {
+        rememberPlayerBackdropColorScheme(song.artworkAt(ROW_ART_PX))
+    } else {
+        null
+    }
+    val useArtworkTint = matchArtwork || playerBackgroundColors != null
+    val matchColorSurface = matchMiniPlayerColor || playerBackgroundColors != null
     val showArtworkOutline by AppSettings.miniPlayerArtworkOutline.collectAsStateWithLifecycle()
     val artworkPalette = rememberArtworkPalette(
         imageUrl = song?.thumbnailUrl?.takeIf { matchArtwork },
@@ -150,10 +160,26 @@ fun PopupNavigationBar(
     val selectedTab = tabs[currentIndex]
     val popupDescription = stringResource(R.string.main_navigation_popup)
     val shape = RoundedCornerShape(percent = 50)
-    val container = if (matchArtwork) artworkPalette.background else MaterialTheme.colorScheme.surface
-    val contentColor = if (matchArtwork) artworkPalette.onBackground else MaterialTheme.colorScheme.onSurface
-    val secondaryContentColor = if (matchArtwork) artworkPalette.onBackgroundVariant else MaterialTheme.colorScheme.onSurfaceVariant
-    val selectedTint = if (matchArtwork) artworkPalette.onBackground else MaterialTheme.colorScheme.primary
+    val container = when {
+        playerBackgroundColors != null -> playerBackgroundColors.background
+        matchArtwork -> artworkPalette.background
+        else -> MaterialTheme.colorScheme.surface
+    }
+    val contentColor = when {
+        playerBackgroundColors != null -> playerBackgroundColors.onBackground
+        matchArtwork -> artworkPalette.onBackground
+        else -> MaterialTheme.colorScheme.onSurface
+    }
+    val secondaryContentColor = when {
+        playerBackgroundColors != null -> playerBackgroundColors.onSurfaceVariant
+        matchArtwork -> artworkPalette.onBackgroundVariant
+        else -> MaterialTheme.colorScheme.onSurfaceVariant
+    }
+    val selectedTint = when {
+        playerBackgroundColors != null -> playerBackgroundColors.primary
+        matchArtwork -> artworkPalette.onBackground
+        else -> MaterialTheme.colorScheme.primary
+    }
 
     Box(
         modifier = modifier
@@ -175,11 +201,11 @@ fun PopupNavigationBar(
                         useGlass -> Modifier
                             .liquidGlass(shape = shape)
                             .then(
-                                if (matchArtwork) Modifier.background(container.copy(alpha = 0.24f), shape)
+                                if (useArtworkTint) Modifier.background(container.copy(alpha = 0.24f), shape)
                                 else Modifier,
                             )
-                        matchMiniPlayerColor && reduceDynamicBlur -> Modifier.background(container)
-                        matchMiniPlayerColor -> Modifier.optimizedHazeEffect(
+                        matchColorSurface && reduceDynamicBlur -> Modifier.background(container)
+                        matchColorSurface -> Modifier.optimizedHazeEffect(
                             state = hazeState,
                             style = HazeMaterials.thin(container),
                         )
@@ -191,10 +217,12 @@ fun PopupNavigationBar(
                     },
                 )
                 .then(
-                    if (matchMiniPlayerColor && matchArtwork && !showArtworkOutline) Modifier
+                    if (matchColorSurface && useArtworkTint && !showArtworkOutline) Modifier
                     else Modifier.border(
                         GLASS_EDGE_WIDTH,
-                        if (matchArtwork) artworkPalette.divider.copy(alpha = 0.55f) else GLASS_EDGE_COLOR,
+                        if (playerBackgroundColors != null) playerBackgroundColors.outline.copy(alpha = 0.55f)
+                        else if (matchArtwork) artworkPalette.divider.copy(alpha = 0.55f)
+                        else GLASS_EDGE_COLOR,
                         shape,
                     ),
                 )
@@ -235,7 +263,7 @@ fun PopupNavigationBar(
         ModalBottomSheet(
             onDismissRequest = { expanded = false },
             sheetState = rememberModalBottomSheetState(skipPartiallyExpanded = true),
-            containerColor = container.copy(alpha = if (matchMiniPlayerColor) 0.96f else 1f),
+            containerColor = container.copy(alpha = if (matchColorSurface) 0.96f else 1f),
         ) {
             Column(
                 modifier = Modifier
@@ -334,13 +362,25 @@ fun FloatingBottomBar(
     val reduceDynamicBlur by AppSettings.reduceDynamicBlur.collectAsStateWithLifecycle()
     val matchMiniPlayerColor by AppSettings.navigationBarMatchesMiniPlayerColor.collectAsStateWithLifecycle()
     val useMiniPlayerArtworkColor by AppSettings.miniPlayerArtworkColor.collectAsStateWithLifecycle()
+    val usePlayerBackgroundColor by AppSettings.navigationBarPlayerBackgroundColor.collectAsStateWithLifecycle()
     val matchArtwork = matchMiniPlayerColor && useMiniPlayerArtworkColor
+    val playerBackgroundColors = if (usePlayerBackgroundColor && song != null) {
+        rememberPlayerBackdropColorScheme(song.artworkAt(ROW_ART_PX))
+    } else {
+        null
+    }
+    val useArtworkTint = matchArtwork || playerBackgroundColors != null
+    val matchColorSurface = matchMiniPlayerColor || playerBackgroundColors != null
     val showArtworkOutline by AppSettings.miniPlayerArtworkOutline.collectAsStateWithLifecycle()
     val artworkPalette = rememberArtworkPalette(
         imageUrl = song?.thumbnailUrl?.takeIf { matchArtwork },
         artPx = ROW_ART_PX,
     )
-    val container = if (matchArtwork) artworkPalette.background else MaterialTheme.colorScheme.surface
+    val container = when {
+        playerBackgroundColors != null -> playerBackgroundColors.background
+        matchArtwork -> artworkPalette.background
+        else -> MaterialTheme.colorScheme.surface
+    }
     val useGlass = LocalLiquidGlassEnabled.current && isGlassSupported()
     val reduceAnimation by AppSettings.reduceAnimation.collectAsStateWithLifecycle()
     val hideNavigationBarLabels by AppSettings.hideNavigationBarLabels.collectAsStateWithLifecycle()
@@ -405,12 +445,12 @@ fun FloatingBottomBar(
                     Modifier
                         .liquidGlass(shape = pillShape)
                         .then(
-                            if (matchArtwork) Modifier.background(container.copy(alpha = 0.24f), pillShape)
+                            if (useArtworkTint) Modifier.background(container.copy(alpha = 0.24f), pillShape)
                             else Modifier,
                         )
-                } else if (matchMiniPlayerColor && reduceDynamicBlur) {
+                } else if (matchColorSurface && reduceDynamicBlur) {
                     Modifier.background(container)
-                } else if (matchMiniPlayerColor) {
+                } else if (matchColorSurface) {
                     Modifier.optimizedHazeEffect(
                         state = hazeState,
                         style = HazeMaterials.thin(container),
@@ -425,10 +465,12 @@ fun FloatingBottomBar(
                 },
             )
             .then(
-                if (matchMiniPlayerColor && matchArtwork && !showArtworkOutline) Modifier
+                if (matchColorSurface && useArtworkTint && !showArtworkOutline) Modifier
                 else Modifier.border(
                     GLASS_EDGE_WIDTH,
-                    if (matchArtwork) artworkPalette.divider.copy(alpha = 0.55f) else GLASS_EDGE_COLOR,
+                    if (playerBackgroundColors != null) playerBackgroundColors.outline.copy(alpha = 0.55f)
+                    else if (matchArtwork) artworkPalette.divider.copy(alpha = 0.55f)
+                    else GLASS_EDGE_COLOR,
                     pillShape,
                 ),
             )
@@ -453,6 +495,7 @@ fun FloatingBottomBar(
                     .background(
                         when {
                             useGlass -> glassIndicatorColor()
+                            playerBackgroundColors != null -> playerBackgroundColors.primary.copy(alpha = 0.14f)
                             matchArtwork -> artworkPalette.accent.copy(alpha = 0.14f)
                             else -> MaterialTheme.colorScheme.primary.copy(alpha = 0.14f)
                         },
@@ -516,11 +559,13 @@ fun FloatingBottomBar(
             // Echo's floating nav bar uses for its own liquid glass.
             val glassTint = glassContentColor()
             val adaptiveTint = when {
+                playerBackgroundColors != null -> playerBackgroundColors.primary
                 matchArtwork -> artworkPalette.onBackground
                 useGlass -> glassTint
                 else -> null
             }
             val adaptiveUnselectedTint = when {
+                playerBackgroundColors != null -> playerBackgroundColors.onSurfaceVariant
                 matchArtwork -> artworkPalette.onBackgroundVariant
                 useGlass -> glassTint.copy(alpha = 0.65f)
                 else -> null

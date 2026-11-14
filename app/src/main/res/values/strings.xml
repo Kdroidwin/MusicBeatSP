@@ -464,6 +464,8 @@
     <string name="classic_nav_bar_subtitle">Use separate stacked mini player and bottom bar instead of collapsible floating bar</string>
     <string name="navigation_bar_matches_mini_player_color">Match navigation bar to mini player color</string>
     <string name="navigation_bar_matches_mini_player_color_subtitle">Use the same artwork tint and content colors as the mini player. Off by default.</string>
+    <string name="navigation_bar_player_background_color">Match bottom tabs to player background</string>
+    <string name="navigation_bar_player_background_color_subtitle">Use the current player’s artwork-derived background color for the bottom tabs, independently of the app theme and other artwork color settings. Off by default.</string>
     <string name="main_navigation_popup">Show navigation tabs in a popup menu</string>
     <string name="main_navigation_popup_subtitle">Replace the bottom tab bar with one button that opens the available screens. Off by default.</string>
     <string name="hide_nav_bar_labels">Hide navigation bar labels</string>
@@ -1344,6 +1346,8 @@
     <string name="match_button_accent_to_artwork_subtitle">Use the current song’s artwork color for buttons and selected controls without changing the app background</string>
     <string name="mini_player_artwork_color">Tint mini player with album art</string>
     <string name="mini_player_artwork_color_subtitle">Use the current song’s artwork colors for the mini player. Off by default.</string>
+    <string name="mini_player_player_background_color">Match mini player to player background</string>
+    <string name="mini_player_player_background_color_subtitle">Use the current player’s artwork-derived background color for the mini player, independently of the app theme and other artwork color settings. Off by default.</string>
     <string name="mini_player_artwork_outline">Show mini player outline with artwork colors</string>
     <string name="mini_player_artwork_outline_subtitle">Show the mini-player edge when artwork colors are enabled. Off by default.</string>
     <string name="mini_player_previous_button">Show previous-track button in mini player</string>

@@ -131,6 +131,8 @@
     <string name="classic_nav_bar_subtitle">折りたたみ式バーの代わりにミニプレイヤーと下部バーを分けて表示します</string>
     <string name="navigation_bar_matches_mini_player_color">タブバーをミニプレイヤーと同じ色にする</string>
     <string name="navigation_bar_matches_mini_player_color_subtitle">ミニプレイヤーと同じアルバムアートの色と文字色を使います。初期設定はオフです。</string>
+    <string name="navigation_bar_player_background_color">下部タブをプレイヤー背景色に合わせる</string>
+    <string name="navigation_bar_player_background_color_subtitle">アプリテーマや他のアルバムアート色設定とは独立して、再生中の曲から生成したプレイヤー背景色を下部タブに使います。初期設定はオフです。</string>
     <string name="include_remote_source_media_in_library">リモート音源をライブラリに表示</string>
     <string name="include_remote_source_media_in_library_subtitle">WebDAV、Jellyfin、Navidrome、OpenSubsonicの曲を曲・アルバム・アーティスト・アルバムアーティストに含めます。初期設定はオフです。</string>
     <string name="no_album_metadata">これらの曲はどのアルバムに属するか示されていません。</string>
@@ -1228,6 +1230,8 @@
     <string name="match_button_accent_to_artwork_subtitle">アプリの背景色は変えず、現在の曲のアートワーク色をボタンや選択状態に使います</string>
     <string name="mini_player_artwork_color">ミニプレイヤーをアートワークの色に合わせる</string>
     <string name="mini_player_artwork_color_subtitle">現在の曲のアートワーク色をミニプレイヤーに使います。初期設定はオフです</string>
+    <string name="mini_player_player_background_color">ミニプレイヤーをプレイヤー背景色に合わせる</string>
+    <string name="mini_player_player_background_color_subtitle">アプリテーマや他のアルバムアート色設定とは独立して、再生中の曲から生成したプレイヤー背景色をミニプレイヤーに使います。初期設定はオフです。</string>
     <string name="mini_player_artwork_outline">アート色テーマでミニプレイヤーの枠線を表示</string>
     <string name="mini_player_artwork_outline_subtitle">アートワーク色を使うときの縁取りを表示します。初期設定はオフです</string>
     <string name="mini_player_previous_button">ミニプレイヤーに前の曲ボタンを表示</string>
