@@ -8,6 +8,7 @@ import android.view.WindowInsetsAnimationControlListener
 import android.view.WindowInsetsAnimationController
 import androidx.compose.foundation.isSystemInDarkTheme
 import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.ColorScheme
 import androidx.compose.material3.darkColorScheme
 import androidx.compose.material3.lightColorScheme
 import androidx.compose.material3.Typography
@@ -21,6 +22,8 @@ import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.lerp
 import androidx.compose.ui.graphics.luminance
+import androidx.compose.ui.graphics.toArgb
+import androidx.core.graphics.ColorUtils
 import androidx.compose.ui.platform.LocalView
 import androidx.core.view.WindowCompat
 import androidx.core.view.WindowInsetsCompat
@@ -32,6 +35,7 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.sp
 import com.music.bitchord.R
 import com.music.bitchord.data.settings.AppSettings
+import com.music.bitchord.ui.player.rememberArtworkColors
 
 // Apple Music's signature red. No longer the primary accent, but kept for the
 // spots (Replay's rank badge) that want that specific red regardless of theme.
@@ -131,6 +135,7 @@ fun BitChordTheme(
     amoledBlack: Boolean = false,
     artworkUrl: String? = null,
     matchArtwork: Boolean = false,
+    playerScreenColors: Boolean = false,
     matchButtonAccentToArtwork: Boolean = false,
     content: @Composable () -> Unit,
 ) {
@@ -152,6 +157,14 @@ fun BitChordTheme(
         // Resolve the playing sleeve through the existing palette/cache path.
         val base = MaterialTheme.colorScheme
         val artwork = rememberArtworkPalette(artworkUrl, dark = darkTheme)
+        // The player screen paints a four-colour mesh instead of Album Art
+        // theme's single dominant-colour surface. Reuse that mesh palette as
+        // its own app theme, and keep the stock dark scheme until the artwork
+        // is actually decoded so this mode never flashes unrelated fallback
+        // colours on the first frame.
+        val playerMesh = if (playerScreenColors && artworkUrl != null) {
+            rememberArtworkColors(artworkUrl)
+        } else null
         val colors = if (matchArtwork && artworkUrl != null) {
             // Artwork mode is a full app theme. Tinting only the accents made
             // it look like a minor player toggle while the library, sheets,
@@ -188,6 +201,8 @@ fun BitChordTheme(
                 surfaceContainerHigh = lerp(artwork.background, artwork.elevated, 0.62f),
                 surfaceContainerHighest = artwork.elevated,
             )
+        } else if (playerScreenColors && playerMesh?.isResolved == true) {
+            playerScreenColorScheme(base, playerMesh.colors)
         } else if (matchButtonAccentToArtwork && artworkUrl != null) {
             // A separate, smaller option for people who want artwork-coloured
             // buttons and selection indicators while keeping the chosen theme's
@@ -213,6 +228,56 @@ fun BitChordTheme(
         } else base
         MaterialTheme(colorScheme = colors, typography = typography, content = content)
     }
+}
+
+/** Material surfaces tinted from the four swatches used by the player backdrop. */
+private fun playerScreenColorScheme(base: ColorScheme, swatches: List<Color>): ColorScheme {
+    val colors = (swatches + DarkColors.primary).take(4)
+    val background = colors[0].playerTone(0.10f)
+    val surface = colors[1].playerTone(0.155f)
+    val surfaceVariant = colors[2].playerTone(0.205f)
+    val elevated = colors[3].playerTone(0.255f)
+    val primary = colors[0].playerTone(0.70f)
+    val secondary = colors[1].playerTone(0.67f)
+    val tertiary = colors[2].playerTone(0.65f)
+    val outline = colors[3].playerTone(0.40f)
+    return base.copy(
+        primary = primary,
+        onPrimary = if (primary.luminance() > 0.40f) Color.Black else Color.White,
+        primaryContainer = surfaceVariant,
+        onPrimaryContainer = Color.White,
+        secondary = secondary,
+        onSecondary = if (secondary.luminance() > 0.40f) Color.Black else Color.White,
+        secondaryContainer = surfaceVariant,
+        onSecondaryContainer = Color.White,
+        tertiary = tertiary,
+        onTertiary = if (tertiary.luminance() > 0.40f) Color.Black else Color.White,
+        tertiaryContainer = elevated,
+        onTertiaryContainer = Color.White,
+        background = background,
+        onBackground = Color.White,
+        surface = surface,
+        onSurface = Color.White,
+        surfaceVariant = surfaceVariant,
+        onSurfaceVariant = Color.White.copy(alpha = 0.78f),
+        surfaceTint = primary,
+        outline = outline,
+        outlineVariant = outline.copy(alpha = 0.72f),
+        surfaceDim = background,
+        surfaceBright = elevated,
+        surfaceContainerLowest = background,
+        surfaceContainerLow = lerp(background, surface, 0.30f),
+        surfaceContainer = lerp(background, surfaceVariant, 0.42f),
+        surfaceContainerHigh = lerp(surface, elevated, 0.55f),
+        surfaceContainerHighest = elevated,
+    )
+}
+
+private fun Color.playerTone(lightness: Float): Color {
+    val hsl = FloatArray(3).also { ColorUtils.colorToHSL(toArgb(), it) }
+    hsl[1] = (hsl[1] * 1.18f).coerceAtMost(0.82f)
+    hsl[2] = lightness
+    return Color(ColorUtils.HSLToColor(hsl))
 }
 
 /**

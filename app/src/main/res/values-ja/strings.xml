@@ -1222,6 +1222,7 @@
     <string name="theme_amoled">AMOLEDブラック</string>
     <string name="theme_match_artwork">アートカラー</string>
     <string name="theme_match_artwork_subtitle">再生中の曲のアートカラーをアプリのアクセントに使います</string>
+    <string name="theme_player_screen_colors">プレイヤー画面カラー</string>
     <string name="match_button_accent_to_artwork">ボタンのアクセント色をアートワークに合わせる</string>
     <string name="match_button_accent_to_artwork_subtitle">アプリの背景色は変えず、現在の曲のアートワーク色をボタンや選択状態に使います</string>
     <string name="mini_player_artwork_color">ミニプレイヤーをアートワークの色に合わせる</string>

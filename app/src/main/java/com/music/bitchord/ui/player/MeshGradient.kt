@@ -56,7 +56,7 @@ private val FallbackColors = listOf(
 
 /** The four mesh colours, wrapped so the backdrop can skip recomposition. */
 @Immutable
-data class MeshPalette(val colors: List<Color>)
+data class MeshPalette(val colors: List<Color>, val isResolved: Boolean = true)
 
 /**
  * The Apple Music "Now Playing" backdrop: four luminous colour blobs sampled
@@ -220,7 +220,9 @@ fun MeshGradientBackground(
 @Composable
 fun rememberArtworkColors(imageUrl: String?, canvasFrame: Bitmap? = null): MeshPalette {
     val context = LocalContext.current
-    var palette by remember(imageUrl) { mutableStateOf(MeshPalette(FallbackColors)) }
+    var palette by remember(imageUrl) {
+        mutableStateOf(MeshPalette(FallbackColors, isResolved = imageUrl == null))
+    }
 
     LaunchedEffect(imageUrl) {
         if (imageUrl == null) return@LaunchedEffect
@@ -229,15 +231,19 @@ fun rememberArtworkColors(imageUrl: String?, canvasFrame: Bitmap? = null): MeshP
             .size(128) // palette quality is fine at thumbnail size, and it's fast
             .allowHardware(false) // Palette needs pixel access
             .build()
-        val result = SingletonImageLoader.get(context).execute(request)
-        val bitmap = (result as? SuccessResult)?.image?.toBitmap() ?: return@LaunchedEffect
-        palette = MeshPalette(paletteOf(bitmap))
+        val bitmap = runCatching {
+            val result = SingletonImageLoader.get(context).execute(request)
+            (result as? SuccessResult)?.image?.toBitmap()
+        }.getOrNull()
+        // Keep this theme in sync with the player backdrop's fallback swatches
+        // when an artwork URI cannot be decoded (for example, revoked access).
+        palette = MeshPalette(bitmap?.let(::paletteOf) ?: FallbackColors, isResolved = true)
     }
 
     LaunchedEffect(canvasFrame) {
         val frame = canvasFrame ?: return@LaunchedEffect
         val colors = withContext(Dispatchers.Default) { paletteOf(frame) }
-        palette = MeshPalette(colors)
+        palette = MeshPalette(colors, isResolved = true)
     }
     return palette
 }

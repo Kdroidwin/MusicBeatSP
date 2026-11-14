@@ -400,7 +400,8 @@ class MainActivity : AppCompatActivity() {
             ) {
                 when {
                     theme == ThemeMode.CUSTOM_IMAGE -> customThemeImageUri
-                    theme == ThemeMode.ARTWORK || matchButtonAccentToArtwork -> player.song?.artworkAt(PLAYER_ART_PX)
+                    theme == ThemeMode.ARTWORK || theme == ThemeMode.PLAYER_COLORS || matchButtonAccentToArtwork ->
+                        player.song?.artworkAt(PLAYER_ART_PX)
                     else -> null
                 }
             }
@@ -457,7 +458,7 @@ class MainActivity : AppCompatActivity() {
             val darkTheme = when (theme) {
                 ThemeMode.SYSTEM -> isSystemInDarkTheme()
                 ThemeMode.LIGHT -> false
-                ThemeMode.DARK, ThemeMode.AMOLED -> true
+                ThemeMode.DARK, ThemeMode.AMOLED, ThemeMode.PLAYER_COLORS -> true
                 ThemeMode.ARTWORK -> isSystemInDarkTheme()
                 ThemeMode.CUSTOM_IMAGE -> true
             }
@@ -466,6 +467,7 @@ class MainActivity : AppCompatActivity() {
                 amoledBlack = theme == ThemeMode.AMOLED,
                 artworkUrl = currentArtwork,
                 matchArtwork = theme == ThemeMode.ARTWORK || theme == ThemeMode.CUSTOM_IMAGE,
+                playerScreenColors = theme == ThemeMode.PLAYER_COLORS,
                 matchButtonAccentToArtwork = matchButtonAccentToArtwork,
             ) {
                 // The glass surfaces sample this layer, and a layer records only

@@ -120,7 +120,7 @@ fun RadioScreen(
     val themeMode by AppSettings.themeMode.collectAsStateWithLifecycle()
     val amoledBlack = themeMode == ThemeMode.AMOLED
     val darkTheme = when (themeMode) {
-        ThemeMode.DARK, ThemeMode.AMOLED -> true
+        ThemeMode.DARK, ThemeMode.AMOLED, ThemeMode.PLAYER_COLORS -> true
         ThemeMode.LIGHT -> false
         ThemeMode.SYSTEM -> isSystemInDarkTheme()
         ThemeMode.ARTWORK -> isSystemInDarkTheme()

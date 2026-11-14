@@ -230,7 +230,13 @@ enum class DownloadQuality(
 }
 
 enum class ThemeMode(val label: String) {
-    SYSTEM("System"), LIGHT("Light"), DARK("Dark"), AMOLED("AMOLED black"), ARTWORK("Album art"), CUSTOM_IMAGE("Custom image")
+    SYSTEM("System"),
+    LIGHT("Light"),
+    DARK("Dark"),
+    AMOLED("AMOLED black"),
+    ARTWORK("Album art"),
+    PLAYER_COLORS("Player screen colors"),
+    CUSTOM_IMAGE("Custom image"),
 }
 
 /** Secondary action shown beside the favorite action in Android media controls. */
