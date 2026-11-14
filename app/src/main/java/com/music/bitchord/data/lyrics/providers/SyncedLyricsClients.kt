@@ -2,6 +2,7 @@ package com.music.bitchord.data.lyrics.providers
 
 import android.util.Base64
 import com.music.bitchord.data.Http
+import com.music.bitchord.data.lyrics.Musixmatch
 import com.music.bitchord.data.lyrics.NetEaseLyrics
 import com.music.bitchord.data.lyrics.QQMusicLyrics
 import com.music.bitchord.data.settings.AppSettings
@@ -1310,22 +1311,13 @@ internal object MusixmatchLyricsClient {
         artist: String,
         album: String?,
         durationSec: Int,
-    ): List<NativeSearchCandidate> = coroutineScope {
-        val lrc = getLyrics(title, artist, album, durationSec) ?: return@coroutineScope emptyList()
-        val isSynced = Regex("""\[\d{2}:\d{2}[.:]\d{2,3}]""").containsMatchIn(lrc)
-        listOf(
-            NativeSearchCandidate(
-                id = "musixmatch_${title.hashCode()}",
-                title = title,
-                artist = artist,
-                album = album,
-                durationSeconds = durationSec,
-                provider = "Musixmatch",
-                syncedLyrics = if (isSynced) lrc else null,
-                plainLyrics = if (!isSynced) lrc else null,
-            )
-        )
-    }
+    ): List<NativeSearchCandidate> = runCatching {
+        // Do not label query text as the result metadata: the former path
+        // returned a single fabricated candidate even when Musixmatch's API
+        // selected a different track. Reuse the strict track match and expose
+        // the verified track's own metadata with its lyrics.
+        Musixmatch.searchCandidate(title, artist, album, durationSec * 1000L)
+    }.getOrNull()?.let(::listOf).orEmpty()
 
     private fun queryPaxMusixmatch(title: String, artist: String, durationSec: Int): String? = runCatching {
         val urlBuilder = "https://lyrics.paxsenix.org/musixmatch/lyrics".toHttpUrlOrNull()?.newBuilder() ?: return null

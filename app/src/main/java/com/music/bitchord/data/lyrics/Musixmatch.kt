@@ -9,7 +9,9 @@ import kotlinx.serialization.SerialName
 import kotlinx.serialization.Serializable
 import okhttp3.HttpUrl.Companion.toHttpUrl
 import okhttp3.Request
+import com.music.bitchord.data.lyrics.providers.NativeSearchCandidate
 import java.text.SimpleDateFormat
+import java.text.Normalizer
 import java.util.Base64
 import java.util.Date
 import java.util.Locale
@@ -53,50 +55,120 @@ object Musixmatch {
     ): List<LyricLine>? = withContext(Dispatchers.IO) {
         val seconds = (durationMs / 1000).toInt()
         val track = bestTrack(title, artist, seconds) ?: return@withContext null
+        fetchTrackLyrics(track)
+    }
 
+    /** Manual search returns the verified Musixmatch track metadata with its lyrics. */
+    internal suspend fun searchCandidate(
+        title: String,
+        artist: String,
+        album: String?,
+        durationMs: Long,
+    ): NativeSearchCandidate? = withContext(Dispatchers.IO) {
+        val seconds = (durationMs / 1000).toInt()
+        val track = bestTrack(title, artist, seconds) ?: return@withContext null
+        val lines = fetchTrackLyrics(track)?.takeIf { it.isNotEmpty() }
+            ?: return@withContext null
+        val synced = when {
+            lines.any { it.isWordSynced } -> lines.toEnhancedLrc()
+            lines.any { it.timeMs > 0L } -> lines.toLrc()
+            else -> null
+        }
+        val plain = if (synced == null) lines.joinToString("\n") { it.text } else null
+        NativeSearchCandidate(
+            id = "musixmatch_${track.trackId}",
+            title = track.trackName,
+            artist = track.artistName,
+            album = track.albumName?.takeIf(String::isNotBlank) ?: album,
+            durationSeconds = track.trackLength?.takeIf { it > 0 } ?: seconds,
+            provider = "Musixmatch",
+            syncedLyrics = synced,
+            plainLyrics = plain,
+        )
+    }
+
+    private suspend fun fetchTrackLyrics(track: Track): List<LyricLine>? {
         // The subtitle endpoint is line-timed by design. Prefer the separate rich-sync
         // tier so tracks that have syllable data do not get flattened on ingestion.
         if (track.hasRichSync != 0) {
             val rich = fetchRichSync(track.trackId)
                 ?.let(::parseRichSyncBody)
                 ?.takeIf { lines -> lines.any { it.isWordSynced } }
-            if (rich != null) return@withContext rich
+            if (rich != null) return rich
         }
 
         val subtitle = if (track.hasSubtitles != 0) fetchSubtitle(track.trackId) else null
         val lrc = subtitle?.let(::subtitleToLrc)?.takeIf { it.isNotBlank() }
-            ?: return@withContext null
-        LrcLib.parseLrc(lrc).takeIf { it.isNotEmpty() }
+            ?: return null
+        return LrcLib.parseLrc(lrc).takeIf { it.isNotEmpty() }
     }
 
     private suspend fun bestTrack(title: String, artist: String, seconds: Int): Track? {
+        val wantedTitle = normalizeTrackText(title)
+        if (wantedTitle.isBlank()) return null
+        val wantedArtists = artistTokens(artist)
         val tracks = searchTrack(title, artist) ?: return null
-        return tracks.maxByOrNull { score(it, title, artist, seconds) }
+        val candidates = tracks.mapNotNull { track ->
+            // The old scorer always returned maxByOrNull, even when every
+            // result was unrelated: a duration bonus could outweigh a title
+            // or artist mismatch. Require exact normalized title and, when
+            // known, an exact artist token before ranking any lyric candidate.
+            if (normalizeTrackText(track.trackName) != wantedTitle) return@mapNotNull null
+            val actualArtists = artistTokens(track.artistName)
+            if (wantedArtists.isNotEmpty() && wantedArtists.intersect(actualArtists).isEmpty()) {
+                return@mapNotNull null
+            }
+
+            val durationDifference = if (seconds > 0 && track.trackLength != null && track.trackLength > 0) {
+                abs(track.trackLength - seconds)
+            } else null
+            val durationTolerance = maxOf(15, seconds / 12)
+            if (durationDifference != null && durationDifference > durationTolerance) return@mapNotNull null
+
+            val durationScore = when {
+                durationDifference == null -> 0
+                durationDifference <= 2 -> 30
+                durationDifference <= 6 -> 20
+                else -> 5
+            }
+            TrackCandidate(
+                track = track,
+                score = 100 + (if (wantedArtists.isNotEmpty()) 50 else 0) + durationScore,
+                durationDifference = durationDifference ?: Int.MAX_VALUE,
+            )
+        }.sortedWith(compareByDescending<TrackCandidate> { it.score }.thenBy { it.durationDifference })
+
+        val best = candidates.firstOrNull()
+        if (best == null) {
+            LyricsLog.w("Musixmatch", "Rejected search results: no exact title/artist/duration match")
+            return null
+        }
+        val runnerUp = candidates.getOrNull(1)
+        if (wantedArtists.isEmpty() && runnerUp != null &&
+            runnerUp.score == best.score && runnerUp.durationDifference == best.durationDifference &&
+            normalizeTrackText(runnerUp.track.artistName) != normalizeTrackText(best.track.artistName)
+        ) {
+            LyricsLog.w("Musixmatch", "Rejected ambiguous same-title results without an artist")
+            return null
+        }
+        LyricsLog.i(
+            "Musixmatch",
+            "Selected exact match '${best.track.trackName}' by '${best.track.artistName}' " +
+                "(durationDiff=${best.durationDifference.takeIf { it != Int.MAX_VALUE }?.let { "${it}s" } ?: "n/a"})",
+        )
+        return best.track
     }
 
-    private fun score(track: Track, title: String, artist: String, seconds: Int): Double {
-        var score = 0.0
-        val name = track.trackName.trim().lowercase(Locale.ROOT)
-        val targetTitle = title.trim().lowercase(Locale.ROOT)
-        score += when {
-            name == targetTitle -> 80.0
-            name.contains(targetTitle) || targetTitle.contains(name) -> 40.0
-            else -> 0.0
-        }
-        if (track.artistName.trim().lowercase(Locale.ROOT).contains(artist.trim().lowercase(Locale.ROOT))) {
-            score += 40.0
-        }
-        track.trackLength?.let { length ->
-            val diff = abs(length - seconds)
-            score += when {
-                diff <= 2 -> 30.0
-                diff <= 5 -> 15.0
-                diff <= 10 -> 5.0
-                else -> -20.0
-            }
-        }
-        return score
-    }
+    private fun normalizeTrackText(value: String): String =
+        Normalizer.normalize(value.trim(), Normalizer.Form.NFKC)
+            .lowercase(Locale.ROOT)
+            .filter(Char::isLetterOrDigit)
+
+    private fun artistTokens(value: String): Set<String> = value
+        .split(Regex("(?i)\\s*(?:,|，|、|/|&|＆|;|feat\\.?|ft\\.?|with|\\s+x\\s+|\\s+and\\s+)\\s*"))
+        .map(::normalizeTrackText)
+        .filter { it.isNotBlank() && it !in setOf("unknownartist", "unknown", "variousartists") }
+        .toSet()
 
     private suspend fun searchTrack(title: String, artist: String): List<Track>? {
         val response = signedGet { token ->
@@ -317,9 +389,16 @@ object Musixmatch {
         @SerialName("track_id") val trackId: Long,
         @SerialName("track_name") val trackName: String,
         @SerialName("artist_name") val artistName: String = "",
+        @SerialName("album_name") val albumName: String? = null,
         @SerialName("track_length") val trackLength: Int? = null,
         @SerialName("has_subtitles") val hasSubtitles: Int? = null,
         @SerialName("has_richsync") val hasRichSync: Int? = null,
+    )
+
+    private data class TrackCandidate(
+        val track: Track,
+        val score: Int,
+        val durationDifference: Int,
     )
 
     @Serializable

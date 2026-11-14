@@ -12,7 +12,11 @@ internal object FollowLyrics {
     private const val BASE = "https://followlyrics.com"
     private val stamp = Regex("""\[(\d{1,3}):(\d{2})(?:[.:](\d{1,3}))?\]""")
     private val stampedBlock = Regex("""(\[\d{1,3}:\d{2}(?:[.:]\d{1,3})?\])([\s\S]*?)(?=\[\d{1,3}:\d{2}(?:[.:]\d{1,3})?\]|$)""")
-    private val credits = Regex("""(?i)^\s*(?:作词|作詞|作曲|编曲|編曲|词|曲|詞|arranger|composer|lyricist|lyrics|music|producer)\s*[:：|].*$""")
+    private val credits = Regex(
+        """(?i)^\s*(?:作词者?|作詞者?|作曲者?|编曲者?|編曲者?|詞作者|词作者|詞|词|曲|arranger|composer|lyricist|lyrics|music|producer)\s*[:：|]\s*.+$""",
+    )
+
+    internal fun isCreditLine(text: String): Boolean = credits.matches(text.trim())
 
     suspend fun lyrics(title: String, artist: String, durationMs: Long): List<LyricLine>? =
         withContext(Dispatchers.IO) {
@@ -62,19 +66,17 @@ internal object FollowLyrics {
                         }
                     }
                     val lrcText = originalBlock.mapNotNull { (_, timeStamp, body) ->
-                        if (body.isBlank() || credits.matches(body)) return@mapNotNull null
+                        if (body.isBlank() ||
+                            (com.music.bitchord.data.settings.AppSettings.removeFollowLyricsCreditRows.value &&
+                                isCreditLine(body))
+                        ) return@mapNotNull null
                         if (artist.isNotBlank() && body.contains(title, true) && body.contains(artist, true)) return@mapNotNull null
                         "$timeStamp$body"
                     }.joinToString("\n")
                     if (stamp.findAll(lrcText).count() < 2) continue
                     val parsed = LrcLib.parseLrc(lrcText)
                         .takeIf { it.any { line -> line.text.isNotBlank() } }
-                    val result = if (com.music.bitchord.data.settings.AppSettings
-                            .convertFollowLyricsToJapaneseKanji.value
-                    ) {
-                        parsed?.map { line -> line.copy(text = JapaneseKanji.convert(line.text)) }
-                    } else parsed
-                    result?.let { return@runCatching it }
+                    parsed?.let { return@runCatching it }
                 }
                 null
             }.getOrNull()?.takeIf { it.isNotEmpty() }

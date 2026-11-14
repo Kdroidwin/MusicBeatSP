@@ -4224,6 +4224,11 @@ private fun SweptLyricLine(
     val richText = remember(line.text, style, showFurigana, lyricInk) {
         makeLyricRichText(line.text, style, lyricInk, showFurigana)
     }
+    val rubyReadingRanges = remember(line.text) {
+        LyricsFurigana.annotations(line.text).map { annotation ->
+            (annotation.sourceStart + annotation.base.length) until annotation.sourceEndExclusive
+        }.filterNot(IntRange::isEmpty)
+    }
 
     // Carried by every copy: identical insets keep them laying out identically,
     // and the inset is what gives the blurred copy's layer somewhere to put the
@@ -4253,7 +4258,7 @@ private fun SweptLyricLine(
                 // offsets (notably after a one-line layout clips the visual
                 // line). Keep the sweep inside the measured UTF-16 range.
                 try {
-                    sweepTo(it, richText.renderedOffset(line.revealedChars(position)))
+                    sweepTo(it, richText.renderedOffset(line.revealedChars(position, rubyReadingRanges)))
                 } catch (_: RuntimeException) {
                     // Bad third-party syllable offsets should degrade to a
                     // static readable line, never crash the render thread.
@@ -4344,7 +4349,9 @@ private fun SweptLyricLine(
                         runCatching {
                             glowAt(
                                 layout = measured,
-                                revealedChars = richText.renderedOffset(line.revealedChars(position)),
+                                revealedChars = richText.renderedOffset(
+                                    line.revealedChars(position, rubyReadingRanges),
+                                ),
                                 intensity = line.glowIntensity(position),
                             )
                         }

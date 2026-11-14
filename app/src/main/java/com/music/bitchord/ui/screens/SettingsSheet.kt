@@ -378,6 +378,8 @@ private fun supplementalSettingsSearchEntries(
     removeQqMusicMetadata: Boolean,
     removeQqMusicTimestampArtifacts: Boolean,
     convertFollowLyricsToJapaneseKanji: Boolean,
+    convertFollowLyricsSimplifiedToJapaneseKanji: Boolean,
+    removeFollowLyricsCreditRows: Boolean,
     convertKugouToJapaneseKanji: Boolean,
     removeKugouLyricMetadata: Boolean,
     lyricsDebugLogs: Boolean,
@@ -457,6 +459,18 @@ private fun supplementalSettingsSearchEntries(
         keywords = listOf("lyrics", "followlyrics", "traditional chinese", "japanese", "繁体字", "日本語漢字", "歌詞"),
         checked = convertFollowLyricsToJapaneseKanji,
     ) { AppSettings.setConvertFollowLyricsToJapaneseKanji(!convertFollowLyricsToJapaneseKanji) },
+    SettingsSearchEntry(
+        title = stringResource(R.string.followlyrics_simplified_japanese_kanji),
+        subtitle = stringResource(R.string.followlyrics_simplified_japanese_kanji_subtitle),
+        keywords = listOf("lyrics", "followlyrics", "simplified chinese", "japanese kanji", "簡体字", "日本語漢字", "歌詞"),
+        checked = convertFollowLyricsSimplifiedToJapaneseKanji,
+    ) { AppSettings.setConvertFollowLyricsSimplifiedToJapaneseKanji(!convertFollowLyricsSimplifiedToJapaneseKanji) },
+    SettingsSearchEntry(
+        title = stringResource(R.string.remove_followlyrics_credit_rows),
+        subtitle = stringResource(R.string.remove_followlyrics_credit_rows_subtitle),
+        keywords = listOf("lyrics", "followlyrics", "credits", "lyricist", "composer", "歌詞", "作詞", "作曲", "作者"),
+        checked = removeFollowLyricsCreditRows,
+    ) { AppSettings.setRemoveFollowLyricsCreditRows(!removeFollowLyricsCreditRows) },
     SettingsSearchEntry(
         title = stringResource(R.string.kugou_japanese_kanji),
         subtitle = stringResource(R.string.kugou_japanese_kanji_subtitle),
@@ -1629,6 +1643,8 @@ fun SettingsScreen(
     val removeQqMusicLyricMetadata by AppSettings.removeQqMusicLyricMetadata.collectAsStateWithLifecycle()
     val removeQqMusicTimestampArtifacts by AppSettings.removeQqMusicTimestampArtifacts.collectAsStateWithLifecycle()
     val convertFollowLyricsToJapaneseKanji by AppSettings.convertFollowLyricsToJapaneseKanji.collectAsStateWithLifecycle()
+    val convertFollowLyricsSimplifiedToJapaneseKanji by AppSettings.convertFollowLyricsSimplifiedToJapaneseKanji.collectAsStateWithLifecycle()
+    val removeFollowLyricsCreditRows by AppSettings.removeFollowLyricsCreditRows.collectAsStateWithLifecycle()
     val convertKugouToJapaneseKanji by AppSettings.convertKugouToJapaneseKanji.collectAsStateWithLifecycle()
     val removeKugouLyricMetadata by AppSettings.removeKugouLyricMetadata.collectAsStateWithLifecycle()
     val translateLyricsWithPlamo by AppSettings.translateLyricsWithPlamo.collectAsStateWithLifecycle()
@@ -2805,6 +2821,8 @@ fun SettingsScreen(
             removeQqMusicMetadata = removeQqMusicLyricMetadata,
             removeQqMusicTimestampArtifacts = removeQqMusicTimestampArtifacts,
             convertFollowLyricsToJapaneseKanji = convertFollowLyricsToJapaneseKanji,
+            convertFollowLyricsSimplifiedToJapaneseKanji = convertFollowLyricsSimplifiedToJapaneseKanji,
+            removeFollowLyricsCreditRows = removeFollowLyricsCreditRows,
             convertKugouToJapaneseKanji = convertKugouToJapaneseKanji,
             removeKugouLyricMetadata = removeKugouLyricMetadata,
             lyricsDebugLogs = showLyricsLogs,
@@ -6934,6 +6952,44 @@ fun SettingsScreen(
                     },
                     onClick = {
                         AppSettings.setConvertFollowLyricsToJapaneseKanji(!convertFollowLyricsToJapaneseKanji)
+                    },
+                )
+                RowDivider()
+                SettingsRow(
+                    icon = Icons.Rounded.DeleteSweep,
+                    title = stringResource(R.string.remove_followlyrics_credit_rows),
+                    subtitle = stringResource(R.string.remove_followlyrics_credit_rows_subtitle),
+                    trailing = {
+                        Switch(
+                            checked = removeFollowLyricsCreditRows,
+                            onCheckedChange = AppSettings::setRemoveFollowLyricsCreditRows,
+                            colors = SwitchDefaults.colors(
+                                checkedTrackColor = MaterialTheme.colorScheme.primary,
+                                checkedBorderColor = MaterialTheme.colorScheme.primary,
+                            ),
+                        )
+                    },
+                    onClick = { AppSettings.setRemoveFollowLyricsCreditRows(!removeFollowLyricsCreditRows) },
+                )
+                RowDivider()
+                SettingsRow(
+                    icon = Icons.Rounded.Language,
+                    title = stringResource(R.string.followlyrics_simplified_japanese_kanji),
+                    subtitle = stringResource(R.string.followlyrics_simplified_japanese_kanji_subtitle),
+                    trailing = {
+                        Switch(
+                            checked = convertFollowLyricsSimplifiedToJapaneseKanji,
+                            onCheckedChange = AppSettings::setConvertFollowLyricsSimplifiedToJapaneseKanji,
+                            colors = SwitchDefaults.colors(
+                                checkedTrackColor = MaterialTheme.colorScheme.primary,
+                                checkedBorderColor = MaterialTheme.colorScheme.primary,
+                            ),
+                        )
+                    },
+                    onClick = {
+                        AppSettings.setConvertFollowLyricsSimplifiedToJapaneseKanji(
+                            !convertFollowLyricsSimplifiedToJapaneseKanji,
+                        )
                     },
                 )
                 RowDivider()

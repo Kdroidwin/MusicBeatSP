@@ -1370,8 +1370,12 @@
     <string name="remove_qq_music_lyric_metadata_subtitle">先頭の曲名行・歌詞のないタイムスタンプ行・中国語や繁体字の作詞／作曲／編曲クレジットを削除します</string>
     <string name="remove_qq_music_timestamp_artifacts">QQ Music歌詞内の数字タイムスタンプ片を削除</string>
     <string name="remove_qq_music_timestamp_artifacts_subtitle">QQ Musicが歌詞に混入させる12345.123)のような壊れた数字列を削除します。初期設定はオンです。</string>
-    <string name="followlyrics_japanese_kanji">FollowLyricsを日本語の漢字に変換</string>
+    <string name="followlyrics_japanese_kanji">FollowLyricsの繁体字を日本語の漢字に変換</string>
     <string name="followlyrics_japanese_kanji_subtitle">繁体字の一部を日本語の新字体に変換します。初期設定はオンです。</string>
+    <string name="followlyrics_simplified_japanese_kanji">FollowLyricsの簡体字を日本語の漢字に変換</string>
+    <string name="followlyrics_simplified_japanese_kanji_subtitle">簡体字を日本語の漢字表記に変換します。繁体字の設定とは別です。初期設定はオンです。</string>
+    <string name="remove_followlyrics_credit_rows">FollowLyricsの作詞・作曲者行を削除</string>
+    <string name="remove_followlyrics_credit_rows_subtitle">先頭にある「词：名前」「曲：名前」などのクレジット行を削除します。初期設定はオンです。</string>
     <string name="kugou_japanese_kanji">KuGouの歌詞を日本語の漢字に変換</string>
     <string name="kugou_japanese_kanji_subtitle">簡体字を日本語の漢字表記に変換します。初期設定はオンです。</string>
     <string name="remove_kugou_lyric_metadata">KuGouの曲名・クレジット行を削除</string>

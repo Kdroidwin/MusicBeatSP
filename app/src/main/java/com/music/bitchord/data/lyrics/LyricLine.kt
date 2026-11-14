@@ -113,16 +113,34 @@ data class LyricLine(
      * on rather than jumping ahead of the next word's first letter.
      */
     fun revealedChars(positionMs: Long): Float {
+        return revealedChars(positionMs, emptyList())
+    }
+
+    /**
+     * Computes the sweep position while ignoring inline ruby readings when
+     * locating timed lyric text. A synced kana can also occur inside
+     * `漢字((かな))`; a plain `indexOf` would bind that timing to the reading
+     * and light the following text before it is sung.
+     */
+    internal fun revealedChars(positionMs: Long, rubyReadingRanges: List<IntRange>): Float {
         if (words.isEmpty()) return if (positionMs >= timeMs) text.length.toFloat() else 0f
         var offset = 0
         words.forEachIndexed { index, word ->
+            // Inline furigana may have been added after the provider supplied
+            // word timings. Compare the sung surface form, never the markup.
+            val timedText = word.text.rubySurfaceText()
             // Where this word sits in [text]. Built by walking rather than
             // searching, so a word repeated in the line still lines up.
             val safeOffset = offset.coerceIn(0, text.length)
-            val start = text.indexOf(word.text, safeOffset).takeIf { it >= 0 } ?: safeOffset
-            val end = start + word.text.length.coerceAtMost(text.length - start)
+            val matchedStart = text.findTimedText(timedText, safeOffset, rubyReadingRanges).takeIf { it >= 0 }
+            val start = matchedStart ?: safeOffset
+            // If provider text does not match the edited lyric, hold at the
+            // last verified position. Advancing by an assumed word length can
+            // sweep arbitrary characters (including a ruby reading) early.
+            val end = if (matchedStart == null) start else start + timedText.length.coerceAtMost(text.length - start)
             if (positionMs < word.startMs) return start.toFloat()
             if (positionMs < word.endMs) {
+                if (matchedStart == null) return start.toFloat()
                 val span = (word.endMs.toDouble() - word.startMs.toDouble()).coerceAtLeast(1.0)
                 val through = ((positionMs.toDouble() - word.startMs.toDouble()) / span)
                     .takeIf(Double::isFinite)?.toFloat()?.coerceIn(0f, 1f) ?: 0f
@@ -134,7 +152,8 @@ data class LyricLine(
             val next = words.getOrNull(index + 1)
             if (next != null && positionMs < next.startMs) {
                 val safeEnd = end.coerceIn(0, text.length)
-                val gapStart = text.indexOf(next.text, safeEnd).takeIf { it >= 0 } ?: safeEnd
+                val gapStart = text.findTimedText(next.text.rubySurfaceText(), safeEnd, rubyReadingRanges)
+                    .takeIf { it >= 0 } ?: safeEnd
                 val pause = (next.startMs.toDouble() - word.endMs.toDouble()).coerceAtLeast(1.0)
                 val through = ((positionMs.toDouble() - word.endMs.toDouble()) / pause)
                     .takeIf(Double::isFinite)?.toFloat()?.coerceIn(0f, 1f) ?: 0f
@@ -143,6 +162,35 @@ data class LyricLine(
             offset = end.coerceIn(0, text.length)
         }
         return text.length.toFloat()
+    }
+
+    private fun String.findTimedText(needle: String, startIndex: Int, excludedRanges: List<IntRange>): Int {
+        if (needle.isEmpty()) return -1
+        var searchFrom = startIndex.coerceIn(0, length)
+        while (searchFrom <= length) {
+            val found = indexOf(needle, searchFrom)
+            if (found < 0) return -1
+            val matchEnd = found + needle.length
+            val excluded = excludedRanges.firstOrNull { range ->
+                !range.isEmpty() && found <= range.last && matchEnd > range.first
+            }
+            if (excluded == null) return found
+            searchFrom = (excluded.last + 1).coerceAtMost(length)
+        }
+        return -1
+    }
+
+    private fun String.rubySurfaceText(): String {
+        val annotations = LyricsFurigana.annotations(this)
+        if (annotations.isEmpty()) return this
+        return buildString(length) {
+            var cursor = 0
+            annotations.forEach { annotation ->
+                append(this@rubySurfaceText, cursor, annotation.sourceStart + annotation.base.length)
+                cursor = annotation.sourceEndExclusive
+            }
+            append(this@rubySurfaceText, cursor, this@rubySurfaceText.length)
+        }
     }
 
     /**

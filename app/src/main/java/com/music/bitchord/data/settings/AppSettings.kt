@@ -932,6 +932,12 @@ object AppSettings {
     /** Converts common Traditional Chinese forms in FollowLyrics to Japanese shinjitai. */
     val convertFollowLyricsToJapaneseKanji = MutableStateFlow(true)
 
+    /** Converts simplified Chinese in FollowLyrics lyrics into Japanese kanji forms. */
+    val convertFollowLyricsSimplifiedToJapaneseKanji = MutableStateFlow(true)
+
+    /** Removes FollowLyrics songwriter and composer credit rows. */
+    val removeFollowLyricsCreditRows = MutableStateFlow(true)
+
     /** Converts KuGou's simplified Chinese lyric glyphs to Japanese kanji forms. */
     val convertKugouToJapaneseKanji = MutableStateFlow(true)
 
@@ -1854,6 +1860,9 @@ object AppSettings {
         removeQqMusicLyricMetadata.value = prefs.getBoolean(KEY_REMOVE_QQ_MUSIC_LYRIC_METADATA, true)
         removeQqMusicTimestampArtifacts.value = prefs.getBoolean(KEY_REMOVE_QQ_MUSIC_TIMESTAMP_ARTIFACTS, true)
         convertFollowLyricsToJapaneseKanji.value = prefs.getBoolean(KEY_CONVERT_FOLLOWLYRICS_TO_JAPANESE_KANJI, true)
+        convertFollowLyricsSimplifiedToJapaneseKanji.value =
+            prefs.getBoolean(KEY_CONVERT_FOLLOWLYRICS_SIMPLIFIED_TO_JAPANESE_KANJI, true)
+        removeFollowLyricsCreditRows.value = prefs.getBoolean(KEY_REMOVE_FOLLOWLYRICS_CREDIT_ROWS, true)
         convertKugouToJapaneseKanji.value = prefs.getBoolean(KEY_CONVERT_KUGOU_TO_JAPANESE_KANJI, true)
         removeKugouLyricMetadata.value = prefs.getBoolean(KEY_REMOVE_KUGOU_LYRIC_METADATA, true)
         translateLyricsWithPlamo.value = prefs.getBoolean(KEY_TRANSLATE_LYRICS_WITH_PLAMO, false)
@@ -3519,6 +3528,16 @@ object AppSettings {
     fun setConvertFollowLyricsToJapaneseKanji(value: Boolean) {
         convertFollowLyricsToJapaneseKanji.value = value
         prefs.edit().putBoolean(KEY_CONVERT_FOLLOWLYRICS_TO_JAPANESE_KANJI, value).apply()
+    }
+
+    fun setConvertFollowLyricsSimplifiedToJapaneseKanji(value: Boolean) {
+        convertFollowLyricsSimplifiedToJapaneseKanji.value = value
+        prefs.edit().putBoolean(KEY_CONVERT_FOLLOWLYRICS_SIMPLIFIED_TO_JAPANESE_KANJI, value).apply()
+    }
+
+    fun setRemoveFollowLyricsCreditRows(value: Boolean) {
+        removeFollowLyricsCreditRows.value = value
+        prefs.edit().putBoolean(KEY_REMOVE_FOLLOWLYRICS_CREDIT_ROWS, value).apply()
     }
 
     fun setConvertKugouToJapaneseKanji(value: Boolean) {
@@ -5207,6 +5226,8 @@ object AppSettings {
     private const val KEY_REMOVE_QQ_MUSIC_LYRIC_METADATA = "remove_qq_music_lyric_metadata"
     private const val KEY_REMOVE_QQ_MUSIC_TIMESTAMP_ARTIFACTS = "remove_qq_music_timestamp_artifacts"
     private const val KEY_CONVERT_FOLLOWLYRICS_TO_JAPANESE_KANJI = "convert_followlyrics_to_japanese_kanji"
+    private const val KEY_CONVERT_FOLLOWLYRICS_SIMPLIFIED_TO_JAPANESE_KANJI = "convert_followlyrics_simplified_to_japanese_kanji"
+    private const val KEY_REMOVE_FOLLOWLYRICS_CREDIT_ROWS = "remove_followlyrics_credit_rows"
     private const val KEY_CONVERT_KUGOU_TO_JAPANESE_KANJI = "convert_kugou_to_japanese_kanji"
     private const val KEY_REMOVE_KUGOU_LYRIC_METADATA = "remove_kugou_lyric_metadata"
     private const val KEY_TRANSLATE_LYRICS_WITH_PLAMO = "translate_lyrics_with_plamo"

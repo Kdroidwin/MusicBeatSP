@@ -75,9 +75,17 @@ object LyricsFetchEngine {
                 append(";qqTimingArtifactCleanup=")
                     .append(com.music.bitchord.data.settings.AppSettings.removeQqMusicTimestampArtifacts.value)
             }
+            if (sources.any { it.id == "musixmatch" }) {
+                // Discard results selected by the former duration-heavy matcher.
+                append(";musixmatchMatch=2")
+            }
             if (sources.any { it.id == "followlyrics" }) {
                 append(";followLyricsJapaneseKanji=")
                     .append(com.music.bitchord.data.settings.AppSettings.convertFollowLyricsToJapaneseKanji.value)
+                append(";followLyricsSimplifiedJapaneseKanji=")
+                    .append(com.music.bitchord.data.settings.AppSettings.convertFollowLyricsSimplifiedToJapaneseKanji.value)
+                append(";followLyricsCredits=")
+                    .append(com.music.bitchord.data.settings.AppSettings.removeFollowLyricsCreditRows.value)
             }
             if (sources.any { it.id == "kugou" }) {
                 append(";kugouJapaneseKanji=")

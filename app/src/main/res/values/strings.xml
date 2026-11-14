@@ -1484,8 +1484,12 @@
     <string name="remove_qq_music_lyric_metadata_subtitle">Remove the opening title and empty timestamp rows, plus Chinese and traditional-character composer/arranger credits</string>
     <string name="remove_qq_music_timestamp_artifacts">Remove QQ Music numeric timing artifacts</string>
     <string name="remove_qq_music_timestamp_artifacts_subtitle">Remove malformed numeric timing tokens such as 12345.123) when QQ returns them inside lyrics. On by default.</string>
-    <string name="followlyrics_japanese_kanji">Convert FollowLyrics to Japanese kanji</string>
+    <string name="followlyrics_japanese_kanji">Convert FollowLyrics traditional Chinese to Japanese kanji</string>
     <string name="followlyrics_japanese_kanji_subtitle">Convert common Traditional Chinese characters to Japanese shinjitai forms. On by default.</string>
+    <string name="followlyrics_simplified_japanese_kanji">Convert FollowLyrics simplified Chinese to Japanese kanji</string>
+    <string name="followlyrics_simplified_japanese_kanji_subtitle">Convert simplified Chinese characters to Japanese kanji forms. Separate from the Traditional Chinese option. On by default.</string>
+    <string name="remove_followlyrics_credit_rows">Remove FollowLyrics songwriter and composer rows</string>
+    <string name="remove_followlyrics_credit_rows_subtitle">Remove opening lines such as 词：name and 曲：name from FollowLyrics. On by default.</string>
     <string name="kugou_japanese_kanji">Convert KuGou lyrics to Japanese kanji</string>
     <string name="kugou_japanese_kanji_subtitle">Convert simplified Chinese glyphs to Japanese kanji forms. On by default.</string>
     <string name="remove_kugou_lyric_metadata">Remove KuGou title and credit lines</string>

@@ -114,11 +114,17 @@ object LyricsRepository {
         ) {
             QQMusicLyrics.cleanLines(lines, title, artist.split(Regex("[,，、/&＆]+")))
         } else lines
-        "followlyrics" -> if (com.music.bitchord.data.settings.AppSettings
-                .convertFollowLyricsToJapaneseKanji.value
-        ) {
-            lines.map(::convertFollowLyricsLine)
-        } else lines
+        "followlyrics" -> {
+            val settings = com.music.bitchord.data.settings.AppSettings
+            val cleaned = if (settings.removeFollowLyricsCreditRows.value) {
+                lines.filterNot { line -> FollowLyrics.isCreditLine(line.text) }
+            } else lines
+            if (settings.convertFollowLyricsToJapaneseKanji.value ||
+                settings.convertFollowLyricsSimplifiedToJapaneseKanji.value
+            ) {
+                cleaned.map(::convertFollowLyricsLine)
+            } else cleaned
+        }
         "kugou" -> {
             val settings = com.music.bitchord.data.settings.AppSettings
             val cleaned = if (settings.removeKugouLyricMetadata.value) {
@@ -164,11 +170,20 @@ object LyricsRepository {
     }
 
     /** Reapply source-specific display options to entries cached by older releases. */
-    private fun convertFollowLyricsLine(line: LyricLine): LyricLine = line.copy(
-        text = JapaneseKanji.convert(line.text),
-        words = line.words.map { word -> word.copy(text = JapaneseKanji.convert(word.text)) },
-        background = line.background?.let(::convertFollowLyricsLine),
-    )
+    private fun convertFollowLyricsLine(line: LyricLine): LyricLine {
+        val settings = com.music.bitchord.data.settings.AppSettings
+        fun convert(text: String): String = when {
+            settings.convertFollowLyricsSimplifiedToJapaneseKanji.value ->
+                JapaneseKanji.convertSimplifiedToJapanese(text)
+            settings.convertFollowLyricsToJapaneseKanji.value -> JapaneseKanji.convert(text)
+            else -> text
+        }
+        return line.copy(
+            text = convert(line.text),
+            words = line.words.map { word -> word.copy(text = convert(word.text)) },
+            background = line.background?.let(::convertFollowLyricsLine),
+        )
+    }
 
     private fun convertKugouLine(line: LyricLine): LyricLine = line.copy(
         text = JapaneseKanji.convertSimplifiedToJapanese(line.text),
