@@ -156,7 +156,7 @@ fun FrostedTopBar(
             .then(
                 when {
                     floatingOnly -> Modifier.background(Color.Transparent)
-                    solidBackground -> Modifier.background(MaterialTheme.colorScheme.background)
+                    solidBackground && !playerBackdropTheme -> Modifier.background(MaterialTheme.colorScheme.background)
                     artworkTint != null && reduceDynamicBlur -> Modifier.background(artworkTint)
                     artworkTint != null -> Modifier.background(Color.Transparent)
                     reduceDynamicBlur && !playerBackdropTheme -> Modifier.background(MaterialTheme.colorScheme.surface)
