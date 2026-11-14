@@ -4,6 +4,8 @@ import kotlinx.coroutines.Deferred
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.async
 import kotlinx.coroutines.coroutineScope
+import java.text.Normalizer
+import java.util.Locale
 
 /**
  * Where the player gets its lyrics.
@@ -107,7 +109,9 @@ object LyricsRepository {
         title: String = "",
         artist: String = "",
     ): List<LyricLine> = when (source.id) {
-        "qq_music" -> if (com.music.bitchord.data.settings.AppSettings.removeQqMusicLyricMetadata.value) {
+        "qq_music" -> if (com.music.bitchord.data.settings.AppSettings.removeQqMusicLyricMetadata.value ||
+            com.music.bitchord.data.settings.AppSettings.removeQqMusicTimestampArtifacts.value
+        ) {
             QQMusicLyrics.cleanLines(lines, title, artist.split(Regex("[,，、/&＆]+")))
         } else lines
         "followlyrics" -> if (com.music.bitchord.data.settings.AppSettings
@@ -115,12 +119,48 @@ object LyricsRepository {
         ) {
             lines.map(::convertFollowLyricsLine)
         } else lines
-        "kugou" -> if (com.music.bitchord.data.settings.AppSettings
-                .convertKugouToJapaneseKanji.value
+        "kugou" -> {
+            val settings = com.music.bitchord.data.settings.AppSettings
+            val cleaned = if (settings.removeKugouLyricMetadata.value) {
+                removeKugouMetadataLines(lines, title, artist)
+            } else lines
+            if (settings.convertKugouToJapaneseKanji.value) cleaned.map(::convertKugouLine) else cleaned
+        }
+        "netease" -> if (com.music.bitchord.data.settings.AppSettings
+                .convertNeteaseToJapaneseKanji.value
         ) {
-            lines.map(::convertKugouLine)
+            lines.map(::convertNeteaseLine)
         } else lines
         else -> lines
+    }
+
+    private fun removeKugouMetadataLines(lines: List<LyricLine>, title: String, artist: String): List<LyricLine> {
+        val creditLine = Regex(
+            """^\s*(?:作词|作詞|詞|词|作曲|作曲者|編曲|編曲者|编曲|编曲者|詞曲|词曲)\s*[:：]\s*\S.*$""",
+            RegexOption.IGNORE_CASE,
+        )
+        fun normalize(value: String): String = Normalizer.normalize(value, Normalizer.Form.NFKC)
+            .lowercase(Locale.ROOT)
+            .filter(Char::isLetterOrDigit)
+
+        val normalizedTitle = normalize(title)
+        val artists = artist.split(Regex("[,，、/&＆]+"))
+            .map(::normalize)
+            .filter { it.length >= 2 }
+        var openingRows = 0
+        var lyricStarted = false
+        return lines.filter { line ->
+            val text = line.text.trim()
+            if (text.isBlank()) return@filter true
+            openingRows++
+            val isCredit = creditLine.matches(text)
+            val normalizedText = normalize(text)
+            val isOpeningTitle = !lyricStarted && openingRows <= 8 && normalizedTitle.length >= 2 &&
+                normalizedText.contains(normalizedTitle) && artists.any(normalizedText::contains)
+            if (isCredit || isOpeningTitle) return@filter false
+            lyricStarted = true
+            true
+        }
     }
 
     /** Reapply source-specific display options to entries cached by older releases. */
@@ -134,6 +174,12 @@ object LyricsRepository {
         text = JapaneseKanji.convertSimplifiedToJapanese(line.text),
         words = line.words.map { word -> word.copy(text = JapaneseKanji.convertSimplifiedToJapanese(word.text)) },
         background = line.background?.let(::convertKugouLine),
+    )
+
+    private fun convertNeteaseLine(line: LyricLine): LyricLine = line.copy(
+        text = JapaneseKanji.convertSimplifiedToJapanese(line.text),
+        words = line.words.map { word -> word.copy(text = JapaneseKanji.convertSimplifiedToJapanese(word.text)) },
+        background = line.background?.let(::convertNeteaseLine),
     )
 
     suspend fun fetch(

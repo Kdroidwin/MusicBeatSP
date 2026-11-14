@@ -920,14 +920,23 @@ object AppSettings {
     /** Removes the leading brace-wrapped credit block found in some NetEase lyric responses. */
     val removeNeteaseLeadingBraceCredits = MutableStateFlow(true)
 
+    /** Converts simplified Chinese glyphs in NetEase lyrics to Japanese kanji forms. */
+    val convertNeteaseToJapaneseKanji = MutableStateFlow(true)
+
     /** Removes QQ Music's opening title row and Chinese composer/arranger credits. */
     val removeQqMusicLyricMetadata = MutableStateFlow(true)
+
+    /** Removes numeric timing artifacts occasionally returned inside QQ Music lyric text. */
+    val removeQqMusicTimestampArtifacts = MutableStateFlow(true)
 
     /** Converts common Traditional Chinese forms in FollowLyrics to Japanese shinjitai. */
     val convertFollowLyricsToJapaneseKanji = MutableStateFlow(true)
 
     /** Converts KuGou's simplified Chinese lyric glyphs to Japanese kanji forms. */
     val convertKugouToJapaneseKanji = MutableStateFlow(true)
+
+    /** Removes KuGou's opening title and songwriter/composer credit rows. */
+    val removeKugouLyricMetadata = MutableStateFlow(true)
 
     /** Adds an optional on-device translation below each original lyric line. */
     val translateLyricsWithPlamo = MutableStateFlow(false)
@@ -1841,9 +1850,12 @@ object AppSettings {
         removeNeteaseLyricCredits.value = prefs.getBoolean(KEY_REMOVE_NETEASE_LYRIC_CREDITS, true)
         keepJapaneseNeteaseLyricLines.value = prefs.getBoolean(KEY_KEEP_JAPANESE_NETEASE_LYRIC_LINES, true)
         removeNeteaseLeadingBraceCredits.value = prefs.getBoolean(KEY_REMOVE_NETEASE_LEADING_BRACE_CREDITS, true)
+        convertNeteaseToJapaneseKanji.value = prefs.getBoolean(KEY_CONVERT_NETEASE_TO_JAPANESE_KANJI, true)
         removeQqMusicLyricMetadata.value = prefs.getBoolean(KEY_REMOVE_QQ_MUSIC_LYRIC_METADATA, true)
+        removeQqMusicTimestampArtifacts.value = prefs.getBoolean(KEY_REMOVE_QQ_MUSIC_TIMESTAMP_ARTIFACTS, true)
         convertFollowLyricsToJapaneseKanji.value = prefs.getBoolean(KEY_CONVERT_FOLLOWLYRICS_TO_JAPANESE_KANJI, true)
         convertKugouToJapaneseKanji.value = prefs.getBoolean(KEY_CONVERT_KUGOU_TO_JAPANESE_KANJI, true)
+        removeKugouLyricMetadata.value = prefs.getBoolean(KEY_REMOVE_KUGOU_LYRIC_METADATA, true)
         translateLyricsWithPlamo.value = prefs.getBoolean(KEY_TRANSLATE_LYRICS_WITH_PLAMO, false)
         hideLyricsTranslationProgress.value = prefs.getBoolean(KEY_HIDE_LYRICS_TRANSLATION_PROGRESS, false)
         showLyricsCloseButton.value = prefs.getBoolean(KEY_SHOW_LYRICS_CLOSE_BUTTON, false)
@@ -3489,9 +3501,19 @@ object AppSettings {
         prefs.edit().putBoolean(KEY_REMOVE_NETEASE_LEADING_BRACE_CREDITS, value).apply()
     }
 
+    fun setConvertNeteaseToJapaneseKanji(value: Boolean) {
+        convertNeteaseToJapaneseKanji.value = value
+        prefs.edit().putBoolean(KEY_CONVERT_NETEASE_TO_JAPANESE_KANJI, value).apply()
+    }
+
     fun setRemoveQqMusicLyricMetadata(value: Boolean) {
         removeQqMusicLyricMetadata.value = value
         prefs.edit().putBoolean(KEY_REMOVE_QQ_MUSIC_LYRIC_METADATA, value).apply()
+    }
+
+    fun setRemoveQqMusicTimestampArtifacts(value: Boolean) {
+        removeQqMusicTimestampArtifacts.value = value
+        prefs.edit().putBoolean(KEY_REMOVE_QQ_MUSIC_TIMESTAMP_ARTIFACTS, value).apply()
     }
 
     fun setConvertFollowLyricsToJapaneseKanji(value: Boolean) {
@@ -3502,6 +3524,11 @@ object AppSettings {
     fun setConvertKugouToJapaneseKanji(value: Boolean) {
         convertKugouToJapaneseKanji.value = value
         prefs.edit().putBoolean(KEY_CONVERT_KUGOU_TO_JAPANESE_KANJI, value).apply()
+    }
+
+    fun setRemoveKugouLyricMetadata(value: Boolean) {
+        removeKugouLyricMetadata.value = value
+        prefs.edit().putBoolean(KEY_REMOVE_KUGOU_LYRIC_METADATA, value).apply()
     }
 
     fun setTranslateLyricsWithPlamo(value: Boolean) {
@@ -5176,9 +5203,12 @@ object AppSettings {
     private const val KEY_REMOVE_NETEASE_LYRIC_CREDITS = "remove_netease_lyric_credits"
     private const val KEY_KEEP_JAPANESE_NETEASE_LYRIC_LINES = "keep_japanese_netease_lyric_lines"
     private const val KEY_REMOVE_NETEASE_LEADING_BRACE_CREDITS = "remove_netease_leading_brace_credits"
+    private const val KEY_CONVERT_NETEASE_TO_JAPANESE_KANJI = "convert_netease_to_japanese_kanji"
     private const val KEY_REMOVE_QQ_MUSIC_LYRIC_METADATA = "remove_qq_music_lyric_metadata"
+    private const val KEY_REMOVE_QQ_MUSIC_TIMESTAMP_ARTIFACTS = "remove_qq_music_timestamp_artifacts"
     private const val KEY_CONVERT_FOLLOWLYRICS_TO_JAPANESE_KANJI = "convert_followlyrics_to_japanese_kanji"
     private const val KEY_CONVERT_KUGOU_TO_JAPANESE_KANJI = "convert_kugou_to_japanese_kanji"
+    private const val KEY_REMOVE_KUGOU_LYRIC_METADATA = "remove_kugou_lyric_metadata"
     private const val KEY_TRANSLATE_LYRICS_WITH_PLAMO = "translate_lyrics_with_plamo"
     private const val KEY_HIDE_LYRICS_TRANSLATION_PROGRESS = "hide_lyrics_translation_progress"
     private const val KEY_SHOW_LYRICS_CLOSE_BUTTON = "show_lyrics_close_button"

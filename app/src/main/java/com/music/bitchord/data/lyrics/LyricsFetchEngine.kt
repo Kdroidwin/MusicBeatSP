@@ -64,12 +64,16 @@ object LyricsFetchEngine {
                 // The old matcher could select unrelated search results. Do
                 // not serve lyrics cached by that matcher after this fix.
                 append(";neteaseMatch=2")
+                append(";neteaseJapaneseKanji=")
+                    .append(com.music.bitchord.data.settings.AppSettings.convertNeteaseToJapaneseKanji.value)
             }
             if (sources.any { it.id == "qq_music" }) {
                 // Invalidate results cached before the QQ matching and fallback fixes.
                 append(";qqMatch=2")
                 append(";qqHeaderCleanup=")
                     .append(com.music.bitchord.data.settings.AppSettings.removeQqMusicLyricMetadata.value)
+                append(";qqTimingArtifactCleanup=")
+                    .append(com.music.bitchord.data.settings.AppSettings.removeQqMusicTimestampArtifacts.value)
             }
             if (sources.any { it.id == "followlyrics" }) {
                 append(";followLyricsJapaneseKanji=")
@@ -78,6 +82,8 @@ object LyricsFetchEngine {
             if (sources.any { it.id == "kugou" }) {
                 append(";kugouJapaneseKanji=")
                     .append(com.music.bitchord.data.settings.AppSettings.convertKugouToJapaneseKanji.value)
+                append(";kugouMetadataCleanup=")
+                    .append(com.music.bitchord.data.settings.AppSettings.removeKugouLyricMetadata.value)
             }
         }
         val flightKey = "${artist.lowercase().trim()}|${title.lowercase().trim()}|${durationMs / 1000}|$cacheVariant"

@@ -64,7 +64,10 @@ object QQMusicLyrics {
                 }
             val cleanedResponse = cleanRawLyrics(response, selected.title, selected.artists)
             val parsed = parsePaxResponse(cleanedResponse)
-            val cleaned = if (com.music.bitchord.data.settings.AppSettings.removeQqMusicLyricMetadata.value) {
+            val settings = com.music.bitchord.data.settings.AppSettings
+            val cleaned = if (settings.removeQqMusicLyricMetadata.value ||
+                settings.removeQqMusicTimestampArtifacts.value
+            ) {
                 parsed?.let { cleanLines(it, selected.title, selected.artists) }
             } else parsed
             cleaned?.takeIf { lines -> lines.any { it.text.isNotBlank() } }
@@ -238,12 +241,22 @@ object QQMusicLyrics {
         return ProviderLyrics.parse(raw)
     }
 
-    internal fun cleanLines(lines: List<LyricLine>, songTitle: String, artists: List<String>): List<LyricLine> =
-        lines.withoutQqMetadata(songTitle, artists)
+    internal fun cleanLines(lines: List<LyricLine>, songTitle: String, artists: List<String>): List<LyricLine> {
+        val settings = com.music.bitchord.data.settings.AppSettings
+        val withMetadataRemoved = if (settings.removeQqMusicLyricMetadata.value) {
+            lines.withoutQqMetadata(songTitle, artists)
+        } else lines
+        return if (settings.removeQqMusicTimestampArtifacts.value) {
+            withMetadataRemoved.withoutQqTimestampArtifacts()
+        } else withMetadataRemoved
+    }
 
     /** Cleans QQ's raw LRC before any lyric parser can discard blank header rows. */
     internal fun cleanRawLyrics(raw: String, songTitle: String, artists: List<String>): String {
-        if (!com.music.bitchord.data.settings.AppSettings.removeQqMusicLyricMetadata.value) return raw
+        val settings = com.music.bitchord.data.settings.AppSettings
+        val removeMetadata = settings.removeQqMusicLyricMetadata.value
+        val removeArtifacts = settings.removeQqMusicTimestampArtifacts.value
+        if (!removeMetadata && !removeArtifacts) return raw
         val title = songTitle.normalized()
         val artistNames = artists.map { it.normalized() }.filter { it.length >= 2 }
         fun body(line: String): String = QQ_LRC_TIMESTAMP_PREFIX.replace(line.trim(), "").trim()
@@ -253,7 +266,14 @@ object QQMusicLyrics {
                 artistNames.any(normalized::contains)
         }
 
-        val lines = raw.lines()
+        val lines = raw.lines().mapNotNull { line ->
+            if (!removeArtifacts || !QQ_TIMESTAMP_ARTIFACT.containsMatchIn(line)) return@mapNotNull line
+            val cleaned = QQ_TIMESTAMP_ARTIFACT.replace(line, "")
+            // Preserve ordinary instrumental gaps, but discard rows that only
+            // contained the malformed timing token.
+            cleaned.takeIf { body(it).isNotBlank() }
+        }
+        if (!removeMetadata) return lines.joinToString("\n")
         val headerIndex = lines.indices.take(8).firstOrNull { index ->
             isOpeningTitleRow(body(lines[index]))
         }
@@ -298,6 +318,42 @@ object QQMusicLyrics {
             true
         }
     }
+
+    private fun List<LyricLine>.withoutQqTimestampArtifacts(): List<LyricLine> =
+        mapNotNull(::removeQqTimestampArtifacts)
+
+    private fun removeQqTimestampArtifacts(line: LyricLine): LyricLine? {
+        val artifactInText = QQ_TIMESTAMP_ARTIFACT.containsMatchIn(line.text)
+        val cleanedText = QQ_TIMESTAMP_ARTIFACT.replace(line.text, "")
+        val cleanedWords = line.words.mapNotNull { word ->
+            val cleaned = QQ_TIMESTAMP_ARTIFACT.replace(word.text, "")
+            if (cleaned.isBlank() && cleaned != word.text) null
+            else word.copy(
+                text = cleaned,
+                // Syllable character ranges refer to the original word text.
+                syllables = if (cleaned != word.text) emptyList() else word.syllables,
+            )
+        }
+        val cleanedBackground = line.background?.let(::removeQqTimestampArtifacts)
+        val artifactInWords = line.words.any { QQ_TIMESTAMP_ARTIFACT.containsMatchIn(it.text) }
+        val artifactInBackground = line.background?.let(::containsQqTimestampArtifact) == true
+        if ((artifactInText || artifactInWords) && cleanedText.isBlank() && cleanedWords.isEmpty()) {
+            return null
+        }
+        val displayText = cleanedText.ifBlank {
+            cleanedWords.joinToString(separator = "") { it.text }
+        }
+        return line.copy(
+            text = displayText,
+            words = cleanedWords,
+            background = cleanedBackground,
+        ).takeUnless { artifactInBackground && cleanedBackground == null && displayText.isBlank() }
+    }
+
+    private fun containsQqTimestampArtifact(line: LyricLine): Boolean =
+        QQ_TIMESTAMP_ARTIFACT.containsMatchIn(line.text) ||
+            line.words.any { QQ_TIMESTAMP_ARTIFACT.containsMatchIn(it.text) } ||
+            line.background?.let(::containsQqTimestampArtifact) == true
 
     /** QQ sometimes emits a timed run for every kana/kanji character. Keep each
      * timing run for the sweep, but do not insert Latin word spaces between CJK
@@ -494,9 +550,12 @@ object QQMusicLyrics {
     )
 
     private val QQ_CREDIT_LINE = Regex(
-        """^\s*(?:作词|作詞|作曲|作曲者|编曲|编曲者|編曲|編曲者|詞曲|词曲|作詞作曲|作词作曲|词|曲)\s*[:：]?\s*.+$""",
+        """^\s*(?:作词|作詞|作曲|作曲者|编曲|编曲者|編曲|編曲者|詞曲|词曲|作詞作曲|作词作曲|詞|词|曲)\s*[:：]?\s*.+$""",
         RegexOption.IGNORE_CASE,
     )
+    // QQ's word-timed response occasionally leaks its provider timing payload
+    // as visible text, e.g. "12345.123)" or "(123456,123)" between words.
+    private val QQ_TIMESTAMP_ARTIFACT = Regex("""(?<!\d)\(?\d{4,6}[.,]\d{3,4}\)(?!\d)""")
     private val QQ_LRC_TIMESTAMP_PREFIX = Regex(
         """^(?:\[\d{1,3}:\d{2}(?:[.:]\d{1,3})?])+\s*""",
     )

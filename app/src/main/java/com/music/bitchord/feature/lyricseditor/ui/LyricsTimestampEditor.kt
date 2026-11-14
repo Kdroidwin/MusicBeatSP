@@ -4,7 +4,11 @@ import java.util.regex.Matcher
 
 /** Helpers for shifting LRC timestamps without changing the lyric text or metadata. */
 internal object LyricsTimestampEditor {
-    private val timestampPattern = Regex("""\[(\d+):(\d{2})(?:\.(\d{1,2}))?\]""")
+    // LRC line timestamps use [mm:ss.xx], while word/syllable sync uses
+    // <mm:ss.xx>. Edit both without changing their delimiters or precision.
+    private val timestampPattern = Regex(
+        """(?:\[(\d+):(\d{2})(?:\.(\d{1,3}))?\]|<(\d+):(\d{2})(?:\.(\d{1,3}))?>)""",
+    )
     private val inputPattern = Regex("""\[(\d+):(\d{2})\.(\d{1,2})\]""")
 
     fun parseInput(value: String): Long? {
@@ -25,7 +29,8 @@ internal object LyricsTimestampEditor {
         if (!hasTimestamps(text)) return null
         var invalid = false
         val shifted = timestampPattern.replace(text) { match ->
-            val timestampMs = toMillis(match.groupValues[1], match.groupValues[2], match.groupValues[3])
+            val (minutes, seconds, fraction) = timestampParts(match)
+            val timestampMs = toMillis(minutes, seconds, fraction)
             val result = runCatching { Math.addExact(timestampMs, deltaMs) }
                 .getOrElse {
                     invalid = true
@@ -35,7 +40,7 @@ internal object LyricsTimestampEditor {
                 invalid = true
                 match.value
             } else {
-                format(result, match.groupValues[3].length)
+                format(result, fraction.length, match.value.first(), match.value.last())
             }
         }
         return shifted.takeUnless { invalid }
@@ -43,9 +48,18 @@ internal object LyricsTimestampEditor {
 
     fun setFirst(text: String, targetMs: Long): String? {
         val first = timestampPattern.find(text) ?: return null
-        val firstMs = toMillis(first.groupValues[1], first.groupValues[2], first.groupValues[3])
-        return shiftAll(text, targetMs - firstMs)
+        val (minutes, seconds, fraction) = timestampParts(first)
+        val firstMs = toMillis(minutes, seconds, fraction)
+        val deltaMs = runCatching { Math.subtractExact(targetMs, firstMs) }.getOrNull() ?: return null
+        return shiftAll(text, deltaMs)
     }
+
+    private fun timestampParts(match: MatchResult): Triple<String, String, String> =
+        if (match.groupValues[1].isNotEmpty()) {
+            Triple(match.groupValues[1], match.groupValues[2], match.groupValues[3])
+        } else {
+            Triple(match.groupValues[4], match.groupValues[5], match.groupValues[6])
+        }
 
     private fun toMillis(minutesText: String, secondsText: String, fraction: String): Long {
         val minutes = minutesText.toLongOrNull() ?: 0L
@@ -53,6 +67,7 @@ internal object LyricsTimestampEditor {
         val fractionMs = when (fraction.length) {
             1 -> fraction.toLongOrNull()?.times(100L) ?: 0L
             2 -> fraction.toLongOrNull()?.times(10L) ?: 0L
+            3 -> fraction.toLongOrNull() ?: 0L
             else -> 0L
         }
         return runCatching {
@@ -60,7 +75,7 @@ internal object LyricsTimestampEditor {
         }.getOrDefault(Long.MAX_VALUE)
     }
 
-    private fun format(totalMs: Long, fractionDigits: Int): String {
+    private fun format(totalMs: Long, fractionDigits: Int, open: Char, close: Char): String {
         val totalSeconds = totalMs / 1_000
         val minutes = totalSeconds / 60
         val seconds = totalSeconds % 60
@@ -68,8 +83,9 @@ internal object LyricsTimestampEditor {
         val fractionText = when (fractionDigits) {
             0 -> ""
             1 -> ".${fraction / 100}"
-            else -> ".${(fraction / 10).toString().padStart(2, '0')}"
+            2 -> ".${(fraction / 10).toString().padStart(2, '0')}"
+            else -> ".${fraction.toString().padStart(3, '0')}"
         }
-        return "[${minutes.toString().padStart(2, '0')}:${seconds.toString().padStart(2, '0')}$fractionText]"
+        return "$open${minutes.toString().padStart(2, '0')}:${seconds.toString().padStart(2, '0')}$fractionText$close"
     }
 }

@@ -374,9 +374,12 @@ private fun supplementalSettingsSearchEntries(
     removeNeteaseCredits: Boolean,
     keepJapaneseNeteaseLines: Boolean,
     removeNeteaseBraceCredits: Boolean,
+    convertNeteaseToJapaneseKanji: Boolean,
     removeQqMusicMetadata: Boolean,
+    removeQqMusicTimestampArtifacts: Boolean,
     convertFollowLyricsToJapaneseKanji: Boolean,
     convertKugouToJapaneseKanji: Boolean,
+    removeKugouLyricMetadata: Boolean,
     lyricsDebugLogs: Boolean,
     bitPerfectMode: BitPerfectMode,
     convertForLimitedDac: Boolean,
@@ -431,11 +434,23 @@ private fun supplementalSettingsSearchEntries(
         checked = removeNeteaseBraceCredits,
     ) { AppSettings.setRemoveNeteaseLeadingBraceCredits(!removeNeteaseBraceCredits) },
     SettingsSearchEntry(
+        title = stringResource(R.string.netease_japanese_kanji),
+        subtitle = stringResource(R.string.netease_japanese_kanji_subtitle),
+        keywords = listOf("lyrics", "netease", "simplified chinese", "japanese kanji", "歌詞", "NetEase", "簡体字", "日本語漢字"),
+        checked = convertNeteaseToJapaneseKanji,
+    ) { AppSettings.setConvertNeteaseToJapaneseKanji(!convertNeteaseToJapaneseKanji) },
+    SettingsSearchEntry(
         title = stringResource(R.string.remove_qq_music_lyric_metadata),
         subtitle = stringResource(R.string.remove_qq_music_lyric_metadata_subtitle),
         keywords = listOf("lyrics", "QQ Music", "credits", "composer", "arranger", "歌詞", "QQ", "作曲", "編曲", "曲名"),
         checked = removeQqMusicMetadata,
     ) { AppSettings.setRemoveQqMusicLyricMetadata(!removeQqMusicMetadata) },
+    SettingsSearchEntry(
+        title = stringResource(R.string.remove_qq_music_timestamp_artifacts),
+        subtitle = stringResource(R.string.remove_qq_music_timestamp_artifacts_subtitle),
+        keywords = listOf("lyrics", "QQ Music", "numbers", "timestamps", "artifact", "歌詞", "数字", "時刻", "QQ"),
+        checked = removeQqMusicTimestampArtifacts,
+    ) { AppSettings.setRemoveQqMusicTimestampArtifacts(!removeQqMusicTimestampArtifacts) },
     SettingsSearchEntry(
         title = stringResource(R.string.followlyrics_japanese_kanji),
         subtitle = stringResource(R.string.followlyrics_japanese_kanji_subtitle),
@@ -448,6 +463,12 @@ private fun supplementalSettingsSearchEntries(
         keywords = listOf("lyrics", "kugou", "simplified chinese", "japanese kanji", "簡体字", "日本語漢字", "歌詞"),
         checked = convertKugouToJapaneseKanji,
     ) { AppSettings.setConvertKugouToJapaneseKanji(!convertKugouToJapaneseKanji) },
+    SettingsSearchEntry(
+        title = stringResource(R.string.remove_kugou_lyric_metadata),
+        subtitle = stringResource(R.string.remove_kugou_lyric_metadata_subtitle),
+        keywords = listOf("lyrics", "kugou", "title", "credits", "songwriter", "歌詞", "曲名", "作詞", "作曲", "クレジット"),
+        checked = removeKugouLyricMetadata,
+    ) { AppSettings.setRemoveKugouLyricMetadata(!removeKugouLyricMetadata) },
     SettingsSearchEntry(
         title = stringResource(R.string.lyrics_debug_logs),
         subtitle = stringResource(R.string.lyrics_debug_logs_subtitle),
@@ -1604,9 +1625,12 @@ fun SettingsScreen(
     val removeNeteaseLyricCredits by AppSettings.removeNeteaseLyricCredits.collectAsStateWithLifecycle()
     val keepJapaneseNeteaseLyricLines by AppSettings.keepJapaneseNeteaseLyricLines.collectAsStateWithLifecycle()
     val removeNeteaseLeadingBraceCredits by AppSettings.removeNeteaseLeadingBraceCredits.collectAsStateWithLifecycle()
+    val convertNeteaseToJapaneseKanji by AppSettings.convertNeteaseToJapaneseKanji.collectAsStateWithLifecycle()
     val removeQqMusicLyricMetadata by AppSettings.removeQqMusicLyricMetadata.collectAsStateWithLifecycle()
+    val removeQqMusicTimestampArtifacts by AppSettings.removeQqMusicTimestampArtifacts.collectAsStateWithLifecycle()
     val convertFollowLyricsToJapaneseKanji by AppSettings.convertFollowLyricsToJapaneseKanji.collectAsStateWithLifecycle()
     val convertKugouToJapaneseKanji by AppSettings.convertKugouToJapaneseKanji.collectAsStateWithLifecycle()
+    val removeKugouLyricMetadata by AppSettings.removeKugouLyricMetadata.collectAsStateWithLifecycle()
     val translateLyricsWithPlamo by AppSettings.translateLyricsWithPlamo.collectAsStateWithLifecycle()
     val hideLyricsTranslationProgress by AppSettings.hideLyricsTranslationProgress.collectAsStateWithLifecycle()
     val showLyricsCloseButton by AppSettings.showLyricsCloseButton.collectAsStateWithLifecycle()
@@ -2777,9 +2801,12 @@ fun SettingsScreen(
             removeNeteaseCredits = removeNeteaseLyricCredits,
             keepJapaneseNeteaseLines = keepJapaneseNeteaseLyricLines,
             removeNeteaseBraceCredits = removeNeteaseLeadingBraceCredits,
+            convertNeteaseToJapaneseKanji = convertNeteaseToJapaneseKanji,
             removeQqMusicMetadata = removeQqMusicLyricMetadata,
+            removeQqMusicTimestampArtifacts = removeQqMusicTimestampArtifacts,
             convertFollowLyricsToJapaneseKanji = convertFollowLyricsToJapaneseKanji,
             convertKugouToJapaneseKanji = convertKugouToJapaneseKanji,
+            removeKugouLyricMetadata = removeKugouLyricMetadata,
             lyricsDebugLogs = showLyricsLogs,
             bitPerfectMode = bitPerfectMode,
             convertForLimitedDac = convertForLimitedDac,
@@ -6839,6 +6866,23 @@ fun SettingsScreen(
                 )
                 RowDivider()
                 SettingsRow(
+                    icon = Icons.Rounded.Language,
+                    title = stringResource(R.string.netease_japanese_kanji),
+                    subtitle = stringResource(R.string.netease_japanese_kanji_subtitle),
+                    trailing = {
+                        Switch(
+                            checked = convertNeteaseToJapaneseKanji,
+                            onCheckedChange = AppSettings::setConvertNeteaseToJapaneseKanji,
+                            colors = SwitchDefaults.colors(
+                                checkedTrackColor = MaterialTheme.colorScheme.primary,
+                                checkedBorderColor = MaterialTheme.colorScheme.primary,
+                            ),
+                        )
+                    },
+                    onClick = { AppSettings.setConvertNeteaseToJapaneseKanji(!convertNeteaseToJapaneseKanji) },
+                )
+                RowDivider()
+                SettingsRow(
                     icon = Icons.Rounded.DeleteSweep,
                     title = stringResource(R.string.remove_qq_music_lyric_metadata),
                     subtitle = stringResource(R.string.remove_qq_music_lyric_metadata_subtitle),
@@ -6853,6 +6897,25 @@ fun SettingsScreen(
                         )
                     },
                     onClick = { AppSettings.setRemoveQqMusicLyricMetadata(!removeQqMusicLyricMetadata) },
+                )
+                RowDivider()
+                SettingsRow(
+                    icon = Icons.Rounded.DeleteSweep,
+                    title = stringResource(R.string.remove_qq_music_timestamp_artifacts),
+                    subtitle = stringResource(R.string.remove_qq_music_timestamp_artifacts_subtitle),
+                    trailing = {
+                        Switch(
+                            checked = removeQqMusicTimestampArtifacts,
+                            onCheckedChange = AppSettings::setRemoveQqMusicTimestampArtifacts,
+                            colors = SwitchDefaults.colors(
+                                checkedTrackColor = MaterialTheme.colorScheme.primary,
+                                checkedBorderColor = MaterialTheme.colorScheme.primary,
+                            ),
+                        )
+                    },
+                    onClick = {
+                        AppSettings.setRemoveQqMusicTimestampArtifacts(!removeQqMusicTimestampArtifacts)
+                    },
                 )
                 RowDivider()
                 SettingsRow(
@@ -6889,6 +6952,23 @@ fun SettingsScreen(
                         )
                     },
                     onClick = { AppSettings.setConvertKugouToJapaneseKanji(!convertKugouToJapaneseKanji) },
+                )
+                RowDivider()
+                SettingsRow(
+                    icon = Icons.Rounded.DeleteSweep,
+                    title = stringResource(R.string.remove_kugou_lyric_metadata),
+                    subtitle = stringResource(R.string.remove_kugou_lyric_metadata_subtitle),
+                    trailing = {
+                        Switch(
+                            checked = removeKugouLyricMetadata,
+                            onCheckedChange = AppSettings::setRemoveKugouLyricMetadata,
+                            colors = SwitchDefaults.colors(
+                                checkedTrackColor = MaterialTheme.colorScheme.primary,
+                                checkedBorderColor = MaterialTheme.colorScheme.primary,
+                            ),
+                        )
+                    },
+                    onClick = { AppSettings.setRemoveKugouLyricMetadata(!removeKugouLyricMetadata) },
                 )
             }
         }
