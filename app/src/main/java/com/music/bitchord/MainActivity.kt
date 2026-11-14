@@ -480,10 +480,13 @@ class MainActivity : AppCompatActivity() {
                 // and text came through it untouched. The window's background is
                 // the floor the pages have always been drawn against, so it is
                 // laid down here too and the recording is opaque like the screen.
+                // Player-background mode already paints an artwork mesh beneath
+                // the app, so its page layer must stay transparent to reveal it.
                 val windowBackground = MaterialTheme.colorScheme.background
-                val paintBackdrop: ContentDrawScope.() -> Unit = remember(windowBackground) {
+                val playerBackgroundTheme = theme == ThemeMode.PLAYER_BACKGROUND
+                val paintBackdrop: ContentDrawScope.() -> Unit = remember(windowBackground, playerBackgroundTheme) {
                     {
-                        drawRect(windowBackground)
+                        if (!playerBackgroundTheme) drawRect(windowBackground)
                         drawContent()
                     }
                 }
@@ -2890,7 +2893,7 @@ private fun BitChordApp(
     Box(
         Modifier
             .fillMaxSize()
-            .background(MaterialTheme.colorScheme.background),
+            .background(mainPageBackgroundColor()),
     ) {
         // A pushed album/artist/playlist page replaces the tab content but
         // leaves the tab bar and mini player in place.
@@ -5545,6 +5548,17 @@ private fun BitChordApp(
             )
         }
 
+    }
+}
+
+/** Keep the player's live backdrop visible beneath root tab content. */
+@Composable
+private fun mainPageBackgroundColor(): Color {
+    val theme by AppSettings.themeMode.collectAsStateWithLifecycle()
+    return if (theme == ThemeMode.PLAYER_BACKGROUND) {
+        Color.Transparent
+    } else {
+        MaterialTheme.colorScheme.background
     }
 }
 
