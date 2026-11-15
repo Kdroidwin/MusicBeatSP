@@ -18,6 +18,8 @@ import androidx.compose.ui.platform.LocalConfiguration
 import androidx.compose.ui.unit.IntOffset
 import androidx.compose.ui.unit.IntSize
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.staticCompositionLocalOf
+import androidx.compose.runtime.Immutable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
@@ -33,6 +35,15 @@ import com.music.bitchord.data.settings.PlayerArtworkMode
 import com.music.bitchord.data.settings.RetroPlayerBackground
 import com.music.bitchord.feature.localmusic.coil.LocalAudioArtworkFetcher
 import com.music.bitchord.ui.theme.rememberArtworkPalette
+
+@Immutable
+data class PlayerMenuBackdropState(
+    val song: Song,
+    val queue: List<Song>,
+)
+
+/** Current player backdrop passed to action surfaces that opt into it. */
+val LocalPlayerMenuBackdropState = staticCompositionLocalOf<PlayerMenuBackdropState?> { null }
 
 /**
  * Draws the same artwork backdrop used by the expanded player behind the app

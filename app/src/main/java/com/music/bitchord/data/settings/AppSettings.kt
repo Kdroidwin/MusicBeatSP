@@ -32,6 +32,10 @@ const val MAX_PLAYER_BUTTON_SPACING_DP = 160f
 /** Maximum upward movement for the player controls, in dp. */
 const val MAX_PLAYER_CONTROLS_RAISE_DP = 160
 
+/** Vertical player-control adjustment range; negative values move a control upward. */
+const val MIN_PLAYER_CONTROLS_VERTICAL_OFFSET_DP = -160
+const val MAX_PLAYER_CONTROLS_VERTICAL_OFFSET_DP = 160
+
 /** Range for the visible side-control icon scale. Touch targets remain unchanged. */
 const val MIN_PLAYER_SIDE_CONTROL_SCALE = 0.5f
 const val MAX_PLAYER_SIDE_CONTROL_SCALE = 1.6f
@@ -41,6 +45,19 @@ enum class AutoplaySource { OFF, YOUTUBE_MUSIC, DEVICE }
 
 /** Source used by the Player Details "Open artist" action. */
 enum class PlayerArtistPageMode { LOCAL, ONLINE, HYBRID, OLD }
+
+/** Label shown for the Home tab and its in-page heading. */
+enum class HomeTabTitleMode(val persistedValue: Int) {
+    HOME(0),
+    LISTEN_NOW(1),
+    APP_LANGUAGE(2),
+    ;
+
+    companion object {
+        fun fromPersistedValue(value: Int): HomeTabTitleMode? =
+            entries.firstOrNull { it.persistedValue == value }
+    }
+}
 
 /**
  * Stream bitrate ceiling on the YouTube fallback path — MEDIUM, HIGH and
@@ -725,8 +742,10 @@ object AppSettings {
     val playerSideControlScale = MutableStateFlow(1f)
     /** Scales shuffle, repeat, and other action glyphs at the outer ends of the transport row. */
     val playerOuterActionControlScale = MutableStateFlow(1f)
-    /** Moves the seek, transport and lower action controls toward the artwork. */
-    val playerControlsRaiseDp = MutableStateFlow(0)
+    /** Vertical offsets for the seek bar, transport row, and lower action row. */
+    val playerSeekBarVerticalOffsetDp = MutableStateFlow(0)
+    val playerTransportVerticalOffsetDp = MutableStateFlow(0)
+    val playerBottomActionsVerticalOffsetDp = MutableStateFlow(0)
     /** Strength of the artwork-matched lower blur in the full-screen player. */
     val fullBleedArtworkBottomBlurStrengthDp = MutableStateFlow(42)
     /** Hides only the word label on the play button in collection detail pages. */
@@ -745,6 +764,8 @@ object AppSettings {
     val rootTabLargeHeader = MutableStateFlow(true)
     /** Uses English names for root-tab labels even when the app language is localized. */
     val rootTabLabelsEnglish = MutableStateFlow(true)
+    /** Chooses the Home tab's label independently of other root-tab labels. */
+    val homeTabTitleMode = MutableStateFlow(HomeTabTitleMode.HOME)
     /** Hides the floating root-tab Settings action after the page scrolls. */
     val hideSettingsIconOnScroll = MutableStateFlow(true)
     /** Keeps the Songs, Albums and Artists title bar visible while scrolling. */
@@ -756,7 +777,7 @@ object AppSettings {
     val frostedPlayerDetails = MutableStateFlow(true)
     /** Master switch for artwork colours on sheets opened from the player. */
     val playerPopupsUseArtworkColor = MutableStateFlow(true)
-    /** Uses the current player's mesh-derived background palette for action menus and pop-up sheets. */
+    /** Draws the current player's actual mesh backdrop behind action menus and pop-up sheets. */
     val playerMenusUsePlayerBackgroundColor = MutableStateFlow(false)
     /** Removes player popup drag handles and their dedicated top spacing. */
     val hidePlayerPopupHandles = MutableStateFlow(true)
@@ -1743,7 +1764,21 @@ object AppSettings {
         playerSideControlScale.value = prefs.getFloat(KEY_PLAYER_SIDE_CONTROL_SCALE, 1f).coerceIn(MIN_PLAYER_SIDE_CONTROL_SCALE, MAX_PLAYER_SIDE_CONTROL_SCALE)
         playerOuterActionControlScale.value = prefs.getFloat(KEY_PLAYER_OUTER_ACTION_CONTROL_SCALE, 1f)
             .coerceIn(MIN_PLAYER_SIDE_CONTROL_SCALE, MAX_PLAYER_SIDE_CONTROL_SCALE)
-        playerControlsRaiseDp.value = prefs.getInt(KEY_PLAYER_CONTROLS_RAISE_DP, 0).coerceIn(0, MAX_PLAYER_CONTROLS_RAISE_DP)
+        val legacyControlsRaise = prefs.getInt(KEY_PLAYER_CONTROLS_RAISE_DP, 0)
+            .coerceIn(0, MAX_PLAYER_CONTROLS_RAISE_DP)
+        val legacyVerticalOffset = -legacyControlsRaise
+        playerSeekBarVerticalOffsetDp.value = prefs.getInt(
+            KEY_PLAYER_SEEK_BAR_VERTICAL_OFFSET_DP,
+            legacyVerticalOffset,
+        ).coerceIn(MIN_PLAYER_CONTROLS_VERTICAL_OFFSET_DP, MAX_PLAYER_CONTROLS_VERTICAL_OFFSET_DP)
+        playerTransportVerticalOffsetDp.value = prefs.getInt(
+            KEY_PLAYER_TRANSPORT_VERTICAL_OFFSET_DP,
+            legacyVerticalOffset,
+        ).coerceIn(MIN_PLAYER_CONTROLS_VERTICAL_OFFSET_DP, MAX_PLAYER_CONTROLS_VERTICAL_OFFSET_DP)
+        playerBottomActionsVerticalOffsetDp.value = prefs.getInt(
+            KEY_PLAYER_BOTTOM_ACTIONS_VERTICAL_OFFSET_DP,
+            legacyVerticalOffset,
+        ).coerceIn(MIN_PLAYER_CONTROLS_VERTICAL_OFFSET_DP, MAX_PLAYER_CONTROLS_VERTICAL_OFFSET_DP)
         fullBleedArtworkBottomBlurStrengthDp.value =
             prefs.getInt(KEY_FULL_BLEED_ARTWORK_BOTTOM_BLUR_STRENGTH_DP, 42).coerceIn(0, 96)
         hidePlaylistPlayButtonLabel.value = prefs.getBoolean(KEY_HIDE_PLAYLIST_PLAY_BUTTON_LABEL, false)
@@ -1754,6 +1789,9 @@ object AppSettings {
         rootTabFloatingSettingsOnly.value = prefs.getBoolean(KEY_ROOT_TAB_FLOATING_SETTINGS_ONLY, false)
         rootTabLargeHeader.value = prefs.getBoolean(KEY_ROOT_TAB_LARGE_HEADER, true)
         rootTabLabelsEnglish.value = prefs.getBoolean(KEY_ROOT_TAB_LABELS_ENGLISH, true)
+        homeTabTitleMode.value = HomeTabTitleMode.fromPersistedValue(
+            prefs.getInt(KEY_HOME_TAB_TITLE_MODE, HomeTabTitleMode.HOME.persistedValue),
+        ) ?: HomeTabTitleMode.HOME
         hideSettingsIconOnScroll.value = prefs.getBoolean(KEY_HIDE_SETTINGS_ICON_ON_SCROLL, true)
         pinMusicLibraryTopBar.value = prefs.getBoolean(KEY_PIN_MUSIC_LIBRARY_TOP_BAR, false)
         keepMusicLibraryTopBarHiddenUntilTop.value =
@@ -2632,10 +2670,22 @@ object AppSettings {
         prefs.edit().putFloat(KEY_PLAYER_OUTER_ACTION_CONTROL_SCALE, safe).apply()
     }
 
-    fun setPlayerControlsRaiseDp(value: Int) {
-        val safe = value.coerceIn(0, MAX_PLAYER_CONTROLS_RAISE_DP)
-        playerControlsRaiseDp.value = safe
-        prefs.edit().putInt(KEY_PLAYER_CONTROLS_RAISE_DP, safe).apply()
+    fun setPlayerSeekBarVerticalOffsetDp(value: Int) {
+        val safe = value.coerceIn(MIN_PLAYER_CONTROLS_VERTICAL_OFFSET_DP, MAX_PLAYER_CONTROLS_VERTICAL_OFFSET_DP)
+        playerSeekBarVerticalOffsetDp.value = safe
+        prefs.edit().putInt(KEY_PLAYER_SEEK_BAR_VERTICAL_OFFSET_DP, safe).apply()
+    }
+
+    fun setPlayerTransportVerticalOffsetDp(value: Int) {
+        val safe = value.coerceIn(MIN_PLAYER_CONTROLS_VERTICAL_OFFSET_DP, MAX_PLAYER_CONTROLS_VERTICAL_OFFSET_DP)
+        playerTransportVerticalOffsetDp.value = safe
+        prefs.edit().putInt(KEY_PLAYER_TRANSPORT_VERTICAL_OFFSET_DP, safe).apply()
+    }
+
+    fun setPlayerBottomActionsVerticalOffsetDp(value: Int) {
+        val safe = value.coerceIn(MIN_PLAYER_CONTROLS_VERTICAL_OFFSET_DP, MAX_PLAYER_CONTROLS_VERTICAL_OFFSET_DP)
+        playerBottomActionsVerticalOffsetDp.value = safe
+        prefs.edit().putInt(KEY_PLAYER_BOTTOM_ACTIONS_VERTICAL_OFFSET_DP, safe).apply()
     }
 
     fun setHidePlaylistPlayButtonLabel(value: Boolean) {
@@ -2676,6 +2726,11 @@ object AppSettings {
     fun setRootTabLabelsEnglish(value: Boolean) {
         rootTabLabelsEnglish.value = value
         prefs.edit().putBoolean(KEY_ROOT_TAB_LABELS_ENGLISH, value).apply()
+    }
+
+    fun setHomeTabTitleMode(value: HomeTabTitleMode) {
+        homeTabTitleMode.value = value
+        prefs.edit().putInt(KEY_HOME_TAB_TITLE_MODE, value.persistedValue).apply()
     }
 
     fun setHideSettingsIconOnScroll(value: Boolean) {
@@ -5165,6 +5220,9 @@ object AppSettings {
     private const val KEY_PLAYER_SIDE_CONTROL_SCALE = "player_side_control_scale"
     private const val KEY_PLAYER_OUTER_ACTION_CONTROL_SCALE = "player_outer_action_control_scale"
     private const val KEY_PLAYER_CONTROLS_RAISE_DP = "player_controls_raise_dp"
+    private const val KEY_PLAYER_SEEK_BAR_VERTICAL_OFFSET_DP = "player_seek_bar_vertical_offset_dp"
+    private const val KEY_PLAYER_TRANSPORT_VERTICAL_OFFSET_DP = "player_transport_vertical_offset_dp"
+    private const val KEY_PLAYER_BOTTOM_ACTIONS_VERTICAL_OFFSET_DP = "player_bottom_actions_vertical_offset_dp"
     private const val KEY_HIDE_PLAYLIST_PLAY_BUTTON_LABEL = "hide_playlist_play_button_label"
     private const val KEY_WHITE_COLLECTION_PLAY_BUTTON = "white_collection_play_button"
     private const val KEY_SHOW_PLAYER_TOP_GRABBER = "show_player_top_grabber"
@@ -5173,6 +5231,7 @@ object AppSettings {
     private const val KEY_ROOT_TAB_FLOATING_SETTINGS_ONLY = "root_tab_floating_settings_only"
     private const val KEY_ROOT_TAB_LARGE_HEADER = "root_tab_large_header"
     private const val KEY_ROOT_TAB_LABELS_ENGLISH = "root_tab_labels_english"
+    private const val KEY_HOME_TAB_TITLE_MODE = "home_tab_title_mode"
     private const val KEY_HIDE_SETTINGS_ICON_ON_SCROLL = "hide_settings_icon_on_scroll"
     private const val KEY_PIN_MUSIC_LIBRARY_TOP_BAR = "pin_music_library_top_bar"
     private const val KEY_MUSIC_LIBRARY_TOP_BAR_HIDDEN_UNTIL_TOP = "music_library_top_bar_hidden_until_top"

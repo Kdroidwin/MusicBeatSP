@@ -175,7 +175,7 @@ fun FrostedTopBar(
             modifier = Modifier
                 .fillMaxWidth()
                 .statusBarsPadding()
-                .height(TopBarContentHeight),
+                .height(if (largePageTitle && !floatingOnly) 0.dp else TopBarContentHeight),
         ) {
             if (!floatingOnly && !largePageTitle) {
                 Text(
@@ -237,27 +237,29 @@ fun FrostedTopBar(
                     }
                 }
             }
-            Row(
-                modifier = Modifier
-                    .align(Alignment.CenterEnd)
-                    .padding(end = 4.dp)
-                    .then(
-                        if (floatingOnly) {
-                            Modifier.background(Color.Black.copy(alpha = 0.42f), CircleShape)
-                        } else Modifier,
-                    ),
-                verticalAlignment = Alignment.CenterVertically,
-            ) {
-                actions()
+            if (!largePageTitle || floatingOnly) {
+                Row(
+                    modifier = Modifier
+                        .align(Alignment.CenterEnd)
+                        .padding(end = 4.dp)
+                        .then(
+                            if (floatingOnly) {
+                                Modifier.background(Color.Black.copy(alpha = 0.42f), CircleShape)
+                            } else Modifier,
+                        ),
+                    verticalAlignment = Alignment.CenterVertically,
+                ) {
+                    actions()
+                }
             }
         }
         if (largePageTitle && !floatingOnly) {
-            Box(
+            Row(
                 modifier = Modifier
                     .fillMaxWidth()
                     .height(RootTabLargeTitleHeight)
                     .padding(horizontal = 20.dp),
-                contentAlignment = Alignment.CenterStart,
+                verticalAlignment = Alignment.CenterVertically,
             ) {
                 Text(
                     text = title,
@@ -268,7 +270,9 @@ fun FrostedTopBar(
                     maxLines = 1,
                     softWrap = false,
                     overflow = TextOverflow.Ellipsis,
+                    modifier = Modifier.weight(1f),
                 )
+                actions()
             }
         }
         // The divider and the loader line share the bar's bottom edge; the box

@@ -74,6 +74,8 @@ import androidx.compose.ui.unit.sp
 import androidx.compose.ui.util.lerp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.music.bitchord.data.settings.AppSettings
+import com.music.bitchord.ui.player.LocalPlayerMenuBackdropState
+import com.music.bitchord.ui.player.rememberPlayerBackdropSurfaceModifier
 import com.music.bitchord.ui.theme.LocalPlayerMenuPalette
 import dev.chrisbanes.haze.HazeState
 import dev.chrisbanes.haze.materials.ExperimentalHazeMaterialsApi
@@ -121,7 +123,9 @@ private val LightMenu = IosMenuColors(
 /** The panel colours for the theme in force. */
 @Composable
 fun iosMenuColors(): IosMenuColors =
-    LocalPlayerMenuPalette.current?.let { palette ->
+    if (LocalPlayerMenuBackdropState.current != null) {
+        DarkMenu
+    } else LocalPlayerMenuPalette.current?.let { palette ->
         IosMenuColors(
             dark = true,
             fill = palette.background,
@@ -168,6 +172,10 @@ fun Modifier.iosMenuPanel(
     castsShadow: Boolean = true,
 ): Modifier {
     val reduceDynamicBlur by AppSettings.reduceDynamicBlur.collectAsStateWithLifecycle()
+    val playerBackdropState = LocalPlayerMenuBackdropState.current
+    val playerBackdropModifier = playerBackdropState?.let { state ->
+        rememberPlayerBackdropSurfaceModifier(state.song, state.queue)
+    }
     val blurs = translucent && !reduceDynamicBlur
     val backdropFrost = blurs && backdrop != null && isGlassSupported()
     val hazeFrost = blurs && !backdropFrost && hazeState != null
@@ -177,7 +185,9 @@ fun Modifier.iosMenuPanel(
         colors.fill
     }
     val shadowed = if (castsShadow) iosMenuShadow() else this
-    val surface = if (hazeFrost) {
+    val surface = if (playerBackdropModifier != null) {
+        shadowed.clip(IosMenuShape).then(playerBackdropModifier)
+    } else if (hazeFrost) {
         val style = menuFrost(colors.fill, alpha = fill.alpha)
         shadowed.clip(IosMenuShape).optimizedHazeEffect(state = hazeState, style = style)
     } else if (backdropFrost) {

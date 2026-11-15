@@ -1244,7 +1244,9 @@ fun NowPlayingScreen(
     val playerActionButtonSpacingDp by AppSettings.playerActionButtonSpacingDp.collectAsStateWithLifecycle()
     val playerSideControlScale by AppSettings.playerSideControlScale.collectAsStateWithLifecycle()
     val playerOuterActionControlScale by AppSettings.playerOuterActionControlScale.collectAsStateWithLifecycle()
-    val playerControlsRaiseDp by AppSettings.playerControlsRaiseDp.collectAsStateWithLifecycle()
+    val playerSeekBarVerticalOffsetDp by AppSettings.playerSeekBarVerticalOffsetDp.collectAsStateWithLifecycle()
+    val playerTransportVerticalOffsetDp by AppSettings.playerTransportVerticalOffsetDp.collectAsStateWithLifecycle()
+    val playerBottomActionsVerticalOffsetDp by AppSettings.playerBottomActionsVerticalOffsetDp.collectAsStateWithLifecycle()
     val autoShowLyricsOnPlayback by AppSettings.autoShowLyricsOnPlayback.collectAsStateWithLifecycle()
     val transportButtonArrangement = remember(playerTransportButtonSpacingDp) {
         playerButtonArrangement(playerTransportButtonSpacingDp)
@@ -3431,8 +3433,7 @@ fun NowPlayingScreen(
             Column(
                 modifier = Modifier
                     .widthIn(max = PLAYER_MAX_WIDTH)
-                    .fillMaxWidth()
-                    .offset(y = (-playerControlsRaiseDp).dp),
+                    .fillMaxWidth(),
                 horizontalAlignment = Alignment.CenterHorizontally,
             ) {
             // Current lyric, one line, directly above the scrubber. It stays in
@@ -3506,6 +3507,7 @@ fun NowPlayingScreen(
                     activeHeight = (playerSeekBarThicknessDp + 4).dp,
                     activeColor = LocalPlayerSeekVolumeInk.current.copy(alpha = 0.92f),
                     inactiveColor = LocalPlayerSeekVolumeInk.current.copy(alpha = 0.26f),
+                    modifier = Modifier.offset(y = playerSeekBarVerticalOffsetDp.dp),
                 )
             }
             val wifiQuality by AppSettings.audioQualityWifi.collectAsStateWithLifecycle()
@@ -3533,7 +3535,7 @@ fun NowPlayingScreen(
                         .fillMaxWidth()
                         // The slider's touch target extends well past the drawn
                         // bar, so pull the labels back up under it.
-                        .offset(y = (-9).dp),
+                        .offset(y = (-9 + playerSeekBarVerticalOffsetDp).dp),
                 ) {
                     Row(
                         modifier = Modifier.fillMaxWidth(),
@@ -3684,6 +3686,7 @@ fun NowPlayingScreen(
                         showPrevious = showLyricsPreviousControl,
                         showPlayPause = showLyricsPlayPauseControl,
                         showNext = showLyricsNextControl,
+                        verticalOffsetDp = playerTransportVerticalOffsetDp,
                         controlSize = lyricsTransportControlSize.dp,
                         isPlaying = isPlaying,
                         isLoading = isLoading,
@@ -3713,7 +3716,8 @@ fun NowPlayingScreen(
             Row(
                 modifier = Modifier
                     .fillMaxWidth()
-                    .expandPlayerControlsForSpacing(playerTransportButtonSpacingDp),
+                    .expandPlayerControlsForSpacing(playerTransportButtonSpacingDp)
+                    .offset(y = playerTransportVerticalOffsetDp.dp),
                 horizontalArrangement = transportButtonArrangement,
                 verticalAlignment = Alignment.CenterVertically,
             ) {
@@ -3969,7 +3973,8 @@ fun NowPlayingScreen(
                 Row(
                     modifier = Modifier
                         .fillMaxWidth()
-                        .expandPlayerControlsForSpacing(playerActionButtonSpacingDp),
+                        .expandPlayerControlsForSpacing(playerActionButtonSpacingDp)
+                        .offset(y = playerBottomActionsVerticalOffsetDp.dp),
                     horizontalArrangement = playerActionButtonArrangement,
                     verticalAlignment = Alignment.CenterVertically,
                 ) {
@@ -5870,6 +5875,7 @@ private fun BoxScope.LyricsTransportControls(
     showPrevious: Boolean,
     showPlayPause: Boolean,
     showNext: Boolean,
+    verticalOffsetDp: Int,
     controlSize: Dp,
     isPlaying: Boolean,
     isLoading: Boolean,
@@ -5881,13 +5887,13 @@ private fun BoxScope.LyricsTransportControls(
     onNext: () -> Unit,
 ) {
     if (!visible) return
-    val rowModifier = if (centered) {
+    val rowModifier = (if (centered) {
         Modifier.align(Alignment.Center)
     } else {
         Modifier
             .align(Alignment.CenterEnd)
             .padding(end = if (closeButtonVisible) 56.dp else 0.dp)
-    }
+    }).offset(y = verticalOffsetDp.dp)
     Row(
         modifier = rowModifier,
         verticalAlignment = Alignment.CenterVertically,

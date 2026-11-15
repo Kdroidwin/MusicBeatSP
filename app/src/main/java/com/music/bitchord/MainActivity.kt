@@ -216,6 +216,7 @@ import com.music.bitchord.data.model.durationMillis
 import com.music.bitchord.data.scrobbling.LastFM
 import com.music.bitchord.data.settings.AppSettings
 import com.music.bitchord.data.settings.PlayerArtistPageMode
+import com.music.bitchord.data.settings.HomeTabTitleMode
 import com.music.bitchord.data.settings.SavedYoutubeCollection
 import com.music.bitchord.data.settings.MainNavigationTab
 import com.music.bitchord.data.settings.MainNavigationTabs
@@ -306,6 +307,8 @@ import com.music.bitchord.ui.player.shareNowPlayingPoster
 import com.music.bitchord.ui.player.TabletLyricsPane
 import com.music.bitchord.ui.player.TabletPlayerBackdrop
 import com.music.bitchord.ui.player.PlayerBackgroundThemeBackdrop
+import com.music.bitchord.ui.player.LocalPlayerMenuBackdropState
+import com.music.bitchord.ui.player.PlayerMenuBackdropState
 import com.music.bitchord.ui.player.LocalSharedPlayerBackdrop
 import com.music.bitchord.ui.player.LocalPlayerDock
 import com.music.bitchord.ui.player.PlayerDock
@@ -484,7 +487,15 @@ class MainActivity : AppCompatActivity() {
                 val playerMenuPalette = if (playerMenusUsePlayerBackgroundColor && player.song != null) {
                     rememberPlayerMenuPalette(player.song?.artworkAt(ROW_ART_PX))
                 } else null
-                CompositionLocalProvider(LocalPlayerMenuPalette provides playerMenuPalette) {
+                val playerMenuBackdropState = remember(playerMenusUsePlayerBackgroundColor, player.song, player.queue) {
+                    if (playerMenusUsePlayerBackgroundColor) {
+                        player.song?.let { PlayerMenuBackdropState(it, player.queue) }
+                    } else null
+                }
+                CompositionLocalProvider(
+                    LocalPlayerMenuPalette provides playerMenuPalette,
+                    LocalPlayerMenuBackdropState provides playerMenuBackdropState,
+                ) {
                 // The glass surfaces sample this layer, and a layer records only
                 // what is drawn into it — which, for BitChord, is a page that
                 // paints no background of its own. Everywhere a page is not
@@ -1068,6 +1079,7 @@ private fun BitChordApp(
     val rootTabFloatingSettingsOnlySetting by AppSettings.rootTabFloatingSettingsOnly.collectAsStateWithLifecycle()
     val rootTabLargeHeaderSetting by AppSettings.rootTabLargeHeader.collectAsStateWithLifecycle()
     val rootTabLabelsEnglishSetting by AppSettings.rootTabLabelsEnglish.collectAsStateWithLifecycle()
+    val homeTabTitleModeSetting by AppSettings.homeTabTitleMode.collectAsStateWithLifecycle()
     val hideSettingsIconOnScroll by AppSettings.hideSettingsIconOnScroll.collectAsStateWithLifecycle()
     val pinMusicLibraryTopBarSetting by AppSettings.pinMusicLibraryTopBar.collectAsStateWithLifecycle()
     val keepMusicLibraryTopBarHiddenUntilTopSetting by AppSettings.keepMusicLibraryTopBarHiddenUntilTop.collectAsStateWithLifecycle()
@@ -1392,7 +1404,7 @@ private fun BitChordApp(
         onRootScrollStatusBarChanged(hideStatusBar)
     }
 
-    val allTabs = rememberMainTabs(rootTabLabelsEnglishSetting)
+    val allTabs = rememberMainTabs(rootTabLabelsEnglishSetting, homeTabTitleModeSetting)
     val tabs = remember(allTabs, visibleTabIndices) {
         visibleTabIndices.mapNotNull(allTabs::getOrNull)
     }
@@ -3860,6 +3872,10 @@ private fun BitChordApp(
                             listState = homeListState,
                             pullState = homePullState,
                             contentPadding = listPadding,
+                            homeTitle = allTabs.getOrNull(TAB_HOME)?.label ?: "Home",
+                            showInlineSettings = rootHeaderHidesHomeBar,
+                            settingsUsesMoreIcon = settingsTopBarUsesMoreIcon,
+                            onOpenSettings = { showSettings = true },
                             viewModel = viewModel,
                             homeAvailable = homeAvailable,
                             onlineRefreshing = MainViewModel.Feed.HOME in refreshingFeeds,
@@ -3983,7 +3999,7 @@ private fun BitChordApp(
                 }
 
                 val showCollectionSortAction = detail != null && !isLocalDetail && detail.type != BrowseType.ARTIST
-                if (!showReplay && !isArtistDetail && (!hideFloatingCollectionControlsNow || showCollectionSortAction)) {
+                if (!showReplay && !isArtistDetail && !rootHeaderHidesHomeBar && (!hideFloatingCollectionControlsNow || showCollectionSortAction)) {
                     FrostedTopBar(
                         title = when {
                             showSources -> stringResource(R.string.sources)
@@ -5571,6 +5587,10 @@ private fun HomeTabRoute(
     listState: LazyListState,
     pullState: androidx.compose.material3.pulltorefresh.PullToRefreshState,
     contentPadding: PaddingValues,
+    homeTitle: String,
+    showInlineSettings: Boolean,
+    settingsUsesMoreIcon: Boolean,
+    onOpenSettings: () -> Unit,
     viewModel: MainViewModel,
     homeAvailable: Boolean,
     onlineRefreshing: Boolean,
@@ -5596,6 +5616,10 @@ private fun HomeTabRoute(
         },
         pullState = pullState,
         contentPadding = contentPadding,
+        homeTitle = homeTitle,
+        showInlineSettings = showInlineSettings,
+        settingsUsesMoreIcon = settingsUsesMoreIcon,
+        onOpenSettings = onOpenSettings,
         onItemClick = onItemClick,
         onItemLongPress = onItemLongPress,
         onRetry = onRetry,
@@ -6032,9 +6056,17 @@ private fun rootTabHeaderMode(enabled: Boolean, isRootPage: Boolean, selectedTab
     else RootTabHeaderMode(showLargeTitle = true, hideHomeBar = false)
 
 @Composable
-private fun rememberMainTabs(forceEnglish: Boolean): List<BottomTab> {
+private fun rememberMainTabs(
+    forceEnglish: Boolean,
+    homeTitleMode: HomeTabTitleMode,
+): List<BottomTab> {
+    val homeTitle = when (homeTitleMode) {
+        HomeTabTitleMode.HOME -> "Home"
+        HomeTabTitleMode.LISTEN_NOW -> "Listen Now"
+        HomeTabTitleMode.APP_LANGUAGE -> stringResource(R.string.listen_now)
+    }
     val labels = if (forceEnglish) {
-        listOf("Songs", "Albums", "Artists", "Library", "Search", "Album Artists", "Folders", "Radio", "Home", "Genres", "Services")
+        listOf("Songs", "Albums", "Artists", "Library", "Search", "Album Artists", "Folders", "Radio", "Genres", "Services")
     } else {
         listOf(
             stringResource(R.string.songs),
@@ -6045,12 +6077,11 @@ private fun rememberMainTabs(forceEnglish: Boolean): List<BottomTab> {
             stringResource(R.string.album_artists),
             stringResource(R.string.folders),
             stringResource(R.string.radio),
-            stringResource(R.string.listen_now),
             stringResource(R.string.genres),
             stringResource(R.string.services),
         )
     }
-    return remember(forceEnglish, labels) {
+    return remember(forceEnglish, homeTitleMode, homeTitle, labels) {
         listOf(
             BottomTab(labels[TAB_SONGS], Icons.Rounded.MusicNote),
             BottomTab(labels[TAB_ALBUMS], Icons.Rounded.Album),
@@ -6060,9 +6091,9 @@ private fun rememberMainTabs(forceEnglish: Boolean): List<BottomTab> {
             BottomTab(labels[TAB_ALBUM_ARTISTS], BitChordIcons.AlbumArtist),
             BottomTab(labels[TAB_FOLDERS], Icons.Rounded.Folder),
             BottomTab(labels[TAB_RADIO], Icons.Rounded.Radio),
-            BottomTab(labels[TAB_HOME], Icons.Rounded.Home),
-            BottomTab(labels[TAB_GENRES], Icons.Rounded.LocalOffer),
-            BottomTab(labels[TAB_SERVICES], Icons.Rounded.Headphones),
+            BottomTab(homeTitle, Icons.Rounded.Home),
+            BottomTab(labels[TAB_GENRES - 1], Icons.Rounded.LocalOffer),
+            BottomTab(labels[TAB_SERVICES - 1], Icons.Rounded.Headphones),
         )
     }
 }
@@ -6083,7 +6114,9 @@ private fun rootTabTopBarPresentation(
         showReplay && showStatusBar -> statusBarInset
         showReplay || collapsedByScroll -> 0.dp
         persistentRootMode -> if (showStatusBar) statusBarInset else 0.dp
-        else -> (if (showStatusBar) statusBarInset else 0.dp) + TopBarContentHeight + largeHeaderHeight + TopBarContentGap
+        else -> (if (showStatusBar) statusBarInset else 0.dp) +
+            (if (largeHeaderHeight > 0.dp) largeHeaderHeight else TopBarContentHeight) +
+            TopBarContentGap
     }
     return RootTabTopBarPresentation(
         floatingSettingsOnly = persistentRootMode || collapsedByScroll,
