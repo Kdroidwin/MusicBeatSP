@@ -125,6 +125,7 @@ fun LocalSearchScreen(
     onConfiguredSourceTrackClick: ((Song) -> Unit)? = null,
     contentPadding: PaddingValues = PaddingValues(0.dp),
     onRootListScrollChanged: ((Boolean) -> Unit)? = null,
+    onRootListScrollOffsetChanged: ((Float) -> Unit)? = null,
     modifier: Modifier = Modifier,
 ) {
     val context = LocalContext.current
@@ -144,6 +145,7 @@ fun LocalSearchScreen(
     var selectedFilter by rememberSaveable { mutableStateOf(LocalSearchFilter.ALL) }
     val listState = rememberLazyListState()
     val rootListScrollCallback = rememberUpdatedState(onRootListScrollChanged)
+    val rootListScrollOffsetCallback = rememberUpdatedState(onRootListScrollOffsetChanged)
     val rootListScrollThresholdPx = 0f
 
     LaunchedEffect(canSearchYoutubeMusic) {
@@ -280,6 +282,15 @@ fun LocalSearchScreen(
         }
             .distinctUntilChanged()
             .collect { rootListScrollCallback.value?.invoke(it) }
+    }
+    LaunchedEffect(listState, inDrillDown) {
+        if (inDrillDown) return@LaunchedEffect
+        snapshotFlow {
+            if (listState.firstVisibleItemIndex > 0) Float.POSITIVE_INFINITY
+            else listState.firstVisibleItemScrollOffset.toFloat()
+        }
+            .distinctUntilChanged()
+            .collect { rootListScrollOffsetCallback.value?.invoke(it) }
     }
 
     val matchedSongs = remember(searchResults) {

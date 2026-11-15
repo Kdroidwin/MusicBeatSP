@@ -737,6 +737,7 @@ fun DrillDownSongList(
     songDropdownMenu: (@Composable (Song) -> Unit)? = null,
     onArtworkPaletteChanged: ((ArtworkPalette?) -> Unit)? = null,
     onRootListScrollChanged: ((Boolean) -> Unit)? = null,
+    onRootListScrollOffsetChanged: ((Float) -> Unit)? = null,
     modifier: Modifier = Modifier,
 ) {
     val folderArtworkFallbackMode by AppSettings.folderArtworkFallbackMode.collectAsStateWithLifecycle()
@@ -807,6 +808,7 @@ fun DrillDownSongList(
     val selectionToolbarBackground = artworkPalette.wash
     val selectionToolbarContentColor = selectionToolbarBackground.highContrastBlackOrWhite()
     val rootListScrollCallback = rememberUpdatedState(onRootListScrollChanged)
+    val rootListScrollOffsetCallback = rememberUpdatedState(onRootListScrollOffsetChanged)
     val rootListScrollThresholdPx = with(LocalDensity.current) { 32.dp.toPx() }
     val collectionHeaderItemCount = 1 + (if (!selectionMode) 1 else 0) + (if (selectionToolbar != null) 1 else 0)
     val collectionColorTransitionHalfHeightPx = with(LocalDensity.current) {
@@ -822,6 +824,14 @@ fun DrillDownSongList(
             }
                 .distinctUntilChanged()
                 .collect { rootListScrollCallback.value?.invoke(it) }
+        }
+        LaunchedEffect(gridState) {
+            snapshotFlow {
+                if (gridState.firstVisibleItemIndex > 0) Float.POSITIVE_INFINITY
+                else gridState.firstVisibleItemScrollOffset.toFloat()
+            }
+                .distinctUntilChanged()
+                .collect { rootListScrollOffsetCallback.value?.invoke(it) }
         }
         BoxWithConstraints(
             modifier = modifier
@@ -955,6 +965,14 @@ fun DrillDownSongList(
             }
                 .distinctUntilChanged()
                 .collect { rootListScrollCallback.value?.invoke(it) }
+        }
+        LaunchedEffect(listState) {
+            snapshotFlow {
+                if (listState.firstVisibleItemIndex > 0) Float.POSITIVE_INFINITY
+                else listState.firstVisibleItemScrollOffset.toFloat()
+            }
+                .distinctUntilChanged()
+                .collect { rootListScrollOffsetCallback.value?.invoke(it) }
         }
         var displayedSongs by remember(songs) { mutableStateOf(songs) }
         val dragState = rememberPlaylistSongDragState(listState, displayedSongs.size) { from, to, draggedKey, insertAfter, groupedKeys ->

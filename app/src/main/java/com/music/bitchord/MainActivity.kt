@@ -155,6 +155,7 @@ import androidx.lifecycle.LifecycleEventObserver
 import androidx.lifecycle.compose.LocalLifecycleOwner
 import com.music.bitchord.feature.localmusic.ui.components.LocalAudioPermissionDialog
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableFloatStateOf
 import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.mutableStateMapOf
 import androidx.compose.runtime.mutableStateOf
@@ -1383,6 +1384,7 @@ private fun BitChordApp(
     val musicLibraryTopBarPinned = rootHeaderLayout.pinned
     val rootTabTopBarCollapsed = rootHeaderLayout.collapsed
     val onRootLibraryOrSearchScrolled = rootHeaderLayout.onListScrollChanged
+    val onRootLibraryOrSearchScrollOffsetChanged = rootHeaderLayout.onListScrollOffsetChanged
     val rootTabTopBarScroll = rootHeaderLayout.scrollConnection
     val rootTabFloatingSettingsOnly = rootHeaderLayout.floatingSettingsOnly
     val rootTopPadding = rootHeaderLayout.contentTopPadding
@@ -3740,6 +3742,7 @@ private fun BitChordApp(
                                 onArtworkPaletteChanged = onLocalArtworkPaletteChanged,
                                 onCollectionNavigationChanged = onCollectionNavigationChanged,
                                 onRootListScrollChanged = onRootLibraryOrSearchScrolled,
+                                onRootListScrollOffsetChanged = onRootLibraryOrSearchScrollOffsetChanged,
                                 onPlaylistDetailVisibilityChanged = { libraryPlaylistDetailOpen = it },
                                 onOpenYoutubeCollection = { collection ->
                                     val type = runCatching { BrowseType.valueOf(collection.type) }
@@ -3805,6 +3808,7 @@ private fun BitChordApp(
                                     )
                                 },
                                     onRootListScrollChanged = onRootLibraryOrSearchScrolled,
+                                    onRootListScrollOffsetChanged = onRootLibraryOrSearchScrollOffsetChanged,
                                     contentPadding = listPadding,
                                 )
                             }
@@ -3981,11 +3985,12 @@ private fun BitChordApp(
 
                 val showCollectionSortAction = detail != null && !isLocalDetail && detail.type != BrowseType.ARTIST
                 RootTabHeaderOverlay(
-                    visible = useInlineRootHeader && !rootHeaderHidesHomeBar && !showReplay &&
-                        (!rootTabTopBarCollapsed || musicLibraryTopBarPinned),
+                    visible = useInlineRootHeader && !rootHeaderHidesHomeBar && !showReplay,
                     title = allTabs.getOrElse(selectedTab) { allTabs.first() }.label,
                     settingsUsesMoreIcon = settingsTopBarUsesMoreIcon,
                     onOpenSettings = { showSettings = true },
+                    topInset = if (showStatusBar) WindowInsets.statusBarsIgnoringVisibility.asPaddingValues().calculateTopPadding() else 0.dp,
+                    scrollOffsetPx = rootHeaderLayout.scrollOffsetPx,
                     modifier = Modifier.align(Alignment.TopStart),
                 )
                 if (
@@ -6050,6 +6055,8 @@ private data class RootTabHeaderLayout(
     val pinned: Boolean,
     val collapsed: Boolean,
     val onListScrollChanged: (Boolean) -> Unit,
+    val onListScrollOffsetChanged: (Float) -> Unit,
+    val scrollOffsetPx: Float,
     val scrollConnection: NestedScrollConnection,
     val floatingSettingsOnly: Boolean,
     val contentTopPadding: androidx.compose.ui.unit.Dp,
@@ -6070,14 +6077,21 @@ private fun rememberRootTabHeaderLayout(
     onRootScrollStatusBarChanged: (Boolean) -> Unit,
 ): RootTabHeaderLayout {
     val mode = rootTabHeaderMode(largeHeaderEnabled, isRootPage, selectedTab)
+    val useInlineHeader = mode.showLargeTitle && isRootPage && selectedTab != TAB_HOME
+    val homeOwnsFlowingHeading = largeHeaderEnabled && isRootPage && selectedTab == TAB_HOME
+    val headingTopPadding = (if (showStatusBar) statusBarInset else 0.dp) + RootTabPageContentHeight
+    val headerScrollRangePx = with(LocalDensity.current) {
+        (if (useInlineHeader) headingTopPadding else RootTabPageContentHeight).toPx()
+    }
     val topBarState = rememberRootTabTopBarState(
         selectedTab = selectedTab,
         isRootScreen = isRootScreen,
         pinSetting = pinSetting,
         keepHiddenUntilTopSetting = keepHiddenUntilTopSetting,
+        flowingHeader = largeHeaderEnabled && isRootPage,
+        headerScrollRangePx = headerScrollRangePx,
     )
     val snapOnReturn = keepHiddenUntilTopSetting && selectedTab != TAB_HOME
-    val useInlineHeader = mode.showLargeTitle && isRootPage && selectedTab != TAB_HOME
     val topBarPresentation = rootTabTopBarPresentation(
         persistentSettingsOnly = largeHeaderEnabled || floatingSettingsOnlyEnabled || mode.hideHomeBar,
         scrollEnabled = topBarState.scrollEnabled,
@@ -6090,16 +6104,20 @@ private fun rememberRootTabHeaderLayout(
     )
     val targetTopPadding = rootTabPageContentTopPadding(
         usePageHeading = mode.showLargeTitle && isRootPage,
-        collapsed = topBarState.collapsed && !topBarState.pinned,
         showStatusBar = showStatusBar,
         statusBarInset = statusBarInset,
         legacyContentPadding = topBarPresentation.contentTopPadding,
     )
+    val effectiveTopPadding = when {
+        useInlineHeader -> headingTopPadding
+        homeOwnsFlowingHeading -> if (showStatusBar) statusBarInset else 0.dp
+        else -> targetTopPadding
+    }
     val animatedTopPadding = animateDpAsState(
-        targetValue = targetTopPadding,
-        // Inline root headings follow Home's immediate in-flow appearance;
-        // do not animate the reserved inset and make the heading look like it
-        // grows out of the content. Legacy headers keep their prior motion.
+        targetValue = effectiveTopPadding,
+        // Large headings are part of the scrolling content. Keep their initial
+        // inset fixed so the heading moves out with the list instead of being
+        // removed from a separate toolbar slot.
         animationSpec = if (useInlineHeader || (snapOnReturn && !topBarState.collapsed)) {
             snap()
         } else {
@@ -6107,8 +6125,8 @@ private fun rememberRootTabHeaderLayout(
         },
         label = "rootTopPadding",
     )
-    val contentTopPadding = if (useInlineHeader || (snapOnReturn && !topBarState.collapsed)) {
-        targetTopPadding
+    val contentTopPadding = if (useInlineHeader || homeOwnsFlowingHeading || (snapOnReturn && !topBarState.collapsed)) {
+        effectiveTopPadding
     } else {
         animatedTopPadding.value
     }
@@ -6116,16 +6134,16 @@ private fun rememberRootTabHeaderLayout(
         topBarState.scrollEnabled,
         topBarState.collapsed,
         topBarState.pinned,
-        targetTopPadding,
+        effectiveTopPadding,
         useInlineHeader,
     ) {
         val hideStatusBar = topBarState.scrollEnabled && topBarState.collapsed && !topBarState.pinned
         // The inline root heading has no entrance/exit motion: its reserved
-        // inset changes in the same frame as the heading. Legacy headers keep
+        // space moves only when the list consumes scroll. Legacy headers keep
         // their existing short collapse transition.
         if (hideStatusBar && !useInlineHeader) {
             snapshotFlow { animatedTopPadding.value }.first { padding ->
-                kotlin.math.abs(padding.value - targetTopPadding.value) < 0.5f
+                kotlin.math.abs(padding.value - effectiveTopPadding.value) < 0.5f
             }
         }
         onRootScrollStatusBarChanged(hideStatusBar)
@@ -6138,6 +6156,8 @@ private fun rememberRootTabHeaderLayout(
         pinned = topBarState.pinned,
         collapsed = topBarState.collapsed,
         onListScrollChanged = topBarState.onListScrollChanged,
+        onListScrollOffsetChanged = topBarState.onListScrollOffsetChanged,
+        scrollOffsetPx = topBarState.scrollOffsetPx,
         scrollConnection = topBarState.scrollConnection,
         floatingSettingsOnly = mode.showLargeTitle || topBarPresentation.floatingSettingsOnly,
         contentTopPadding = contentTopPadding,
@@ -6146,13 +6166,11 @@ private fun rememberRootTabHeaderLayout(
 
 private fun rootTabPageContentTopPadding(
     usePageHeading: Boolean,
-    collapsed: Boolean,
     showStatusBar: Boolean,
     statusBarInset: androidx.compose.ui.unit.Dp,
     legacyContentPadding: androidx.compose.ui.unit.Dp,
 ): androidx.compose.ui.unit.Dp = when {
     !usePageHeading -> legacyContentPadding
-    collapsed -> 0.dp
     else -> (if (showStatusBar) statusBarInset else 0.dp) + RootTabPageContentHeight
 }
 
@@ -6162,12 +6180,15 @@ private fun RootTabPageHeading(
     title: String,
     settingsUsesMoreIcon: Boolean,
     onOpenSettings: () -> Unit,
+    topInset: androidx.compose.ui.unit.Dp,
+    scrollOffsetPx: Float,
     modifier: Modifier = Modifier,
 ) {
     Row(
         modifier = modifier
             .fillMaxWidth()
-            .statusBarsPadding()
+            .offset(y = with(LocalDensity.current) { (-scrollOffsetPx).toDp() })
+            .padding(top = topInset)
             .padding(horizontal = 20.dp, vertical = 14.dp)
             .heightIn(min = RootTabLargeTitleHeight),
         verticalAlignment = Alignment.CenterVertically,
@@ -6205,6 +6226,8 @@ private fun RootTabHeaderOverlay(
     title: String,
     settingsUsesMoreIcon: Boolean,
     onOpenSettings: () -> Unit,
+    topInset: androidx.compose.ui.unit.Dp,
+    scrollOffsetPx: Float,
     modifier: Modifier = Modifier,
 ) {
     if (visible) {
@@ -6212,6 +6235,8 @@ private fun RootTabHeaderOverlay(
             title = title,
             settingsUsesMoreIcon = settingsUsesMoreIcon,
             onOpenSettings = onOpenSettings,
+            topInset = topInset,
+            scrollOffsetPx = scrollOffsetPx,
             modifier = modifier,
         )
     }
@@ -6360,6 +6385,8 @@ private data class RootTabTopBarState(
     val pinned: Boolean,
     val collapsed: Boolean,
     val onListScrollChanged: (Boolean) -> Unit,
+    val onListScrollOffsetChanged: (Float) -> Unit,
+    val scrollOffsetPx: Float,
     val scrollConnection: NestedScrollConnection,
 )
 
@@ -6369,6 +6396,8 @@ private fun rememberRootTabTopBarState(
     isRootScreen: Boolean,
     pinSetting: Boolean,
     keepHiddenUntilTopSetting: Boolean,
+    flowingHeader: Boolean,
+    headerScrollRangePx: Float,
 ): RootTabTopBarState {
     val scrollEnabled = isRootScreen
     val listOwnsScrollState = selectedTab == TAB_LIBRARY || selectedTab == TAB_SEARCH
@@ -6380,52 +6409,86 @@ private fun rememberRootTabTopBarState(
     // actually returned to the position where it was hidden.
     val holdHiddenUntilTop = isRootScreen && selectedTab != TAB_HOME && keepHiddenUntilTopSetting
     var collapsed by remember(selectedTab) { mutableStateOf(false) }
+    var scrollOffsetPx by remember(selectedTab) { mutableFloatStateOf(0f) }
 
     LaunchedEffect(selectedTab, pinned) {
-        if (pinned) collapsed = false
+        if (pinned) {
+            collapsed = false
+            scrollOffsetPx = 0f
+        }
     }
 
     val onListScrollChanged: (Boolean) -> Unit = { contentScrolled ->
-        if (isRootScreen && listOwnsScrollState) collapsed = contentScrolled && !pinned
+        if (isRootScreen && listOwnsScrollState && !flowingHeader) {
+            collapsed = contentScrolled && !pinned
+        }
+    }
+    val updateOffset: (Float) -> Unit = { requestedOffset ->
+        if (isRootScreen && flowingHeader && !pinned) {
+            val nextOffset = requestedOffset.coerceIn(0f, headerScrollRangePx)
+            val heldAtTop = holdHiddenUntilTop && collapsed && nextOffset > 0f
+            scrollOffsetPx = if (heldAtTop) headerScrollRangePx else nextOffset
+            val nextCollapsed = scrollOffsetPx >= headerScrollRangePx - 1f
+            if (collapsed != nextCollapsed) collapsed = nextCollapsed
+        }
     }
 
-    // Collapse on the first real content movement. Library and Search report
-    // their list state directly so reversing direction mid-list cannot reveal
-    // their category/source labels before they reach the top.
+    // Root headings follow the content's consumed scroll distance. Library and
+    // Search report their list position directly because those screens own
+    // their scroll state; this also keeps their category/source rows hidden
+    // until the list itself returns to its top.
     val scrollConnection = remember(
         selectedTab,
         scrollEnabled,
         listOwnsScrollState,
         pinned,
         holdHiddenUntilTop,
+        flowingHeader,
+        headerScrollRangePx,
     ) {
         RootTabTopBarScrollConnection(
             enabled = scrollEnabled && !listOwnsScrollState && !pinned,
+            flowingHeader = flowingHeader,
             initiallyCollapsed = collapsed,
+            initialScrollOffsetPx = scrollOffsetPx,
+            headerScrollRangePx = headerScrollRangePx,
             thresholdPx = 0f,
             holdHiddenUntilTop = holdHiddenUntilTop,
             onCollapsedChange = { collapsed = it },
+            onScrollOffsetChange = { offset ->
+                scrollOffsetPx = offset
+                val nextCollapsed = offset >= headerScrollRangePx - 1f
+                if (collapsed != nextCollapsed) collapsed = nextCollapsed
+            },
         )
     }
+    val onListScrollOffsetChanged: (Float) -> Unit = { updateOffset(it) }
 
     return RootTabTopBarState(
         scrollEnabled = scrollEnabled,
         pinned = pinned,
         collapsed = collapsed,
         onListScrollChanged = onListScrollChanged,
+        onListScrollOffsetChanged = onListScrollOffsetChanged,
+        scrollOffsetPx = scrollOffsetPx,
         scrollConnection = scrollConnection,
     )
 }
 
-/** Tracks when an inline root heading should leave or re-enter the page. */
+/** Follows only scroll movement actually consumed by a root page's content. */
 private class RootTabTopBarScrollConnection(
     private val enabled: Boolean,
+    private val flowingHeader: Boolean,
     initiallyCollapsed: Boolean,
+    initialScrollOffsetPx: Float,
+    private val headerScrollRangePx: Float,
     private val thresholdPx: Float,
     private val holdHiddenUntilTop: Boolean,
     private val onCollapsedChange: (Boolean) -> Unit,
+    private val onScrollOffsetChange: (Float) -> Unit,
 ) : NestedScrollConnection {
     private var collapsed = initiallyCollapsed
+    private var scrollOffsetPx = initialScrollOffsetPx.coerceIn(0f, headerScrollRangePx)
     private var lastDirection = 0
     private var accumulatedDistance = 0f
     // Distance the root content has moved down since this header was hidden.
@@ -6437,64 +6500,66 @@ private class RootTabTopBarScrollConnection(
     override fun onPreScroll(
         available: Offset,
         source: NestedScrollSource,
-    ): Offset {
-        if (!enabled) return Offset.Zero
-
-        // Observe the gesture before the child consumes it. Some tab screens
-        // have nested result/category lists that report no post-scroll delta to
-        // this outer connection, leaving their full bar visible indefinitely.
-        val delta = available.y
-        if (delta == 0f) return Offset.Zero
-
-        val direction = if (delta < 0f) -1 else 1
-        val shouldCollapse = direction < 0
-        if (holdHiddenUntilTop && collapsed && !shouldCollapse) {
-            accumulatedDistance = 0f
-            lastDirection = 0
-            return Offset.Zero
-        }
-        if (shouldCollapse == collapsed) {
-            accumulatedDistance = 0f
-            lastDirection = 0
-            return Offset.Zero
-        }
-        if (direction != lastDirection) accumulatedDistance = 0f
-        accumulatedDistance += abs(delta)
-        lastDirection = direction
-
-        if (accumulatedDistance >= thresholdPx) {
-            collapsed = shouldCollapse
-            accumulatedDistance = 0f
-            lastDirection = 0
-            if (collapsed) distanceFromRevealPosition = 0f
-            onCollapsedChange(collapsed)
-        }
-        return Offset.Zero
-    }
+    ): Offset = Offset.Zero
 
     override fun onPostScroll(
         consumed: Offset,
         available: Offset,
         source: NestedScrollSource,
     ): Offset {
-        if (!enabled || !holdHiddenUntilTop) return Offset.Zero
+        if (!enabled || consumed.y == 0f) return Offset.Zero
 
-        // Count only motion consumed by the scrolled content. Nested children
-        // can leave positive unconsumed deltas at their own top edge; those
-        // must not make a root tab header pop back while the page is mid-list.
-        if (consumed.y < 0f) {
-            distanceFromRevealPosition += -consumed.y
-        } else if (consumed.y > 0f) {
-            distanceFromRevealPosition =
-                (distanceFromRevealPosition - consumed.y).coerceAtLeast(0f)
+        val delta = consumed.y
+        if (delta < 0f) {
+            distanceFromRevealPosition += -delta
+        } else {
+            distanceFromRevealPosition = (distanceFromRevealPosition - delta).coerceAtLeast(0f)
         }
 
-        if (collapsed && available.y > 0f && distanceFromRevealPosition <= 1f) {
-            collapsed = false
-            accumulatedDistance = 0f
-            lastDirection = 0
-            distanceFromRevealPosition = 0f
-            onCollapsedChange(false)
+        if (flowingHeader) {
+            val nextOffset = when {
+                delta < 0f -> (scrollOffsetPx - delta).coerceAtMost(headerScrollRangePx)
+                holdHiddenUntilTop && collapsed -> {
+                    if (distanceFromRevealPosition <= 1f) 0f else headerScrollRangePx
+                }
+                else -> (scrollOffsetPx - delta).coerceAtLeast(0f)
+            }
+            scrollOffsetPx = nextOffset
+            onScrollOffsetChange(nextOffset)
+            val nextCollapsed = nextOffset >= headerScrollRangePx - 1f
+            if (collapsed != nextCollapsed) {
+                collapsed = nextCollapsed
+                onCollapsedChange(nextCollapsed)
+            }
+            if (distanceFromRevealPosition <= 1f && delta > 0f) {
+                distanceFromRevealPosition = 0f
+            }
+        } else {
+            val direction = if (delta < 0f) -1 else 1
+            val shouldCollapse = direction < 0
+            if (holdHiddenUntilTop && collapsed && !shouldCollapse) {
+                if (distanceFromRevealPosition <= 1f) {
+                    collapsed = false
+                    accumulatedDistance = 0f
+                    lastDirection = 0
+                    onCollapsedChange(false)
+                }
+                return Offset.Zero
+            }
+            if (shouldCollapse == collapsed) {
+                accumulatedDistance = 0f
+                lastDirection = 0
+                return Offset.Zero
+            }
+            if (direction != lastDirection) accumulatedDistance = 0f
+            accumulatedDistance += abs(delta)
+            lastDirection = direction
+            if (accumulatedDistance >= thresholdPx) {
+                collapsed = shouldCollapse
+                accumulatedDistance = 0f
+                lastDirection = 0
+                onCollapsedChange(collapsed)
+            }
         }
         return Offset.Zero
     }

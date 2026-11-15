@@ -275,6 +275,7 @@ fun LibraryScreen(
     onArtworkPaletteChanged: ((ArtworkPalette?) -> Unit)? = null,
     onCollectionNavigationChanged: ((Boolean, (() -> Unit)?) -> Unit)? = null,
     onRootListScrollChanged: ((Boolean) -> Unit)? = null,
+    onRootListScrollOffsetChanged: ((Float) -> Unit)? = null,
     onPlaylistDetailVisibilityChanged: ((Boolean) -> Unit)? = null,
     onOpenYoutubeCollection: (SavedYoutubeCollection) -> Unit = {},
     onOpenReplay: (() -> Unit)? = null,
@@ -701,15 +702,20 @@ fun LibraryScreen(
     val inHistoryView = selectedFilter == LibraryFilter.RECENTLY_PLAYED ||
         selectedFilter == LibraryFilter.MOST_PLAYED
     val rootListScrollCallback = rememberUpdatedState(onRootListScrollChanged)
+    val rootListScrollOffsetCallback = rememberUpdatedState(onRootListScrollOffsetChanged)
     var rootLibraryContentScrolled by remember { mutableStateOf(false) }
     val reportRootLibraryScroll: (Boolean) -> Unit = { isScrolled ->
         rootLibraryContentScrolled = isScrolled
         rootListScrollCallback.value?.invoke(isScrolled)
     }
+    val reportRootLibraryScrollOffset: (Float) -> Unit = { offset ->
+        if (!inDrillDown) rootListScrollOffsetCallback.value?.invoke(offset)
+    }
     val rootListScrollThresholdPx = 0f
     LaunchedEffect(selectedFilter, libraryViewType, inDrillDown, rootListScrollThresholdPx) {
         if (inDrillDown || inHistoryView || selectedFilter == LibraryFilter.YOUTUBE_DOWNLOADS) {
             reportRootLibraryScroll(false)
+            if (!inDrillDown) rootListScrollOffsetCallback.value?.invoke(0f)
             return@LaunchedEffect
         }
         val rootListScrollFlow = when {
@@ -727,6 +733,29 @@ fun LibraryScreen(
             }
         }
         rootListScrollFlow.distinctUntilChanged().collect { reportRootLibraryScroll(it) }
+    }
+    LaunchedEffect(selectedFilter, libraryViewType, inDrillDown, inHistoryView) {
+        if (inDrillDown) return@LaunchedEffect
+        if (inHistoryView || selectedFilter == LibraryFilter.YOUTUBE_DOWNLOADS) {
+            return@LaunchedEffect
+        }
+        val rootScrollOffsetFlow = when {
+            selectedFilter == LibraryFilter.YOUTUBE_MUSIC -> snapshotFlow {
+                if (youtubeCollectionsListState.firstVisibleItemIndex > 0) Float.POSITIVE_INFINITY
+                else youtubeCollectionsListState.firstVisibleItemScrollOffset.toFloat()
+            }
+            libraryViewType == LibraryViewType.GRID -> snapshotFlow {
+                if (collectionGridState.firstVisibleItemIndex > 0) Float.POSITIVE_INFINITY
+                else collectionGridState.firstVisibleItemScrollOffset.toFloat()
+            }
+            else -> snapshotFlow {
+                if (collectionListState.firstVisibleItemIndex > 0) Float.POSITIVE_INFINITY
+                else collectionListState.firstVisibleItemScrollOffset.toFloat()
+            }
+        }
+        rootScrollOffsetFlow.distinctUntilChanged().collect { offset ->
+            rootListScrollOffsetCallback.value?.invoke(offset)
+        }
     }
     val selectedPlaylistSongs = remember(visibleDrillDownSongs, selectedPlaylistSongIds) {
         visibleDrillDownSongs.filter { (it.localUri ?: it.videoId) in selectedPlaylistSongIds }
@@ -1278,6 +1307,7 @@ fun LibraryScreen(
                     songDropdownMenu = if (visibleDrillDownPlaylistId != null || visibleDrillDownIsFavorites) playlistSongDropdownMenu else songDropdownMenu,
                     onArtworkPaletteChanged = onArtworkPaletteChanged,
                     onRootListScrollChanged = reportRootLibraryScroll,
+                    onRootListScrollOffsetChanged = reportRootLibraryScrollOffset,
                 )
             } else if (key == "library:youtube") {
                 Column(
@@ -1465,6 +1495,7 @@ fun LibraryScreen(
                             contentPadding = PaddingValues(bottom = contentPadding.calculateBottomPadding()),
                             songDropdownMenu = songDropdownMenu,
                             onRootListScrollChanged = reportRootLibraryScroll,
+                            onRootListScrollOffsetChanged = reportRootLibraryScrollOffset,
                             modifier = Modifier.weight(1f),
                         )
                     }
@@ -1536,6 +1567,7 @@ fun LibraryScreen(
                             contentPadding = PaddingValues(bottom = contentPadding.calculateBottomPadding()),
                             songDropdownMenu = songDropdownMenu,
                             onRootListScrollChanged = reportRootLibraryScroll,
+                            onRootListScrollOffsetChanged = reportRootLibraryScrollOffset,
                             modifier = Modifier.weight(1f),
                         )
                     }
