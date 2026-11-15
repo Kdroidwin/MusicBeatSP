@@ -1870,6 +1870,10 @@
     <string name="settings_top_bar_more_icon_subtitle">Show a three-dot icon instead of the gear in the main top bar.</string>
     <string name="root_tab_floating_settings_only">Show only floating Settings on main tabs</string>
     <string name="root_tab_floating_settings_only_subtitle">Hide the app icon and tab title bar on main tabs while keeping Settings as a floating action. Off by default.</string>
+    <string name="root_tab_large_header">Use large tab headings</string>
+    <string name="root_tab_large_header_subtitle">Replace the centered title bar with a large, left-aligned page heading like BitChord. Home hides the bar and keeps Settings floating. On by default; turn off to restore the previous design.</string>
+    <string name="root_tab_labels_english">Use English tab names</string>
+    <string name="root_tab_labels_english_subtitle">Show tab names such as Albums and Library in English even when another app language is selected. Turn off to use translated names.</string>
     <string name="hide_settings_icon_on_scroll">Hide the Settings icon while scrolling</string>
     <string name="hide_settings_icon_on_scroll_subtitle">Do not keep the Settings action pinned while scrolling through tabs. On by default.</string>
     <string name="pin_music_library_top_bar">Keep Songs, Albums, Artists, Library and Search bars pinned</string>
@@ -1906,6 +1910,9 @@
     <string name="player_side_control_scale_value">%1$d%%</string>
     <string name="player_outer_action_control_size">Outer action icon size</string>
     <string name="player_outer_action_control_size_subtitle">Adjust shuffle, repeat, and other action icons at the outer ends of the player controls. Tap targets stay the same.</string>
+    <string name="player_controls_raise">Raise player controls</string>
+    <string name="player_controls_raise_subtitle">Move the seek bar, previous/next controls and lower player buttons upward together.</string>
+    <string name="player_controls_raise_value">%1$d dp</string>
     <string name="player_play_pause_corner_roundness">Play icon corner roundness</string>
     <string name="player_play_pause_corner_roundness_subtitle">Adjust the three corners of the triangular play icon. This does not add a background shape.</string>
     <string name="player_corner_roundness_value">%1$d%%</string>

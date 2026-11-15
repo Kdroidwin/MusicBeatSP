@@ -77,6 +77,9 @@ val TopBarContentHeight = 52.dp
  */
 val TopBarContentGap = 12.dp
 
+/** Extra content area used by root tabs with the large page-heading design. */
+val RootTabLargeTitleHeight = 72.dp
+
 /**
  * How far down the window the bar actually ends: the status bar inset it is
  * pinned under, plus its own height.
@@ -129,6 +132,8 @@ fun FrostedTopBar(
     artworkTint: Color? = null,
     /** Draws only floating navigation/actions over collection artwork. */
     floatingOnly: Boolean = false,
+    /** Replaces the centered toolbar title with a large left-aligned page heading. */
+    largePageTitle: Boolean = false,
     /** Uses a flat opaque fill, for feeds whose content should not show through the bar. */
     solidBackground: Boolean = false,
 ) {
@@ -144,7 +149,7 @@ fun FrostedTopBar(
     // the fade exists to remove.
     val dividerColor by animateColorAsState(
         targetValue = MaterialTheme.colorScheme.outline.copy(
-            alpha = if (!floatingOnly && scrolled && (reduceDynamicBlur || solidBackground)) 0.6f else 0f,
+            alpha = if (!floatingOnly && !largePageTitle && scrolled && (reduceDynamicBlur || solidBackground)) 0.6f else 0f,
         ),
         animationSpec = tween(220),
         label = "topBarDivider",
@@ -157,6 +162,7 @@ fun FrostedTopBar(
                 when {
                     floatingOnly -> Modifier.background(Color.Transparent)
                     solidBackground && !playerBackdropTheme -> Modifier.background(MaterialTheme.colorScheme.background)
+                    largePageTitle && !reduceDynamicBlur && !playerBackdropTheme -> Modifier.background(Color.Transparent)
                     artworkTint != null && reduceDynamicBlur -> Modifier.background(artworkTint)
                     artworkTint != null -> Modifier.background(Color.Transparent)
                     reduceDynamicBlur && !playerBackdropTheme -> Modifier.background(MaterialTheme.colorScheme.surface)
@@ -171,7 +177,7 @@ fun FrostedTopBar(
                 .statusBarsPadding()
                 .height(TopBarContentHeight),
         ) {
-            if (!floatingOnly) {
+            if (!floatingOnly && !largePageTitle) {
                 Text(
                     text = title,
                     style = MaterialTheme.typography.titleMedium.copy(fontWeight = androidx.compose.ui.text.font.FontWeight.SemiBold),
@@ -204,7 +210,7 @@ fun FrostedTopBar(
                         tint = if (floatingOnly) Color.White else MaterialTheme.colorScheme.onSurface,
                     )
                 }
-            } else if (!floatingOnly) {
+            } else if (!floatingOnly && !largePageTitle) {
                 Row(
                     modifier = Modifier
                         .align(Alignment.CenterStart)
@@ -243,6 +249,26 @@ fun FrostedTopBar(
                 verticalAlignment = Alignment.CenterVertically,
             ) {
                 actions()
+            }
+        }
+        if (largePageTitle && !floatingOnly) {
+            Box(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .height(RootTabLargeTitleHeight)
+                    .padding(horizontal = 20.dp),
+                contentAlignment = Alignment.CenterStart,
+            ) {
+                Text(
+                    text = title,
+                    style = MaterialTheme.typography.displaySmall.copy(
+                        fontWeight = androidx.compose.ui.text.font.FontWeight.Bold,
+                    ),
+                    color = MaterialTheme.colorScheme.onSurface,
+                    maxLines = 1,
+                    softWrap = false,
+                    overflow = TextOverflow.Ellipsis,
+                )
             }
         }
         // The divider and the loader line share the bar's bottom edge; the box

@@ -293,6 +293,7 @@ import com.music.bitchord.ui.components.TopFadeBlur
 import com.music.bitchord.ui.components.topBarContentPadding
 import com.music.bitchord.ui.components.TopBarContentHeight
 import com.music.bitchord.ui.components.TopBarContentGap
+import com.music.bitchord.ui.components.RootTabLargeTitleHeight
 import com.music.bitchord.ui.components.AppLanguageDialog
 import com.music.bitchord.ui.components.LyricsSourcesDialog
 import com.music.bitchord.ui.icons.BitChordIcons
@@ -1065,6 +1066,8 @@ private fun BitChordApp(
     val savedYoutubeCollections by AppSettings.savedYoutubeCollections.collectAsStateWithLifecycle()
     val settingsTopBarUsesMoreIcon by AppSettings.settingsTopBarUsesMoreIcon.collectAsStateWithLifecycle()
     val rootTabFloatingSettingsOnlySetting by AppSettings.rootTabFloatingSettingsOnly.collectAsStateWithLifecycle()
+    val rootTabLargeHeaderSetting by AppSettings.rootTabLargeHeader.collectAsStateWithLifecycle()
+    val rootTabLabelsEnglishSetting by AppSettings.rootTabLabelsEnglish.collectAsStateWithLifecycle()
     val hideSettingsIconOnScroll by AppSettings.hideSettingsIconOnScroll.collectAsStateWithLifecycle()
     val pinMusicLibraryTopBarSetting by AppSettings.pinMusicLibraryTopBar.collectAsStateWithLifecycle()
     val keepMusicLibraryTopBarHiddenUntilTopSetting by AppSettings.keepMusicLibraryTopBarHiddenUntilTop.collectAsStateWithLifecycle()
@@ -1345,6 +1348,11 @@ private fun BitChordApp(
         }
     }
 
+    val rootHeaderIsRootPage = detail == null && !showSettings && !showReplay && !showSources && !showWearOs &&
+        !libraryPlaylistDetailOpen && collectionBackHandlers["$TAB_KEY$selectedTab"] == null
+    val rootHeaderMode = rootTabHeaderMode(rootTabLargeHeaderSetting, rootHeaderIsRootPage, selectedTab)
+    val rootHeaderShowsLargeTitle = rootHeaderMode.showLargeTitle
+    val rootHeaderHidesHomeBar = rootHeaderMode.hideHomeBar
     val rootTabTopBarState = rememberRootTabTopBarState(
         selectedTab = selectedTab,
         isRootScreen = detail == null && !showSettings && !showReplay && !showSources && !showWearOs,
@@ -1357,14 +1365,14 @@ private fun BitChordApp(
     val onRootLibraryOrSearchScrolled = rootTabTopBarState.onListScrollChanged
     val rootTabTopBarScroll = rootTabTopBarState.scrollConnection
     val rootTopBarPresentation = rootTabTopBarPresentation(
-        persistentSettingsOnly = rootTabFloatingSettingsOnlySetting,
+        persistentSettingsOnly = rootTabFloatingSettingsOnlySetting || rootHeaderHidesHomeBar,
         scrollEnabled = rootTabTopBarScrollEnabled,
         collapsed = rootTabTopBarCollapsed && !musicLibraryTopBarPinned,
         showStatusBar = showStatusBar,
         showReplay = showReplay,
-        isRootTab = detail == null && !showSettings && !showReplay && !showSources && !showWearOs &&
-            !libraryPlaylistDetailOpen && collectionBackHandlers["$TAB_KEY$selectedTab"] == null,
+        isRootTab = rootHeaderIsRootPage,
         statusBarInset = WindowInsets.statusBarsIgnoringVisibility.asPaddingValues().calculateTopPadding(),
+        largeHeaderHeight = if (rootHeaderShowsLargeTitle) RootTabLargeTitleHeight else 0.dp,
     )
     val rootTabFloatingSettingsOnly = rootTopBarPresentation.floatingSettingsOnly
     val rootTopPaddingTarget = rootTopBarPresentation.contentTopPadding
@@ -1384,39 +1392,7 @@ private fun BitChordApp(
         onRootScrollStatusBarChanged(hideStatusBar)
     }
 
-    // Held, not rebuilt. `listOf` hands back a new instance on every pass, and a
-    // List is not a type the compiler can call stable, so under strong skipping
-    // the bar this is handed to compares it by identity, never matches, and so
-    // can never skip. This composable re-runs on every frame of a scroll — it
-    // reads [scrolled] — which made the whole floating bar, both of its states
-    // and every glass surface on them recompose once per frame for the length of
-    // a fold. Keyed on the labels so a locale change still rebuilds it.
-    val songsLabel = stringResource(R.string.songs)
-    val albumsLabel = stringResource(R.string.albums)
-    val artistsLabel = stringResource(R.string.artists)
-    val albumArtistsLabel = stringResource(R.string.album_artists)
-    val libraryLabel = stringResource(R.string.library)
-    val searchLabel = stringResource(R.string.search)
-    val foldersLabel = stringResource(R.string.folders)
-    val radioLabel = stringResource(R.string.radio)
-    val homeLabel = stringResource(R.string.listen_now)
-    val genresLabel = stringResource(R.string.genres)
-    val servicesLabel = stringResource(R.string.services)
-    val allTabs = remember(songsLabel, albumsLabel, artistsLabel, albumArtistsLabel, libraryLabel, searchLabel, foldersLabel, radioLabel, homeLabel, genresLabel, servicesLabel) {
-        listOf(
-            BottomTab(songsLabel, Icons.Rounded.MusicNote),
-            BottomTab(albumsLabel, Icons.Rounded.Album),
-            BottomTab(artistsLabel, Icons.Rounded.Person),
-            BottomTab(libraryLabel, Icons.Rounded.LibraryMusic),
-            BottomTab(searchLabel, BitChordIcons.Search),
-            BottomTab(albumArtistsLabel, BitChordIcons.AlbumArtist),
-            BottomTab(foldersLabel, Icons.Rounded.Folder),
-            BottomTab(radioLabel, Icons.Rounded.Radio),
-            BottomTab(homeLabel, Icons.Rounded.Home),
-            BottomTab(genresLabel, Icons.Rounded.LocalOffer),
-            BottomTab(servicesLabel, Icons.Rounded.Headphones),
-        )
-    }
+    val allTabs = rememberMainTabs(rootTabLabelsEnglishSetting)
     val tabs = remember(allTabs, visibleTabIndices) {
         visibleTabIndices.mapNotNull(allTabs::getOrNull)
     }
@@ -4032,6 +4008,7 @@ private fun BitChordApp(
                             else -> null
                         },
                         floatingOnly = hideCollectionHeaderNow || rootTabFloatingSettingsOnly,
+                        largePageTitle = rootHeaderShowsLargeTitle,
                         solidBackground = isRadioScreenVisible,
                         onBack = if (hideFloatingCollectionControlsNow) null else when {
                             showSources -> ({ showSources = false })
@@ -6044,6 +6021,52 @@ private data class RootTabTopBarPresentation(
     val contentTopPadding: androidx.compose.ui.unit.Dp,
 )
 
+private data class RootTabHeaderMode(
+    val showLargeTitle: Boolean,
+    val hideHomeBar: Boolean,
+)
+
+private fun rootTabHeaderMode(enabled: Boolean, isRootPage: Boolean, selectedTab: Int) =
+    if (!enabled || !isRootPage) RootTabHeaderMode(showLargeTitle = false, hideHomeBar = false)
+    else if (selectedTab == TAB_HOME) RootTabHeaderMode(showLargeTitle = false, hideHomeBar = true)
+    else RootTabHeaderMode(showLargeTitle = true, hideHomeBar = false)
+
+@Composable
+private fun rememberMainTabs(forceEnglish: Boolean): List<BottomTab> {
+    val labels = if (forceEnglish) {
+        listOf("Songs", "Albums", "Artists", "Library", "Search", "Album Artists", "Folders", "Radio", "Home", "Genres", "Services")
+    } else {
+        listOf(
+            stringResource(R.string.songs),
+            stringResource(R.string.albums),
+            stringResource(R.string.artists),
+            stringResource(R.string.library),
+            stringResource(R.string.search),
+            stringResource(R.string.album_artists),
+            stringResource(R.string.folders),
+            stringResource(R.string.radio),
+            stringResource(R.string.listen_now),
+            stringResource(R.string.genres),
+            stringResource(R.string.services),
+        )
+    }
+    return remember(forceEnglish, labels) {
+        listOf(
+            BottomTab(labels[TAB_SONGS], Icons.Rounded.MusicNote),
+            BottomTab(labels[TAB_ALBUMS], Icons.Rounded.Album),
+            BottomTab(labels[TAB_ARTISTS], Icons.Rounded.Person),
+            BottomTab(labels[TAB_LIBRARY], Icons.Rounded.LibraryMusic),
+            BottomTab(labels[TAB_SEARCH], BitChordIcons.Search),
+            BottomTab(labels[TAB_ALBUM_ARTISTS], BitChordIcons.AlbumArtist),
+            BottomTab(labels[TAB_FOLDERS], Icons.Rounded.Folder),
+            BottomTab(labels[TAB_RADIO], Icons.Rounded.Radio),
+            BottomTab(labels[TAB_HOME], Icons.Rounded.Home),
+            BottomTab(labels[TAB_GENRES], Icons.Rounded.LocalOffer),
+            BottomTab(labels[TAB_SERVICES], Icons.Rounded.Headphones),
+        )
+    }
+}
+
 private fun rootTabTopBarPresentation(
     persistentSettingsOnly: Boolean,
     scrollEnabled: Boolean,
@@ -6052,6 +6075,7 @@ private fun rootTabTopBarPresentation(
     showReplay: Boolean,
     isRootTab: Boolean,
     statusBarInset: androidx.compose.ui.unit.Dp,
+    largeHeaderHeight: androidx.compose.ui.unit.Dp = 0.dp,
 ): RootTabTopBarPresentation {
     val persistentRootMode = persistentSettingsOnly && isRootTab
     val collapsedByScroll = scrollEnabled && collapsed
@@ -6059,7 +6083,7 @@ private fun rootTabTopBarPresentation(
         showReplay && showStatusBar -> statusBarInset
         showReplay || collapsedByScroll -> 0.dp
         persistentRootMode -> if (showStatusBar) statusBarInset else 0.dp
-        else -> (if (showStatusBar) statusBarInset else 0.dp) + TopBarContentHeight + TopBarContentGap
+        else -> (if (showStatusBar) statusBarInset else 0.dp) + TopBarContentHeight + largeHeaderHeight + TopBarContentGap
     }
     return RootTabTopBarPresentation(
         floatingSettingsOnly = persistentRootMode || collapsedByScroll,

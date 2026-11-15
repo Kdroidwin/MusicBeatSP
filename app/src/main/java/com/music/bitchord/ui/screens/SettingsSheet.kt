@@ -200,6 +200,7 @@ import com.music.bitchord.data.settings.SeekButtonMode
 import com.music.bitchord.data.settings.TransportSideAction
 import com.music.bitchord.data.settings.MAX_PLAYER_ARTWORK_BLUR_DP
 import com.music.bitchord.data.settings.MAX_PLAYER_BUTTON_SPACING_DP
+import com.music.bitchord.data.settings.MAX_PLAYER_CONTROLS_RAISE_DP
 import com.music.bitchord.data.settings.MIN_PLAYER_SIDE_CONTROL_SCALE
 import com.music.bitchord.data.settings.MAX_PLAYER_SIDE_CONTROL_SCALE
 import com.music.bitchord.data.settings.MainNavigationTab
@@ -1121,6 +1122,44 @@ private fun playerOuterActionControlSizeSearchEntry(scale: Float) = SettingsSear
 )
 
 @Composable
+private fun playerControlsRaiseSearchEntry(): SettingsSearchEntry {
+    val offsetDp by AppSettings.playerControlsRaiseDp.collectAsStateWithLifecycle()
+    return SettingsSearchEntry(
+        title = stringResource(R.string.player_controls_raise),
+        subtitle = stringResource(R.string.player_controls_raise_subtitle),
+        keywords = listOf("player", "controls", "move", "raise", "up", "seek bar", "transport", "プレイヤー", "操作", "上に移動", "上げる", "シークバー", "前へ", "次へ"),
+        valueLabel = stringResource(R.string.player_controls_raise_value, offsetDp),
+        sliderValue = offsetDp.toFloat(),
+        sliderValueRange = 0f..MAX_PLAYER_CONTROLS_RAISE_DP.toFloat(),
+        sliderSteps = 15,
+        onSliderValueChange = { AppSettings.setPlayerControlsRaiseDp(it.roundToInt()) },
+        activate = {},
+    )
+}
+
+@Composable
+private fun rootTabLargeHeaderSearchEntry(): SettingsSearchEntry {
+    val enabled by AppSettings.rootTabLargeHeader.collectAsStateWithLifecycle()
+    return SettingsSearchEntry(
+        stringResource(R.string.root_tab_large_header),
+        stringResource(R.string.root_tab_large_header_subtitle),
+        listOf("tabs", "large title", "page heading", "BitChord", "header", "タブ", "大見出し", "上部バー", "ホーム"),
+        enabled,
+    ) { AppSettings.setRootTabLargeHeader(!enabled) }
+}
+
+@Composable
+private fun rootTabLabelsEnglishSearchEntry(): SettingsSearchEntry {
+    val enabled by AppSettings.rootTabLabelsEnglish.collectAsStateWithLifecycle()
+    return SettingsSearchEntry(
+        stringResource(R.string.root_tab_labels_english),
+        stringResource(R.string.root_tab_labels_english_subtitle),
+        listOf("tabs", "English", "labels", "language", "Albums", "Library", "タブ名", "英語", "言語", "アルバム", "ライブラリ"),
+        enabled,
+    ) { AppSettings.setRootTabLabelsEnglish(!enabled) }
+}
+
+@Composable
 private fun playerPlayPauseCornerRoundnessSearchEntry(roundnessPercent: Int) = SettingsSearchEntry(
     title = stringResource(R.string.player_play_pause_corner_roundness),
     subtitle = stringResource(R.string.player_play_pause_corner_roundness_subtitle),
@@ -1553,6 +1592,8 @@ fun SettingsScreen(
     val mainNavigationTabsPopup by AppSettings.mainNavigationTabsPopup.collectAsStateWithLifecycle()
     val settingsTopBarUsesMoreIcon by AppSettings.settingsTopBarUsesMoreIcon.collectAsStateWithLifecycle()
     val rootTabFloatingSettingsOnly by AppSettings.rootTabFloatingSettingsOnly.collectAsStateWithLifecycle()
+    val rootTabLargeHeader by AppSettings.rootTabLargeHeader.collectAsStateWithLifecycle()
+    val rootTabLabelsEnglish by AppSettings.rootTabLabelsEnglish.collectAsStateWithLifecycle()
     val hideSettingsIconOnScroll by AppSettings.hideSettingsIconOnScroll.collectAsStateWithLifecycle()
     val pinMusicLibraryTopBar by AppSettings.pinMusicLibraryTopBar.collectAsStateWithLifecycle()
     val keepMusicLibraryTopBarHiddenUntilTop by AppSettings.keepMusicLibraryTopBarHiddenUntilTop.collectAsStateWithLifecycle()
@@ -1778,6 +1819,7 @@ fun SettingsScreen(
     val collectionQueueRainbowBackdrop by AppSettings.collectionQueueRainbowBackdrop.collectAsStateWithLifecycle()
     val playerSideControlScale by AppSettings.playerSideControlScale.collectAsStateWithLifecycle()
     val playerOuterActionControlScale by AppSettings.playerOuterActionControlScale.collectAsStateWithLifecycle()
+    val playerControlsRaiseDp by AppSettings.playerControlsRaiseDp.collectAsStateWithLifecycle()
     val showPlayerTopGrabber by AppSettings.showPlayerTopGrabber.collectAsStateWithLifecycle()
     val parametricEqEnabled by AppSettings.parametricEqEnabled.collectAsStateWithLifecycle()
     val tpdfDitherEnabled by AppSettings.tpdfDitherEnabled.collectAsStateWithLifecycle()
@@ -2304,6 +2346,8 @@ fun SettingsScreen(
         SettingsSearchEntry(stringResource(R.string.navigation_bar_matches_mini_player_color), stringResource(R.string.navigation_bar_matches_mini_player_color_subtitle), listOf("navigation", "tab bar", "mini player", "artwork", "color", "タブバー", "ミニプレイヤー", "アルバムアート", "色"), navigationBarMatchesMiniPlayerColor) { AppSettings.setNavigationBarMatchesMiniPlayerColor(!navigationBarMatchesMiniPlayerColor) },
         SettingsSearchEntry(stringResource(R.string.main_navigation_popup), stringResource(R.string.main_navigation_popup_subtitle), listOf("navigation", "tabs", "popup", "menu", "bottom bar", "ナビゲーション", "タブ", "ポップアップ", "メニュー"), mainNavigationTabsPopup) { AppSettings.setMainNavigationTabsPopup(!mainNavigationTabsPopup) },
         SettingsSearchEntry(stringResource(R.string.settings_top_bar_more_icon), stringResource(R.string.settings_top_bar_more_icon_subtitle), listOf("settings", "gear", "ellipsis", "more", "歯車", "設定", "三点", "︙"), settingsTopBarUsesMoreIcon) { AppSettings.setSettingsTopBarUsesMoreIcon(!settingsTopBarUsesMoreIcon) },
+        rootTabLargeHeaderSearchEntry(),
+        rootTabLabelsEnglishSearchEntry(),
         SettingsSearchEntry(stringResource(R.string.root_tab_floating_settings_only), stringResource(R.string.root_tab_floating_settings_only_subtitle), listOf("settings", "floating", "top bar", "header", "title", "gear", "上部バー", "設定アイコン", "フローティング"), rootTabFloatingSettingsOnly) { AppSettings.setRootTabFloatingSettingsOnly(!rootTabFloatingSettingsOnly) },
         hideSettingsIconOnScrollSearchEntry(hideSettingsIconOnScroll),
         SettingsSearchEntry(stringResource(R.string.hide_nav_bar_labels), stringResource(R.string.hide_nav_bar_labels_subtitle), listOf("navigation", "nav bar", "label", "ラベル", "ナビゲーション"), hideNavBarLabels) { AppSettings.setHideNavigationBarLabels(!hideNavBarLabels) },
@@ -2393,6 +2437,7 @@ fun SettingsScreen(
         ) { AppSettings.setCollectionQueueRainbowBackdrop(!collectionQueueRainbowBackdrop) },
         playerSideControlSizeSearchEntry(playerSideControlScale),
         playerOuterActionControlSizeSearchEntry(playerOuterActionControlScale),
+        playerControlsRaiseSearchEntry(),
         playerPlayPauseCornerRoundnessSearchEntry(playerPlayPauseCornerRadiusPercent),
         playerTransportSpacingSearchEntry(playerTransportButtonSpacingDp),
         playerActionSpacingSearchEntry(playerActionButtonSpacingDp),
@@ -5045,6 +5090,20 @@ fun SettingsScreen(
             )
             RowDivider()
             SettingsRow(
+                icon = Icons.Rounded.VerticalAlignTop,
+                title = stringResource(R.string.player_controls_raise),
+                subtitle = stringResource(R.string.player_controls_raise_subtitle),
+                value = stringResource(R.string.player_controls_raise_value, playerControlsRaiseDp),
+            )
+            Slider(
+                value = playerControlsRaiseDp.toFloat(),
+                onValueChange = { AppSettings.setPlayerControlsRaiseDp(it.roundToInt()) },
+                steps = 15,
+                valueRange = 0f..MAX_PLAYER_CONTROLS_RAISE_DP.toFloat(),
+                modifier = Modifier.padding(start = ROW_INSET, end = ROW_INSET, bottom = 14.dp),
+            )
+            RowDivider()
+            SettingsRow(
                 icon = Icons.Rounded.Tune,
                 title = stringResource(R.string.player_transport_button_spacing),
                 subtitle = stringResource(R.string.player_transport_button_spacing_subtitle),
@@ -5530,6 +5589,32 @@ fun SettingsScreen(
                     )
                 },
                 onClick = { AppSettings.setSettingsTopBarUsesMoreIcon(!settingsTopBarUsesMoreIcon) },
+            )
+            RowDivider()
+            SettingsRow(
+                icon = Icons.Rounded.ViewStream,
+                title = stringResource(R.string.root_tab_large_header),
+                subtitle = stringResource(R.string.root_tab_large_header_subtitle),
+                trailing = {
+                    Switch(
+                        checked = rootTabLargeHeader,
+                        onCheckedChange = AppSettings::setRootTabLargeHeader,
+                    )
+                },
+                onClick = { AppSettings.setRootTabLargeHeader(!rootTabLargeHeader) },
+            )
+            RowDivider()
+            SettingsRow(
+                icon = Icons.Rounded.Language,
+                title = stringResource(R.string.root_tab_labels_english),
+                subtitle = stringResource(R.string.root_tab_labels_english_subtitle),
+                trailing = {
+                    Switch(
+                        checked = rootTabLabelsEnglish,
+                        onCheckedChange = AppSettings::setRootTabLabelsEnglish,
+                    )
+                },
+                onClick = { AppSettings.setRootTabLabelsEnglish(!rootTabLabelsEnglish) },
             )
             RowDivider()
             SettingsRow(

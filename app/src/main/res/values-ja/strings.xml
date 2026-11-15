@@ -1843,6 +1843,10 @@
     <string name="settings_top_bar_more_icon_subtitle">メイン画面上部の歯車を三点メニューのアイコンに変更します。</string>
     <string name="root_tab_floating_settings_only">メイン画面の上部バーを隠す</string>
     <string name="root_tab_floating_settings_only_subtitle">曲・アルバム・ライブラリ・ラジオなどの上部バーを隠し、設定アイコンだけをフローティング表示します。初期設定はオフです。</string>
+    <string name="root_tab_large_header">タブに大きな見出しを表示</string>
+    <string name="root_tab_large_header_subtitle">BitChordのように中央タイトルバーを左寄せの大きな見出しへ置き換えます。ホームではバーを隠し、設定アイコンだけをフローティング表示します。初期設定はオンです。オフにすると従来のデザインに戻ります。</string>
+    <string name="root_tab_labels_english">タブ名を英語で表示</string>
+    <string name="root_tab_labels_english_subtitle">アプリの言語が日本語などでも Albums、Library のような英語名を表示します。オフにすると選択中の言語に合わせます。</string>
     <string name="hide_settings_icon_on_scroll">設定アイコンをスクロール時に隠す</string>
     <string name="hide_settings_icon_on_scroll_subtitle">どのタブでも、スクロール中は設定アイコンを固定表示しません。初期設定はオンです。</string>
     <string name="pin_music_library_top_bar">曲・アルバム・アーティスト・ライブラリ・検索のバーを固定</string>
@@ -1879,6 +1883,9 @@
     <string name="player_side_control_scale_value">%1$d%%</string>
     <string name="player_outer_action_control_size">外側の操作アイコンサイズ</string>
     <string name="player_outer_action_control_size_subtitle">再生操作の両端にあるシャッフル・リピートなどのアイコンの大きさを調整します。タップ範囲は維持されます。</string>
+    <string name="player_controls_raise">プレイヤー操作部を上へ移動</string>
+    <string name="player_controls_raise_subtitle">シークバー、前へ・次へボタン、プレイヤー下部のボタンをまとめて上に移動します。</string>
+    <string name="player_controls_raise_value">%1$d dp</string>
     <string name="player_play_pause_corner_roundness">再生アイコンの角の丸み</string>
     <string name="player_play_pause_corner_roundness_subtitle">▷の3つの角の丸みを調整します。背景の図形は追加されません。</string>
     <string name="player_corner_roundness_value">%1$d%%</string>

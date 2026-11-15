@@ -29,6 +29,9 @@ const val MAX_PLAYER_ARTWORK_BLUR_DP = 128f
 /** Maximum manually requested gap between player controls, in dp. */
 const val MAX_PLAYER_BUTTON_SPACING_DP = 160f
 
+/** Maximum upward movement for the player controls, in dp. */
+const val MAX_PLAYER_CONTROLS_RAISE_DP = 160
+
 /** Range for the visible side-control icon scale. Touch targets remain unchanged. */
 const val MIN_PLAYER_SIDE_CONTROL_SCALE = 0.5f
 const val MAX_PLAYER_SIDE_CONTROL_SCALE = 1.6f
@@ -722,6 +725,8 @@ object AppSettings {
     val playerSideControlScale = MutableStateFlow(1f)
     /** Scales shuffle, repeat, and other action glyphs at the outer ends of the transport row. */
     val playerOuterActionControlScale = MutableStateFlow(1f)
+    /** Moves the seek, transport and lower action controls toward the artwork. */
+    val playerControlsRaiseDp = MutableStateFlow(0)
     /** Strength of the artwork-matched lower blur in the full-screen player. */
     val fullBleedArtworkBottomBlurStrengthDp = MutableStateFlow(42)
     /** Hides only the word label on the play button in collection detail pages. */
@@ -736,6 +741,10 @@ object AppSettings {
     val settingsTopBarUsesMoreIcon = MutableStateFlow(false)
     /** Hides the root-tab app bar while leaving its floating Settings action. */
     val rootTabFloatingSettingsOnly = MutableStateFlow(false)
+    /** Uses a BitChord-style large page heading in place of the centered root-tab bar. */
+    val rootTabLargeHeader = MutableStateFlow(true)
+    /** Uses English names for root-tab labels even when the app language is localized. */
+    val rootTabLabelsEnglish = MutableStateFlow(true)
     /** Hides the floating root-tab Settings action after the page scrolls. */
     val hideSettingsIconOnScroll = MutableStateFlow(true)
     /** Keeps the Songs, Albums and Artists title bar visible while scrolling. */
@@ -1734,6 +1743,7 @@ object AppSettings {
         playerSideControlScale.value = prefs.getFloat(KEY_PLAYER_SIDE_CONTROL_SCALE, 1f).coerceIn(MIN_PLAYER_SIDE_CONTROL_SCALE, MAX_PLAYER_SIDE_CONTROL_SCALE)
         playerOuterActionControlScale.value = prefs.getFloat(KEY_PLAYER_OUTER_ACTION_CONTROL_SCALE, 1f)
             .coerceIn(MIN_PLAYER_SIDE_CONTROL_SCALE, MAX_PLAYER_SIDE_CONTROL_SCALE)
+        playerControlsRaiseDp.value = prefs.getInt(KEY_PLAYER_CONTROLS_RAISE_DP, 0).coerceIn(0, MAX_PLAYER_CONTROLS_RAISE_DP)
         fullBleedArtworkBottomBlurStrengthDp.value =
             prefs.getInt(KEY_FULL_BLEED_ARTWORK_BOTTOM_BLUR_STRENGTH_DP, 42).coerceIn(0, 96)
         hidePlaylistPlayButtonLabel.value = prefs.getBoolean(KEY_HIDE_PLAYLIST_PLAY_BUTTON_LABEL, false)
@@ -1742,6 +1752,8 @@ object AppSettings {
         whiteCollectionActionButtons.value = prefs.getBoolean(KEY_WHITE_COLLECTION_ACTION_BUTTONS, false)
         settingsTopBarUsesMoreIcon.value = prefs.getBoolean(KEY_SETTINGS_TOP_BAR_MORE_ICON, false)
         rootTabFloatingSettingsOnly.value = prefs.getBoolean(KEY_ROOT_TAB_FLOATING_SETTINGS_ONLY, false)
+        rootTabLargeHeader.value = prefs.getBoolean(KEY_ROOT_TAB_LARGE_HEADER, true)
+        rootTabLabelsEnglish.value = prefs.getBoolean(KEY_ROOT_TAB_LABELS_ENGLISH, true)
         hideSettingsIconOnScroll.value = prefs.getBoolean(KEY_HIDE_SETTINGS_ICON_ON_SCROLL, true)
         pinMusicLibraryTopBar.value = prefs.getBoolean(KEY_PIN_MUSIC_LIBRARY_TOP_BAR, false)
         keepMusicLibraryTopBarHiddenUntilTop.value =
@@ -2620,6 +2632,12 @@ object AppSettings {
         prefs.edit().putFloat(KEY_PLAYER_OUTER_ACTION_CONTROL_SCALE, safe).apply()
     }
 
+    fun setPlayerControlsRaiseDp(value: Int) {
+        val safe = value.coerceIn(0, MAX_PLAYER_CONTROLS_RAISE_DP)
+        playerControlsRaiseDp.value = safe
+        prefs.edit().putInt(KEY_PLAYER_CONTROLS_RAISE_DP, safe).apply()
+    }
+
     fun setHidePlaylistPlayButtonLabel(value: Boolean) {
         hidePlaylistPlayButtonLabel.value = value
         prefs.edit().putBoolean(KEY_HIDE_PLAYLIST_PLAY_BUTTON_LABEL, value).apply()
@@ -2648,6 +2666,16 @@ object AppSettings {
     fun setRootTabFloatingSettingsOnly(value: Boolean) {
         rootTabFloatingSettingsOnly.value = value
         prefs.edit().putBoolean(KEY_ROOT_TAB_FLOATING_SETTINGS_ONLY, value).apply()
+    }
+
+    fun setRootTabLargeHeader(value: Boolean) {
+        rootTabLargeHeader.value = value
+        prefs.edit().putBoolean(KEY_ROOT_TAB_LARGE_HEADER, value).apply()
+    }
+
+    fun setRootTabLabelsEnglish(value: Boolean) {
+        rootTabLabelsEnglish.value = value
+        prefs.edit().putBoolean(KEY_ROOT_TAB_LABELS_ENGLISH, value).apply()
     }
 
     fun setHideSettingsIconOnScroll(value: Boolean) {
@@ -5136,12 +5164,15 @@ object AppSettings {
     private const val KEY_COLLECTION_QUEUE_RAINBOW_BACKDROP = "collection_queue_rainbow_backdrop"
     private const val KEY_PLAYER_SIDE_CONTROL_SCALE = "player_side_control_scale"
     private const val KEY_PLAYER_OUTER_ACTION_CONTROL_SCALE = "player_outer_action_control_scale"
+    private const val KEY_PLAYER_CONTROLS_RAISE_DP = "player_controls_raise_dp"
     private const val KEY_HIDE_PLAYLIST_PLAY_BUTTON_LABEL = "hide_playlist_play_button_label"
     private const val KEY_WHITE_COLLECTION_PLAY_BUTTON = "white_collection_play_button"
     private const val KEY_SHOW_PLAYER_TOP_GRABBER = "show_player_top_grabber"
     private const val KEY_WHITE_COLLECTION_ACTION_BUTTONS = "white_collection_action_buttons"
     private const val KEY_SETTINGS_TOP_BAR_MORE_ICON = "settings_top_bar_more_icon"
     private const val KEY_ROOT_TAB_FLOATING_SETTINGS_ONLY = "root_tab_floating_settings_only"
+    private const val KEY_ROOT_TAB_LARGE_HEADER = "root_tab_large_header"
+    private const val KEY_ROOT_TAB_LABELS_ENGLISH = "root_tab_labels_english"
     private const val KEY_HIDE_SETTINGS_ICON_ON_SCROLL = "hide_settings_icon_on_scroll"
     private const val KEY_PIN_MUSIC_LIBRARY_TOP_BAR = "pin_music_library_top_bar"
     private const val KEY_MUSIC_LIBRARY_TOP_BAR_HIDDEN_UNTIL_TOP = "music_library_top_bar_hidden_until_top"

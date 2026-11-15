@@ -1244,6 +1244,7 @@ fun NowPlayingScreen(
     val playerActionButtonSpacingDp by AppSettings.playerActionButtonSpacingDp.collectAsStateWithLifecycle()
     val playerSideControlScale by AppSettings.playerSideControlScale.collectAsStateWithLifecycle()
     val playerOuterActionControlScale by AppSettings.playerOuterActionControlScale.collectAsStateWithLifecycle()
+    val playerControlsRaiseDp by AppSettings.playerControlsRaiseDp.collectAsStateWithLifecycle()
     val autoShowLyricsOnPlayback by AppSettings.autoShowLyricsOnPlayback.collectAsStateWithLifecycle()
     val transportButtonArrangement = remember(playerTransportButtonSpacingDp) {
         playerButtonArrangement(playerTransportButtonSpacingDp)
@@ -3430,7 +3431,8 @@ fun NowPlayingScreen(
             Column(
                 modifier = Modifier
                     .widthIn(max = PLAYER_MAX_WIDTH)
-                    .fillMaxWidth(),
+                    .fillMaxWidth()
+                    .offset(y = (-playerControlsRaiseDp).dp),
                 horizontalAlignment = Alignment.CenterHorizontally,
             ) {
             // Current lyric, one line, directly above the scrubber. It stays in
