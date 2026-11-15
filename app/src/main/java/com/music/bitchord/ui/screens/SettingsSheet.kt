@@ -241,6 +241,7 @@ import kotlinx.coroutines.launch
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
+import java.text.Normalizer
 import java.util.Locale
 import kotlin.math.roundToInt
 
@@ -557,6 +558,22 @@ private fun settingsSearchCategory(text: String): SettingsSearchCategory {
         listOf("status bar", "navigation bar", "system", "backup", "import", "export", "storage", "language", "performance", "screen", "settings", "app", "ステータスバー", "ナビゲーションバー", "バックアップ", "インポート", "エクスポート", "ストレージ", "言語", "パフォーマンス", "画面", "設定", "アプリ").any(value::contains) -> SettingsSearchCategory.SYSTEM
         else -> SettingsSearchCategory.OTHER
     }
+}
+
+/** Normalize labels and aliases so spacing, punctuation, and full-width text do not hide settings. */
+private fun settingsSearchMatches(entry: SettingsSearchEntry, rawQuery: String): Boolean {
+    fun normalize(value: String): String = Normalizer.normalize(value, Normalizer.Form.NFKC)
+        .lowercase(Locale.ROOT)
+        .filter { it.isLetterOrDigit() }
+
+    val terms = rawQuery.trim()
+        .split(Regex("\\s+"))
+        .map(::normalize)
+        .filter { it.isNotEmpty() }
+    if (terms.isEmpty()) return false
+
+    val haystack = normalize("${entry.title} ${entry.subtitle} ${entry.keywords.joinToString(" ")}")
+    return terms.all { term -> haystack.contains(term) }
 }
 
 @Composable
@@ -1460,7 +1477,7 @@ private fun musicLibraryTopBarSettingsSearchEntries(
     SettingsSearchEntry(
         stringResource(R.string.keep_music_library_top_bar_hidden_until_top),
         stringResource(R.string.keep_music_library_top_bar_hidden_until_top_subtitle),
-        listOf("songs", "albums", "artists", "library", "search", "all", "recently played", "filters", "sources", "top bar", "header", "scroll up", "top", "スクロール", "上部", "一番上", "曲", "アルバム", "アーティスト", "ライブラリ", "検索", "すべて", "最近再生した曲", "音源", "絞り込み"),
+        listOf("BitChord", "tabs", "songs", "albums", "artists", "library", "search", "all", "recently played", "filters", "sources", "top bar", "header", "scroll up", "upward", "reverse scroll", "first item", "スクロール", "上に戻る", "上方向", "再表示", "上部バー", "一番上", "先頭", "曲", "アルバム", "アーティスト", "ライブラリ", "検索", "すべて", "最近再生した曲", "音源", "絞り込み"),
         hiddenUntilTop,
     ) { AppSettings.setKeepMusicLibraryTopBarHiddenUntilTop(!hiddenUntilTop) },
 )
@@ -1998,6 +2015,7 @@ fun SettingsScreen(
     val showPlaylistSongArtwork by AppSettings.showPlaylistSongArtwork.collectAsStateWithLifecycle()
     val hidePlaylistPlayButtonLabel by AppSettings.hidePlaylistPlayButtonLabel.collectAsStateWithLifecycle()
     val showCollectionSongArtwork by AppSettings.showCollectionSongArtwork.collectAsStateWithLifecycle()
+    val hideLocalQuickSearch by AppSettings.hideLocalQuickSearch.collectAsStateWithLifecycle()
     val localSearchCollectionSongArtwork by AppSettings.localSearchCollectionSongArtwork.collectAsStateWithLifecycle()
     val localSearchFullScreenArtwork by AppSettings.localSearchFullScreenArtwork.collectAsStateWithLifecycle()
     val showPlayHistorySongArtwork by AppSettings.showPlayHistorySongArtwork.collectAsStateWithLifecycle()
@@ -2592,6 +2610,12 @@ fun SettingsScreen(
             localSearchCollectionSongArtwork,
         ) { AppSettings.setLocalSearchCollectionSongArtwork(!localSearchCollectionSongArtwork) },
         SettingsSearchEntry(
+            stringResource(R.string.hide_local_quick_search),
+            stringResource(R.string.hide_local_quick_search_subtitle),
+            listOf("quick search", "search box", "search field", "songs", "albums", "artists", "playlists", "クイック検索", "検索欄", "検索ボックス", "曲", "アルバム", "アーティスト", "プレイリスト"),
+            hideLocalQuickSearch,
+        ) { AppSettings.setHideLocalQuickSearch(!hideLocalQuickSearch) },
+        SettingsSearchEntry(
             stringResource(R.string.local_search_full_screen_artwork),
             stringResource(R.string.local_search_full_screen_artwork_subtitle),
             listOf("search", "this device", "artist", "album", "full screen", "検索", "この端末", "アーティスト", "アルバム", "全画面アート"),
@@ -2601,6 +2625,284 @@ fun SettingsScreen(
         SettingsSearchEntry(stringResource(R.string.localize_library_collection_count), stringResource(R.string.localize_library_collection_count_subtitle), listOf("library", "collections", "count", "language", "ライブラリ", "コレクション", "件数", "日本語"), localizeLibraryCollectionCount) { AppSettings.setLocalizeLibraryCollectionCount(!localizeLibraryCollectionCount) },
         localizeLibraryAllLabelSearchEntry(localizeLibraryAllLabel),
         )
+
+    @Composable
+    fun buildPreviouslyUnindexedPlaybackSearchEntries(): List<SettingsSearchEntry> = listOf(
+        SettingsSearchEntry(
+            title = stringResource(R.string.external_media_control),
+            subtitle = stringResource(R.string.external_media_control_subtitle),
+            keywords = listOf("notification access", "other player", "external app", "media control", "通知アクセス", "他のプレイヤー", "外部アプリ", "メディア操作"),
+            checked = externalMediaAccessActive,
+            activate = {
+                if (externalMediaAccessActive) onOpenServices()
+                else setExternalMediaControlWithPermission(true)
+            },
+        ),
+        SettingsSearchEntry(
+            title = stringResource(R.string.spotify_integration),
+            subtitle = stringResource(R.string.spotify_integration_subtitle),
+            keywords = listOf("spotify", "premium", "developer dashboard", "official app", "account", "Spotify Premium", "連携", "アカウント"),
+            checked = spotifyIntegrationEnabled,
+            activate = {
+                if (spotifyIntegrationEnabled) onOpenServices()
+                else setSpotifyIntegrationWithSetup(true)
+            },
+        ),
+        SettingsSearchEntry(
+            title = stringResource(R.string.output_precision),
+            subtitle = "${outputStatus.sink} · ${outputStatus.deviceName} · ${AudioOutputStatus.encodingLabel(outputStatus)}",
+            keywords = listOf("PCM", "output format", "bit depth", "sample format", "audio output", "出力形式", "ビット深度", "PCM出力"),
+            valueLabel = outputPcmMode.label,
+            activate = {
+                val modes = OutputPcmMode.entries
+                AppSettings.setOutputPcmMode(modes[(modes.indexOf(outputPcmMode) + 1) % modes.size])
+            },
+        ),
+        SettingsSearchEntry(
+            title = stringResource(R.string.audio_focus_level),
+            subtitle = stringResource(R.string.audio_focus_level_subtitle),
+            keywords = listOf("audio focus", "ducking", "other apps", "音声フォーカス", "他のアプリ", "音量低下"),
+            valueLabel = audioFocusLevel.toString(),
+            sliderValue = audioFocusLevel.toFloat(),
+            sliderValueRange = 0f..4f,
+            sliderSteps = 3,
+            onSliderValueChange = { AppSettings.setAudioFocusLevel(it.roundToInt()) },
+            activate = {},
+        ),
+        SettingsSearchEntry(
+            title = stringResource(R.string.restart_queue_when_ended),
+            subtitle = stringResource(R.string.restart_queue_when_ended_subtitle),
+            keywords = listOf("queue", "restart", "end of queue", "再生キュー", "最後", "最初から"),
+            checked = restartQueueWhenEnded,
+            activate = { AppSettings.setRestartQueueWhenEnded(!restartQueueWhenEnded) },
+        ),
+        SettingsSearchEntry(
+            title = stringResource(R.string.advance_queue_when_repeat_off),
+            subtitle = stringResource(R.string.advance_queue_when_repeat_off_subtitle),
+            keywords = listOf("queue", "next track", "repeat off", "再生キュー", "次の曲", "リピート", "オフ"),
+            checked = advanceQueueWhenRepeatOff,
+            activate = { AppSettings.setAdvanceQueueWhenRepeatOff(!advanceQueueWhenRepeatOff) },
+        ),
+        SettingsSearchEntry(
+            title = stringResource(R.string.dont_repeat_songs),
+            subtitle = stringResource(R.string.dont_repeat_songs_subtitle),
+            keywords = listOf("repeat", "radio", "suggestions", "same song", "リピート", "ラジオ", "同じ曲", "重複"),
+            checked = dontRepeatSuggestions,
+            activate = { AppSettings.setDontRepeatSuggestions(!dontRepeatSuggestions) },
+        ),
+        SettingsSearchEntry(
+            title = stringResource(R.string.play_next_on_swipe),
+            subtitle = stringResource(if (swipeToPlayNext) R.string.swipe_plays_next else R.string.swipe_adds_to_queue),
+            keywords = listOf("swipe", "play next", "queue", "スワイプ", "次に再生", "キュー"),
+            checked = swipeToPlayNext,
+            activate = { AppSettings.setSwipeToPlayNext(!swipeToPlayNext) },
+        ),
+        SettingsSearchEntry(
+            title = stringResource(R.string.media_control_secondary_action),
+            subtitle = stringResource(R.string.media_control_secondary_action_subtitle),
+            keywords = listOf("notification", "media controls", "shuffle", "queue", "通知", "メディア操作", "シャッフル", "キュー"),
+            valueLabel = mediaControlSecondaryAction.localizedLabel(),
+            activate = { showMediaControlActionPicker = true },
+        ),
+        SettingsSearchEntry(
+            title = stringResource(R.string.media_control_favorite_star),
+            subtitle = stringResource(R.string.media_control_favorite_star_subtitle),
+            keywords = listOf("notification", "media controls", "favorite", "star", "通知", "メディア操作", "お気に入り", "星"),
+            checked = mediaControlFavoriteUsesStar,
+            activate = { AppSettings.setMediaControlFavoriteUsesStar(!mediaControlFavoriteUsesStar) },
+        ),
+        SettingsSearchEntry(
+            title = stringResource(R.string.hide_media_control_custom_actions),
+            subtitle = stringResource(R.string.hide_media_control_custom_actions_subtitle),
+            keywords = listOf("notification", "media controls", "custom action", "buttons", "通知", "メディア操作", "ボタン", "非表示"),
+            checked = hideMediaControlCustomActions,
+            activate = { AppSettings.setHideMediaControlCustomActions(!hideMediaControlCustomActions) },
+        ),
+        SettingsSearchEntry(
+            title = stringResource(R.string.hide_volume_bar),
+            subtitle = stringResource(R.string.hide_volume_bar_subtitle),
+            keywords = listOf("player", "volume", "slider", "プレイヤー", "音量", "バー", "スライダー"),
+            checked = hideVolumeBar,
+            activate = { AppSettings.setHideVolumeBar(!hideVolumeBar) },
+        ),
+        SettingsSearchEntry(
+            title = stringResource(R.string.hide_radio_playback_bar),
+            subtitle = stringResource(R.string.hide_radio_playback_bar_subtitle),
+            keywords = listOf("radio", "playback", "player", "ラジオ", "再生バー", "プレイヤー"),
+            checked = hideRadioPlaybackBar,
+            activate = { AppSettings.setHideRadioPlaybackBar(!hideRadioPlaybackBar) },
+        ),
+        SettingsSearchEntry(
+            title = stringResource(R.string.stop_music_on_close),
+            subtitle = stringResource(R.string.stop_music_on_close_subtitle),
+            keywords = listOf("stop playback", "close app", "exit", "task removed", "終了", "アプリを閉じる", "再生停止"),
+            checked = stopOnTaskRemoved,
+            activate = { AppSettings.setStopOnTaskRemoved(!stopOnTaskRemoved) },
+        ),
+        SettingsSearchEntry(
+            title = stringResource(R.string.work_out_genres),
+            subtitle = stringResource(if (replayGenres) R.string.replay_genres_enabled_subtitle else R.string.replay_genres_disabled_subtitle),
+            keywords = listOf("replay", "genres", "genre tab", "再生まとめ", "ジャンル", "タブ"),
+            checked = replayGenres,
+            activate = { AppSettings.setReplayGenres(!replayGenres) },
+        ),
+    )
+
+    @Composable
+    fun buildPreviouslyUnindexedPlayerAndLyricsSearchEntries(): List<SettingsSearchEntry> = listOf(
+        SettingsSearchEntry(
+            title = stringResource(R.string.artwork_tap_opens_lyrics),
+            subtitle = stringResource(R.string.artwork_tap_opens_lyrics_subtitle),
+            keywords = listOf("player", "artwork", "tap", "lyrics", "プレイヤー", "アートワーク", "タップ", "歌詞"),
+            checked = artworkTapOpensLyrics,
+            activate = { AppSettings.setArtworkTapOpensLyrics(!artworkTapOpensLyrics) },
+        ),
+        SettingsSearchEntry(
+            title = stringResource(R.string.lyrics_font_size),
+            subtitle = stringResource(R.string.lyrics_font_size_value, (lyricsFontScale * 100f).roundToInt()),
+            keywords = listOf("lyrics", "font", "size", "scale", "歌詞", "文字", "サイズ", "大きさ"),
+            valueLabel = stringResource(R.string.lyrics_font_size_value, (lyricsFontScale * 100f).roundToInt()),
+            sliderValue = lyricsFontScale,
+            sliderValueRange = 0.6f..1.6f,
+            sliderSteps = 19,
+            onSliderValueChange = AppSettings::setLyricsFontScale,
+            activate = {},
+        ),
+        SettingsSearchEntry(
+            title = stringResource(R.string.lyrics_text_alignment),
+            subtitle = stringResource(R.string.lyrics_display),
+            keywords = listOf("lyrics", "alignment", "left", "center", "right", "歌詞", "配置", "左揃え", "中央揃え", "右揃え"),
+            valueLabel = stringResource(
+                when (lyricsTextAlignment) {
+                    LyricsTextAlignment.LEFT -> R.string.lyrics_align_left
+                    LyricsTextAlignment.CENTER -> R.string.lyrics_align_center
+                    LyricsTextAlignment.RIGHT -> R.string.lyrics_align_right
+                },
+            ),
+            activate = {
+                val alignments = LyricsTextAlignment.entries
+                AppSettings.setLyricsTextAlignment(alignments[(alignments.indexOf(lyricsTextAlignment) + 1) % alignments.size])
+            },
+        ),
+        SettingsSearchEntry(
+            title = stringResource(R.string.hide_player_quick_action_circles),
+            subtitle = stringResource(R.string.hide_player_quick_action_circles_subtitle),
+            keywords = listOf("player", "quick action", "circle", "highlight", "プレイヤー", "クイックアクション", "円", "丸"),
+            checked = hidePlayerQuickActionCircles,
+            activate = { AppSettings.setHidePlayerQuickActionCircles(!hidePlayerQuickActionCircles) },
+        ),
+        SettingsSearchEntry(
+            title = stringResource(R.string.hide_player_control_highlight_circles),
+            subtitle = stringResource(R.string.hide_player_control_highlight_circles_subtitle),
+            keywords = listOf("player", "controls", "highlight", "circle", "buttons", "プレイヤー", "操作ボタン", "選択", "円"),
+            checked = hidePlayerControlHighlightCircles,
+            activate = { AppSettings.setHidePlayerControlHighlightCircles(!hidePlayerControlHighlightCircles) },
+        ),
+        SettingsSearchEntry(
+            title = stringResource(R.string.player_details_vertical_menu),
+            subtitle = stringResource(R.string.player_details_vertical_menu_subtitle),
+            keywords = listOf("player", "details", "menu", "vertical", "ellipsis", "プレイヤー", "詳細", "メニュー", "縦", "︙"),
+            checked = playerDetailsVerticalMenu,
+            activate = { AppSettings.setPlayerDetailsVerticalMenu(!playerDetailsVerticalMenu) },
+        ),
+        SettingsSearchEntry(
+            title = stringResource(R.string.player_seek_bar_thickness),
+            subtitle = stringResource(R.string.player_bar_thickness_subtitle),
+            keywords = listOf("player", "seek", "progress", "bar", "thickness", "プレイヤー", "シーク", "再生位置", "太さ"),
+            valueLabel = stringResource(R.string.player_bar_thickness_value, playerSeekBarThicknessDp),
+            sliderValue = playerSeekBarThicknessDp.toFloat(),
+            sliderValueRange = 2f..14f,
+            sliderSteps = 11,
+            onSliderValueChange = { AppSettings.setPlayerSeekBarThicknessDp(it.roundToInt()) },
+            activate = {},
+        ),
+        SettingsSearchEntry(
+            title = stringResource(R.string.player_volume_bar_thickness),
+            subtitle = stringResource(R.string.player_bar_thickness_subtitle),
+            keywords = listOf("player", "volume", "bar", "thickness", "プレイヤー", "音量", "太さ"),
+            valueLabel = stringResource(R.string.player_bar_thickness_value, playerVolumeBarThicknessDp),
+            sliderValue = playerVolumeBarThicknessDp.toFloat(),
+            sliderValueRange = 2f..14f,
+            sliderSteps = 11,
+            onSliderValueChange = { AppSettings.setPlayerVolumeBarThicknessDp(it.roundToInt()) },
+            activate = {},
+        ),
+        SettingsSearchEntry(
+            title = stringResource(R.string.resampler_cutoff),
+            subtitle = stringResource(R.string.resampler_cutoff_subtitle),
+            keywords = listOf("PCM", "resampler", "cutoff", "filter", "frequency", "リサンプラー", "カットオフ", "周波数", "音質"),
+            checked = resamplerCutoffHz > 0,
+            valueLabel = if (resamplerCutoffHz > 0) stringResource(R.string.resampler_cutoff_value, resamplerCutoffHz) else stringResource(R.string.off),
+            sliderValue = resamplerCutoffHz.takeIf { it > 0 }?.toFloat(),
+            sliderValueRange = 8_000f..22_000f,
+            sliderSteps = 13,
+            onSliderValueChange = { AppSettings.setResamplerCutoffHz(it.roundToInt()) },
+            activate = { AppSettings.setResamplerCutoffHz(if (resamplerCutoffHz > 0) 0 else 20_000) },
+        ),
+    )
+
+    @Composable
+    fun buildPreviouslyUnindexedAppearanceSearchEntries(): List<SettingsSearchEntry> = listOf(
+        SettingsSearchEntry(
+            title = stringResource(R.string.theme),
+            subtitle = theme.localizedLabel(),
+            keywords = listOf("appearance", "theme", "color", "colour", "dark", "light", "AMOLED", "外観", "テーマ", "色", "ダーク", "ライト"),
+            valueLabel = theme.localizedLabel(),
+            activate = { showThemePicker.value = true },
+        ),
+        SettingsSearchEntry(
+            title = stringResource(R.string.choose_theme_image),
+            subtitle = stringResource(R.string.choose_theme_image_subtitle),
+            keywords = listOf("theme", "custom image", "background", "appearance", "テーマ", "画像", "背景"),
+            valueLabel = stringResource(if (customThemeImageUri.isNullOrBlank()) R.string.choose_image else R.string.theme_image_selected),
+            activate = chooseThemeImage,
+        ),
+        SettingsSearchEntry(
+            title = stringResource(R.string.liquid_glass),
+            subtitle = stringResource(if (liquidGlassSupported) R.string.liquid_glass_subtitle else R.string.liquid_glass_unavailable),
+            keywords = listOf("Liquid Glass", "glass", "translucent", "blur", "液体ガラス", "透明", "ぼかし", "BitChord"),
+            checked = liquidGlass,
+            enabled = liquidGlassSupported,
+            activate = { if (liquidGlassSupported) AppSettings.setLiquidGlass(!liquidGlass) },
+        ),
+        SettingsSearchEntry(
+            title = stringResource(R.string.high_performance_mode),
+            subtitle = if (highPerformanceMode) {
+                stringResource(R.string.high_performance_active, selectedPerformanceRefreshRate)
+            } else {
+                stringResource(R.string.high_performance_subtitle)
+            },
+            keywords = listOf("performance", "refresh rate", "120Hz", "display", "パフォーマンス", "リフレッシュレート", "高性能"),
+            checked = highPerformanceMode,
+            activate = {
+                if (highPerformanceMode) AppSettings.setHighPerformanceMode(false)
+                else showPerformanceWarning = true
+            },
+        ),
+        SettingsSearchEntry(
+            title = stringResource(R.string.show_nerd_stats),
+            subtitle = stringResource(R.string.show_nerd_stats_subtitle),
+            keywords = listOf("technical information", "codec", "bitrate", "nerd stats", "技術情報", "コーデック", "ビットレート"),
+            checked = nerdStats,
+            activate = { AppSettings.setShowNerdStats(!nerdStats) },
+        ),
+        SettingsSearchEntry(
+            title = stringResource(R.string.screen_orientation),
+            subtitle = stringResource(R.string.screen_orientation_subtitle),
+            keywords = listOf("rotation", "portrait", "landscape", "画面", "回転", "縦向き", "横向き"),
+            valueLabel = stringResource(
+                when (orientationMode) {
+                    ScreenOrientationMode.SYSTEM -> R.string.orientation_system
+                    ScreenOrientationMode.PORTRAIT -> R.string.orientation_portrait
+                    ScreenOrientationMode.LANDSCAPE -> R.string.orientation_landscape
+                },
+            ),
+            activate = {
+                val modes = ScreenOrientationMode.entries
+                AppSettings.setScreenOrientationMode(modes[(modes.indexOf(orientationMode) + 1) % modes.size])
+            },
+        ),
+    )
 
     @Composable
     fun buildSettingsSearchTailEntries(): List<SettingsSearchEntry> =
@@ -2721,6 +3023,9 @@ fun SettingsScreen(
         buildSettingsSearchEntriesPart3() +
         buildSettingsSearchEntriesPart4() +
         buildSettingsSearchEntriesPart5() +
+        buildPreviouslyUnindexedPlaybackSearchEntries() +
+        buildPreviouslyUnindexedPlayerAndLyricsSearchEntries() +
+        buildPreviouslyUnindexedAppearanceSearchEntries() +
         buildSettingsSearchTailEntries()
 
     val playerInkSearchEntries = PlayerInkGroup.entries.map { group ->
@@ -3638,8 +3943,7 @@ fun SettingsScreen(
 
         if (settingsSearchQuery.isNotBlank()) {
             val matches = allSettingsSearchEntries.filter { entry ->
-                (entry.title + " " + entry.subtitle + " " + entry.keywords.joinToString(" "))
-                    .contains(settingsSearchQuery.trim(), ignoreCase = true)
+                settingsSearchMatches(entry, settingsSearchQuery)
             }
             SettingsGroup(header = stringResource(R.string.settings_search_results)) {
                 if (matches.isEmpty()) {
@@ -7279,6 +7583,7 @@ fun SettingsScreen(
             includeRemoteSourceMediaInLibrary = includeRemoteSourceMediaInLibrary,
             localMusicFolderRoot = localMusicFolderRoot,
             fullScreenCollectionArtwork = fullScreenCollectionArtwork,
+            hideLocalQuickSearch = hideLocalQuickSearch,
             smartPlaylistsEnabled = smartPlaylistsEnabled,
             hideCollectionTopBar = hideCollectionTopBar,
             hideFloatingCollectionControls = hideFloatingCollectionControls,
@@ -9044,6 +9349,7 @@ private fun LocalMusicSettingsGroup(
     includeRemoteSourceMediaInLibrary: Boolean,
     localMusicFolderRoot: String,
     fullScreenCollectionArtwork: Boolean,
+    hideLocalQuickSearch: Boolean,
     smartPlaylistsEnabled: Boolean,
     hideCollectionTopBar: Boolean,
     hideFloatingCollectionControls: Boolean,
@@ -9552,6 +9858,19 @@ SettingsGroup(header = stringResource(R.string.local_music)) {
             )
         },
         onClick = { AppSettings.setShowCollectionSongArtwork(!showCollectionSongArtwork) },
+    )
+    RowDivider()
+    SettingsRow(
+        icon = Icons.Rounded.Search,
+        title = stringResource(R.string.hide_local_quick_search),
+        subtitle = stringResource(R.string.hide_local_quick_search_subtitle),
+        trailing = {
+            Switch(
+                checked = hideLocalQuickSearch,
+                onCheckedChange = AppSettings::setHideLocalQuickSearch,
+            )
+        },
+        onClick = { AppSettings.setHideLocalQuickSearch(!hideLocalQuickSearch) },
     )
     RowDivider()
     SettingsRow(

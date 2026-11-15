@@ -1883,8 +1883,10 @@
     <string name="hide_settings_icon_on_scroll_subtitle">Do not keep the Settings action pinned while scrolling through tabs. On by default.</string>
     <string name="pin_music_library_top_bar">Keep Songs, Albums, Artists, Library and Search bars pinned</string>
     <string name="pin_music_library_top_bar_subtitle">Keep the top bar visible while scrolling these tabs. Library categories such as All and Recently played, and Search source and filter labels, stay visible too. Off by default.</string>
-    <string name="keep_music_library_top_bar_hidden_until_top">Show the hidden bar only at the top</string>
-    <string name="keep_music_library_top_bar_hidden_until_top_subtitle">After the bar hides, scrolling upward keeps it hidden until the list reaches the first item. Library category labels and Search source and filter labels follow the same behavior. On by default.</string>
+    <string name="keep_music_library_top_bar_hidden_until_top">Reveal tab headers only at the top</string>
+    <string name="keep_music_library_top_bar_hidden_until_top_subtitle">After a root tab header hides, scrolling upward keeps it out of view until the list reaches the top. It appears there without shifting the list down. Applies to every tab. On by default, like BitChord.</string>
+    <string name="hide_local_quick_search">Hide quick search fields</string>
+    <string name="hide_local_quick_search_subtitle">Hide the inline search box in local Songs, Albums, Artists, Album Artists, and Playlists. Off by default.</string>
     <string name="tablet_lyrics_beside_player">Tablet full-screen player</string>
     <string name="tablet_lyrics_beside_player_subtitle">On wide screens, expand the bottom player across the full window, with playback controls on the left and synced lyrics on the right. Swipe down from the top handle to return.</string>
     <string name="youtube_music_saved">YouTube Music</string>

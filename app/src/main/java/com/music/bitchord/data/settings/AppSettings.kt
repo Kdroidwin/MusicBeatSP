@@ -770,8 +770,10 @@ object AppSettings {
     val hideSettingsIconOnScroll = MutableStateFlow(true)
     /** Keeps the Songs, Albums and Artists title bar visible while scrolling. */
     val pinMusicLibraryTopBar = MutableStateFlow(false)
-    /** After a music-library title bar hides, wait until the list reaches its top before showing it again. */
+    /** Keep root-tab headers hidden while reversing direction; reveal only at the list top. */
     val keepMusicLibraryTopBarHiddenUntilTop = MutableStateFlow(true)
+    /** Hides the inline quick-search field in local Songs, Albums, Artists and Playlists. */
+    val hideLocalQuickSearch = MutableStateFlow(false)
     val launcherIcon = MutableStateFlow(LauncherIcon.PINK)
     val frostedQueueManager = MutableStateFlow(true)
     val frostedPlayerDetails = MutableStateFlow(true)
@@ -1796,6 +1798,7 @@ object AppSettings {
         pinMusicLibraryTopBar.value = prefs.getBoolean(KEY_PIN_MUSIC_LIBRARY_TOP_BAR, false)
         keepMusicLibraryTopBarHiddenUntilTop.value =
             prefs.getBoolean(KEY_MUSIC_LIBRARY_TOP_BAR_HIDDEN_UNTIL_TOP, true)
+        hideLocalQuickSearch.value = prefs.getBoolean(KEY_HIDE_LOCAL_QUICK_SEARCH, false)
         launcherIcon.value = runCatching {
             LauncherIcon.valueOf(prefs.getString(KEY_LAUNCHER_ICON, LauncherIcon.PINK.name) ?: LauncherIcon.PINK.name)
         }.getOrDefault(LauncherIcon.PINK)
@@ -2746,6 +2749,11 @@ object AppSettings {
     fun setKeepMusicLibraryTopBarHiddenUntilTop(value: Boolean) {
         keepMusicLibraryTopBarHiddenUntilTop.value = value
         prefs.edit().putBoolean(KEY_MUSIC_LIBRARY_TOP_BAR_HIDDEN_UNTIL_TOP, value).apply()
+    }
+
+    fun setHideLocalQuickSearch(value: Boolean) {
+        hideLocalQuickSearch.value = value
+        prefs.edit().putBoolean(KEY_HIDE_LOCAL_QUICK_SEARCH, value).apply()
     }
 
     fun setTabletFullscreenPlayer(value: Boolean) {
@@ -5235,6 +5243,7 @@ object AppSettings {
     private const val KEY_HIDE_SETTINGS_ICON_ON_SCROLL = "hide_settings_icon_on_scroll"
     private const val KEY_PIN_MUSIC_LIBRARY_TOP_BAR = "pin_music_library_top_bar"
     private const val KEY_MUSIC_LIBRARY_TOP_BAR_HIDDEN_UNTIL_TOP = "music_library_top_bar_hidden_until_top"
+    private const val KEY_HIDE_LOCAL_QUICK_SEARCH = "hide_local_quick_search"
     private const val KEY_TABLET_LYRICS_BESIDE_PLAYER = "tablet_lyrics_beside_player"
     private const val KEY_SAVED_YOUTUBE_COLLECTIONS = "saved_youtube_music_collections"
     private const val MAX_SAVED_YOUTUBE_COLLECTIONS = 500

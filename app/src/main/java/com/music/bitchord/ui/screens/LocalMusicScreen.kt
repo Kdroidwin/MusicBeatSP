@@ -432,6 +432,7 @@ fun LocalMusicScreen(
         AppSettings.localArtistsViewType.collectAsStateWithLifecycle()
     }
     val localFolderHierarchy by AppSettings.localFolderHierarchy.collectAsStateWithLifecycle()
+    val hideLocalQuickSearch by AppSettings.hideLocalQuickSearch.collectAsStateWithLifecycle()
     val showCollectionSongArtwork by AppSettings.showCollectionSongArtwork.collectAsStateWithLifecycle()
     val fullScreenCollectionArtwork by AppSettings.fullScreenCollectionArtwork.collectAsStateWithLifecycle()
     val keepCollectionArtworkAspectRatio by AppSettings.keepCollectionArtworkAspectRatio.collectAsStateWithLifecycle()
@@ -708,6 +709,12 @@ fun LocalMusicScreen(
     LaunchedEffect(selectedTab, inDrillDown) {
         quickSearchActive = false
         quickSearchQuery = ""
+    }
+    LaunchedEffect(hideLocalQuickSearch) {
+        if (hideLocalQuickSearch) {
+            quickSearchActive = false
+            quickSearchQuery = ""
+        }
     }
     SideEffect {
         if (!inDrillDown || drillDownShowsAlbums || !fullScreenCollectionArtwork || !drillDownFullScreenArtwork) {
@@ -994,7 +1001,7 @@ fun LocalMusicScreen(
             else -> null
         }
         val quickSearchContent: (@Composable (Modifier) -> Unit)? =
-            if (!inDrillDown && !selectingSongs && quickSearchHint != null) {
+            if (!hideLocalQuickSearch && !inDrillDown && !selectingSongs && quickSearchHint != null) {
                 { searchModifier ->
                     LocalCollectionQuickSearch(
                         active = quickSearchActive,
@@ -1151,9 +1158,9 @@ fun LocalMusicScreen(
                 }
 
                 key == "tab:$LOCAL_TAB_SONGS" -> {
-                    val visibleSongs = remember(sortedSongs, quickSearchActive, quickSearchQuery) {
+                    val visibleSongs = remember(sortedSongs, quickSearchActive, quickSearchQuery, hideLocalQuickSearch) {
                         val query = quickSearchQuery.trim()
-                        if (!quickSearchActive || query.isEmpty()) sortedSongs
+                        if (hideLocalQuickSearch || !quickSearchActive || query.isEmpty()) sortedSongs
                         else sortedSongs.filter { it.title.contains(query, ignoreCase = true) }
                     }
                     SongsTab(
@@ -1220,9 +1227,9 @@ fun LocalMusicScreen(
                             ArtistSort.NAME_DESC -> grouped.sortedByDescending { it.name.lowercase(Locale.ROOT) }
                         }
                     }
-                    val visibleArtists = remember(artists, quickSearchActive, quickSearchQuery) {
+                    val visibleArtists = remember(artists, quickSearchActive, quickSearchQuery, hideLocalQuickSearch) {
                         val query = quickSearchQuery.trim()
-                        if (!quickSearchActive || query.isEmpty()) artists
+                        if (hideLocalQuickSearch || !quickSearchActive || query.isEmpty()) artists
                         else artists.filter { it.name.contains(query, ignoreCase = true) }
                     }
                     ArtistsTab(
@@ -1286,9 +1293,9 @@ fun LocalMusicScreen(
                             ArtistSort.NAME_DESC -> grouped.sortedByDescending { it.name.lowercase(Locale.ROOT) }
                         }
                     }
-                    val visibleAlbumArtists = remember(albumArtists, quickSearchActive, quickSearchQuery) {
+                    val visibleAlbumArtists = remember(albumArtists, quickSearchActive, quickSearchQuery, hideLocalQuickSearch) {
                         val query = quickSearchQuery.trim()
-                        if (!quickSearchActive || query.isEmpty()) albumArtists
+                        if (hideLocalQuickSearch || !quickSearchActive || query.isEmpty()) albumArtists
                         else albumArtists.filter { it.name.contains(query, ignoreCase = true) }
                     }
                     ArtistsTab(
@@ -1328,9 +1335,9 @@ fun LocalMusicScreen(
                     val allAlbums = remember(sortedSongs, collections) {
                         albumEntries(sortedSongs, collections)
                     }
-                    val albums = remember(allAlbums, quickSearchActive, quickSearchQuery) {
+                    val albums = remember(allAlbums, quickSearchActive, quickSearchQuery, hideLocalQuickSearch) {
                         val query = quickSearchQuery.trim()
-                        if (!quickSearchActive || query.isEmpty()) allAlbums
+                        if (hideLocalQuickSearch || !quickSearchActive || query.isEmpty()) allAlbums
                         else allAlbums.filter { it.title.contains(query, ignoreCase = true) }
                     }
                     AlbumsTab(
@@ -1395,9 +1402,9 @@ fun LocalMusicScreen(
 
                 key == "tab:$LOCAL_TAB_PLAYLISTS" -> {
                     LocalPlaylistsTab(
-                        playlists = remember(localPlaylists, quickSearchActive, quickSearchQuery) {
+                        playlists = remember(localPlaylists, quickSearchActive, quickSearchQuery, hideLocalQuickSearch) {
                             val query = quickSearchQuery.trim()
-                            if (!quickSearchActive || query.isEmpty()) localPlaylists
+                            if (hideLocalQuickSearch || !quickSearchActive || query.isEmpty()) localPlaylists
                             else localPlaylists.filter { it.name.contains(query, ignoreCase = true) }
                         },
                         onPlaylistClick = { playlist ->

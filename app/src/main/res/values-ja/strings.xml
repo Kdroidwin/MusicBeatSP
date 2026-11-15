@@ -1856,8 +1856,10 @@
     <string name="hide_settings_icon_on_scroll_subtitle">どのタブでも、スクロール中は設定アイコンを固定表示しません。初期設定はオンです。</string>
     <string name="pin_music_library_top_bar">曲・アルバム・アーティスト・ライブラリ・検索のバーを固定</string>
     <string name="pin_music_library_top_bar_subtitle">対象タブをスクロールしても上部バーを表示します。ライブラリの「すべて」「最近再生した曲」などや検索の音源・絞り込みラベルも表示したままにします。初期設定はオフです。</string>
-    <string name="keep_music_library_top_bar_hidden_until_top">一覧の先頭で上部バーを再表示</string>
-    <string name="keep_music_library_top_bar_hidden_until_top_subtitle">バーが隠れた後、上方向へスクロールしても一覧の先頭に戻るまで再表示しません。ライブラリのカテゴリラベルや検索の音源・絞り込みラベルも同じ動作です。初期設定はオンです。</string>
+    <string name="keep_music_library_top_bar_hidden_until_top">タブの上部バーは先頭でのみ再表示</string>
+    <string name="keep_music_library_top_bar_hidden_until_top_subtitle">上部バーが隠れた後は、上方向に戻しても一覧の先頭まで表示しません。先頭では一覧を押し下げずに再表示します。全タブに適用され、BitChord風の動作が初期設定でオンです。</string>
+    <string name="hide_local_quick_search">クイック検索欄を非表示</string>
+    <string name="hide_local_quick_search_subtitle">曲・アルバム・アーティスト・アルバムアーティスト・プレイリストの一覧内にある検索欄を隠します。初期設定はオフです。</string>
     <string name="tablet_lyrics_beside_player">タブレットでプレイヤーを全画面表示</string>
     <string name="tablet_lyrics_beside_player_subtitle">横長画面ではプレイヤーを下部バーから全画面に広げ、左に再生操作、右に同期歌詞を表示します。上端を下へスワイプすると戻ります。</string>
     <string name="youtube_music_saved">YouTube Music</string>
