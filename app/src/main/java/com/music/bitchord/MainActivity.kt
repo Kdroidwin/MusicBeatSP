@@ -1377,6 +1377,7 @@ private fun BitChordApp(
     val rootTabTopBarCollapsed = rootTabTopBarState.collapsed
     val onRootLibraryOrSearchScrolled = rootTabTopBarState.onListScrollChanged
     val rootTabTopBarScroll = rootTabTopBarState.scrollConnection
+    val snapRootHeaderReturn = keepMusicLibraryTopBarHiddenUntilTopSetting && selectedTab != TAB_HOME
     val rootTopBarPresentation = rootTabTopBarPresentation(
         persistentSettingsOnly = rootTabFloatingSettingsOnlySetting || rootHeaderHidesHomeBar,
         scrollEnabled = rootTabTopBarScrollEnabled,
@@ -1395,7 +1396,7 @@ private fun BitChordApp(
         // until the list reaches its top, then restore its space in one frame.
         // Animating this padding made the header look like it was growing out
         // of the list and shifted content under the user's finger.
-        animationSpec = if (keepMusicLibraryTopBarHiddenUntilTopSetting && !rootTabTopBarCollapsed) {
+        animationSpec = if (snapRootHeaderReturn && !rootTabTopBarCollapsed) {
             snap()
         } else {
             tween(180)
@@ -6217,10 +6218,10 @@ private fun rememberRootTabTopBarState(
     val optionApplies = selectedTab == TAB_SONGS || selectedTab == TAB_ALBUMS ||
         selectedTab == TAB_ARTISTS || selectedTab == TAB_LIBRARY || selectedTab == TAB_SEARCH
     val pinned = optionApplies && pinSetting
-    // Apply the reverse-scroll behavior to every root tab. Previously it was
-    // restricted to Songs/Albums/Artists/Library/Search, so other tabs
-    // revealed their full header as soon as the user scrolled upward.
-    val holdHiddenUntilTop = isRootScreen && keepHiddenUntilTopSetting
+    // Home owns its own inline header/settings affordance. Keep its separate
+    // behavior; the other root tabs hold their header until the content has
+    // actually returned to the position where it was hidden.
+    val holdHiddenUntilTop = isRootScreen && selectedTab != TAB_HOME && keepHiddenUntilTopSetting
     var collapsed by remember(selectedTab) { mutableStateOf(false) }
 
     LaunchedEffect(selectedTab, pinned) {
@@ -6270,6 +6271,11 @@ private class RootTabTopBarScrollConnection(
     private var collapsed = initiallyCollapsed
     private var lastDirection = 0
     private var accumulatedDistance = 0f
+    // Distance the root content has moved down since this header was hidden.
+    // A positive unconsumed delta alone is not proof that the page is at its
+    // top: nested children can reach their own boundary while the root page is
+    // still scrolled. Track consumed motion and reveal only after it unwinds.
+    private var distanceFromRevealPosition = 0f
 
     override fun onPreScroll(
         available: Offset,
@@ -6303,6 +6309,7 @@ private class RootTabTopBarScrollConnection(
             collapsed = shouldCollapse
             accumulatedDistance = 0f
             lastDirection = 0
+            if (collapsed) distanceFromRevealPosition = 0f
             onCollapsedChange(collapsed)
         }
         return Offset.Zero
@@ -6313,12 +6320,23 @@ private class RootTabTopBarScrollConnection(
         available: Offset,
         source: NestedScrollSource,
     ): Offset {
-        // A positive unconsumed delta means the child list has reached its
-        // first item. Until then upward scrolling must not reveal the bar.
-        if (enabled && holdHiddenUntilTop && collapsed && available.y > 0f) {
+        if (!enabled || !holdHiddenUntilTop) return Offset.Zero
+
+        // Count only motion consumed by the scrolled content. Nested children
+        // can leave positive unconsumed deltas at their own top edge; those
+        // must not make a root tab header pop back while the page is mid-list.
+        if (consumed.y < 0f) {
+            distanceFromRevealPosition += -consumed.y
+        } else if (consumed.y > 0f) {
+            distanceFromRevealPosition =
+                (distanceFromRevealPosition - consumed.y).coerceAtLeast(0f)
+        }
+
+        if (collapsed && available.y > 0f && distanceFromRevealPosition <= 1f) {
             collapsed = false
             accumulatedDistance = 0f
             lastDirection = 0
+            distanceFromRevealPosition = 0f
             onCollapsedChange(false)
         }
         return Offset.Zero
