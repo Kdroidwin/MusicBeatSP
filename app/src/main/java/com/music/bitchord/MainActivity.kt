@@ -1390,12 +1390,9 @@ private fun BitChordApp(
     )
     val rootTabFloatingSettingsOnly = rootTopBarPresentation.floatingSettingsOnly
     val rootTopPaddingTarget = rootTopBarPresentation.contentTopPadding
-    val rootTopPaddingState = animateDpAsState(
+    val animatedRootTopPadding = animateDpAsState(
         targetValue = rootTopPaddingTarget,
-        // On the upward return, keep the header out of the content's layout
-        // until the list reaches its top, then restore its space in one frame.
-        // Animating this padding made the header look like it was growing out
-        // of the list and shifted content under the user's finger.
+        // Keep the hide motion used by the existing root header behavior.
         animationSpec = if (snapRootHeaderReturn && !rootTabTopBarCollapsed) {
             snap()
         } else {
@@ -1403,13 +1400,25 @@ private fun BitChordApp(
         },
         label = "rootTopPadding",
     )
+    // Do not feed an in-flight animate* value back into the layout as the
+    // header returns. A changed animation spec can still expose the previous
+    // tween's intermediate value for a frame, which looks like the bar grows
+    // out of the content. Root tabs using the BitChord-style return snap to
+    // their final inset directly; Home deliberately keeps its own motion.
+    val rootTopPadding = if (snapRootHeaderReturn && !rootTabTopBarCollapsed) {
+        rootTopPaddingTarget
+    } else {
+        animatedRootTopPadding.value
+    }
     LaunchedEffect(rootTabTopBarScrollEnabled, rootTabTopBarCollapsed, musicLibraryTopBarPinned, rootTopPaddingTarget) {
         val hideStatusBar = rootTabTopBarScrollEnabled && rootTabTopBarCollapsed && !musicLibraryTopBarPinned
-        // Let the content clear the header space first. Hiding a system bar
-        // while a finger is dragging also changes window insets mid-gesture,
-        // which causes a one-time scroll hitch.
-        snapshotFlow { rootTopPaddingState.value }.first { padding ->
-            kotlin.math.abs(padding.value - rootTopPaddingTarget.value) < 0.5f
+        // Finish collapsing the content inset before hiding Android's status
+        // bar. On reveal the root padding is already snapped, so showing the
+        // system bar does not wait on or restart the content animation.
+        if (hideStatusBar) {
+            snapshotFlow { animatedRootTopPadding.value }.first { padding ->
+                kotlin.math.abs(padding.value - rootTopPaddingTarget.value) < 0.5f
+            }
         }
         onRootScrollStatusBarChanged(hideStatusBar)
     }
@@ -2506,7 +2515,7 @@ private fun BitChordApp(
     val listPadding = PaddingValues(
         // Shrink the reserved header space with the same short motion as the
         // system-bar transition, instead of moving the list in one frame.
-        top = if (fullBleedArtistDetail) 0.dp else rootTopPaddingState.value,
+        top = if (fullBleedArtistDetail) 0.dp else rootTopPadding,
         bottom = if (player.song != null && !playerDocked) 210.dp else 140.dp,
     )
 
