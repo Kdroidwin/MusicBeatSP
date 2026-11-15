@@ -32,6 +32,7 @@ import androidx.compose.animation.ExitTransition
 import androidx.compose.animation.fadeIn
 import androidx.compose.animation.core.animateDpAsState
 import androidx.compose.animation.core.animateFloatAsState
+import androidx.compose.animation.core.snap
 import androidx.compose.animation.core.tween
 import androidx.compose.animation.fadeOut
 import androidx.compose.animation.togetherWith
@@ -1390,7 +1391,15 @@ private fun BitChordApp(
     val rootTopPaddingTarget = rootTopBarPresentation.contentTopPadding
     val rootTopPaddingState = animateDpAsState(
         targetValue = rootTopPaddingTarget,
-        animationSpec = tween(180),
+        // On the upward return, keep the header out of the content's layout
+        // until the list reaches its top, then restore its space in one frame.
+        // Animating this padding made the header look like it was growing out
+        // of the list and shifted content under the user's finger.
+        animationSpec = if (keepMusicLibraryTopBarHiddenUntilTopSetting && !rootTabTopBarCollapsed) {
+            snap()
+        } else {
+            tween(180)
+        },
         label = "rootTopPadding",
     )
     LaunchedEffect(rootTabTopBarScrollEnabled, rootTabTopBarCollapsed, musicLibraryTopBarPinned, rootTopPaddingTarget) {
@@ -6208,7 +6217,10 @@ private fun rememberRootTabTopBarState(
     val optionApplies = selectedTab == TAB_SONGS || selectedTab == TAB_ALBUMS ||
         selectedTab == TAB_ARTISTS || selectedTab == TAB_LIBRARY || selectedTab == TAB_SEARCH
     val pinned = optionApplies && pinSetting
-    val holdHiddenUntilTop = optionApplies && keepHiddenUntilTopSetting
+    // Apply the reverse-scroll behavior to every root tab. Previously it was
+    // restricted to Songs/Albums/Artists/Library/Search, so other tabs
+    // revealed their full header as soon as the user scrolled upward.
+    val holdHiddenUntilTop = isRootScreen && keepHiddenUntilTopSetting
     var collapsed by remember(selectedTab) { mutableStateOf(false) }
 
     LaunchedEffect(selectedTab, pinned) {
