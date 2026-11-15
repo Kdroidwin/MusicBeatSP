@@ -1891,9 +1891,11 @@
     <string name="player_outer_action_control_size">外側の操作アイコンサイズ</string>
     <string name="player_outer_action_control_size_subtitle">再生操作の両端にあるシャッフル・リピートなどのアイコンの大きさを調整します。タップ範囲は維持されます。</string>
     <string name="player_seek_bar_vertical_position">再生バーの上下位置</string>
+    <string name="player_lyrics_strip_vertical_position">シークバー上の歌詞の上下位置</string>
+    <string name="player_lyrics_strip_vertical_position_subtitle">シークバー上の1行歌詞だけを個別に調整します（-80〜+80 dp）。再生バー自体を動かした場合は、その位置にも追従します。</string>
     <string name="player_transport_vertical_position">前へ・次へ／左右ボタンの上下位置</string>
     <string name="player_bottom_actions_vertical_position">プレイヤー下部ボタンの上下位置</string>
-    <string name="player_vertical_position_subtitle">3か所は独立して調整できます。負の値で上へ、正の値で下へ移動します。</string>
+    <string name="player_vertical_position_subtitle">各項目を個別に調整できます。負の値で上へ、正の値で下へ移動します。</string>
     <string name="player_vertical_offset_value">%1$d dp</string>
     <string name="player_play_pause_corner_roundness">再生アイコンの角の丸み</string>
     <string name="player_play_pause_corner_roundness_subtitle">▷の3つの角の丸みを調整します。背景の図形は追加されません。</string>

@@ -1363,74 +1363,29 @@ private fun BitChordApp(
 
     val rootHeaderIsRootPage = detail == null && !showSettings && !showReplay && !showSources && !showWearOs &&
         !libraryPlaylistDetailOpen && collectionBackHandlers["$TAB_KEY$selectedTab"] == null
-    val rootHeaderMode = rootTabHeaderMode(rootTabLargeHeaderSetting, rootHeaderIsRootPage, selectedTab)
-    val rootHeaderShowsLargeTitle = rootHeaderMode.showLargeTitle
-    val rootHeaderHidesHomeBar = rootHeaderMode.hideHomeBar
-    val rootTabTopBarState = rememberRootTabTopBarState(
+    val rootHeaderLayout = rememberRootTabHeaderLayout(
+        largeHeaderEnabled = rootTabLargeHeaderSetting,
+        floatingSettingsOnlyEnabled = rootTabFloatingSettingsOnlySetting,
         selectedTab = selectedTab,
+        isRootPage = rootHeaderIsRootPage,
         isRootScreen = detail == null && !showSettings && !showReplay && !showSources && !showWearOs,
         pinSetting = pinMusicLibraryTopBarSetting,
         keepHiddenUntilTopSetting = keepMusicLibraryTopBarHiddenUntilTopSetting,
-    )
-    val rootTabTopBarScrollEnabled = rootTabTopBarState.scrollEnabled
-    val musicLibraryTopBarPinned = rootTabTopBarState.pinned
-    val rootTabTopBarCollapsed = rootTabTopBarState.collapsed
-    val onRootLibraryOrSearchScrolled = rootTabTopBarState.onListScrollChanged
-    val rootTabTopBarScroll = rootTabTopBarState.scrollConnection
-    val snapRootHeaderReturn = keepMusicLibraryTopBarHiddenUntilTopSetting && selectedTab != TAB_HOME
-    val rootTopBarPresentation = rootTabTopBarPresentation(
-        // The redesigned root pages have no toolbar: the title belongs to the
-        // page body and Settings is its own floating action. Preserve the
-        // explicit floating-only option for legacy headers.
-        persistentSettingsOnly = rootTabLargeHeaderSetting || rootTabFloatingSettingsOnlySetting || rootHeaderHidesHomeBar,
-        scrollEnabled = rootTabTopBarScrollEnabled,
-        collapsed = rootTabTopBarCollapsed && !musicLibraryTopBarPinned,
         showStatusBar = showStatusBar,
         showReplay = showReplay,
-        isRootTab = rootHeaderIsRootPage,
         statusBarInset = WindowInsets.statusBarsIgnoringVisibility.asPaddingValues().calculateTopPadding(),
-        largeHeaderHeight = if (rootHeaderShowsLargeTitle) RootTabLargeTitleHeight else 0.dp,
+        onRootScrollStatusBarChanged = onRootScrollStatusBarChanged,
     )
-    val rootTabFloatingSettingsOnly = rootHeaderShowsLargeTitle || rootTopBarPresentation.floatingSettingsOnly
-    val rootTopPaddingTarget = rootTabPageContentTopPadding(
-        usePageHeading = rootHeaderShowsLargeTitle && rootHeaderIsRootPage,
-        collapsed = rootTabTopBarCollapsed && !musicLibraryTopBarPinned,
-        showStatusBar = showStatusBar,
-        statusBarInset = WindowInsets.statusBarsIgnoringVisibility.asPaddingValues().calculateTopPadding(),
-        legacyContentPadding = rootTopBarPresentation.contentTopPadding,
-    )
-    val animatedRootTopPadding = animateDpAsState(
-        targetValue = rootTopPaddingTarget,
-        // Keep the hide motion used by the existing root header behavior.
-        animationSpec = if (snapRootHeaderReturn && !rootTabTopBarCollapsed) {
-            snap()
-        } else {
-            tween(180)
-        },
-        label = "rootTopPadding",
-    )
-    // Do not feed an in-flight animate* value back into the layout as the
-    // header returns. A changed animation spec can still expose the previous
-    // tween's intermediate value for a frame, which looks like the bar grows
-    // out of the content. Root tabs using the BitChord-style return snap to
-    // their final inset directly; Home deliberately keeps its own motion.
-    val rootTopPadding = if (snapRootHeaderReturn && !rootTabTopBarCollapsed) {
-        rootTopPaddingTarget
-    } else {
-        animatedRootTopPadding.value
-    }
-    LaunchedEffect(rootTabTopBarScrollEnabled, rootTabTopBarCollapsed, musicLibraryTopBarPinned, rootTopPaddingTarget) {
-        val hideStatusBar = rootTabTopBarScrollEnabled && rootTabTopBarCollapsed && !musicLibraryTopBarPinned
-        // Finish collapsing the content inset before hiding Android's status
-        // bar. On reveal the root padding is already snapped, so showing the
-        // system bar does not wait on or restart the content animation.
-        if (hideStatusBar) {
-            snapshotFlow { animatedRootTopPadding.value }.first { padding ->
-                kotlin.math.abs(padding.value - rootTopPaddingTarget.value) < 0.5f
-            }
-        }
-        onRootScrollStatusBarChanged(hideStatusBar)
-    }
+    val rootHeaderShowsLargeTitle = rootHeaderLayout.showsLargeTitle
+    val rootHeaderHidesHomeBar = rootHeaderLayout.hidesHomeBar
+    val useInlineRootHeader = rootHeaderLayout.useInlineHeader
+    val rootTabTopBarScrollEnabled = rootHeaderLayout.scrollEnabled
+    val musicLibraryTopBarPinned = rootHeaderLayout.pinned
+    val rootTabTopBarCollapsed = rootHeaderLayout.collapsed
+    val onRootLibraryOrSearchScrolled = rootHeaderLayout.onListScrollChanged
+    val rootTabTopBarScroll = rootHeaderLayout.scrollConnection
+    val rootTabFloatingSettingsOnly = rootHeaderLayout.floatingSettingsOnly
+    val rootTopPadding = rootHeaderLayout.contentTopPadding
 
     val allTabs = rememberMainTabs(rootTabLabelsEnglishSetting, homeTabTitleModeSetting)
     val tabs = remember(allTabs, visibleTabIndices) {
@@ -2512,13 +2467,10 @@ private fun BitChordApp(
         startDownload(listOf(withDuration), null)
     }
 
-    // Content padding leaves room for the frosted bar above and the tab bar
-    // (plus mini player) below, so nothing is ever trapped under the glass.
-    //
-    // The top is measured off the bar rather than guessed at: the bar is pinned
-    // under the status bar inset, and that inset varies by device and by window,
-    // so a fixed number only ever lines up on the one device it was picked on.
-    // See [topBarContentPadding].
+    // Content padding leaves room for the active root heading/header and the
+    // tab bar (plus mini player) below, so nothing is trapped under either.
+    // The top follows the current system-bar inset, which varies by device and
+    // window; inline headings and legacy top bars each reserve their own height.
     val fullBleedArtistDetail = detail?.type == BrowseType.ARTIST &&
         !showSettings && !showReplay && !showSources && !showWearOs
     val listPadding = PaddingValues(
@@ -4029,9 +3981,8 @@ private fun BitChordApp(
 
                 val showCollectionSortAction = detail != null && !isLocalDetail && detail.type != BrowseType.ARTIST
                 RootTabHeaderOverlay(
-                    visible = rootHeaderShowsLargeTitle && rootHeaderIsRootPage && !rootHeaderHidesHomeBar &&
-                        !showReplay,
-                    showPageTitle = !rootTabTopBarCollapsed || musicLibraryTopBarPinned,
+                    visible = useInlineRootHeader && !rootHeaderHidesHomeBar && !showReplay &&
+                        (!rootTabTopBarCollapsed || musicLibraryTopBarPinned),
                     title = allTabs.getOrElse(selectedTab) { allTabs.first() }.label,
                     settingsUsesMoreIcon = settingsTopBarUsesMoreIcon,
                     onOpenSettings = { showSettings = true },
@@ -6091,6 +6042,108 @@ private data class RootTabHeaderMode(
     val hideHomeBar: Boolean,
 )
 
+private data class RootTabHeaderLayout(
+    val showsLargeTitle: Boolean,
+    val hidesHomeBar: Boolean,
+    val useInlineHeader: Boolean,
+    val scrollEnabled: Boolean,
+    val pinned: Boolean,
+    val collapsed: Boolean,
+    val onListScrollChanged: (Boolean) -> Unit,
+    val scrollConnection: NestedScrollConnection,
+    val floatingSettingsOnly: Boolean,
+    val contentTopPadding: androidx.compose.ui.unit.Dp,
+)
+
+@Composable
+private fun rememberRootTabHeaderLayout(
+    largeHeaderEnabled: Boolean,
+    floatingSettingsOnlyEnabled: Boolean,
+    selectedTab: Int,
+    isRootPage: Boolean,
+    isRootScreen: Boolean,
+    pinSetting: Boolean,
+    keepHiddenUntilTopSetting: Boolean,
+    showStatusBar: Boolean,
+    showReplay: Boolean,
+    statusBarInset: androidx.compose.ui.unit.Dp,
+    onRootScrollStatusBarChanged: (Boolean) -> Unit,
+): RootTabHeaderLayout {
+    val mode = rootTabHeaderMode(largeHeaderEnabled, isRootPage, selectedTab)
+    val topBarState = rememberRootTabTopBarState(
+        selectedTab = selectedTab,
+        isRootScreen = isRootScreen,
+        pinSetting = pinSetting,
+        keepHiddenUntilTopSetting = keepHiddenUntilTopSetting,
+    )
+    val snapOnReturn = keepHiddenUntilTopSetting && selectedTab != TAB_HOME
+    val useInlineHeader = mode.showLargeTitle && isRootPage && selectedTab != TAB_HOME
+    val topBarPresentation = rootTabTopBarPresentation(
+        persistentSettingsOnly = largeHeaderEnabled || floatingSettingsOnlyEnabled || mode.hideHomeBar,
+        scrollEnabled = topBarState.scrollEnabled,
+        collapsed = topBarState.collapsed && !topBarState.pinned,
+        showStatusBar = showStatusBar,
+        showReplay = showReplay,
+        isRootTab = isRootPage,
+        statusBarInset = statusBarInset,
+        largeHeaderHeight = if (mode.showLargeTitle) RootTabLargeTitleHeight else 0.dp,
+    )
+    val targetTopPadding = rootTabPageContentTopPadding(
+        usePageHeading = mode.showLargeTitle && isRootPage,
+        collapsed = topBarState.collapsed && !topBarState.pinned,
+        showStatusBar = showStatusBar,
+        statusBarInset = statusBarInset,
+        legacyContentPadding = topBarPresentation.contentTopPadding,
+    )
+    val animatedTopPadding = animateDpAsState(
+        targetValue = targetTopPadding,
+        // Inline root headings follow Home's immediate in-flow appearance;
+        // do not animate the reserved inset and make the heading look like it
+        // grows out of the content. Legacy headers keep their prior motion.
+        animationSpec = if (useInlineHeader || (snapOnReturn && !topBarState.collapsed)) {
+            snap()
+        } else {
+            tween(180)
+        },
+        label = "rootTopPadding",
+    )
+    val contentTopPadding = if (useInlineHeader || (snapOnReturn && !topBarState.collapsed)) {
+        targetTopPadding
+    } else {
+        animatedTopPadding.value
+    }
+    LaunchedEffect(
+        topBarState.scrollEnabled,
+        topBarState.collapsed,
+        topBarState.pinned,
+        targetTopPadding,
+        useInlineHeader,
+    ) {
+        val hideStatusBar = topBarState.scrollEnabled && topBarState.collapsed && !topBarState.pinned
+        // The inline root heading has no entrance/exit motion: its reserved
+        // inset changes in the same frame as the heading. Legacy headers keep
+        // their existing short collapse transition.
+        if (hideStatusBar && !useInlineHeader) {
+            snapshotFlow { animatedTopPadding.value }.first { padding ->
+                kotlin.math.abs(padding.value - targetTopPadding.value) < 0.5f
+            }
+        }
+        onRootScrollStatusBarChanged(hideStatusBar)
+    }
+    return RootTabHeaderLayout(
+        showsLargeTitle = mode.showLargeTitle,
+        hidesHomeBar = mode.hideHomeBar,
+        useInlineHeader = useInlineHeader,
+        scrollEnabled = topBarState.scrollEnabled,
+        pinned = topBarState.pinned,
+        collapsed = topBarState.collapsed,
+        onListScrollChanged = topBarState.onListScrollChanged,
+        scrollConnection = topBarState.scrollConnection,
+        floatingSettingsOnly = mode.showLargeTitle || topBarPresentation.floatingSettingsOnly,
+        contentTopPadding = contentTopPadding,
+    )
+}
+
 private fun rootTabPageContentTopPadding(
     usePageHeading: Boolean,
     collapsed: Boolean,
@@ -6103,83 +6156,64 @@ private fun rootTabPageContentTopPadding(
     else -> (if (showStatusBar) statusBarInset else 0.dp) + RootTabPageContentHeight
 }
 
-/**
- * A page heading below the floating settings action. It is not part of a
- * toolbar and has no adjacent action or full-width background.
- */
+/** An unframed heading row matching Home's inline title and settings action. */
 @Composable
 private fun RootTabPageHeading(
     title: String,
+    settingsUsesMoreIcon: Boolean,
+    onOpenSettings: () -> Unit,
     modifier: Modifier = Modifier,
 ) {
-    Column(
-        modifier = modifier.statusBarsPadding().padding(start = 20.dp),
+    Row(
+        modifier = modifier
+            .fillMaxWidth()
+            .statusBarsPadding()
+            .padding(horizontal = 20.dp, vertical = 14.dp)
+            .heightIn(min = RootTabLargeTitleHeight),
+        verticalAlignment = Alignment.CenterVertically,
     ) {
-        Spacer(Modifier.height(TopBarContentHeight + TopBarContentGap))
-        Box(
-            modifier = Modifier.height(RootTabLargeTitleHeight),
-            contentAlignment = Alignment.CenterStart,
+        Text(
+            text = title,
+            style = MaterialTheme.typography.displaySmall.copy(
+                fontWeight = androidx.compose.ui.text.font.FontWeight.Bold,
+            ),
+            color = MaterialTheme.colorScheme.onBackground,
+            maxLines = 1,
+            softWrap = false,
+            overflow = TextOverflow.Ellipsis,
+            modifier = Modifier.weight(1f),
+        )
+        IconButton(
+            onClick = onOpenSettings,
+            modifier = Modifier.size(48.dp),
         ) {
-            Text(
-                text = title,
-                style = MaterialTheme.typography.displaySmall.copy(
-                    fontWeight = androidx.compose.ui.text.font.FontWeight.Bold,
-                ),
-                color = MaterialTheme.colorScheme.onSurface,
-                maxLines = 1,
-                softWrap = false,
-                overflow = TextOverflow.Ellipsis,
-                modifier = Modifier.widthIn(max = 320.dp),
+            Icon(
+                if (settingsUsesMoreIcon) Icons.Rounded.MoreVert else Icons.Rounded.Settings,
+                contentDescription = stringResource(R.string.settings),
+                tint = MaterialTheme.colorScheme.onBackground,
             )
         }
     }
 }
 
-@Composable
-private fun RootTabFloatingSettings(
-    settingsUsesMoreIcon: Boolean,
-    onOpenSettings: () -> Unit,
-    modifier: Modifier = Modifier,
-) {
-    IconButton(
-        onClick = onOpenSettings,
-        modifier = modifier
-            .statusBarsPadding()
-            .padding(top = 4.dp, end = 12.dp)
-            .size(48.dp)
-            .background(MaterialTheme.colorScheme.surface.copy(alpha = 0.82f), CircleShape),
-    ) {
-        Icon(
-            if (settingsUsesMoreIcon) Icons.Rounded.MoreVert else Icons.Rounded.Settings,
-            contentDescription = stringResource(R.string.settings),
-            tint = MaterialTheme.colorScheme.onSurface,
-        )
-    }
-}
-
 private val RootTabPageContentHeight =
-    TopBarContentHeight + TopBarContentGap + RootTabLargeTitleHeight + TopBarContentGap
+    RootTabLargeTitleHeight + 28.dp + TopBarContentGap
 
 @Composable
 private fun RootTabHeaderOverlay(
     visible: Boolean,
-    showPageTitle: Boolean,
     title: String,
     settingsUsesMoreIcon: Boolean,
     onOpenSettings: () -> Unit,
     modifier: Modifier = Modifier,
 ) {
     if (visible) {
-        Box(modifier.fillMaxWidth()) {
-            if (showPageTitle) {
-                RootTabPageHeading(title = title, modifier = Modifier.align(Alignment.TopStart))
-            }
-            RootTabFloatingSettings(
-                settingsUsesMoreIcon = settingsUsesMoreIcon,
-                onOpenSettings = onOpenSettings,
-                modifier = Modifier.align(Alignment.TopEnd),
-            )
-        }
+        RootTabPageHeading(
+            title = title,
+            settingsUsesMoreIcon = settingsUsesMoreIcon,
+            onOpenSettings = onOpenSettings,
+            modifier = modifier,
+        )
     }
 }
 
@@ -6383,7 +6417,7 @@ private fun rememberRootTabTopBarState(
     )
 }
 
-/** Keep only the floating settings action visible while a root tab scrolls. */
+/** Tracks when an inline root heading should leave or re-enter the page. */
 private class RootTabTopBarScrollConnection(
     private val enabled: Boolean,
     initiallyCollapsed: Boolean,

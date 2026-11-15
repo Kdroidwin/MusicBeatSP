@@ -1918,9 +1918,11 @@
     <string name="player_outer_action_control_size">Outer action icon size</string>
     <string name="player_outer_action_control_size_subtitle">Adjust shuffle, repeat, and other action icons at the outer ends of the player controls. Tap targets stay the same.</string>
     <string name="player_seek_bar_vertical_position">Seek bar vertical position</string>
+    <string name="player_lyrics_strip_vertical_position">Current lyric line vertical position</string>
+    <string name="player_lyrics_strip_vertical_position_subtitle">Adjust the single lyric line above the seek bar independently, from -80 to +80 dp. It follows the seek bar position.</string>
     <string name="player_transport_vertical_position">Previous/next and side buttons vertical position</string>
     <string name="player_bottom_actions_vertical_position">Bottom player buttons vertical position</string>
-    <string name="player_vertical_position_subtitle">Adjust all three independently. Negative values move up; positive values move down.</string>
+    <string name="player_vertical_position_subtitle">Adjust each control independently. Negative values move up; positive values move down.</string>
     <string name="player_vertical_offset_value">%1$d dp</string>
     <string name="player_play_pause_corner_roundness">Play icon corner roundness</string>
     <string name="player_play_pause_corner_roundness_subtitle">Adjust the three corners of the triangular play icon. This does not add a background shape.</string>

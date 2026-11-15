@@ -1245,6 +1245,7 @@ fun NowPlayingScreen(
     val playerSideControlScale by AppSettings.playerSideControlScale.collectAsStateWithLifecycle()
     val playerOuterActionControlScale by AppSettings.playerOuterActionControlScale.collectAsStateWithLifecycle()
     val playerSeekBarVerticalOffsetDp by AppSettings.playerSeekBarVerticalOffsetDp.collectAsStateWithLifecycle()
+    val playerLyricsStripVerticalOffsetDp by AppSettings.playerLyricsStripVerticalOffsetDp.collectAsStateWithLifecycle()
     val playerTransportVerticalOffsetDp by AppSettings.playerTransportVerticalOffsetDp.collectAsStateWithLifecycle()
     val playerBottomActionsVerticalOffsetDp by AppSettings.playerBottomActionsVerticalOffsetDp.collectAsStateWithLifecycle()
     val autoShowLyricsOnPlayback by AppSettings.autoShowLyricsOnPlayback.collectAsStateWithLifecycle()
@@ -3455,7 +3456,7 @@ fun NowPlayingScreen(
                         // drawn bar, so the strip reads as further off it than
                         // it is. Nudged down into that dead space, the same way
                         // the timestamps below are pulled back up into it.
-                        .offset(y = 6.dp),
+                        .offset(y = (6 + playerSeekBarVerticalOffsetDp + playerLyricsStripVerticalOffsetDp).dp),
                 ) {
                     if (!currentSongLyrics.isNullOrEmpty()) {
                         CurrentLyricLine(

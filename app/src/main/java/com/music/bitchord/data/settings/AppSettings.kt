@@ -36,6 +36,10 @@ const val MAX_PLAYER_CONTROLS_RAISE_DP = 160
 const val MIN_PLAYER_CONTROLS_VERTICAL_OFFSET_DP = -160
 const val MAX_PLAYER_CONTROLS_VERTICAL_OFFSET_DP = 160
 
+/** Smaller safe range for moving the one-line lyric independently of the seek bar. */
+const val MIN_PLAYER_LYRICS_STRIP_VERTICAL_OFFSET_DP = -80
+const val MAX_PLAYER_LYRICS_STRIP_VERTICAL_OFFSET_DP = 80
+
 /** Range for the visible side-control icon scale. Touch targets remain unchanged. */
 const val MIN_PLAYER_SIDE_CONTROL_SCALE = 0.5f
 const val MAX_PLAYER_SIDE_CONTROL_SCALE = 1.6f
@@ -742,8 +746,9 @@ object AppSettings {
     val playerSideControlScale = MutableStateFlow(1f)
     /** Scales shuffle, repeat, and other action glyphs at the outer ends of the transport row. */
     val playerOuterActionControlScale = MutableStateFlow(1f)
-    /** Vertical offsets for the seek bar, transport row, and lower action row. */
+    /** Independent vertical offsets for the seek bar, lyric strip, transport, and lower actions. */
     val playerSeekBarVerticalOffsetDp = MutableStateFlow(0)
+    val playerLyricsStripVerticalOffsetDp = MutableStateFlow(0)
     val playerTransportVerticalOffsetDp = MutableStateFlow(0)
     val playerBottomActionsVerticalOffsetDp = MutableStateFlow(0)
     /** Strength of the artwork-matched lower blur in the full-screen player. */
@@ -1773,6 +1778,10 @@ object AppSettings {
             KEY_PLAYER_SEEK_BAR_VERTICAL_OFFSET_DP,
             legacyVerticalOffset,
         ).coerceIn(MIN_PLAYER_CONTROLS_VERTICAL_OFFSET_DP, MAX_PLAYER_CONTROLS_VERTICAL_OFFSET_DP)
+        playerLyricsStripVerticalOffsetDp.value = prefs.getInt(
+            KEY_PLAYER_LYRICS_STRIP_VERTICAL_OFFSET_DP,
+            0,
+        ).coerceIn(MIN_PLAYER_LYRICS_STRIP_VERTICAL_OFFSET_DP, MAX_PLAYER_LYRICS_STRIP_VERTICAL_OFFSET_DP)
         playerTransportVerticalOffsetDp.value = prefs.getInt(
             KEY_PLAYER_TRANSPORT_VERTICAL_OFFSET_DP,
             legacyVerticalOffset,
@@ -2677,6 +2686,12 @@ object AppSettings {
         val safe = value.coerceIn(MIN_PLAYER_CONTROLS_VERTICAL_OFFSET_DP, MAX_PLAYER_CONTROLS_VERTICAL_OFFSET_DP)
         playerSeekBarVerticalOffsetDp.value = safe
         prefs.edit().putInt(KEY_PLAYER_SEEK_BAR_VERTICAL_OFFSET_DP, safe).apply()
+    }
+
+    fun setPlayerLyricsStripVerticalOffsetDp(value: Int) {
+        val safe = value.coerceIn(MIN_PLAYER_LYRICS_STRIP_VERTICAL_OFFSET_DP, MAX_PLAYER_LYRICS_STRIP_VERTICAL_OFFSET_DP)
+        playerLyricsStripVerticalOffsetDp.value = safe
+        prefs.edit().putInt(KEY_PLAYER_LYRICS_STRIP_VERTICAL_OFFSET_DP, safe).apply()
     }
 
     fun setPlayerTransportVerticalOffsetDp(value: Int) {
@@ -5229,6 +5244,7 @@ object AppSettings {
     private const val KEY_PLAYER_OUTER_ACTION_CONTROL_SCALE = "player_outer_action_control_scale"
     private const val KEY_PLAYER_CONTROLS_RAISE_DP = "player_controls_raise_dp"
     private const val KEY_PLAYER_SEEK_BAR_VERTICAL_OFFSET_DP = "player_seek_bar_vertical_offset_dp"
+    private const val KEY_PLAYER_LYRICS_STRIP_VERTICAL_OFFSET_DP = "player_lyrics_strip_vertical_offset_dp"
     private const val KEY_PLAYER_TRANSPORT_VERTICAL_OFFSET_DP = "player_transport_vertical_offset_dp"
     private const val KEY_PLAYER_BOTTOM_ACTIONS_VERTICAL_OFFSET_DP = "player_bottom_actions_vertical_offset_dp"
     private const val KEY_HIDE_PLAYLIST_PLAY_BUTTON_LABEL = "hide_playlist_play_button_label"

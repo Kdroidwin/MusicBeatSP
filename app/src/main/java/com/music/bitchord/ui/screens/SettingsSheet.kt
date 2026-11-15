@@ -203,6 +203,8 @@ import com.music.bitchord.data.settings.MAX_PLAYER_ARTWORK_BLUR_DP
 import com.music.bitchord.data.settings.MAX_PLAYER_BUTTON_SPACING_DP
 import com.music.bitchord.data.settings.MIN_PLAYER_CONTROLS_VERTICAL_OFFSET_DP
 import com.music.bitchord.data.settings.MAX_PLAYER_CONTROLS_VERTICAL_OFFSET_DP
+import com.music.bitchord.data.settings.MIN_PLAYER_LYRICS_STRIP_VERTICAL_OFFSET_DP
+import com.music.bitchord.data.settings.MAX_PLAYER_LYRICS_STRIP_VERTICAL_OFFSET_DP
 import com.music.bitchord.data.settings.MIN_PLAYER_SIDE_CONTROL_SCALE
 import com.music.bitchord.data.settings.MAX_PLAYER_SIDE_CONTROL_SCALE
 import com.music.bitchord.data.settings.MainNavigationTab
@@ -1147,13 +1149,15 @@ private fun playerVerticalOffsetSearchEntry(
     keywords: List<String>,
     offsetDp: Int,
     onOffsetChange: (Int) -> Unit,
+    minimum: Int = MIN_PLAYER_CONTROLS_VERTICAL_OFFSET_DP,
+    maximum: Int = MAX_PLAYER_CONTROLS_VERTICAL_OFFSET_DP,
 ) = SettingsSearchEntry(
     title = stringResource(title),
     subtitle = stringResource(subtitle),
     keywords = keywords,
     valueLabel = stringResource(R.string.player_vertical_offset_value, offsetDp),
     sliderValue = offsetDp.toFloat(),
-    sliderValueRange = MIN_PLAYER_CONTROLS_VERTICAL_OFFSET_DP.toFloat()..MAX_PLAYER_CONTROLS_VERTICAL_OFFSET_DP.toFloat(),
+    sliderValueRange = minimum.toFloat()..maximum.toFloat(),
     onSliderValueChange = { onOffsetChange(it.roundToInt()) },
     activate = {},
 )
@@ -1161,6 +1165,7 @@ private fun playerVerticalOffsetSearchEntry(
 @Composable
 private fun playerVerticalOffsetSearchEntries(): List<SettingsSearchEntry> {
     val seekBarOffset by AppSettings.playerSeekBarVerticalOffsetDp.collectAsStateWithLifecycle()
+    val lyricsStripOffset by AppSettings.playerLyricsStripVerticalOffsetDp.collectAsStateWithLifecycle()
     val transportOffset by AppSettings.playerTransportVerticalOffsetDp.collectAsStateWithLifecycle()
     val bottomActionsOffset by AppSettings.playerBottomActionsVerticalOffsetDp.collectAsStateWithLifecycle()
     return listOf(
@@ -1170,6 +1175,15 @@ private fun playerVerticalOffsetSearchEntries(): List<SettingsSearchEntry> {
             listOf("player", "seek bar", "progress", "vertical", "position", "プレイヤー", "再生バー", "シークバー", "上下", "位置"),
             seekBarOffset,
             AppSettings::setPlayerSeekBarVerticalOffsetDp,
+        ),
+        playerVerticalOffsetSearchEntry(
+            R.string.player_lyrics_strip_vertical_position,
+            R.string.player_lyrics_strip_vertical_position_subtitle,
+            listOf("player", "lyrics", "current lyric", "seek bar", "vertical", "position", "プレイヤー", "歌詞", "シークバー上", "上下", "位置"),
+            lyricsStripOffset,
+            AppSettings::setPlayerLyricsStripVerticalOffsetDp,
+            MIN_PLAYER_LYRICS_STRIP_VERTICAL_OFFSET_DP,
+            MAX_PLAYER_LYRICS_STRIP_VERTICAL_OFFSET_DP,
         ),
         playerVerticalOffsetSearchEntry(
             R.string.player_transport_vertical_position,
@@ -1209,6 +1223,8 @@ private fun PlayerVerticalOffsetSetting(
     title: Int,
     valueDp: Int,
     onValueChange: (Int) -> Unit,
+    minimum: Int = MIN_PLAYER_CONTROLS_VERTICAL_OFFSET_DP,
+    maximum: Int = MAX_PLAYER_CONTROLS_VERTICAL_OFFSET_DP,
 ) {
     SettingsRow(
         icon = Icons.Rounded.VerticalAlignTop,
@@ -1219,7 +1235,7 @@ private fun PlayerVerticalOffsetSetting(
     Slider(
         value = valueDp.toFloat(),
         onValueChange = { onValueChange(it.roundToInt()) },
-        valueRange = MIN_PLAYER_CONTROLS_VERTICAL_OFFSET_DP.toFloat()..MAX_PLAYER_CONTROLS_VERTICAL_OFFSET_DP.toFloat(),
+        valueRange = minimum.toFloat()..maximum.toFloat(),
         modifier = Modifier.padding(start = ROW_INSET, end = ROW_INSET, bottom = 14.dp),
     )
 }
@@ -1939,6 +1955,7 @@ fun SettingsScreen(
     val playerSideControlScale by AppSettings.playerSideControlScale.collectAsStateWithLifecycle()
     val playerOuterActionControlScale by AppSettings.playerOuterActionControlScale.collectAsStateWithLifecycle()
     val playerSeekBarVerticalOffsetDp by AppSettings.playerSeekBarVerticalOffsetDp.collectAsStateWithLifecycle()
+    val playerLyricsStripVerticalOffsetDp by AppSettings.playerLyricsStripVerticalOffsetDp.collectAsStateWithLifecycle()
     val playerTransportVerticalOffsetDp by AppSettings.playerTransportVerticalOffsetDp.collectAsStateWithLifecycle()
     val playerBottomActionsVerticalOffsetDp by AppSettings.playerBottomActionsVerticalOffsetDp.collectAsStateWithLifecycle()
     val showPlayerTopGrabber by AppSettings.showPlayerTopGrabber.collectAsStateWithLifecycle()
@@ -5269,6 +5286,14 @@ fun SettingsScreen(
                 title = R.string.player_seek_bar_vertical_position,
                 valueDp = playerSeekBarVerticalOffsetDp,
                 onValueChange = AppSettings::setPlayerSeekBarVerticalOffsetDp,
+            )
+            RowDivider()
+            PlayerVerticalOffsetSetting(
+                title = R.string.player_lyrics_strip_vertical_position,
+                valueDp = playerLyricsStripVerticalOffsetDp,
+                onValueChange = AppSettings::setPlayerLyricsStripVerticalOffsetDp,
+                minimum = MIN_PLAYER_LYRICS_STRIP_VERTICAL_OFFSET_DP,
+                maximum = MAX_PLAYER_LYRICS_STRIP_VERTICAL_OFFSET_DP,
             )
             RowDivider()
             PlayerVerticalOffsetSetting(
