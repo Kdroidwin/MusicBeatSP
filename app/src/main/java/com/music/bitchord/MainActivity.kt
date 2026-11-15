@@ -704,6 +704,7 @@ private fun BitChordApp(
 ) {
     val context = LocalContext.current
     val inheritedOverscrollFactory = LocalOverscrollFactory.current
+    val libraryOverscrollFactory = rememberIosOverscrollFactory(maximumPullDp = 48.dp)
     val externalMediaControlEnabled by AppSettings.externalMediaControlEnabled.collectAsStateWithLifecycle()
     val externalMediaLifecycleOwner = LocalLifecycleOwner.current
     LaunchedEffect(externalMediaControlEnabled) {
@@ -3720,7 +3721,11 @@ private fun BitChordApp(
                             }
                         } else {
                             CompositionLocalProvider(
-                                LocalOverscrollFactory provides if (stopLibraryAtScrollBoundsSetting) null else inheritedOverscrollFactory,
+                                LocalOverscrollFactory provides if (stopLibraryAtScrollBoundsSetting) {
+                                    libraryOverscrollFactory
+                                } else {
+                                    inheritedOverscrollFactory
+                                },
                             ) {
                                 LibraryScreen(
                                     songs = catalogSongs,
@@ -6119,16 +6124,11 @@ private fun rememberRootTabHeaderLayout(
         statusBarInset = statusBarInset,
         legacyContentPadding = topBarPresentation.contentTopPadding,
     )
-    val inlineListHeadingPadding = if (
-        useInlineHeader && (selectedTab == TAB_LIBRARY || selectedTab == TAB_SEARCH)
-    ) {
-        val scrolledHeadingHeight = with(LocalDensity.current) { topBarState.scrollOffsetPx.toDp() }
-        (headingTopPadding - scrolledHeadingHeight).coerceAtLeast(0.dp)
-    } else {
-        headingTopPadding
-    }
     val effectiveTopPadding = when {
-        useInlineHeader -> inlineListHeadingPadding
+        // The list already moves by its scroll offset. Shrinking its top
+        // padding by the same amount moves the content twice as fast as the
+        // floating heading, making the title overlap the first rows on return.
+        useInlineHeader -> headingTopPadding
         homeOwnsFlowingHeading -> if (showStatusBar) statusBarInset else 0.dp
         else -> targetTopPadding
     }

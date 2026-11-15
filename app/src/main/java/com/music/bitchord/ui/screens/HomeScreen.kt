@@ -71,7 +71,6 @@ import com.music.bitchord.feature.localmusic.data.LocalFavoritesStore
 import com.music.bitchord.feature.localsongactions.data.LocalPlayStatsStore
 import com.music.bitchord.ui.components.MessageState
 import com.music.bitchord.ui.components.PullToRefresh
-import com.music.bitchord.ui.components.SongArtworkImage
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.Dispatchers
@@ -598,15 +597,18 @@ private fun HomeAiShelfRow(
                             onLongClick = { onSongLongPress(song) },
                         ),
                     ) {
-                        SongArtworkImage(
-                            song = song,
-                            artworkPx = 320,
+                        HomeArtworkImage(
+                            // Match Library's MediaStore artwork URI so Coil can
+                            // reuse the same cached request when returning Home.
+                            // Song.artworkAt() prefers the audio-file URI for
+                            // local tracks; resolving that independently here
+                            // caused a second load (and a visible flash).
+                            imageUrl = song.thumbnailUrl?.artworkAt(320)
+                                ?: song.artworkAt(320),
                             contentDescription = song.title,
-                            contentScale = ContentScale.Crop,
                             modifier = Modifier.fillMaxWidth().aspectRatio(1f)
                                 .clip(RoundedCornerShape(12.dp))
                                 .background(MaterialTheme.colorScheme.surfaceVariant),
-                            crossfade = false,
                         )
                         Spacer(Modifier.height(7.dp))
                         Text(song.title, style = MaterialTheme.typography.titleSmall, color = MaterialTheme.colorScheme.onBackground,

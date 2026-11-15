@@ -25,6 +25,7 @@ import androidx.compose.ui.node.LayoutModifierNode
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.unit.Constraints
 import androidx.compose.ui.unit.Density
+import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.Velocity
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.coroutineScope
@@ -56,7 +57,9 @@ private fun rubberBand(rawDistance: Float, containerPx: Float): Float {
  * It replaces Android's stretch/glow with a UIScrollView-like rubber band during a
  * drag, then critically damps the content back to its resting position on release.
  */
-private class IosOverscrollEffect : OverscrollEffect {
+private class IosOverscrollEffect(
+    private val maximumPullPx: Float? = null,
+) : OverscrollEffect {
     private val rawPullX = mutableFloatStateOf(0f)
     private val rawPullY = mutableFloatStateOf(0f)
     private var containerWidthPx = 0f
@@ -84,11 +87,11 @@ private class IosOverscrollEffect : OverscrollEffect {
         var stretchedY = 0f
         if (source == NestedScrollSource.UserInput) {
             if (leftover.x != 0f) {
-                rawPullX.floatValue += leftover.x
+                rawPullX.floatValue = limitPull(rawPullX.floatValue + leftover.x)
                 stretchedX = leftover.x
             }
             if (leftover.y != 0f) {
-                rawPullY.floatValue += leftover.y
+                rawPullY.floatValue = limitPull(rawPullY.floatValue + leftover.y)
                 stretchedY = leftover.y
             }
         }
@@ -117,6 +120,10 @@ private class IosOverscrollEffect : OverscrollEffect {
         pull.floatValue = next
         return next - current
     }
+
+    private fun limitPull(value: Float): Float = maximumPullPx?.let { limit ->
+        value.coerceIn(-limit, limit)
+    } ?: value
 
     private suspend fun settle(pull: MutableFloatState, leftoverVelocity: Float) {
         if (pull.floatValue == 0f && leftoverVelocity == 0f) return
@@ -172,19 +179,25 @@ private class IosOverscrollNode(
 private class IosOverscrollFactory(
     private val density: Density,
     private val scope: CoroutineScope,
+    private val maximumPullPx: Float?,
 ) : OverscrollFactory {
-    override fun createOverscrollEffect(): OverscrollEffect = IosOverscrollEffect()
+    override fun createOverscrollEffect(): OverscrollEffect = IosOverscrollEffect(maximumPullPx)
 
     override fun equals(other: Any?): Boolean =
-        other is IosOverscrollFactory && other.density == density && other.scope === scope
+        other is IosOverscrollFactory && other.density == density && other.scope === scope &&
+            other.maximumPullPx == maximumPullPx
 
-    override fun hashCode(): Int = 31 * density.hashCode() + scope.hashCode()
+    override fun hashCode(): Int = 31 * (31 * density.hashCode() + scope.hashCode()) +
+        (maximumPullPx?.hashCode() ?: 0)
 }
 
 /** Provides iOS-style rubber-band overscroll to every descendant scroll container. */
 @Composable
-fun rememberIosOverscrollFactory(): OverscrollFactory {
+fun rememberIosOverscrollFactory(maximumPullDp: Dp? = null): OverscrollFactory {
     val density = LocalDensity.current
     val scope = rememberCoroutineScope()
-    return remember(density, scope) { IosOverscrollFactory(density, scope) }
+    val maximumPullPx = with(density) { maximumPullDp?.toPx() }
+    return remember(density, scope, maximumPullPx) {
+        IosOverscrollFactory(density, scope, maximumPullPx)
+    }
 }

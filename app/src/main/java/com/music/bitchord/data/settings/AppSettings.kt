@@ -777,7 +777,7 @@ object AppSettings {
     val pinMusicLibraryTopBar = MutableStateFlow(false)
     /** Keep root-tab headers hidden while reversing direction; reveal only at the list top. */
     val keepMusicLibraryTopBarHiddenUntilTop = MutableStateFlow(true)
-    /** Disables rubber-band overscroll in Library so its lists stop at their bounds. */
+    /** Limits Library edge overscroll to a short, spring-settled pull. */
     val stopLibraryAtScrollBounds = MutableStateFlow(true)
     /** Hides the inline quick-search field in local Songs, Albums, Artists and Playlists. */
     val hideLocalQuickSearch = MutableStateFlow(false)

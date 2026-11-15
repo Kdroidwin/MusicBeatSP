@@ -1858,8 +1858,8 @@
     <string name="pin_music_library_top_bar_subtitle">対象タブをスクロールしても上部バーを表示します。ライブラリの「すべて」「最近再生した曲」などや検索の音源・絞り込みラベルも表示したままにします。初期設定はオフです。</string>
     <string name="keep_music_library_top_bar_hidden_until_top">タブの上部バーは先頭でのみ再表示</string>
     <string name="keep_music_library_top_bar_hidden_until_top_subtitle">従来の上部バーを使う場合、隠れたバーは上方向に戻しても一覧の先頭まで表示しません。大きな見出しデザインではHomeと同じくスクロールに合わせて見出しが現れます。初期設定はオンです。</string>
-    <string name="stop_library_at_scroll_bounds">ライブラリ一覧を端で止める</string>
-    <string name="stop_library_at_scroll_bounds_subtitle">ライブラリの一覧を先頭や末尾で引っ張ったときのラバーバンド効果を無効にします。初期設定はオンです。</string>
+    <string name="stop_library_at_scroll_bounds">ライブラリ端のスクロールを少しだけ許可</string>
+    <string name="stop_library_at_scroll_bounds_subtitle">先頭や末尾で急停止せず、短く滑らかに引っ張れるようにします。オフにすると通常のラバーバンドになります。初期設定はオンです。</string>
     <string name="hide_local_quick_search">クイック検索欄を非表示</string>
     <string name="hide_local_quick_search_subtitle">曲・アルバム・アーティスト・アルバムアーティスト・プレイリストの一覧内にある検索欄を隠します。初期設定はオフです。</string>
     <string name="tablet_lyrics_beside_player">タブレットでプレイヤーを全画面表示</string>
