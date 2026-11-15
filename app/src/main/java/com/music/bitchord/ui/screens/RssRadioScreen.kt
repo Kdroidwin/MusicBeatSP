@@ -1,6 +1,7 @@
 package com.music.bitchord.ui.screens
 
 import android.widget.Toast
+import androidx.activity.compose.BackHandler
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
@@ -139,6 +140,10 @@ internal fun RssRadioScreen(
     }
 
     val selectedFeed = feeds.firstOrNull { it.id == selectedFeedId }
+    BackHandler(enabled = selectedFeedId != null) {
+        selectedFeedId = null
+        query = ""
+    }
     LaunchedEffect(selectedFeedId, feeds) {
         if (selectedFeedId != null && selectedFeed == null) selectedFeedId = null
     }

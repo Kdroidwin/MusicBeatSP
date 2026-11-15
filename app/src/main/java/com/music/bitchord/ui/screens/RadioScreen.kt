@@ -5,6 +5,7 @@ import android.net.Uri
 import android.os.Build
 import android.provider.Settings
 import android.widget.Toast
+import androidx.activity.compose.BackHandler
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.background
@@ -168,6 +169,17 @@ fun RadioScreen(
         ?.videoId?.takeIf { it.startsWith("radiko:") }?.removePrefix("radiko:")
     val currentOnsenEpisodeId = currentSong?.takeIf { it.isOnsenAudio }
         ?.videoId?.removePrefix("onsen:")
+
+    // Radio station and program pages are local navigation inside the Radio
+    // tab. Consume Back here before MainActivity's root-tab handler can switch
+    // the selected tab back to Songs.
+    BackHandler(enabled = selectedOnsenProgram != null || stationDetail != null) {
+        if (selectedOnsenProgram != null) {
+            selectedOnsenProgram = null
+        } else {
+            stationDetail = null
+        }
+    }
 
     LaunchedEffect(controller, currentOnsenEpisodeId) {
         val episodeId = currentOnsenEpisodeId ?: return@LaunchedEffect

@@ -6108,8 +6108,16 @@ private fun rememberRootTabHeaderLayout(
         statusBarInset = statusBarInset,
         legacyContentPadding = topBarPresentation.contentTopPadding,
     )
+    val inlineListHeadingPadding = if (
+        useInlineHeader && (selectedTab == TAB_LIBRARY || selectedTab == TAB_SEARCH)
+    ) {
+        val scrolledHeadingHeight = with(LocalDensity.current) { topBarState.scrollOffsetPx.toDp() }
+        (headingTopPadding - scrolledHeadingHeight).coerceAtLeast(0.dp)
+    } else {
+        headingTopPadding
+    }
     val effectiveTopPadding = when {
-        useInlineHeader -> headingTopPadding
+        useInlineHeader -> inlineListHeadingPadding
         homeOwnsFlowingHeading -> if (showStatusBar) statusBarInset else 0.dp
         else -> targetTopPadding
     }
