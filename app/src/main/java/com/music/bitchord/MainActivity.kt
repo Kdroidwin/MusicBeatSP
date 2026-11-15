@@ -1379,7 +1379,10 @@ private fun BitChordApp(
     val rootTabTopBarScroll = rootTabTopBarState.scrollConnection
     val snapRootHeaderReturn = keepMusicLibraryTopBarHiddenUntilTopSetting && selectedTab != TAB_HOME
     val rootTopBarPresentation = rootTabTopBarPresentation(
-        persistentSettingsOnly = rootTabFloatingSettingsOnlySetting || rootHeaderHidesHomeBar,
+        // The redesigned root pages have no toolbar: the title belongs to the
+        // page body and Settings is its own floating action. Preserve the
+        // explicit floating-only option for legacy headers.
+        persistentSettingsOnly = rootTabLargeHeaderSetting || rootTabFloatingSettingsOnlySetting || rootHeaderHidesHomeBar,
         scrollEnabled = rootTabTopBarScrollEnabled,
         collapsed = rootTabTopBarCollapsed && !musicLibraryTopBarPinned,
         showStatusBar = showStatusBar,
@@ -1388,8 +1391,14 @@ private fun BitChordApp(
         statusBarInset = WindowInsets.statusBarsIgnoringVisibility.asPaddingValues().calculateTopPadding(),
         largeHeaderHeight = if (rootHeaderShowsLargeTitle) RootTabLargeTitleHeight else 0.dp,
     )
-    val rootTabFloatingSettingsOnly = rootTopBarPresentation.floatingSettingsOnly
-    val rootTopPaddingTarget = rootTopBarPresentation.contentTopPadding
+    val rootTabFloatingSettingsOnly = rootHeaderShowsLargeTitle || rootTopBarPresentation.floatingSettingsOnly
+    val rootTopPaddingTarget = rootTabPageContentTopPadding(
+        usePageHeading = rootHeaderShowsLargeTitle && rootHeaderIsRootPage,
+        collapsed = rootTabTopBarCollapsed && !musicLibraryTopBarPinned,
+        showStatusBar = showStatusBar,
+        statusBarInset = WindowInsets.statusBarsIgnoringVisibility.asPaddingValues().calculateTopPadding(),
+        legacyContentPadding = rootTopBarPresentation.contentTopPadding,
+    )
     val animatedRootTopPadding = animateDpAsState(
         targetValue = rootTopPaddingTarget,
         // Keep the hide motion used by the existing root header behavior.
@@ -3995,7 +4004,8 @@ private fun BitChordApp(
                     hideFloatingCollectionControls && hideCollectionHeaderNow && isAlbumOrPlaylistArtworkDetail
                 if (
                     !LocalPlayerBackdropThemeEnabled.current &&
-                    !showReplay && !hideCollectionHeaderNow && !isRadioScreenVisible && !rootTabFloatingSettingsOnly
+                    !showReplay && !hideCollectionHeaderNow && !isRadioScreenVisible && !rootTabFloatingSettingsOnly &&
+                    !rootHeaderShowsLargeTitle
                 ) {
                     TopFadeBlur(
                         hazeState = hazeState,
@@ -4018,7 +4028,19 @@ private fun BitChordApp(
                 }
 
                 val showCollectionSortAction = detail != null && !isLocalDetail && detail.type != BrowseType.ARTIST
-                if (!showReplay && !isArtistDetail && !rootHeaderHidesHomeBar && (!hideFloatingCollectionControlsNow || showCollectionSortAction)) {
+                RootTabHeaderOverlay(
+                    visible = rootHeaderShowsLargeTitle && rootHeaderIsRootPage && !rootHeaderHidesHomeBar &&
+                        !showReplay,
+                    showPageTitle = !rootTabTopBarCollapsed || musicLibraryTopBarPinned,
+                    title = allTabs.getOrElse(selectedTab) { allTabs.first() }.label,
+                    settingsUsesMoreIcon = settingsTopBarUsesMoreIcon,
+                    onOpenSettings = { showSettings = true },
+                    modifier = Modifier.align(Alignment.TopStart),
+                )
+                if (
+                    !rootHeaderShowsLargeTitle && !showReplay && !isArtistDetail && !rootHeaderHidesHomeBar &&
+                    (!hideFloatingCollectionControlsNow || showCollectionSortAction)
+                ) {
                     FrostedTopBar(
                         title = when {
                             showSources -> stringResource(R.string.sources)
@@ -6068,6 +6090,98 @@ private data class RootTabHeaderMode(
     val showLargeTitle: Boolean,
     val hideHomeBar: Boolean,
 )
+
+private fun rootTabPageContentTopPadding(
+    usePageHeading: Boolean,
+    collapsed: Boolean,
+    showStatusBar: Boolean,
+    statusBarInset: androidx.compose.ui.unit.Dp,
+    legacyContentPadding: androidx.compose.ui.unit.Dp,
+): androidx.compose.ui.unit.Dp = when {
+    !usePageHeading -> legacyContentPadding
+    collapsed -> 0.dp
+    else -> (if (showStatusBar) statusBarInset else 0.dp) + RootTabPageContentHeight
+}
+
+/**
+ * A page heading below the floating settings action. It is not part of a
+ * toolbar and has no adjacent action or full-width background.
+ */
+@Composable
+private fun RootTabPageHeading(
+    title: String,
+    modifier: Modifier = Modifier,
+) {
+    Column(
+        modifier = modifier.statusBarsPadding().padding(start = 20.dp),
+    ) {
+        Spacer(Modifier.height(TopBarContentHeight + TopBarContentGap))
+        Box(
+            modifier = Modifier.height(RootTabLargeTitleHeight),
+            contentAlignment = Alignment.CenterStart,
+        ) {
+            Text(
+                text = title,
+                style = MaterialTheme.typography.displaySmall.copy(
+                    fontWeight = androidx.compose.ui.text.font.FontWeight.Bold,
+                ),
+                color = MaterialTheme.colorScheme.onSurface,
+                maxLines = 1,
+                softWrap = false,
+                overflow = TextOverflow.Ellipsis,
+                modifier = Modifier.widthIn(max = 320.dp),
+            )
+        }
+    }
+}
+
+@Composable
+private fun RootTabFloatingSettings(
+    settingsUsesMoreIcon: Boolean,
+    onOpenSettings: () -> Unit,
+    modifier: Modifier = Modifier,
+) {
+    IconButton(
+        onClick = onOpenSettings,
+        modifier = modifier
+            .statusBarsPadding()
+            .padding(top = 4.dp, end = 12.dp)
+            .size(48.dp)
+            .background(MaterialTheme.colorScheme.surface.copy(alpha = 0.82f), CircleShape),
+    ) {
+        Icon(
+            if (settingsUsesMoreIcon) Icons.Rounded.MoreVert else Icons.Rounded.Settings,
+            contentDescription = stringResource(R.string.settings),
+            tint = MaterialTheme.colorScheme.onSurface,
+        )
+    }
+}
+
+private val RootTabPageContentHeight =
+    TopBarContentHeight + TopBarContentGap + RootTabLargeTitleHeight + TopBarContentGap
+
+@Composable
+private fun RootTabHeaderOverlay(
+    visible: Boolean,
+    showPageTitle: Boolean,
+    title: String,
+    settingsUsesMoreIcon: Boolean,
+    onOpenSettings: () -> Unit,
+    modifier: Modifier = Modifier,
+) {
+    if (visible) {
+        Box(modifier.fillMaxWidth()) {
+            if (showPageTitle) {
+                RootTabPageHeading(title = title, modifier = Modifier.align(Alignment.TopStart))
+            }
+            RootTabFloatingSettings(
+                settingsUsesMoreIcon = settingsUsesMoreIcon,
+                onOpenSettings = onOpenSettings,
+                modifier = Modifier.align(Alignment.TopEnd),
+            )
+        }
+    }
+}
 
 private fun rootTabHeaderMode(enabled: Boolean, isRootPage: Boolean, selectedTab: Int) =
     if (!enabled || !isRootPage) RootTabHeaderMode(showLargeTitle = false, hideHomeBar = false)
