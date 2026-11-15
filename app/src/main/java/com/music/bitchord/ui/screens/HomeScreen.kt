@@ -58,6 +58,8 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import coil3.compose.AsyncImage
+import coil3.request.ImageRequest
+import coil3.request.crossfade
 import com.music.bitchord.R
 import com.music.bitchord.data.model.Song
 import com.music.bitchord.data.model.HomeShelf
@@ -69,6 +71,7 @@ import com.music.bitchord.feature.localmusic.data.LocalFavoritesStore
 import com.music.bitchord.feature.localsongactions.data.LocalPlayStatsStore
 import com.music.bitchord.ui.components.MessageState
 import com.music.bitchord.ui.components.PullToRefresh
+import com.music.bitchord.ui.components.SongArtworkImage
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.Dispatchers
@@ -554,6 +557,15 @@ private fun HomeAiShelfRow(
     onSongClick: (List<Song>, Int) -> Unit,
     onSongLongPress: (Song) -> Unit,
 ) {
+    val itemKeys = remember(songs) {
+        val occurrences = mutableMapOf<String, Int>()
+        songs.map { song ->
+            val identity = homeAiCacheKey(song)
+            val occurrence = occurrences.getOrDefault(identity, 0)
+            occurrences[identity] = occurrence + 1
+            "$identity:$occurrence"
+        }
+    }
     Column(modifier = Modifier.padding(bottom = 14.dp)) {
         Text(
             text = title,
@@ -579,20 +591,22 @@ private fun HomeAiShelfRow(
                 contentPadding = PaddingValues(horizontal = 20.dp),
                 horizontalArrangement = Arrangement.spacedBy(12.dp),
             ) {
-                itemsIndexed(songs, key = { index, song -> "${song.localUri ?: song.localPath ?: song.videoId}:$index" }) { index, song ->
+                itemsIndexed(songs, key = { index, _ -> itemKeys[index] }) { index, song ->
                     Column(
                         modifier = Modifier.width(126.dp).combinedClickable(
                             onClick = { onSongClick(songs, index) },
                             onLongClick = { onSongLongPress(song) },
                         ),
                     ) {
-                        AsyncImage(
-                            model = song.thumbnailUrl?.artworkAt(320),
+                        SongArtworkImage(
+                            song = song,
+                            artworkPx = 320,
                             contentDescription = song.title,
                             contentScale = ContentScale.Crop,
                             modifier = Modifier.fillMaxWidth().aspectRatio(1f)
                                 .clip(RoundedCornerShape(12.dp))
                                 .background(MaterialTheme.colorScheme.surfaceVariant),
+                            crossfade = false,
                         )
                         Spacer(Modifier.height(7.dp))
                         Text(song.title, style = MaterialTheme.typography.titleSmall, color = MaterialTheme.colorScheme.onBackground,
@@ -613,6 +627,24 @@ private fun homeAiCacheKey(song: Song): String {
     val bytes = java.security.MessageDigest.getInstance("SHA-256")
         .digest("$identity|${song.durationText}|${song.localStartMs}|${song.localEndMs}".toByteArray())
     return bytes.joinToString("") { "%02x".format(it) }.take(32)
+}
+
+@Composable
+private fun HomeArtworkImage(
+    imageUrl: String?,
+    contentDescription: String,
+    modifier: Modifier,
+) {
+    val context = LocalContext.current
+    val request = remember(imageUrl, context) {
+        imageUrl?.let { ImageRequest.Builder(context).data(it).crossfade(false).build() }
+    }
+    AsyncImage(
+        model = request,
+        contentDescription = contentDescription,
+        contentScale = ContentScale.Crop,
+        modifier = modifier,
+    )
 }
 
 private fun homeAiStableHash(value: String): Long =
@@ -660,10 +692,9 @@ private fun HomeShelfRow(
                             onLongClick = { onItemLongPress(item) },
                         ),
                 ) {
-                    AsyncImage(
-                        model = item.thumbnailUrl.artworkAt(320),
+                    HomeArtworkImage(
+                        imageUrl = item.thumbnailUrl.artworkAt(320),
                         contentDescription = item.title,
-                        contentScale = ContentScale.Crop,
                         modifier = Modifier
                             .fillMaxWidth()
                             .aspectRatio(1f)

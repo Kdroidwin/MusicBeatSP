@@ -168,18 +168,12 @@ object RadioRecordingFavoriteScheduler {
         if (!RadioAutoRecordingScheduler.canScheduleExactAlarms(context) || RadioAutoRecordingStore.folderUri(context) == null) return
         val favorite = RadioRecordingFavoriteStore.find(context, favoriteId)
             ?.takeIf { it.kind == RadioFavoriteKind.TIME } ?: return
-        var after = afterMs
-        repeat(9) {
-            val recording = nextTimeRecording(favorite, after) ?: return
-            val overlaps = RadioAutoRecordingStore.recordings(context).any { existing ->
-                existing.id != recording.id && recording.startTimeMs < existing.endTimeMs && existing.startTimeMs < recording.endTimeMs
-            }
-            if (!overlaps) {
-                runCatching { RadioAutoRecordingScheduler.schedule(context, recording) }
-                return
-            }
-            after = recording.startTimeMs
-        }
+        val recording = nextTimeRecording(favorite, afterMs) ?: return
+        // Distinct favorites are allowed to overlap. The foreground recording
+        // service runs one job per recording ID, so rejecting an overlapping
+        // program here silently skipped valid time favorites whenever a
+        // keyword or one-time program recording was already scheduled.
+        runCatching { RadioAutoRecordingScheduler.schedule(context, recording) }
     }
 
     fun scheduleAllTimeFavorites(context: Context) {
@@ -237,10 +231,11 @@ object RadioRecordingFavoriteScheduler {
                                 artworkUrl = program.imageUrl,
                             ).copy(favoriteId = favorite.id)
                             val existing = RadioAutoRecordingStore.recording(context, recording.id)
-                            if (existing == null && !RadioAutoRecordingStore.recordings(context).any { other ->
-                                    other.id != recording.id && recording.startTimeMs < other.endTimeMs && other.startTimeMs < recording.endTimeMs
-                                }
-                            ) {
+                            // A different station/program may overlap in time;
+                            // the service supports concurrent recording jobs.
+                            // Keep only an exact program-ID duplicate, which is
+                            // already covered by the pending recording.
+                            if (existing == null) {
                                 RadioAutoRecordingScheduler.schedule(context, recording)
                             }
                         }

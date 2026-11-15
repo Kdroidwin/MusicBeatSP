@@ -703,6 +703,7 @@ private fun BitChordApp(
     viewModel: MainViewModel = viewModel(),
 ) {
     val context = LocalContext.current
+    val inheritedOverscrollFactory = LocalOverscrollFactory.current
     val externalMediaControlEnabled by AppSettings.externalMediaControlEnabled.collectAsStateWithLifecycle()
     val externalMediaLifecycleOwner = LocalLifecycleOwner.current
     LaunchedEffect(externalMediaControlEnabled) {
@@ -1085,6 +1086,7 @@ private fun BitChordApp(
     val hideSettingsIconOnScroll by AppSettings.hideSettingsIconOnScroll.collectAsStateWithLifecycle()
     val pinMusicLibraryTopBarSetting by AppSettings.pinMusicLibraryTopBar.collectAsStateWithLifecycle()
     val keepMusicLibraryTopBarHiddenUntilTopSetting by AppSettings.keepMusicLibraryTopBarHiddenUntilTop.collectAsStateWithLifecycle()
+    val stopLibraryAtScrollBoundsSetting by AppSettings.stopLibraryAtScrollBounds.collectAsStateWithLifecycle()
     val searchHistory by viewModel.searchHistory.collectAsStateWithLifecycle()
 
     // Settings has no tab of its own — it sits on top of whatever tab was
@@ -3717,46 +3719,50 @@ private fun BitChordApp(
                                 )
                             }
                         } else {
-                            LibraryScreen(
-                                songs = catalogSongs,
-                                currentSong = player.song,
-                                isPlaying = player.isPlaying,
-                                onSongClick = play,
-                                onSongLongPress = openSongMenu,
-                                onSongSwipe = onSongSwipe,
-                                onShuffle = { songs ->
-                                    QueueShuffle.enableForNextQueue()
-                                    play(songs, songs.indices.random())
-                                },
-                                contentPadding = listPadding,
-                                onPlayNext = playNext,
-                                onAddToQueue = addToQueue,
-                                onDeleteSong = { viewModel.loadLocalMusic() },
-                                onSongTagsOrLyricsSaved = { viewModel.reloadLyrics(it) },
-                                onSongMetadataUpdated = viewModel::updateLocalSongMetadata,
-                                onLocalMusicChanged = { viewModel.loadLocalMusic() },
-                                initialFilterRequest = libraryFilterRequest,
-                                onInitialFilterApplied = { libraryFilterRequest = null },
-                                initialPlaylistOpenRequest = libraryPlaylistOpenRequest,
-                                onInitialPlaylistOpenApplied = { libraryPlaylistOpenRequest = null },
-                                onArtworkPaletteChanged = onLocalArtworkPaletteChanged,
-                                onCollectionNavigationChanged = onCollectionNavigationChanged,
-                                onRootListScrollChanged = onRootLibraryOrSearchScrolled,
-                                onRootListScrollOffsetChanged = onRootLibraryOrSearchScrollOffsetChanged,
-                                onPlaylistDetailVisibilityChanged = { libraryPlaylistDetailOpen = it },
-                                onOpenYoutubeCollection = { collection ->
-                                    val type = runCatching { BrowseType.valueOf(collection.type) }
-                                        .getOrDefault(BrowseType.OTHER)
-                                    viewModel.openDetail(
-                                        browseId = collection.browseId,
-                                        title = collection.title,
-                                        subtitle = collection.subtitle,
-                                        thumbnailUrl = collection.thumbnailUrl,
-                                        type = type,
-                                    )
-                                },
-                                onOpenReplay = { showReplay = true },
-                            )
+                            CompositionLocalProvider(
+                                LocalOverscrollFactory provides if (stopLibraryAtScrollBoundsSetting) null else inheritedOverscrollFactory,
+                            ) {
+                                LibraryScreen(
+                                    songs = catalogSongs,
+                                    currentSong = player.song,
+                                    isPlaying = player.isPlaying,
+                                    onSongClick = play,
+                                    onSongLongPress = openSongMenu,
+                                    onSongSwipe = onSongSwipe,
+                                    onShuffle = { songs ->
+                                        QueueShuffle.enableForNextQueue()
+                                        play(songs, songs.indices.random())
+                                    },
+                                    contentPadding = listPadding,
+                                    onPlayNext = playNext,
+                                    onAddToQueue = addToQueue,
+                                    onDeleteSong = { viewModel.loadLocalMusic() },
+                                    onSongTagsOrLyricsSaved = { viewModel.reloadLyrics(it) },
+                                    onSongMetadataUpdated = viewModel::updateLocalSongMetadata,
+                                    onLocalMusicChanged = { viewModel.loadLocalMusic() },
+                                    initialFilterRequest = libraryFilterRequest,
+                                    onInitialFilterApplied = { libraryFilterRequest = null },
+                                    initialPlaylistOpenRequest = libraryPlaylistOpenRequest,
+                                    onInitialPlaylistOpenApplied = { libraryPlaylistOpenRequest = null },
+                                    onArtworkPaletteChanged = onLocalArtworkPaletteChanged,
+                                    onCollectionNavigationChanged = onCollectionNavigationChanged,
+                                    onRootListScrollChanged = onRootLibraryOrSearchScrolled,
+                                    onRootListScrollOffsetChanged = onRootLibraryOrSearchScrollOffsetChanged,
+                                    onPlaylistDetailVisibilityChanged = { libraryPlaylistDetailOpen = it },
+                                    onOpenYoutubeCollection = { collection ->
+                                        val type = runCatching { BrowseType.valueOf(collection.type) }
+                                            .getOrDefault(BrowseType.OTHER)
+                                        viewModel.openDetail(
+                                            browseId = collection.browseId,
+                                            title = collection.title,
+                                            subtitle = collection.subtitle,
+                                            thumbnailUrl = collection.thumbnailUrl,
+                                            type = type,
+                                        )
+                                    },
+                                    onOpenReplay = { showReplay = true },
+                                )
+                            }
                         }
                         TAB_SEARCH -> searchSaveableStateHolder.SaveableStateProvider("main-search") {
                             if (!hasStoragePermission) {
@@ -6078,6 +6084,7 @@ private fun rememberRootTabHeaderLayout(
 ): RootTabHeaderLayout {
     val mode = rootTabHeaderMode(largeHeaderEnabled, isRootPage, selectedTab)
     val useInlineHeader = mode.showLargeTitle && isRootPage && selectedTab != TAB_HOME
+    val flowingHeader = largeHeaderEnabled && isRootPage
     val homeOwnsFlowingHeading = largeHeaderEnabled && isRootPage && selectedTab == TAB_HOME
     val headingTopPadding = (if (showStatusBar) statusBarInset else 0.dp) + RootTabPageContentHeight
     val headerScrollRangePx = with(LocalDensity.current) {
@@ -6088,10 +6095,14 @@ private fun rememberRootTabHeaderLayout(
         isRootScreen = isRootScreen,
         pinSetting = pinSetting,
         keepHiddenUntilTopSetting = keepHiddenUntilTopSetting,
-        flowingHeader = largeHeaderEnabled && isRootPage,
+        flowingHeader = flowingHeader,
         headerScrollRangePx = headerScrollRangePx,
     )
-    val snapOnReturn = keepHiddenUntilTopSetting && selectedTab != TAB_HOME
+    // In the large-title design, root headings flow with content just like the
+    // Home heading. Holding them completely off-screen until the exact top
+    // creates an empty black band while slowly scrolling back up. Keep the
+    // legacy "show only at top" option for the classic toolbar layout.
+    val snapOnReturn = keepHiddenUntilTopSetting && selectedTab != TAB_HOME && !flowingHeader
     val topBarPresentation = rootTabTopBarPresentation(
         persistentSettingsOnly = largeHeaderEnabled || floatingSettingsOnlyEnabled || mode.hideHomeBar,
         scrollEnabled = topBarState.scrollEnabled,
@@ -6415,7 +6426,8 @@ private fun rememberRootTabTopBarState(
     // Home owns its own inline header/settings affordance. Keep its separate
     // behavior; the other root tabs hold their header until the content has
     // actually returned to the position where it was hidden.
-    val holdHiddenUntilTop = isRootScreen && selectedTab != TAB_HOME && keepHiddenUntilTopSetting
+    val holdHiddenUntilTop = isRootScreen && selectedTab != TAB_HOME &&
+        keepHiddenUntilTopSetting && !flowingHeader
     var collapsed by remember(selectedTab) { mutableStateOf(false) }
     var scrollOffsetPx by remember(selectedTab) { mutableFloatStateOf(0f) }
 

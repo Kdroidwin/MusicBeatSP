@@ -1483,6 +1483,7 @@ private fun hideSettingsIconOnScrollSearchEntry(enabled: Boolean) = SettingsSear
 private fun musicLibraryTopBarSettingsSearchEntries(
     pinned: Boolean,
     hiddenUntilTop: Boolean,
+    stopLibraryAtScrollBounds: Boolean,
 ): List<SettingsSearchEntry> = listOf(
     SettingsSearchEntry(
         stringResource(R.string.pin_music_library_top_bar),
@@ -1496,6 +1497,12 @@ private fun musicLibraryTopBarSettingsSearchEntries(
         listOf("BitChord", "tabs", "songs", "albums", "artists", "library", "search", "all", "recently played", "filters", "sources", "top bar", "header", "scroll up", "upward", "reverse scroll", "first item", "スクロール", "上に戻る", "上方向", "再表示", "上部バー", "一番上", "先頭", "曲", "アルバム", "アーティスト", "ライブラリ", "検索", "すべて", "最近再生した曲", "音源", "絞り込み"),
         hiddenUntilTop,
     ) { AppSettings.setKeepMusicLibraryTopBarHiddenUntilTop(!hiddenUntilTop) },
+    SettingsSearchEntry(
+        stringResource(R.string.stop_library_at_scroll_bounds),
+        stringResource(R.string.stop_library_at_scroll_bounds_subtitle),
+        listOf("library", "overscroll", "rubber band", "bounce", "scroll", "top", "ライブラリ", "オーバースクロール", "スクロール", "先頭", "跳ね返り"),
+        stopLibraryAtScrollBounds,
+    ) { AppSettings.setStopLibraryAtScrollBounds(!stopLibraryAtScrollBounds) },
 )
 
 @Composable
@@ -1731,6 +1738,7 @@ fun SettingsScreen(
     val hideSettingsIconOnScroll by AppSettings.hideSettingsIconOnScroll.collectAsStateWithLifecycle()
     val pinMusicLibraryTopBar by AppSettings.pinMusicLibraryTopBar.collectAsStateWithLifecycle()
     val keepMusicLibraryTopBarHiddenUntilTop by AppSettings.keepMusicLibraryTopBarHiddenUntilTop.collectAsStateWithLifecycle()
+    val stopLibraryAtScrollBounds by AppSettings.stopLibraryAtScrollBounds.collectAsStateWithLifecycle()
     val hideNavBarLabels by AppSettings.hideNavigationBarLabels.collectAsStateWithLifecycle()
     val hideRadioTopLabels by AppSettings.hideRadioTopLabels.collectAsStateWithLifecycle()
     val navigationBarMatchesMiniPlayerColor by AppSettings.navigationBarMatchesMiniPlayerColor.collectAsStateWithLifecycle()
@@ -3060,6 +3068,7 @@ fun SettingsScreen(
         musicLibraryTopBarSettingsSearchEntries(
             pinned = pinMusicLibraryTopBar,
             hiddenUntilTop = keepMusicLibraryTopBarHiddenUntilTop,
+            stopLibraryAtScrollBounds = stopLibraryAtScrollBounds,
         ) +
         crossfadeSettingsSearchEntries(
             durationMs = crossfadeDurationMs,
@@ -5888,6 +5897,19 @@ fun SettingsScreen(
                 onClick = {
                     AppSettings.setKeepMusicLibraryTopBarHiddenUntilTop(!keepMusicLibraryTopBarHiddenUntilTop)
                 },
+            )
+            RowDivider()
+            SettingsRow(
+                icon = Icons.Rounded.MotionPhotosOff,
+                title = stringResource(R.string.stop_library_at_scroll_bounds),
+                subtitle = stringResource(R.string.stop_library_at_scroll_bounds_subtitle),
+                trailing = {
+                    Switch(
+                        checked = stopLibraryAtScrollBounds,
+                        onCheckedChange = AppSettings::setStopLibraryAtScrollBounds,
+                    )
+                },
+                onClick = { AppSettings.setStopLibraryAtScrollBounds(!stopLibraryAtScrollBounds) },
             )
             RowDivider()
             SettingsRow(

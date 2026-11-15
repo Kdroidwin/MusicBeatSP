@@ -69,10 +69,13 @@ import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.text.TextStyle
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
+import androidx.compose.ui.platform.LocalContext
 import com.music.bitchord.R
 import com.music.bitchord.data.model.ROW_ART_PX
 import com.music.bitchord.data.model.Song
 import com.music.bitchord.data.model.artworkAt
+import coil3.request.ImageRequest
+import coil3.request.crossfade
 import androidx.compose.foundation.isSystemInDarkTheme
 import androidx.compose.ui.composed
 import androidx.compose.ui.graphics.Shape
@@ -136,6 +139,7 @@ internal fun SongArtworkImage(
     modifier: Modifier = Modifier,
     contentScale: ContentScale = ContentScale.Crop,
     contentDescription: String? = null,
+    crossfade: Boolean = true,
 ) {
     val folderArtworkFallbackMode by AppSettings.folderArtworkFallbackMode.collectAsStateWithLifecycle()
     val artworkModel = remember(song, artworkPx, folderArtworkFallbackMode) { song.artworkAt(artworkPx) }
@@ -147,8 +151,17 @@ internal fun SongArtworkImage(
     var useRemoteFallback by remember(song.videoId, song.localUri, artworkModel, remoteFallback) {
         mutableStateOf(artworkModel == null)
     }
+    val imageModel = if (useRemoteFallback) remoteFallback ?: artworkModel else artworkModel ?: remoteFallback
+    val imageRequest = if (crossfade) {
+        imageModel
+    } else {
+        val requestContext = LocalContext.current
+        remember(imageModel, requestContext) {
+            imageModel?.let { ImageRequest.Builder(requestContext).data(it).crossfade(false).build() }
+        }
+    }
     AsyncImage(
-        model = if (useRemoteFallback) remoteFallback ?: artworkModel else artworkModel ?: remoteFallback,
+        model = imageRequest,
         contentDescription = contentDescription,
         contentScale = contentScale,
         modifier = modifier,
