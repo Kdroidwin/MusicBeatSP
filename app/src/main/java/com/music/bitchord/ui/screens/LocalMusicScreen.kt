@@ -75,6 +75,7 @@ import androidx.compose.material3.DropdownMenu
 import androidx.compose.material3.DropdownMenuItem
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.ExperimentalMaterial3Api
+import androidx.compose.material3.FloatingActionButton
 import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
@@ -127,6 +128,7 @@ import com.music.bitchord.data.model.sortedByAlbumTrackOrder
 import com.music.bitchord.feature.artistimage.model.ArtistEntry
 import com.music.bitchord.feature.artistimage.model.ArtistImage
 import com.music.bitchord.feature.artistimage.data.ArtistArtworkStore
+import com.music.bitchord.feature.artistimage.data.ArtistPageModeStore
 import com.music.bitchord.feature.artistimage.model.ArtistSort
 import com.music.bitchord.feature.artistimage.util.ArtistSplitter
 import com.music.bitchord.ui.components.ArtistViewAndSortControls
@@ -175,6 +177,7 @@ import com.music.bitchord.ui.components.ExplicitSongTitle
 import com.music.bitchord.data.model.artworkAt
 import com.music.bitchord.data.model.isSameTrackAs
 import com.music.bitchord.data.settings.AppSettings
+import com.music.bitchord.data.settings.PlayerArtistPageMode
 import com.music.bitchord.ui.theme.pageBackgroundColor
 import com.music.bitchord.data.settings.LibraryViewType
 import com.music.bitchord.ui.theme.ArtworkPalette
@@ -311,6 +314,10 @@ fun LocalMusicScreen(
     initialDrillDownLabel: String? = null,
     onDrillDownDismiss: (() -> Unit)? = null,
     onCollectionNavigationChanged: ((Boolean, (() -> Unit)?) -> Unit)? = null,
+    /** Shows the floating shuffle action for the main Songs tab only. */
+    showSongsShuffleFab: Boolean = false,
+    /** One-shot shuffle playback for Songs-tab action; collection shuffles keep their existing mode. */
+    onShuffleSongsTab: ((List<Song>) -> Unit)? = null,
 ) {
     val context = LocalContext.current
     val folderArtworkFallbackMode by AppSettings.folderArtworkFallbackMode.collectAsStateWithLifecycle()
@@ -440,6 +447,7 @@ fun LocalMusicScreen(
     val shuffleArtistAlbums by AppSettings.shuffleArtistAlbums.collectAsStateWithLifecycle()
     val onlineAlbumArtistArtwork by AppSettings.onlineAlbumArtistArtwork.collectAsStateWithLifecycle()
     val artistDeezerArtworkEnabled by AppSettings.artistDeezerArtworkEnabled.collectAsStateWithLifecycle()
+    val playerArtistPageMode by AppSettings.playerArtistPageMode.collectAsStateWithLifecycle()
     val playlistTrackMenuUsesArtworkColor by AppSettings.playlistTrackMenuUsesArtworkColor.collectAsStateWithLifecycle()
     val offlineMode by AppSettings.offlineMode.collectAsStateWithLifecycle()
     val drillDownViewType by if (isDownloads) {
@@ -753,7 +761,7 @@ fun LocalMusicScreen(
     val collectionNavigationCallback = rememberUpdatedState(onCollectionNavigationChanged)
     val currentCollectionBackHandler = rememberUpdatedState(backFromDrillDown)
     val collectionBackHandler = remember { { currentCollectionBackHandler.value() } }
-    LaunchedEffect(inDrillDown) {
+    SideEffect {
         collectionNavigationCallback.value?.invoke(
             inDrillDown,
             collectionBackHandler.takeIf { inDrillDown },
@@ -1193,6 +1201,8 @@ fun LocalMusicScreen(
                         contentPadding = bodyContentPadding,
                         songDropdownMenu = if (isDownloads) null else songDropdownMenu,
                         quickSearch = quickSearchContent,
+                        showShuffleFab = showSongsShuffleFab && !isDownloads && !selectingSongs,
+                        onShuffle = onShuffleSongsTab ?: onShuffle,
                     )
                 }
 
@@ -1234,9 +1244,10 @@ fun LocalMusicScreen(
                     }
                     ArtistsTab(
                         artists = visibleArtists,
-                        // Respect the user's Deezer artwork setting and offline mode;
-                        // selected local portraits remain preferred by ArtistImageFetcher.
-                        allowRemoteArtwork = artistDeezerArtworkEnabled && !offlineMode,
+                        // YouTube Music artwork is available only in Hybrid/Online mode;
+                        // custom local portraits remain preferred by ArtistImageFetcher.
+                        allowRemoteArtwork = !offlineMode &&
+                            playerArtistPageMode in setOf(PlayerArtistPageMode.ONLINE, PlayerArtistPageMode.HYBRID),
                         viewType = artistsViewType,
                         onViewTypeToggle = {
                             val next = if (artistsViewType == LibraryViewType.GRID) LibraryViewType.LIST else LibraryViewType.GRID
@@ -1991,6 +2002,8 @@ private fun SongsTab(
     contentPadding: PaddingValues,
     songDropdownMenu: (@Composable (Song) -> Unit)? = null,
     quickSearch: (@Composable (Modifier) -> Unit)? = null,
+    showShuffleFab: Boolean = false,
+    onShuffle: (List<Song>) -> Unit,
 ) {
     if (viewType == LibraryViewType.GRID) {
         val gridState = rememberLazyGridState()
@@ -2053,6 +2066,19 @@ private fun SongsTab(
                 ),
                 headerCount = if (quickSearch != null) 2 else 1,
             )
+            if (showShuffleFab && songs.isNotEmpty()) {
+                FloatingActionButton(
+                    onClick = { onShuffle(songs) },
+                    modifier = Modifier
+                        .align(Alignment.BottomEnd)
+                        .padding(
+                            end = 20.dp,
+                            bottom = contentPadding.calculateBottomPadding() + 16.dp,
+                        ),
+                ) {
+                    Icon(Icons.Rounded.Shuffle, contentDescription = stringResource(R.string.shuffle))
+                }
+            }
         }
     } else {
         val listState = rememberLazyListState()
@@ -2113,11 +2139,28 @@ private fun SongsTab(
                 contentPadding = contentPadding,
                 headerCount = if (quickSearch != null) 2 else 1,
             )
+            if (showShuffleFab && songs.isNotEmpty()) {
+                FloatingActionButton(
+                    onClick = { onShuffle(songs) },
+                    modifier = Modifier
+                        .align(Alignment.BottomEnd)
+                        .padding(
+                            end = 20.dp,
+                            bottom = contentPadding.calculateBottomPadding() + 16.dp,
+                        ),
+                ) {
+                    Icon(Icons.Rounded.Shuffle, contentDescription = stringResource(R.string.shuffle))
+                }
+            }
         }
     }
 }
 
 // ── Artists tab ───────────────────────────────────────────────────────────────
+
+private fun isHttpArtworkUrl(value: String): Boolean =
+    value.startsWith("http://", ignoreCase = true) ||
+        value.startsWith("https://", ignoreCase = true)
 
 @Composable
 private fun ArtistsTab(
@@ -2134,6 +2177,7 @@ private fun ArtistsTab(
     quickSearch: (@Composable (Modifier) -> Unit)? = null,
 ) {
     val artistArtworkUris by ArtistArtworkStore.imageUris.collectAsStateWithLifecycle()
+    val localOnlyArtistNames by ArtistPageModeStore.localOnlyArtistNames.collectAsStateWithLifecycle()
     if (viewType == LibraryViewType.GRID) {
         val gridState = rememberLazyGridState()
         val gridColumns = rememberGridColumns(gridKind)
@@ -2172,12 +2216,21 @@ private fun ArtistsTab(
                     )
                 }
                 items(artists, key = { it.key }) { entry ->
+                    val isLocalOnlyArtist = !allowRemoteArtwork ||
+                        entry.name.trim().replace(Regex("\\s+"), " ").lowercase(Locale.ROOT) in localOnlyArtistNames
+                    val localArtworkFallback = if (isLocalOnlyArtist) {
+                        entry.songs.firstNotNullOfOrNull { song ->
+                            song.thumbnailUrl?.takeUnless(::isHttpArtworkUrl)
+                        }
+                    } else {
+                        null
+                    }
                     ArtistGridCard(
                         name = entry.name,
                         songCount = entry.songs.size,
-                        thumbnailUrl = entry.thumbnailUrl,
-                        customArtworkUrl = ArtistArtworkStore.imageUriFor(entry.name, artistArtworkUris),
-                        allowRemoteArtwork = allowRemoteArtwork,
+                        thumbnailUrl = if (isLocalOnlyArtist) localArtworkFallback else entry.thumbnailUrl,
+                        customArtworkUrl = ArtistArtworkStore.imageUriForLibraryArtist(entry.name, artistArtworkUris),
+                        allowRemoteArtwork = allowRemoteArtwork && !isLocalOnlyArtist,
                         onClick = { onArtistClick(entry.name, entry.songs) },
                         onLongPress = onArtistLongPress?.let { { it(entry.name, entry.songs) } },
                     )
@@ -2222,12 +2275,21 @@ private fun ArtistsTab(
                     )
                 }
                 items(artists, key = { it.key }) { entry ->
+                    val isLocalOnlyArtist = !allowRemoteArtwork ||
+                        entry.name.trim().replace(Regex("\\s+"), " ").lowercase(Locale.ROOT) in localOnlyArtistNames
+                    val localArtworkFallback = if (isLocalOnlyArtist) {
+                        entry.songs.firstNotNullOfOrNull { song ->
+                            song.thumbnailUrl?.takeUnless(::isHttpArtworkUrl)
+                        }
+                    } else {
+                        null
+                    }
                     ArtistRow(
                         name = entry.name,
                         songCount = entry.songs.size,
-                        thumbnailUrl = entry.thumbnailUrl,
-                        customArtworkUrl = ArtistArtworkStore.imageUriFor(entry.name, artistArtworkUris),
-                        allowRemoteArtwork = allowRemoteArtwork,
+                        thumbnailUrl = if (isLocalOnlyArtist) localArtworkFallback else entry.thumbnailUrl,
+                        customArtworkUrl = ArtistArtworkStore.imageUriForLibraryArtist(entry.name, artistArtworkUris),
+                        allowRemoteArtwork = allowRemoteArtwork && !isLocalOnlyArtist,
                         onClick = { onArtistClick(entry.name, entry.songs) },
                         onLongPress = onArtistLongPress?.let { { it(entry.name, entry.songs) } },
                     )

@@ -63,6 +63,7 @@ import coil3.request.crossfade
 import com.music.bitchord.R
 import com.music.bitchord.data.model.Song
 import com.music.bitchord.data.model.HomeShelf
+import com.music.bitchord.data.model.ROW_ART_PX
 import com.music.bitchord.data.model.ShelfItem
 import com.music.bitchord.data.model.UiState
 import com.music.bitchord.data.model.artworkAt
@@ -71,6 +72,7 @@ import com.music.bitchord.feature.localmusic.data.LocalFavoritesStore
 import com.music.bitchord.feature.localsongactions.data.LocalPlayStatsStore
 import com.music.bitchord.ui.components.MessageState
 import com.music.bitchord.ui.components.PullToRefresh
+import com.music.bitchord.ui.components.SongArtworkImage
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.Dispatchers
@@ -597,18 +599,21 @@ private fun HomeAiShelfRow(
                             onLongClick = { onSongLongPress(song) },
                         ),
                     ) {
-                        HomeArtworkImage(
-                            // Match Library's MediaStore artwork URI so Coil can
-                            // reuse the same cached request when returning Home.
-                            // Song.artworkAt() prefers the audio-file URI for
-                            // local tracks; resolving that independently here
-                            // caused a second load (and a visible flash).
-                            imageUrl = song.thumbnailUrl?.artworkAt(320)
-                                ?: song.artworkAt(320),
+                        SongArtworkImage(
+                            // Use the same local-first artwork request as the
+                            // Library rows. Preferring thumbnailUrl here made
+                            // local songs issue a separate network request on
+                            // every tab return, and disabling Coil's fade made
+                            // the empty placeholder flash visible.
+                            song = song,
+                            artworkPx = 320,
                             contentDescription = song.title,
                             modifier = Modifier.fillMaxWidth().aspectRatio(1f)
                                 .clip(RoundedCornerShape(12.dp))
                                 .background(MaterialTheme.colorScheme.surfaceVariant),
+                            crossfade = true,
+                            keepCachedArtworkWhileLoading = true,
+                            placeholderArtworkPx = ROW_ART_PX,
                         )
                         Spacer(Modifier.height(7.dp))
                         Text(song.title, style = MaterialTheme.typography.titleSmall, color = MaterialTheme.colorScheme.onBackground,
@@ -639,7 +644,15 @@ private fun HomeArtworkImage(
 ) {
     val context = LocalContext.current
     val request = remember(imageUrl, context) {
-        imageUrl?.let { ImageRequest.Builder(context).data(it).crossfade(false).build() }
+        imageUrl?.let {
+            val cacheKey = "home-online-artwork:$it"
+            ImageRequest.Builder(context)
+                .data(it)
+                .memoryCacheKey(cacheKey)
+                .placeholderMemoryCacheKey(cacheKey)
+                .crossfade(false)
+                .build()
+        }
     }
     AsyncImage(
         model = request,

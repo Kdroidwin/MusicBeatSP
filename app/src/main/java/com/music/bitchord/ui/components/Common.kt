@@ -140,6 +140,8 @@ internal fun SongArtworkImage(
     contentScale: ContentScale = ContentScale.Crop,
     contentDescription: String? = null,
     crossfade: Boolean = true,
+    keepCachedArtworkWhileLoading: Boolean = false,
+    placeholderArtworkPx: Int? = null,
 ) {
     val folderArtworkFallbackMode by AppSettings.folderArtworkFallbackMode.collectAsStateWithLifecycle()
     val artworkModel = remember(song, artworkPx, folderArtworkFallbackMode) { song.artworkAt(artworkPx) }
@@ -152,12 +154,26 @@ internal fun SongArtworkImage(
         mutableStateOf(artworkModel == null)
     }
     val imageModel = if (useRemoteFallback) remoteFallback ?: artworkModel else artworkModel ?: remoteFallback
-    val imageRequest = if (crossfade) {
-        imageModel
-    } else {
-        val requestContext = LocalContext.current
-        remember(imageModel, requestContext) {
-            imageModel?.let { ImageRequest.Builder(requestContext).data(it).crossfade(false).build() }
+    val placeholderModel = remember(song, placeholderArtworkPx, folderArtworkFallbackMode) {
+        placeholderArtworkPx?.let(song::artworkAt)
+    }
+    // Use the source URI as the shared key on every SongArtworkImage surface.
+    // The Home shelf can then show the small row image as a placeholder while
+    // its larger card image is being decoded after a tab switch.
+    val skipCrossfade = !crossfade || keepCachedArtworkWhileLoading
+    val requestContext = LocalContext.current
+    val imageRequest = remember(imageModel, placeholderModel, requestContext, skipCrossfade) {
+        imageModel?.let { model ->
+            ImageRequest.Builder(requestContext)
+                .data(model)
+                .memoryCacheKey(model)
+                .apply {
+                    if (skipCrossfade) crossfade(false)
+                    if (placeholderModel != null && placeholderModel != model) {
+                        placeholderMemoryCacheKey(placeholderModel)
+                    }
+                }
+                .build()
         }
     }
     AsyncImage(

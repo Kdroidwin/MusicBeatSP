@@ -1548,7 +1548,7 @@ private fun scheduleRadioAutoRecording(
             startAt = program.startAt,
             endAt = program.endAt,
             artworkUrl = program.imageUrl,
-        )
+        ).copy(userRequested = true)
         val now = System.currentTimeMillis()
         if (recording.startTimeMs <= now || recording.endTimeMs <= now) return RadioScheduleResult.ENDED
         val overlaps = RadioAutoRecordingStore.recordings(context).any { existing ->

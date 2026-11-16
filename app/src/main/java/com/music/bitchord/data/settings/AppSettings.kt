@@ -1340,6 +1340,8 @@ object AppSettings {
     val onlineAlbumArtistArtwork = MutableStateFlow(false)
     /** Allows Deezer lookups for artist portraits. Resetting artist art turns this off. */
     val artistDeezerArtworkEnabled = MutableStateFlow(true)
+    /** Shows a floating shuffle action on the main Songs tab. */
+    val songsShuffleFloatingButton = MutableStateFlow(true)
     /** Player artist navigation defaults to a local/online hybrid. */
     val playerArtistPageMode = MutableStateFlow(PlayerArtistPageMode.HYBRID)
     /** Artist landing pages include this device's albums and playlists by default. */
@@ -2155,6 +2157,7 @@ object AppSettings {
         shuffleArtistAlbums.value = prefs.getBoolean(KEY_SHUFFLE_ARTIST_ALBUMS, false)
         onlineAlbumArtistArtwork.value = prefs.getBoolean(KEY_ONLINE_ALBUM_ARTIST_ARTWORK, false)
         artistDeezerArtworkEnabled.value = prefs.getBoolean(KEY_ARTIST_DEEZER_ARTWORK_ENABLED, true)
+        songsShuffleFloatingButton.value = prefs.getBoolean(KEY_SONGS_SHUFFLE_FLOATING_BUTTON, true)
         playerArtistPageMode.value = prefs.getString(KEY_PLAYER_ARTIST_PAGE_MODE, null)
             ?.let { saved -> PlayerArtistPageMode.entries.firstOrNull { it.name == saved } }
             ?: PlayerArtistPageMode.HYBRID
@@ -4844,6 +4847,11 @@ object AppSettings {
         prefs.edit().putBoolean(KEY_ARTIST_DEEZER_ARTWORK_ENABLED, value).apply()
     }
 
+    fun setSongsShuffleFloatingButton(value: Boolean) {
+        songsShuffleFloatingButton.value = value
+        prefs.edit().putBoolean(KEY_SONGS_SHUFFLE_FLOATING_BUTTON, value).apply()
+    }
+
     fun setPlayerArtistPageMode(value: PlayerArtistPageMode) {
         playerArtistPageMode.value = value
         prefs.edit().putString(KEY_PLAYER_ARTIST_PAGE_MODE, value.name).apply()
@@ -5526,6 +5534,7 @@ object AppSettings {
     private const val KEY_SHUFFLE_ARTIST_ALBUMS = "shuffle_artist_albums"
     private const val KEY_ONLINE_ALBUM_ARTIST_ARTWORK = "online_album_artist_artwork"
     private const val KEY_ARTIST_DEEZER_ARTWORK_ENABLED = "artist_deezer_artwork_enabled"
+    private const val KEY_SONGS_SHUFFLE_FLOATING_BUTTON = "songs_shuffle_floating_button"
     private const val KEY_PLAYER_ARTIST_PAGE_MODE = "player_artist_page_mode"
     private const val KEY_SHOW_LOCAL_ARTIST_SECTIONS = "show_local_artist_sections"
     private const val KEY_SHOW_ARTIST_RECOMMENDATIONS = "show_artist_recommendations"

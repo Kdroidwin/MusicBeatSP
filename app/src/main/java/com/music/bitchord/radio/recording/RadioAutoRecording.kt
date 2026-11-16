@@ -24,8 +24,16 @@ data class RadioAutoRecording(
     val startTimeMs: Long,
     val endTimeMs: Long,
     val artworkUrl: String? = null,
+    /** Kept for backwards compatibility with recording records written before multi-source matching. */
     val favoriteId: String? = null,
+    /** All favorite rules that matched this exact program; one recording can satisfy several rules. */
+    val favoriteIds: Set<String> = emptySet(),
+    /** The user explicitly scheduled this one-time recording from a program page. */
+    val userRequested: Boolean = false,
 )
+
+private val RadioAutoRecording.linkedFavoriteIds: Set<String>
+    get() = favoriteIds + listOfNotNull(favoriteId)
 
 object RadioAutoRecordingStore {
     private const val PREFS = "radio_auto_recordings"
@@ -67,6 +75,7 @@ object RadioAutoRecordingStore {
         prefs(context).edit().putString(KEY_FOLDER, uri.toString()).apply()
     }
 
+    @Synchronized
     fun recordings(context: Context): List<RadioAutoRecording> {
         val json = prefs(context).getString(KEY_RECORDINGS, "[]") ?: "[]"
         return runCatching {
@@ -85,25 +94,54 @@ object RadioAutoRecordingStore {
                     endTimeMs = row.getLong("endTimeMs"),
                     artworkUrl = row.optString("artworkUrl").takeIf { it.isNotBlank() && it != "null" },
                     favoriteId = row.optString("favoriteId").takeIf { it.isNotBlank() && it != "null" },
+                    favoriteIds = row.optJSONArray("favoriteIds")?.let { ids ->
+                        buildSet {
+                            for (idIndex in 0 until ids.length()) {
+                                ids.optString(idIndex).takeIf(String::isNotBlank)?.let(::add)
+                            }
+                        }
+                    }.orEmpty(),
+                    userRequested = row.optBoolean("userRequested", false),
                 )
             }
         }.getOrDefault(emptyList())
     }
 
+    @Synchronized
     fun recording(context: Context, id: String): RadioAutoRecording? = recordings(context).firstOrNull { it.id == id }
 
-    fun save(context: Context, recording: RadioAutoRecording) {
+    /** Merge matching favorite rules atomically so concurrent favorite refreshes cannot overwrite each other. */
+    @Synchronized
+    fun save(context: Context, recording: RadioAutoRecording): RadioAutoRecording {
+        val rows = recordings(context)
+        val existing = rows.firstOrNull { it.id == recording.id }
+        val linkedIds = existing?.linkedFavoriteIds.orEmpty() + recording.linkedFavoriteIds
+        val merged = recording.copy(
+            favoriteId = recording.favoriteId ?: existing?.favoriteId,
+            favoriteIds = linkedIds,
+            userRequested = recording.userRequested || existing?.userRequested == true,
+        )
+        persistRecordings(context, rows.filterNot { it.id == recording.id } + merged)
+        return merged
+    }
+
+    /** Replace a record without merging links, used when one favorite rule is removed. */
+    @Synchronized
+    fun replace(context: Context, recording: RadioAutoRecording) {
         val rows = recordings(context).filterNot { it.id == recording.id } + recording
         persistRecordings(context, rows)
     }
 
+    @Synchronized
     fun remove(context: Context, id: String) {
         persistRecordings(context, recordings(context).filterNot { it.id == id })
         setActive(context, id, false)
     }
 
+    @Synchronized
     fun activeIds(context: Context): Set<String> = prefs(context).getStringSet(KEY_ACTIVE, emptySet()).orEmpty()
 
+    @Synchronized
     fun setActive(context: Context, id: String, active: Boolean) {
         val updated = activeIds(context).toMutableSet().apply {
             if (active) add(id) else remove(id)
@@ -111,6 +149,7 @@ object RadioAutoRecordingStore {
         prefs(context).edit().putStringSet(KEY_ACTIVE, updated).apply()
     }
 
+    @Synchronized
     fun clearActive(context: Context) {
         prefs(context).edit().putStringSet(KEY_ACTIVE, emptySet()).apply()
     }
@@ -130,7 +169,9 @@ object RadioAutoRecordingStore {
                     .put("startTimeMs", item.startTimeMs)
                     .put("endTimeMs", item.endTimeMs)
                     .put("artworkUrl", item.artworkUrl)
-                    .put("favoriteId", item.favoriteId),
+                    .put("favoriteId", item.favoriteId)
+                    .put("favoriteIds", JSONArray(item.linkedFavoriteIds.toList()))
+                    .put("userRequested", item.userRequested),
             )
         }
         prefs(context).edit().putString(KEY_RECORDINGS, array.toString()).apply()
@@ -148,24 +189,38 @@ object RadioAutoRecordingScheduler {
         Build.VERSION.SDK_INT < Build.VERSION_CODES.S ||
             context.getSystemService(AlarmManager::class.java).canScheduleExactAlarms()
 
+    @Synchronized
     fun schedule(context: Context, recording: RadioAutoRecording) {
         val alarmManager = context.getSystemService(AlarmManager::class.java)
         val pendingIntent = alarmIntent(context, recording.id)
-        RadioAutoRecordingStore.save(context, recording)
+        val previous = RadioAutoRecordingStore.recording(context, recording.id)
+        val merged = RadioAutoRecordingStore.save(context, recording)
         try {
+            // A keyword/time favorite can match a program that is already being
+            // recorded. Merge its rule into the active record, then let the
+            // service schedule the next recurring occurrence on completion.
+            if (recording.id in RadioAutoRecordingStore.activeIds(context) && recording.startTimeMs <= System.currentTimeMillis()) {
+                return
+            }
+            alarmManager.cancel(legacyAlarmIntent(context, recording.id))
             if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.M) {
-                alarmManager.setExactAndAllowWhileIdle(AlarmManager.RTC_WAKEUP, recording.startTimeMs, pendingIntent)
+                alarmManager.setExactAndAllowWhileIdle(AlarmManager.RTC_WAKEUP, merged.startTimeMs, pendingIntent)
             } else {
-                alarmManager.setExact(AlarmManager.RTC_WAKEUP, recording.startTimeMs, pendingIntent)
+                alarmManager.setExact(AlarmManager.RTC_WAKEUP, merged.startTimeMs, pendingIntent)
             }
         } catch (failure: Throwable) {
-            RadioAutoRecordingStore.remove(context, recording.id)
+            if (previous != null) RadioAutoRecordingStore.replace(context, previous)
+            else RadioAutoRecordingStore.remove(context, recording.id)
             throw failure
         }
     }
 
+    @Synchronized
     fun cancel(context: Context, id: String) {
-        context.getSystemService(AlarmManager::class.java).cancel(alarmIntent(context, id))
+        context.getSystemService(AlarmManager::class.java).apply {
+            cancel(alarmIntent(context, id))
+            cancel(legacyAlarmIntent(context, id))
+        }
         RadioAutoRecordingStore.remove(context, id)
     }
 
@@ -177,7 +232,9 @@ object RadioAutoRecordingScheduler {
             .filter { it.endTimeMs > now }
             .forEach { recording ->
                 runCatching {
-                    context.getSystemService(AlarmManager::class.java).setExactAndAllowWhileIdle(
+                    val alarmManager = context.getSystemService(AlarmManager::class.java)
+                    alarmManager.cancel(legacyAlarmIntent(context, recording.id))
+                    alarmManager.setExactAndAllowWhileIdle(
                         AlarmManager.RTC_WAKEUP,
                         recording.startTimeMs,
                         alarmIntent(context, recording.id),
@@ -187,6 +244,17 @@ object RadioAutoRecordingScheduler {
     }
 
     private fun alarmIntent(context: Context, id: String): PendingIntent = PendingIntent.getBroadcast(
+        context,
+        id.hashCode(),
+        Intent(context, RadioRecordingAlarmReceiver::class.java)
+            .setAction(ACTION_RECORD)
+            .setData(Uri.parse("musicbeat://radio-recording/${Uri.encode(id)}"))
+            .putExtra(EXTRA_RECORDING_ID, id),
+        PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE,
+    )
+
+    /** PendingIntent identity used by app versions before IDs were also encoded in the data URI. */
+    private fun legacyAlarmIntent(context: Context, id: String): PendingIntent = PendingIntent.getBroadcast(
         context,
         id.hashCode(),
         Intent(context, RadioRecordingAlarmReceiver::class.java)

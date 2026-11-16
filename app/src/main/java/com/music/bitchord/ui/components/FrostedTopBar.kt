@@ -14,6 +14,7 @@ import androidx.compose.foundation.gestures.detectVerticalDragGestures
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.ExperimentalLayoutApi
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.WindowInsets
 import androidx.compose.foundation.layout.asPaddingValues
@@ -22,7 +23,9 @@ import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.statusBars
+import androidx.compose.foundation.layout.statusBarsIgnoringVisibility
 import androidx.compose.foundation.layout.statusBarsPadding
+import androidx.compose.foundation.layout.windowInsetsPadding
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.rounded.ArrowBack
@@ -118,6 +121,7 @@ fun topBarContentPadding(): Dp = topBarHeight() + TopBarContentGap
  * once the list scrolls, the small centered title fades in.
  */
 @Composable
+@OptIn(ExperimentalLayoutApi::class)
 fun FrostedTopBar(
     title: String,
     scrolled: Boolean,
@@ -136,6 +140,8 @@ fun FrostedTopBar(
     largePageTitle: Boolean = false,
     /** Uses a flat opaque fill, for feeds whose content should not show through the bar. */
     solidBackground: Boolean = false,
+    /** Keeps toolbar controls at a stable vertical position when a detail hides the status bar. */
+    preserveStatusBarInset: Boolean = false,
 ) {
     val reduceDynamicBlur by AppSettings.reduceDynamicBlur.collectAsStateWithLifecycle()
     val playerBackdropTheme = LocalPlayerBackdropThemeEnabled.current
@@ -174,7 +180,13 @@ fun FrostedTopBar(
         Box(
             modifier = Modifier
                 .fillMaxWidth()
-                .statusBarsPadding()
+                .then(
+                    if (preserveStatusBarInset) {
+                        Modifier.windowInsetsPadding(WindowInsets.statusBarsIgnoringVisibility)
+                    } else {
+                        Modifier.statusBarsPadding()
+                    },
+                )
                 .height(if (largePageTitle && !floatingOnly) 0.dp else TopBarContentHeight),
         ) {
             if (!floatingOnly && !largePageTitle) {

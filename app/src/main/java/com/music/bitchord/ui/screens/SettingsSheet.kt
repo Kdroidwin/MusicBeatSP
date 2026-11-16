@@ -90,6 +90,7 @@ import androidx.compose.material.icons.rounded.Search
 import androidx.compose.material.icons.rounded.Settings
 import androidx.compose.material.icons.rounded.SmartDisplay
 import androidx.compose.material.icons.rounded.Share
+import androidx.compose.material.icons.rounded.Shuffle
 import androidx.compose.material.icons.rounded.ScreenRotation
 import androidx.compose.material.icons.rounded.Schedule
 import androidx.compose.material.icons.rounded.SkipPrevious
@@ -989,6 +990,14 @@ private fun hideQueueManagerTitleSearchEntry(hidden: Boolean) = SettingsSearchEn
     keywords = listOf("queue", "manager", "title", "heading", "再生キュー", "管理", "タイトル", "見出し"),
     checked = hidden,
 ) { AppSettings.setHideQueueManagerTitle(!hidden) }
+
+@Composable
+private fun songsShuffleFloatingButtonSearchEntry(enabled: Boolean) = SettingsSearchEntry(
+    title = stringResource(R.string.songs_shuffle_floating_button),
+    subtitle = stringResource(R.string.songs_shuffle_floating_button_subtitle),
+    keywords = listOf("songs", "shuffle", "floating", "button", "曲", "シャッフル", "ボタン", "フローティング"),
+    checked = enabled,
+) { AppSettings.setSongsShuffleFloatingButton(!enabled) }
 
 @Composable
 private fun hideCollectionPlayLabelSearchEntry(hidden: Boolean) = SettingsSearchEntry(
@@ -2044,6 +2053,7 @@ fun SettingsScreen(
     val localSearchCollectionSongArtwork by AppSettings.localSearchCollectionSongArtwork.collectAsStateWithLifecycle()
     val localSearchFullScreenArtwork by AppSettings.localSearchFullScreenArtwork.collectAsStateWithLifecycle()
     val showPlayHistorySongArtwork by AppSettings.showPlayHistorySongArtwork.collectAsStateWithLifecycle()
+    val songsShuffleFloatingButton by AppSettings.songsShuffleFloatingButton.collectAsStateWithLifecycle()
     val keepCollectionArtworkAspectRatio by AppSettings.keepCollectionArtworkAspectRatio.collectAsStateWithLifecycle()
     val localizeLibraryCollectionCount by AppSettings.localizeLibraryCollectionCount.collectAsStateWithLifecycle()
     val localizeLibraryAllLabel by AppSettings.localizeLibraryAllLabel.collectAsStateWithLifecycle()
@@ -3061,6 +3071,7 @@ fun SettingsScreen(
         )
     }
     val settingsSearchEntries = buildSettingsSearchEntries() +
+        songsShuffleFloatingButtonSearchEntry(songsShuffleFloatingButton) +
         playerBackdropColorSearchEntries(
             miniPlayerEnabled = miniPlayerPlayerBackgroundColor,
             navigationBarEnabled = navigationBarPlayerBackgroundColor,
@@ -7649,6 +7660,7 @@ fun SettingsScreen(
             localSearchCollectionSongArtwork = localSearchCollectionSongArtwork,
             localSearchFullScreenArtwork = localSearchFullScreenArtwork,
             showPlayHistorySongArtwork = showPlayHistorySongArtwork,
+            songsShuffleFloatingButton = songsShuffleFloatingButton,
             keepCollectionArtworkAspectRatio = keepCollectionArtworkAspectRatio,
             localizeLibraryCollectionCount = localizeLibraryCollectionCount,
             localizeLibraryAllLabel = localizeLibraryAllLabel,
@@ -9415,6 +9427,7 @@ private fun LocalMusicSettingsGroup(
     localSearchCollectionSongArtwork: Boolean,
     localSearchFullScreenArtwork: Boolean,
     showPlayHistorySongArtwork: Boolean,
+    songsShuffleFloatingButton: Boolean,
     keepCollectionArtworkAspectRatio: Boolean,
     localizeLibraryCollectionCount: Boolean,
     localizeLibraryAllLabel: Boolean,
@@ -9492,6 +9505,19 @@ SettingsGroup(header = stringResource(R.string.local_music)) {
             )
         },
         onClick = { AppSettings.setShowPlayHistorySongArtwork(!showPlayHistorySongArtwork) },
+    )
+    RowDivider()
+    SettingsRow(
+        icon = Icons.Rounded.Shuffle,
+        title = stringResource(R.string.songs_shuffle_floating_button),
+        subtitle = stringResource(R.string.songs_shuffle_floating_button_subtitle),
+        trailing = {
+            Switch(
+                checked = songsShuffleFloatingButton,
+                onCheckedChange = AppSettings::setSongsShuffleFloatingButton,
+            )
+        },
+        onClick = { AppSettings.setSongsShuffleFloatingButton(!songsShuffleFloatingButton) },
     )
     RowDivider()
     SettingsRow(

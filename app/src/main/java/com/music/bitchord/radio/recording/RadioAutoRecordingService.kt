@@ -124,11 +124,15 @@ class RadioAutoRecordingService : Service() {
             } finally {
                 jobs.remove(id)
                 if (!destroying) {
+                    val completedRecording = RadioAutoRecordingStore.recording(this@RadioAutoRecordingService, id) ?: recording
                     RadioAutoRecordingStore.setActive(this@RadioAutoRecordingService, id, false)
                     RadioAutoRecordingStore.remove(this@RadioAutoRecordingService, id)
-                    recording.favoriteId?.let { favoriteId ->
-                        RadioRecordingFavoriteScheduler.scheduleNextTimeFavorite(this@RadioAutoRecordingService, favoriteId)
-                    }
+                    completedRecording.favoriteIds
+                        .plus(listOfNotNull(completedRecording.favoriteId))
+                        .distinct()
+                        .forEach { favoriteId ->
+                            RadioRecordingFavoriteScheduler.scheduleNextTimeFavorite(this@RadioAutoRecordingService, favoriteId)
+                        }
                     if (jobs.isEmpty()) {
                         releaseCpu()
                         stopForeground(STOP_FOREGROUND_DETACH)

@@ -69,6 +69,8 @@ import androidx.compose.ui.input.nestedscroll.nestedScroll
 import androidx.compose.ui.input.nestedscroll.NestedScrollConnection
 import androidx.compose.ui.input.nestedscroll.NestedScrollSource
 import androidx.compose.ui.graphics.drawscope.ContentDrawScope
+import androidx.compose.ui.draw.drawWithContent
+import androidx.compose.ui.graphics.drawscope.clipRect
 import androidx.compose.foundation.layout.windowInsetsTopHeight
 import androidx.compose.foundation.lazy.LazyListState
 import androidx.compose.foundation.lazy.LazyColumn
@@ -1154,6 +1156,7 @@ private fun BitChordApp(
         controller?.clearMediaItems()
     }
     val shuffleEnabled by QueueShuffle.enabled.collectAsStateWithLifecycle()
+    val songsShuffleFloatingButton by AppSettings.songsShuffleFloatingButton.collectAsStateWithLifecycle()
     val playerPopupsUseArtworkColor by AppSettings.playerPopupsUseArtworkColor.collectAsStateWithLifecycle()
     // A conversion is deliberately scoped to the current listening session.
     // Keeping the complete original row here lets Revert restore the exact
@@ -3558,6 +3561,16 @@ private fun BitChordApp(
                                 contentPadding = listPadding,
                                 initialTab = LOCAL_TAB_SONGS,
                                 showTabRow = false,
+                                showSongsShuffleFab = songsShuffleFloatingButton,
+                                onShuffleSongsTab = { songs ->
+                                    val shuffledSongs = songs.shuffled()
+                                    val nonIdentityShuffle = if (songs.size > 1 && shuffledSongs == songs) {
+                                        shuffledSongs.drop(1) + shuffledSongs.first()
+                                    } else shuffledSongs
+                                    // Shuffle only this Songs-tab start order. Do not enable the
+                                    // persistent queue shuffle mode used by collection shuffle actions.
+                                    play(nonIdentityShuffle, 0)
+                                },
                                 onArtworkPaletteChanged = onLocalArtworkPaletteChanged,
                                 onPlayNext = playNext,
                                 onAddToQueue = addToQueue,
@@ -4034,6 +4047,7 @@ private fun BitChordApp(
                         floatingOnly = hideCollectionHeaderNow || rootTabFloatingSettingsOnly,
                         largePageTitle = rootHeaderShowsLargeTitle,
                         solidBackground = isRadioScreenVisible,
+                        preserveStatusBarInset = selectedTab == TAB_LIBRARY && libraryPlaylistDetailOpen,
                         onBack = if (hideFloatingCollectionControlsNow) null else when {
                             showSources -> ({ showSources = false })
                             showWearOs -> ({ showWearOs = false })
@@ -6124,11 +6138,15 @@ private fun rememberRootTabHeaderLayout(
         statusBarInset = statusBarInset,
         legacyContentPadding = topBarPresentation.contentTopPadding,
     )
+    val inlineHeaderScrollOffset = with(LocalDensity.current) {
+        topBarState.scrollOffsetPx.toDp()
+    }
     val effectiveTopPadding = when {
-        // The list already moves by its scroll offset. Shrinking its top
-        // padding by the same amount moves the content twice as fast as the
-        // floating heading, making the title overlap the first rows on return.
-        useInlineHeader -> headingTopPadding
+        // The parent nested-scroll connection consumes the header's portion of
+        // an upward gesture before the list does. Shrink this reserved space by
+        // that consumed distance so the page content and its heading travel
+        // together; the list starts scrolling after the heading is gone.
+        useInlineHeader -> (headingTopPadding - inlineHeaderScrollOffset).coerceAtLeast(0.dp)
         homeOwnsFlowingHeading -> if (showStatusBar) statusBarInset else 0.dp
         else -> targetTopPadding
     }
@@ -6250,14 +6268,27 @@ private fun RootTabHeaderOverlay(
     modifier: Modifier = Modifier,
 ) {
     if (visible) {
-        RootTabPageHeading(
-            title = title,
-            settingsUsesMoreIcon = settingsUsesMoreIcon,
-            onOpenSettings = onOpenSettings,
-            topInset = topInset,
-            scrollOffsetPx = scrollOffsetPx,
-            modifier = modifier,
-        )
+        Box(
+            modifier = modifier
+                .fillMaxSize()
+                // The page title is translated with the scrolling content. Clip
+                // it below the system bar so slow scrolls cannot paint its lower
+                // half over the status icons or leave a detached floating title.
+                .drawWithContent {
+                    clipRect(top = topInset.toPx(), bottom = size.height) {
+                        this@drawWithContent.drawContent()
+                    }
+                },
+        ) {
+            RootTabPageHeading(
+                title = title,
+                settingsUsesMoreIcon = settingsUsesMoreIcon,
+                onOpenSettings = onOpenSettings,
+                topInset = topInset,
+                scrollOffsetPx = scrollOffsetPx,
+                modifier = Modifier.align(Alignment.TopStart),
+            )
+        }
     }
 }
 
@@ -6419,7 +6450,11 @@ private fun rememberRootTabTopBarState(
     headerScrollRangePx: Float,
 ): RootTabTopBarState {
     val scrollEnabled = isRootScreen
-    val listOwnsScrollState = selectedTab == TAB_LIBRARY || selectedTab == TAB_SEARCH
+    // Library and Search can drive the classic toolbar from their own list
+    // states. In the large-title layout the parent must consume the header's
+    // scroll distance first, before those child lists start moving.
+    val listOwnsScrollState = !flowingHeader &&
+        (selectedTab == TAB_LIBRARY || selectedTab == TAB_SEARCH)
     val optionApplies = selectedTab == TAB_SONGS || selectedTab == TAB_ALBUMS ||
         selectedTab == TAB_ARTISTS || selectedTab == TAB_LIBRARY || selectedTab == TAB_SEARCH
     val pinned = optionApplies && pinSetting
@@ -6443,20 +6478,9 @@ private fun rememberRootTabTopBarState(
             collapsed = contentScrolled && !pinned
         }
     }
-    val updateOffset: (Float) -> Unit = { requestedOffset ->
-        if (isRootScreen && flowingHeader && !pinned) {
-            val nextOffset = requestedOffset.coerceIn(0f, headerScrollRangePx)
-            val heldAtTop = holdHiddenUntilTop && collapsed && nextOffset > 0f
-            scrollOffsetPx = if (heldAtTop) headerScrollRangePx else nextOffset
-            val nextCollapsed = scrollOffsetPx >= headerScrollRangePx - 1f
-            if (collapsed != nextCollapsed) collapsed = nextCollapsed
-        }
-    }
-
-    // Root headings follow the content's consumed scroll distance. Library and
-    // Search report their list position directly because those screens own
-    // their scroll state; this also keeps their category/source rows hidden
-    // until the list itself returns to its top.
+    // Flowing offsets belong to the parent nested-scroll connection. In the
+    // classic layout, Library and Search still use their list state to decide
+    // when the separate toolbar should collapse.
     val scrollConnection = remember(
         selectedTab,
         scrollEnabled,
@@ -6482,7 +6506,7 @@ private fun rememberRootTabTopBarState(
             },
         )
     }
-    val onListScrollOffsetChanged: (Float) -> Unit = { updateOffset(it) }
+    val onListScrollOffsetChanged: (Float) -> Unit = {}
 
     return RootTabTopBarState(
         scrollEnabled = scrollEnabled,
@@ -6520,14 +6544,32 @@ private class RootTabTopBarScrollConnection(
     override fun onPreScroll(
         available: Offset,
         source: NestedScrollSource,
-    ): Offset = Offset.Zero
+    ): Offset {
+        if (!enabled || !flowingHeader || available.y >= 0f) return Offset.Zero
+
+        // Collapse the page heading before allowing its child list to scroll.
+        // This keeps the heading, reserved inset and first row in one motion.
+        val collapse = (-available.y).coerceAtMost(headerScrollRangePx - scrollOffsetPx)
+        if (collapse <= 0f) return Offset.Zero
+        val nextOffset = scrollOffsetPx + collapse
+        scrollOffsetPx = nextOffset
+        onScrollOffsetChange(nextOffset)
+        val nextCollapsed = nextOffset >= headerScrollRangePx - 1f
+        if (collapsed != nextCollapsed) {
+            collapsed = nextCollapsed
+            onCollapsedChange(nextCollapsed)
+        }
+        return Offset(x = 0f, y = -collapse)
+    }
 
     override fun onPostScroll(
         consumed: Offset,
         available: Offset,
         source: NestedScrollSource,
     ): Offset {
-        if (!enabled || consumed.y == 0f) return Offset.Zero
+        if (!enabled || (consumed.y == 0f && (!flowingHeader || available.y <= 0f))) {
+            return Offset.Zero
+        }
 
         val delta = consumed.y
         if (delta < 0f) {
@@ -6537,13 +6579,12 @@ private class RootTabTopBarScrollConnection(
         }
 
         if (flowingHeader) {
-            val nextOffset = when {
-                delta < 0f -> (scrollOffsetPx - delta).coerceAtMost(headerScrollRangePx)
-                holdHiddenUntilTop && collapsed -> {
-                    if (distanceFromRevealPosition <= 1f) 0f else headerScrollRangePx
-                }
-                else -> (scrollOffsetPx - delta).coerceAtLeast(0f)
-            }
+            // Reveal only from downward distance left unconsumed by the child;
+            // while a list is still moving back toward its top, the heading
+            // stays out of the way instead of floating over rows.
+            val reveal = available.y.coerceAtLeast(0f).coerceAtMost(scrollOffsetPx)
+            if (reveal <= 0f) return Offset.Zero
+            val nextOffset = scrollOffsetPx - reveal
             scrollOffsetPx = nextOffset
             onScrollOffsetChange(nextOffset)
             val nextCollapsed = nextOffset >= headerScrollRangePx - 1f
@@ -6551,9 +6592,7 @@ private class RootTabTopBarScrollConnection(
                 collapsed = nextCollapsed
                 onCollapsedChange(nextCollapsed)
             }
-            if (distanceFromRevealPosition <= 1f && delta > 0f) {
-                distanceFromRevealPosition = 0f
-            }
+            return Offset(x = 0f, y = reveal)
         } else {
             val direction = if (delta < 0f) -1 else 1
             val shouldCollapse = direction < 0

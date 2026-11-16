@@ -23,6 +23,7 @@ import androidx.compose.foundation.lazy.LazyRow
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.lazy.itemsIndexed
 import androidx.compose.foundation.lazy.rememberLazyListState
+import androidx.compose.foundation.layout.offset
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
@@ -50,6 +51,7 @@ import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.draw.clipToBounds
 import androidx.compose.ui.draw.drawWithContent
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
@@ -58,6 +60,7 @@ import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.Dp
+import androidx.compose.ui.unit.IntOffset
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import coil3.compose.AsyncImage
@@ -129,29 +132,39 @@ fun DetailScreen(
     val palette = rememberArtworkPalette(imageUrl = heroUrl)
     val wash = palette.wash
 
-    LazyColumn(
-        state = listState,
-        modifier = modifier.fillMaxSize().background(wash),
-        contentPadding = contentPadding,
-    ) {
-        item(key = "artist-hero") {
-            ArtistHero(
-                title = page.title,
-                heroUrl = heroUrl,
-                wash = wash,
-                palette = palette,
-                onPlay = { if (songs.isNotEmpty()) onSongClick(songs, 0) },
-                onShuffle = { if (songs.isNotEmpty()) onShuffle(songs) },
-                subscriptionLabel = subscriptionLabel,
-                subscribed = subscribed,
-                onToggleSubscription = onToggleSubscription,
-                hasCustomArtwork = page.artistArtworkOverride != null,
-                onChangeArtwork = onChangeArtistArtwork,
-                onResetArtwork = onResetArtistArtwork,
-                isLocalOnlyArtist = isLocalOnlyArtist,
-                onToggleLocalOnlyArtist = onToggleLocalOnlyArtist,
-            )
-        }
+    BoxWithConstraints(modifier.fillMaxSize().background(wash)) {
+        val artHeight = (maxWidth * 1.1f).coerceIn(340.dp, 590.dp)
+        ArtistPageBackground(
+            title = page.title,
+            heroUrl = heroUrl,
+            wash = wash,
+            elevated = palette.elevated,
+            artHeight = artHeight,
+            listState = listState,
+            modifier = Modifier.matchParentSize(),
+        )
+        LazyColumn(
+            state = listState,
+            modifier = Modifier.fillMaxSize(),
+            contentPadding = contentPadding,
+        ) {
+            item(key = "artist-hero") {
+                ArtistHero(
+                    title = page.title,
+                    artHeight = artHeight,
+                    palette = palette,
+                    onPlay = { if (songs.isNotEmpty()) onSongClick(songs, 0) },
+                    onShuffle = { if (songs.isNotEmpty()) onShuffle(songs) },
+                    subscriptionLabel = subscriptionLabel,
+                    subscribed = subscribed,
+                    onToggleSubscription = onToggleSubscription,
+                    hasCustomArtwork = page.artistArtworkOverride != null,
+                    onChangeArtwork = onChangeArtistArtwork,
+                    onResetArtwork = onResetArtistArtwork,
+                    isLocalOnlyArtist = isLocalOnlyArtist,
+                    onToggleLocalOnlyArtist = onToggleLocalOnlyArtist,
+                )
+            }
 
         val audienceStats = if (hideArtistAudienceStats) {
             emptyList()
@@ -298,35 +311,39 @@ fun DetailScreen(
                 )
             }
         }
+        }
     }
 }
 
 @Composable
-private fun ArtistHero(
+private fun ArtistPageBackground(
     title: String,
     heroUrl: String?,
     wash: Color,
-    palette: ArtworkPalette,
-    onPlay: () -> Unit,
-    onShuffle: () -> Unit,
-    subscriptionLabel: String?,
-    subscribed: Boolean,
-    onToggleSubscription: (() -> Unit)?,
-    hasCustomArtwork: Boolean,
-    onChangeArtwork: (() -> Unit)?,
-    onResetArtwork: (() -> Unit)?,
-    isLocalOnlyArtist: Boolean,
-    onToggleLocalOnlyArtist: ((Boolean) -> Unit)?,
+    elevated: Color,
+    artHeight: Dp,
+    listState: LazyListState,
+    modifier: Modifier = Modifier,
 ) {
-    BoxWithConstraints(Modifier.fillMaxWidth()) {
-        val artHeight = (maxWidth * 1.1f).coerceIn(340.dp, 590.dp)
-        var showArtistOptions by remember(title, heroUrl) { mutableStateOf(false) }
-        Box(Modifier.fillMaxWidth().height(artHeight)) {
+    Box(modifier.clipToBounds()) {
+        Box(
+            Modifier
+                .fillMaxWidth()
+                .height(artHeight)
+                .offset {
+                    val top = if (listState.firstVisibleItemIndex == 0) {
+                        -listState.firstVisibleItemScrollOffset
+                    } else {
+                        -(artHeight.roundToPx() * 2)
+                    }
+                    IntOffset(0, top)
+                },
+        ) {
             AsyncImage(
                 model = heroUrl?.artworkAt(1200),
                 contentDescription = title,
                 contentScale = ContentScale.Crop,
-                modifier = Modifier.fillMaxSize().background(palette.elevated),
+                modifier = Modifier.fillMaxSize().background(elevated),
             )
             Box(
                 Modifier.fillMaxSize().drawWithContent {
@@ -340,6 +357,29 @@ private fun ArtistHero(
                     )
                 },
             )
+        }
+    }
+}
+
+@Composable
+private fun ArtistHero(
+    title: String,
+    artHeight: Dp,
+    palette: ArtworkPalette,
+    onPlay: () -> Unit,
+    onShuffle: () -> Unit,
+    subscriptionLabel: String?,
+    subscribed: Boolean,
+    onToggleSubscription: (() -> Unit)?,
+    hasCustomArtwork: Boolean,
+    onChangeArtwork: (() -> Unit)?,
+    onResetArtwork: (() -> Unit)?,
+    isLocalOnlyArtist: Boolean,
+    onToggleLocalOnlyArtist: ((Boolean) -> Unit)?,
+) {
+    Box(Modifier.fillMaxWidth()) {
+        var showArtistOptions by remember(title, hasCustomArtwork) { mutableStateOf(false) }
+        Box(Modifier.fillMaxWidth().height(artHeight)) {
             if (onChangeArtwork != null) {
                 Row(
                     modifier = Modifier.align(Alignment.TopEnd).padding(14.dp),

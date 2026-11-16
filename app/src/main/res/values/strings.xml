@@ -1285,8 +1285,8 @@
     <string name="shuffle_artist_albums_subtitle">During artist shuffle, change album order while keeping each album’s track order</string>
     <string name="online_album_artist_artwork">Online album-artist artwork</string>
     <string name="online_album_artist_artwork_subtitle">Allow album-artist images to be searched on Deezer. When off, only local album artwork is used. Off by default.</string>
-    <string name="artist_deezer_artwork_enabled">Use Deezer artist images</string>
-    <string name="artist_deezer_artwork_enabled_subtitle">Use online portraits in the Artists tab’s round thumbnails. User-selected artist images take priority; turn this off to use local album art or the default icon.</string>
+    <string name="artist_deezer_artwork_enabled">Use Deezer as an artist-image fallback</string>
+    <string name="artist_deezer_artwork_enabled_subtitle">If YouTube Music has no matching artist image, allow a Deezer portrait lookup. User-selected images and YouTube Music images take priority.</string>
     <string name="artist_signatures">Artist signatures</string>
     <string name="artist_signatures_subtitle">Show handwritten signatures on local artist pages. Configure a signature API URL to use this feature.</string>
     <string name="artist_signatures_url">Signature API URL</string>
@@ -1832,6 +1832,8 @@
     <string name="local_search_full_screen_artwork_subtitle">Open local artist, album, and folder results from This device with full-screen artwork. On by default.</string>
     <string name="play_history_song_artwork">Show album art in play history</string>
     <string name="play_history_song_artwork_subtitle">Show each track’s album cover instead of its number in Recently played and Most played. On by default.</string>
+    <string name="songs_shuffle_floating_button">Show a shuffle button on Songs</string>
+    <string name="songs_shuffle_floating_button_subtitle">Show a floating shuffle button on the Songs tab, above the mini player and navigation bar. On by default.</string>
     <string name="library_categories">Library categories</string>
     <string name="library_categories_subtitle">Reorder or hide Favorites, Playlists, YouTube Music, and play history in the Library.</string>
     <string name="library_category_order_subtitle">Use the arrows to change its position and the switch to show or hide it.</string>

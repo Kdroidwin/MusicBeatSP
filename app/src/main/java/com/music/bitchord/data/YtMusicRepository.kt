@@ -6,6 +6,7 @@ import com.music.bitchord.data.innertube.InnertubeParser
 import com.music.bitchord.data.model.Account
 import com.music.bitchord.data.model.AccountChannel
 import com.music.bitchord.data.model.ArtistPage
+import com.music.bitchord.data.model.BrowseItem
 import com.music.bitchord.data.model.HomeFeed
 import com.music.bitchord.data.model.HomeShelf
 import com.music.bitchord.data.model.LibraryPage
@@ -42,6 +43,9 @@ object YtMusicRepository {
     private const val TAG = "BitChord"
     private val VIDEO_INCLUSIVE_FILTERS = setOf(SearchFilter.ALL, SearchFilter.SONGS)
     private val moodGenreShelfCache = ConcurrentHashMap<String, List<HomeShelf>>()
+    private val artistSearchCache = ConcurrentHashMap<String, BrowseItem>()
+    private val missingArtistSearchCache = ConcurrentHashMap<String, Long>()
+    private const val ARTIST_SEARCH_MISS_TTL_MS = 10 * 60 * 1000L
     /** Podcast continuations omit the show header, so retain it by token. */
     private val podcastShowByToken = ConcurrentHashMap<String, String>()
 
@@ -392,16 +396,31 @@ object YtMusicRepository {
      * silently landing on a similarly named artist.
      */
     suspend fun findArtistPageId(name: String): Result<String> {
+        return findArtistPage(name).map(BrowseItem::browseId)
+    }
+
+    /** Resolves a local artist name to the exact YouTube Music artist result, including its thumbnail. */
+    suspend fun findArtistPage(name: String): Result<BrowseItem> {
         val wanted = artistSearchKey(name)
         if (wanted.isBlank()) return Result.failure(IllegalArgumentException("Artist name is empty"))
-        return search(name, SearchFilter.ARTISTS).mapCatching { rows ->
+        artistSearchCache[wanted]?.let { return Result.success(it) }
+        val missAt = missingArtistSearchCache[wanted]
+        if (missAt != null && System.currentTimeMillis() - missAt < ARTIST_SEARCH_MISS_TTL_MS) {
+            return Result.failure(NoSuchElementException("No exact artist page found for $name"))
+        }
+        missingArtistSearchCache.remove(wanted)
+        return search(name.trim(), SearchFilter.ARTISTS).mapCatching { rows ->
             rows.asSequence()
                 .filterIsInstance<SearchResult.Browse>()
                 .map { it.item }
                 .filter { it.type == com.music.bitchord.data.model.BrowseType.ARTIST }
                 .firstOrNull { artistSearchKey(it.title) == wanted }
-                ?.browseId
+                ?.also { artistSearchCache[wanted] = it }
                 ?: throw NoSuchElementException("No exact artist page found for $name")
+        }.onFailure { error ->
+            if (error is NoSuchElementException) {
+                missingArtistSearchCache[wanted] = System.currentTimeMillis()
+            }
         }
     }
 

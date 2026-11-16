@@ -124,9 +124,33 @@ object RadioRecordingFavoriteStore {
 
     fun remove(context: Context, id: String) {
         saveAll(context, favorites(context).filterNot { it.id == id })
+        val activeIds = RadioAutoRecordingStore.activeIds(context)
         RadioAutoRecordingStore.recordings(context)
-            .filter { it.favoriteId == id && !RadioAutoRecordingStore.activeIds(context).contains(it.id) }
-            .forEach { RadioAutoRecordingScheduler.cancel(context, it.id) }
+            .filter { id in it.favoriteIds || it.favoriteId == id }
+            .filterNot { it.id in activeIds }
+            .forEach { recording ->
+                val remainingFavoriteIds = (recording.favoriteIds + listOfNotNull(recording.favoriteId)) - id
+                if (remainingFavoriteIds.isEmpty()) {
+                    if (recording.userRequested) {
+                        RadioAutoRecordingStore.replace(
+                            context,
+                            recording.copy(favoriteId = null, favoriteIds = emptySet()),
+                        )
+                    } else {
+                        RadioAutoRecordingScheduler.cancel(context, recording.id)
+                    }
+                } else {
+                    val primaryId = recording.favoriteId?.takeIf { it in remainingFavoriteIds }
+                        ?: remainingFavoriteIds.first()
+                    RadioAutoRecordingStore.replace(
+                        context,
+                        recording.copy(
+                            favoriteId = primaryId,
+                            favoriteIds = remainingFavoriteIds,
+                        ),
+                    )
+                }
+            }
     }
 
     private fun save(context: Context, favorite: RadioRecordingFavorite) {
@@ -230,14 +254,11 @@ object RadioRecordingFavoriteScheduler {
                                 endAt = program.endAt,
                                 artworkUrl = program.imageUrl,
                             ).copy(favoriteId = favorite.id)
-                            val existing = RadioAutoRecordingStore.recording(context, recording.id)
-                            // A different station/program may overlap in time;
-                            // the service supports concurrent recording jobs.
-                            // Keep only an exact program-ID duplicate, which is
-                            // already covered by the pending recording.
-                            if (existing == null) {
-                                RadioAutoRecordingScheduler.schedule(context, recording)
-                            }
+                            // The same exact program may match multiple keyword
+                            // favorites or a time favorite. Keep one alarm and
+                            // merge every matching rule so recurring schedules
+                            // are not lost when that recording finishes.
+                            RadioAutoRecordingScheduler.schedule(context, recording)
                         }
                     }
             }

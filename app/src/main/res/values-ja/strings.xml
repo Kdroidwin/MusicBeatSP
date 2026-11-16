@@ -1169,8 +1169,8 @@
     <string name="shuffle_artist_albums_subtitle">シャッフル時はアルバムの順番を入れ替え、アルバム内の曲順を保ちます</string>
     <string name="online_album_artist_artwork">アルバムアーティスト画像のオンライン取得</string>
     <string name="online_album_artist_artwork_subtitle">オンにするとDeezerから画像を検索します。オフではローカル音源のアルバムアートだけを使います。初期設定はオフです。</string>
-    <string name="artist_deezer_artwork_enabled">Deezerのアーティスト画像を使う</string>
-    <string name="artist_deezer_artwork_enabled_subtitle">アーティストタブの丸型サムネイルにオンラインの画像を使います。ユーザーが指定した画像は優先され、オフでは端末内アルバムアートか標準アイコンを使います。</string>
+    <string name="artist_deezer_artwork_enabled">アーティスト画像がない場合にDeezerを使う</string>
+    <string name="artist_deezer_artwork_enabled_subtitle">YouTube Musicで一致するアーティスト画像が見つからない場合に、Deezerからの画像取得を許可します。ユーザー指定画像とYouTube Musicの画像が優先されます。</string>
     <string name="artist_signatures">アーティストの署名</string>
     <string name="artist_signatures_subtitle">ローカルライブラリのアーティスト詳細に手書き署名を表示します。署名API URLを設定してください。</string>
     <string name="artist_signatures_url">署名APIのURL</string>
@@ -1730,6 +1730,8 @@
     <string name="local_search_full_screen_artwork_subtitle">「この端末」の検索結果からアーティスト・アルバム・フォルダーを開いたときに全画面アートを表示します。初期設定はオンです。</string>
     <string name="play_history_song_artwork">再生履歴にアルバムアートを表示</string>
     <string name="play_history_song_artwork_subtitle">「最近再生した曲」と「よく再生する曲」で、曲番号の代わりにアルバムアートを表示します。初期設定はオンです。</string>
+    <string name="songs_shuffle_floating_button">曲タブにシャッフルボタンを表示</string>
+    <string name="songs_shuffle_floating_button_subtitle">曲タブの右下に、ミニプレーヤーとナビゲーションバーの上へシャッフルボタンを表示します。初期設定はオンです。</string>
     <string name="library_categories">ライブラリ項目</string>
     <string name="library_categories_subtitle">ライブラリの「お気に入り」「プレイリスト」「YouTube Music」「再生履歴」の順序と表示を変更します。</string>
     <string name="library_category_order_subtitle">矢印で順番を変更し、スイッチで表示・非表示を切り替えます。</string>

@@ -6,6 +6,7 @@ import org.json.JSONObject
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
+import java.util.Locale
 
 /** Per-artist source overrides for artist pages. */
 object ArtistPageModeStore {
@@ -21,10 +22,12 @@ object ArtistPageModeStore {
     private var entries: Map<String, String> = emptyMap()
     private val _localOnlyArtistKeys = MutableStateFlow<Set<String>>(emptySet())
     val localOnlyArtistKeys: StateFlow<Set<String>> = _localOnlyArtistKeys.asStateFlow()
+    private val _localOnlyArtistNames = MutableStateFlow<Set<String>>(emptySet())
+    val localOnlyArtistNames: StateFlow<Set<String>> = _localOnlyArtistNames.asStateFlow()
 
     fun init(context: Context) = synchronized(lock) {
         entries = readEntries(context.applicationContext)
-        _localOnlyArtistKeys.value = entries.keys
+        publish(entries)
     }
 
     fun identityKeyFor(artistName: String, artistId: String? = null): String {
@@ -47,7 +50,7 @@ object ArtistPageModeStore {
             if (updated == entries) return true
             if (!persist(context.applicationContext, updated)) return false
             entries = updated
-            _localOnlyArtistKeys.value = updated.keys
+            publish(updated)
             true
         }
 
@@ -70,8 +73,19 @@ object ArtistPageModeStore {
         val app = context.applicationContext
         check(persist(app, validated)) { "Could not save artist page settings" }
         entries = validated
-        _localOnlyArtistKeys.value = validated.keys
+        publish(validated)
     }
+
+    /** Name-level fallback for the local library list, whose rows have no remote artist id. */
+    private fun publish(values: Map<String, String>) {
+        _localOnlyArtistKeys.value = values.keys
+        _localOnlyArtistNames.value = values.values
+            .mapTo(linkedSetOf()) { normalizeName(it) }
+    }
+
+    private fun normalizeName(name: String): String = name.trim()
+        .replace(Regex("\\s+"), " ")
+        .lowercase(Locale.ROOT)
 
     private fun readEntries(context: Context): Map<String, String> {
         val raw = context.getSharedPreferences(PREFS, Context.MODE_PRIVATE)

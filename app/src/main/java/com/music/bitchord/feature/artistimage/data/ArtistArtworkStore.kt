@@ -78,6 +78,24 @@ object ArtistArtworkStore {
         }
     }
 
+    /** Resolves a local-library artist row to its custom image when the stored remote identity is unambiguous by name. */
+    fun imageUriForLibraryArtist(
+        artistName: String,
+        uriMap: Map<String, String> = _imageUris.value,
+    ): String? {
+        val normalizedName = keyFor(artistName)
+        uriMap[normalizedName]?.let { return it }
+        val matchingKeys = synchronized(lock) {
+            entries.values
+                .filter { keyFor(it.artistName) == normalizedName }
+                .map { it.artistKey }
+                .distinct()
+        }
+        // Local artist rows merge tracks by display name. If that name maps to
+        // multiple remote identities, do not apply one channel's art to another.
+        return matchingKeys.singleOrNull()?.let(uriMap::get)
+    }
+
     suspend fun set(
         context: Context,
         artistName: String,

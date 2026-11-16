@@ -4,13 +4,14 @@ import coil3.ImageLoader
 import coil3.fetch.FetchResult
 import coil3.fetch.Fetcher
 import coil3.request.Options
+import com.music.bitchord.data.YtMusicRepository
 import com.music.bitchord.data.settings.AppSettings
 import com.music.bitchord.feature.artistimage.data.DeezerArtistService
 import com.music.bitchord.feature.artistimage.model.ArtistImage
 
 /**
- * Coil 3 Fetcher for [ArtistImage] that fetches the artist's portrait photo from Deezer,
- * falling back to the track's album art if Deezer has no match or if offline.
+ * Coil 3 Fetcher for [ArtistImage] that resolves the artist through YouTube Music,
+ * with optional Deezer and track-art fallbacks.
  */
 class ArtistImageFetcher(
     private val loader: ImageLoader,
@@ -20,19 +21,33 @@ class ArtistImageFetcher(
 
     override suspend fun fetch(): FetchResult? {
         val customArtworkUrl = image.customArtworkUrl?.takeIf(String::isNotBlank)
-        val deezerUrl = if (customArtworkUrl == null && image.allowOnlineLookup && AppSettings.artistDeezerArtworkEnabled.value) {
-            DeezerArtistService.getArtistImageUrl(image.name, image.isLarge)
+        // Hybrid/online artist thumbnails come from YouTube Music. The Deezer
+        // switch controls only the optional Deezer fallback and must not gate
+        // YouTube Music artwork. User-selected images remain the first choice.
+        val youtubeMusicUrl = if (
+            customArtworkUrl == null &&
+            image.allowOnlineLookup &&
+            AppSettings.youtubeMusicNetworkAllowed
+        ) {
+            YtMusicRepository.findArtistPage(image.name).getOrNull()?.thumbnailUrl
         } else {
             null
         }
-        // Album-artist artwork is local-only unless the user explicitly opts
-        // in. Its fallback can be a remote thumbnail for downloaded tracks, so
-        // suppress HTTP(S) fallback URLs too when online lookup is disabled.
+        val deezerUrl = if (customArtworkUrl == null && youtubeMusicUrl == null &&
+            image.allowOnlineLookup && AppSettings.artistDeezerArtworkEnabled.value
+        ) {
+            DeezerArtistService.getArtistImageUrl(image.name, image.isLarge)
+        } else null
+        // Local/old artist mode must stay with local artwork. A fallback may
+        // itself be a remote thumbnail, so suppress both HTTP schemes when
+        // online lookup is disabled.
         val fallbackUrl = image.fallbackUrl?.takeIf {
-            image.allowOnlineLookup ||
-                !it.startsWith("https://", ignoreCase = true)
+            image.allowOnlineLookup || (
+                !it.startsWith("https://", ignoreCase = true) &&
+                    !it.startsWith("http://", ignoreCase = true)
+                )
         }
-        val target = customArtworkUrl ?: deezerUrl ?: fallbackUrl
+        val target = customArtworkUrl ?: youtubeMusicUrl ?: deezerUrl ?: fallbackUrl
 
         if (!target.isNullOrBlank()) {
             val mapped = loader.components.map(target, options)

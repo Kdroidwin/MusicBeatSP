@@ -713,9 +713,14 @@ fun LibraryScreen(
     }
     val rootListScrollThresholdPx = 0f
     LaunchedEffect(selectedFilter, libraryViewType, inDrillDown, rootListScrollThresholdPx) {
-        if (inDrillDown || inHistoryView || selectedFilter == LibraryFilter.YOUTUBE_DOWNLOADS) {
+        // Drilling into a playlist keeps the root collection list mounted and
+        // preserves its scroll position. Do not report that hidden list as
+        // being at the top: doing so resets the root header/status-bar state,
+        // then the restored list position immediately changes it back on exit.
+        if (inDrillDown) return@LaunchedEffect
+        if (inHistoryView || selectedFilter == LibraryFilter.YOUTUBE_DOWNLOADS) {
             reportRootLibraryScroll(false)
-            if (!inDrillDown) rootListScrollOffsetCallback.value?.invoke(0f)
+            rootListScrollOffsetCallback.value?.invoke(0f)
             return@LaunchedEffect
         }
         val rootListScrollFlow = when {
@@ -1017,7 +1022,7 @@ fun LibraryScreen(
     val collectionNavigationCallback = rememberUpdatedState(onCollectionNavigationChanged)
     val currentCollectionBackHandler = rememberUpdatedState(leaveDrillDown)
     val collectionBackHandler = remember { { currentCollectionBackHandler.value() } }
-    LaunchedEffect(inDrillDown) {
+    SideEffect {
         collectionNavigationCallback.value?.invoke(
             inDrillDown,
             collectionBackHandler.takeIf { inDrillDown },
