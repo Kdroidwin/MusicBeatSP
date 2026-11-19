@@ -25,10 +25,13 @@ import com.music.bitchord.radio.recording.RadioRecordingFavoriteStore
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
 import kotlinx.serialization.Serializable
+import kotlinx.serialization.builtins.ListSerializer
 import kotlinx.serialization.json.Json
 import java.io.ByteArrayOutputStream
 import java.io.InputStream
+import java.nio.ByteBuffer
 import java.nio.charset.StandardCharsets
+import java.security.MessageDigest
 import java.time.Instant
 import java.time.ZoneId
 import java.time.format.DateTimeFormatter
@@ -46,7 +49,7 @@ import java.time.format.DateTimeFormatter
 object Backup {
 
     private const val APP_TAG = "musicbeat"
-    private const val SCHEMA_VERSION = 8
+    private const val SCHEMA_VERSION = 11
     private const val MAX_IMPORT_BYTES = 128 * 1024 * 1024
 
     private val json = Json {
@@ -64,9 +67,13 @@ object Backup {
     /**
      * Writes all offline player data to [target] document picked by user.
      */
-    suspend fun exportTo(context: Context, target: Uri): Result<ExportSummary> = withContext(Dispatchers.IO) {
+    suspend fun exportTo(context: Context, target: Uri, historyPassword: CharArray): Result<ExportSummary> = withContext(Dispatchers.IO) {
         runCatching {
             val buckets = ListeningStats.exportAll()
+            val encryptedListening = ListeningHistoryCrypto.encryptForBackup(
+                json.encodeToString(ListSerializer(StoredBucket.serializer()), buckets).toByteArray(StandardCharsets.UTF_8),
+                historyPassword,
+            )
             // The list order is the user's playlist order; BackupFile stores it as
             // an ordered JSON array, and importPlaylists restores it unchanged.
             val playlists = LocalPlaylistStore.exportPlaylists()
@@ -87,11 +94,19 @@ object Backup {
                 "Artist images are too large to include in one backup"
             }
 
-            val file = BackupFile(
+            val artworkBackup = artistArtwork.map { item ->
+                ArtistArtworkBackup(
+                    artistName = item.artistName,
+                    mimeType = item.mimeType,
+                    imageBase64 = Base64.encodeToString(item.bytes, Base64.NO_WRAP),
+                    artistKey = item.artistKey,
+                )
+            }
+            val fingerprintInput = BackupFile(
                 app = APP_TAG,
                 version = SCHEMA_VERSION,
-                versionName = BuildConfig.VERSION_NAME,
-                exportedAt = Instant.now().toString(),
+                versionName = "",
+                exportedAt = "",
                 settings = settingsMap,
                 playlists = playlists,
                 favorites = favorites,
@@ -99,17 +114,43 @@ object Backup {
                 playStats = playStats,
                 equalizer = equalizer,
                 listening = buckets,
+                encryptedListening = null,
                 savedQueues = savedQueues,
-                artistArtwork = artistArtwork.map { item ->
-                    ArtistArtworkBackup(
-                        artistName = item.artistName,
-                        mimeType = item.mimeType,
-                        imageBase64 = Base64.encodeToString(item.bytes, Base64.NO_WRAP),
-                        artistKey = item.artistKey,
-                    )
-                },
+                artistArtwork = emptyList(),
                 artistLocalOnly = localOnlyArtists.map { ArtistLocalOnlyBackup(it.artistName, it.artistKey) },
                 radioRecordingFavorites = radioFavorites,
+            )
+            val stateFingerprint = computeStateFingerprint(fingerprintInput, buckets, artistArtwork)
+
+            val unsignedFile = BackupFile(
+                app = APP_TAG,
+                version = SCHEMA_VERSION,
+                versionName = BuildConfig.VERSION_NAME,
+                stateFingerprint = stateFingerprint,
+                exportedAt = Instant.now().toString(),
+                settings = settingsMap,
+                playlists = playlists,
+                favorites = favorites,
+                favoriteSongs = favoriteSongs,
+                playStats = playStats,
+                equalizer = equalizer,
+                // Listening history is kept separate and authenticated-encrypted
+                // so the backup can be restored on another device with its password.
+                listening = emptyList(),
+                encryptedListening = encryptedListening,
+                savedQueues = savedQueues,
+                artistArtwork = artworkBackup,
+                artistLocalOnly = localOnlyArtists.map { ArtistLocalOnlyBackup(it.artistName, it.artistKey) },
+                radioRecordingFavorites = radioFavorites,
+            )
+            val signature = BackupSignatures.sign(
+                json.encodeToString(BackupFile.serializer(), unsignedFile).toByteArray(StandardCharsets.UTF_8),
+                historyPassword,
+            )
+            val file = unsignedFile.copy(
+                signature = signature.value,
+                signatureSalt = signature.salt,
+                signatureIterations = signature.iterations,
             )
             val text = json.encodeToString(BackupFile.serializer(), file)
             require(text.toByteArray().size <= MAX_IMPORT_BYTES) { "Backup is too large to import" }
@@ -133,7 +174,49 @@ object Backup {
     /**
      * Reads [source] and restores offline player data (playlists, favorites, stats, equalizer, settings, history).
      */
-    suspend fun importFrom(context: Context, source: Uri): Result<Summary> = withContext(Dispatchers.IO) {
+    suspend fun requiresListeningPassword(context: Context, source: Uri): Boolean = withContext(Dispatchers.IO) {
+        runCatching {
+            val text = context.contentResolver.openInputStream(source)
+                ?.use(::readBoundedBackup)
+                ?: return@withContext false
+            json.decodeFromString(BackupFile.serializer(), text).let {
+                it.encryptedListening != null || it.signature != null
+            }
+        }.getOrDefault(false)
+    }
+
+    /** Stable semantic hash used by scheduled import to avoid replaying the same SyncThing state. */
+    suspend fun readStateFingerprint(
+        context: Context,
+        source: Uri,
+        historyPassword: CharArray?,
+    ): Result<String> = withContext(Dispatchers.IO) {
+        runCatching {
+            val text = context.contentResolver.openInputStream(source)
+                ?.use(::readBoundedBackup)
+                ?: error("Couldn't open that file")
+            val file = runCatching { json.decodeFromString(BackupFile.serializer(), text) }
+                .getOrElse { error("That doesn't look like a valid MusicBeat backup") }
+            require(file.app == APP_TAG) { "That backup is from another app: ${file.app}" }
+            require(file.version <= SCHEMA_VERSION) { "That backup was written by a newer version of MusicBeat" }
+            verifyBackupSignature(file, historyPassword)
+            file.stateFingerprint?.takeIf { it.matches(Regex("[0-9a-f]{64}")) }?.let { return@runCatching it }
+            val listening = file.encryptedListening?.let { encrypted ->
+                val password = requireNotNull(historyPassword) { "This backup requires its history password" }
+                val plaintext = ListeningHistoryCrypto.decryptFromBackup(encrypted, password)
+                runCatching {
+                    json.decodeFromString(ListSerializer(StoredBucket.serializer()), plaintext.toString(StandardCharsets.UTF_8))
+                }.getOrElse { error("The encrypted listening history is invalid") }
+            } ?: file.listening
+            computeStateFingerprint(file, listening)
+        }
+    }
+
+    suspend fun importFrom(
+        context: Context,
+        source: Uri,
+        historyPassword: CharArray? = null,
+    ): Result<Summary> = withContext(Dispatchers.IO) {
         runCatching {
             val text = context.contentResolver.openInputStream(source)
                 ?.use(::readBoundedBackup)
@@ -145,6 +228,15 @@ object Backup {
             require(file.version <= SCHEMA_VERSION) {
                 "That backup was written by a newer version of MusicBeat"
             }
+            verifyBackupSignature(file, historyPassword)
+            val listening = file.encryptedListening?.let { encrypted ->
+                val password = requireNotNull(historyPassword) { "This backup requires its history password" }
+                val plaintext = runCatching { ListeningHistoryCrypto.decryptFromBackup(encrypted, password) }
+                    .getOrElse { error("Could not decrypt listening history. Check the password and try again.") }
+                runCatching {
+                    json.decodeFromString(ListSerializer(StoredBucket.serializer()), plaintext.toString(StandardCharsets.UTF_8))
+                }.getOrElse { error("The encrypted listening history is invalid") }
+            } ?: file.listening
 
             LocalPlaylistStore.importPlaylists(file.playlists)
             if (file.version >= 2 || file.favorites.isNotEmpty()) {
@@ -160,7 +252,6 @@ object Backup {
             }
             EqualizerSettings.importBackup(file.equalizer)
             AppSettings.importPrefs(file.settings.mapValues { it.value.decoded() })
-            ListeningStats.importAll(file.listening)
             SearchHistory.reload()
             check(SavedQueueStore.importQueues(file.savedQueues.map { it.toSavedQueue() })) {
                 "Could not restore saved queues"
@@ -185,12 +276,15 @@ object Backup {
                     file.radioRecordingFavorites.map(BackupRadioFavorite::toFavorite),
                 )
             }
+            check(ListeningStats.importAll(listening)) {
+                "Could not encrypt restored listening history on this device"
+            }
 
             Summary(
                 playlists = file.playlists.size,
                 favorites = file.favorites.size,
                 settings = file.settings.size,
-                months = file.listening.size,
+                months = listening.size,
                 hasEqualizer = file.equalizer != null,
                 playStats = file.playStats.size,
                 from = file.versionName,
@@ -214,6 +308,62 @@ object Backup {
             bytes.write(buffer, 0, count)
         }
         return String(bytes.toByteArray(), StandardCharsets.UTF_8)
+    }
+
+    private fun computeStateFingerprint(
+        file: BackupFile,
+        listening: List<StoredBucket>,
+        rawArtwork: List<ArtistArtworkStore.BackupArtwork>? = null,
+    ): String {
+        val normalized = file.copy(
+            versionName = "",
+            exportedAt = "",
+            settings = file.settings.toSortedMap(),
+            favorites = file.favorites.toSortedSet(),
+            favoriteSongs = file.favoriteSongs.sortedBy { it.favoriteId },
+            playStats = file.playStats.toSortedMap(),
+            listening = listening.sortedBy { it.month },
+            encryptedListening = null,
+            signature = null,
+            signatureSalt = null,
+            signatureIterations = null,
+            artistArtwork = emptyList(),
+            artistLocalOnly = file.artistLocalOnly.sortedWith(
+                compareBy<ArtistLocalOnlyBackup> { it.artistKey }.thenBy { it.artistName },
+            ),
+            stateFingerprint = null,
+        )
+        val digest = MessageDigest.getInstance("SHA-256")
+        val stablePayload = json.encodeToString(BackupFile.serializer(), normalized).toByteArray(StandardCharsets.UTF_8)
+        digest.update(ByteBuffer.allocate(Int.SIZE_BYTES).putInt(stablePayload.size).array())
+        digest.update(stablePayload)
+        stablePayload.fill(0)
+
+        fun addArtwork(artistName: String, mimeType: String, artistKey: String?, bytes: ByteArray) {
+            val metadata = "${artistKey.orEmpty()}\u0000$artistName\u0000$mimeType".toByteArray(StandardCharsets.UTF_8)
+            digest.update(ByteBuffer.allocate(Int.SIZE_BYTES).putInt(metadata.size).array())
+            digest.update(metadata)
+            digest.update(ByteBuffer.allocate(Int.SIZE_BYTES).putInt(bytes.size).array())
+            digest.update(bytes)
+            metadata.fill(0)
+        }
+
+        if (rawArtwork != null) {
+            rawArtwork.sortedWith(compareBy<ArtistArtworkStore.BackupArtwork> { it.artistKey.orEmpty() }.thenBy { it.artistName })
+                .forEach { item -> addArtwork(item.artistName, item.mimeType, item.artistKey, item.bytes) }
+        } else {
+            file.artistArtwork.sortedWith(compareBy<ArtistArtworkBackup> { it.artistKey.orEmpty() }.thenBy { it.artistName })
+                .forEach { item ->
+                    val bytes = runCatching { Base64.decode(item.imageBase64, Base64.DEFAULT) }
+                        .getOrElse { error("That backup contains an invalid artist image") }
+                    try {
+                        addArtwork(item.artistName, item.mimeType, item.artistKey, bytes)
+                    } finally {
+                        bytes.fill(0)
+                    }
+                }
+        }
+        return digest.digest().joinToString("") { "%02x".format(it) }
     }
 
     data class ExportSummary(
@@ -252,12 +402,33 @@ object Backup {
         val favoriteSongs: List<BackupFavoriteSong> = emptyList(),
         val playStats: Map<String, LocalPlayStats> = emptyMap(),
         val equalizer: EqualizerBackup? = null,
+        /** Plaintext field retained solely for importing schema 1–8 backups. */
         val listening: List<StoredBucket> = emptyList(),
+        val encryptedListening: EncryptedListeningBackup? = null,
         val savedQueues: List<BackupQueue> = emptyList(),
         val artistArtwork: List<ArtistArtworkBackup> = emptyList(),
         val artistLocalOnly: List<ArtistLocalOnlyBackup> = emptyList(),
         val radioRecordingFavorites: List<BackupRadioFavorite> = emptyList(),
+        /** Hash of logical data, excluding export time and randomized history encryption. */
+        val stateFingerprint: String? = null,
+        /** Password-derived HMAC authenticates the complete exported JSON payload. */
+        val signature: String? = null,
+        val signatureSalt: String? = null,
+        val signatureIterations: Int? = null,
     )
+
+    private fun verifyBackupSignature(file: BackupFile, password: CharArray?) {
+        val fields = listOf(file.signature, file.signatureSalt)
+        if (fields.all { it == null }) return // Backward-compatible import of older backups.
+        require(fields.all { !it.isNullOrBlank() }) { "This backup has incomplete signature data" }
+        require(file.signatureIterations != null) { "This backup has incomplete signature data" }
+        val key = requireNotNull(password) { "This signed backup requires its backup password" }
+        val unsigned = file.copy(signature = null, signatureSalt = null, signatureIterations = null)
+        val payload = json.encodeToString(BackupFile.serializer(), unsigned).toByteArray(StandardCharsets.UTF_8)
+        require(BackupSignatures.verify(file.signature!!, file.signatureSalt!!, file.signatureIterations!!, payload, key)) {
+            "Backup authentication failed. Check the password or whether the file was changed."
+        }
+    }
 
     @Serializable
     data class ArtistLocalOnlyBackup(

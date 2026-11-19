@@ -268,7 +268,7 @@ object MusicLink {
 
     private val AUDIO_EXTENSIONS = setOf(
         ".mp3", ".m4a", ".flac", ".ogg", ".opus", ".aac", ".webm",
-        ".wav", ".aiff", ".aif", ".alac", ".ape", ".wma", ".wv", ".3gp",
+        ".wav", ".aiff", ".aif", ".alac", ".ape", ".wma", ".wv", ".3gp", ".mid", ".midi",
     )
 
     private val ZIP_MIME_TYPES = setOf("application/zip", "application/x-zip-compressed")

@@ -119,8 +119,10 @@ import androidx.compose.material.icons.rounded.FastRewind
 import androidx.compose.material.icons.rounded.GraphicEq
 import androidx.compose.material.icons.rounded.Headphones
 import androidx.compose.material.icons.rounded.History
-import androidx.compose.material.icons.rounded.Info
 import androidx.compose.material.icons.rounded.Language
+import androidx.compose.material.icons.rounded.Check
+import androidx.compose.material.icons.rounded.Info
+import androidx.compose.material.icons.rounded.Translate
 import androidx.compose.material.icons.rounded.MoreHoriz
 import androidx.compose.material.icons.rounded.MoreVert
 import androidx.compose.material.icons.rounded.MusicNote
@@ -133,6 +135,8 @@ import androidx.compose.material.icons.rounded.Pause
 import androidx.compose.material.icons.rounded.PlayArrow
 import androidx.compose.material.icons.rounded.Videocam
 import androidx.compose.material3.CircularProgressIndicator
+import androidx.compose.material3.DropdownMenu
+import androidx.compose.material3.DropdownMenuItem
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.BottomSheetDefaults
 import androidx.compose.material3.Icon
@@ -983,6 +987,7 @@ fun NowPlayingScreen(
     onOpenAlbum: (String) -> Unit,
     onOpenArtist: (String) -> Unit,
     onOpenArtistCredit: (String, String?) -> Unit,
+    onSelectLyricsProvider: (LyricsSource) -> Unit = {},
     instantStatusBarReveal: Boolean = false,
     lyrics: List<LyricLine>?,
     lyricsSource: LyricsSource?,
@@ -1236,6 +1241,13 @@ fun NowPlayingScreen(
     // source tree, so it needs its own source for the same frosted material as
     // the bottom navigation pill.
     val syncedLyricsEnabled by AppSettings.syncedLyrics.collectAsStateWithLifecycle()
+    val showLyricsSourceSwitcher by AppSettings.showLyricsSourceSwitcher.collectAsStateWithLifecycle()
+    val lyricsSources by AppSettings.lyricsSources.collectAsStateWithLifecycle()
+    val lyricsSourceOrder by AppSettings.lyricsSourceOrder.collectAsStateWithLifecycle()
+    val orderedLyricsSourceChoices = remember(lyricsSourceOrder, lyricsSources) {
+        (lyricsSourceOrder.filter { it in lyricsSources } + lyricsSources.filter { it !in lyricsSourceOrder })
+            .distinctBy(LyricsSource::id)
+    }
     val playerTitleFontSizeSp by AppSettings.playerTitleFontSizeSp.collectAsStateWithLifecycle()
     val playerArtistFontSizeSp by AppSettings.playerArtistFontSizeSp.collectAsStateWithLifecycle()
     val playerPlayPauseIconSizeDp by AppSettings.playerPlayPauseIconSizeDp.collectAsStateWithLifecycle()
@@ -3315,7 +3327,7 @@ fun NowPlayingScreen(
                                 isLoading = !lyricsReadyForCurrentSong,
                             )
                         }
-                        if (showLyricsLogsEnabled || showLyricsCloseButton) Row(
+                        if (showLyricsLogsEnabled || showLyricsCloseButton || showLyricsSourceSwitcher) Row(
                             modifier = Modifier
                                 .align(Alignment.TopEnd)
                                 .padding(top = lyricsTopPadding + 4.dp, end = 8.dp),
@@ -3340,6 +3352,17 @@ fun NowPlayingScreen(
                                         modifier = Modifier.size(20.dp),
                                     )
                                 }
+                            }
+                            if (showLyricsSourceSwitcher) {
+                                LyricsSourceSwitcherButton(
+                                    sources = orderedLyricsSourceChoices,
+                                    selected = currentSongLyricsSource,
+                                    onSelect = onSelectLyricsProvider,
+                                    modifier = Modifier
+                                        .size(40.dp)
+                                        .clip(CircleShape)
+                                        .background(Color.Black.copy(alpha = 0.35f)),
+                                )
                             }
                             if (showLyricsCloseButton) {
                                 IconButton(
@@ -3653,6 +3676,18 @@ fun NowPlayingScreen(
                             // laid over the full-width parent below, so its centered
                             // position is independent of both the X and the log icon.
                             Spacer(Modifier.weight(1f))
+                        }
+                        if (showLyricsSourceSwitcher) {
+                            Spacer(Modifier.width(8.dp))
+                            LyricsSourceSwitcherButton(
+                                sources = orderedLyricsSourceChoices,
+                                selected = currentSongLyricsSource,
+                                onSelect = onSelectLyricsProvider,
+                                modifier = Modifier
+                                    .size(48.dp)
+                                    .clip(CircleShape)
+                                    .background(Color.White.copy(alpha = 0.10f)),
+                            )
                         }
                         if (showLyricsCloseButton) {
                             Spacer(Modifier.width(8.dp))
@@ -4612,6 +4647,53 @@ fun TabletPlayerBackdrop(
 private enum class PlamoLyricsStatus { Idle, MissingModel, Translating, Failed }
 
 @Composable
+private fun LyricsSourceSwitcherButton(
+    sources: List<LyricsSource>,
+    selected: LyricsSource?,
+    onSelect: (LyricsSource) -> Unit,
+    modifier: Modifier = Modifier,
+) {
+    var expanded by remember { mutableStateOf(false) }
+    Box(modifier = modifier) {
+        IconButton(onClick = { expanded = true }) {
+            Icon(
+                imageVector = Icons.Rounded.Language,
+                contentDescription = stringResource(R.string.lyrics_switch_source),
+                tint = Color.White.copy(alpha = 0.9f),
+                modifier = Modifier.size(20.dp),
+            )
+        }
+        DropdownMenu(
+            expanded = expanded,
+            onDismissRequest = { expanded = false },
+        ) {
+            if (sources.isEmpty()) {
+                DropdownMenuItem(
+                    text = { Text(stringResource(R.string.no_lyrics_sources_enabled)) },
+                    onClick = { expanded = false },
+                    enabled = false,
+                )
+            } else {
+                sources.forEach { source ->
+                    DropdownMenuItem(
+                        text = { Text(source.label, maxLines = 1, overflow = TextOverflow.Ellipsis) },
+                        onClick = {
+                            expanded = false
+                            onSelect(source)
+                        },
+                        leadingIcon = {
+                            if (source == selected) {
+                                Icon(Icons.Rounded.Check, contentDescription = null)
+                            }
+                        },
+                    )
+                }
+            }
+        }
+    }
+}
+
+@Composable
 private fun LyricsPanel(
     lines: List<LyricLine>,
     trackKey: Any,
@@ -4771,32 +4853,51 @@ private fun LyricsPanel(
 
     Box(modifier) {
         if (translateLyrics) {
-            IconButton(
-                onClick = {
-                    val willShowTranslation = !showTranslatedLyrics
-                    showTranslatedLyrics = willShowTranslation
-                    if (willShowTranslation &&
-                        (translationAttempt == 0 || plamoStatus == PlamoLyricsStatus.MissingModel || plamoStatus == PlamoLyricsStatus.Failed)
-                    ) {
-                        translatedLyrics = emptyMap()
-                        translationAttempt += 1
-                    }
-                },
+            val translationActive = showTranslatedLyrics || plamoStatus == PlamoLyricsStatus.Translating
+            val translationTint = when {
+                translationActive -> LocalPlayerLyricInk.current
+                else -> LocalPlayerLyricInk.current.copy(alpha = 0.78f)
+            }
+            Box(
                 modifier = Modifier
-                    .align(Alignment.TopEnd)
-                    .padding(top = 4.dp, end = 4.dp)
+                    .align(Alignment.BottomEnd)
+                    .padding(end = 4.dp, bottom = 4.dp)
+                    .size(34.dp)
+                    .clip(CircleShape)
+                    .background(LocalPlayerLyricInk.current.copy(alpha = if (translationActive) 0.34f else 0.18f))
+                    .clickable(
+                        interactionSource = remember { MutableInteractionSource() },
+                        indication = null,
+                    ) {
+                        val willShowTranslation = !showTranslatedLyrics
+                        showTranslatedLyrics = willShowTranslation
+                        if (willShowTranslation &&
+                            (translationAttempt == 0 || plamoStatus == PlamoLyricsStatus.MissingModel || plamoStatus == PlamoLyricsStatus.Failed)
+                        ) {
+                            translatedLyrics = emptyMap()
+                            translationAttempt += 1
+                        }
+                    }
                     .zIndex(1f),
+                contentAlignment = Alignment.Center,
             ) {
-                Icon(
-                    imageVector = Icons.Rounded.Language,
-                    contentDescription = stringResource(
-                        if (showTranslatedLyrics) R.string.lyrics_show_original
-                        else R.string.lyrics_show_translation,
-                    ),
-                    tint = LocalPlayerLyricInk.current.copy(
-                        alpha = if (showTranslatedLyrics) 1f else 0.82f,
-                    ),
-                )
+                if (plamoStatus == PlamoLyricsStatus.Translating) {
+                    CircularProgressIndicator(
+                        modifier = Modifier.size(16.dp),
+                        color = translationTint,
+                        strokeWidth = 1.7.dp,
+                    )
+                } else {
+                    Icon(
+                        imageVector = Icons.Rounded.Translate,
+                        contentDescription = stringResource(
+                            if (showTranslatedLyrics) R.string.lyrics_show_original
+                            else R.string.lyrics_show_translation,
+                        ),
+                        tint = translationTint,
+                        modifier = Modifier.size(19.dp),
+                    )
+                }
             }
         }
         LazyColumn(
@@ -5280,8 +5381,19 @@ private fun LyricRichText.renderedOffset(sourceOffset: Float): Float {
         if (sourceOffset < range.sourceStart) return@forEach
         if (sourceOffset < range.sourceEndExclusive) {
             val baseEnd = range.sourceStart + range.baseLength
-            val rendered = if (sourceOffset < baseEnd) range.renderedStart.toFloat()
-            else (range.renderedStart + 1).toFloat()
+            // Inline ruby is one Compose placeholder, even when its base has
+            // several individually timed characters. Mapping every partial
+            // source offset to the placeholder's leading edge made the lyric
+            // sweep jump from before the ruby to after the whole ruby at the
+            // boundary. Keep the sweep continuous across the visible base;
+            // the reading itself is never counted as sung text.
+            val baseProgress = ((sourceOffset - range.sourceStart) / range.baseLength.coerceAtLeast(1))
+                .coerceIn(0f, 1f)
+            val rendered = if (sourceOffset < baseEnd) {
+                range.renderedStart + baseProgress
+            } else {
+                (range.renderedStart + 1).toFloat()
+            }
             return rendered.coerceIn(0f, annotated.length.toFloat())
         }
         removedCharacters += (range.sourceEndExclusive - range.sourceStart - 1)

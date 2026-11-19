@@ -3,14 +3,12 @@ package com.music.bitchord.data
 import android.Manifest
 import android.content.ContentUris
 import android.content.Context
-import android.content.Intent
 import android.content.pm.PackageManager
 import android.media.MediaMetadataRetriever
 import android.net.Uri
 import android.os.Build
 import android.os.Environment
 import android.provider.MediaStore
-import android.provider.Settings
 import com.music.bitchord.data.DebugLog as Log
 import androidx.core.content.ContextCompat
 import com.music.bitchord.data.model.Song
@@ -31,7 +29,9 @@ object LocalMediaRepository {
 
     private val localMusicExtensions = setOf(
         "mp3", "m4a", "flac", "wav", "wma", "ogg", "opus", "aac", "webm", "dsf", "dff",
+        "mid", "midi",
     )
+    private val midiExtensions = setOf("mid", "midi")
 
     private val nonMusicPathSegments = listOf(
         "/alarms/",
@@ -45,62 +45,8 @@ object LocalMediaRepository {
         "/whatsapp voice notes/",
     )
 
-    /**
-     * Checks if the app has All Files Access (MANAGE_EXTERNAL_STORAGE).
-     * On Android 11+ (API 30+), this allows tag editing and lyrics embedding without system prompts.
-     * On Android 10 and below, checks READ_EXTERNAL_STORAGE.
-     */
-    fun hasAllFilesPermission(context: Context? = null): Boolean {
-        return if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.R) {
-            Environment.isExternalStorageManager()
-        } else if (context != null) {
-            ContextCompat.checkSelfPermission(
-                context,
-                Manifest.permission.READ_EXTERNAL_STORAGE,
-            ) == PackageManager.PERMISSION_GRANTED
-        } else {
-            true
-        }
-    }
-
-    /**
-     * Returns an Intent to open system settings for All Files Access.
-     */
-    @androidx.annotation.RequiresApi(Build.VERSION_CODES.R)
-    fun createAllFilesAccessIntent(context: Context): Intent {
-        val appIntent = Intent(Settings.ACTION_MANAGE_APP_ALL_FILES_ACCESS_PERMISSION).apply {
-            data = Uri.fromParts("package", context.packageName, null)
-        }
-        return if (appIntent.resolveActivity(context.packageManager) != null) {
-            appIntent
-        } else {
-            Intent(Settings.ACTION_MANAGE_ALL_FILES_ACCESS_PERMISSION)
-        }
-    }
-
-    /**
-     * Opens system settings for the user to grant All Files Access to BitChord.
-     */
-    fun requestAllFilesAccess(context: Context) {
-        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.R) {
-            runCatching {
-                val intent = Intent(Settings.ACTION_MANAGE_APP_ALL_FILES_ACCESS_PERMISSION).apply {
-                    data = Uri.fromParts("package", context.packageName, null)
-                    addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
-                }
-                context.startActivity(intent)
-            }.onFailure {
-                val fallback = Intent(Settings.ACTION_MANAGE_ALL_FILES_ACCESS_PERMISSION).apply {
-                    addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
-                }
-                context.startActivity(fallback)
-            }
-        }
-    }
-
-    /** Check whether the app has the audio or all-files permission for the local library. */
+    /** Check only the scoped audio-library permission; other files use per-folder SAF grants. */
     fun hasStoragePermission(context: Context): Boolean {
-        if (hasAllFilesPermission(context)) return true
         return if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
             ContextCompat.checkSelfPermission(
                 context,
@@ -309,20 +255,22 @@ object LocalMediaRepository {
         val dsdSelection = if (dsdAllowed) {
             " OR ${MediaStore.Audio.Media.DISPLAY_NAME} LIKE '%.dsf' OR ${MediaStore.Audio.Media.DISPLAY_NAME} LIKE '%.dff'"
         } else ""
+        val midiSelection = " OR ${MediaStore.Audio.Media.DISPLAY_NAME} LIKE '%.mid' OR ${MediaStore.Audio.Media.DISPLAY_NAME} LIKE '%.midi'"
+        val extraAudioSelection = " OR ${MediaStore.Audio.Media.DISPLAY_NAME} LIKE '%.wav' OR ${MediaStore.Audio.Media.DISPLAY_NAME} LIKE '%.wma'$midiSelection$dsdSelection"
         val selection = if (filterNonMusic) {
             buildString {
-                append("(((${MediaStore.Audio.Media.IS_MUSIC} != 0 OR ${MediaStore.Audio.Media.DISPLAY_NAME} LIKE '%.wav' OR ${MediaStore.Audio.Media.DISPLAY_NAME} LIKE '%.wma')")
-                append(" AND ${MediaStore.Audio.Media.DURATION} >= ?")
+                append("((${MediaStore.Audio.Media.IS_MUSIC} != 0$extraAudioSelection)")
+                append(" AND (${MediaStore.Audio.Media.DURATION} >= ?$midiSelection)")
                 append(" AND ${MediaStore.Audio.Media.IS_ALARM} = 0")
                 append(" AND ${MediaStore.Audio.Media.IS_NOTIFICATION} = 0")
                 append(" AND ${MediaStore.Audio.Media.IS_RINGTONE} = 0")
                 if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
                     append(" AND ${MediaStore.Audio.Media.IS_PODCAST} = 0")
                 }
-                append(")$dsdSelection)")
+                append("))")
             }
         } else {
-            "(${MediaStore.Audio.Media.IS_MUSIC} != 0 OR ${MediaStore.Audio.Media.DISPLAY_NAME} LIKE '%.wav' OR ${MediaStore.Audio.Media.DISPLAY_NAME} LIKE '%.wma'$dsdSelection)"
+            "(${MediaStore.Audio.Media.IS_MUSIC} != 0$extraAudioSelection)"
         }
         val selectionArgs = if (filterNonMusic) {
             arrayOf(MIN_LOCAL_MUSIC_DURATION_MS.toString())
@@ -582,7 +530,7 @@ object LocalMediaRepository {
         val dsdSelection = if (dsdAllowed) {
             " OR ${MediaStore.Audio.Media.DISPLAY_NAME} LIKE '%.dsf' OR ${MediaStore.Audio.Media.DISPLAY_NAME} LIKE '%.dff'"
         } else ""
-        val selection = "(${MediaStore.Audio.Media.IS_MUSIC} != 0 OR ${MediaStore.Audio.Media.DISPLAY_NAME} LIKE '%.wav' OR ${MediaStore.Audio.Media.DISPLAY_NAME} LIKE '%.wma'$dsdSelection)"
+        val selection = "(${MediaStore.Audio.Media.IS_MUSIC} != 0 OR ${MediaStore.Audio.Media.DISPLAY_NAME} LIKE '%.wav' OR ${MediaStore.Audio.Media.DISPLAY_NAME} LIKE '%.wma' OR ${MediaStore.Audio.Media.DISPLAY_NAME} LIKE '%.mid' OR ${MediaStore.Audio.Media.DISPLAY_NAME} LIKE '%.midi'$dsdSelection)"
 
         val volumeUris = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
             runCatching {
@@ -682,7 +630,10 @@ object LocalMediaRepository {
             ?: displayName
         val extension = fileName.substringAfterLast('.', "").lowercase(Locale.ROOT)
         if (extension !in localMusicExtensions) return false
-        if (extension !in DSD_EXTENSIONS && durationMs < MIN_LOCAL_MUSIC_DURATION_MS) return false
+        // MediaStore often reports MIDI duration as zero even though it is a
+        // playable file. Keep short MIDI files in the library without relaxing
+        // the existing duration filter for any other audio format.
+        if (extension !in DSD_EXTENSIONS && extension !in midiExtensions && durationMs < MIN_LOCAL_MUSIC_DURATION_MS) return false
 
         val normalizedPath = path
             ?.replace('\\', '/')
@@ -706,6 +657,7 @@ object LocalMediaRepository {
             lower.endsWith(".flac") || lower.endsWith(".wav") || lower.endsWith(".wma") ||
             lower.endsWith(".ogg") || lower.endsWith(".opus") ||
             lower.endsWith(".aac") || lower.endsWith(".webm") ||
+            lower.endsWith(".mid") || lower.endsWith(".midi") ||
             (AppSettings.dsdPlaybackEnabled.value && isDsdFileName(lower)) ||
             lower.endsWith(".3gp")
     }

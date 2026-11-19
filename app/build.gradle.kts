@@ -313,6 +313,12 @@ dependencies {
     implementation("androidx.media3:media3-common:1.11.1")
     implementation("androidx.media3:media3-transformer:1.11.1")
     implementation("androidx.media3:media3-datasource-okhttp:1.11.1")
+    // Keep MIDI isolated to Media3's optional extractor/renderer extension.
+    // It feeds the existing AudioSink, while all non-MIDI formats retain the
+    // existing renderer and processor path unchanged.
+    implementation("androidx.media3:media3-exoplayer-midi:1.11.1")
+    implementation("androidx.work:work-runtime-ktx:2.12.0")
+    implementation("androidx.documentfile:documentfile:1.1.0")
     // Official Google Cast sender framework. Device discovery and route UI
     // are initialized only when the player details menu is opened.
     implementation("com.google.android.gms:play-services-cast-framework:22.3.1")

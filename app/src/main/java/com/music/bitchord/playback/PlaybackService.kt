@@ -106,6 +106,7 @@ import com.music.bitchord.data.scrobbling.LastFM
 import com.music.bitchord.data.scrobbling.ListenBrainzManager
 import com.music.bitchord.data.scrobbling.ScrobbleManager
 import com.music.bitchord.data.settings.AppSettings
+import com.music.bitchord.data.settings.BluetoothButtonAction
 import com.music.bitchord.radio.RadioPlaybackSession
 import com.music.bitchord.data.settings.MediaControlSecondaryAction
 import com.music.bitchord.data.settings.OutputPcmMode
@@ -450,16 +451,49 @@ class PlaybackService : MediaLibraryService() {
             }
         }
     }
+    @Volatile private var headphoneRouteConnected = false
     private val outputDeviceCallback = object : AudioDeviceCallback() {
         override fun onAudioDevicesAdded(addedDevices: Array<AudioDeviceInfo>) {
             requestOutputReconfiguration()
+            val headsetAdded = addedDevices.any { it.isHeadphoneOrHeadset() }
+            val isNewConnection = headsetAdded && !headphoneRouteConnected
+            if (headsetAdded) headphoneRouteConnected = true
+            if (isNewConnection) {
+                Handler(Looper.getMainLooper()).post { resumeForHeadphoneConnection() }
+            }
             Handler(Looper.getMainLooper()).postDelayed(
                 { VolumeHandoff.onOutputConnected(this@PlaybackService) },
                 1_200L,
             )
         }
-        override fun onAudioDevicesRemoved(removedDevices: Array<AudioDeviceInfo>) = requestOutputReconfiguration()
+        override fun onAudioDevicesRemoved(removedDevices: Array<AudioDeviceInfo>) {
+            requestOutputReconfiguration()
+            if (removedDevices.any { it.isHeadphoneOrHeadset() }) {
+                Handler(Looper.getMainLooper()).postDelayed({
+                    headphoneRouteConnected = audioManager
+                        ?.getDevices(AudioManager.GET_DEVICES_OUTPUTS)
+                        ?.any { it.isHeadphoneOrHeadset() } == true
+                }, 150L)
+            }
+        }
     }
+
+    private fun resumeForHeadphoneConnection() {
+        if (!AppSettings.autoPlayOnHeadphoneConnect.value) return
+        val active = player ?: return
+        if (active.mediaItemCount == 0 || active.playWhenReady || active.isPlaying) return
+        if (active.playbackState == Player.STATE_IDLE || active.playbackState == Player.STATE_ENDED) return
+        active.play()
+    }
+
+    private fun AudioDeviceInfo.isHeadphoneOrHeadset(): Boolean = type in setOf(
+        AudioDeviceInfo.TYPE_WIRED_HEADSET,
+        AudioDeviceInfo.TYPE_WIRED_HEADPHONES,
+        AudioDeviceInfo.TYPE_BLUETOOTH_A2DP,
+        AudioDeviceInfo.TYPE_BLUETOOTH_SCO,
+        AudioDeviceInfo.TYPE_USB_HEADSET,
+        AudioDeviceInfo.TYPE_BLE_HEADSET,
+    )
     private val systemVolumeObserver = object : ContentObserver(Handler(Looper.getMainLooper())) {
         override fun onChange(selfChange: Boolean) {
             pauseLocalPlaybackIfVolumeIsZero()
@@ -1654,6 +1688,9 @@ class PlaybackService : MediaLibraryService() {
         val sparePlayer = buildPlayer(spareAudioChain, ownsSession = false)
         player = exoPlayer
         spare = sparePlayer
+        headphoneRouteConnected = audioManager
+            ?.getDevices(AudioManager.GET_DEVICES_OUTPUTS)
+            ?.any { it.isHeadphoneOrHeadset() } == true
         audioManager?.registerAudioDeviceCallback(outputDeviceCallback, null)
         androidx.core.content.ContextCompat.registerReceiver(
             this,
@@ -4772,6 +4809,10 @@ class PlaybackService : MediaLibraryService() {
         darUpsampler: DarPcmUpsamplingAudioProcessor,
     ) = object : DefaultRenderersFactory(this) {
         init {
+            // The MIDI renderer is an optional Media3 extension. Keeping its
+            // registration here lets MIDI use the normal AudioSink/EQ chain;
+            // the platform renderer remains primary for every other format.
+            setExtensionRendererMode(DefaultRenderersFactory.EXTENSION_RENDERER_MODE_ON)
             // Do not force PCM_FLOAT onto an OEM speaker mixer merely because
             // the preference asks for it. The selected USB route must advertise
             // the format; otherwise Media3 uses its stable PCM16 path.
@@ -6368,6 +6409,34 @@ class PlaybackService : MediaLibraryService() {
      * Handles browsing and content resolution for Android Auto and other MediaBrowser clients.
      */
     private inner class MediaLibraryCallback : MediaLibrarySession.Callback {
+
+        override fun onMediaButtonEvent(
+            session: MediaSession,
+            controller: MediaSession.ControllerInfo,
+            intent: Intent,
+        ): Boolean {
+            val keyEvent = intent.getParcelableExtra<android.view.KeyEvent>(Intent.EXTRA_KEY_EVENT)
+                ?: return super.onMediaButtonEvent(session, controller, intent)
+            val isSingleButton = keyEvent.keyCode == android.view.KeyEvent.KEYCODE_MEDIA_PLAY_PAUSE ||
+                keyEvent.keyCode == android.view.KeyEvent.KEYCODE_HEADSETHOOK
+            val mapping = AppSettings.bluetoothButtonAction.value
+            if (!isSingleButton || mapping == BluetoothButtonAction.PLAY_PAUSE) {
+                return super.onMediaButtonEvent(session, controller, intent)
+            }
+            if (!controller.isTrusted) return false
+            if (keyEvent.action != android.view.KeyEvent.ACTION_DOWN) return true
+            if (keyEvent.repeatCount > 0) return true
+
+            when (mapping) {
+                BluetoothButtonAction.PLAY_PAUSE -> Unit
+                BluetoothButtonAction.NEXT_TRACK -> session.player.seekToNextMediaItem()
+                BluetoothButtonAction.PREVIOUS_TRACK -> session.player.seekToPrevious()
+                BluetoothButtonAction.TOGGLE_SHUFFLE -> toggleShuffleFromNotification()
+                BluetoothButtonAction.TOGGLE_FAVORITE -> session.player.currentMediaItem?.mediaId
+                    ?.let(::toggleFavoriteFromNotification)
+            }
+            return true
+        }
 
         override fun onConnect(
             session: MediaSession,

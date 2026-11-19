@@ -210,6 +210,28 @@ enum class TransportSideAction {
     SEARCH,
 }
 
+/** Action assigned to the single multifunction button on wired/Bluetooth headsets. */
+enum class BluetoothButtonAction {
+    PLAY_PAUSE,
+    NEXT_TRACK,
+    PREVIOUS_TRACK,
+    TOGGLE_SHUFFLE,
+    TOGGLE_FAVORITE,
+}
+
+enum class AppGestureDirection { LEFT, RIGHT, UP, DOWN }
+
+enum class AppGestureAction {
+    NONE,
+    PAGE_TOP,
+    PAGE_BOTTOM,
+    OPEN_SETTINGS,
+    OPEN_SEARCH,
+    PLAY_PAUSE,
+    NEXT_TRACK,
+    PREVIOUS_TRACK,
+}
+
 /** Destinations within the device-local music library. */
 enum class LocalLibraryTab { SONGS, ALBUMS, ARTISTS, FOLDERS, PLAYLISTS, ALBUM_ARTISTS, GENRES }
 
@@ -637,6 +659,11 @@ object AppSettings {
     val preferUsbDac = MutableStateFlow(false)
     /** When disabled, pause local playback unless Android routes it to headphones, Bluetooth, or USB. */
     val speakerPlaybackAllowed = MutableStateFlow(true)
+    /** Resume a paused queue when a wired or Bluetooth headset is newly connected. */
+    val autoPlayOnHeadphoneConnect = MutableStateFlow(false)
+    val bluetoothButtonAction = MutableStateFlow(BluetoothButtonAction.PLAY_PAUSE)
+    val gesturesEnabled = MutableStateFlow(false)
+    val gestureActions = MutableStateFlow(AppGestureDirection.entries.associateWith { AppGestureAction.NONE })
 
     /**
      * Whether a source offering a Dolby Atmos rendition is allowed to serve it.
@@ -1238,6 +1265,9 @@ object AppSettings {
      */
     val syncedLyrics = MutableStateFlow(true)
 
+    /** Show the provider picker in the full-screen lyrics panel. */
+    val showLyricsSourceSwitcher = MutableStateFlow(true)
+
     /** The databases [syncedLyrics] may ask. Empty is the same as off. Populated dynamically from extensions. */
     val lyricsSources = MutableStateFlow<Set<LyricsSource>>(emptySet())
 
@@ -1374,6 +1404,8 @@ object AppSettings {
     val localDrillDownSongsViewType = MutableStateFlow(LibraryViewType.LIST)
     val downloadedDrillDownSongsViewType = MutableStateFlow(LibraryViewType.LIST)
     val librarySort = MutableStateFlow(LibrarySort.DEFAULT)
+    /** Split slash-separated artist credits when grouping songs and opening artist pages. */
+    val artistSlashSeparators = MutableStateFlow(true)
     val youtubeDownloadsSort = MutableStateFlow(LibrarySort.DEFAULT)
 
     /**
@@ -1673,6 +1705,20 @@ object AppSettings {
         signatureApiUrl.value = normalizeSignatureApiUrl(prefs.getString(KEY_SIGNATURE_API_URL, "").orEmpty())
         preferUsbDac.value = prefs.getBoolean(KEY_PREFER_USB_DAC, false)
         speakerPlaybackAllowed.value = prefs.getBoolean(KEY_SPEAKER_PLAYBACK_ALLOWED, true)
+        autoPlayOnHeadphoneConnect.value = prefs.getBoolean(KEY_AUTO_PLAY_ON_HEADPHONE_CONNECT, false)
+        bluetoothButtonAction.value = runCatching {
+            BluetoothButtonAction.valueOf(
+                prefs.getString(KEY_BLUETOOTH_BUTTON_ACTION, BluetoothButtonAction.PLAY_PAUSE.name).orEmpty(),
+            )
+        }.getOrDefault(BluetoothButtonAction.PLAY_PAUSE)
+        gesturesEnabled.value = prefs.getBoolean(KEY_GESTURES_ENABLED, false)
+        gestureActions.value = AppGestureDirection.entries.associateWith { direction ->
+            runCatching {
+                AppGestureAction.valueOf(
+                    prefs.getString(gestureKey(direction), AppGestureAction.NONE.name).orEmpty(),
+                )
+            }.getOrDefault(AppGestureAction.NONE)
+        }
         dolbyAtmos.value = prefs.getBoolean(KEY_DOLBY_ATMOS, false)
         diracAudioEnabled.value = prefs.getBoolean(KEY_DIRAC_AUDIO_ENABLED, false)
         diracAudioPreset.value = prefs.getInt(KEY_DIRAC_AUDIO_PRESET, 0).coerceIn(0, 2)
@@ -2083,6 +2129,7 @@ object AppSettings {
         hideSeekButtonLabels.value = prefs.getBoolean(KEY_HIDE_SEEK_BUTTON_LABELS, false)
         legacyMeshGradient.value = prefs.getBoolean(KEY_LEGACY_MESH_GRADIENT, false)
         syncedLyrics.value = prefs.getBoolean(KEY_SYNCED_LYRICS, true)
+        showLyricsSourceSwitcher.value = prefs.getBoolean(KEY_SHOW_LYRICS_SOURCE_SWITCHER, true)
         showLyricsFurigana.value = prefs.getBoolean(KEY_SHOW_LYRICS_FURIGANA, false)
         autoFitOneLineLyrics.value = prefs.getBoolean(KEY_AUTO_FIT_ONE_LINE_LYRICS, false)
         compactLyricsSearchSources.value = prefs.getBoolean(KEY_COMPACT_LYRICS_SEARCH_SOURCES, true)
@@ -2181,6 +2228,7 @@ object AppSettings {
         librarySort.value = prefs.getString(KEY_LIBRARY_SORT, null)
             ?.let { saved -> LibrarySort.entries.firstOrNull { it.name == saved } }
             ?: LibrarySort.DEFAULT
+        artistSlashSeparators.value = prefs.getBoolean(KEY_ARTIST_SLASH_SEPARATORS, true)
         youtubeDownloadsSort.value = prefs.getString(KEY_YOUTUBE_DOWNLOADS_SORT, null)
             ?.let { saved -> LibrarySort.entries.firstOrNull { it.name == saved } }
             ?: LibrarySort.DEFAULT
@@ -4027,6 +4075,11 @@ object AppSettings {
         prefs.edit().putBoolean(KEY_SYNCED_LYRICS, value).apply()
     }
 
+    fun setShowLyricsSourceSwitcher(value: Boolean) {
+        showLyricsSourceSwitcher.value = value
+        prefs.edit().putBoolean(KEY_SHOW_LYRICS_SOURCE_SWITCHER, value).apply()
+    }
+
     fun setShowLyricsFurigana(value: Boolean) {
         showLyricsFurigana.value = value
         prefs.edit().putBoolean(KEY_SHOW_LYRICS_FURIGANA, value).apply()
@@ -4477,6 +4530,29 @@ object AppSettings {
         prefs.edit().putBoolean(KEY_SPEAKER_PLAYBACK_ALLOWED, value).apply()
     }
 
+    fun setAutoPlayOnHeadphoneConnect(value: Boolean) {
+        autoPlayOnHeadphoneConnect.value = value
+        prefs.edit().putBoolean(KEY_AUTO_PLAY_ON_HEADPHONE_CONNECT, value).apply()
+    }
+
+    fun setBluetoothButtonAction(value: BluetoothButtonAction) {
+        bluetoothButtonAction.value = value
+        prefs.edit().putString(KEY_BLUETOOTH_BUTTON_ACTION, value.name).apply()
+    }
+
+    fun setGesturesEnabled(value: Boolean) {
+        gesturesEnabled.value = value
+        prefs.edit().putBoolean(KEY_GESTURES_ENABLED, value).apply()
+    }
+
+    fun setGestureAction(direction: AppGestureDirection, action: AppGestureAction) {
+        gestureActions.value = gestureActions.value + (direction to action)
+        prefs.edit().putString(gestureKey(direction), action.name).apply()
+    }
+
+    private fun gestureKey(direction: AppGestureDirection): String =
+        "app_gesture_${direction.name.lowercase(Locale.ROOT)}"
+
     fun setExportDownloads(value: Boolean) {
         exportDownloads.value = value
         prefs.edit().putBoolean(KEY_EXPORT_DOWNLOADS, value).apply()
@@ -4627,6 +4703,11 @@ object AppSettings {
     fun setLibrarySort(value: LibrarySort) {
         librarySort.value = value
         prefs.edit().putString(KEY_LIBRARY_SORT, value.name).apply()
+    }
+
+    fun setArtistSlashSeparators(value: Boolean) {
+        artistSlashSeparators.value = value
+        prefs.edit().putBoolean(KEY_ARTIST_SLASH_SEPARATORS, value).apply()
     }
 
     fun setYoutubeDownloadsSort(value: LibrarySort) {
@@ -5220,6 +5301,9 @@ object AppSettings {
     private const val KEY_SIGNATURE_API_URL = "artist_signature_api_url"
     private const val KEY_PREFER_USB_DAC = "prefer_usb_dac"
     private const val KEY_SPEAKER_PLAYBACK_ALLOWED = "speaker_playback_allowed"
+    private const val KEY_AUTO_PLAY_ON_HEADPHONE_CONNECT = "auto_play_on_headphone_connect"
+    private const val KEY_BLUETOOTH_BUTTON_ACTION = "bluetooth_button_action"
+    private const val KEY_GESTURES_ENABLED = "app_gestures_enabled"
     private const val KEY_DOLBY_ATMOS = "dolby_atmos"
     private const val KEY_DIRAC_AUDIO_ENABLED = "dirac_audio_enabled"
     private const val KEY_DIRAC_AUDIO_PRESET = "dirac_audio_preset"
@@ -5478,6 +5562,7 @@ object AppSettings {
     private const val KEY_HIDE_SEEK_BUTTON_LABELS = "hide_seek_button_labels"
     private const val KEY_LEGACY_MESH_GRADIENT = "legacy_mesh_gradient"
     private const val KEY_SYNCED_LYRICS = "synced_lyrics"
+    private const val KEY_SHOW_LYRICS_SOURCE_SWITCHER = "show_lyrics_source_switcher"
     private const val KEY_SHOW_LYRICS_FURIGANA = "show_lyrics_furigana"
     private const val KEY_AUTO_FIT_ONE_LINE_LYRICS = "auto_fit_one_line_lyrics"
     private const val KEY_COMPACT_LYRICS_SEARCH_SOURCES = "compact_lyrics_search_sources"
@@ -5541,6 +5626,7 @@ object AppSettings {
     private const val KEY_SHOW_ARTIST_OVERVIEW = "show_artist_overview"
     private const val KEY_HIDE_ARTIST_AUDIENCE_STATS = "hide_artist_audience_stats"
     private const val KEY_LIBRARY_SORT = "library_sort"
+    private const val KEY_ARTIST_SLASH_SEPARATORS = "artist_slash_separators"
     private const val KEY_YOUTUBE_DOWNLOADS_SORT = "youtube_downloads_sort"
     private const val KEY_DETAIL_SONG_SORTS = "detail_song_sorts"
     private const val KEY_LIBRARY_FAVORITE_SONG_SORT = "library_favorite_song_sort"

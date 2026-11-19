@@ -42,6 +42,7 @@ import com.music.bitchord.feature.tageditor.ui.components.TagEditorSaveFab
 import com.music.bitchord.feature.tageditor.ui.components.TagEditorTopBar
 import com.music.bitchord.feature.tageditor.ui.viewmodel.TagEditorViewModel
 import com.music.bitchord.feature.tageditor.domain.model.TagField
+import com.music.bitchord.feature.tageditor.data.TagLibWriter
 import androidx.compose.ui.graphics.luminance
 import com.music.bitchord.ui.theme.SystemBarIcons
 
@@ -105,14 +106,9 @@ fun TagEditorScreen(
         val uniqueTargets = targets.distinctBy {
             it.localUri?.takeIf(String::isNotBlank) ?: it.localPath?.takeIf(String::isNotBlank) ?: it.videoId
         }
-        if (
-            android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.R &&
-            !android.os.Environment.isExternalStorageManager()
-        ) {
+        if (android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.R) {
             val mediaUris = uniqueTargets.mapNotNull { target ->
-                val raw = target.localUri ?: target.videoId
-                if (!raw.startsWith("content://")) return@mapNotNull null
-                runCatching { android.net.Uri.parse(raw) }.getOrNull()
+                TagLibWriter.permissionUriForSong(context, target)
                     ?.takeIf { it.authority == android.provider.MediaStore.AUTHORITY }
             }.distinct()
             val needsPermission = mediaUris.filter { uri ->

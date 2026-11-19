@@ -219,6 +219,8 @@ import com.music.bitchord.data.model.UiState
 import com.music.bitchord.data.model.durationMillis
 import com.music.bitchord.data.scrobbling.LastFM
 import com.music.bitchord.data.settings.AppSettings
+import com.music.bitchord.data.settings.AppGestureAction
+import com.music.bitchord.data.settings.AppGestureDirection
 import com.music.bitchord.data.settings.PlayerArtistPageMode
 import com.music.bitchord.data.settings.HomeTabTitleMode
 import com.music.bitchord.data.settings.SavedYoutubeCollection
@@ -272,6 +274,9 @@ import com.music.bitchord.ui.player.PlayerArtworkBackdropPreloader
 import com.music.bitchord.ui.components.BottomTab
 import com.music.bitchord.ui.components.FLOATING_BAR_MAX_WIDTH
 import com.music.bitchord.ui.components.FloatingBottomBar
+import com.music.bitchord.ui.components.GestureScrollRequest
+import com.music.bitchord.ui.components.RootGestureScrollRequests
+import com.music.bitchord.ui.components.observeRootEdgeGestures
 import com.music.bitchord.ui.components.GlassNavBar
 import com.music.bitchord.ui.components.PopupNavigationBar
 import com.music.bitchord.ui.components.floatingtabbar.FloatingTabBarInlineBehavior
@@ -725,6 +730,9 @@ private fun BitChordApp(
     val appleMusicStyleMenus by AppSettings.appleMusicStyleMenus.collectAsStateWithLifecycle()
     val showStatusBar by AppSettings.showStatusBar.collectAsStateWithLifecycle()
     val showPlayerStatusBar by AppSettings.showPlayerStatusBar.collectAsStateWithLifecycle()
+    val appGesturesEnabled by AppSettings.gesturesEnabled.collectAsStateWithLifecycle()
+    val appGestureActions by AppSettings.gestureActions.collectAsStateWithLifecycle()
+    val gestureScope = rememberCoroutineScope()
     val instantStatusBarOnPlayerClose by AppSettings.instantStatusBarOnPlayerClose.collectAsStateWithLifecycle()
     val hazeState = remember { HazeState() }
     val playerHazeState = remember { HazeState() }
@@ -1203,9 +1211,6 @@ private fun BitChordApp(
     var hasStoragePermission by remember {
         mutableStateOf(LocalMediaRepository.hasStoragePermission(context))
     }
-    var hasAllFilesPermission by remember {
-        mutableStateOf(LocalMediaRepository.hasAllFilesPermission(context))
-    }
     val allFilesAsked by AppSettings.allFilesPermissionAsked.collectAsStateWithLifecycle()
     var showFirstLaunchPermissionDialog by rememberSaveable {
         mutableStateOf(!allFilesAsked)
@@ -1303,8 +1308,6 @@ private fun BitChordApp(
         val observer = LifecycleEventObserver { _, event ->
             if (event == Lifecycle.Event.ON_RESUME) {
                 val currentStorage = LocalMediaRepository.hasStoragePermission(context)
-                val currentAllFiles = LocalMediaRepository.hasAllFilesPermission(context)
-                hasAllFilesPermission = currentAllFiles
                 if (currentStorage != hasStoragePermission) {
                     hasStoragePermission = currentStorage
                     if (currentStorage) {
@@ -1365,6 +1368,48 @@ private fun BitChordApp(
         derivedStateOf {
             detailListState.firstVisibleItemIndex > 0 ||
                 detailListState.firstVisibleItemScrollOffset > detailTitleDrop
+        }
+    }
+
+    val performAppGesture: (AppGestureAction) -> Unit = { action ->
+        when (action) {
+            AppGestureAction.NONE -> Unit
+            AppGestureAction.PAGE_TOP, AppGestureAction.PAGE_BOTTOM -> {
+                val top = action == AppGestureAction.PAGE_TOP
+                when {
+                    showReplay -> gestureScope.launch {
+                        val count = replayListState.layoutInfo.totalItemsCount
+                        if (count > 0) replayListState.animateScrollToItem(if (top) 0 else count - 1)
+                    }
+                    detail != null -> gestureScope.launch {
+                        val count = detailListState.layoutInfo.totalItemsCount
+                        if (count > 0) detailListState.animateScrollToItem(if (top) 0 else count - 1)
+                    }
+                    selectedTab == TAB_HOME -> gestureScope.launch {
+                        val count = homeListState.layoutInfo.totalItemsCount
+                        if (count > 0) homeListState.animateScrollToItem(if (top) 0 else count - 1)
+                    }
+                    selectedTab == TAB_SEARCH -> gestureScope.launch {
+                        val count = searchListState.layoutInfo.totalItemsCount
+                        if (count > 0) searchListState.animateScrollToItem(if (top) 0 else count - 1)
+                    }
+                    else -> RootGestureScrollRequests.request(
+                        if (top) GestureScrollRequest.TOP else GestureScrollRequest.BOTTOM,
+                    )
+                }
+            }
+            AppGestureAction.OPEN_SETTINGS -> showSettings = true
+            AppGestureAction.OPEN_SEARCH -> {
+                viewModel.clearDetail()
+                showSources = false
+                showReplay = false
+                showSettings = false
+                selectedTab = TAB_SEARCH
+                searchFocusTrigger++
+            }
+            AppGestureAction.PLAY_PAUSE -> controller?.let { if (it.isPlaying) it.pause() else it.play() }
+            AppGestureAction.NEXT_TRACK -> controller?.seekToNextMediaItem()
+            AppGestureAction.PREVIOUS_TRACK -> controller?.seekToPreviousMediaItem()
         }
     }
 
@@ -1504,9 +1549,7 @@ private fun BitChordApp(
         if (!isLocalArtistDetail || cleanName.isBlank() || previousName.isBlank() || targets.isEmpty()) return
         val pending = PendingLocalArtistRename(previousName, cleanName, targets)
         val mediaStoreUris = targets.mapNotNull { song ->
-            (song.localUri ?: song.videoId)
-                .takeIf { it.startsWith("content://") }
-                ?.let { runCatching { Uri.parse(it) }.getOrNull() }
+            TagLibWriter.permissionUriForSong(context, song)
                 ?.takeIf { it.authority == MediaStore.AUTHORITY }
         }.distinct()
         val needsApproval = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.R) {
@@ -2250,17 +2293,6 @@ private fun BitChordApp(
                 .show()
         }
     }
-    val allFilesLauncher = rememberLauncherForActivityResult(
-        ActivityResultContracts.StartActivityForResult(),
-    ) {
-        val granted = LocalMediaRepository.hasStoragePermission(context)
-        hasStoragePermission = granted
-        hasAllFilesPermission = LocalMediaRepository.hasAllFilesPermission(context)
-        if (granted) {
-            viewModel.reloadLocalDetail("local:all")
-            viewModel.loadLocalMusic()
-        }
-    }
     val mediaPermissionLauncher = rememberLauncherForActivityResult(
         ActivityResultContracts.RequestPermission(),
     ) { granted ->
@@ -2279,18 +2311,6 @@ private fun BitChordApp(
             Manifest.permission.READ_EXTERNAL_STORAGE
         }
         mediaPermissionLauncher.launch(perm)
-    }
-    val requestAllFilesAccess: () -> Unit = {
-        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.R) {
-            runCatching {
-                val intent = LocalMediaRepository.createAllFilesAccessIntent(context)
-                allFilesLauncher.launch(intent)
-            }.onFailure {
-                LocalMediaRepository.requestAllFilesAccess(context)
-            }
-        } else {
-            requestAudioPermission()
-        }
     }
     val requestDefaultPermission: () -> Unit = requestAudioPermission
     // Shared by the Library tab itself and by a shelf's "Show all" page, so a
@@ -2532,7 +2552,10 @@ private fun BitChordApp(
         links = YtMusicRepository.trackLinks(current.videoId).getOrNull()
         linksLoading = false
     }
-    val playerSong = player.song?.let { current ->
+    val localSongMetadataVersion by viewModel.localSongMetadataVersion.collectAsStateWithLifecycle()
+    val playerSong = remember(player.song, links, localSongMetadataVersion) {
+        player.song?.let { sessionSong ->
+        val current = viewModel.applyLocalSongMetadata(sessionSong)
         val extra = links?.takeIf { it.videoId == current.videoId }
         val enriched = if (extra != null) {
             current.copy(
@@ -2558,6 +2581,7 @@ private fun BitChordApp(
                 enriched.artist.trim().takeIf(String::isNotBlank)?.let { "local:artist:$it" }
             } else null,
         )
+        }
     }
     LaunchedEffect(playerSong, pendingArtworkPlayerOpenSong, artworkReadyPlayerOpenSong) {
         val pending = pendingArtworkPlayerOpenSong
@@ -2859,6 +2883,7 @@ private fun BitChordApp(
             },
             lyrics = lyrics,
             lyricsSource = lyricsSource,
+            onSelectLyricsProvider = viewModel::selectLyricsProvider,
             lyricsUnavailable = lyricsChecked && lyricsVideoId == player.song?.videoId && lyrics.isNullOrEmpty(),
             lyricsReadyForCurrentSong = lyricsChecked && lyricsVideoId == player.song?.videoId,
             docked = docked,
@@ -2883,7 +2908,13 @@ private fun BitChordApp(
     Box(
         Modifier
             .fillMaxSize()
-            .background(mainPageBackgroundColor()),
+            .background(mainPageBackgroundColor())
+            .observeRootEdgeGestures(
+                enabled = appGesturesEnabled && !showNowPlaying && !playerDocked && !showSettings &&
+                    !showReplay && !showSources && !showWearOs && songActions == null && browseActions == null,
+                actions = appGestureActions,
+                onAction = performAppGesture,
+            ),
     ) {
         // A pushed album/artist/playlist page replaces the tab content but
         // leaves the tab bar and mini player in place.
@@ -5569,15 +5600,7 @@ private fun BitChordApp(
                         requestAudioPermission()
                     }
                 },
-                onRequestAllFilesAccess = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.R) {
-                    {
-                        AppSettings.setAllFilesPermissionAsked(true)
-                        showFirstLaunchPermissionDialog = false
-                        requestAllFilesAccess()
-                    }
-                } else {
-                    null
-                },
+                onRequestAllFilesAccess = null,
                 onDismissRequest = {
                     AppSettings.setAllFilesPermissionAsked(true)
                     showFirstLaunchPermissionDialog = false

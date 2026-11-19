@@ -27,6 +27,7 @@ import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.heightIn
+import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.layout.imePadding
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
@@ -34,12 +35,14 @@ import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.foundation.lazy.LazyColumn
+import androidx.compose.foundation.lazy.LazyRow
 import androidx.compose.foundation.lazy.itemsIndexed
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.rounded.Check
 import androidx.compose.material.icons.rounded.Code
 import androidx.compose.material.icons.rounded.Forward5
+import androidx.compose.material.icons.rounded.History
 import androidx.compose.material.icons.rounded.Pause
 import androidx.compose.material.icons.rounded.PlayArrow
 import androidx.compose.material.icons.rounded.Replay5
@@ -138,6 +141,7 @@ fun LyricsEditorScreen(
     val searchResults by viewModel.searchResults.collectAsState()
     val isSearchingResults by viewModel.isSearchingResults.collectAsState()
     val autoSyncProgress by viewModel.autoSyncProgress.collectAsState()
+    val history by viewModel.history.collectAsState()
 
     var showDownloadDialog by remember { mutableStateOf(false) }
     var showSearchResultsDialog by remember { mutableStateOf(false) }
@@ -151,7 +155,10 @@ fun LyricsEditorScreen(
     val lyricsEditorScope = rememberCoroutineScope()
     var timestampInput by remember { mutableStateOf("[00:00.0]") }
     var shiftTimestampsForward by remember { mutableStateOf(true) }
-    var syncMode by remember(song.videoId) { mutableStateOf(false) }
+    var selectedEditorTab by remember(song.videoId) { mutableStateOf(LyricsEditorTab.SIMPLE) }
+    val syncMode = selectedEditorTab == LyricsEditorTab.SYNC
+    val characterSyncMode = selectedEditorTab == LyricsEditorTab.CHARACTER_SYNC
+    val historyMode = selectedEditorTab == LyricsEditorTab.HISTORY
     var textFieldValue by remember { mutableStateOf(TextFieldValue(currentText)) }
 
     val lineCount = remember(currentText) {
@@ -290,7 +297,7 @@ fun LyricsEditorScreen(
             LyricsEditorTopBar(
                 onBackClick = onBackClick,
                 actions = {
-                    if (syncMode) {
+                    if (syncMode || characterSyncMode) {
                         IconButton(onClick = { handleSave() }, enabled = !isLoading && !isSaving) {
                             Icon(
                                 imageVector = Icons.Rounded.Check,
@@ -303,7 +310,7 @@ fun LyricsEditorScreen(
             )
         },
         bottomBar = {
-            if (syncMode) {
+            if (syncMode || characterSyncMode) {
                 SyncPlaybackBar(
                     positionMs = playbackPositionMs,
                     durationMs = playbackDurationMs,
@@ -315,7 +322,7 @@ fun LyricsEditorScreen(
                     onNext = syncSeekForward,
                     onSeek = { onSyncSeek?.invoke(it) },
                 )
-            } else LyricsEditorBottomBar(
+            } else if (!historyMode) LyricsEditorBottomBar(
                 enabled = !isLoading && !isSaving && autoSyncProgress == null && !isCorrectingOrthography,
                 onSearchClick = ::searchLyricsOnWeb,
                 onDownloadClick = {
@@ -422,32 +429,44 @@ fun LyricsEditorScreen(
             verticalArrangement = Arrangement.spacedBy(12.dp),
         ) {
             Row(
-                modifier = Modifier.fillMaxWidth(),
-                horizontalArrangement = Arrangement.Center,
+                modifier = Modifier.fillMaxWidth().horizontalScroll(rememberScrollState()),
+                horizontalArrangement = Arrangement.Start,
                 verticalAlignment = Alignment.CenterVertically,
             ) {
                 Surface(
                     shape = RoundedCornerShape(12.dp),
                     color = MaterialTheme.colorScheme.surfaceContainerHigh,
                 ) {
-                    Row {
+                    Row(horizontalArrangement = Arrangement.spacedBy(2.dp)) {
                         LyricsEditorModeButton(
                             text = stringResource(R.string.lyrics_sync_simple),
-                            selected = !syncMode,
+                            selected = selectedEditorTab == LyricsEditorTab.SIMPLE,
                             enabled = !isLoading && !isSaving,
-                            onClick = { syncMode = false },
+                            onClick = { selectedEditorTab = LyricsEditorTab.SIMPLE },
                         )
                         LyricsEditorModeButton(
                             text = stringResource(R.string.lyrics_sync_mode),
                             selected = syncMode,
                             enabled = !isLoading && !isSaving,
-                            onClick = { syncMode = true },
+                            onClick = { selectedEditorTab = LyricsEditorTab.SYNC },
+                        )
+                        LyricsEditorModeButton(
+                            text = stringResource(R.string.lyrics_sync_character_mode),
+                            selected = characterSyncMode,
+                            enabled = !isLoading && !isSaving,
+                            onClick = { selectedEditorTab = LyricsEditorTab.CHARACTER_SYNC },
+                        )
+                        LyricsEditorModeButton(
+                            text = stringResource(R.string.lyrics_history_tab),
+                            selected = historyMode,
+                            enabled = !isLoading && !isSaving,
+                            onClick = { selectedEditorTab = LyricsEditorTab.HISTORY },
                         )
                     }
                 }
             }
 
-            if (!syncMode) {
+            if (!syncMode && !characterSyncMode && !historyMode) {
                 LyricsEditorHeader(
                     song = song,
                     isLoading = isLoading,
@@ -463,7 +482,7 @@ fun LyricsEditorScreen(
             }
 
             AnimatedVisibility(
-                visible = isFileSource && !syncMode,
+                visible = isFileSource && !syncMode && !characterSyncMode && !historyMode,
                 enter = fadeIn(),
                 exit = fadeOut(),
             ) {
@@ -493,7 +512,7 @@ fun LyricsEditorScreen(
             ) {
                 Column(modifier = Modifier.fillMaxSize()) {
                     // Studio status bar
-                    if (!syncMode) Row(
+                    if (!syncMode && !characterSyncMode && !historyMode) Row(
                         modifier = Modifier
                             .fillMaxWidth()
                             .padding(horizontal = 14.dp, vertical = 8.dp),
@@ -532,7 +551,126 @@ fun LyricsEditorScreen(
                         thickness = 1.dp,
                     )
 
-                    if (syncMode) {
+                    if (historyMode) {
+                        if (history.isEmpty()) {
+                            androidx.compose.foundation.layout.Box(
+                                modifier = Modifier.fillMaxSize().padding(24.dp),
+                                contentAlignment = Alignment.Center,
+                            ) {
+                                Text(
+                                    text = stringResource(R.string.lyrics_history_empty),
+                                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                                    textAlign = TextAlign.Center,
+                                )
+                            }
+                        } else {
+                            LazyColumn(Modifier.fillMaxSize()) {
+                                itemsIndexed(history.asReversed(), key = { _, revision -> revision.id }) { _, revision ->
+                                    Surface(
+                                        modifier = Modifier.fillMaxWidth().padding(horizontal = 10.dp, vertical = 5.dp),
+                                        shape = RoundedCornerShape(14.dp),
+                                        color = MaterialTheme.colorScheme.surfaceContainerHigh.copy(alpha = 0.7f),
+                                    ) {
+                                        Column(
+                                            modifier = Modifier.fillMaxWidth().padding(12.dp),
+                                            verticalArrangement = Arrangement.spacedBy(6.dp),
+                                        ) {
+                                            Text(
+                                                text = remember(revision.savedAtMs) {
+                                                    java.text.DateFormat.getDateTimeInstance().format(java.util.Date(revision.savedAtMs))
+                                                },
+                                                style = MaterialTheme.typography.labelMedium,
+                                                color = MaterialTheme.colorScheme.primary,
+                                            )
+                                            Text(
+                                                text = revision.text.ifBlank { stringResource(R.string.lyrics_history_empty_revision) },
+                                                maxLines = 3,
+                                                overflow = TextOverflow.Ellipsis,
+                                                style = MaterialTheme.typography.bodyMedium,
+                                            )
+                                            TextButton(
+                                                onClick = {
+                                                    viewModel.restoreHistoryRevision(revision)
+                                                    selectedEditorTab = LyricsEditorTab.SIMPLE
+                                                },
+                                                enabled = !isSaving,
+                                            ) {
+                                                Text(stringResource(R.string.lyrics_history_restore))
+                                            }
+                                        }
+                                    }
+                                }
+                            }
+                        }
+                    } else if (characterSyncMode) {
+                        Column(Modifier.fillMaxSize()) {
+                            Text(
+                                text = stringResource(R.string.lyrics_character_sync_hint),
+                                modifier = Modifier.fillMaxWidth().padding(horizontal = 14.dp, vertical = 8.dp),
+                                style = MaterialTheme.typography.labelMedium,
+                                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                            )
+                            LazyColumn(Modifier.fillMaxSize()) {
+                                itemsIndexed(syncLines, key = { _, line -> line.index }) { _, line ->
+                                    val characters = remember(line.lyric) { inlineTimedCharacters(line.lyric) }
+                                    Column(
+                                        modifier = Modifier.fillMaxWidth().padding(horizontal = 12.dp, vertical = 8.dp),
+                                        verticalArrangement = Arrangement.spacedBy(5.dp),
+                                    ) {
+                                        Row(verticalAlignment = Alignment.CenterVertically) {
+                                            Text(
+                                                text = line.timestamp.ifBlank { "--:--.--" },
+                                                style = MaterialTheme.typography.labelSmall.copy(fontFamily = FontFamily.Monospace),
+                                                color = MaterialTheme.colorScheme.primary,
+                                            )
+                                            Text(
+                                                text = line.lyric.ifBlank { stringResource(R.string.lyrics_sync_not_lyric) },
+                                                modifier = Modifier.padding(start = 10.dp),
+                                                style = MaterialTheme.typography.bodySmall,
+                                                color = if (line.isMetadata) MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.55f) else MaterialTheme.colorScheme.onSurface,
+                                                maxLines = 1,
+                                                overflow = TextOverflow.Ellipsis,
+                                            )
+                                        }
+                                        LazyRow(horizontalArrangement = Arrangement.spacedBy(4.dp)) {
+                                            itemsIndexed(characters, key = { index, _ -> "${line.index}:$index" }) { charIndex, character ->
+                                                Column(horizontalAlignment = Alignment.CenterHorizontally) {
+                                                    Text(
+                                                        text = character.timestamp?.removePrefix("<")?.removeSuffix(">") ?: "—",
+                                                        style = MaterialTheme.typography.labelSmall.copy(fontFamily = FontFamily.Monospace),
+                                                        color = if (character.timestamp == null) MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.65f) else MaterialTheme.colorScheme.primary,
+                                                    )
+                                                    Surface(
+                                                        onClick = {
+                                                            if (line.isMetadata || isSaving) return@Surface
+                                                            val stamped = stampCharacter(line.raw, line.lyric, charIndex, playbackPositionMs)
+                                                            val updatedLines = textFieldValue.text.split('\n').toMutableList()
+                                                            if (line.index in updatedLines.indices) {
+                                                                updatedLines[line.index] = stamped
+                                                                val updatedText = updatedLines.joinToString("\n")
+                                                                textFieldValue = TextFieldValue(updatedText, TextRange(updatedText.length))
+                                                                viewModel.updateText(updatedText)
+                                                            }
+                                                        },
+                                                        enabled = !line.isMetadata && !isSaving,
+                                                        shape = RoundedCornerShape(8.dp),
+                                                        color = if (character.timestamp == null) MaterialTheme.colorScheme.surfaceContainerHigh else MaterialTheme.colorScheme.primaryContainer,
+                                                    ) {
+                                                        Text(
+                                                            text = character.value,
+                                                            modifier = Modifier.padding(horizontal = 8.dp, vertical = 5.dp),
+                                                            style = MaterialTheme.typography.bodyMedium,
+                                                        )
+                                                    }
+                                                }
+                                            }
+                                        }
+                                    }
+                                    HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.18f))
+                                }
+                            }
+                        }
+                    } else if (syncMode) {
                         Column(Modifier.fillMaxSize()) {
                             LazyColumn(Modifier.fillMaxSize()) {
                                 itemsIndexed(syncLines, key = { _, line -> line.index }) { _, line ->
@@ -888,6 +1026,13 @@ private data class SyncEditorLine(
     val isMetadata: Boolean,
 )
 
+private enum class LyricsEditorTab { SIMPLE, SYNC, CHARACTER_SYNC, HISTORY }
+
+private data class InlineTimedCharacter(
+    val value: String,
+    val timestamp: String?,
+)
+
 @Composable
 private fun LyricsEditorModeButton(
     text: String,
@@ -989,6 +1134,53 @@ private fun SyncPlaybackBar(
 private val SYNC_STAMP = Regex("""\[\d{1,3}:\d{2}[.:]\d{1,3}]""")
 private val SYNC_PREFIX = Regex("""^(?:\[\d{1,3}:\d{2}(?:[.:]\d{1,3})?])+""")
 private val SYNC_METADATA = Regex("""\[[A-Za-z]{2,}:.*]""")
+private val INLINE_SYNC_STAMP = Regex("""<\d{1,3}:\d{2}(?:[.:]\d{1,3})?>""")
+
+private fun inlineTimedCharacters(text: String): List<InlineTimedCharacter> {
+    if (text.isEmpty()) return emptyList()
+    val result = mutableListOf<InlineTimedCharacter>()
+    var cursor = 0
+    var pendingTimestamp: String? = null
+
+    fun appendCharacters(segment: String) {
+        if (segment.isEmpty()) return
+        val iterator = java.text.BreakIterator.getCharacterInstance(java.util.Locale.ROOT)
+        iterator.setText(segment)
+        var start = iterator.first()
+        var end = iterator.next()
+        var applyTimestamp = pendingTimestamp
+        while (end != java.text.BreakIterator.DONE) {
+            result += InlineTimedCharacter(
+                value = segment.substring(start, end),
+                timestamp = applyTimestamp,
+            )
+            applyTimestamp = null
+            start = end
+            end = iterator.next()
+        }
+        pendingTimestamp = applyTimestamp
+    }
+
+    INLINE_SYNC_STAMP.findAll(text).forEach { match ->
+        appendCharacters(text.substring(cursor, match.range.first))
+        pendingTimestamp = match.value
+        cursor = match.range.last + 1
+    }
+    appendCharacters(text.substring(cursor))
+    return result
+}
+
+private fun stampCharacter(rawLine: String, lyricBody: String, index: Int, positionMs: Long): String {
+    val characters = inlineTimedCharacters(lyricBody)
+    if (index !in characters.indices) return rawLine
+    val prefix = SYNC_PREFIX.find(rawLine)?.value.orEmpty()
+    val timestamp = "<${formatLrcTime(positionMs)}>"
+    val updated = characters.mapIndexed { characterIndex, character ->
+        val stamp = if (characterIndex == index) timestamp else character.timestamp.orEmpty()
+        "$stamp${character.value}"
+    }.joinToString(separator = "")
+    return prefix + updated
+}
 
 private fun formatLrcTime(positionMs: Long): String {
     val centiseconds = positionMs.coerceAtLeast(0L) / 10L

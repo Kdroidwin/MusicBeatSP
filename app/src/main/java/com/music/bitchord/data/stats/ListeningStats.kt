@@ -13,11 +13,16 @@ import kotlinx.coroutines.withContext
 import kotlinx.serialization.Serializable
 import kotlinx.serialization.json.Json
 import java.io.File
+import java.io.FileOutputStream
+import java.nio.file.AtomicMoveNotSupportedException
+import java.nio.file.Files
+import java.nio.file.StandardCopyOption
 import java.time.Instant
 import java.time.LocalDate
 import java.time.YearMonth
 import java.time.ZoneId
 import java.util.Locale
+import java.util.concurrent.ConcurrentHashMap
 
 /**
  * What this device has listened to, kept on this device.
@@ -38,8 +43,8 @@ import java.util.Locale
  *
  * ## One file per month
  *
- * Buckets are calendar months in the device's own time zone, one JSON file
- * each. That is what makes "this year" and "all time" the same operation on
+ * Buckets are calendar months in the device's own time zone, one authenticated
+ * encrypted file each. That is what makes "this year" and "all time" the same operation on
  * different numbers of files, and it means the only bucket held in memory is
  * the one being written to — the rest are read, merged and released.
  *
@@ -49,13 +54,14 @@ import java.util.Locale
  *
  * ## Nothing leaves the device
  *
- * There is no upload, no account and no id. [Backup] can write the whole thing
- * out as JSON because the user asked it to, and that is the only way any of this
- * goes anywhere.
+ * There is no upload, no account and no id. [Backup] can write the history
+ * inside a password-encrypted field because the user asked it to, and that is
+ * the only way any of this goes anywhere.
  */
 object ListeningStats {
 
     private lateinit var directory: File
+    private lateinit var appContext: Context
 
     private val json = Json {
         ignoreUnknownKeys = true
@@ -73,9 +79,13 @@ object ListeningStats {
     private var open: OpenBucket? = null
 
     private val lock = Any()
+    private val bucketFileLocks = ConcurrentHashMap<String, Any>()
 
     /** Set when [open] has changes not yet on disk. */
     private var dirty = false
+
+    /** Invalidates writes queued before a history restore replaces the files. */
+    private var generation = 0L
 
     /**
      * Where every write to this folder happens.
@@ -107,12 +117,22 @@ object ListeningStats {
     )
 
     fun init(context: Context) {
-        directory = File(context.filesDir, DIRECTORY)
+        appContext = context.applicationContext
+        directory = File(appContext.filesDir, DIRECTORY)
         // Opening a month means reading and parsing it, and the first thing to
         // ask for one is the playback sampler — on the main thread, a few
         // seconds into the first track. Done here instead, it has happened long
         // before anything is playing.
-        writer.launch { synchronized(lock) { bucketFor(YearMonth.now()) } }
+        writer.launch {
+            migrateLegacyFiles()
+            // Migrate every legacy plaintext month, not only the current month
+            // that playback opens. Encrypted files are skipped after one read.
+            months().forEach { month ->
+                val key = month.toString()
+                if (File(directory, "$key.json").exists()) read(key)
+            }
+            synchronized(lock) { bucketFor(YearMonth.now()) }
+        }
     }
 
     private val ready: Boolean get() = this::directory.isInitialized
@@ -210,22 +230,24 @@ object ListeningStats {
      * than re-serialising a month every time a track ticks over.
      */
     fun flush() {
-        pending()?.let { (key, snapshot) -> writer.launch { write(key, snapshot) } }
+        pending()?.let { pending -> writer.launch { write(pending) } }
     }
 
     /** As [flush], for a caller that is about to read back what it wrote. */
     private suspend fun flushAndAwait() {
-        pending()?.let { (key, snapshot) -> writer.launch { write(key, snapshot) }.join() }
+        pending()?.let { pending -> writer.launch { write(pending) }.join() }
     }
 
     /** The open month as bytes-to-be, or null when nothing has changed. */
-    private fun pending(): Pair<String, StoredBucket>? {
+    private data class PendingWrite(val key: String, val snapshot: StoredBucket, val generation: Long)
+
+    private fun pending(): PendingWrite? {
         if (!ready) return null
         return synchronized(lock) {
             if (!dirty) return null
             val bucket = open ?: return null
             dirty = false
-            bucket.key to bucket.snapshot()
+            PendingWrite(bucket.key, bucket.snapshot(), generation)
         }
     }
 
@@ -241,19 +263,28 @@ object ListeningStats {
      * Written aside and renamed, so a kill mid-write leaves the previous
      * month rather than a truncated one.
      */
-    private suspend fun write(key: String, snapshot: StoredBucket) = writeLock.withLock {
-        runCatching {
-            directory.mkdirs()
-            val file = File(directory, "$key.json")
-            val temporary = File(directory, "$key.json.tmp")
-            temporary.writeText(json.encodeToString(StoredBucket.serializer(), snapshot))
-            if (!temporary.renameTo(file)) {
-                // renameTo will not replace on some filesystems; the delete is
-                // the only thing standing between that and a .tmp per flush.
-                if (file.delete() && temporary.renameTo(file)) Unit else temporary.delete()
+    private suspend fun write(pending: PendingWrite) = writeLock.withLock {
+        val (key, snapshot, writeGeneration) = pending
+        if (!synchronized(lock) { generation == writeGeneration }) return@withLock
+        var failed = false
+        synchronized(bucketFileLock(key)) {
+            runCatching {
+                directory.mkdirs()
+                val encrypted = ListeningHistoryCrypto.encryptLocal(
+                    key,
+                    json.encodeToString(StoredBucket.serializer(), snapshot).toByteArray(Charsets.UTF_8),
+                )
+                replaceFileAtomically(File(directory, "$key.enc"), File(directory, "$key.enc.tmp"), encrypted)
+                // Drop the legacy plaintext only after the encrypted replacement
+                // has reached its final name successfully.
+                File(directory, "$key.json").delete()
+                version++
+            }.onFailure {
+                Log.w(TAG, "Could not write encrypted listening bucket $key", it)
+                failed = true
             }
-            version++
-        }.onFailure { Log.w(TAG, "Could not write listening bucket $key", it) }
+        }
+        if (failed) synchronized(lock) { if (generation == writeGeneration) dirty = true }
     }
 
     /** The bucket for [month], loading or creating it and retiring the last one. */
@@ -264,7 +295,8 @@ object ListeningStats {
         // has to reach disk before it is dropped on the floor.
         open?.let { previous ->
             val stale = previous.snapshot()
-            writer.launch { write(previous.key, stale) }
+            val staleGeneration = generation
+            writer.launch { write(PendingWrite(previous.key, stale, staleGeneration)) }
         }
         val loaded = read(key) ?: StoredBucket(month = key)
         return OpenBucket.of(key, loaded).also {
@@ -309,18 +341,94 @@ object ListeningStats {
         if (!ready) return emptyList()
         val files = directory.listFiles() ?: return emptyList()
         return files.mapNotNull { file ->
-            file.name.removeSuffix(".json").takeIf { it != file.name }
-                ?.let { runCatching { YearMonth.parse(it) }.getOrNull() }
-        }.sorted()
+            val month = when {
+                file.name.endsWith(".enc") -> file.name.removeSuffix(".enc")
+                file.name.endsWith(".json") -> file.name.removeSuffix(".json")
+                else -> return@mapNotNull null
+            }
+            runCatching { YearMonth.parse(month) }.getOrNull()
+        }.distinct().sorted()
     }
 
-    private fun read(key: String): StoredBucket? {
-        val file = File(directory, "$key.json")
-        if (!file.exists()) return null
-        return runCatching { json.decodeFromString(StoredBucket.serializer(), file.readText()) }
-            .onFailure { Log.w(TAG, "Discarding unreadable listening bucket $key", it) }
-            .getOrNull()
+    private fun read(key: String): StoredBucket? = synchronized(bucketFileLock(key)) {
+        readUnlocked(key)
     }
+
+    private fun readUnlocked(key: String): StoredBucket? {
+        val encryptedFile = File(directory, "$key.enc")
+        if (encryptedFile.exists()) {
+            val decrypted = runCatching {
+                require(encryptedFile.length() <= MAX_BUCKET_BYTES) { "Encrypted listening bucket is too large" }
+                ListeningHistoryCrypto.decryptLocal(key, encryptedFile.readBytes())
+            }
+            if (decrypted.isSuccess) {
+                return runCatching {
+                    json.decodeFromString(StoredBucket.serializer(), decrypted.getOrThrow().toString(Charsets.UTF_8))
+                }.onFailure { Log.w(TAG, "Discarding unreadable listening bucket $key", it) }.getOrNull()
+            }
+            // During a one-time migration the plaintext copy is retained until
+            // the encrypted file has been written. It can still recover this
+            // month if a process was killed between those two steps.
+            if (!File(directory, "$key.json").exists()) {
+                Log.w(TAG, "Could not decrypt listening bucket $key", decrypted.exceptionOrNull())
+                return null
+            }
+        }
+
+        val legacyFile = File(directory, "$key.json")
+        if (!legacyFile.exists()) return null
+        val legacy = runCatching {
+            require(legacyFile.length() <= MAX_BUCKET_BYTES) { "Listening bucket is too large" }
+            json.decodeFromString(StoredBucket.serializer(), legacyFile.readText())
+        }.onFailure { Log.w(TAG, "Could not read legacy listening bucket $key", it) }.getOrNull() ?: return null
+        runCatching {
+            directory.mkdirs()
+            val encrypted = ListeningHistoryCrypto.encryptLocal(
+                key,
+                json.encodeToString(StoredBucket.serializer(), legacy).toByteArray(Charsets.UTF_8),
+            )
+            replaceFileAtomically(File(directory, "$key.enc"), File(directory, "$key.enc.tmp"), encrypted)
+            legacyFile.delete()
+        }.onFailure { Log.w(TAG, "Could not encrypt legacy listening bucket $key", it) }
+        return legacy
+    }
+
+    /** Recovers a valid last-write temp file before removing old plaintext temps. */
+    private fun migrateLegacyFiles() {
+        val temporaries = directory.listFiles()?.filter { it.name.endsWith(".json.tmp") }.orEmpty()
+        temporaries.forEach { temporary ->
+            val key = temporary.name.removeSuffix(".json.tmp")
+            synchronized(bucketFileLock(key)) {
+                val validMonth = runCatching { YearMonth.parse(key) }.isSuccess
+                val encrypted = File(directory, "$key.enc")
+                when {
+                    !validMonth || encrypted.exists() -> temporary.delete()
+                    else -> {
+                        val snapshot = runCatching {
+                            require(temporary.length() <= MAX_BUCKET_BYTES) { "Legacy listening temporary file is too large" }
+                            json.decodeFromString(StoredBucket.serializer(), temporary.readText())
+                        }.getOrNull()
+                        if (snapshot == null) {
+                            temporary.delete()
+                        } else {
+                            runCatching {
+                                val bytes = ListeningHistoryCrypto.encryptLocal(
+                                    key,
+                                    json.encodeToString(StoredBucket.serializer(), snapshot.copy(month = key))
+                                        .toByteArray(Charsets.UTF_8),
+                                )
+                                replaceFileAtomically(encrypted, File(directory, "$key.enc.tmp"), bytes)
+                                File(directory, "$key.json").delete()
+                                temporary.delete()
+                            }.onFailure { Log.w(TAG, "Could not recover legacy listening bucket $key", it) }
+                        }
+                    }
+                }
+            }
+        }
+    }
+
+    private fun bucketFileLock(key: String): Any = bucketFileLocks.computeIfAbsent(key) { Any() }
 
     // ── Housekeeping ────────────────────────────────────────────────────────
 
@@ -336,6 +444,7 @@ object ListeningStats {
         val existing = months()
         if (existing.size > KEEP_MONTHS) {
             existing.take(existing.size - KEEP_MONTHS).forEach {
+                File(directory, "$it.enc").delete()
                 File(directory, "$it.json").delete()
             }
         }
@@ -394,23 +503,75 @@ object ListeningStats {
      * onto a new device, and two copies of the same month added together would
      * silently double every number on the page with no way to tell afterwards.
      */
-    fun importAll(buckets: List<StoredBucket>) {
-        if (!ready) return
-        synchronized(lock) {
-            open = null
-            dirty = false
-            directory.listFiles()?.forEach { it.delete() }
-            directory.mkdirs()
-            version++
-            cached = null
-            buckets.forEach { bucket ->
-                val key = runCatching { YearMonth.parse(bucket.month).toString() }.getOrNull()
-                    ?: return@forEach
-                runCatching {
-                    File(directory, "$key.json")
-                        .writeText(json.encodeToString(StoredBucket.serializer(), bucket))
-                }.onFailure { Log.w(TAG, "Could not import bucket $key", it) }
+    suspend fun importAll(buckets: List<StoredBucket>): Boolean {
+        if (!ready) return false
+        return writeLock.withLock {
+            val prepared = runCatching {
+                buckets.mapNotNull { bucket ->
+                    val key = runCatching { YearMonth.parse(bucket.month).toString() }.getOrNull() ?: return@mapNotNull null
+                    key to ListeningHistoryCrypto.encryptLocal(
+                        key,
+                        json.encodeToString(StoredBucket.serializer(), bucket.copy(month = key))
+                            .toByteArray(Charsets.UTF_8),
+                    )
+                }
+            }.getOrElse {
+                Log.w(TAG, "Could not encrypt imported listening history", it)
+                return@withLock false
             }
+
+            val parent = directory.parentFile ?: return@withLock false
+            val token = java.util.UUID.randomUUID().toString()
+            val staging = File(parent, "${DIRECTORY}_import_$token")
+            val previous = File(parent, "${DIRECTORY}_previous_$token")
+            runCatching {
+                require(staging.mkdirs() || staging.isDirectory) { "Could not prepare listening history restore" }
+                prepared.forEach { (key, encrypted) ->
+                    writeSynced(File(staging, "$key.enc"), encrypted)
+                }
+                if (directory.exists()) {
+                    require(directory.renameTo(previous)) { "Could not preserve existing listening history" }
+                }
+                if (!staging.renameTo(directory)) {
+                    previous.takeIf { it.exists() }?.renameTo(directory)
+                    error("Could not install restored listening history")
+                }
+                previous.deleteRecursively()
+                synchronized(lock) {
+                    generation++
+                    open = null
+                    dirty = false
+                    version++
+                    cached = null
+                }
+                true
+            }.getOrElse {
+                staging.deleteRecursively()
+                if (previous.exists() && !directory.exists()) previous.renameTo(directory)
+                Log.w(TAG, "Could not replace listening history from backup", it)
+                false
+            }
+        }
+    }
+
+    private fun replaceFileAtomically(destination: File, temporary: File, bytes: ByteArray) {
+        writeSynced(temporary, bytes)
+        try {
+            Files.move(
+                temporary.toPath(),
+                destination.toPath(),
+                StandardCopyOption.REPLACE_EXISTING,
+                StandardCopyOption.ATOMIC_MOVE,
+            )
+        } catch (_: AtomicMoveNotSupportedException) {
+            Files.move(temporary.toPath(), destination.toPath(), StandardCopyOption.REPLACE_EXISTING)
+        }
+    }
+
+    private fun writeSynced(file: File, bytes: ByteArray) {
+        FileOutputStream(file).use { stream ->
+            stream.write(bytes)
+            stream.fd.sync()
         }
     }
 
@@ -646,6 +807,7 @@ object ListeningStats {
 
     private const val TAG = "BitChordListening"
     private const val DIRECTORY = "listening"
+    private const val MAX_BUCKET_BYTES = 16L * 1024 * 1024
 
     /** How far down the artist chart a page opening will send lookups for. */
     private const val ARTISTS_TO_RESOLVE = 15

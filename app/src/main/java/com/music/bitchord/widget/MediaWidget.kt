@@ -145,6 +145,7 @@ abstract class MediaWidget : AppWidgetProvider() {
                     render(app, ids, fallbackWidthDp, deadline = null)
                 }
                 MediaWidgetAlbumSquare.refresh(app)
+                MediaWidgetVinyl.refresh(app)
                 MediaWidgetMini.refresh(app)
                 MediaWidgetPill.refresh(app)
                 MediaWidgetNowPlaying.refresh(app)

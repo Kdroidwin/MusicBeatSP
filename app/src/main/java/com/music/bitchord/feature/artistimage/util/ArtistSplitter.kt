@@ -1,6 +1,7 @@
 package com.music.bitchord.feature.artistimage.util
 
 import com.music.bitchord.data.model.Song
+import com.music.bitchord.data.settings.AppSettings
 import com.music.bitchord.feature.artistimage.model.ArtistEntry
 import java.util.Locale
 
@@ -45,7 +46,7 @@ object ArtistSplitter {
     /**
      * Regex matching multi-artist separators:
      * - Semicolons: ;
-     * - Slashes and backslashes: / or \
+     * - Backslashes: \; / and ／ follow the slash-separator setting
      * - Pipes, bullets, dots: |, •, ·
      * - Commas: ASCII comma, Japanese comma, full-width comma
      * - Whitespace-surrounded ampersand: &
@@ -53,9 +54,11 @@ object ArtistSplitter {
      * - Collaboration words: feat., feat, ft., ft, featuring, with, vs., vs, x
      */
     private val DELIMITER_REGEX = Regex(
-        """\s*(?:[;/\\|•·、，]|,\s*|\s+&\s+|\s+\+\s+|\s+(?:feat\.?|ft\.?|featuring|with|vs\.?|x)\s+)\s*""",
+        """\s*(?:[;\\|•·、，]|,\s*|\s+&\s+|\s+\+\s+|\s+(?:feat\.?|ft\.?|featuring|with|vs\.?|x)\s+)\s*""",
         RegexOption.IGNORE_CASE,
     )
+
+    private val SLASH_DELIMITER_REGEX = Regex("""\s*[/／]\s*""")
 
     private val UNWANTED_PUNCTUATION = Regex("""^[^\p{L}\p{N}]+|[^\p{L}\p{N}]+$""")
 
@@ -70,7 +73,10 @@ object ArtistSplitter {
      * - "Roop Kumar Rathod, Sayeed Quadri,..." -> ["Roop Kumar Rathod", "Sayeed Quadri"]
      * - "AC/DC" -> ["AC/DC"]
      */
-    fun split(rawArtist: String?): List<String> {
+    fun split(
+        rawArtist: String?,
+        splitOnSlash: Boolean = AppSettings.artistSlashSeparators.value,
+    ): List<String> {
         val raw = rawArtist?.trim().orEmpty()
         if (raw.isBlank()) return emptyList()
 
@@ -92,7 +98,8 @@ object ArtistSplitter {
         }
 
         // Split by delimiters
-        val rawTokens = protectedString.split(DELIMITER_REGEX)
+        val baseTokens = protectedString.split(DELIMITER_REGEX)
+        val rawTokens = if (splitOnSlash) baseTokens.flatMap { it.split(SLASH_DELIMITER_REGEX) } else baseTokens
 
         val results = mutableListOf<String>()
         for (token in rawTokens) {

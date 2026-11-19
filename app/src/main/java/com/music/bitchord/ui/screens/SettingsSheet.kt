@@ -98,6 +98,7 @@ import androidx.compose.material.icons.rounded.SwapHoriz
 import androidx.compose.material.icons.rounded.Speed
 import androidx.compose.material.icons.rounded.SurroundSound
 import androidx.compose.material.icons.rounded.Tune
+import androidx.compose.material.icons.rounded.TouchApp
 import androidx.compose.material.icons.rounded.ViewStream
 import androidx.compose.material.icons.rounded.VerticalAlignTop
 import androidx.compose.material.icons.rounded.VisibilityOff
@@ -121,6 +122,7 @@ import androidx.compose.material3.ModalBottomSheet
 import androidx.compose.material3.rememberModalBottomSheetState
 import androidx.compose.material3.OutlinedTextField
 import com.music.bitchord.feature.localmusic.domain.model.LocalFolder
+import com.music.bitchord.feature.localmusic.data.LocalFolderGrantStore
 import com.music.bitchord.feature.localmusic.ui.components.BlacklistedFoldersSheet
 import com.music.bitchord.feature.homeai.HomeExcludedFoldersSheet
 import androidx.compose.material3.Slider
@@ -141,6 +143,7 @@ import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.lifecycle.Lifecycle
 import androidx.lifecycle.LifecycleEventObserver
+import androidx.lifecycle.ViewModel
 import androidx.lifecycle.lifecycleScope
 import androidx.lifecycle.compose.LocalLifecycleOwner
 import androidx.lifecycle.viewmodel.compose.viewModel
@@ -184,6 +187,9 @@ import com.music.bitchord.data.LocalMediaRepository
 import com.music.bitchord.data.NerdStats
 import com.music.bitchord.data.scrobbling.LastFM
 import com.music.bitchord.data.settings.AppSettings
+import com.music.bitchord.data.settings.BluetoothButtonAction
+import com.music.bitchord.data.settings.AppGestureAction
+import com.music.bitchord.data.settings.AppGestureDirection
 import com.music.bitchord.ui.player.AudioVisualizationPanel
 import com.music.bitchord.data.settings.FolderArtworkFallbackMode
 import com.music.bitchord.data.settings.HomeTabTitleMode
@@ -1914,6 +1920,8 @@ fun SettingsScreen(
     val keepArtworkFullSizeWhenPaused by AppSettings.keepArtworkFullSizeWhenPaused.collectAsStateWithLifecycle()
     val legacyMeshGradient by AppSettings.legacyMeshGradient.collectAsStateWithLifecycle()
     val syncedLyrics by AppSettings.syncedLyrics.collectAsStateWithLifecycle()
+    val showLyricsSourceSwitcher by AppSettings.showLyricsSourceSwitcher.collectAsStateWithLifecycle()
+    val artistSlashSeparators by AppSettings.artistSlashSeparators.collectAsStateWithLifecycle()
     val autoEmbedLyrics by AppSettings.autoEmbedLyrics.collectAsStateWithLifecycle()
     val autoShowLyricsOnPlayback by AppSettings.autoShowLyricsOnPlayback.collectAsStateWithLifecycle()
     val autoFetchLyricsOnYoutubePlayback by AppSettings.autoFetchLyricsOnYoutubePlayback.collectAsStateWithLifecycle()
@@ -1988,6 +1996,10 @@ fun SettingsScreen(
     val convertForLimitedDac by AppSettings.convertForLimitedDac.collectAsStateWithLifecycle()
     val preferUsbDac by AppSettings.preferUsbDac.collectAsStateWithLifecycle()
     val speakerPlaybackAllowed by AppSettings.speakerPlaybackAllowed.collectAsStateWithLifecycle()
+    val autoPlayOnHeadphoneConnect by AppSettings.autoPlayOnHeadphoneConnect.collectAsStateWithLifecycle()
+    val bluetoothButtonAction by AppSettings.bluetoothButtonAction.collectAsStateWithLifecycle()
+    val gesturesEnabled by AppSettings.gesturesEnabled.collectAsStateWithLifecycle()
+    val gestureActions by AppSettings.gestureActions.collectAsStateWithLifecycle()
     val outputStatus by AudioOutputStatus.current.collectAsStateWithLifecycle()
     val sourceAudioStats by NerdStats.current.collectAsStateWithLifecycle()
     val availableSystemAudioEffects = remember {
@@ -2457,6 +2469,42 @@ fun SettingsScreen(
             listOf("speaker", "headphones", "bluetooth", "USB", "スピーカー", "イヤホン", "出力先", "音声出力"),
             speakerPlaybackAllowed,
         ) { AppSettings.setSpeakerPlaybackAllowed(!speakerPlaybackAllowed) },
+        SettingsSearchEntry(
+            stringResource(R.string.auto_play_on_headphone_connect),
+            stringResource(R.string.auto_play_on_headphone_connect_subtitle),
+            listOf("headphone", "headset", "bluetooth", "auto play", "イヤホン", "ヘッドホン", "接続", "自動再生"),
+            autoPlayOnHeadphoneConnect,
+        ) { AppSettings.setAutoPlayOnHeadphoneConnect(!autoPlayOnHeadphoneConnect) },
+        SettingsSearchEntry(
+            title = stringResource(R.string.bluetooth_button_action),
+            subtitle = stringResource(R.string.bluetooth_button_action_subtitle),
+            keywords = listOf("bluetooth", "headphone", "button", "media key", "イヤホン", "ボタン", "再生", "次", "前"),
+            valueLabel = bluetoothButtonAction.localizedLabel(),
+            activate = {
+                val next = (BluetoothButtonAction.entries.indexOf(bluetoothButtonAction) + 1) % BluetoothButtonAction.entries.size
+                AppSettings.setBluetoothButtonAction(BluetoothButtonAction.entries[next])
+            },
+        ),
+        SettingsSearchEntry(
+            stringResource(R.string.app_gestures),
+            stringResource(R.string.app_gestures_subtitle),
+            listOf("gesture", "swipe", "ジェスチャー", "スワイプ"),
+            gesturesEnabled,
+        ) { AppSettings.setGesturesEnabled(!gesturesEnabled) },
+        *AppGestureDirection.entries.map { direction ->
+            val action = gestureActions[direction] ?: AppGestureAction.NONE
+            SettingsSearchEntry(
+                title = direction.localizedTitle(),
+                subtitle = stringResource(R.string.app_gestures_subtitle),
+                keywords = listOf("gesture", "swipe", direction.name.lowercase(), "ジェスチャー", "スワイプ"),
+                valueLabel = action.localizedLabel(),
+                activate = {
+                    val choices = AppGestureAction.entries
+                    val next = (choices.indexOf(action) + 1) % choices.size
+                    AppSettings.setGestureAction(direction, choices[next])
+                },
+            )
+        }.toTypedArray(),
         SettingsSearchEntry(stringResource(R.string.lyrics_furigana), stringResource(R.string.lyrics_furigana_subtitle), listOf("lyrics", "furigana", "ruby", "ふりがな", "ルビ"), showLyricsFurigana) { AppSettings.setShowLyricsFurigana(!showLyricsFurigana) },
         SettingsSearchEntry(stringResource(R.string.lyrics_auto_fit), stringResource(R.string.lyrics_auto_fit_subtitle), listOf("lyrics", "one line", "fit", "歌詞", "一行", "文字サイズ"), autoFitOneLineLyrics) { AppSettings.setAutoFitOneLineLyrics(!autoFitOneLineLyrics) },
         SettingsSearchEntry(stringResource(R.string.lyrics_translation_plamo), stringResource(R.string.lyrics_translation_plamo_subtitle), stringResource(R.string.lyrics_translation_plamo_search_keywords).split(' '), translateLyricsWithPlamo) { AppSettings.setTranslateLyricsWithPlamo(!translateLyricsWithPlamo) },
@@ -2486,6 +2534,7 @@ fun SettingsScreen(
         SettingsSearchEntry(stringResource(R.string.preload_album_art), stringResource(R.string.preload_album_art_subtitle), listOf("artwork", "album art", "preload", "先読み", "アルバムアート"), preloadAlbumArtOnStartup) { AppSettings.setPreloadAlbumArtOnStartup(!preloadAlbumArtOnStartup) },
         SettingsSearchEntry(stringResource(R.string.persistent_local_artwork), stringResource(R.string.persistent_local_artwork_subtitle), listOf("artwork", "album art", "storage", "playlist", "full screen", "画像", "ストレージ", "プレイリスト", "全画面アート"), persistentLocalArtwork) { AppSettings.setPersistentLocalArtwork(!persistentLocalArtwork) },
         SettingsSearchEntry(stringResource(R.string.synced_lyrics), stringResource(R.string.synced_lyrics_subtitle), listOf("lyrics", "歌詞", "同期"), syncedLyrics) { AppSettings.setSyncedLyrics(!syncedLyrics) },
+        SettingsSearchEntry(stringResource(R.string.show_lyrics_source_switcher), stringResource(R.string.show_lyrics_source_switcher_subtitle), listOf("lyrics", "source", "provider", "globe", "歌詞", "ソース", "地球儀"), showLyricsSourceSwitcher) { AppSettings.setShowLyricsSourceSwitcher(!showLyricsSourceSwitcher) },
         SettingsSearchEntry(stringResource(R.string.lyrics_sync_five_second_seek), stringResource(R.string.lyrics_sync_five_second_seek_subtitle), listOf("lyrics", "歌詞", "同期", "5 seconds", "5秒", "skip", "スキップ"), lyricsSyncFiveSecondSeek) { AppSettings.setLyricsSyncFiveSecondSeek(!lyricsSyncFiveSecondSeek) },
         autoShowLyricsSearchEntry(autoShowLyricsOnPlayback),
         SettingsSearchEntry(stringResource(R.string.blur_unfocused_lyrics), stringResource(R.string.blur_unfocused_lyrics_subtitle), listOf("lyrics", "歌詞", "blur", "ぼかし"), lyricsBlur) { AppSettings.setLyricsBlur(!lyricsBlur) },
@@ -2658,6 +2707,7 @@ fun SettingsScreen(
         ) { AppSettings.setLocalSearchFullScreenArtwork(!localSearchFullScreenArtwork) },
         SettingsSearchEntry(stringResource(R.string.keep_collection_artwork_aspect_ratio), stringResource(R.string.keep_collection_artwork_aspect_ratio_subtitle), listOf("playlist", "album", "artwork", "aspect ratio", "cover", "プレイリスト", "アルバム", "アート", "縦横比"), keepCollectionArtworkAspectRatio) { AppSettings.setKeepCollectionArtworkAspectRatio(!keepCollectionArtworkAspectRatio) },
         SettingsSearchEntry(stringResource(R.string.localize_library_collection_count), stringResource(R.string.localize_library_collection_count_subtitle), listOf("library", "collections", "count", "language", "ライブラリ", "コレクション", "件数", "日本語"), localizeLibraryCollectionCount) { AppSettings.setLocalizeLibraryCollectionCount(!localizeLibraryCollectionCount) },
+        SettingsSearchEntry(stringResource(R.string.artist_slash_separators), stringResource(R.string.artist_slash_separators_subtitle), listOf("artist", "split", "slash", "アーティスト", "区切り", "スラッシュ", "/", "／"), artistSlashSeparators) { AppSettings.setArtistSlashSeparators(!artistSlashSeparators) },
         localizeLibraryAllLabelSearchEntry(localizeLibraryAllLabel),
         )
 
@@ -3322,6 +3372,15 @@ fun SettingsScreen(
     var exportStatus by remember { mutableStateOf<String?>(null) }
     var importStatus by remember { mutableStateOf<String?>(null) }
     var confirmImport by remember { mutableStateOf(false) }
+    var showBackupPasswordDialog by remember { mutableStateOf(false) }
+    var showPeriodicBackupSettings by remember { mutableStateOf(false) }
+    var showRestoreHistoryPasswordDialog by remember { mutableStateOf(false) }
+    var backupPasswordInput by remember { mutableStateOf("") }
+    var backupPasswordConfirmation by remember { mutableStateOf("") }
+    var restoreHistoryPassword by remember { mutableStateOf("") }
+    var backupPasswordError by remember { mutableStateOf<String?>(null) }
+    var pendingExportUri by rememberSaveable { mutableStateOf<String?>(null) }
+    var pendingEncryptedBackupUri by remember { mutableStateOf<Uri?>(null) }
     var showPerformanceConfirmation by remember { mutableStateOf(false) }
     var showManageFoldersSheet by remember { mutableStateOf(false) }
     var showHomeExcludedFoldersSheet by remember { mutableStateOf(false) }
@@ -3342,48 +3401,33 @@ fun SettingsScreen(
     // left composition (for example when the system picker recreates the activity).
     // Use the screen owner's lifecycle scope for the work they start.
     val backupScope = lifecycleOwner.lifecycleScope
+    val backupPasswordVault: BackupPasswordVault = viewModel()
 
-    LaunchedEffect(showManageFoldersSheet, showHomeExcludedFoldersSheet) {
-        if (showManageFoldersSheet || showHomeExcludedFoldersSheet) {
-            discoveredFolders = LocalMediaRepository.getAllDiscoveredFolders(context)
+    fun importSummaryMessage(summary: Backup.Summary): String = buildString {
+        append("Restored ")
+        val parts = mutableListOf<String>()
+        if (summary.playlists > 0) parts += "${summary.playlists} ${if (summary.playlists == 1) "playlist" else "playlists"}"
+        if (summary.favorites > 0) parts += "${summary.favorites} ${if (summary.favorites == 1) "favorite" else "favorites"}"
+        if (summary.hasEqualizer) parts += "equalizer"
+        if (summary.queues > 0) parts += context.getString(R.string.saved_queue_count, summary.queues)
+        if (summary.radioFavorites > 0) parts += context.getString(R.string.radio_recording_favorite_count, summary.radioFavorites)
+        parts += "settings"
+        if (summary.months > 0) parts += context.countOfMonths(summary.months)
+        append(parts.joinToString(", "))
+        if (summary.from.isNotBlank()) append(" from ${summary.from}")
+    }
+
+    suspend fun restoreBackup(source: Uri, password: CharArray? = null): Result<Backup.Summary> {
+        val result = Backup.importFrom(context, source, password)
+        importStatus = result.fold(::importSummaryMessage) {
+            context.getString(R.string.import_failed, it.message ?: context.getString(R.string.unknown_error))
         }
+        return result
     }
 
-    val batterySettingsLauncher = rememberLauncherForActivityResult(
-        ActivityResultContracts.StartActivityForResult(),
-    ) {
-        showPerformanceConfirmation = true
-    }
-    var hasAllFiles by remember { mutableStateOf(LocalMediaRepository.hasAllFilesPermission(context)) }
-    val allFilesSettingsLauncher = rememberLauncherForActivityResult(
-        ActivityResultContracts.StartActivityForResult(),
-    ) {
-        hasAllFiles = LocalMediaRepository.hasAllFilesPermission(context)
-    }
-
-    DisposableEffect(lifecycleOwner) {
-        val observer = LifecycleEventObserver { _, event ->
-            if (event == Lifecycle.Event.ON_RESUME) {
-                hasAllFiles = LocalMediaRepository.hasAllFilesPermission(context)
-            }
-        }
-        lifecycleOwner.lifecycle.addObserver(observer)
-        onDispose { lifecycleOwner.lifecycle.removeObserver(observer) }
-    }
-
-    /**
-     * Both halves go through the system document picker rather than a path of
-     * this app's own choosing. That is what puts the file somewhere the user can
-     * actually find it — Drive, Files, a folder they already back up — and it
-     * means neither direction needs a storage permission, since the grant
-     * arrives with the document they picked.
-     */
-    val exportPicker = rememberLauncherForActivityResult(
-        ActivityResultContracts.CreateDocument("application/json"),
-    ) { target ->
-        if (target == null) return@rememberLauncherForActivityResult
-        backupScope.launch {
-            exportStatus = Backup.exportTo(context, target).fold(
+    suspend fun exportBackup(target: Uri, password: CharArray) {
+        try {
+            exportStatus = Backup.exportTo(context, target, password).fold(
                 onSuccess = { summary ->
                     buildString {
                         append("Exported ")
@@ -3402,6 +3446,52 @@ fun SettingsScreen(
                     context.getString(R.string.export_failed, it.message ?: context.getString(R.string.unknown_error))
                 },
             )
+        } finally {
+            password.fill('\u0000')
+        }
+    }
+
+    LaunchedEffect(showManageFoldersSheet, showHomeExcludedFoldersSheet) {
+        if (showManageFoldersSheet || showHomeExcludedFoldersSheet) {
+            discoveredFolders = LocalMediaRepository.getAllDiscoveredFolders(context)
+        }
+    }
+
+    val batterySettingsLauncher = rememberLauncherForActivityResult(
+        ActivityResultContracts.StartActivityForResult(),
+    ) {
+        showPerformanceConfirmation = true
+    }
+    /**
+     * Both halves go through the system document picker rather than a path of
+     * this app's own choosing. That is what puts the file somewhere the user can
+     * actually find it — Drive, Files, a folder they already back up — and it
+     * means neither direction needs a storage permission, since the grant
+     * arrives with the document they picked.
+     */
+    val exportPicker = rememberLauncherForActivityResult(
+        ActivityResultContracts.CreateDocument("application/json"),
+    ) { target ->
+        val password = backupPasswordVault.take()
+        if (target == null) {
+            password?.fill('\u0000')
+            pendingExportUri = null
+            return@rememberLauncherForActivityResult
+        }
+        if (password == null) {
+            // The picker can cause an Activity recreation. If process state was
+            // lost, ask for the password again instead of writing an unprotected
+            // backup or failing after the user has chosen a destination.
+            pendingExportUri = target.toString()
+            backupPasswordInput = ""
+            backupPasswordConfirmation = ""
+            backupPasswordError = null
+            showBackupPasswordDialog = true
+            return@rememberLauncherForActivityResult
+        }
+        pendingExportUri = null
+        backupScope.launch {
+            exportBackup(target, password)
         }
     }
     val importPicker = rememberLauncherForActivityResult(
@@ -3409,26 +3499,14 @@ fun SettingsScreen(
     ) { source ->
         if (source == null) return@rememberLauncherForActivityResult
         backupScope.launch {
-            importStatus = Backup.importFrom(context, source).fold(
-                onSuccess = { summary ->
-                    buildString {
-                        append("Restored ")
-                        val parts = mutableListOf<String>()
-                        if (summary.playlists > 0) parts += "${summary.playlists} ${if (summary.playlists == 1) "playlist" else "playlists"}"
-                        if (summary.favorites > 0) parts += "${summary.favorites} ${if (summary.favorites == 1) "favorite" else "favorites"}"
-                        if (summary.hasEqualizer) parts += "equalizer"
-                        if (summary.queues > 0) parts += context.getString(R.string.saved_queue_count, summary.queues)
-                        if (summary.radioFavorites > 0) parts += context.getString(R.string.radio_recording_favorite_count, summary.radioFavorites)
-                        parts += "settings"
-                        if (summary.months > 0) parts += context.countOfMonths(summary.months)
-                        append(parts.joinToString(", "))
-                        if (summary.from.isNotBlank()) append(" from ${summary.from}")
-                    }
-                },
-                onFailure = {
-                    context.getString(R.string.import_failed, it.message ?: context.getString(R.string.unknown_error))
-                },
-            )
+            if (Backup.requiresListeningPassword(context, source)) {
+                pendingEncryptedBackupUri = source
+                restoreHistoryPassword = ""
+                backupPasswordError = null
+                showRestoreHistoryPasswordDialog = true
+            } else {
+                restoreBackup(source)
+            }
         }
     }
     val m3uPicker = rememberLauncherForActivityResult(
@@ -3707,13 +3785,28 @@ fun SettingsScreen(
             title = stringResource(R.string.export_data),
             subtitle = stringResource(R.string.export_data_subtitle),
             keywords = listOf("backup", "export", "バックアップ", "書き出し"),
-            activate = { exportPicker.launch(Backup.suggestedName()) },
+            activate = {
+                pendingExportUri = null
+                backupPasswordInput = ""
+                backupPasswordConfirmation = ""
+                backupPasswordError = null
+                showBackupPasswordDialog = true
+            },
         ),
         SettingsSearchEntry(
             title = stringResource(R.string.import_data),
             subtitle = stringResource(R.string.import_data_subtitle),
             keywords = listOf("backup", "restore", "import", "バックアップ", "復元"),
             activate = { confirmImport = true },
+        ),
+        SettingsSearchEntry(
+            title = stringResource(R.string.periodic_backup_title),
+            subtitle = stringResource(R.string.periodic_backup_description),
+            keywords = listOf("periodic backup", "sync", "定期バックアップ", "自動バックアップ", "同期"),
+            activate = {
+                settingsSearchQuery = ""
+                showPeriodicBackupSettings = true
+            },
         ),
         SettingsSearchEntry(
             title = stringResource(R.string.replay),
@@ -3749,20 +3842,6 @@ fun SettingsScreen(
             subtitle = stringResource(R.string.home_excluded_folders_subtitle),
             keywords = listOf("home", "recommendations", "exclude folder", "folder filter", "ホーム", "おすすめ", "除外", "フォルダー"),
             activate = { showHomeExcludedFoldersSheet = true },
-        ),
-        SettingsSearchEntry(
-            title = stringResource(R.string.all_files_access),
-            subtitle = stringResource(R.string.all_files_access),
-            keywords = listOf("all files access", "manage external storage", "file permission", "すべてのファイル", "全ファイルアクセス", "タグ編集権限"),
-            valueLabel = if (hasAllFiles) stringResource(R.string.all_files_access_granted) else null,
-            enabled = Build.VERSION.SDK_INT >= Build.VERSION_CODES.R,
-            activate = {
-                runCatching {
-                    allFilesSettingsLauncher.launch(LocalMediaRepository.createAllFilesAccessIntent(context))
-                }.onFailure {
-                    LocalMediaRepository.requestAllFilesAccess(context)
-                }
-            },
         ),
         SettingsSearchEntry(
             title = stringResource(R.string.refresh_rate),
@@ -4228,6 +4307,40 @@ fun SettingsScreen(
             )
             RowDivider()
             SettingsRow(
+                icon = Icons.Rounded.TouchApp,
+                title = stringResource(R.string.app_gestures),
+                subtitle = stringResource(R.string.app_gestures_subtitle),
+                trailing = {
+                    Switch(
+                        checked = gesturesEnabled,
+                        onCheckedChange = AppSettings::setGesturesEnabled,
+                        colors = SwitchDefaults.colors(
+                            checkedTrackColor = MaterialTheme.colorScheme.primary,
+                            checkedBorderColor = MaterialTheme.colorScheme.primary,
+                        ),
+                    )
+                },
+                onClick = { AppSettings.setGesturesEnabled(!gesturesEnabled) },
+            )
+            if (gesturesEnabled) {
+                AppGestureDirection.entries.forEach { direction ->
+                    val action = gestureActions[direction] ?: AppGestureAction.NONE
+                    SettingsRow(
+                        icon = Icons.Rounded.TouchApp,
+                        title = direction.localizedTitle(),
+                        subtitle = stringResource(R.string.app_gestures_subtitle),
+                        trailing = { Text(action.localizedLabel()) },
+                        onClick = {
+                            val choices = AppGestureAction.entries
+                            val next = (choices.indexOf(action) + 1) % choices.size
+                            AppSettings.setGestureAction(direction, choices[next])
+                        },
+                    )
+                    RowDivider()
+                }
+            }
+            RowDivider()
+            SettingsRow(
                 icon = Icons.Rounded.Headphones,
                 title = stringResource(R.string.speaker_playback_allowed),
                 subtitle = stringResource(R.string.speaker_playback_allowed_subtitle),
@@ -4242,6 +4355,34 @@ fun SettingsScreen(
                     )
                 },
                 onClick = { AppSettings.setSpeakerPlaybackAllowed(!speakerPlaybackAllowed) },
+            )
+            RowDivider()
+            SettingsRow(
+                icon = Icons.Rounded.Headphones,
+                title = stringResource(R.string.auto_play_on_headphone_connect),
+                subtitle = stringResource(R.string.auto_play_on_headphone_connect_subtitle),
+                trailing = {
+                    Switch(
+                        checked = autoPlayOnHeadphoneConnect,
+                        onCheckedChange = AppSettings::setAutoPlayOnHeadphoneConnect,
+                        colors = SwitchDefaults.colors(
+                            checkedTrackColor = MaterialTheme.colorScheme.primary,
+                            checkedBorderColor = MaterialTheme.colorScheme.primary,
+                        ),
+                    )
+                },
+                onClick = { AppSettings.setAutoPlayOnHeadphoneConnect(!autoPlayOnHeadphoneConnect) },
+            )
+            RowDivider()
+            SettingsRow(
+                icon = Icons.Rounded.Headphones,
+                title = stringResource(R.string.bluetooth_button_action),
+                subtitle = stringResource(R.string.bluetooth_button_action_subtitle),
+                trailing = { Text(bluetoothButtonAction.localizedLabel()) },
+                onClick = {
+                    val next = (BluetoothButtonAction.entries.indexOf(bluetoothButtonAction) + 1) % BluetoothButtonAction.entries.size
+                    AppSettings.setBluetoothButtonAction(BluetoothButtonAction.entries[next])
+                },
             )
             RowDivider()
             SettingsRow(
@@ -6822,6 +6963,23 @@ fun SettingsScreen(
             RowDivider()
             SettingsRow(
                 icon = Icons.Rounded.Language,
+                title = stringResource(R.string.show_lyrics_source_switcher),
+                subtitle = stringResource(R.string.show_lyrics_source_switcher_subtitle),
+                trailing = {
+                    Switch(
+                        checked = showLyricsSourceSwitcher,
+                        onCheckedChange = AppSettings::setShowLyricsSourceSwitcher,
+                        colors = SwitchDefaults.colors(
+                            checkedTrackColor = MaterialTheme.colorScheme.primary,
+                            checkedBorderColor = MaterialTheme.colorScheme.primary,
+                        ),
+                    )
+                },
+                onClick = { AppSettings.setShowLyricsSourceSwitcher(!showLyricsSourceSwitcher) },
+            )
+            RowDivider()
+            SettingsRow(
+                icon = Icons.Rounded.Language,
                 title = stringResource(R.string.lyrics_translation_plamo),
                 subtitle = stringResource(R.string.lyrics_translation_plamo_subtitle),
                 trailing = {
@@ -7650,6 +7808,7 @@ fun SettingsScreen(
             onlineAlbumArtistArtwork = onlineAlbumArtistArtwork,
             artistDeezerArtworkEnabled = artistDeezerArtworkEnabled,
             playerArtistPageModeLabel = playerArtistPageModeLabel,
+            artistSlashSeparators = artistSlashSeparators,
             showLocalArtistSections = showLocalArtistSections,
             showArtistRecommendations = showArtistRecommendations,
             showArtistOverview = showArtistOverview,
@@ -7667,17 +7826,12 @@ fun SettingsScreen(
             whiteCollectionActionButtons = whiteCollectionActionButtons,
             whiteCollectionPlayButton = whiteCollectionPlayButton,
             hidePlaylistPlayButtonLabel = hidePlaylistPlayButtonLabel,
-            hasAllFiles = hasAllFiles,
             onManageFolders = { showManageFoldersSheet = true },
             onManageHomeExcludedFolders = { showHomeExcludedFoldersSheet = true },
             onChooseMusicFolder = { musicFolderRootPicker.launch(null) },
-            onClearMusicFolder = { AppSettings.setLocalMusicFolderPath("") },
-            onOpenAllFiles = {
-                runCatching {
-                    allFilesSettingsLauncher.launch(LocalMediaRepository.createAllFilesAccessIntent(context))
-                }.onFailure {
-                    LocalMediaRepository.requestAllFilesAccess(context)
-                }
+            onClearMusicFolder = {
+                LocalFolderGrantStore.clear(context)
+                AppSettings.setLocalMusicFolderPath("")
             },
             onOpenArtistSignatureEditor = { showArtistSignatureEditor = true },
             onOpenSpotifyCanvasSetup = { showSpotifyCanvasEditor = true },
@@ -7786,7 +7940,13 @@ fun SettingsScreen(
                 icon = Icons.Rounded.FileUpload,
                 title = stringResource(R.string.export_data),
                 subtitle = exportStatus ?: stringResource(R.string.export_data_subtitle),
-                onClick = { exportPicker.launch(Backup.suggestedName()) },
+                onClick = {
+                    pendingExportUri = null
+                    backupPasswordInput = ""
+                    backupPasswordConfirmation = ""
+                    backupPasswordError = null
+                    showBackupPasswordDialog = true
+                },
             )
             RowDivider()
             SettingsRow(
@@ -7794,6 +7954,13 @@ fun SettingsScreen(
                 title = stringResource(R.string.import_data),
                 subtitle = importStatus ?: stringResource(R.string.import_data_subtitle),
                 onClick = { confirmImport = true },
+            )
+            RowDivider()
+            SettingsRow(
+                icon = Icons.Rounded.FileUpload,
+                title = stringResource(R.string.periodic_backup_title),
+                subtitle = stringResource(R.string.periodic_backup_description),
+                onClick = { showPeriodicBackupSettings = true },
             )
         }
 
@@ -8690,6 +8857,158 @@ fun SettingsScreen(
         onDismiss = { showSpotifyCanvasEditor = false },
     )
 
+    if (showPeriodicBackupSettings) {
+        PeriodicBackupDialog(onDismiss = { showPeriodicBackupSettings = false })
+    }
+
+    if (showBackupPasswordDialog) {
+        AlertDialog(
+            onDismissRequest = {
+                showBackupPasswordDialog = false
+                backupPasswordInput = ""
+                backupPasswordConfirmation = ""
+                backupPasswordError = null
+                pendingExportUri = null
+                backupPasswordVault.clear()
+            },
+            title = { Text(stringResource(R.string.backup_history_password_title)) },
+            text = {
+                Column {
+                    Text(stringResource(R.string.backup_history_password_description))
+                    Spacer(Modifier.height(12.dp))
+                    OutlinedTextField(
+                        value = backupPasswordInput,
+                        onValueChange = { backupPasswordInput = it; backupPasswordError = null },
+                        label = { Text(stringResource(R.string.backup_password)) },
+                        visualTransformation = PasswordVisualTransformation(),
+                        singleLine = true,
+                        modifier = Modifier.fillMaxWidth(),
+                    )
+                    Spacer(Modifier.height(8.dp))
+                    OutlinedTextField(
+                        value = backupPasswordConfirmation,
+                        onValueChange = { backupPasswordConfirmation = it; backupPasswordError = null },
+                        label = { Text(stringResource(R.string.backup_password_confirmation)) },
+                        visualTransformation = PasswordVisualTransformation(),
+                        singleLine = true,
+                        modifier = Modifier.fillMaxWidth(),
+                    )
+                    when {
+                        backupPasswordInput.isNotEmpty() && backupPasswordInput.length < 8 -> Text(
+                            stringResource(R.string.backup_password_too_short),
+                            color = MaterialTheme.colorScheme.error,
+                        )
+                        backupPasswordConfirmation.isNotEmpty() && backupPasswordInput != backupPasswordConfirmation -> Text(
+                            stringResource(R.string.backup_password_mismatch),
+                            color = MaterialTheme.colorScheme.error,
+                        )
+                    }
+                    backupPasswordError?.let { message ->
+                        Spacer(Modifier.height(8.dp))
+                        Text(message, color = MaterialTheme.colorScheme.error)
+                    }
+                }
+            },
+            confirmButton = {
+                TextButton(
+                    enabled = backupPasswordInput.length >= 8 && backupPasswordInput == backupPasswordConfirmation,
+                    onClick = {
+                        val password = backupPasswordInput.toCharArray()
+                        val previouslyChosenTarget = pendingExportUri?.let(Uri::parse)
+                        pendingExportUri = null
+                        backupPasswordInput = ""
+                        backupPasswordConfirmation = ""
+                        backupPasswordError = null
+                        showBackupPasswordDialog = false
+                        if (previouslyChosenTarget != null) {
+                            backupScope.launch { exportBackup(previouslyChosenTarget, password) }
+                        } else {
+                            backupPasswordVault.put(password)
+                            exportPicker.launch(Backup.suggestedName())
+                        }
+                    },
+                ) {
+                    Text(stringResource(R.string.export_data))
+                }
+            },
+            dismissButton = {
+                TextButton(onClick = {
+                    showBackupPasswordDialog = false
+                    backupPasswordInput = ""
+                    backupPasswordConfirmation = ""
+                    backupPasswordError = null
+                    pendingExportUri = null
+                    backupPasswordVault.clear()
+                }) {
+                    Text(stringResource(R.string.cancel))
+                }
+            },
+        )
+    }
+
+    if (showRestoreHistoryPasswordDialog) {
+        AlertDialog(
+            onDismissRequest = {
+                showRestoreHistoryPasswordDialog = false
+                pendingEncryptedBackupUri = null
+                restoreHistoryPassword = ""
+                backupPasswordError = null
+            },
+            title = { Text(stringResource(R.string.restore_history_password_title)) },
+            text = {
+                Column {
+                    Text(stringResource(R.string.restore_history_password_description))
+                    Spacer(Modifier.height(12.dp))
+                    OutlinedTextField(
+                        value = restoreHistoryPassword,
+                        onValueChange = { restoreHistoryPassword = it; backupPasswordError = null },
+                        label = { Text(stringResource(R.string.backup_password)) },
+                        visualTransformation = PasswordVisualTransformation(),
+                        singleLine = true,
+                        modifier = Modifier.fillMaxWidth(),
+                    )
+                    backupPasswordError?.let { message ->
+                        Spacer(Modifier.height(8.dp))
+                        Text(message, color = MaterialTheme.colorScheme.error)
+                    }
+                }
+            },
+            confirmButton = {
+                TextButton(
+                    enabled = restoreHistoryPassword.isNotEmpty() && pendingEncryptedBackupUri != null,
+                    onClick = {
+                        val source = pendingEncryptedBackupUri ?: return@TextButton
+                        val password = restoreHistoryPassword.toCharArray()
+                        backupScope.launch {
+                            val result = restoreBackup(source, password)
+                            password.fill('\u0000')
+                            if (result.isSuccess) {
+                                showRestoreHistoryPasswordDialog = false
+                                pendingEncryptedBackupUri = null
+                                restoreHistoryPassword = ""
+                                backupPasswordError = null
+                            } else {
+                                backupPasswordError = importStatus
+                            }
+                        }
+                    },
+                ) {
+                    Text(stringResource(R.string.restore_backup))
+                }
+            },
+            dismissButton = {
+                TextButton(onClick = {
+                    showRestoreHistoryPasswordDialog = false
+                    pendingEncryptedBackupUri = null
+                    restoreHistoryPassword = ""
+                    backupPasswordError = null
+                }) {
+                    Text(stringResource(R.string.cancel))
+                }
+            },
+        )
+    }
+
     // Asked before the picker opens rather than after a file is chosen: the
     // thing being confirmed is that this device's own history is about to be
     // thrown away, and that is true whichever file gets picked.
@@ -9417,6 +9736,7 @@ private fun LocalMusicSettingsGroup(
     onlineAlbumArtistArtwork: Boolean,
     artistDeezerArtworkEnabled: Boolean,
     playerArtistPageModeLabel: String,
+    artistSlashSeparators: Boolean,
     showLocalArtistSections: Boolean,
     showArtistRecommendations: Boolean,
     showArtistOverview: Boolean,
@@ -9434,12 +9754,10 @@ private fun LocalMusicSettingsGroup(
     whiteCollectionActionButtons: Boolean,
     whiteCollectionPlayButton: Boolean,
     hidePlaylistPlayButtonLabel: Boolean,
-    hasAllFiles: Boolean,
     onManageFolders: () -> Unit,
     onManageHomeExcludedFolders: () -> Unit,
     onChooseMusicFolder: () -> Unit,
     onClearMusicFolder: () -> Unit,
-    onOpenAllFiles: () -> Unit,
     onOpenArtistSignatureEditor: () -> Unit,
     onOpenSpotifyCanvasSetup: () -> Unit,
     onChoosePlayerArtistPageMode: () -> Unit,
@@ -9651,6 +9969,19 @@ SettingsGroup(header = stringResource(R.string.local_music)) {
     )
     RowDivider()
     SettingsRow(
+        icon = Icons.Rounded.Person,
+        title = stringResource(R.string.artist_slash_separators),
+        subtitle = stringResource(R.string.artist_slash_separators_subtitle),
+        trailing = {
+            Switch(
+                checked = artistSlashSeparators,
+                onCheckedChange = AppSettings::setArtistSlashSeparators,
+            )
+        },
+        onClick = { AppSettings.setArtistSlashSeparators(!artistSlashSeparators) },
+    )
+    RowDivider()
+    SettingsRow(
         icon = Icons.Rounded.Album,
         title = stringResource(R.string.show_local_artist_sections),
         subtitle = stringResource(R.string.show_local_artist_sections_subtitle),
@@ -9858,30 +10189,6 @@ SettingsGroup(header = stringResource(R.string.local_music)) {
         onClick = { AppSettings.setOnlineAlbumArtistArtwork(!onlineAlbumArtistArtwork) },
     )
     RowDivider()
-    if (android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.R) {
-        SettingsRow(
-            icon = Icons.Rounded.FolderSpecial,
-            title = stringResource(R.string.all_files_access),
-            subtitle = if (hasAllFiles) {
-                "Granted — tags and lyrics are edited directly without prompts"
-            } else {
-                "Grant access to edit tags and embed lyrics without system prompts"
-            },
-            trailing = {
-                if (hasAllFiles) {
-                    Icon(
-                        Icons.Rounded.CheckCircle,
-                        contentDescription = null,
-                        tint = MaterialTheme.colorScheme.primary,
-                    )
-                } else {
-                    Chevron()
-                }
-            },
-            onClick = onOpenAllFiles,
-        )
-        RowDivider()
-    }
     SettingsRow(
         icon = Icons.Rounded.FilterAlt,
         title = stringResource(R.string.filter_non_music_audio),
@@ -10400,6 +10707,41 @@ private fun TransportSideAction.localizedLabel(): String = stringResource(
         TransportSideAction.QUEUE -> R.string.quick_action_queue
         TransportSideAction.PLAYLISTS -> R.string.quick_action_playlists
         TransportSideAction.SEARCH -> R.string.quick_action_search
+    },
+)
+
+@Composable
+private fun BluetoothButtonAction.localizedLabel(): String = stringResource(
+    when (this) {
+        BluetoothButtonAction.PLAY_PAUSE -> R.string.bluetooth_button_play_pause
+        BluetoothButtonAction.NEXT_TRACK -> R.string.bluetooth_button_next
+        BluetoothButtonAction.PREVIOUS_TRACK -> R.string.bluetooth_button_previous
+        BluetoothButtonAction.TOGGLE_SHUFFLE -> R.string.bluetooth_button_shuffle
+        BluetoothButtonAction.TOGGLE_FAVORITE -> R.string.bluetooth_button_favorite
+    },
+)
+
+@Composable
+private fun AppGestureDirection.localizedTitle(): String = stringResource(
+    when (this) {
+        AppGestureDirection.LEFT -> R.string.gesture_edge_left
+        AppGestureDirection.RIGHT -> R.string.gesture_edge_right
+        AppGestureDirection.UP -> R.string.gesture_edge_up
+        AppGestureDirection.DOWN -> R.string.gesture_edge_down
+    },
+)
+
+@Composable
+private fun AppGestureAction.localizedLabel(): String = stringResource(
+    when (this) {
+        AppGestureAction.NONE -> R.string.gesture_action_none
+        AppGestureAction.PAGE_TOP -> R.string.gesture_action_page_top
+        AppGestureAction.PAGE_BOTTOM -> R.string.gesture_action_page_bottom
+        AppGestureAction.OPEN_SETTINGS -> R.string.gesture_action_settings
+        AppGestureAction.OPEN_SEARCH -> R.string.gesture_action_search
+        AppGestureAction.PLAY_PAUSE -> R.string.gesture_action_play_pause
+        AppGestureAction.NEXT_TRACK -> R.string.gesture_action_next
+        AppGestureAction.PREVIOUS_TRACK -> R.string.gesture_action_previous
     },
 )
 

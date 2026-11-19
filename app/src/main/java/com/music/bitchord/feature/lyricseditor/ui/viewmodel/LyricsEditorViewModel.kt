@@ -12,6 +12,8 @@ import com.music.bitchord.data.settings.AppSettings
 import com.music.bitchord.data.lyrics.LyricsStrictness
 import com.music.bitchord.data.lyrics.providers.NativeLyricsProviders
 import com.music.bitchord.feature.lyricseditor.data.LocalLyricsManager
+import com.music.bitchord.feature.lyricseditor.data.LyricsHistoryRevision
+import com.music.bitchord.feature.lyricseditor.data.LyricsHistoryStore
 import com.music.bitchord.feature.lyricseditor.domain.model.LyricsEditorSource
 import com.music.bitchord.feature.lyricseditor.domain.model.LyricsMatchScorer
 import com.music.bitchord.feature.lyricseditor.domain.model.LyricsSearchResultItem
@@ -23,8 +25,10 @@ import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asSharedFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.Job
+import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.withContext
 
 enum class AutoSyncStage { FetchingLyrics, DownloadingModel, DecodingAudio, Aligning }
 data class AutoSyncProgress(val stage: AutoSyncStage, val percent: Int? = null)
@@ -54,6 +58,9 @@ class LyricsEditorViewModel(app: Application) : AndroidViewModel(app) {
 
     private val _autoSyncProgress = MutableStateFlow<AutoSyncProgress?>(null)
     val autoSyncProgress: StateFlow<AutoSyncProgress?> = _autoSyncProgress.asStateFlow()
+
+    private val _history = MutableStateFlow<List<LyricsHistoryRevision>>(emptyList())
+    val history: StateFlow<List<LyricsHistoryRevision>> = _history.asStateFlow()
 
     private val _saveResult = MutableSharedFlow<Boolean>()
     val saveResult: SharedFlow<Boolean> = _saveResult.asSharedFlow()
@@ -100,9 +107,16 @@ class LyricsEditorViewModel(app: Application) : AndroidViewModel(app) {
                 val text = LocalLyricsManager.readLyrics(getApplication(), song, source)
                 originalLyricsMap[source] = text
                 editedLyricsMap[source] = text
+                if (text.isNotBlank()) {
+                    withContext(Dispatchers.IO) { LyricsHistoryStore.record(getApplication(), song, source, text) }
+                }
             }
 
+            if (activeSong?.videoId != song.videoId) return@launch
             _currentText.value = editedLyricsMap[_selectedSource.value].orEmpty()
+            _history.value = withContext(Dispatchers.IO) {
+                LyricsHistoryStore.read(getApplication(), song, _selectedSource.value)
+            }
             _isLoading.value = false
         }
     }
@@ -112,6 +126,17 @@ class LyricsEditorViewModel(app: Application) : AndroidViewModel(app) {
         editedLyricsMap[_selectedSource.value] = _currentText.value
         _selectedSource.value = source
         _currentText.value = editedLyricsMap[source].orEmpty()
+        val song = activeSong ?: return
+        viewModelScope.launch(Dispatchers.IO) {
+            val revisions = LyricsHistoryStore.read(getApplication(), song, source)
+            _history.value = revisions
+        }
+    }
+
+    /** Copies a previous saved revision into the editor; it still needs an explicit save. */
+    fun restoreHistoryRevision(revision: LyricsHistoryRevision) {
+        _currentText.value = revision.text
+        editedLyricsMap[_selectedSource.value] = revision.text
     }
 
     fun updateText(text: String) {
@@ -358,6 +383,10 @@ class LyricsEditorViewModel(app: Application) : AndroidViewModel(app) {
 
             if (success) {
                 originalLyricsMap[currentSource] = lyricsToSave
+                withContext(Dispatchers.IO) {
+                    LyricsHistoryStore.record(getApplication(), song, currentSource, lyricsToSave)
+                    _history.value = LyricsHistoryStore.read(getApplication(), song, currentSource)
+                }
             }
 
             _isSaving.value = false

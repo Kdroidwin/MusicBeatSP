@@ -193,6 +193,8 @@ class MainViewModel(app: Application) : AndroidViewModel(app) {
     private val _localSongs = MutableStateFlow<UiState<List<Song>>>(UiState.Loading)
     val localSongs: StateFlow<UiState<List<Song>>> = _localSongs.asStateFlow()
     private val localSongMetadataOverrides = mutableMapOf<String, Song>()
+    private val _localSongMetadataVersion = MutableStateFlow(0L)
+    val localSongMetadataVersion: StateFlow<Long> = _localSongMetadataVersion.asStateFlow()
     private val localMusicLoadGeneration = AtomicLong(0L)
 
     private val _localArtworkPreload = MutableStateFlow(LocalArtworkPreloadState())
@@ -319,6 +321,15 @@ class MainViewModel(app: Application) : AndroidViewModel(app) {
     private var lyricsFor: LyricsLoadKey? = null
     private var lastSong: Song? = null
     private var lyricsRequestGeneration = 0L
+    private data class ActiveLyricsRequest(
+        val videoId: String,
+        val title: String,
+        val artist: String,
+        val durationMs: Long,
+        val album: String?,
+    )
+    private var activeLyricsRequest: ActiveLyricsRequest? = null
+    private var pendingLyricsProvider: LyricsSource? = null
 
     /**
      * Called as the playing track changes; cheap no-op when already loaded.
@@ -340,6 +351,7 @@ class MainViewModel(app: Application) : AndroidViewModel(app) {
         song: Song? = null,
         force: Boolean = false,
     ) {
+        if (activeLyricsRequest?.videoId != videoId) pendingLyricsProvider = null
         lastSong = song ?: Song(
             videoId = videoId,
             title = title,
@@ -348,6 +360,7 @@ class MainViewModel(app: Application) : AndroidViewModel(app) {
             albumName = album,
             localUri = localUri,
         )
+        activeLyricsRequest = ActiveLyricsRequest(videoId, title, artist, durationMs, album)
         _lyricsVideoId.value = videoId
         val actualVideoId = song?.videoId ?: videoId
         val isYoutubePlayback = actualVideoId.length == 11 &&
@@ -369,6 +382,17 @@ class MainViewModel(app: Application) : AndroidViewModel(app) {
             prioritizeSyllableSync = prioritizeSyllableSync,
             preferEmbeddedLocalLyrics = preferEmbeddedLocalLyrics,
         )
+        if (durationMs > 0L) pendingLyricsProvider?.let { pending ->
+            pendingLyricsProvider = null
+            if (pending in AppSettings.lyricsSources.value) {
+                // Mark this track/settings combination before dispatching the
+                // manual lookup so the playback effect cannot immediately
+                // replace the selected provider with automatic lookup.
+                lyricsFor = key
+                selectLyricsProvider(pending)
+                return
+            }
+        }
         if (!force && lyricsFor == key) return
         val requestGeneration = ++lyricsRequestGeneration
         lyricsFor = key
@@ -497,6 +521,51 @@ class MainViewModel(app: Application) : AndroidViewModel(app) {
                     }
                 }
             }
+        }
+    }
+
+    /** Fetches only the selected configured provider for the currently playing track. */
+    fun selectLyricsProvider(source: LyricsSource) {
+        val request = activeLyricsRequest ?: return
+        if (source !in AppSettings.lyricsSources.value) return
+        lyricsJob?.cancel()
+        val generation = ++lyricsRequestGeneration
+        _lyrics.value = null
+        _lyricsSource.value = null
+        _lyricsChecked.value = false
+        _lyricsVideoId.value = request.videoId
+        if (request.durationMs <= 0L) {
+            pendingLyricsProvider = source
+            lyricsFor = null
+            return
+        }
+        pendingLyricsProvider = null
+
+        lyricsJob = viewModelScope.launch {
+            val found = try {
+                LyricsRepository.fetch(
+                    source = source,
+                    videoId = request.videoId,
+                    title = request.title,
+                    artist = request.artist,
+                    durationMs = request.durationMs,
+                    album = request.album,
+                )?.takeIf { lines ->
+                    val lastTimestamp = lines.maxOfOrNull { it.timeMs }
+                    lastTimestamp == null || lastTimestamp <= request.durationMs + 20_000L
+                }?.let { lines ->
+                    LyricsRepository.applySourceDisplayOptions(source, lines, request.title, request.artist)
+                }
+            } catch (cancelled: CancellationException) {
+                throw cancelled
+            } catch (error: Exception) {
+                TrackLog.w("Lyrics", "manual source lookup failed for ${source.id}", error)
+                null
+            }
+            if (generation != lyricsRequestGeneration || activeLyricsRequest?.videoId != request.videoId) return@launch
+            _lyrics.value = found?.withBackgroundVocals()
+            _lyricsSource.value = source.takeIf { !found.isNullOrEmpty() }
+            _lyricsChecked.value = true
         }
     }
 
@@ -2809,16 +2878,36 @@ class MainViewModel(app: Application) : AndroidViewModel(app) {
         val keys = localSongMetadataKeys(updatedSong)
         if (keys.isEmpty()) return
         keys.forEach { localSongMetadataOverrides[it] = updatedSong }
-        val current = _localSongs.value as? UiState.Success ?: return
-        val refreshed = current.data.map { song ->
-            if (localSongMetadataKeys(song).any(keys::contains)) updatedSong.copy(
-                videoId = song.videoId,
-                localUri = song.localUri,
-                localPath = song.localPath,
-            ) else song
+        _localSongMetadataVersion.value += 1L
+        val current = _localSongs.value as? UiState.Success
+        if (current != null) {
+            val refreshed = current.data.map { song ->
+                if (localSongMetadataKeys(song).any(keys::contains)) updatedSong.copy(
+                    videoId = song.videoId,
+                    localUri = song.localUri,
+                    localPath = song.localPath,
+                ) else song
+            }
+            if (refreshed != current.data) _localSongs.value = UiState.Success(refreshed)
         }
-        if (refreshed != current.data) _localSongs.value = UiState.Success(refreshed)
+        // Local detail pages keep their own song snapshot. Refresh it alongside
+        // the library so edited artist tags appear immediately in open album,
+        // playlist, and artist pages while MediaStore catches up.
+        _detailStack.value = _detailStack.value.map { page ->
+            val pageSongs = (page.songs as? UiState.Success)?.data ?: return@map page
+            val refreshedSongs = pageSongs.map { song ->
+                if (localSongMetadataKeys(song).any(keys::contains)) updatedSong.copy(
+                    videoId = song.videoId,
+                    localUri = song.localUri,
+                    localPath = song.localPath,
+                ) else song
+            }
+            if (refreshedSongs == pageSongs) page else page.copy(songs = UiState.Success(refreshedSongs))
+        }
     }
+
+    /** Applies an in-memory tag edit to the media-session copy used by the player UI. */
+    fun applyLocalSongMetadata(song: Song): Song = applyLocalSongMetadataOverride(song)
 
     /** Refreshes a local artist detail after a bulk artist-tag edit. */
     fun renameLocalArtistPage(previousName: String, newName: String) {

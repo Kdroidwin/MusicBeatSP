@@ -1,6 +1,7 @@
 package com.music.bitchord.feature.tageditor.data
 
 import android.content.Context
+import android.content.ContentUris
 import android.Manifest
 import android.content.pm.PackageManager
 import android.graphics.Bitmap
@@ -8,7 +9,6 @@ import android.graphics.BitmapFactory
 import android.media.MediaScannerConnection
 import android.net.Uri
 import android.os.Build
-import android.os.Environment
 import android.os.ParcelFileDescriptor
 import android.provider.MediaStore
 import android.system.Os
@@ -18,6 +18,9 @@ import androidx.core.content.ContextCompat
 import com.kyant.taglib.Picture
 import com.kyant.taglib.TagLib
 import com.music.bitchord.data.model.Song
+import com.music.bitchord.feature.localmusic.data.LocalFolderGrantStore
+import com.music.bitchord.feature.localmusic.data.LocalFolderRootResolver
+import androidx.documentfile.provider.DocumentFile
 import com.music.bitchord.feature.tageditor.domain.model.SongTagData
 import com.music.bitchord.feature.tageditor.domain.model.TagField
 import kotlinx.coroutines.Dispatchers
@@ -309,6 +312,44 @@ object TagLibWriter {
             }
         }
 
+    /** URI suitable for a per-item MediaStore approval or an existing persisted SAF grant. */
+    fun permissionUriForSong(context: Context, song: Song): Uri? {
+        val original = getUriForSong(song)
+        if (original?.scheme == "content") return original
+        val path = original?.path ?: song.localPath ?: return original
+        val mediaUri = runCatching {
+            context.contentResolver.query(
+                MediaStore.Audio.Media.EXTERNAL_CONTENT_URI,
+                arrayOf(MediaStore.Audio.Media._ID),
+                "${MediaStore.Audio.Media.DATA} = ?",
+                arrayOf(File(path).canonicalPath),
+                null,
+            )?.use { cursor ->
+                if (cursor.moveToFirst()) {
+                    ContentUris.withAppendedId(
+                        MediaStore.Audio.Media.EXTERNAL_CONTENT_URI,
+                        cursor.getLong(0),
+                    )
+                } else null
+            }
+        }.getOrNull()
+        return mediaUri ?: resolveSafDocument(context, path)
+    }
+
+    private fun resolveSafDocument(context: Context, absolutePath: String): Uri? = runCatching {
+        val treeUri = LocalFolderGrantStore.get(context) ?: return null
+        val rootPath = LocalFolderRootResolver.resolve(context, treeUri) ?: return null
+        val root = File(rootPath).canonicalPath.trimEnd(File.separatorChar)
+        val target = File(absolutePath).canonicalPath
+        if (!target.startsWith(root + File.separator)) return null
+        val relative = target.removePrefix(root + File.separator)
+        var document = DocumentFile.fromTreeUri(context, treeUri) ?: return null
+        for (segment in relative.split(File.separatorChar).filter(String::isNotBlank)) {
+            document = document.findFile(segment) ?: return null
+        }
+        document.uri
+    }.getOrNull()
+
     private fun getUriForSong(song: Song): Uri? {
         val raw = song.localUri ?: song.videoId
         return when {
@@ -319,14 +360,12 @@ object TagLibWriter {
     }
 
     private fun openFileDescriptor(context: Context, song: Song, mode: String): ParcelFileDescriptor? {
-        val uri = getUriForSong(song)
+        val uri = permissionUriForSong(context, song) ?: getUriForSong(song)
         val writing = mode.contains("w")
         val localFile = song.localPath?.let(::File)?.takeIf(File::isFile)
 
-        // With explicit broad file access, a real filesystem descriptor is
-        // more reliable for TagLib than some MediaStore proxy descriptors.
-        // Keep scoped-storage writes on the URI path so Android's per-item
-        // approval and provider checks remain in force.
+        // Direct paths are restricted to app-owned files. Shared media uses
+        // the MediaStore approval or persisted SAF document grant resolved above.
         if (uri?.scheme == "file") {
             val file = File(uri.path ?: return null)
             val allowed = if (writing) {
@@ -379,7 +418,6 @@ object TagLibWriter {
     private fun canReadDirectFile(context: Context, file: File): Boolean {
         if (!file.isFile) return false
         if (isAppSpecificFile(context, file)) return true
-        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.R && Environment.isExternalStorageManager()) return true
         val permission = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
             Manifest.permission.READ_MEDIA_AUDIO
         } else {
@@ -391,9 +429,7 @@ object TagLibWriter {
     private fun canWriteDirectFile(context: Context, file: File): Boolean {
         if (!file.isFile) return false
         if (isAppSpecificFile(context, file)) return true
-        return if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.R) {
-            Environment.isExternalStorageManager()
-        } else if (Build.VERSION.SDK_INT <= Build.VERSION_CODES.P) {
+        return if (Build.VERSION.SDK_INT <= Build.VERSION_CODES.P) {
             ContextCompat.checkSelfPermission(
                 context,
                 Manifest.permission.WRITE_EXTERNAL_STORAGE,

@@ -45,7 +45,7 @@ class M3uImportException(val reason: M3uImportFailure) : Exception()
 object M3uPlaylistImporter {
     private const val MAX_M3U_BYTES = 16 * 1024 * 1024
     private val supportedAudioExtensions = setOf(
-        "mp3", "m4a", "m4b", "flac", "alac", "wav", "ogg", "opus", "aac", "webm", "mp4",
+        "mp3", "m4a", "m4b", "flac", "alac", "wav", "ogg", "opus", "aac", "webm", "mp4", "mid", "midi",
     )
 
     suspend fun prepare(context: Context, playlistUri: Uri, localSongs: List<Song>): PreparedM3uImport =

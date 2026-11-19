@@ -29,6 +29,7 @@ import com.music.bitchord.data.sources.SourceRegistry
 import com.music.bitchord.data.sources.RemoteServerArtworkFetcher
 import com.music.bitchord.data.stats.ArtistFacts
 import com.music.bitchord.data.stats.ListeningStats
+import com.music.bitchord.data.stats.PeriodicBackupScheduler
 import com.music.bitchord.download.Downloads
 import com.music.bitchord.feature.artistimage.coil.ArtistImageFetcher
 import com.music.bitchord.feature.artistimage.coil.ArtistImageKeyer
@@ -97,6 +98,8 @@ class BitChordApplication : Application(), SingletonImageLoader.Factory {
         // PlaybackService because the Replay page reads it from the UI side and
         // both live in this process — one owner, one directory.
         ListeningStats.init(this)
+        // Rebuild the best-effort WorkManager schedules after process start.
+        PeriodicBackupScheduler.reconcile(this)
         // After AppSettings, whose switch decides whether half of it runs.
         ArtistFacts.init(this)
         // One cache directory can only be opened once per process, and

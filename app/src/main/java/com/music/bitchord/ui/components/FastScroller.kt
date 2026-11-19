@@ -58,6 +58,7 @@ fun FastScroller(
     headerCount: Int = 1,
     minItemsForFastScroll: Int = 6,
 ) {
+    ObserveGestureScroll(listState)
     FastScrollerCore(
         itemCount = itemCount,
         scrollProgress = {
@@ -137,6 +138,7 @@ fun FastScroller(
     headerCount: Int = 1,
     minItemsForFastScroll: Int = 6,
 ) {
+    ObserveGestureScroll(gridState)
     FastScrollerCore(
         itemCount = itemCount,
         scrollProgress = {

@@ -18,6 +18,7 @@ import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.platform.LocalContext
 import com.music.bitchord.R
 import com.music.bitchord.feature.localmusic.data.LocalFolderRootResolver
+import com.music.bitchord.feature.localmusic.data.LocalFolderGrantStore
 
 @Composable
 internal fun rememberMusicFolderRootPicker(
@@ -26,12 +27,13 @@ internal fun rememberMusicFolderRootPicker(
     val context = LocalContext.current
     return rememberLauncherForActivityResult(ActivityResultContracts.OpenDocumentTree()) { treeUri ->
         if (treeUri != null) {
-            runCatching {
+            val persistedGrant = runCatching {
                 context.contentResolver.takePersistableUriPermission(
                     treeUri,
-                    Intent.FLAG_GRANT_READ_URI_PERMISSION,
+                    Intent.FLAG_GRANT_READ_URI_PERMISSION or Intent.FLAG_GRANT_WRITE_URI_PERMISSION,
                 )
-            }
+            }.isSuccess
+            if (persistedGrant) LocalFolderGrantStore.set(context, treeUri)
             val path = LocalFolderRootResolver.resolve(context, treeUri)
             if (path != null) {
                 onFolderSelected(path)

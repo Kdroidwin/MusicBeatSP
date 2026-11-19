@@ -342,6 +342,7 @@ fun LocalMusicScreen(
     var quickSearchQuery by rememberSaveable(initialTab) { mutableStateOf("") }
     val visibleLocalLibraryTabs by AppSettings.visibleLocalLibraryTabs.collectAsStateWithLifecycle()
     val localLibraryTabOrder by AppSettings.localLibraryTabOrder.collectAsStateWithLifecycle()
+    val artistSlashSeparators by AppSettings.artistSlashSeparators.collectAsStateWithLifecycle()
     val displayedLocalTabs = remember(visibleLocalLibraryTabs, localLibraryTabOrder, isDownloads, showTabRow) {
         val allowedTabs = if (showTabRow) visibleLocalLibraryTabs else LocalLibraryTab.entries.toSet()
         localLibraryTabOrder
@@ -611,9 +612,7 @@ fun LocalMusicScreen(
 
     fun saveBulkArtistTags(targets: List<Song>) {
         val mediaUris = targets.mapNotNull { song ->
-            (song.localUri ?: song.videoId)
-                .takeIf { it.startsWith("content://") }
-                ?.let { runCatching { Uri.parse(it) }.getOrNull() }
+            TagLibWriter.permissionUriForSong(context, song)
                 ?.takeIf { it.authority == MediaStore.AUTHORITY }
         }.distinct()
         val needsApproval = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.R) {
@@ -1226,7 +1225,7 @@ fun LocalMusicScreen(
 
                 key == "tab:$LOCAL_TAB_ARTISTS" -> {
                     val unknownArtistStr = stringResource(R.string.unknown_artist)
-                    val artists = remember(sortedSongs, unknownArtistStr, artistSort) {
+                    val artists = remember(sortedSongs, unknownArtistStr, artistSort, artistSlashSeparators) {
                         val grouped = ArtistSplitter.groupSongsByArtist(sortedSongs, unknownArtistStr)
                         when (artistSort) {
                             ArtistSort.MOST_SONGS -> grouped.sortedWith(

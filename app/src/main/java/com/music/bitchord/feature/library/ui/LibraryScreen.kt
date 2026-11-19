@@ -566,9 +566,8 @@ fun LibraryScreen(
 
     fun saveBulkTags(targets: List<Song>) {
         val contentUris = targets.mapNotNull { song ->
-            (song.localUri ?: song.videoId)
-                .takeIf { it.startsWith("content://") }
-                ?.let { runCatching { Uri.parse(it) }.getOrNull() }
+            TagLibWriter.permissionUriForSong(context, song)
+                ?.takeIf { it.authority == MediaStore.AUTHORITY }
         }.distinct()
         val needsApproval = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.R) {
             contentUris.filter { uri ->
@@ -795,9 +794,7 @@ fun LibraryScreen(
 
     fun writeSelectedArtwork(targets: List<Song>, artwork: TagLibWriter.PreparedArtwork) {
         val mediaStoreUris = targets.mapNotNull { song ->
-            val rawUri = song.localUri ?: song.videoId
-            runCatching { Uri.parse(rawUri) }
-                .getOrNull()
+            TagLibWriter.permissionUriForSong(context, song)
                 ?.takeIf { it.scheme == "content" && it.authority == MediaStore.AUTHORITY }
         }.distinct()
         val needsApproval = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.R) {
