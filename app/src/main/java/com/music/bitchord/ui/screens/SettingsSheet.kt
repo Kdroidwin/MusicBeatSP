@@ -38,6 +38,7 @@ import androidx.compose.material.icons.automirrored.rounded.QueueMusic
 import androidx.compose.material.icons.automirrored.rounded.VolumeOff
 import androidx.compose.material.icons.automirrored.rounded.VolumeUp
 import androidx.compose.material.icons.rounded.Album
+import androidx.compose.material.icons.rounded.Alarm
 import androidx.compose.material.icons.rounded.AudioFile
 import androidx.compose.material.icons.rounded.ArrowDownward
 import androidx.compose.material.icons.rounded.ArrowUpward
@@ -86,6 +87,7 @@ import androidx.compose.material.icons.rounded.PlaylistPlay
 import androidx.compose.material.icons.rounded.Pause
 import androidx.compose.material.icons.rounded.PlayArrow
 import androidx.compose.material.icons.rounded.Radio
+import androidx.compose.material.icons.rounded.Repeat
 import androidx.compose.material.icons.rounded.Refresh
 import androidx.compose.material.icons.rounded.Search
 import androidx.compose.material.icons.rounded.Settings
@@ -238,6 +240,7 @@ import com.music.bitchord.data.settings.PillMotionStyle
 import com.music.bitchord.data.stats.Backup
 import com.music.bitchord.external.ExternalMedia
 import com.music.bitchord.feature.localmusic.data.LocalPlaylistStore
+import com.music.bitchord.playback.ScheduledPlaylistScheduler
 import com.music.bitchord.ui.components.PlaylistOrderDialog
 import com.music.bitchord.feature.localmusic.data.M3uImportException
 import com.music.bitchord.feature.localmusic.data.M3uImportFailure
@@ -1717,6 +1720,9 @@ fun SettingsScreen(
     val skipSilence by AppSettings.skipSilence.collectAsStateWithLifecycle()
     val audioOffloadEnabled by AppSettings.audioOffloadEnabled.collectAsStateWithLifecycle()
     val crossfadeDurationMs by AppSettings.crossfadeDurationMs.collectAsStateWithLifecycle()
+    val abRepeatEnabled by AppSettings.abRepeatEnabled.collectAsStateWithLifecycle()
+    val scheduledPlaylistSpec by ScheduledPlaylistScheduler.spec.collectAsStateWithLifecycle()
+    val localPlaylists by LocalPlaylistStore.playlists.collectAsStateWithLifecycle()
     val crossfadeOptions = AppSettings.crossfadeDurationOptionsMs
     val crossfadeSliderIndex = AppSettings.crossfadeSliderIndex(crossfadeDurationMs)
     val smartFade by AppSettings.smartFadeEnabled.collectAsStateWithLifecycle()
@@ -2099,6 +2105,7 @@ fun SettingsScreen(
     var playerInkHexDraft by rememberSaveable { mutableStateOf("#FFFFFF") }
     var showPerformanceWarning by remember { mutableStateOf(false) }
     var showEqualizerSheet by remember { mutableStateOf(false) }
+    var showScheduledPlaylistDialog by rememberSaveable { mutableStateOf(false) }
     var showAutomixPerformanceSheet by rememberSaveable { mutableStateOf(false) }
     var showCdRippingSheet by rememberSaveable { mutableStateOf(false) }
     fun openPlayerInkPicker(group: PlayerInkGroup) {
@@ -3157,6 +3164,22 @@ fun SettingsScreen(
             audioOffloadEnabled = audioOffloadEnabled,
             darPcmUpsamplingEnabled = darPcmUpsamplingEnabled,
         ) +
+        listOf(
+            SettingsSearchEntry(
+                title = stringResource(R.string.ab_repeat),
+                subtitle = stringResource(R.string.ab_repeat_subtitle),
+                keywords = listOf("A-B", "AB repeat", "loop section", "リピート", "区間リピート", "A-Bリピート"),
+                checked = abRepeatEnabled,
+                activate = { AppSettings.setAbRepeatEnabled(!abRepeatEnabled) },
+            ),
+            SettingsSearchEntry(
+                title = stringResource(R.string.scheduled_playlist),
+                subtitle = stringResource(R.string.scheduled_playlist_subtitle),
+                keywords = listOf("playlist", "schedule", "time", "alarm", "自動再生", "時刻", "プレイリスト"),
+                checked = scheduledPlaylistSpec.enabled,
+                activate = { showScheduledPlaylistDialog = true },
+            ),
+        ) +
         widgetOpacitySearchEntry(widgetOpacity) +
         navigationTabSettingsSearchEntries(
             mainTabOrder = mainTabOrder,
@@ -3380,8 +3403,6 @@ fun SettingsScreen(
     val scrobbleDelaySeconds by AppSettings.scrobbleDelaySeconds.collectAsStateWithLifecycle()
     val listenBrainzEnabled by AppSettings.listenBrainzEnabled.collectAsStateWithLifecycle()
     val listenBrainzToken by AppSettings.listenBrainzToken.collectAsStateWithLifecycle()
-
-    val localPlaylists by LocalPlaylistStore.playlists.collectAsStateWithLifecycle()
 
     // What the last export or import did, shown on the row that did it rather
     // than as a toast: a backup is the one action here whose outcome nobody can
@@ -4167,6 +4188,44 @@ fun SettingsScreen(
         val originalDeveloperLabel = stringResource(R.string.original_developer)
 
         SettingsGroup(header = stringResource(R.string.playback)) {
+            SettingsRow(
+                icon = Icons.Rounded.Repeat,
+                title = stringResource(R.string.ab_repeat),
+                subtitle = stringResource(R.string.ab_repeat_subtitle),
+                trailing = {
+                    Switch(
+                        checked = abRepeatEnabled,
+                        onCheckedChange = AppSettings::setAbRepeatEnabled,
+                        colors = SwitchDefaults.colors(
+                            checkedTrackColor = MaterialTheme.colorScheme.primary,
+                            checkedBorderColor = MaterialTheme.colorScheme.primary,
+                        ),
+                    )
+                },
+                onClick = { AppSettings.setAbRepeatEnabled(!abRepeatEnabled) },
+            )
+            RowDivider()
+            val scheduledPlaylistName = localPlaylists.firstOrNull { it.id == scheduledPlaylistSpec.playlistId }?.name
+            SettingsRow(
+                icon = Icons.Rounded.Alarm,
+                title = stringResource(R.string.scheduled_playlist),
+                subtitle = buildString {
+                    append(stringResource(R.string.scheduled_playlist_subtitle))
+                    scheduledPlaylistName?.let { append(" · ").append(it) }
+                    append(" · %02d:%02d".format(scheduledPlaylistSpec.hour, scheduledPlaylistSpec.minute))
+                },
+                trailing = {
+                    Switch(
+                        checked = scheduledPlaylistSpec.enabled,
+                        onCheckedChange = { enabled ->
+                            if (enabled) showScheduledPlaylistDialog = true
+                            else ScheduledPlaylistScheduler.save(context, scheduledPlaylistSpec.copy(enabled = false))
+                        },
+                    )
+                },
+                onClick = { showScheduledPlaylistDialog = true },
+            )
+            RowDivider()
             SettingsRow(
                 icon = Icons.Rounded.Headphones,
                 title = stringResource(R.string.external_media_control),
@@ -9471,6 +9530,11 @@ fun SettingsScreen(
                 },
             )
         }
+
+    }
+
+    if (showScheduledPlaylistDialog) {
+        ScheduledPlaylistSettingsDialog(onDismiss = { showScheduledPlaylistDialog = false })
     }
 
     if (showCdRippingSheet) {

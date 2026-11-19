@@ -77,6 +77,8 @@ import com.music.bitchord.MainActivity
 import com.music.bitchord.R
 import com.music.bitchord.data.LocalMediaRepository
 import com.music.bitchord.data.YtMusicRepository
+import com.music.bitchord.feature.localmusic.data.LocalPlaylistStore
+import com.music.bitchord.feature.localmusic.data.resolvePlaylistSongs
 import com.music.bitchord.data.lyrics.EmbeddedLyrics
 import com.music.bitchord.data.lyrics.LyricLine
 import com.music.bitchord.data.lyrics.LyricsRepository
@@ -176,6 +178,10 @@ const val ACTION_TOGGLE_AUTOPLAY = "com.music.bitchord.action.TOGGLE_AUTOPLAY"
 const val ACTION_TOGGLE_SHUFFLE = "com.music.bitchord.action.TOGGLE_SHUFFLE"
 /** Session command used by Wear OS to toggle the current track's favorite state. */
 const val ACTION_TOGGLE_FAVORITE = "com.music.bitchord.action.TOGGLE_FAVORITE"
+const val ACTION_PLAY_SCHEDULED_PLAYLIST = "com.music.bitchord.action.PLAY_SCHEDULED_PLAYLIST"
+const val EXTRA_SCHEDULED_PLAYLIST_ID = "scheduled_playlist_id"
+const val EXTRA_SCHEDULED_PLAYLIST_TIME = "scheduled_playlist_issued_at"
+const val EXTRA_SCHEDULED_PLAYLIST_TOKEN = "scheduled_playlist_token"
 private const val ACTION_OPEN_MEDIA_PLAYLISTS = "com.music.bitchord.action.OPEN_MEDIA_PLAYLISTS"
 private const val ACTION_OPEN_MEDIA_LYRICS = "com.music.bitchord.action.OPEN_MEDIA_LYRICS"
 private const val ACTION_OPEN_MEDIA_QUEUE = "com.music.bitchord.action.OPEN_MEDIA_QUEUE"
@@ -1772,6 +1778,43 @@ class PlaybackService : MediaLibraryService() {
                     if (onWatch) WATCH_SESSION_FOREGROUND_MS else DEFAULT_FOREGROUND_SERVICE_TIMEOUT_MS,
                 )
             }
+        }
+    }
+
+    override fun onStartCommand(intent: Intent?, flags: Int, startId: Int): Int {
+        val result = super.onStartCommand(intent, flags, startId)
+        if (intent?.action == ACTION_PLAY_SCHEDULED_PLAYLIST) {
+            val playlistId = intent.getStringExtra(EXTRA_SCHEDULED_PLAYLIST_ID)
+            val issuedAt = intent.getLongExtra(EXTRA_SCHEDULED_PLAYLIST_TIME, 0L)
+            val token = intent.getStringExtra(EXTRA_SCHEDULED_PLAYLIST_TOKEN)
+            if (ScheduledPlaylistScheduler.validateServiceRequest(playlistId, issuedAt, token)) {
+                playlistId?.let(::playScheduledPlaylist)
+            } else {
+                Log.w("BitChord", "Rejected unauthenticated scheduled-playlist request")
+            }
+        }
+        return result
+    }
+
+    private fun playScheduledPlaylist(playlistId: String) {
+        scope.launch {
+            if (!ScheduledPlaylistScheduler.isCurrentSchedule(playlistId)) return@launch
+            val playlist = LocalPlaylistStore.playlists.value.firstOrNull { it.id == playlistId }
+                ?: return@launch
+            val localSongs = LocalMediaRepository.getLocalMusic(applicationContext)
+            val songs = resolvePlaylistSongs(playlist, localSongs)
+            if (!ScheduledPlaylistScheduler.isCurrentSchedule(playlistId)) return@launch
+            val items = songs.mapNotNull { song -> runCatching { song.toMediaItem() }.getOrNull() }
+            if (items.isEmpty()) {
+                Log.w("BitChord", "Scheduled playlist has no playable entries")
+                return@launch
+            }
+            val active = player ?: return@launch
+            ABRepeatController.clear()
+            active.setMediaItems(items, 0, 0L)
+            active.prepare()
+            active.play()
+            TrackLog.i("SCHEDULED_PLAYLIST", "started ${playlist.name}", about = playlistId)
         }
     }
 

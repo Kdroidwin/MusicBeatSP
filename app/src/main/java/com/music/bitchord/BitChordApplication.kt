@@ -94,6 +94,8 @@ class BitChordApplication : Application(), SingletonImageLoader.Factory {
         // without a media-store query per row.
         Downloads.init(this)
         LocalPlaylistStore.init(this)
+        com.music.bitchord.playback.ScheduledPlaylistScheduler.init(this)
+        com.music.bitchord.playback.ScheduledPlaylistScheduler.reconcile(this)
         LocalFavoritesStore.init(this)
         // The device's own listening record. Opened here rather than in
         // PlaybackService because the Replay page reads it from the UI side and
