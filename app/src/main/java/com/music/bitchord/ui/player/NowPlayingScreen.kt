@@ -4312,6 +4312,13 @@ private fun SweptLyricLine(
     val richText = remember(line.text, style, showFurigana, lyricInk) {
         makeLyricRichText(line.text, style, lyricInk, showFurigana)
     }
+    // Inline ruby is drawn by its own child Text composables, so the parent
+    // Text's dim color does not automatically reach it. Build a matching dim
+    // copy; reusing [richText] here made only furigana bases stay bright before
+    // their timed character was sung.
+    val dimRichText = remember(line.text, style, showFurigana, lyricInk, dimAlpha) {
+        makeLyricRichText(line.text, style, lyricInk.copy(alpha = dimAlpha), showFurigana)
+    }
 
     // Carried by every copy: identical insets keep them laying out identically,
     // and the inset is what gives the blurred copy's layer somewhere to put the
@@ -4388,8 +4395,8 @@ private fun SweptLyricLine(
         // cover the remaining transport controls in the compact strip.
         Box(Modifier.fillMaxWidth()) {
         Text(
-            text = richText.annotated,
-            inlineContent = richText.inlineContent,
+            text = dimRichText.annotated,
+            inlineContent = dimRichText.inlineContent,
             style = fittedStyle,
             color = lyricInk.copy(alpha = dimAlpha),
             maxLines = displayedMaxLines,
