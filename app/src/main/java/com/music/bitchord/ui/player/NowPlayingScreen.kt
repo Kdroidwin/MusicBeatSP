@@ -1,6 +1,8 @@
 package com.music.bitchord.ui.player
 
 import com.music.bitchord.R
+import com.music.bitchord.playback.ABRepeatController
+import com.music.bitchord.playback.ABRepeatPhase
 import com.music.bitchord.ui.components.ExplicitSongTitle
 
 import android.database.ContentObserver
@@ -1285,6 +1287,8 @@ fun NowPlayingScreen(
     val lyricsTransportControlsCentered by AppSettings.lyricsTransportControlsCentered.collectAsStateWithLifecycle()
     val favoriteUsesStar by AppSettings.favoriteUsesStar.collectAsStateWithLifecycle()
     val playerQuickActions by AppSettings.playerQuickActions.collectAsStateWithLifecycle()
+    val abRepeatEnabled by AppSettings.abRepeatEnabled.collectAsStateWithLifecycle()
+    val abRepeatState by ABRepeatController.state.collectAsStateWithLifecycle()
     val hidePlayerQuickActionCircles by AppSettings.hidePlayerQuickActionCircles.collectAsStateWithLifecycle()
     val keepScreenOn by AppSettings.keepScreenOn.collectAsStateWithLifecycle()
     val keepScreenOnDuringLyrics by AppSettings.keepScreenOnDuringLyrics.collectAsStateWithLifecycle()
@@ -3289,6 +3293,31 @@ fun NowPlayingScreen(
                             }
                             Spacer(Modifier.width(4.dp))
                         }
+                    }
+                    if (abRepeatEnabled) {
+                        val abLabel = when (abRepeatState.phase) {
+                            ABRepeatPhase.OFF -> "A"
+                            ABRepeatPhase.MARK_B -> "B"
+                            ABRepeatPhase.REPEATING -> "A-B"
+                        }
+                        val abDescription = stringResource(
+                            when (abRepeatState.phase) {
+                                ABRepeatPhase.OFF -> R.string.ab_repeat_mark_a
+                                ABRepeatPhase.MARK_B -> R.string.ab_repeat_mark_b
+                                ABRepeatPhase.REPEATING -> R.string.ab_repeat_clear
+                            },
+                        )
+                        CircleGlyph(
+                            icon = BitChordIcons.Repeat,
+                            label = abLabel,
+                            contentDescription = abDescription,
+                            showDisc = !hidePlayerQuickActionCircles,
+                            active = abRepeatState.phase != ABRepeatPhase.OFF,
+                            enabled = durationMs > 0L,
+                            haptic = Haptic.Tap,
+                            onClick = { ABRepeatController.markAt(song.videoId, positionMs) },
+                        )
+                        Spacer(Modifier.width(4.dp))
                     }
                     Spacer(Modifier.width(4.dp))
 

@@ -1728,6 +1728,7 @@ class PlaybackService : MediaLibraryService() {
         observeScrobbling()
         observeDiscord()
         watchSleepTimer()
+        ABRepeatController.observe(scope) { player }
         // Register before restoring the queue so its first media-item
         // transition can begin the ReplayGain lookup before playback starts.
         exoPlayer.addListener(playbackListener)

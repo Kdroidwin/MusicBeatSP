@@ -625,6 +625,8 @@ object AppSettings {
 
     /** Equal-power overlap between consecutive tracks in milliseconds; zero keeps transitions unchanged. */
     val crossfadeDurationMs = MutableStateFlow(0)
+    /** Makes the optional player A-B loop control available; disabled on first install. */
+    val abRepeatEnabled = MutableStateFlow(false)
     val crossfadeDurationOptionsMs: List<Int> = buildList {
         add(0)
         addAll((10..90 step 10).toList())
@@ -1681,6 +1683,7 @@ object AppSettings {
             prefs.getInt(KEY_CROSSFADE_SECONDS, 0).coerceIn(0, MAX_CROSSFADE_SECONDS) * 1000
         }
         crossfadeDurationMs.value = nearestCrossfadeDuration(savedCrossfadeMs)
+        abRepeatEnabled.value = prefs.getBoolean(KEY_AB_REPEAT_ENABLED, false)
         if (!prefs.contains(KEY_CROSSFADE_DURATION_MS)) {
             prefs.edit().putInt(KEY_CROSSFADE_DURATION_MS, crossfadeDurationMs.value).apply()
         }
@@ -2516,6 +2519,12 @@ object AppSettings {
             .putInt(KEY_CROSSFADE_DURATION_MS, normalized)
             .putInt(KEY_CROSSFADE_SECONDS, ((normalized + 500) / 1000).coerceIn(0, MAX_CROSSFADE_SECONDS))
             .apply()
+    }
+
+    fun setAbRepeatEnabled(value: Boolean) {
+        abRepeatEnabled.value = value
+        if (!value) com.music.bitchord.playback.ABRepeatController.clear()
+        prefs.edit().putBoolean(KEY_AB_REPEAT_ENABLED, value).apply()
     }
 
     @Deprecated("Use setCrossfadeDurationMs")
@@ -5352,6 +5361,7 @@ object AppSettings {
     private const val KEY_AUDIO_OFFLOAD_ENABLED = "audio_offload_enabled"
     private const val KEY_CROSSFADE_SECONDS = "crossfade_seconds"
     private const val KEY_CROSSFADE_DURATION_MS = "crossfade_duration_ms"
+    private const val KEY_AB_REPEAT_ENABLED = "ab_repeat_enabled"
     private const val KEY_CD_RIPPING_OUTPUT_TREE_URI = "cd_ripping_output_tree_uri"
     private const val KEY_CD_RIPPING_RETRIES = "cd_ripping_retries"
     private const val KEY_CD_RIPPING_SPEED_X = "cd_ripping_speed_x"
