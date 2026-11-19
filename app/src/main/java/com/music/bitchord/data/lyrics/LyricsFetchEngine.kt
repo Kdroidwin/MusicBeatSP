@@ -50,6 +50,7 @@ object LyricsFetchEngine {
         sources: Set<LyricsSource>,
         order: List<LyricsSource>,
         prioritizeSyllableSync: Boolean,
+        onProviderState: (LyricsSource, LyricsProviderState) -> Unit = { _, _ -> },
         fetcher: suspend (source: LyricsSource, videoId: String, title: String, artist: String, durationMs: Long, album: String?) -> List<LyricLine>?,
     ): LyricsRepository.Result? {
         val cacheVariant = buildString {
@@ -109,6 +110,7 @@ object LyricsFetchEngine {
                     order = order,
                     prioritizeSyllableSync = prioritizeSyllableSync,
                     cacheVariant = cacheVariant,
+                    onProviderState = onProviderState,
                     fetcher = fetcher,
                 )
             }
@@ -131,6 +133,7 @@ object LyricsFetchEngine {
         order: List<LyricsSource>,
         prioritizeSyllableSync: Boolean,
         cacheVariant: String,
+        onProviderState: (LyricsSource, LyricsProviderState) -> Unit,
         fetcher: suspend (source: LyricsSource, videoId: String, title: String, artist: String, durationMs: Long, album: String?) -> List<LyricLine>?,
     ): LyricsRepository.Result? {
         // 2. Check Instrumental heuristic
@@ -143,10 +146,12 @@ object LyricsFetchEngine {
         val (cachedResult, isNegativeHit) = LyricsFetchCache.get(title, artist, durationMs, cacheVariant)
         if (isNegativeHit) {
             LyricsLog.i("Engine", "Negative cache hit (no lyrics previously found): \"$title\"")
+            sources.forEach { onProviderState(it, LyricsProviderState.NOT_FOUND) }
             return null
         }
         if (cachedResult != null) {
             LyricsLog.s("Engine", "Cache hit for \"$title\" from ${cachedResult.source.label}")
+            onProviderState(cachedResult.source, LyricsProviderState.FOUND)
             return cachedResult
         }
 
@@ -166,6 +171,7 @@ object LyricsFetchEngine {
             album = album,
             activeSources = activeSources,
             prioritizeSyllableSync = prioritizeSyllableSync,
+            onProviderState = onProviderState,
             fetcher = fetcher,
         )
 
@@ -194,6 +200,7 @@ object LyricsFetchEngine {
         album: String?,
         activeSources: List<LyricsSource>,
         prioritizeSyllableSync: Boolean,
+        onProviderState: (LyricsSource, LyricsProviderState) -> Unit,
         fetcher: suspend (source: LyricsSource, videoId: String, title: String, artist: String, durationMs: Long, album: String?) -> List<LyricLine>?,
     ): LyricsRepository.Result? = coroutineScope {
         val semaphore = Semaphore(PARALLELISM)
@@ -213,15 +220,21 @@ object LyricsFetchEngine {
         val providerJobs = viableSourcesWithIndex.map { (index, source) ->
             launch(Dispatchers.IO) {
                 semaphore.withPermit {
+                    onProviderState(source, LyricsProviderState.FETCHING)
                     try {
                         val lines = fetchWithFallback(source, videoId, title, artist, durationMs, album, fetcher)
                         if (!lines.isNullOrEmpty()) {
                             LyricsProviderHealth.markAvailable(source.id)
                         }
+                        onProviderState(
+                            source,
+                            if (lines.isNullOrEmpty()) LyricsProviderState.NOT_FOUND else LyricsProviderState.FOUND,
+                        )
                         resultsChannel.send(CandidateResult(index, source, lines, null))
                     } catch (e: Throwable) {
                         if (e !is CancellationException) {
                             LyricsProviderHealth.markUnavailable(source.id, e)
+                            onProviderState(source, LyricsProviderState.NOT_FOUND)
                         }
                         resultsChannel.send(CandidateResult(index, source, null, e))
                     }
@@ -229,16 +242,20 @@ object LyricsFetchEngine {
             }
         }
 
+        val completed = mutableSetOf<Int>()
+
         fun finish(best: CandidateResult): LyricsRepository.Result {
             // Stop in-flight providers before closing their result channel.
             // Closing alone leaves suspended requests alive and their later
             // send() calls can fail the structured lookup scope.
+            viableSourcesWithIndex
+                .filterNot { (idx, _) -> idx in completed }
+                .forEach { (_, source) -> onProviderState(source, LyricsProviderState.NOT_FETCHED) }
             providerJobs.forEach { it.cancel() }
             resultsChannel.close()
             return LyricsRepository.Result(best.source, best.lines!!)
         }
 
-        val completed = mutableSetOf<Int>()
         var bestCandidate: CandidateResult? = null
         var pendingCount = viableSourcesWithIndex.size
         var graceStartedAt = 0L

@@ -1532,6 +1532,12 @@
     <string name="lyrics_history_restore">Restore to editor</string>
     <string name="lyrics_character_sync_hint">Tap a character to assign the current playback time. Changes are not committed until you save.</string>
     <string name="lyrics_switch_source">Switch lyric source</string>
+    <string name="choose_lyrics_provider">Choose lyrics provider</string>
+    <string name="lyrics_provider_current">Currently shown</string>
+    <string name="lyrics_provider_found">Lyrics found</string>
+    <string name="lyrics_provider_not_found">No lyrics found</string>
+    <string name="lyrics_provider_fetching">Searching…</string>
+    <string name="lyrics_provider_not_fetched">Tap to search</string>
     <string name="show_lyrics_source_switcher">Show lyric source switcher</string>
     <string name="show_lyrics_source_switcher_subtitle">Show the globe button on the lyrics screen to fetch from an available source you choose.</string>
     <string name="artist_slash_separators">Split artist names on slashes</string>

@@ -74,6 +74,7 @@ import androidx.compose.foundation.layout.fillMaxHeight
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.WindowInsets
 import androidx.compose.foundation.layout.asPaddingValues
 import androidx.compose.foundation.layout.navigationBarsPadding
@@ -89,6 +90,7 @@ import androidx.compose.foundation.text.InlineTextContent
 import androidx.compose.foundation.text.appendInlineContent
 import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.verticalScroll
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.LazyListItemInfo
 import androidx.compose.foundation.lazy.LazyListState
@@ -121,6 +123,7 @@ import androidx.compose.material.icons.rounded.Headphones
 import androidx.compose.material.icons.rounded.History
 import androidx.compose.material.icons.rounded.Language
 import androidx.compose.material.icons.rounded.Check
+import androidx.compose.material.icons.rounded.Search
 import androidx.compose.material.icons.rounded.Info
 import androidx.compose.material.icons.rounded.Translate
 import androidx.compose.material.icons.rounded.MoreHoriz
@@ -264,6 +267,7 @@ import com.music.bitchord.ui.theme.SystemBarIcons
 import com.music.bitchord.ui.theme.SystemBarVisibility
 import com.music.bitchord.ui.rememberIsForeground
 import com.music.bitchord.ui.theme.rememberArtworkPalette
+import com.music.bitchord.ui.theme.ArtworkPalette
 import com.music.bitchord.ui.theme.LocalPlayerMenuPalette
 import com.music.bitchord.ui.components.ArtworkBackdrop
 import com.music.bitchord.ui.components.PlayerPopupSystemBars
@@ -280,6 +284,7 @@ import com.music.bitchord.data.lyrics.LrcParser
 import com.music.bitchord.data.lyrics.LyricLine
 import com.music.bitchord.data.lyrics.LyricsStripText
 import com.music.bitchord.data.lyrics.LyricsSource
+import com.music.bitchord.data.lyrics.LyricsProviderState
 import com.music.bitchord.feature.lyrics.PlamoLyricsTranslation
 import com.music.bitchord.ui.components.LyricsLogConsole
 import com.music.bitchord.ui.player.components.DoubleTapSeekArea
@@ -991,6 +996,7 @@ fun NowPlayingScreen(
     instantStatusBarReveal: Boolean = false,
     lyrics: List<LyricLine>?,
     lyricsSource: LyricsSource?,
+    lyricsProviderStates: Map<LyricsSource, LyricsProviderState> = emptyMap(),
     lyricsUnavailable: Boolean,
     /** True only after a lyric result (or miss) has been resolved for [song]. */
     lyricsReadyForCurrentSong: Boolean,
@@ -3327,7 +3333,7 @@ fun NowPlayingScreen(
                                 isLoading = !lyricsReadyForCurrentSong,
                             )
                         }
-                        if (showLyricsLogsEnabled || showLyricsCloseButton || showLyricsSourceSwitcher) Row(
+                        if (showLyricsLogsEnabled || showLyricsCloseButton) Row(
                             modifier = Modifier
                                 .align(Alignment.TopEnd)
                                 .padding(top = lyricsTopPadding + 4.dp, end = 8.dp),
@@ -3353,17 +3359,6 @@ fun NowPlayingScreen(
                                     )
                                 }
                             }
-                            if (showLyricsSourceSwitcher) {
-                                LyricsSourceSwitcherButton(
-                                    sources = orderedLyricsSourceChoices,
-                                    selected = currentSongLyricsSource,
-                                    onSelect = onSelectLyricsProvider,
-                                    modifier = Modifier
-                                        .size(40.dp)
-                                        .clip(CircleShape)
-                                        .background(Color.Black.copy(alpha = 0.35f)),
-                                )
-                            }
                             if (showLyricsCloseButton) {
                                 IconButton(
                                     onClick = {
@@ -3383,6 +3378,23 @@ fun NowPlayingScreen(
                                     )
                                 }
                             }
+                        }
+                        if (showLyricsSourceSwitcher) {
+                            LyricsSourceSwitcherButton(
+                                sources = orderedLyricsSourceChoices,
+                                selected = currentSongLyricsSource,
+                                states = lyricsProviderStates,
+                                artworkPalette = popupPalette,
+                                artworkUrl = if (playerMenuPalette != null) null else song.thumbnailUrl,
+                                useArtworkColor = playerPopupsUseArtworkColor || playerMenuPalette != null,
+                                onSelect = onSelectLyricsProvider,
+                                modifier = Modifier
+                                    .align(Alignment.BottomCenter)
+                                    .padding(bottom = 16.dp)
+                                    .size(44.dp)
+                                    .clip(CircleShape)
+                                    .background(Color.Black.copy(alpha = 0.35f)),
+                            )
                         }
                     }
                 } else if (lyricsOpen && lyricsLogsOpen) {
@@ -3682,6 +3694,10 @@ fun NowPlayingScreen(
                             LyricsSourceSwitcherButton(
                                 sources = orderedLyricsSourceChoices,
                                 selected = currentSongLyricsSource,
+                                states = lyricsProviderStates,
+                                artworkPalette = popupPalette,
+                                artworkUrl = if (playerMenuPalette != null) null else song.thumbnailUrl,
+                                useArtworkColor = playerPopupsUseArtworkColor || playerMenuPalette != null,
                                 onSelect = onSelectLyricsProvider,
                                 modifier = Modifier
                                     .size(48.dp)
@@ -4270,11 +4286,6 @@ private fun SweptLyricLine(
     val richText = remember(line.text, style, showFurigana, lyricInk) {
         makeLyricRichText(line.text, style, lyricInk, showFurigana)
     }
-    val rubyReadingRanges = remember(line.text) {
-        LyricsFurigana.annotations(line.text).map { annotation ->
-            (annotation.sourceStart + annotation.base.length) until annotation.sourceEndExclusive
-        }.filterNot(IntRange::isEmpty)
-    }
 
     // Carried by every copy: identical insets keep them laying out identically,
     // and the inset is what gives the blurred copy's layer somewhere to put the
@@ -4304,7 +4315,7 @@ private fun SweptLyricLine(
                 // offsets (notably after a one-line layout clips the visual
                 // line). Keep the sweep inside the measured UTF-16 range.
                 try {
-                    sweepTo(it, richText.renderedOffset(line.revealedChars(position, rubyReadingRanges)))
+                    sweepTo(it, richText.renderedOffset(line.revealedChars(position)))
                 } catch (_: RuntimeException) {
                     // Bad third-party syllable offsets should degrade to a
                     // static readable line, never crash the render thread.
@@ -4396,7 +4407,7 @@ private fun SweptLyricLine(
                             glowAt(
                                 layout = measured,
                                 revealedChars = richText.renderedOffset(
-                                    line.revealedChars(position, rubyReadingRanges),
+                                    line.revealedChars(position),
                                 ),
                                 intensity = line.glowIntensity(position),
                             )
@@ -4647,13 +4658,25 @@ fun TabletPlayerBackdrop(
 private enum class PlamoLyricsStatus { Idle, MissingModel, Translating, Failed }
 
 @Composable
+@OptIn(ExperimentalMaterial3Api::class)
 private fun LyricsSourceSwitcherButton(
     sources: List<LyricsSource>,
     selected: LyricsSource?,
+    states: Map<LyricsSource, LyricsProviderState>,
+    artworkPalette: ArtworkPalette,
+    artworkUrl: String?,
+    useArtworkColor: Boolean,
     onSelect: (LyricsSource) -> Unit,
     modifier: Modifier = Modifier,
 ) {
     var expanded by remember { mutableStateOf(false) }
+    var requestedSource by remember { mutableStateOf<LyricsSource?>(null) }
+    LaunchedEffect(selected, requestedSource) {
+        if (requestedSource != null && selected == requestedSource) {
+            expanded = false
+            requestedSource = null
+        }
+    }
     Box(modifier = modifier) {
         IconButton(onClick = { expanded = true }) {
             Icon(
@@ -4663,30 +4686,137 @@ private fun LyricsSourceSwitcherButton(
                 modifier = Modifier.size(20.dp),
             )
         }
-        DropdownMenu(
-            expanded = expanded,
+        if (expanded) ModalBottomSheet(
             onDismissRequest = { expanded = false },
+            sheetState = rememberModalBottomSheetState(skipPartiallyExpanded = true),
+            shape = RoundedCornerShape(topStart = 26.dp, topEnd = 26.dp),
+            containerColor = if (useArtworkColor) Color.Transparent else Color(0xFF151515),
+            dragHandle = null,
+            contentWindowInsets = { WindowInsets(0, 0, 0, 0) },
         ) {
-            if (sources.isEmpty()) {
-                DropdownMenuItem(
-                    text = { Text(stringResource(R.string.no_lyrics_sources_enabled)) },
-                    onClick = { expanded = false },
-                    enabled = false,
-                )
-            } else {
-                sources.forEach { source ->
-                    DropdownMenuItem(
-                        text = { Text(source.label, maxLines = 1, overflow = TextOverflow.Ellipsis) },
-                        onClick = {
-                            expanded = false
-                            onSelect(source)
-                        },
-                        leadingIcon = {
-                            if (source == selected) {
-                                Icon(Icons.Rounded.Check, contentDescription = null)
-                            }
-                        },
+            val sheetShape = RoundedCornerShape(topStart = 26.dp, topEnd = 26.dp)
+            Box(Modifier.fillMaxWidth().clip(sheetShape)) {
+                if (useArtworkColor) {
+                    ArtworkBackdrop(
+                        palette = artworkPalette,
+                        imageUrl = artworkUrl,
+                        modifier = Modifier.matchParentSize(),
+                        washFraction = 0.78f,
+                        artPx = ROW_ART_PX,
                     )
+                }
+                Column(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .heightIn(max = 560.dp)
+                        .navigationBarsPadding()
+                        .verticalScroll(rememberScrollState())
+                        .padding(horizontal = 16.dp)
+                        .padding(top = 12.dp, bottom = 20.dp),
+                    verticalArrangement = Arrangement.spacedBy(6.dp),
+                ) {
+                Box(
+                    Modifier
+                        .align(Alignment.CenterHorizontally)
+                        .padding(bottom = 10.dp)
+                        .size(width = 36.dp, height = 4.dp)
+                        .clip(CircleShape)
+                        .background(Color.White.copy(alpha = 0.25f)),
+                )
+                Text(
+                    text = stringResource(R.string.choose_lyrics_provider),
+                    style = MaterialTheme.typography.titleLarge,
+                    color = Color.White,
+                    modifier = Modifier.padding(start = 4.dp, bottom = 8.dp),
+                )
+                if (sources.isEmpty()) {
+                    Text(
+                        text = stringResource(R.string.no_lyrics_sources_enabled),
+                        color = Color.White.copy(alpha = 0.65f),
+                        modifier = Modifier.padding(horizontal = 12.dp, vertical = 14.dp),
+                    )
+                } else sources.forEach { source ->
+                    val state = states[source] ?: LyricsProviderState.NOT_FETCHED
+                    val current = source == selected
+                    val status = when {
+                        current -> stringResource(R.string.lyrics_provider_current)
+                        state == LyricsProviderState.FOUND -> stringResource(R.string.lyrics_provider_found)
+                        state == LyricsProviderState.NOT_FOUND -> stringResource(R.string.lyrics_provider_not_found)
+                        state == LyricsProviderState.FETCHING -> stringResource(R.string.lyrics_provider_fetching)
+                        else -> stringResource(R.string.lyrics_provider_not_fetched)
+                    }
+                    Row(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .clip(RoundedCornerShape(16.dp))
+                            .background(Color.White.copy(alpha = if (current) 0.10f else 0.05f))
+                            .clickable(
+                                interactionSource = remember { MutableInteractionSource() },
+                                indication = null,
+                                enabled = !current && state != LyricsProviderState.NOT_FOUND,
+                            ) {
+                                requestedSource = source
+                                onSelect(source)
+                                if (state == LyricsProviderState.FOUND) {
+                                    expanded = false
+                                    requestedSource = null
+                                }
+                            }
+                            .padding(horizontal = 14.dp, vertical = 12.dp),
+                        verticalAlignment = Alignment.CenterVertically,
+                    ) {
+                        Box(
+                            Modifier
+                                .size(40.dp)
+                                .clip(CircleShape)
+                                .background(Color.White.copy(alpha = if (current) 0.16f else 0.08f)),
+                            contentAlignment = Alignment.Center,
+                        ) {
+                            when {
+                                state == LyricsProviderState.FETCHING -> CircularProgressIndicator(
+                                    color = Color.White.copy(alpha = 0.8f),
+                                    strokeWidth = 2.dp,
+                                    modifier = Modifier.size(20.dp),
+                                )
+                                current || state == LyricsProviderState.FOUND -> Icon(
+                                    imageVector = Icons.Rounded.Check,
+                                    contentDescription = null,
+                                    tint = Color.White.copy(alpha = if (current) 1f else 0.75f),
+                                    modifier = Modifier.size(21.dp),
+                                )
+                                state == LyricsProviderState.NOT_FOUND -> Icon(
+                                    imageVector = Icons.Rounded.Close,
+                                    contentDescription = null,
+                                    tint = Color.White.copy(alpha = 0.4f),
+                                    modifier = Modifier.size(20.dp),
+                                )
+                                else -> Icon(
+                                    imageVector = Icons.Rounded.Search,
+                                    contentDescription = null,
+                                    tint = Color.White.copy(alpha = 0.7f),
+                                    modifier = Modifier.size(20.dp),
+                                )
+                            }
+                        }
+                        Spacer(Modifier.width(13.dp))
+                        Column(Modifier.weight(1f)) {
+                            Text(
+                                text = source.label,
+                                style = MaterialTheme.typography.bodyLarge,
+                                color = Color.White.copy(alpha = if (current) 1f else 0.85f),
+                                maxLines = 1,
+                                overflow = TextOverflow.Ellipsis,
+                            )
+                            Text(
+                                text = status,
+                                style = MaterialTheme.typography.labelMedium,
+                                color = Color.White.copy(alpha = if (current) 0.7f else 0.5f),
+                                maxLines = 1,
+                                overflow = TextOverflow.Ellipsis,
+                            )
+                        }
+                    }
+                }
                 }
             }
         }

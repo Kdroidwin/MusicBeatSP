@@ -1086,6 +1086,7 @@ private fun BitChordApp(
     val signedIn by viewModel.signedIn.collectAsStateWithLifecycle()
     val lyrics by viewModel.lyrics.collectAsStateWithLifecycle()
     val lyricsSource by viewModel.lyricsSource.collectAsStateWithLifecycle()
+    val lyricsProviderStates by viewModel.lyricsProviderStates.collectAsStateWithLifecycle()
     val lyricsChecked by viewModel.lyricsChecked.collectAsStateWithLifecycle()
     val lyricsVideoId by viewModel.lyricsVideoId.collectAsStateWithLifecycle()
     val savedYoutubeCollections by AppSettings.savedYoutubeCollections.collectAsStateWithLifecycle()
@@ -2883,6 +2884,7 @@ private fun BitChordApp(
             },
             lyrics = lyrics,
             lyricsSource = lyricsSource,
+            lyricsProviderStates = lyricsProviderStates,
             onSelectLyricsProvider = viewModel::selectLyricsProvider,
             lyricsUnavailable = lyricsChecked && lyricsVideoId == player.song?.videoId && lyrics.isNullOrEmpty(),
             lyricsReadyForCurrentSong = lyricsChecked && lyricsVideoId == player.song?.videoId,

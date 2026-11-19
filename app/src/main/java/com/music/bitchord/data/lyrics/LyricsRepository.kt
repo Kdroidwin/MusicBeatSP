@@ -67,6 +67,7 @@ object LyricsRepository {
         sources: Set<LyricsSource> = com.music.bitchord.data.settings.AppSettings.lyricsSources.value,
         order: List<LyricsSource> = com.music.bitchord.data.settings.AppSettings.lyricsSourceOrder.value,
         prioritizeSyllableSync: Boolean = false,
+        onProviderState: (LyricsSource, LyricsProviderState) -> Unit = { _, _ -> },
     ): Result? {
         LyricsLog.clear()
         LyricsLog.i("Repository", "Looking up lyrics for \"$title\" by \"$artist\" (${durationMs / 1000}s)")
@@ -87,6 +88,7 @@ object LyricsRepository {
             sources = sources,
             order = order,
             prioritizeSyllableSync = prioritizeSyllableSync,
+            onProviderState = onProviderState,
             fetcher = { source, vId, t, a, dMs, alb ->
                 fetch(source, vId, t, a, dMs, alb)
                     ?.takeIf { lines ->

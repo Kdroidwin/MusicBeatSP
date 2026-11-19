@@ -23,6 +23,7 @@ import com.music.bitchord.data.lyrics.EmbeddedLyrics
 import com.music.bitchord.data.lyrics.LyricLine
 import com.music.bitchord.data.lyrics.LyricsRepository
 import com.music.bitchord.data.lyrics.LyricsSource
+import com.music.bitchord.data.lyrics.LyricsProviderState
 import com.music.bitchord.data.lyrics.toLrc
 import com.music.bitchord.data.lyrics.withBackgroundVocals
 import com.music.bitchord.feature.lyricseditor.data.LocalLyricsManager
@@ -79,6 +80,7 @@ import kotlinx.coroutines.flow.combine
 import kotlinx.coroutines.flow.debounce
 import kotlinx.coroutines.flow.drop
 import kotlinx.coroutines.flow.stateIn
+import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.sync.Semaphore
 import kotlinx.coroutines.sync.withPermit
@@ -289,6 +291,10 @@ class MainViewModel(app: Application) : AndroidViewModel(app) {
     private val _lyricsSource = MutableStateFlow<LyricsSource?>(null)
     val lyricsSource: StateFlow<LyricsSource?> = _lyricsSource.asStateFlow()
 
+    /** Per-provider progress shown in the player's source chooser. */
+    private val _lyricsProviderStates = MutableStateFlow<Map<LyricsSource, LyricsProviderState>>(emptyMap())
+    val lyricsProviderStates: StateFlow<Map<LyricsSource, LyricsProviderState>> = _lyricsProviderStates.asStateFlow()
+
     /**
      * Whether the lookup for the current track has finished. [lyrics] alone
      * can't tell "still looking" apart from "looked, found nothing" — both
@@ -372,6 +378,7 @@ class MainViewModel(app: Application) : AndroidViewModel(app) {
         } else {
             emptySet()
         }
+        _lyricsProviderStates.value = sources.associateWith { LyricsProviderState.NOT_FETCHED }
         val sourceOrder = AppSettings.lyricsSourceOrder.value
         val prioritizeSyllableSync = AppSettings.prioritizeSyllableSync.value
         val preferEmbeddedLocalLyrics = AppSettings.preferEmbeddedLocalLyrics.value
@@ -480,6 +487,11 @@ class MainViewModel(app: Application) : AndroidViewModel(app) {
                 LyricsRepository.lyrics(
                     videoId, title, artist, durationMs, album, sources,
                     sourceOrder, prioritizeSyllableSync,
+                    onProviderState = { source, state ->
+                        if (requestGeneration == lyricsRequestGeneration) {
+                            _lyricsProviderStates.update { it + (source to state) }
+                        }
+                    },
                 )
             } catch (cancelled: CancellationException) {
                 throw cancelled
@@ -534,6 +546,7 @@ class MainViewModel(app: Application) : AndroidViewModel(app) {
         _lyricsSource.value = null
         _lyricsChecked.value = false
         _lyricsVideoId.value = request.videoId
+        _lyricsProviderStates.update { it + (source to LyricsProviderState.FETCHING) }
         if (request.durationMs <= 0L) {
             pendingLyricsProvider = source
             lyricsFor = null
@@ -566,6 +579,9 @@ class MainViewModel(app: Application) : AndroidViewModel(app) {
             _lyrics.value = found?.withBackgroundVocals()
             _lyricsSource.value = source.takeIf { !found.isNullOrEmpty() }
             _lyricsChecked.value = true
+            _lyricsProviderStates.update {
+                it + (source to if (found.isNullOrEmpty()) LyricsProviderState.NOT_FOUND else LyricsProviderState.FOUND)
+            }
         }
     }
 

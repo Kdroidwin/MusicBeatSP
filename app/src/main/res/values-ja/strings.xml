@@ -1418,6 +1418,12 @@
     <string name="lyrics_history_restore">編集に復元</string>
     <string name="lyrics_character_sync_hint">文字をタップすると現在の再生位置を割り当てます。保存するまで変更は確定しません。</string>
     <string name="lyrics_switch_source">歌詞ソースを切り替え</string>
+    <string name="choose_lyrics_provider">歌詞ソースを選択</string>
+    <string name="lyrics_provider_current">表示中</string>
+    <string name="lyrics_provider_found">歌詞あり</string>
+    <string name="lyrics_provider_not_found">歌詞なし</string>
+    <string name="lyrics_provider_fetching">検索中…</string>
+    <string name="lyrics_provider_not_fetched">タップして検索</string>
     <string name="show_lyrics_source_switcher">歌詞ソース切替ボタン</string>
     <string name="show_lyrics_source_switcher_subtitle">歌詞画面に地球儀アイコンを表示し、利用可能な歌詞ソースを手動で切り替えます。</string>
     <string name="artist_slash_separators">アーティスト名のスラッシュ区切り</string>

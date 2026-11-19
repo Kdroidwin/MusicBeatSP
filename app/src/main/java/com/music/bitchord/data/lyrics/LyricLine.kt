@@ -113,75 +113,74 @@ data class LyricLine(
      * on rather than jumping ahead of the next word's first letter.
      */
     fun revealedChars(positionMs: Long): Float {
-        return revealedChars(positionMs, emptyList())
+        if (words.isEmpty()) return if (positionMs >= timeMs) text.length.toFloat() else 0f
+
+        val annotations = LyricsFurigana.annotations(text)
+        val surface = text.rubySurfaceText(annotations)
+        val matched = mutableListOf<MatchedLyricWord>()
+        var searchOffset = 0
+        words.forEach { word ->
+            val timedText = word.text.rubySurfaceText().trim()
+            if (timedText.isEmpty()) return@forEach
+            val start = surface.indexOf(timedText, searchOffset)
+            // A karaoke word can consist only of furigana reading text, or can
+            // differ from the edited line. It has no visible glyph to time.
+            // Falling back to searchOffset here used to light the first lyric
+            // character whenever that unmatched token began at the line start.
+            if (start < 0) return@forEach
+            val end = (start + timedText.length).coerceAtMost(surface.length)
+            if (end <= start) return@forEach
+            matched += MatchedLyricWord(word.startMs, word.endMs, start, end)
+            searchOffset = end
+        }
+
+        if (positionMs >= endMs) return text.length.toFloat()
+        if (matched.isEmpty()) return 0f
+
+        var previous: MatchedLyricWord? = null
+        matched.forEach { current ->
+            if (positionMs < current.startMs) {
+                val prior = previous ?: return sourceOffsetForRubySurface(text, annotations, 0f)
+                val span = (current.startMs.toDouble() - prior.endMs.toDouble()).coerceAtLeast(1.0)
+                val through = ((positionMs.toDouble() - prior.endMs.toDouble()) / span)
+                    .takeIf(Double::isFinite)?.toFloat()?.coerceIn(0f, 1f) ?: 0f
+                val gapStart = prior.endChar.toFloat()
+                val gapEnd = maxOf(gapStart, current.startChar.toFloat())
+                return sourceOffsetForRubySurface(text, annotations, gapStart + through * (gapEnd - gapStart))
+            }
+            if (positionMs < current.endMs) {
+                val span = (current.endMs.toDouble() - current.startMs.toDouble()).coerceAtLeast(1.0)
+                val through = ((positionMs.toDouble() - current.startMs.toDouble()) / span)
+                    .takeIf(Double::isFinite)?.toFloat()?.coerceIn(0f, 1f) ?: 0f
+                val reveal = current.startChar + through * (current.endChar - current.startChar)
+                return sourceOffsetForRubySurface(text, annotations, reveal)
+            }
+            previous = current
+        }
+
+        val last = matched.last()
+        return sourceOffsetForRubySurface(text, annotations, last.endChar.toFloat())
     }
 
     /**
-     * Computes the sweep position while ignoring inline ruby readings when
-     * locating timed lyric text. A synced kana can also occur inside
-     * `漢字((かな))`; a plain `indexOf` would bind that timing to the reading
-     * and light the following text before it is sung.
+     * Kept for callers compiled against the earlier range-based helper. The
+     * ranges are no longer needed because alignment runs on ruby-free text.
      */
+    @Suppress("UNUSED_PARAMETER")
     internal fun revealedChars(positionMs: Long, rubyReadingRanges: List<IntRange>): Float {
-        if (words.isEmpty()) return if (positionMs >= timeMs) text.length.toFloat() else 0f
-        var offset = 0
-        words.forEachIndexed { index, word ->
-            // Inline furigana may have been added after the provider supplied
-            // word timings. Compare the sung surface form, never the markup.
-            val timedText = word.text.rubySurfaceText()
-            // Where this word sits in [text]. Built by walking rather than
-            // searching, so a word repeated in the line still lines up.
-            val safeOffset = offset.coerceIn(0, text.length)
-            val matchedStart = text.findTimedText(timedText, safeOffset, rubyReadingRanges).takeIf { it >= 0 }
-            val start = matchedStart ?: safeOffset
-            // If provider text does not match the edited lyric, hold at the
-            // last verified position. Advancing by an assumed word length can
-            // sweep arbitrary characters (including a ruby reading) early.
-            val end = if (matchedStart == null) start else start + timedText.length.coerceAtMost(text.length - start)
-            if (positionMs < word.startMs) return start.toFloat()
-            if (positionMs < word.endMs) {
-                if (matchedStart == null) return start.toFloat()
-                val span = (word.endMs.toDouble() - word.startMs.toDouble()).coerceAtLeast(1.0)
-                val through = ((positionMs.toDouble() - word.startMs.toDouble()) / span)
-                    .takeIf(Double::isFinite)?.toFloat()?.coerceIn(0f, 1f) ?: 0f
-                return (start + through * (end - start)).coerceIn(0f, text.length.toFloat())
-            }
-            // Past this word: the trailing space fills over the pause before
-            // the next one, so the highlight keeps creeping instead of resting
-            // on the word's last letter.
-            val next = words.getOrNull(index + 1)
-            if (next != null && positionMs < next.startMs) {
-                val safeEnd = end.coerceIn(0, text.length)
-                val gapStart = text.findTimedText(next.text.rubySurfaceText(), safeEnd, rubyReadingRanges)
-                    .takeIf { it >= 0 } ?: safeEnd
-                val pause = (next.startMs.toDouble() - word.endMs.toDouble()).coerceAtLeast(1.0)
-                val through = ((positionMs.toDouble() - word.endMs.toDouble()) / pause)
-                    .takeIf(Double::isFinite)?.toFloat()?.coerceIn(0f, 1f) ?: 0f
-                return (safeEnd + through * (gapStart - safeEnd)).coerceIn(0f, text.length.toFloat())
-            }
-            offset = end.coerceIn(0, text.length)
-        }
-        return text.length.toFloat()
+        return revealedChars(positionMs)
     }
 
-    private fun String.findTimedText(needle: String, startIndex: Int, excludedRanges: List<IntRange>): Int {
-        if (needle.isEmpty()) return -1
-        var searchFrom = startIndex.coerceIn(0, length)
-        while (searchFrom <= length) {
-            val found = indexOf(needle, searchFrom)
-            if (found < 0) return -1
-            val matchEnd = found + needle.length
-            val excluded = excludedRanges.firstOrNull { range ->
-                !range.isEmpty() && found <= range.last && matchEnd > range.first
-            }
-            if (excluded == null) return found
-            searchFrom = (excluded.last + 1).coerceAtMost(length)
-        }
-        return -1
-    }
+    private data class MatchedLyricWord(
+        val startMs: Long,
+        val endMs: Long,
+        val startChar: Int,
+        val endChar: Int,
+    )
 
-    private fun String.rubySurfaceText(): String {
-        val annotations = LyricsFurigana.annotations(this)
+    private fun String.rubySurfaceText(
+        annotations: List<LyricsFurigana.Annotation> = LyricsFurigana.annotations(this),
+    ): String {
         if (annotations.isEmpty()) return this
         return buildString(length) {
             var cursor = 0
@@ -191,6 +190,37 @@ data class LyricLine(
             }
             append(this@rubySurfaceText, cursor, this@rubySurfaceText.length)
         }
+    }
+
+    /** Convert the timed surface offset back to the source offset used by the ruby renderer. */
+    private fun sourceOffsetForRubySurface(
+        source: String,
+        annotations: List<LyricsFurigana.Annotation>,
+        offset: Float,
+    ): Float {
+        if (!offset.isFinite()) return 0f
+        if (annotations.isEmpty()) return offset.coerceIn(0f, source.length.toFloat())
+        var sourceCursor = 0
+        var surfaceCursor = 0
+        annotations.forEach { annotation ->
+            val ordinaryLength = (annotation.sourceStart - sourceCursor).coerceAtLeast(0)
+            val ordinaryEnd = surfaceCursor + ordinaryLength
+            if (offset <= ordinaryEnd.toFloat()) {
+                return (sourceCursor + (offset - surfaceCursor).coerceAtLeast(0f))
+                    .coerceIn(0f, source.length.toFloat())
+            }
+            surfaceCursor = ordinaryEnd
+            val baseEnd = surfaceCursor + annotation.base.length
+            if (offset < baseEnd.toFloat()) {
+                return (annotation.sourceStart + offset - surfaceCursor)
+                    .coerceIn(0f, source.length.toFloat())
+            }
+            if (offset <= baseEnd.toFloat()) return annotation.sourceEndExclusive.toFloat()
+            surfaceCursor = baseEnd
+            sourceCursor = annotation.sourceEndExclusive
+        }
+        return (sourceCursor + (offset - surfaceCursor).coerceAtLeast(0f))
+            .coerceIn(0f, source.length.toFloat())
     }
 
     /**
