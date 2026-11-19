@@ -3331,6 +3331,21 @@ fun NowPlayingScreen(
                                 onSeekToLine = onSeek,
                                 modifier = Modifier.fillMaxSize(),
                                 isLoading = !lyricsReadyForCurrentSong,
+                                sourceSwitcher = if (showLyricsSourceSwitcher) { sourceModifier ->
+                                    LyricsSourceSwitcherButton(
+                                        sources = orderedLyricsSourceChoices,
+                                        selected = currentSongLyricsSource,
+                                        states = lyricsProviderStates,
+                                        artworkPalette = popupPalette,
+                                        artworkUrl = if (playerMenuPalette != null) null else song.thumbnailUrl,
+                                        useArtworkColor = playerPopupsUseArtworkColor || playerMenuPalette != null,
+                                        onSelect = onSelectLyricsProvider,
+                                        iconTint = LocalPlayerLyricInk.current.copy(alpha = 0.78f),
+                                        modifier = sourceModifier
+                                            .clip(CircleShape)
+                                            .background(LocalPlayerLyricInk.current.copy(alpha = 0.18f)),
+                                    )
+                                } else null,
                             )
                         }
                         if (showLyricsLogsEnabled || showLyricsCloseButton) Row(
@@ -3379,23 +3394,6 @@ fun NowPlayingScreen(
                                 }
                             }
                         }
-                        if (showLyricsSourceSwitcher) {
-                            LyricsSourceSwitcherButton(
-                                sources = orderedLyricsSourceChoices,
-                                selected = currentSongLyricsSource,
-                                states = lyricsProviderStates,
-                                artworkPalette = popupPalette,
-                                artworkUrl = if (playerMenuPalette != null) null else song.thumbnailUrl,
-                                useArtworkColor = playerPopupsUseArtworkColor || playerMenuPalette != null,
-                                onSelect = onSelectLyricsProvider,
-                                modifier = Modifier
-                                    .align(Alignment.BottomCenter)
-                                    .padding(bottom = 16.dp)
-                                    .size(44.dp)
-                                    .clip(CircleShape)
-                                    .background(Color.Black.copy(alpha = 0.35f)),
-                            )
-                        }
                     }
                 } else if (lyricsOpen && lyricsLogsOpen) {
                         // Full-screen log console — replaces the lyrics list while
@@ -3430,6 +3428,21 @@ fun NowPlayingScreen(
                                     translationY = (1f - p) * 26.dp.toPx()
                                 },
                             isLoading = !lyricsReadyForCurrentSong,
+                            sourceSwitcher = if (showLyricsSourceSwitcher) { sourceModifier ->
+                                LyricsSourceSwitcherButton(
+                                    sources = orderedLyricsSourceChoices,
+                                    selected = currentSongLyricsSource,
+                                    states = lyricsProviderStates,
+                                    artworkPalette = popupPalette,
+                                    artworkUrl = if (playerMenuPalette != null) null else song.thumbnailUrl,
+                                    useArtworkColor = playerPopupsUseArtworkColor || playerMenuPalette != null,
+                                    onSelect = onSelectLyricsProvider,
+                                    iconTint = LocalPlayerLyricInk.current.copy(alpha = 0.78f),
+                                    modifier = sourceModifier
+                                        .clip(CircleShape)
+                                        .background(LocalPlayerLyricInk.current.copy(alpha = 0.18f)),
+                                )
+                            } else null,
                         )
                 }
 
@@ -3688,22 +3701,6 @@ fun NowPlayingScreen(
                             // laid over the full-width parent below, so its centered
                             // position is independent of both the X and the log icon.
                             Spacer(Modifier.weight(1f))
-                        }
-                        if (showLyricsSourceSwitcher) {
-                            Spacer(Modifier.width(8.dp))
-                            LyricsSourceSwitcherButton(
-                                sources = orderedLyricsSourceChoices,
-                                selected = currentSongLyricsSource,
-                                states = lyricsProviderStates,
-                                artworkPalette = popupPalette,
-                                artworkUrl = if (playerMenuPalette != null) null else song.thumbnailUrl,
-                                useArtworkColor = playerPopupsUseArtworkColor || playerMenuPalette != null,
-                                onSelect = onSelectLyricsProvider,
-                                modifier = Modifier
-                                    .size(48.dp)
-                                    .clip(CircleShape)
-                                    .background(Color.White.copy(alpha = 0.10f)),
-                            )
                         }
                         if (showLyricsCloseButton) {
                             Spacer(Modifier.width(8.dp))
@@ -4667,6 +4664,7 @@ private fun LyricsSourceSwitcherButton(
     artworkUrl: String?,
     useArtworkColor: Boolean,
     onSelect: (LyricsSource) -> Unit,
+    iconTint: Color = Color.White.copy(alpha = 0.9f),
     modifier: Modifier = Modifier,
 ) {
     var expanded by remember { mutableStateOf(false) }
@@ -4678,11 +4676,19 @@ private fun LyricsSourceSwitcherButton(
         }
     }
     Box(modifier = modifier) {
-        IconButton(onClick = { expanded = true }) {
+        Box(
+            modifier = Modifier
+                .fillMaxSize()
+                .clickable(
+                    interactionSource = remember { MutableInteractionSource() },
+                    indication = null,
+                ) { expanded = true },
+            contentAlignment = Alignment.Center,
+        ) {
             Icon(
                 imageVector = Icons.Rounded.Language,
                 contentDescription = stringResource(R.string.lyrics_switch_source),
-                tint = Color.White.copy(alpha = 0.9f),
+                tint = iconTint,
                 modifier = Modifier.size(20.dp),
             )
         }
@@ -4832,6 +4838,7 @@ private fun LyricsPanel(
     onSeekToLine: (Long) -> Unit,
     modifier: Modifier = Modifier,
     isLoading: Boolean = false,
+    sourceSwitcher: (@Composable (Modifier) -> Unit)? = null,
 ) {
     val clock = rememberLyricClock(positionMs, isPlaying)
     val context = LocalContext.current
@@ -4967,21 +4974,37 @@ private fun LyricsPanel(
     }
 
     if (lines.isEmpty()) {
-        Box(modifier, contentAlignment = Alignment.Center) {
-            if (isLoading) {
-                LyricsLoadingLine(trackKey = trackKey)
-            } else if (!hideLyricsUnavailableLabel) {
-                Text(
-                    text = stringResource(R.string.no_lyrics_for_track),
-                    style = MaterialTheme.typography.titleMedium,
-                    color = LocalPlayerLyricInk.current.copy(alpha = 0.6f),
-                )
+        Box(modifier) {
+            Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
+                if (isLoading) {
+                    LyricsLoadingLine(trackKey = trackKey)
+                } else if (!hideLyricsUnavailableLabel) {
+                    Text(
+                        text = stringResource(R.string.no_lyrics_for_track),
+                        style = MaterialTheme.typography.titleMedium,
+                        color = LocalPlayerLyricInk.current.copy(alpha = 0.6f),
+                    )
+                }
             }
+            sourceSwitcher?.invoke(
+                Modifier
+                    .align(Alignment.BottomStart)
+                    .padding(start = 4.dp, bottom = 4.dp)
+                    .size(34.dp)
+                    .zIndex(1f),
+            )
         }
         return
     }
 
     Box(modifier) {
+        sourceSwitcher?.invoke(
+            Modifier
+                .align(Alignment.BottomStart)
+                .padding(start = 4.dp, bottom = 4.dp)
+                .size(34.dp)
+                .zIndex(1f),
+        )
         if (translateLyrics) {
             val translationActive = showTranslatedLyrics || plamoStatus == PlamoLyricsStatus.Translating
             val translationTint = when {
