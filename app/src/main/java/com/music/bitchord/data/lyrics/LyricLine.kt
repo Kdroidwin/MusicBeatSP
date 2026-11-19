@@ -118,20 +118,49 @@ data class LyricLine(
         val annotations = LyricsFurigana.annotations(text)
         val surface = text.rubySurfaceText(annotations)
         val matched = mutableListOf<MatchedLyricWord>()
-        var searchOffset = 0
-        words.forEach { word ->
-            val timedText = word.text.rubySurfaceText().trim()
-            if (timedText.isEmpty()) return@forEach
-            val start = surface.indexOf(timedText, searchOffset)
-            // A karaoke word can consist only of furigana reading text, or can
-            // differ from the edited line. It has no visible glyph to time.
-            // Falling back to searchOffset here used to light the first lyric
-            // character whenever that unmatched token began at the line start.
-            if (start < 0) return@forEach
-            val end = (start + timedText.length).coerceAtMost(surface.length)
-            if (end <= start) return@forEach
-            matched += MatchedLyricWord(word.startMs, word.endMs, start, end)
-            searchOffset = end
+        if (annotations.isEmpty()) {
+            var searchOffset = 0
+            words.forEach { word ->
+                val timedText = word.text.rubySurfaceText().trim()
+                if (timedText.isEmpty()) return@forEach
+                val start = surface.indexOf(timedText, searchOffset)
+                // Keep unmatched provider text out of the sweep. Guessing its
+                // position used to light the first lyric character at line start.
+                if (start < 0) return@forEach
+                val end = (start + timedText.length).coerceAtMost(surface.length)
+                if (end <= start) return@forEach
+                matched += MatchedLyricWord(word.startMs, word.endMs, start, end)
+                searchOffset = end
+            }
+        } else {
+            // With character-synced lyrics the ruby itself is also split into
+            // timestamped tokens: `((さだめ))` becomes `((`, `さ`, `だ`, `め`, `))`.
+            // Searching those tokens in ruby-free text can bind a reading kana
+            // to an identical kana elsewhere and move the sweep to the wrong
+            // side of the line. Align against source offsets first, then time
+            // only glyphs that survive the ruby removal.
+            val sourceToSurface = text.rubySurfaceOffsets(annotations)
+            var sourceSearchOffset = 0
+            words.forEach { word ->
+                val timedText = word.text.trim()
+                if (timedText.isEmpty()) return@forEach
+                val sourceStart = text.indexOf(timedText, sourceSearchOffset)
+                if (sourceStart < 0) return@forEach
+                val sourceEnd = (sourceStart + timedText.length).coerceAtMost(text.length)
+                sourceSearchOffset = sourceEnd
+
+                var visibleStart = Int.MAX_VALUE
+                var visibleEnd = -1
+                for (sourceIndex in sourceStart until sourceEnd) {
+                    val surfaceIndex = sourceToSurface[sourceIndex]
+                    if (surfaceIndex < 0) continue // Ruby markers and reading are not lyric glyphs.
+                    visibleStart = minOf(visibleStart, surfaceIndex)
+                    visibleEnd = maxOf(visibleEnd, surfaceIndex + 1)
+                }
+                if (visibleEnd > visibleStart) {
+                    matched += MatchedLyricWord(word.startMs, word.endMs, visibleStart, visibleEnd)
+                }
+            }
         }
 
         if (positionMs >= endMs) return text.length.toFloat()
@@ -190,6 +219,33 @@ data class LyricLine(
             }
             append(this@rubySurfaceText, cursor, this@rubySurfaceText.length)
         }
+    }
+
+    /** Map source UTF-16 offsets to the ruby-free text used by the karaoke sweep. */
+    private fun String.rubySurfaceOffsets(
+        annotations: List<LyricsFurigana.Annotation>,
+    ): IntArray {
+        val offsets = IntArray(length) { -1 }
+        var sourceCursor = 0
+        var surfaceCursor = 0
+        annotations.forEach { annotation ->
+            while (sourceCursor < annotation.sourceStart) {
+                offsets[sourceCursor] = surfaceCursor
+                sourceCursor++
+                surfaceCursor++
+            }
+            repeat(annotation.base.length) { baseOffset ->
+                offsets[annotation.sourceStart + baseOffset] = surfaceCursor + baseOffset
+            }
+            sourceCursor = annotation.sourceEndExclusive
+            surfaceCursor += annotation.base.length
+        }
+        while (sourceCursor < length) {
+            offsets[sourceCursor] = surfaceCursor
+            sourceCursor++
+            surfaceCursor++
+        }
+        return offsets
     }
 
     /** Convert the timed surface offset back to the source offset used by the ruby renderer. */
