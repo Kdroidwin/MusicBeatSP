@@ -2320,6 +2320,12 @@
     <string name="gesture_edge_right">右端のジェスチャー</string>
     <string name="gesture_edge_up">上端のジェスチャー</string>
     <string name="gesture_edge_down">下端のジェスチャー</string>
+    <string name="app_gesture_draw_subtitle">枠内になぞって形を登録し、動作を選ぶと、画面上の同じ形で実行できます。</string>
+    <string name="gesture_shape_l">L字をなぞる</string>
+    <string name="gesture_shape_mirrored_l">逆L字をなぞる</string>
+    <string name="gesture_shape_u">コの字をなぞる</string>
+    <string name="gesture_shape_inverted_u">逆コの字をなぞる</string>
+    <string name="gesture_clear">描画を消去</string>
     <string name="gesture_action_none">操作なし</string>
     <string name="gesture_action_page_top">ページの先頭へ移動</string>
     <string name="gesture_action_page_bottom">ページの末尾へ移動</string>

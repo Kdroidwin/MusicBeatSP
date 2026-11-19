@@ -2347,6 +2347,12 @@
     <string name="gesture_edge_right">Right edge gesture</string>
     <string name="gesture_edge_up">Top edge gesture</string>
     <string name="gesture_edge_down">Bottom edge gesture</string>
+    <string name="app_gesture_draw_subtitle">Draw this path in the pad, choose an action, then use the same shape anywhere on screen.</string>
+    <string name="gesture_shape_l">Draw L shape</string>
+    <string name="gesture_shape_mirrored_l">Draw mirrored L shape</string>
+    <string name="gesture_shape_u">Draw U shape</string>
+    <string name="gesture_shape_inverted_u">Draw inverted U shape</string>
+    <string name="gesture_clear">Clear drawing</string>
     <string name="gesture_action_none">Do nothing</string>
     <string name="gesture_action_page_top">Scroll page to top</string>
     <string name="gesture_action_page_bottom">Scroll page to bottom</string>

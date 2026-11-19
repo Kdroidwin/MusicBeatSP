@@ -221,6 +221,16 @@ enum class BluetoothButtonAction {
 
 enum class AppGestureDirection { LEFT, RIGHT, UP, DOWN }
 
+/** Slots for user-drawn multi-segment gesture patterns. */
+enum class AppGestureShape { L, MIRRORED_L, U, INVERTED_U }
+
+data class GesturePoint(val x: Float, val y: Float)
+
+data class AppGestureBinding(
+    val action: AppGestureAction = AppGestureAction.NONE,
+    val points: List<GesturePoint> = emptyList(),
+)
+
 enum class AppGestureAction {
     NONE,
     PAGE_TOP,
@@ -664,6 +674,7 @@ object AppSettings {
     val bluetoothButtonAction = MutableStateFlow(BluetoothButtonAction.PLAY_PAUSE)
     val gesturesEnabled = MutableStateFlow(false)
     val gestureActions = MutableStateFlow(AppGestureDirection.entries.associateWith { AppGestureAction.NONE })
+    val gestureBindings = MutableStateFlow(AppGestureShape.entries.associateWith { AppGestureBinding() })
 
     /**
      * Whether a source offering a Dolby Atmos rendition is allowed to serve it.
@@ -1718,6 +1729,17 @@ object AppSettings {
                     prefs.getString(gestureKey(direction), AppGestureAction.NONE.name).orEmpty(),
                 )
             }.getOrDefault(AppGestureAction.NONE)
+        }
+        gestureBindings.value = AppGestureShape.entries.associateWith { shape ->
+            val action = runCatching {
+                AppGestureAction.valueOf(
+                    prefs.getString(gestureShapeActionKey(shape), AppGestureAction.NONE.name).orEmpty(),
+                )
+            }.getOrDefault(AppGestureAction.NONE)
+            AppGestureBinding(
+                action = action,
+                points = decodeGesturePoints(prefs.getString(gestureShapePointsKey(shape), null)),
+            )
         }
         dolbyAtmos.value = prefs.getBoolean(KEY_DOLBY_ATMOS, false)
         diracAudioEnabled.value = prefs.getBoolean(KEY_DIRAC_AUDIO_ENABLED, false)
@@ -4550,8 +4572,44 @@ object AppSettings {
         prefs.edit().putString(gestureKey(direction), action.name).apply()
     }
 
+    fun setGestureBinding(shape: AppGestureShape, binding: AppGestureBinding) {
+        val safePoints = binding.points.take(64).map { point ->
+            GesturePoint(point.x.takeIf(Float::isFinite)?.coerceIn(0f, 1f) ?: 0f,
+                point.y.takeIf(Float::isFinite)?.coerceIn(0f, 1f) ?: 0f)
+        }
+        val safe = binding.copy(points = safePoints)
+        gestureBindings.value = gestureBindings.value + (shape to safe)
+        prefs.edit()
+            .putString(gestureShapeActionKey(shape), safe.action.name)
+            .putString(gestureShapePointsKey(shape), encodeGesturePoints(safe.points))
+            .apply()
+    }
+
     private fun gestureKey(direction: AppGestureDirection): String =
         "app_gesture_${direction.name.lowercase(Locale.ROOT)}"
+
+    private fun gestureShapeActionKey(shape: AppGestureShape): String =
+        "app_gesture_shape_${shape.name.lowercase(Locale.ROOT)}_action"
+
+    private fun gestureShapePointsKey(shape: AppGestureShape): String =
+        "app_gesture_shape_${shape.name.lowercase(Locale.ROOT)}_points"
+
+    private fun encodeGesturePoints(points: List<GesturePoint>): String = points
+        .take(64)
+        .joinToString(";") { point ->
+            "${point.x.coerceIn(0f, 1f)},${point.y.coerceIn(0f, 1f)}"
+        }
+
+    private fun decodeGesturePoints(encoded: String?): List<GesturePoint> = encoded
+        ?.split(';')
+        ?.take(64)
+        ?.mapNotNull { pair ->
+            val values = pair.split(',', limit = 2)
+            val x = values.getOrNull(0)?.toFloatOrNull()?.takeIf(Float::isFinite) ?: return@mapNotNull null
+            val y = values.getOrNull(1)?.toFloatOrNull()?.takeIf(Float::isFinite) ?: return@mapNotNull null
+            GesturePoint(x.coerceIn(0f, 1f), y.coerceIn(0f, 1f))
+        }
+        .orEmpty()
 
     fun setExportDownloads(value: Boolean) {
         exportDownloads.value = value

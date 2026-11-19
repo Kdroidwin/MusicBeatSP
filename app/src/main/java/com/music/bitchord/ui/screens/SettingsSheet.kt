@@ -190,6 +190,9 @@ import com.music.bitchord.data.settings.AppSettings
 import com.music.bitchord.data.settings.BluetoothButtonAction
 import com.music.bitchord.data.settings.AppGestureAction
 import com.music.bitchord.data.settings.AppGestureDirection
+import com.music.bitchord.data.settings.AppGestureShape
+import com.music.bitchord.data.settings.AppGestureBinding
+import com.music.bitchord.ui.components.GesturePatternEditorDialog
 import com.music.bitchord.ui.player.AudioVisualizationPanel
 import com.music.bitchord.data.settings.FolderArtworkFallbackMode
 import com.music.bitchord.data.settings.HomeTabTitleMode
@@ -2000,6 +2003,7 @@ fun SettingsScreen(
     val bluetoothButtonAction by AppSettings.bluetoothButtonAction.collectAsStateWithLifecycle()
     val gesturesEnabled by AppSettings.gesturesEnabled.collectAsStateWithLifecycle()
     val gestureActions by AppSettings.gestureActions.collectAsStateWithLifecycle()
+    val gestureBindings by AppSettings.gestureBindings.collectAsStateWithLifecycle()
     val outputStatus by AudioOutputStatus.current.collectAsStateWithLifecycle()
     val sourceAudioStats by NerdStats.current.collectAsStateWithLifecycle()
     val availableSystemAudioEffects = remember {
@@ -2022,6 +2026,7 @@ fun SettingsScreen(
     var showBitPerfectModeDialog by remember { mutableStateOf(false) }
     var pendingBitPerfectMode by remember { mutableStateOf<BitPerfectMode?>(null) }
     var showFixedVolumeConfirmation by remember { mutableStateOf(false) }
+    var editingGestureShape by remember { mutableStateOf<AppGestureShape?>(null) }
     val bitPerfectModeLabel = stringResource(
         when (bitPerfectMode) {
             BitPerfectMode.OFF -> R.string.off
@@ -2503,6 +2508,16 @@ fun SettingsScreen(
                     val next = (choices.indexOf(action) + 1) % choices.size
                     AppSettings.setGestureAction(direction, choices[next])
                 },
+            )
+        }.toTypedArray(),
+        *AppGestureShape.entries.map { shape ->
+            val binding = gestureBindings[shape] ?: AppGestureBinding()
+            SettingsSearchEntry(
+                title = shape.localizedTitle(),
+                subtitle = stringResource(R.string.app_gesture_draw_subtitle),
+                keywords = listOf("gesture", "draw", "L shape", "U shape", "ジェスチャー", "なぞる", "L字", "逆L", "コの字", "逆コの字"),
+                valueLabel = binding.action.localizedLabel(),
+                activate = { editingGestureShape = shape },
             )
         }.toTypedArray(),
         SettingsSearchEntry(stringResource(R.string.lyrics_furigana), stringResource(R.string.lyrics_furigana_subtitle), listOf("lyrics", "furigana", "ruby", "ふりがな", "ルビ"), showLyricsFurigana) { AppSettings.setShowLyricsFurigana(!showLyricsFurigana) },
@@ -4335,6 +4350,17 @@ fun SettingsScreen(
                             val next = (choices.indexOf(action) + 1) % choices.size
                             AppSettings.setGestureAction(direction, choices[next])
                         },
+                    )
+                    RowDivider()
+                }
+                AppGestureShape.entries.forEach { shape ->
+                    val binding = gestureBindings[shape] ?: AppGestureBinding()
+                    SettingsRow(
+                        icon = Icons.Rounded.TouchApp,
+                        title = shape.localizedTitle(),
+                        subtitle = stringResource(R.string.app_gesture_draw_subtitle),
+                        trailing = { Text(binding.action.localizedLabel()) },
+                        onClick = { editingGestureShape = shape },
                     )
                     RowDivider()
                 }
@@ -8386,6 +8412,21 @@ fun SettingsScreen(
                 },
             )
         }
+        editingGestureShape?.let { shape ->
+            val binding = gestureBindings[shape] ?: AppGestureBinding()
+            GesturePatternEditorDialog(
+                shape = shape,
+                title = shape.localizedTitle(),
+                instruction = stringResource(R.string.app_gesture_draw_subtitle),
+                binding = binding,
+                actionLabel = { it.localizedLabel() },
+                onDismiss = { editingGestureShape = null },
+                onSave = { updated ->
+                    AppSettings.setGestureBinding(shape, updated)
+                    editingGestureShape = null
+                },
+            )
+        }
         if (showFixedVolumeConfirmation) {
             AlertDialog(
                 onDismissRequest = { showFixedVolumeConfirmation = false },
@@ -10728,6 +10769,16 @@ private fun AppGestureDirection.localizedTitle(): String = stringResource(
         AppGestureDirection.RIGHT -> R.string.gesture_edge_right
         AppGestureDirection.UP -> R.string.gesture_edge_up
         AppGestureDirection.DOWN -> R.string.gesture_edge_down
+    },
+)
+
+@Composable
+private fun AppGestureShape.localizedTitle(): String = stringResource(
+    when (this) {
+        AppGestureShape.L -> R.string.gesture_shape_l
+        AppGestureShape.MIRRORED_L -> R.string.gesture_shape_mirrored_l
+        AppGestureShape.U -> R.string.gesture_shape_u
+        AppGestureShape.INVERTED_U -> R.string.gesture_shape_inverted_u
     },
 )
 

@@ -11,7 +11,10 @@ import androidx.compose.ui.input.pointer.PointerEventPass
 import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.unit.dp
 import com.music.bitchord.data.settings.AppGestureAction
+import com.music.bitchord.data.settings.AppGestureBinding
 import com.music.bitchord.data.settings.AppGestureDirection
+import com.music.bitchord.data.settings.AppGestureShape
+import com.music.bitchord.data.settings.GesturePoint
 import kotlinx.coroutines.flow.MutableSharedFlow
 
 internal enum class GestureScrollRequest { TOP, BOTTOM }
@@ -25,21 +28,42 @@ internal object RootGestureScrollRequests {
 internal fun Modifier.observeRootEdgeGestures(
     enabled: Boolean,
     actions: Map<AppGestureDirection, AppGestureAction>,
+    bindings: Map<AppGestureShape, AppGestureBinding>,
     onAction: (AppGestureAction) -> Unit,
-): Modifier = pointerInput(enabled, actions, onAction) {
+): Modifier = pointerInput(enabled, actions, bindings, onAction) {
     if (!enabled) return@pointerInput
     val edge = 32.dp.toPx()
     val threshold = 72.dp.toPx()
     awaitEachGesture {
         val down = awaitFirstDown(requireUnconsumed = false, pass = PointerEventPass.Initial)
         val start = down.position
-        var fired = false
+        var multiTouch = false
+        val path = mutableListOf(GesturePoint(
+            (start.x / size.width.coerceAtLeast(1)).coerceIn(0f, 1f),
+            (start.y / size.height.coerceAtLeast(1)).coerceIn(0f, 1f),
+        ))
         do {
             val event = awaitPointerEvent(PointerEventPass.Initial)
+            if (event.changes.count { it.pressed } > 1) multiTouch = true
             val change = event.changes.firstOrNull { it.id == down.id } ?: break
-            if (!fired) {
-                val dx = change.position.x - start.x
-                val dy = change.position.y - start.y
+            val point = GesturePoint(
+                (change.position.x / size.width.coerceAtLeast(1)).coerceIn(0f, 1f),
+                (change.position.y / size.height.coerceAtLeast(1)).coerceIn(0f, 1f),
+            )
+            val last = path.last()
+            val move = kotlin.math.hypot(point.x - last.x, point.y - last.y)
+            if (move >= 0.004f && path.size < 256) path += point
+            if (!change.pressed) break
+        } while (true)
+        if (!multiTouch) {
+            val shape = GesturePathMatcher.match(path, bindings)
+            val drawnAction = shape?.let { bindings[it]?.action }
+                ?.takeUnless { it == AppGestureAction.NONE }
+            if (drawnAction != null) {
+                onAction(drawnAction)
+            } else {
+                val dx = path.last().x * size.width - start.x
+                val dy = path.last().y * size.height - start.y
                 val direction = when {
                     start.x <= edge && dx >= threshold && kotlin.math.abs(dx) > kotlin.math.abs(dy) * 1.35f -> AppGestureDirection.LEFT
                     start.x >= size.width - edge && dx <= -threshold && kotlin.math.abs(dx) > kotlin.math.abs(dy) * 1.35f -> AppGestureDirection.RIGHT
@@ -47,14 +71,9 @@ internal fun Modifier.observeRootEdgeGestures(
                     start.y >= size.height - edge && dy <= -threshold && kotlin.math.abs(dy) > kotlin.math.abs(dx) * 1.35f -> AppGestureDirection.DOWN
                     else -> null
                 }
-                val action = direction?.let(actions::get)?.takeUnless { it == AppGestureAction.NONE }
-                if (action != null) {
-                    fired = true
-                    onAction(action)
-                }
+                direction?.let(actions::get)?.takeUnless { it == AppGestureAction.NONE }?.let(onAction)
             }
-            if (!change.pressed) break
-        } while (true)
+        }
     }
 }
 

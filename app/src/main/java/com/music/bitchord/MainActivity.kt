@@ -732,6 +732,7 @@ private fun BitChordApp(
     val showPlayerStatusBar by AppSettings.showPlayerStatusBar.collectAsStateWithLifecycle()
     val appGesturesEnabled by AppSettings.gesturesEnabled.collectAsStateWithLifecycle()
     val appGestureActions by AppSettings.gestureActions.collectAsStateWithLifecycle()
+    val appGestureBindings by AppSettings.gestureBindings.collectAsStateWithLifecycle()
     val gestureScope = rememberCoroutineScope()
     val instantStatusBarOnPlayerClose by AppSettings.instantStatusBarOnPlayerClose.collectAsStateWithLifecycle()
     val hazeState = remember { HazeState() }
@@ -2915,6 +2916,7 @@ private fun BitChordApp(
                 enabled = appGesturesEnabled && !showNowPlaying && !playerDocked && !showSettings &&
                     !showReplay && !showSources && !showWearOs && songActions == null && browseActions == null,
                 actions = appGestureActions,
+                bindings = appGestureBindings,
                 onAction = performAppGesture,
             ),
     ) {
