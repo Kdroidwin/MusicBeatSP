@@ -55,6 +55,9 @@ import androidx.compose.material3.OutlinedTextFieldDefaults
 import androidx.compose.material3.TextButton
 import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.Surface
+import androidx.compose.material3.pulltorefresh.PullToRefreshBox
+import androidx.compose.material3.pulltorefresh.PullToRefreshDefaults
+import androidx.compose.material3.pulltorefresh.rememberPullToRefreshState
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.rounded.ArrowDownward
 import androidx.compose.material.icons.rounded.ArrowUpward
@@ -250,6 +253,7 @@ private fun PlaylistSelectionToolbar(
 /**
  * Modern Library screen unifying user Favorites and Playlists with list/grid toggle.
  */
+@OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun LibraryScreen(
     songs: List<Song>,
@@ -277,11 +281,14 @@ fun LibraryScreen(
     onRootListScrollChanged: ((Boolean) -> Unit)? = null,
     onRootListScrollOffsetChanged: ((Float) -> Unit)? = null,
     onPlaylistDetailVisibilityChanged: ((Boolean) -> Unit)? = null,
+    isRefreshingPlaylistMetadata: Boolean = false,
+    onRefreshPlaylistMetadata: () -> Unit = {},
     onOpenYoutubeCollection: (SavedYoutubeCollection) -> Unit = {},
     onOpenReplay: (() -> Unit)? = null,
 ) {
     val context = LocalContext.current.applicationContext
     val pinRootFilters by AppSettings.pinMusicLibraryTopBar.collectAsStateWithLifecycle()
+    val refreshPlaylistTagsOnPull by AppSettings.refreshPlaylistTagsOnPull.collectAsStateWithLifecycle()
     val playlists by LocalPlaylistStore.playlists.collectAsStateWithLifecycle()
     val favoriteIds by LocalFavoritesStore.favoriteIds.collectAsStateWithLifecycle()
     val favoriteOrder by LocalFavoritesStore.favoriteOrder.collectAsStateWithLifecycle()
@@ -1176,7 +1183,8 @@ fun LibraryScreen(
             modifier = Modifier.fillMaxSize(),
         ) { key ->
             if (key.startsWith("drill:")) {
-                DrillDownSongList(
+                val renderDrillDown: @Composable () -> Unit = {
+                    DrillDownSongList(
                     label = visibleDrillDownLabel.orEmpty(),
                     artworkUrl = visibleDrillDownArt,
                     songs = visibleDrillDownSongs,
@@ -1309,8 +1317,35 @@ fun LibraryScreen(
                     songDropdownMenu = if (visibleDrillDownPlaylistId != null || visibleDrillDownIsFavorites) playlistSongDropdownMenu else songDropdownMenu,
                     onArtworkPaletteChanged = onArtworkPaletteChanged,
                     onRootListScrollChanged = reportRootLibraryScroll,
-                    onRootListScrollOffsetChanged = reportRootLibraryScrollOffset,
-                )
+                        onRootListScrollOffsetChanged = reportRootLibraryScrollOffset,
+                    )
+                }
+                if (refreshPlaylistTagsOnPull && visibleDrillDownPlaylistId != null &&
+                    !playlistSelectionMode && !playlistReorderEnabled
+                ) {
+                    val playlistRefreshState = rememberPullToRefreshState()
+                    PullToRefreshBox(
+                        isRefreshing = isRefreshingPlaylistMetadata,
+                        onRefresh = {
+                            if (!isRefreshingPlaylistMetadata) onRefreshPlaylistMetadata()
+                        },
+                        state = playlistRefreshState,
+                        modifier = Modifier.fillMaxSize(),
+                        indicator = {
+                            PullToRefreshDefaults.Indicator(
+                                state = playlistRefreshState,
+                                isRefreshing = isRefreshingPlaylistMetadata,
+                                modifier = Modifier
+                                    .align(Alignment.TopCenter)
+                                    .padding(top = contentPadding.calculateTopPadding()),
+                            )
+                        },
+                    ) {
+                        renderDrillDown()
+                    }
+                } else {
+                    renderDrillDown()
+                }
             } else if (key == "library:youtube") {
                 Column(
                     modifier = Modifier

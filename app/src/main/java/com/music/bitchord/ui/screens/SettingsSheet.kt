@@ -86,6 +86,7 @@ import androidx.compose.material.icons.rounded.PlaylistPlay
 import androidx.compose.material.icons.rounded.Pause
 import androidx.compose.material.icons.rounded.PlayArrow
 import androidx.compose.material.icons.rounded.Radio
+import androidx.compose.material.icons.rounded.Refresh
 import androidx.compose.material.icons.rounded.Search
 import androidx.compose.material.icons.rounded.Settings
 import androidx.compose.material.icons.rounded.SmartDisplay
@@ -1775,6 +1776,7 @@ fun SettingsScreen(
     val rememberLastOpenedFolder by AppSettings.rememberLastOpenedFolder.collectAsStateWithLifecycle()
     val localMusicFolderRoot by AppSettings.localMusicFolderUri.collectAsStateWithLifecycle()
     val fullScreenCollectionArtwork by AppSettings.fullScreenCollectionArtwork.collectAsStateWithLifecycle()
+    val refreshPlaylistTagsOnPull by AppSettings.refreshPlaylistTagsOnPull.collectAsStateWithLifecycle()
     val smartPlaylistsEnabled by AppSettings.smartPlaylistsEnabled.collectAsStateWithLifecycle()
     val whiteCollectionActionButtons by AppSettings.whiteCollectionActionButtons.collectAsStateWithLifecycle()
     val whiteCollectionPlayButton by AppSettings.whiteCollectionPlayButton.collectAsStateWithLifecycle()
@@ -2691,6 +2693,7 @@ fun SettingsScreen(
         ) { AppSettings.setShowPlayerTopGrabber(!showPlayerTopGrabber) },
         SettingsSearchEntry(stringResource(R.string.filter_non_music_audio), stringResource(R.string.filter_non_music_audio_subtitle), listOf("filter", "audio", "music", "音楽", "フィルター"), filterNonMusicAudio) { AppSettings.setFilterNonMusicAudio(!filterNonMusicAudio) },
         SettingsSearchEntry(stringResource(R.string.playlist_song_artwork), stringResource(R.string.playlist_song_artwork_subtitle), listOf("playlist", "artwork", "プレイリスト", "アルバムアート"), showPlaylistSongArtwork) { AppSettings.setShowPlaylistSongArtwork(!showPlaylistSongArtwork) },
+        SettingsSearchEntry(stringResource(R.string.refresh_playlist_tags_on_pull), stringResource(R.string.refresh_playlist_tags_on_pull_subtitle), listOf("playlist", "refresh", "metadata", "tags", "artist", "title", "プレイリスト", "更新", "タグ", "アーティスト", "曲名"), refreshPlaylistTagsOnPull) { AppSettings.setRefreshPlaylistTagsOnPull(!refreshPlaylistTagsOnPull) },
         hideCollectionPlayLabelSearchEntry(hidePlaylistPlayButtonLabel),
         SettingsSearchEntry(
             stringResource(R.string.collection_song_artwork),
@@ -7825,6 +7828,7 @@ fun SettingsScreen(
             includeRemoteSourceMediaInLibrary = includeRemoteSourceMediaInLibrary,
             localMusicFolderRoot = localMusicFolderRoot,
             fullScreenCollectionArtwork = fullScreenCollectionArtwork,
+            refreshPlaylistTagsOnPull = refreshPlaylistTagsOnPull,
             hideLocalQuickSearch = hideLocalQuickSearch,
             smartPlaylistsEnabled = smartPlaylistsEnabled,
             hideCollectionTopBar = hideCollectionTopBar,
@@ -9768,6 +9772,7 @@ private fun LocalMusicSettingsGroup(
     includeRemoteSourceMediaInLibrary: Boolean,
     localMusicFolderRoot: String,
     fullScreenCollectionArtwork: Boolean,
+    refreshPlaylistTagsOnPull: Boolean,
     hideLocalQuickSearch: Boolean,
     smartPlaylistsEnabled: Boolean,
     hideCollectionTopBar: Boolean,
@@ -10262,6 +10267,23 @@ SettingsGroup(header = stringResource(R.string.local_music)) {
             )
         },
         onClick = { AppSettings.setShowPlaylistSongArtwork(!showPlaylistSongArtwork) },
+    )
+    RowDivider()
+    SettingsRow(
+        icon = Icons.Rounded.Refresh,
+        title = stringResource(R.string.refresh_playlist_tags_on_pull),
+        subtitle = stringResource(R.string.refresh_playlist_tags_on_pull_subtitle),
+        trailing = {
+            Switch(
+                checked = refreshPlaylistTagsOnPull,
+                onCheckedChange = AppSettings::setRefreshPlaylistTagsOnPull,
+                colors = SwitchDefaults.colors(
+                    checkedTrackColor = MaterialTheme.colorScheme.primary,
+                    checkedBorderColor = MaterialTheme.colorScheme.primary,
+                ),
+            )
+        },
+        onClick = { AppSettings.setRefreshPlaylistTagsOnPull(!refreshPlaylistTagsOnPull) },
     )
     RowDivider()
     SettingsRow(

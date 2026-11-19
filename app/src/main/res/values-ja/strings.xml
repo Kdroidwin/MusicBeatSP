@@ -1364,6 +1364,8 @@
     <string name="favorite_icon_star_subtitle">プレーヤーとライブラリのお気に入りアイコンをハートから星に変更します</string>
     <string name="persistent_local_artwork">ローカルアートをストレージに保存</string>
     <string name="persistent_local_artwork_subtitle">ライブラリやプレイリストの大きなアートをアプリ内に保存し、2回目以降を速く読み込みます</string>
+    <string name="refresh_playlist_tags_on_pull">引っ張ってプレイリストのタグを更新</string>
+    <string name="refresh_playlist_tags_on_pull_subtitle">端末内プレイリストを下に引っ張ると、曲名・アーティスト名などのタグを読み直します</string>
     <string name="folder_artwork_fallback">埋め込みアートがない場合にフォルダー画像を使う</string>
     <string name="folder_artwork_fallback_subtitle">folder.jpg、albumart.jpg、cover.jpg など音楽ファイルと同じフォルダーの画像を使います</string>
     <string name="folder_artwork_fallback_disabled">無効</string>

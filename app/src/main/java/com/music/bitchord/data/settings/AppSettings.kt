@@ -992,6 +992,8 @@ object AppSettings {
     /** Player backdrop blur in dp; zero draws sampled colours sharply. */
     val artworkBackdropBlurDp = MutableStateFlow(32f)
     val persistentLocalArtwork = MutableStateFlow(true)
+    /** Refreshes MediaStore tags when a local playlist detail is pulled down. */
+    val refreshPlaylistTagsOnPull = MutableStateFlow(true)
     /** Uses cover/folder/albumart sidecars when an audio file has no embedded cover. */
     val folderArtworkFallbackMode = MutableStateFlow(FolderArtworkFallbackMode.DISABLED)
 
@@ -1999,6 +2001,7 @@ object AppSettings {
         artworkBackdropBlurDp.value = prefs.getFloat(KEY_ARTWORK_BACKDROP_BLUR_DP, 32f)
             .coerceIn(0f, MAX_PLAYER_ARTWORK_BLUR_DP)
         persistentLocalArtwork.value = prefs.getBoolean(KEY_PERSISTENT_LOCAL_ARTWORK, true)
+        refreshPlaylistTagsOnPull.value = prefs.getBoolean(KEY_REFRESH_PLAYLIST_TAGS_ON_PULL, true)
         folderArtworkFallbackMode.value = FolderArtworkFallbackMode.fromPersistedValue(
             prefs.getInt(KEY_FOLDER_ARTWORK_FALLBACK_MODE, FolderArtworkFallbackMode.DISABLED.persistedValue),
         ) ?: FolderArtworkFallbackMode.DISABLED
@@ -3626,6 +3629,11 @@ object AppSettings {
     fun setPersistentLocalArtwork(value: Boolean) {
         persistentLocalArtwork.value = value
         prefs.edit().putBoolean(KEY_PERSISTENT_LOCAL_ARTWORK, value).apply()
+    }
+
+    fun setRefreshPlaylistTagsOnPull(value: Boolean) {
+        refreshPlaylistTagsOnPull.value = value
+        prefs.edit().putBoolean(KEY_REFRESH_PLAYLIST_TAGS_ON_PULL, value).apply()
     }
 
     fun setFolderArtworkFallbackMode(value: FolderArtworkFallbackMode) {
@@ -5524,6 +5532,7 @@ object AppSettings {
     private const val KEY_AUDIO_CUTTER_ENABLED = "audio_cutter_enabled"
     private const val KEY_ARTWORK_BACKDROP_BLUR_DP = "artwork_backdrop_blur_dp"
     private const val KEY_PERSISTENT_LOCAL_ARTWORK = "persistent_local_artwork"
+    private const val KEY_REFRESH_PLAYLIST_TAGS_ON_PULL = "refresh_playlist_tags_on_pull"
     private const val KEY_FOLDER_ARTWORK_FALLBACK_MODE = "folder_artwork_fallback_mode"
     private const val KEY_LYRICS_BLUR = "lyrics_blur"
     private const val KEY_PREFER_EMBEDDED_LOCAL_LYRICS = "prefer_embedded_local_lyrics"
