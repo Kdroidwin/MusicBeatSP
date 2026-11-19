@@ -6417,13 +6417,16 @@ class PlaybackService : MediaLibraryService() {
         ): Boolean {
             val keyEvent = intent.getParcelableExtra<android.view.KeyEvent>(Intent.EXTRA_KEY_EVENT)
                 ?: return super.onMediaButtonEvent(session, controller, intent)
-            val isSingleButton = keyEvent.keyCode == android.view.KeyEvent.KEYCODE_MEDIA_PLAY_PAUSE ||
-                keyEvent.keyCode == android.view.KeyEvent.KEYCODE_HEADSETHOOK
+            val isSingleButton = keyEvent.keyCode in setOf(
+                android.view.KeyEvent.KEYCODE_MEDIA_PLAY_PAUSE,
+                android.view.KeyEvent.KEYCODE_MEDIA_PLAY,
+                android.view.KeyEvent.KEYCODE_MEDIA_PAUSE,
+                android.view.KeyEvent.KEYCODE_HEADSETHOOK,
+            )
             val mapping = AppSettings.bluetoothButtonAction.value
             if (!isSingleButton || mapping == BluetoothButtonAction.PLAY_PAUSE) {
                 return super.onMediaButtonEvent(session, controller, intent)
             }
-            if (!controller.isTrusted) return false
             if (keyEvent.action != android.view.KeyEvent.ACTION_DOWN) return true
             if (keyEvent.repeatCount > 0) return true
 
