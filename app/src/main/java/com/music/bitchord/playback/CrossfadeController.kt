@@ -12,9 +12,11 @@ import androidx.media3.common.Timeline
 import androidx.media3.common.util.UnstableApi
 import androidx.media3.exoplayer.ExoPlayer
 import com.music.bitchord.data.settings.AppSettings
+import com.music.bitchord.data.settings.AppSettings.MAX_CROSSFADE_DURATION_MS
 import com.music.bitchord.data.settings.MixBlend
 import com.music.bitchord.data.settings.SmartAnalysis
 import com.music.bitchord.data.settings.TrackAnalysisState
+import com.music.bitchord.data.settings.TrackPlaybackSettings
 import com.music.bitchord.data.settings.TransitionWindow
 import com.music.bitchord.playback.smart.CrossfadeMode
 import com.music.bitchord.playback.smart.FILTER_ECHO_AT
@@ -197,6 +199,8 @@ class CrossfadeController(
     private val versionSwapActive: () -> Boolean = { false },
     /** Invoked after [finish] has completed cleanup and returned to IDLE. */
     private val onSettled: () -> Unit = {},
+    /** Optional outgoing-track crossfade override; null keeps the global value. */
+    private val trackCrossfadeDurationMs: (MediaItem) -> Int? = { null },
 ) {
 
     private enum class Phase {
@@ -1918,10 +1922,12 @@ class CrossfadeController(
     private fun smartFadeIsEnabled(): Boolean = AppSettings.smartFadeEnabled.value &&
         !BitPerfectOutput.ready.value && !AppSettings.audioOffloadEnabled.value
 
-    private fun configuredFadeMs(): Long = if (BitPerfectOutput.ready.value || AppSettings.audioOffloadEnabled.value) {
-        0L
-    } else {
-        AppSettings.crossfadeDurationMs.value.toLong()
+    private fun configuredFadeMs(): Long {
+        if (BitPerfectOutput.ready.value) return 0L
+        val override = active().currentMediaItem?.let(trackCrossfadeDurationMs)
+        if (override != null) return override.coerceIn(0, MAX_CROSSFADE_DURATION_MS).toLong()
+        if (AppSettings.audioOffloadEnabled.value && !TrackPlaybackSettings.hasEnabledTrackCrossfades()) return 0L
+        return AppSettings.crossfadeDurationMs.value.toLong()
     }
 
     /**

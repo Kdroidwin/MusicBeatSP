@@ -107,6 +107,7 @@ import com.music.bitchord.data.scrobbling.ListenBrainzManager
 import com.music.bitchord.data.scrobbling.ScrobbleManager
 import com.music.bitchord.data.settings.AppSettings
 import com.music.bitchord.data.settings.BluetoothButtonAction
+import com.music.bitchord.data.settings.TrackPlaybackSettings
 import com.music.bitchord.radio.RadioPlaybackSession
 import com.music.bitchord.data.settings.MediaControlSecondaryAction
 import com.music.bitchord.data.settings.OutputPcmMode
@@ -2225,6 +2226,11 @@ class PlaybackService : MediaLibraryService() {
             spareAudioChain.replayGain.blendTrim = trim
         },
         versionSwapActive = { false },
+        trackCrossfadeDurationMs = { item ->
+            TrackPlaybackSettings.profileFor(item.mediaId)
+                ?.takeIf { it.crossfadeOverride }
+                ?.crossfadeDurationMs
+        },
     )
 
     /** Moves the session onto the already-playing incoming decoder at mid-fade. */
@@ -5471,6 +5477,12 @@ class PlaybackService : MediaLibraryService() {
             }
         }
         scope.launch {
+            TrackPlaybackSettings.revision.collect {
+                updateAudioEffectsEnabled()
+                eachPlayer(::applyAudioOffloadPreference)
+            }
+        }
+        scope.launch {
             combine(AppSettings.diracAudioEnabled, AppSettings.diracAudioPreset) { enabled, preset -> enabled to preset }
                 .distinctUntilChanged()
                 .collect { updateAudioEffectsEnabled() }
@@ -5499,9 +5511,15 @@ class PlaybackService : MediaLibraryService() {
         val settings = com.music.bitchord.data.settings.EqualizerSettings
         val bitPerfect = BitPerfectOutput.ready.value
         val regularEqEnabled = settings.enabled.value && !bitPerfect
-        val applyProfile = { manager: com.music.bitchord.playback.equalizer.AudioEffectManager?, isDolbyAtmos: Boolean ->
+        val applyProfile = { manager: com.music.bitchord.playback.equalizer.AudioEffectManager?, isDolbyAtmos: Boolean, mediaId: String? ->
             val diracEnabled = AppSettings.diracAudioEnabled.value && !bitPerfect && !isDolbyAtmos
-            val bandLevels = if (diracEnabled) {
+            val trackProfile = TrackPlaybackSettings.profileFor(mediaId)
+                ?.takeIf { it.eqOverride }
+            val bandLevels = if (trackProfile != null) {
+                trackProfile.eqBandLevels.mapIndexed { band, level ->
+                    band to level.coerceIn(-1500, 1500).toShort()
+                }.toMap()
+            } else if (diracEnabled) {
                 com.music.bitchord.playback.equalizer.EqualizerPreset
                     .diracPresetByIndex(AppSettings.diracAudioPreset.value)
                     .bandLevels
@@ -5510,15 +5528,18 @@ class PlaybackService : MediaLibraryService() {
             } else {
                 settings.bandLevels.value
             }
-            val effectsEnabled = regularEqEnabled || diracEnabled
-            val bassBoost = settings.bassBoostStrength.value.takeIf { regularEqEnabled } ?: 0
-            val virtualizer = settings.virtualizerStrength.value.takeIf { regularEqEnabled } ?: 0
+            val effectsEnabled = if (trackProfile != null) trackProfile.eqEnabled && !bitPerfect
+                else regularEqEnabled || diracEnabled
+            val bassBoost = if (trackProfile != null) 0 else settings.bassBoostStrength.value.takeIf { regularEqEnabled } ?: 0
+            val virtualizer = if (trackProfile != null) 0 else settings.virtualizerStrength.value.takeIf { regularEqEnabled } ?: 0
             manager?.applyAll(effectsEnabled, bandLevels, bassBoost, virtualizer)
         }
-        val standbyIsDolbyAtmos = spare?.currentMediaItem?.mediaId
+        val activeItem = player?.currentMediaItem
+        val standbyItem = spare?.currentMediaItem
+        val standbyIsDolbyAtmos = standbyItem?.mediaId
             ?.let { NerdStats.declaredFormat(it)?.isDolbyAtmos } == true
-        applyProfile(audioEffectManager, activeTrackIsDolbyAtmos)
-        applyProfile(spareAudioEffectManager, standbyIsDolbyAtmos)
+        applyProfile(audioEffectManager, activeTrackIsDolbyAtmos, activeItem?.mediaId)
+        applyProfile(spareAudioEffectManager, standbyIsDolbyAtmos, standbyItem?.mediaId)
         updateAdvancedAudioEffects()
     }
 
@@ -5526,6 +5547,7 @@ class PlaybackService : MediaLibraryService() {
     private fun applyAudioOffloadPreference(target: ExoPlayer) {
         val enabled = AppSettings.audioOffloadEnabled.value &&
             AppSettings.crossfadeDurationMs.value == 0 &&
+            !TrackPlaybackSettings.hasEnabledTrackCrossfades() &&
             !AppSettings.darPcmUpsamplingEnabled.value &&
             !AppSettings.showAnalogDigitalPeakMeter.value &&
             !AppSettings.showSpectrumAnalyzer.value

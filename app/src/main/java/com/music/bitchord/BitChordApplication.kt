@@ -81,6 +81,7 @@ class BitChordApplication : Application(), SingletonImageLoader.Factory {
         YoutubeStreamBootstrap.initializeIfAllowed(this)
         com.music.bitchord.feature.lyrics.manager.LyricsExtensionManager.init(this)
         com.music.bitchord.data.settings.EqualizerSettings.init(this)
+        com.music.bitchord.data.settings.TrackPlaybackSettings.init(this)
         SourceRegistry.init(this)
         SearchHistory.init(this)
         LastPlayed.init(this)

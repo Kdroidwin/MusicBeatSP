@@ -68,6 +68,7 @@ import com.music.bitchord.R
 import com.music.bitchord.data.model.Song
 import com.music.bitchord.playback.SleepTimer
 import com.music.bitchord.ui.player.ThinSlider
+import com.music.bitchord.ui.screens.TrackPlaybackSettingsDialog
 import com.music.bitchord.ui.components.BrowseTarget
 import kotlinx.coroutines.delay
 import java.util.Locale
@@ -97,6 +98,7 @@ fun AppleMusicTrackActionsMenu(
     onShareNowPlaying: (() -> Unit)? = null,
     onMore: () -> Unit,
 ) {
+    var showTrackPlaybackSettings by remember(song.videoId) { mutableStateOf(false) }
     val menu: @Composable () -> Unit = {
         IosMenuPopover(
             item = song.takeIf { open },
@@ -131,6 +133,9 @@ fun AppleMusicTrackActionsMenu(
                 if (onDeleteDownload != null) MenuRow(R.string.delete_download, Icons.Rounded.Delete, onCloseMenu, onDeleteDownload)
                 IosMenuSeparator()
                 MenuRow(R.string.equalizer, Icons.Rounded.GraphicEq, onCloseMenu, onEqualizer)
+                MenuRow(R.string.track_playback_settings, Icons.Rounded.GraphicEq, onCloseMenu) {
+                    showTrackPlaybackSettings = true
+                }
                 MenuRow(R.string.playback_tuning, Icons.Rounded.Speed, onCloseMenu, onPlaybackTuning)
                 if (showPlayerActions) {
                     IosMenuRow(
@@ -167,6 +172,12 @@ fun AppleMusicTrackActionsMenu(
         }
     } else if (!showPlayerActions) {
         menu()
+    }
+    if (showTrackPlaybackSettings) {
+        TrackPlaybackSettingsDialog(song) {
+            showTrackPlaybackSettings = false
+            onDismiss()
+        }
     }
 }
 

@@ -67,6 +67,7 @@ import com.music.bitchord.ui.components.ArtworkBackdrop
 import com.music.bitchord.ui.components.PlayerPopupSystemBars
 import com.music.bitchord.ui.theme.rememberArtworkPalette
 import com.music.bitchord.ui.theme.LocalPlayerMenuPalette
+import com.music.bitchord.ui.screens.TrackPlaybackSettingsDialog
 import java.util.Locale
 
 /**
@@ -120,6 +121,7 @@ fun LocalSongActionsSheet(
     val embedDragHandle = showPlayerActions || useArtworkBackdrop
     val hideEmbeddedDragHandle = showPlayerActions && hidePlayerPopupHandles
     var pickingSleepTimer by remember { mutableStateOf(false) }
+    var showTrackPlaybackSettings by remember(song.videoId) { mutableStateOf(false) }
     val hiddenActions by AppSettings.hiddenPlayerDetailsActions.collectAsStateWithLifecycle()
     val actionOrder by AppSettings.playerDetailsActionOrder.collectAsStateWithLifecycle()
     val savedDownloads by Downloads.saved.collectAsStateWithLifecycle()
@@ -321,11 +323,18 @@ fun LocalSongActionsSheet(
                                     onClick = changeImage,
                                 )
                             }
-                            PlayerDetailsAction.EQUALIZER -> LocalSongActionItem(
-                                icon = Icons.Rounded.GraphicEq,
-                                label = stringResource(R.string.equalizer),
-                                onClick = onEqualizer,
-                            )
+                            PlayerDetailsAction.EQUALIZER -> {
+                                LocalSongActionItem(
+                                    icon = Icons.Rounded.GraphicEq,
+                                    label = stringResource(R.string.equalizer),
+                                    onClick = onEqualizer,
+                                )
+                                LocalSongActionItem(
+                                    icon = Icons.Rounded.GraphicEq,
+                                    label = stringResource(R.string.track_playback_settings),
+                                    onClick = { showTrackPlaybackSettings = true },
+                                )
+                            }
                             PlayerDetailsAction.CHROMECAST -> if (showPlayerActions) {
                                 CastActionItem(onUnavailable = onCastUnavailable)
                             }
@@ -377,6 +386,12 @@ fun LocalSongActionsSheet(
                     }
                 }
             }
+        }
+    }
+    if (showTrackPlaybackSettings) {
+        TrackPlaybackSettingsDialog(song) {
+            showTrackPlaybackSettings = false
+            onDismissRequest()
         }
     }
 }
