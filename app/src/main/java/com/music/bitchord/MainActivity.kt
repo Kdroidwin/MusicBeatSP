@@ -219,8 +219,6 @@ import com.music.bitchord.data.model.UiState
 import com.music.bitchord.data.model.durationMillis
 import com.music.bitchord.data.scrobbling.LastFM
 import com.music.bitchord.data.settings.AppSettings
-import com.music.bitchord.data.settings.AppGestureAction
-import com.music.bitchord.data.settings.AppGestureDirection
 import com.music.bitchord.data.settings.PlayerArtistPageMode
 import com.music.bitchord.data.settings.HomeTabTitleMode
 import com.music.bitchord.data.settings.SavedYoutubeCollection
@@ -274,9 +272,6 @@ import com.music.bitchord.ui.player.PlayerArtworkBackdropPreloader
 import com.music.bitchord.ui.components.BottomTab
 import com.music.bitchord.ui.components.FLOATING_BAR_MAX_WIDTH
 import com.music.bitchord.ui.components.FloatingBottomBar
-import com.music.bitchord.ui.components.GestureScrollRequest
-import com.music.bitchord.ui.components.RootGestureScrollRequests
-import com.music.bitchord.ui.components.observeRootEdgeGestures
 import com.music.bitchord.ui.components.GlassNavBar
 import com.music.bitchord.ui.components.PopupNavigationBar
 import com.music.bitchord.ui.components.floatingtabbar.FloatingTabBarInlineBehavior
@@ -730,10 +725,6 @@ private fun BitChordApp(
     val appleMusicStyleMenus by AppSettings.appleMusicStyleMenus.collectAsStateWithLifecycle()
     val showStatusBar by AppSettings.showStatusBar.collectAsStateWithLifecycle()
     val showPlayerStatusBar by AppSettings.showPlayerStatusBar.collectAsStateWithLifecycle()
-    val appGesturesEnabled by AppSettings.gesturesEnabled.collectAsStateWithLifecycle()
-    val appGestureActions by AppSettings.gestureActions.collectAsStateWithLifecycle()
-    val appGestureBindings by AppSettings.gestureBindings.collectAsStateWithLifecycle()
-    val gestureScope = rememberCoroutineScope()
     val instantStatusBarOnPlayerClose by AppSettings.instantStatusBarOnPlayerClose.collectAsStateWithLifecycle()
     val hazeState = remember { HazeState() }
     val playerHazeState = remember { HazeState() }
@@ -1374,48 +1365,6 @@ private fun BitChordApp(
         derivedStateOf {
             detailListState.firstVisibleItemIndex > 0 ||
                 detailListState.firstVisibleItemScrollOffset > detailTitleDrop
-        }
-    }
-
-    val performAppGesture: (AppGestureAction) -> Unit = { action ->
-        when (action) {
-            AppGestureAction.NONE -> Unit
-            AppGestureAction.PAGE_TOP, AppGestureAction.PAGE_BOTTOM -> {
-                val top = action == AppGestureAction.PAGE_TOP
-                when {
-                    showReplay -> gestureScope.launch {
-                        val count = replayListState.layoutInfo.totalItemsCount
-                        if (count > 0) replayListState.animateScrollToItem(if (top) 0 else count - 1)
-                    }
-                    detail != null -> gestureScope.launch {
-                        val count = detailListState.layoutInfo.totalItemsCount
-                        if (count > 0) detailListState.animateScrollToItem(if (top) 0 else count - 1)
-                    }
-                    selectedTab == TAB_HOME -> gestureScope.launch {
-                        val count = homeListState.layoutInfo.totalItemsCount
-                        if (count > 0) homeListState.animateScrollToItem(if (top) 0 else count - 1)
-                    }
-                    selectedTab == TAB_SEARCH -> gestureScope.launch {
-                        val count = searchListState.layoutInfo.totalItemsCount
-                        if (count > 0) searchListState.animateScrollToItem(if (top) 0 else count - 1)
-                    }
-                    else -> RootGestureScrollRequests.request(
-                        if (top) GestureScrollRequest.TOP else GestureScrollRequest.BOTTOM,
-                    )
-                }
-            }
-            AppGestureAction.OPEN_SETTINGS -> showSettings = true
-            AppGestureAction.OPEN_SEARCH -> {
-                viewModel.clearDetail()
-                showSources = false
-                showReplay = false
-                showSettings = false
-                selectedTab = TAB_SEARCH
-                searchFocusTrigger++
-            }
-            AppGestureAction.PLAY_PAUSE -> controller?.let { if (it.isPlaying) it.pause() else it.play() }
-            AppGestureAction.NEXT_TRACK -> controller?.seekToNextMediaItem()
-            AppGestureAction.PREVIOUS_TRACK -> controller?.seekToPreviousMediaItem()
         }
     }
 
@@ -2915,14 +2864,7 @@ private fun BitChordApp(
     Box(
         Modifier
             .fillMaxSize()
-            .background(mainPageBackgroundColor())
-            .observeRootEdgeGestures(
-                enabled = appGesturesEnabled && !showNowPlaying && !playerDocked && !showSettings &&
-                    !showReplay && !showSources && !showWearOs && songActions == null && browseActions == null,
-                actions = appGestureActions,
-                bindings = appGestureBindings,
-                onAction = performAppGesture,
-            ),
+            .background(mainPageBackgroundColor()),
     ) {
         // A pushed album/artist/playlist page replaces the tab content but
         // leaves the tab bar and mini player in place.

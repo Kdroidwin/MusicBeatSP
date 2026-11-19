@@ -101,7 +101,6 @@ import androidx.compose.material.icons.rounded.SwapHoriz
 import androidx.compose.material.icons.rounded.Speed
 import androidx.compose.material.icons.rounded.SurroundSound
 import androidx.compose.material.icons.rounded.Tune
-import androidx.compose.material.icons.rounded.TouchApp
 import androidx.compose.material.icons.rounded.ViewStream
 import androidx.compose.material.icons.rounded.VerticalAlignTop
 import androidx.compose.material.icons.rounded.VisibilityOff
@@ -191,11 +190,6 @@ import com.music.bitchord.data.NerdStats
 import com.music.bitchord.data.scrobbling.LastFM
 import com.music.bitchord.data.settings.AppSettings
 import com.music.bitchord.data.settings.BluetoothButtonAction
-import com.music.bitchord.data.settings.AppGestureAction
-import com.music.bitchord.data.settings.AppGestureDirection
-import com.music.bitchord.data.settings.AppGestureShape
-import com.music.bitchord.data.settings.AppGestureBinding
-import com.music.bitchord.ui.components.GesturePatternEditorDialog
 import com.music.bitchord.ui.player.AudioVisualizationPanel
 import com.music.bitchord.data.settings.FolderArtworkFallbackMode
 import com.music.bitchord.data.settings.HomeTabTitleMode
@@ -2009,9 +2003,6 @@ fun SettingsScreen(
     val speakerPlaybackAllowed by AppSettings.speakerPlaybackAllowed.collectAsStateWithLifecycle()
     val autoPlayOnHeadphoneConnect by AppSettings.autoPlayOnHeadphoneConnect.collectAsStateWithLifecycle()
     val bluetoothButtonAction by AppSettings.bluetoothButtonAction.collectAsStateWithLifecycle()
-    val gesturesEnabled by AppSettings.gesturesEnabled.collectAsStateWithLifecycle()
-    val gestureActions by AppSettings.gestureActions.collectAsStateWithLifecycle()
-    val gestureBindings by AppSettings.gestureBindings.collectAsStateWithLifecycle()
     val outputStatus by AudioOutputStatus.current.collectAsStateWithLifecycle()
     val sourceAudioStats by NerdStats.current.collectAsStateWithLifecycle()
     val availableSystemAudioEffects = remember {
@@ -2034,7 +2025,6 @@ fun SettingsScreen(
     var showBitPerfectModeDialog by remember { mutableStateOf(false) }
     var pendingBitPerfectMode by remember { mutableStateOf<BitPerfectMode?>(null) }
     var showFixedVolumeConfirmation by remember { mutableStateOf(false) }
-    var editingGestureShape by remember { mutableStateOf<AppGestureShape?>(null) }
     val bitPerfectModeLabel = stringResource(
         when (bitPerfectMode) {
             BitPerfectMode.OFF -> R.string.off
@@ -2499,36 +2489,6 @@ fun SettingsScreen(
                 AppSettings.setBluetoothButtonAction(BluetoothButtonAction.entries[next])
             },
         ),
-        SettingsSearchEntry(
-            stringResource(R.string.app_gestures),
-            stringResource(R.string.app_gestures_subtitle),
-            listOf("gesture", "swipe", "ジェスチャー", "スワイプ"),
-            gesturesEnabled,
-        ) { AppSettings.setGesturesEnabled(!gesturesEnabled) },
-        *AppGestureDirection.entries.map { direction ->
-            val action = gestureActions[direction] ?: AppGestureAction.NONE
-            SettingsSearchEntry(
-                title = direction.localizedTitle(),
-                subtitle = stringResource(R.string.app_gestures_subtitle),
-                keywords = listOf("gesture", "swipe", direction.name.lowercase(), "ジェスチャー", "スワイプ"),
-                valueLabel = action.localizedLabel(),
-                activate = {
-                    val choices = AppGestureAction.entries
-                    val next = (choices.indexOf(action) + 1) % choices.size
-                    AppSettings.setGestureAction(direction, choices[next])
-                },
-            )
-        }.toTypedArray(),
-        *AppGestureShape.entries.map { shape ->
-            val binding = gestureBindings[shape] ?: AppGestureBinding()
-            SettingsSearchEntry(
-                title = shape.localizedTitle(),
-                subtitle = stringResource(R.string.app_gesture_draw_subtitle),
-                keywords = listOf("gesture", "draw", "L shape", "U shape", "ジェスチャー", "なぞる", "L字", "逆L", "コの字", "逆コの字"),
-                valueLabel = binding.action.localizedLabel(),
-                activate = { editingGestureShape = shape },
-            )
-        }.toTypedArray(),
         SettingsSearchEntry(stringResource(R.string.lyrics_furigana), stringResource(R.string.lyrics_furigana_subtitle), listOf("lyrics", "furigana", "ruby", "ふりがな", "ルビ"), showLyricsFurigana) { AppSettings.setShowLyricsFurigana(!showLyricsFurigana) },
         SettingsSearchEntry(stringResource(R.string.lyrics_auto_fit), stringResource(R.string.lyrics_auto_fit_subtitle), listOf("lyrics", "one line", "fit", "歌詞", "一行", "文字サイズ"), autoFitOneLineLyrics) { AppSettings.setAutoFitOneLineLyrics(!autoFitOneLineLyrics) },
         SettingsSearchEntry(stringResource(R.string.lyrics_translation_plamo), stringResource(R.string.lyrics_translation_plamo_subtitle), stringResource(R.string.lyrics_translation_plamo_search_keywords).split(' '), translateLyricsWithPlamo) { AppSettings.setTranslateLyricsWithPlamo(!translateLyricsWithPlamo) },
@@ -4382,51 +4342,6 @@ fun SettingsScreen(
                 onCheckedChange = AppSettings::setPreferUsbDac,
                 badge = stringResource(R.string.connected).takeIf { outputStatus.isUsb },
             )
-            RowDivider()
-            SettingsRow(
-                icon = Icons.Rounded.TouchApp,
-                title = stringResource(R.string.app_gestures),
-                subtitle = stringResource(R.string.app_gestures_subtitle),
-                trailing = {
-                    Switch(
-                        checked = gesturesEnabled,
-                        onCheckedChange = AppSettings::setGesturesEnabled,
-                        colors = SwitchDefaults.colors(
-                            checkedTrackColor = MaterialTheme.colorScheme.primary,
-                            checkedBorderColor = MaterialTheme.colorScheme.primary,
-                        ),
-                    )
-                },
-                onClick = { AppSettings.setGesturesEnabled(!gesturesEnabled) },
-            )
-            if (gesturesEnabled) {
-                AppGestureDirection.entries.forEach { direction ->
-                    val action = gestureActions[direction] ?: AppGestureAction.NONE
-                    SettingsRow(
-                        icon = Icons.Rounded.TouchApp,
-                        title = direction.localizedTitle(),
-                        subtitle = stringResource(R.string.app_gestures_subtitle),
-                        trailing = { Text(action.localizedLabel()) },
-                        onClick = {
-                            val choices = AppGestureAction.entries
-                            val next = (choices.indexOf(action) + 1) % choices.size
-                            AppSettings.setGestureAction(direction, choices[next])
-                        },
-                    )
-                    RowDivider()
-                }
-                AppGestureShape.entries.forEach { shape ->
-                    val binding = gestureBindings[shape] ?: AppGestureBinding()
-                    SettingsRow(
-                        icon = Icons.Rounded.TouchApp,
-                        title = shape.localizedTitle(),
-                        subtitle = stringResource(R.string.app_gesture_draw_subtitle),
-                        trailing = { Text(binding.action.localizedLabel()) },
-                        onClick = { editingGestureShape = shape },
-                    )
-                    RowDivider()
-                }
-            }
             RowDivider()
             SettingsRow(
                 icon = Icons.Rounded.Headphones,
@@ -8475,21 +8390,6 @@ fun SettingsScreen(
                 },
             )
         }
-        editingGestureShape?.let { shape ->
-            val binding = gestureBindings[shape] ?: AppGestureBinding()
-            GesturePatternEditorDialog(
-                shape = shape,
-                title = shape.localizedTitle(),
-                instruction = stringResource(R.string.app_gesture_draw_subtitle),
-                binding = binding,
-                actionLabel = { it.localizedLabel() },
-                onDismiss = { editingGestureShape = null },
-                onSave = { updated ->
-                    AppSettings.setGestureBinding(shape, updated)
-                    editingGestureShape = null
-                },
-            )
-        }
         if (showFixedVolumeConfirmation) {
             AlertDialog(
                 onDismissRequest = { showFixedVolumeConfirmation = false },
@@ -10845,40 +10745,6 @@ private fun BluetoothButtonAction.localizedLabel(): String = stringResource(
         BluetoothButtonAction.PREVIOUS_TRACK -> R.string.bluetooth_button_previous
         BluetoothButtonAction.TOGGLE_SHUFFLE -> R.string.bluetooth_button_shuffle
         BluetoothButtonAction.TOGGLE_FAVORITE -> R.string.bluetooth_button_favorite
-    },
-)
-
-@Composable
-private fun AppGestureDirection.localizedTitle(): String = stringResource(
-    when (this) {
-        AppGestureDirection.LEFT -> R.string.gesture_edge_left
-        AppGestureDirection.RIGHT -> R.string.gesture_edge_right
-        AppGestureDirection.UP -> R.string.gesture_edge_up
-        AppGestureDirection.DOWN -> R.string.gesture_edge_down
-    },
-)
-
-@Composable
-private fun AppGestureShape.localizedTitle(): String = stringResource(
-    when (this) {
-        AppGestureShape.L -> R.string.gesture_shape_l
-        AppGestureShape.MIRRORED_L -> R.string.gesture_shape_mirrored_l
-        AppGestureShape.U -> R.string.gesture_shape_u
-        AppGestureShape.INVERTED_U -> R.string.gesture_shape_inverted_u
-    },
-)
-
-@Composable
-private fun AppGestureAction.localizedLabel(): String = stringResource(
-    when (this) {
-        AppGestureAction.NONE -> R.string.gesture_action_none
-        AppGestureAction.PAGE_TOP -> R.string.gesture_action_page_top
-        AppGestureAction.PAGE_BOTTOM -> R.string.gesture_action_page_bottom
-        AppGestureAction.OPEN_SETTINGS -> R.string.gesture_action_settings
-        AppGestureAction.OPEN_SEARCH -> R.string.gesture_action_search
-        AppGestureAction.PLAY_PAUSE -> R.string.gesture_action_play_pause
-        AppGestureAction.NEXT_TRACK -> R.string.gesture_action_next
-        AppGestureAction.PREVIOUS_TRACK -> R.string.gesture_action_previous
     },
 )
 
