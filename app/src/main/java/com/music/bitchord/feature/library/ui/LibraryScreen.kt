@@ -1330,7 +1330,12 @@ fun LibraryScreen(
                     PullToRefreshBox(
                         isRefreshing = isRefreshingPlaylistMetadata,
                         onRefresh = {
-                            if (!isRefreshingPlaylistMetadata) mainViewModel.loadLocalMusic(isPullToRefresh = true)
+                            if (!isRefreshingPlaylistMetadata) {
+                                mainViewModel.loadLocalMusic(
+                                    isPullToRefresh = true,
+                                    playlistSongsToRefresh = drillDownSongs,
+                                )
+                            }
                         },
                         state = playlistRefreshState,
                         modifier = Modifier.fillMaxSize(),

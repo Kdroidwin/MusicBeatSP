@@ -1,6 +1,7 @@
 package com.music.bitchord.ui
 
 import android.app.Application
+import android.net.Uri
 import androidx.lifecycle.AndroidViewModel
 import androidx.lifecycle.viewModelScope
 import com.music.bitchord.R
@@ -18,6 +19,7 @@ import com.music.bitchord.data.YtMusicRepository
 import com.music.bitchord.feature.localmusic.data.LocalFavoritesStore
 import com.music.bitchord.feature.localmusic.data.LocalPlaylistStore
 import com.music.bitchord.feature.localmusic.data.resolvePlaylistSongs
+import com.music.bitchord.feature.tageditor.data.TagLibWriter
 import com.music.bitchord.feature.localsongactions.data.LocalPlayStatsStore
 import com.music.bitchord.data.lyrics.EmbeddedLyrics
 import com.music.bitchord.data.lyrics.LyricLine
@@ -2843,7 +2845,10 @@ class MainViewModel(app: Application) : AndroidViewModel(app) {
         }
     }
 
-    fun loadLocalMusic(isPullToRefresh: Boolean = false) {
+    fun loadLocalMusic(
+        isPullToRefresh: Boolean = false,
+        playlistSongsToRefresh: List<Song>? = null,
+    ) {
         val generation = localMusicLoadGeneration.incrementAndGet()
         viewModelScope.launch {
             if (isPullToRefresh) {
@@ -2860,6 +2865,10 @@ class MainViewModel(app: Application) : AndroidViewModel(app) {
                 } else {
                     val songs = LocalMediaRepository.getLocalMusic(context)
                     if (generation != localMusicLoadGeneration.get()) return@launch
+                    if (isPullToRefresh && playlistSongsToRefresh != null) {
+                        refreshPlaylistTagsFromFiles(context, playlistSongsToRefresh, songs)
+                        if (generation != localMusicLoadGeneration.get()) return@launch
+                    }
                     if (songs.isEmpty()) {
                         _localSongs.value = UiState.Error(text(R.string.no_local_audio_found))
                         LocalLibrarySnapshotStore.clear(context)
@@ -2878,6 +2887,86 @@ class MainViewModel(app: Application) : AndroidViewModel(app) {
             }
         }
     }
+
+    /**
+     * MediaStore's title/artist columns can remain stale after an audio tag is
+     * edited outside the app. A playlist pull refresh therefore rereads the
+     * actual file tags for that playlist, then replaces both the live metadata
+     * override and any persisted playlist edit snapshot before publishing the
+     * newly scanned library rows.
+     */
+    private suspend fun refreshPlaylistTagsFromFiles(
+        context: android.content.Context,
+        playlistSongs: List<Song>,
+        scannedSongs: List<Song>,
+    ) {
+        val scannedByUri = scannedSongs.mapNotNull { song -> song.localUri?.let { it to song } }.toMap()
+        val scannedById = scannedSongs.associateBy(Song::videoId)
+        val scannedByPath = scannedSongs.mapNotNull { song -> localTagRefreshPath(song)?.let { it to song } }.toMap()
+        val refreshableSongs = playlistSongs.asSequence()
+            .filter(::isRefreshableLocalTagTrack)
+            .map { playlistSong ->
+                val path = localTagRefreshPath(playlistSong)
+                playlistSong.localUri?.let(scannedByUri::get)
+                    ?: scannedById[playlistSong.videoId]
+                    ?: path?.let(scannedByPath::get)
+                    ?: playlistSong
+            }
+            .filter(::isRefreshableLocalTagTrack)
+            .distinctBy { localTagRefreshPath(it) ?: it.localUri ?: it.videoId }
+            .toList()
+
+        val tagReadLimit = Semaphore(4)
+        val refreshedSongs = coroutineScope {
+            refreshableSongs.map { song ->
+                async {
+                    tagReadLimit.withPermit {
+                        val tags = try {
+                            TagLibWriter.readTags(context, song, readArtwork = false)
+                        } catch (cancelled: CancellationException) {
+                            throw cancelled
+                        } catch (_: Exception) {
+                            return@withPermit null
+                        }
+                        song.copy(
+                            title = tags.title.trim().ifBlank { song.title },
+                            artist = tags.artist.trim().ifBlank { song.artist },
+                            albumName = tags.album.trim().takeIf(String::isNotBlank) ?: song.albumName,
+                            albumArtist = tags.albumArtist.trim().takeIf(String::isNotBlank) ?: song.albumArtist,
+                            trackNumber = tags.trackNumber.substringBefore('/').trim().toIntOrNull() ?: song.trackNumber,
+                        )
+                    }
+                }
+            }.awaitAll().filterNotNull()
+        }
+
+        refreshedSongs.forEach { refreshedSong ->
+            updateLocalSongMetadata(refreshedSong)
+            LocalPlaylistStore.updateEditedSongMetadata(
+                song = refreshedSong,
+                title = refreshedSong.title,
+                artist = refreshedSong.artist,
+                albumName = refreshedSong.albumName.orEmpty(),
+                albumArtist = refreshedSong.albumArtist.orEmpty(),
+            )
+        }
+    }
+
+    private fun isRefreshableLocalTagTrack(song: Song): Boolean {
+        val hasLocalFile = !song.localPath.isNullOrBlank() ||
+            song.localUri?.startsWith("content://") == true ||
+            song.localUri?.startsWith("file://") == true
+        return hasLocalFile && !song.videoId.isYoutubeVideoId()
+    }
+
+    private fun localTagRefreshPath(song: Song): String? =
+        song.localPath?.replace('\\', '/')?.trim()?.trimEnd('/')?.takeIf(String::isNotBlank)
+            ?: song.localUri?.takeIf { it.startsWith("file://") }
+                ?.let { runCatching { Uri.parse(it).path }.getOrNull() }
+                ?.replace('\\', '/')?.trim()?.trimEnd('/')?.takeIf(String::isNotBlank)
+
+    private fun String.isYoutubeVideoId(): Boolean = length == 11 &&
+        all { it.isLetterOrDigit() || it == '_' || it == '-' }
 
     /** Only reuse a snapshot when the preferences that shape the scan still match. */
     private fun localLibrarySnapshotFingerprint(): String = buildString {
