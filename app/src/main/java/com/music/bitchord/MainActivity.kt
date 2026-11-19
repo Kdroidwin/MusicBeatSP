@@ -960,6 +960,10 @@ private fun BitChordApp(
      */
     var menuFromPlayer by remember { mutableStateOf(false) }
     var pendingPlayerQuickAction by remember { mutableStateOf<PlayerQuickAction?>(null) }
+    val openEqualizerFromTrackMenu: () -> Unit = {
+        songActions = null
+        showEqualizerSheet = true
+    }
     LaunchedEffect(songActions) {
         if (songActions == null) pendingPlayerQuickAction = null
     }
@@ -4776,7 +4780,7 @@ private fun BitChordApp(
                                 }
                             }
                         } else null,
-                        onEqualizer = { songActions = null; showEqualizerSheet = true },
+                        onEqualizer = openEqualizerFromTrackMenu,
                         onPlaybackTuning = { songActions = null; showPlaybackTuning = true },
                         onTagEditor = { showTagEditor = true },
                         onEditLyrics = { showLyricsEditor = true },
@@ -4882,10 +4886,7 @@ private fun BitChordApp(
                             viewModel.loadPlaylists()
                         }
                     },
-                    onEqualizer = {
-                        songActions = null
-                        showEqualizerSheet = true
-                    },
+                    onEqualizer = openEqualizerFromTrackMenu,
                     onPlaybackTuning = {
                         songActions = null
                         showPlaybackTuning = true
