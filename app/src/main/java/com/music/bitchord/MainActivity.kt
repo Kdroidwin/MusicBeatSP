@@ -3802,8 +3802,6 @@ private fun BitChordApp(
                                     onRootListScrollChanged = onRootLibraryOrSearchScrolled,
                                     onRootListScrollOffsetChanged = onRootLibraryOrSearchScrollOffsetChanged,
                                     onPlaylistDetailVisibilityChanged = { libraryPlaylistDetailOpen = it },
-                                    isRefreshingPlaylistMetadata = isRefreshingLocalMusic,
-                                    onRefreshPlaylistMetadata = { viewModel.loadLocalMusic(isPullToRefresh = true) },
                                     onOpenYoutubeCollection = { collection ->
                                         val type = runCatching { BrowseType.valueOf(collection.type) }
                                             .getOrDefault(BrowseType.OTHER)

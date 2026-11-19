@@ -46,6 +46,7 @@ import androidx.compose.foundation.verticalScroll
 import androidx.compose.foundation.gestures.detectHorizontalDragGestures
 import androidx.compose.foundation.layout.heightIn
 import androidx.compose.material3.Text
+import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
@@ -95,6 +96,7 @@ import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
+import androidx.lifecycle.viewmodel.compose.viewModel
 import kotlinx.coroutines.flow.distinctUntilChanged
 import com.music.bitchord.R
 import com.music.bitchord.data.model.Song
@@ -133,6 +135,7 @@ import com.music.bitchord.feature.localmusic.ui.components.DrillDownSongList
 import com.music.bitchord.feature.localmusic.ui.components.rememberPlaylistCoverPicker
 import com.music.bitchord.ui.components.FastScroller
 import com.music.bitchord.ui.components.SectionIndexer
+import com.music.bitchord.ui.MainViewModel
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.withContext
@@ -281,12 +284,12 @@ fun LibraryScreen(
     onRootListScrollChanged: ((Boolean) -> Unit)? = null,
     onRootListScrollOffsetChanged: ((Float) -> Unit)? = null,
     onPlaylistDetailVisibilityChanged: ((Boolean) -> Unit)? = null,
-    isRefreshingPlaylistMetadata: Boolean = false,
-    onRefreshPlaylistMetadata: () -> Unit = {},
     onOpenYoutubeCollection: (SavedYoutubeCollection) -> Unit = {},
     onOpenReplay: (() -> Unit)? = null,
 ) {
     val context = LocalContext.current.applicationContext
+    val mainViewModel: MainViewModel = viewModel()
+    val isRefreshingPlaylistMetadata by mainViewModel.isRefreshingLocalMusic.collectAsStateWithLifecycle()
     val pinRootFilters by AppSettings.pinMusicLibraryTopBar.collectAsStateWithLifecycle()
     val refreshPlaylistTagsOnPull by AppSettings.refreshPlaylistTagsOnPull.collectAsStateWithLifecycle()
     val playlists by LocalPlaylistStore.playlists.collectAsStateWithLifecycle()
@@ -1185,138 +1188,138 @@ fun LibraryScreen(
             if (key.startsWith("drill:")) {
                 val renderDrillDown: @Composable () -> Unit = {
                     DrillDownSongList(
-                    label = visibleDrillDownLabel.orEmpty(),
-                    artworkUrl = visibleDrillDownArt,
-                    songs = visibleDrillDownSongs,
-                    isArtist = false,
-                    // Favorites use the same saved, draggable song ordering as a playlist.
-                    isPlaylist = visibleDrillDownPlaylistId != null || visibleDrillDownIsFavorites,
-                    showArtworkInList = showPlaylistSongArtwork,
-                    showCollectionArtworkInList = visibleDrillDownPlaylistId == null && showCollectionSongArtwork,
-                    fullScreenArtwork = fullScreenCollectionArtwork,
-                    preserveArtworkAspectRatioInCollections = keepCollectionArtworkAspectRatio,
-                    viewType = songsViewType,
-                    onViewTypeToggle = {
-                        playlistReorderEnabled = false
-                        val next = if (songsViewType == LibraryViewType.GRID) LibraryViewType.LIST else LibraryViewType.GRID
-                        AppSettings.setLibrarySongsViewType(next)
-                    },
-                    selectionMode = playlistSelectionMode && (visibleDrillDownPlaylistId != null || visibleDrillDownIsFavorites),
-                    onSelectionToggle = ::togglePlaylistSongSelection,
-                    selectionToolbar = if (playlistSelectionMode && (visibleDrillDownPlaylistId != null || visibleDrillDownIsFavorites)) {
-                        { contentColor ->
-                            PlaylistSelectionToolbar(
-                                count = selectedPlaylistSongIds.size,
-                                allSelected = visibleDrillDownSongs.isNotEmpty() && visibleDrillDownSongs.all(::isPlaylistSongSelected),
-                                contentColor = contentColor,
-                                onSelectAll = {
-                                    val allSelected = visibleDrillDownSongs.isNotEmpty() && visibleDrillDownSongs.all(::isPlaylistSongSelected)
-                                    if (allSelected) {
-                                        selectedPlaylistSongIds = emptySet()
-                                        playlistSelectionMode = false
-                                    } else {
-                                        selectedPlaylistSongIds = visibleDrillDownSongs.mapTo(mutableSetOf()) { it.localUri ?: it.videoId }
-                                        playlistSelectionMode = true
-                                    }
-                                },
-                                onAddToPlaylist = { showAddSelectedToPlaylist = true },
-                                onEditTags = {
-                                    val targets = selectedPlaylistSongs.filter(Song::isEditableLocalTrack)
-                                    if (targets.isEmpty()) {
-                                        Toast.makeText(context, R.string.bulk_tag_requires_local_tracks, Toast.LENGTH_SHORT).show()
-                                    } else {
-                                        bulkTagTargets = targets
-                                        showBulkTagEditor = true
-                                    }
-                                },
-                                onChangeArtwork = {
-                                    bulkArtworkTargetsForPicker = selectedPlaylistSongs
-                                    bulkArtworkPicker.launch(
-                                        PickVisualMediaRequest(ActivityResultContracts.PickVisualMedia.ImageOnly),
-                                    )
-                                },
-                                onShare = { LocalSongActionsHelper.shareSongs(context, selectedPlaylistSongs) },
-                                onDeleteFromPlaylist = { showDeleteFromPlaylistDialog = true },
-                                allowRemove = visibleDrillDownIsFavorites || !visibleDrillDownIsSmartPlaylist,
-                                removeLabelRes = if (visibleDrillDownIsFavorites) R.string.remove_from_favorites else R.string.remove_from_playlist,
-                                allowReorder = visibleDrillDownIsFavorites || !visibleDrillDownIsSmartPlaylist,
-                                onMoveUp = { moveSelectedSongsByOne(-1) },
-                                onMoveDown = { moveSelectedSongsByOne(1) },
-                                onMoveToTop = { persistSelectedOrder(toTop = true) },
-                                onMoveToBottom = { persistSelectedOrder(toTop = false) },
-                                reorderEnabled = playlistReorderEnabled,
-                                onToggleReorder = {
-                                    if (playlistReorderEnabled) {
-                                        playlistReorderEnabled = false
-                                    } else {
-                                        if (songsViewType != LibraryViewType.LIST) {
-                                            AppSettings.setLibrarySongsViewType(LibraryViewType.LIST)
+                        label = visibleDrillDownLabel.orEmpty(),
+                        artworkUrl = visibleDrillDownArt,
+                        songs = visibleDrillDownSongs,
+                        isArtist = false,
+                        // Favorites use the same saved, draggable song ordering as a playlist.
+                        isPlaylist = visibleDrillDownPlaylistId != null || visibleDrillDownIsFavorites,
+                        showArtworkInList = showPlaylistSongArtwork,
+                        showCollectionArtworkInList = visibleDrillDownPlaylistId == null && showCollectionSongArtwork,
+                        fullScreenArtwork = fullScreenCollectionArtwork,
+                        preserveArtworkAspectRatioInCollections = keepCollectionArtworkAspectRatio,
+                        viewType = songsViewType,
+                        onViewTypeToggle = {
+                            playlistReorderEnabled = false
+                            val next = if (songsViewType == LibraryViewType.GRID) LibraryViewType.LIST else LibraryViewType.GRID
+                            AppSettings.setLibrarySongsViewType(next)
+                        },
+                        selectionMode = playlistSelectionMode && (visibleDrillDownPlaylistId != null || visibleDrillDownIsFavorites),
+                        onSelectionToggle = ::togglePlaylistSongSelection,
+                        selectionToolbar = if (playlistSelectionMode && (visibleDrillDownPlaylistId != null || visibleDrillDownIsFavorites)) {
+                            { contentColor ->
+                                PlaylistSelectionToolbar(
+                                    count = selectedPlaylistSongIds.size,
+                                    allSelected = visibleDrillDownSongs.isNotEmpty() && visibleDrillDownSongs.all(::isPlaylistSongSelected),
+                                    contentColor = contentColor,
+                                    onSelectAll = {
+                                        val allSelected = visibleDrillDownSongs.isNotEmpty() && visibleDrillDownSongs.all(::isPlaylistSongSelected)
+                                        if (allSelected) {
+                                            selectedPlaylistSongIds = emptySet()
+                                            playlistSelectionMode = false
+                                        } else {
+                                            selectedPlaylistSongIds = visibleDrillDownSongs.mapTo(mutableSetOf()) { it.localUri ?: it.videoId }
+                                            playlistSelectionMode = true
                                         }
-                                        playlistReorderEnabled = true
-                                    }
-                                },
-                                onCancel = {
-                                    playlistSelectionMode = false
-                                    selectedPlaylistSongIds = emptySet()
-                                },
-                            )
-                        }
-                    } else null,
-                    selectedIds = selectedPlaylistSongIds,
-                    currentSong = currentSong,
-                    isPlaying = isPlaying,
-                    onSongClick = { list, idx -> onSongClick(list, idx) },
-                    onSongLongPress = { song ->
-                        if (visibleDrillDownPlaylistId != null || visibleDrillDownIsFavorites) {
-                            val key = song.localUri ?: song.videoId
-                            if (!playlistSelectionMode) {
-                                playlistReorderEnabled = false
-                                playlistSelectionMode = true
-                                selectedPlaylistSongIds = setOf(key)
-                            } else {
-                                togglePlaylistSongSelection(song)
+                                    },
+                                    onAddToPlaylist = { showAddSelectedToPlaylist = true },
+                                    onEditTags = {
+                                        val targets = selectedPlaylistSongs.filter(Song::isEditableLocalTrack)
+                                        if (targets.isEmpty()) {
+                                            Toast.makeText(context, R.string.bulk_tag_requires_local_tracks, Toast.LENGTH_SHORT).show()
+                                        } else {
+                                            bulkTagTargets = targets
+                                            showBulkTagEditor = true
+                                        }
+                                    },
+                                    onChangeArtwork = {
+                                        bulkArtworkTargetsForPicker = selectedPlaylistSongs
+                                        bulkArtworkPicker.launch(
+                                            PickVisualMediaRequest(ActivityResultContracts.PickVisualMedia.ImageOnly),
+                                        )
+                                    },
+                                    onShare = { LocalSongActionsHelper.shareSongs(context, selectedPlaylistSongs) },
+                                    onDeleteFromPlaylist = { showDeleteFromPlaylistDialog = true },
+                                    allowRemove = visibleDrillDownIsFavorites || !visibleDrillDownIsSmartPlaylist,
+                                    removeLabelRes = if (visibleDrillDownIsFavorites) R.string.remove_from_favorites else R.string.remove_from_playlist,
+                                    allowReorder = visibleDrillDownIsFavorites || !visibleDrillDownIsSmartPlaylist,
+                                    onMoveUp = { moveSelectedSongsByOne(-1) },
+                                    onMoveDown = { moveSelectedSongsByOne(1) },
+                                    onMoveToTop = { persistSelectedOrder(toTop = true) },
+                                    onMoveToBottom = { persistSelectedOrder(toTop = false) },
+                                    reorderEnabled = playlistReorderEnabled,
+                                    onToggleReorder = {
+                                        if (playlistReorderEnabled) {
+                                            playlistReorderEnabled = false
+                                        } else {
+                                            if (songsViewType != LibraryViewType.LIST) {
+                                                AppSettings.setLibrarySongsViewType(LibraryViewType.LIST)
+                                            }
+                                            playlistReorderEnabled = true
+                                        }
+                                    },
+                                    onCancel = {
+                                        playlistSelectionMode = false
+                                        selectedPlaylistSongIds = emptySet()
+                                    },
+                                )
                             }
-                        } else {
-                            onSongLongPress(song)
-                        }
-                    },
-                    // Selection changes the row tap and long-press behavior,
-                    // but the trailing details/actions button stays available.
-                    onSongMore = if (visibleDrillDownPlaylistId != null || visibleDrillDownIsFavorites) {
-                        { song -> activePlaylistMenuSong = song }
-                    } else onSongLongPress,
-                    onSongSwipe = onSongSwipe,
-                    onShuffle = onShuffle,
-                    onMore = if (visibleDrillDownIsFavorites) ({ showFavoriteSortDialog = true }) else null,
-                    reorderEnabled = playlistReorderEnabled && (visibleDrillDownIsFavorites || (visibleDrillDownPlaylistId != null && !visibleDrillDownIsSmartPlaylist)),
-                    onReorderToggle = if (visibleDrillDownIsFavorites || (visibleDrillDownPlaylistId != null && !visibleDrillDownIsSmartPlaylist)) {
-                        {
-                            if (playlistReorderEnabled) {
-                                playlistReorderEnabled = false
-                            } else {
-                                if (songsViewType != LibraryViewType.LIST) {
-                                    AppSettings.setLibrarySongsViewType(LibraryViewType.LIST)
+                        } else null,
+                        selectedIds = selectedPlaylistSongIds,
+                        currentSong = currentSong,
+                        isPlaying = isPlaying,
+                        onSongClick = { list, idx -> onSongClick(list, idx) },
+                        onSongLongPress = { song ->
+                            if (visibleDrillDownPlaylistId != null || visibleDrillDownIsFavorites) {
+                                val key = song.localUri ?: song.videoId
+                                if (!playlistSelectionMode) {
+                                    playlistReorderEnabled = false
+                                    playlistSelectionMode = true
+                                    selectedPlaylistSongIds = setOf(key)
+                                } else {
+                                    togglePlaylistSongSelection(song)
                                 }
-                                playlistReorderEnabled = true
+                            } else {
+                                onSongLongPress(song)
                             }
-                        }
-                    } else null,
-                    onReorderComplete = { reorderedSongs ->
-                        val playlistId = drillDownPlaylistId
-                        if (playlistId != null && !drillDownIsSmartPlaylist) {
-                            drillDownSongs = reorderedSongs
-                            persistPlaylistSongOrder(playlistId, reorderedSongs)
-                        } else if (drillDownIsFavorites) {
-                            drillDownSongs = reorderedSongs
-                            AppSettings.setLibraryFavoriteSongSort(FavoriteSongSort.DEFAULT)
-                            LocalFavoritesStore.setFavoriteOrder(reorderedSongs.map(Song::favoriteStoreKey))
-                        }
-                    },
-                    onBack = leaveDrillDown,
-                    contentPadding = contentPadding,
-                    songDropdownMenu = if (visibleDrillDownPlaylistId != null || visibleDrillDownIsFavorites) playlistSongDropdownMenu else songDropdownMenu,
-                    onArtworkPaletteChanged = onArtworkPaletteChanged,
-                    onRootListScrollChanged = reportRootLibraryScroll,
+                        },
+                        // Selection changes the row tap and long-press behavior,
+                        // but the trailing details/actions button stays available.
+                        onSongMore = if (visibleDrillDownPlaylistId != null || visibleDrillDownIsFavorites) {
+                            { song -> activePlaylistMenuSong = song }
+                        } else onSongLongPress,
+                        onSongSwipe = onSongSwipe,
+                        onShuffle = onShuffle,
+                        onMore = if (visibleDrillDownIsFavorites) ({ showFavoriteSortDialog = true }) else null,
+                        reorderEnabled = playlistReorderEnabled && (visibleDrillDownIsFavorites || (visibleDrillDownPlaylistId != null && !visibleDrillDownIsSmartPlaylist)),
+                        onReorderToggle = if (visibleDrillDownIsFavorites || (visibleDrillDownPlaylistId != null && !visibleDrillDownIsSmartPlaylist)) {
+                            {
+                                if (playlistReorderEnabled) {
+                                    playlistReorderEnabled = false
+                                } else {
+                                    if (songsViewType != LibraryViewType.LIST) {
+                                        AppSettings.setLibrarySongsViewType(LibraryViewType.LIST)
+                                    }
+                                    playlistReorderEnabled = true
+                                }
+                            }
+                        } else null,
+                        onReorderComplete = { reorderedSongs ->
+                            val playlistId = drillDownPlaylistId
+                            if (playlistId != null && !drillDownIsSmartPlaylist) {
+                                drillDownSongs = reorderedSongs
+                                persistPlaylistSongOrder(playlistId, reorderedSongs)
+                            } else if (drillDownIsFavorites) {
+                                drillDownSongs = reorderedSongs
+                                AppSettings.setLibraryFavoriteSongSort(FavoriteSongSort.DEFAULT)
+                                LocalFavoritesStore.setFavoriteOrder(reorderedSongs.map(Song::favoriteStoreKey))
+                            }
+                        },
+                        onBack = leaveDrillDown,
+                        contentPadding = contentPadding,
+                        songDropdownMenu = if (visibleDrillDownPlaylistId != null || visibleDrillDownIsFavorites) playlistSongDropdownMenu else songDropdownMenu,
+                        onArtworkPaletteChanged = onArtworkPaletteChanged,
+                        onRootListScrollChanged = reportRootLibraryScroll,
                         onRootListScrollOffsetChanged = reportRootLibraryScrollOffset,
                     )
                 }
@@ -1327,7 +1330,7 @@ fun LibraryScreen(
                     PullToRefreshBox(
                         isRefreshing = isRefreshingPlaylistMetadata,
                         onRefresh = {
-                            if (!isRefreshingPlaylistMetadata) onRefreshPlaylistMetadata()
+                            if (!isRefreshingPlaylistMetadata) mainViewModel.loadLocalMusic(isPullToRefresh = true)
                         },
                         state = playlistRefreshState,
                         modifier = Modifier.fillMaxSize(),
