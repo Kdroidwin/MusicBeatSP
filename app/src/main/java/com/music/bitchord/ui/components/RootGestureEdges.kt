@@ -6,6 +6,7 @@ import androidx.compose.foundation.lazy.LazyListState
 import androidx.compose.foundation.lazy.grid.LazyGridState
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.rememberUpdatedState
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.input.pointer.PointerEventPass
 import androidx.compose.ui.input.pointer.pointerInput
@@ -25,12 +26,19 @@ internal object RootGestureScrollRequests {
 }
 
 /** Observes only edge-originating swipes and never consumes taps or list scrolls. */
+@Composable
 internal fun Modifier.observeRootEdgeGestures(
     enabled: Boolean,
     actions: Map<AppGestureDirection, AppGestureAction>,
     bindings: Map<AppGestureShape, AppGestureBinding>,
     onAction: (AppGestureAction) -> Unit,
-): Modifier = pointerInput(enabled, actions, bindings, onAction) {
+): Modifier {
+    // MainActivity recreates this callback when ordinary UI state changes. If
+    // it is a pointerInput key, that cancels an in-progress stroke (playhead,
+    // list state and status-bar changes can all recompose during a drag).
+    // Keep the pointer coroutine stable and read the latest action at release.
+    val currentOnAction = rememberUpdatedState(onAction)
+    return pointerInput(enabled, actions, bindings) {
     if (!enabled) return@pointerInput
     val edge = 32.dp.toPx()
     val threshold = 72.dp.toPx()
@@ -60,7 +68,7 @@ internal fun Modifier.observeRootEdgeGestures(
             val drawnAction = shape?.let { bindings[it]?.action }
                 ?.takeUnless { it == AppGestureAction.NONE }
             if (drawnAction != null) {
-                onAction(drawnAction)
+                currentOnAction.value(drawnAction)
             } else {
                 val dx = path.last().x * size.width - start.x
                 val dy = path.last().y * size.height - start.y
@@ -71,9 +79,11 @@ internal fun Modifier.observeRootEdgeGestures(
                     start.y >= size.height - edge && dy <= -threshold && kotlin.math.abs(dy) > kotlin.math.abs(dx) * 1.35f -> AppGestureDirection.DOWN
                     else -> null
                 }
-                direction?.let(actions::get)?.takeUnless { it == AppGestureAction.NONE }?.let(onAction)
+                direction?.let(actions::get)?.takeUnless { it == AppGestureAction.NONE }
+                    ?.let(currentOnAction.value)
             }
         }
+    }
     }
 }
 

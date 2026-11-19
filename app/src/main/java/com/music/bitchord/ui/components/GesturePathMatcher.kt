@@ -8,8 +8,11 @@ import kotlin.math.hypot
 
 /** Compares drawn paths by shape and direction, independent of screen size or drawing speed. */
 internal object GesturePathMatcher {
-    private const val SAMPLE_COUNT = 32
-    private const val MAX_MATCH_DISTANCE = 0.18f
+    private const val SAMPLE_COUNT = 48
+    // A hand-drawn path rarely lands exactly on the thin guide line. A slightly
+    // wider tolerance keeps real finger traces usable while still separating
+    // the four intentionally different patterns.
+    private const val MAX_MATCH_DISTANCE = 0.34f
 
     fun match(
         input: List<GesturePoint>,
@@ -21,14 +24,17 @@ internal object GesturePathMatcher {
             .filter { (_, binding) -> binding.action != AppGestureAction.NONE && binding.points.size >= 3 }
             .mapNotNull { (shape, binding) ->
                 val normalizedTemplate = normalize(binding.points) ?: return@mapNotNull null
-                shape to minOf(distance(normalizedInput, normalizedTemplate), distance(normalizedInput, normalizedTemplate.asReversed()))
+                // Direction is part of the saved pattern. Treating the reverse
+                // stroke as equivalent made L / mirrored-L and U / inverted-U
+                // indistinguishable in normal use.
+                shape to distance(normalizedInput, normalizedTemplate)
             }
             .sortedBy { it.second }
             .toList()
         val best = ranked.firstOrNull() ?: return null
         val secondDistance = ranked.getOrNull(1)?.second
         if (best.second > MAX_MATCH_DISTANCE) return null
-        if (secondDistance != null && secondDistance - best.second < 0.025f) return null
+        if (secondDistance != null && secondDistance - best.second < 0.008f) return null
         return best.first
     }
 
@@ -91,10 +97,13 @@ internal object GesturePathMatcher {
         return kotlin.math.sqrt(meanSquared).toFloat()
     }
 
-    private fun hasCorner(points: List<GesturePoint>): Boolean = (1 until points.lastIndex).any { index ->
-        val before = points[index - 1]
+    private fun hasCorner(points: List<GesturePoint>): Boolean = (2 until points.lastIndex - 1).any { index ->
+        // Compare across a short window. Finger traces round corners, so an
+        // adjacent-sample angle can look almost straight even when the overall
+        // stroke clearly turns through a right angle.
+        val before = points[index - 2]
         val middle = points[index]
-        val after = points[index + 1]
+        val after = points[index + 2]
         val ax = middle.x - before.x
         val ay = middle.y - before.y
         val bx = after.x - middle.x
