@@ -31,6 +31,7 @@ import kotlinx.coroutines.tasks.await
 import kotlinx.coroutines.withContext
 import kotlinx.coroutines.withTimeoutOrNull
 import com.music.bitchord.wear.playback.Speaker
+import com.music.bitchord.wear.WearProtocolAuth
 import com.music.bitchord.wear.WearProtocol as P
 
 /**
@@ -49,9 +50,10 @@ class PhoneLink(context: Context, private val scope: CoroutineScope) :
     DataClient.OnDataChangedListener,
     CapabilityClient.OnCapabilityChangedListener {
 
-    private val dataClient = Wearable.getDataClient(context)
-    private val messageClient = Wearable.getMessageClient(context)
-    private val capabilityClient = Wearable.getCapabilityClient(context)
+    private val appContext = context.applicationContext
+    private val dataClient = Wearable.getDataClient(appContext)
+    private val messageClient = Wearable.getMessageClient(appContext)
+    private val capabilityClient = Wearable.getCapabilityClient(appContext)
 
     private val _link = MutableStateFlow(Link.Connecting)
     val link: StateFlow<Link> = _link.asStateFlow()
@@ -242,6 +244,15 @@ class PhoneLink(context: Context, private val scope: CoroutineScope) :
             Triple(item.uri.path, item.uri.host, DataMapItem.fromDataItem(item).dataMap)
         }
         changes.forEach { (path, host, map) ->
+            if (path == P.PATH_AUTH_KEY) {
+                val key = map.getByteArray(P.KEY_AUTH_SECRET)
+                if (key?.size == 32) {
+                    runCatching { WearProtocolAuth.store(appContext, key) }
+                    key.fill(0)
+                    if (host != null) phoneNode = host
+                }
+                return@forEach
+            }
             // Fresh state is proof of a live phone, and says which node it is.
             if (host != null && phoneNode == null) phoneNode = host
             _link.value = Link.Connected
@@ -291,6 +302,7 @@ class PhoneLink(context: Context, private val scope: CoroutineScope) :
             return
         }
         if (sendNow(P.CMD_SYNC)) _link.value = Link.Connected
+        requestAuthKey(node)
     }
 
     private suspend fun findPhone(): String? = withTimeoutOrNull(FIND_TIMEOUT_MS) {
@@ -312,7 +324,19 @@ class PhoneLink(context: Context, private val scope: CoroutineScope) :
                 return false
             }
             val sent = runCatching {
-                messageClient.sendMessage(node, "${P.PATH_COMMAND}/$command", arg.toByteArray()).await()
+                val raw = arg.toByteArray()
+                val payload = if (command == P.CMD_SYNC) {
+                    raw
+                } else {
+                    val key = WearProtocolAuth.load(appContext) ?: awaitAuthKey(node) ?: return@runCatching false
+                    try {
+                        WearProtocolAuth.encode(key, "command:$command", raw)
+                    } finally {
+                        key.fill(0)
+                        raw.fill(0)
+                    }
+                }
+                messageClient.sendMessage(node, "${P.PATH_COMMAND}/$command", payload).await()
             }.onFailure { Log.w(TAG, "send $command (attempt $attempt): ${it.message}") }.isSuccess
             if (sent) return true
             // The node may have changed (phone rebooted, re-paired): look again once.
@@ -320,6 +344,35 @@ class PhoneLink(context: Context, private val scope: CoroutineScope) :
         }
         _link.value = Link.NoPhone
         return false
+    }
+
+    private suspend fun requestAuthKey(node: String) {
+        runCatching { messageClient.sendMessage(node, P.PATH_AUTH_REQUEST, ByteArray(0)).await() }
+    }
+
+    private suspend fun awaitAuthKey(node: String): ByteArray? {
+        requestAuthKey(node)
+        val uri = Uri.Builder()
+            .scheme(PutDataRequest.WEAR_URI_SCHEME)
+            .encodedAuthority(node)
+            .path(P.PATH_AUTH_KEY)
+            .build()
+        repeat(15) {
+            val items = runCatching { dataClient.getDataItems(uri).await() }.getOrNull()
+            val key = try {
+                items?.mapNotNull { item ->
+                    DataMapItem.fromDataItem(item).dataMap.getByteArray(P.KEY_AUTH_SECRET)
+                }?.firstOrNull { it.size == 32 }
+            } finally {
+                items?.release()
+            }
+            if (key != null) {
+                runCatching { WearProtocolAuth.store(appContext, key) }
+                return key
+            }
+            delay(200)
+        }
+        return WearProtocolAuth.load(appContext)
     }
 
     private fun applyNowPlaying(map: DataMap) {

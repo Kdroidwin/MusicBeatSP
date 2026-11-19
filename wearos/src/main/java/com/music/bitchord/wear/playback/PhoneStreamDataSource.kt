@@ -13,12 +13,16 @@ import com.google.android.gms.tasks.Tasks
 import com.google.android.gms.wearable.CapabilityClient
 import com.google.android.gms.wearable.ChannelClient
 import com.google.android.gms.wearable.Wearable
+import com.google.android.gms.wearable.PutDataRequest
+import com.google.android.gms.wearable.DataMapItem
 import java.io.BufferedInputStream
+import java.io.ByteArrayOutputStream
 import java.io.DataInputStream
 import java.io.DataOutputStream
 import java.io.InputStream
 import java.util.concurrent.TimeUnit
 import com.music.bitchord.wear.WearProtocol as P
+import com.music.bitchord.wear.WearProtocolAuth
 
 /**
  * Reads a track through the phone.
@@ -47,12 +51,27 @@ class PhoneStreamDataSource(context: Context) : BaseDataSource(true) {
         try {
             val opened = Tasks.await(channels.openChannel(node, P.PATH_STREAM), OPEN_TIMEOUT_S, TimeUnit.SECONDS)
             channel = opened
+            val secret = WearProtocolAuth.load(app) ?: readAuthKey(node)
+                ?: throw DataSourceException(PlaybackException.ERROR_CODE_IO_NETWORK_CONNECTION_FAILED)
+            val bodyBytes = ByteArrayOutputStream().also { bytes ->
+                DataOutputStream(bytes).use { request ->
+                    request.writeUTF(dataSpec.uri.toString())
+                    request.writeLong(dataSpec.position)
+                    request.writeLong(dataSpec.length)
+                }
+            }.toByteArray()
+            val packet = try {
+                WearProtocolAuth.encode(secret, "stream", bodyBytes)
+            } finally {
+                secret.fill(0)
+                bodyBytes.fill(0)
+            }
             DataOutputStream(Tasks.await(channels.getOutputStream(opened), OPEN_TIMEOUT_S, TimeUnit.SECONDS)).apply {
-                writeUTF(dataSpec.uri.toString())
-                writeLong(dataSpec.position)
-                writeLong(dataSpec.length)
+                writeInt(packet.size)
+                write(packet)
                 flush()
             }
+            packet.fill(0)
             val stream = DataInputStream(
                 BufferedInputStream(Tasks.await(channels.getInputStream(opened), OPEN_TIMEOUT_S, TimeUnit.SECONDS), BUFFER),
             )
@@ -104,6 +123,39 @@ class PhoneStreamDataSource(context: Context) : BaseDataSource(true) {
 
     class Factory(private val context: Context) : DataSource.Factory {
         override fun createDataSource(): DataSource = PhoneStreamDataSource(context)
+    }
+
+    private fun readAuthKey(node: String): ByteArray? {
+        runCatching {
+            Tasks.await(
+                Wearable.getMessageClient(app).sendMessage(node, P.PATH_AUTH_REQUEST, ByteArray(0)),
+                OPEN_TIMEOUT_S,
+                TimeUnit.SECONDS,
+            )
+        }
+        val keyUri = Uri.Builder()
+            .scheme(PutDataRequest.WEAR_URI_SCHEME)
+            .encodedAuthority(node)
+            .path(P.PATH_AUTH_KEY)
+            .build()
+        repeat(15) {
+            val items = runCatching {
+                Tasks.await(Wearable.getDataClient(app).getDataItems(keyUri), 2, TimeUnit.SECONDS)
+            }.getOrNull()
+            val key = try {
+                items?.mapNotNull { item ->
+                    DataMapItem.fromDataItem(item).dataMap.getByteArray(P.KEY_AUTH_SECRET)
+                }?.firstOrNull { it.size == 32 }
+            } finally {
+                items?.release()
+            }
+            if (key != null) {
+                runCatching { WearProtocolAuth.store(app, key) }
+                return key
+            }
+            Thread.sleep(200)
+        }
+        return WearProtocolAuth.load(app)
     }
 
     companion object {

@@ -31,6 +31,7 @@ import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
@@ -43,7 +44,9 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
+import kotlinx.coroutines.launch
 import com.music.bitchord.R
+import com.music.bitchord.wear.WearBridge
 import com.music.bitchord.wear.WatchAppStatus
 import com.music.bitchord.wear.WatchEntry
 import com.music.bitchord.wear.WatchInstaller
@@ -88,6 +91,9 @@ fun WearOsScreen(contentPadding: PaddingValues, modifier: Modifier = Modifier) {
     val update by WatchInstaller.update.collectAsStateWithLifecycle()
     var installingNode by rememberSaveable { mutableStateOf<String?>(null) }
     var installingName by rememberSaveable { mutableStateOf("") }
+    var rotatingAuthKey by rememberSaveable { mutableStateOf(false) }
+    var authKeyStatus by rememberSaveable { mutableStateOf<String?>(null) }
+    val scope = rememberCoroutineScope()
 
     LaunchedEffect(Unit) { WatchInstaller.refresh(context) }
     BackHandler(enabled = installingNode != null) { installingNode = null }
@@ -140,6 +146,35 @@ fun WearOsScreen(contentPadding: PaddingValues, modifier: Modifier = Modifier) {
                     )
                 }
             }
+        }
+
+        SettingsGroup(header = stringResource(R.string.wear_os_security_header)) {
+            SettingsRow(
+                icon = Icons.Rounded.Watch,
+                title = stringResource(R.string.wear_os_rotate_key),
+                subtitle = authKeyStatus ?: stringResource(R.string.wear_os_rotate_key_subtitle),
+                enabled = !rotatingAuthKey,
+                trailing = {
+                    if (rotatingAuthKey) {
+                        CircularProgressIndicator(modifier = Modifier.size(20.dp), strokeWidth = 2.dp)
+                    }
+                },
+                onClick = {
+                    if (rotatingAuthKey) return@SettingsRow
+                    rotatingAuthKey = true
+                    authKeyStatus = null
+                    scope.launch {
+                        try {
+                            val count = WearBridge.rotateAuthKey(context)
+                            authKeyStatus = context.getString(R.string.wear_os_rotate_key_done, count)
+                        } catch (_: Exception) {
+                            authKeyStatus = context.getString(R.string.wear_os_rotate_key_failed)
+                        } finally {
+                            rotatingAuthKey = false
+                        }
+                    }
+                },
+            )
         }
     }
 }

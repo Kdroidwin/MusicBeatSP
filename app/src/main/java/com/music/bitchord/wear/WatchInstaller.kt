@@ -5,6 +5,8 @@ import android.net.Uri
 import android.net.nsd.NsdManager
 import android.net.nsd.NsdServiceInfo
 import android.os.Build
+import android.security.keystore.KeyGenParameterSpec
+import android.security.keystore.KeyProperties
 import android.util.Log
 import com.google.android.gms.tasks.Tasks
 import com.google.android.gms.wearable.CapabilityClient
@@ -31,15 +33,24 @@ import org.bouncycastle.cert.jcajce.JcaX509CertificateConverter
 import org.bouncycastle.cert.jcajce.JcaX509v3CertificateBuilder
 import org.bouncycastle.operator.jcajce.JcaContentSignerBuilder
 import java.io.File
+import java.io.FileOutputStream
 import java.math.BigInteger
 import java.security.KeyFactory
 import java.security.KeyPairGenerator
+import java.security.KeyStore
 import java.security.PrivateKey
 import java.security.cert.Certificate
 import java.security.cert.CertificateFactory
 import java.security.spec.PKCS8EncodedKeySpec
+import java.nio.file.AtomicMoveNotSupportedException
+import java.nio.file.Files
+import java.nio.file.StandardCopyOption
 import java.util.Date
 import java.util.concurrent.TimeUnit
+import javax.crypto.Cipher
+import javax.crypto.KeyGenerator
+import javax.crypto.SecretKey
+import javax.crypto.spec.GCMParameterSpec
 import com.music.bitchord.wear.WearProtocol as P
 
 /**
@@ -66,6 +77,10 @@ object WatchInstaller {
     private const val SHA_ASSET = "wear/BitChordWear.sha256"
     private const val PAIRING_SERVICE = "_adb-tls-pairing._tcp"
     private const val CONNECT_SERVICE = "_adb-tls-connect._tcp"
+    private const val ADB_KEY_ALIAS = "musicbeat.watch-installer-adb-key.v1"
+    private const val ADB_KEY_MAGIC = "MBADB1"
+    private const val ADB_KEY_IV_BYTES = 12
+    private const val ADB_KEY_MAX_BYTES = 16 * 1024
 
     private val scope = CoroutineScope(SupervisorJob() + Dispatchers.IO)
 
@@ -388,13 +403,63 @@ object WatchInstaller {
         init {
             setApi(Build.VERSION.SDK_INT)
             setTimeout(30, TimeUnit.SECONDS)
-            val dir = File(app.noBackupFilesDir, "adb").apply { mkdirs() }
-            val keyFile = File(dir, "adbkey.pk8")
+            val appContext = app.applicationContext
+            val dir = File(appContext.noBackupFilesDir, "adb").apply { mkdirs() }
+            val keyFile = File(dir, "adbkey.pk8.enc")
+            val legacyKeyFile = File(dir, "adbkey.pk8")
             val certFile = File(dir, "adbkey.crt")
-            if (keyFile.exists() && certFile.exists()) {
-                key = KeyFactory.getInstance("RSA").generatePrivate(PKCS8EncodedKeySpec(keyFile.readBytes()))
-                cert = certFile.inputStream().use { CertificateFactory.getInstance("X.509").generateCertificate(it) }
+
+            val savedIdentity = when {
+                certFile.isFile && keyFile.isFile -> runCatching {
+                    val encrypted = keyFile.readBytes()
+                    require(encrypted.size <= ADB_KEY_MAX_BYTES) { "Saved ADB identity is too large" }
+                    val encoded = try {
+                        decryptAdbPrivateKey(appContext, encrypted)
+                    } finally {
+                        encrypted.fill(0)
+                    }
+                    try {
+                        KeyFactory.getInstance("RSA").generatePrivate(PKCS8EncodedKeySpec(encoded)) to
+                            certFile.inputStream().use {
+                                CertificateFactory.getInstance("X.509").generateCertificate(it)
+                            }
+                    } finally {
+                        encoded.fill(0)
+                    }
+                }.onFailure { Log.w(TAG, "Saved watch installer identity was unreadable; a new identity will be created") }
+                    .getOrNull()
+
+                certFile.isFile && legacyKeyFile.isFile -> {
+                    val encoded = legacyKeyFile.readBytes()
+                    require(encoded.size <= ADB_KEY_MAX_BYTES) { "Legacy ADB identity is too large" }
+                    try {
+                        val privateKey = KeyFactory.getInstance("RSA").generatePrivate(PKCS8EncodedKeySpec(encoded))
+                        val certificate = certFile.inputStream().use {
+                            CertificateFactory.getInstance("X.509").generateCertificate(it)
+                        }
+                        // Encrypt and sync the replacement before removing the old
+                        // file, so a failed migration never loses the paired identity.
+                        encryptAndStoreAdbPrivateKey(appContext, keyFile, encoded)
+                        check(legacyKeyFile.delete()) { "Could not remove the old plaintext ADB key" }
+                        privateKey to certificate
+                    } finally {
+                        encoded.fill(0)
+                    }
+                }
+
+                else -> null
+            }
+
+            if (savedIdentity != null) {
+                key = savedIdentity.first
+                cert = savedIdentity.second
             } else {
+                // An unreadable identity cannot authenticate to the watch.
+                // Replace both halves together instead of pairing a new key
+                // with an old certificate.
+                keyFile.delete()
+                legacyKeyFile.delete()
+                certFile.delete()
                 val pair = KeyPairGenerator.getInstance("RSA").apply { initialize(2048) }.generateKeyPair()
                 val name = X500Name("CN=BitChord")
                 val now = System.currentTimeMillis()
@@ -408,8 +473,94 @@ object WatchInstaller {
                 ).build(JcaContentSignerBuilder("SHA256withRSA").build(pair.private))
                 key = pair.private
                 cert = JcaX509CertificateConverter().getCertificate(holder)
-                keyFile.writeBytes(key.encoded)
-                certFile.writeBytes(cert.encoded)
+                val encoded = requireNotNull(key.encoded) { "The ADB private key could not be encoded" }
+                try {
+                    encryptAndStoreAdbPrivateKey(appContext, keyFile, encoded)
+                } finally {
+                    encoded.fill(0)
+                }
+                writeAdbFileAtomically(certFile, cert.encoded)
+            }
+        }
+
+        private fun decryptAdbPrivateKey(context: Context, stored: ByteArray): ByteArray {
+            val magic = ADB_KEY_MAGIC.toByteArray(Charsets.US_ASCII)
+            require(stored.size in (magic.size + 1 + ADB_KEY_IV_BYTES + 16)..ADB_KEY_MAX_BYTES)
+            require(stored.copyOfRange(0, magic.size).contentEquals(magic)) { "Unknown ADB key format" }
+            val ivLength = stored[magic.size].toInt() and 0xff
+            require(ivLength == ADB_KEY_IV_BYTES)
+            val ivStart = magic.size + 1
+            val iv = stored.copyOfRange(ivStart, ivStart + ivLength)
+            val encrypted = stored.copyOfRange(ivStart + ivLength, stored.size)
+            return try {
+                Cipher.getInstance("AES/GCM/NoPadding").run {
+                    init(Cipher.DECRYPT_MODE, adbStorageKey(), GCMParameterSpec(128, iv))
+                    updateAAD(adbKeyAad(context))
+                    doFinal(encrypted)
+                }
+            } finally {
+                iv.fill(0)
+                encrypted.fill(0)
+            }
+        }
+
+        private fun encryptAndStoreAdbPrivateKey(context: Context, target: File, encoded: ByteArray) {
+            require(encoded.isNotEmpty() && encoded.size <= ADB_KEY_MAX_BYTES)
+            val cipher = Cipher.getInstance("AES/GCM/NoPadding")
+            cipher.init(Cipher.ENCRYPT_MODE, adbStorageKey())
+            cipher.updateAAD(adbKeyAad(context))
+            val encrypted = cipher.doFinal(encoded)
+            val magic = ADB_KEY_MAGIC.toByteArray(Charsets.US_ASCII)
+            val stored = ByteArray(magic.size + 1 + cipher.iv.size + encrypted.size)
+            try {
+                magic.copyInto(stored)
+                stored[magic.size] = cipher.iv.size.toByte()
+                cipher.iv.copyInto(stored, magic.size + 1)
+                encrypted.copyInto(stored, magic.size + 1 + cipher.iv.size)
+                writeAdbFileAtomically(target, stored)
+            } finally {
+                encrypted.fill(0)
+                stored.fill(0)
+            }
+        }
+
+        private fun adbStorageKey(): SecretKey {
+            val store = KeyStore.getInstance("AndroidKeyStore").apply { load(null) }
+            (store.getKey(ADB_KEY_ALIAS, null) as? SecretKey)?.let { return it }
+            return KeyGenerator.getInstance(KeyProperties.KEY_ALGORITHM_AES, "AndroidKeyStore").run {
+                init(
+                    KeyGenParameterSpec.Builder(
+                        ADB_KEY_ALIAS,
+                        KeyProperties.PURPOSE_ENCRYPT or KeyProperties.PURPOSE_DECRYPT,
+                    )
+                        .setBlockModes(KeyProperties.BLOCK_MODE_GCM)
+                        .setEncryptionPaddings(KeyProperties.ENCRYPTION_PADDING_NONE)
+                        .setKeySize(256)
+                        .setRandomizedEncryptionRequired(true)
+                        .build(),
+                )
+                generateKey()
+            }
+        }
+
+        private fun adbKeyAad(context: Context) =
+            ("${context.packageName}:wear-adb-private-key:v1").toByteArray(Charsets.UTF_8)
+
+        private fun writeAdbFileAtomically(target: File, bytes: ByteArray) {
+            val temporary = File(target.parentFile, "${target.name}.tmp")
+            FileOutputStream(temporary).use { output ->
+                output.write(bytes)
+                output.fd.sync()
+            }
+            try {
+                Files.move(
+                    temporary.toPath(),
+                    target.toPath(),
+                    StandardCopyOption.ATOMIC_MOVE,
+                    StandardCopyOption.REPLACE_EXISTING,
+                )
+            } catch (_: AtomicMoveNotSupportedException) {
+                Files.move(temporary.toPath(), target.toPath(), StandardCopyOption.REPLACE_EXISTING)
             }
         }
 

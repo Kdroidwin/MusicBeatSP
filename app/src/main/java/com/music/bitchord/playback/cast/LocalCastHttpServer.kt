@@ -62,6 +62,8 @@ internal class LocalCastHttpServer(
     @Throws(IOException::class)
     fun start(): String {
         check(!closed.get()) { "Cast media server is closed" }
+        val expectedReceiver = receiverAddress
+            ?: throw IOException("Cast receiver address is unavailable; refusing to expose local media")
         if (serverSocket == null) {
             val length = mediaLength()
             if (length <= 0L) throw IOException("Local media has no readable length")
@@ -80,7 +82,7 @@ internal class LocalCastHttpServer(
         }
         val candidate = advertisedAddress
             ?: throw IOException("No local IPv4 address is available for Cast")
-        val subnetMatch = receiverAddress?.let(candidate::sharesSubnetWith) ?: false
+        val subnetMatch = expectedReceiver.let(candidate::sharesSubnetWith)
         val transport = when (candidate.transportPriority) {
             0 -> "wifi"
             1 -> "ethernet"
@@ -98,6 +100,10 @@ internal class LocalCastHttpServer(
             } catch (_: IOException) {
                 if (!closed.get()) close()
                 return
+            }
+            if (client.inetAddress != receiverAddress) {
+                runCatching { client.close() }
+                continue
             }
             clients += client
             try {

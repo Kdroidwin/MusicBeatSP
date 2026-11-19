@@ -31,6 +31,10 @@ object WearProtocol {
     const val PATH_NOW_PLAYING = "/bitchord/now_playing"
     const val PATH_QUEUE = "/bitchord/queue"
     const val PATH_COMMAND = "/bitchord/command"
+    /** One-time provisioning request; the key is returned over the paired Wear Data Layer. */
+    const val PATH_AUTH_REQUEST = "/bitchord/auth/request"
+    const val PATH_AUTH_KEY = "/bitchord/auth/key"
+    const val KEY_AUTH_SECRET = "auth_secret"
     const val PATH_OUTPUTS = "/bitchord/outputs"
 
     /**

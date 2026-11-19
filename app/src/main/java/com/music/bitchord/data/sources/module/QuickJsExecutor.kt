@@ -2,6 +2,7 @@ package com.music.bitchord.data.sources.module
 
 import com.music.bitchord.data.TrackLog
 import com.music.bitchord.data.Http
+import com.music.bitchord.data.net.PublicInternetDns
 import com.dokar.quickjs.QuickJs
 import com.dokar.quickjs.binding.AsyncFunctionBinding
 import com.dokar.quickjs.binding.FunctionBinding
@@ -125,6 +126,7 @@ internal object QuickJsExecutor {
 
     private val syncHttpClient by lazy {
         Http.untrustedClient.newBuilder()
+            .dns(PublicInternetDns)
             .connectTimeout(20, TimeUnit.SECONDS)
             .readTimeout(20, TimeUnit.SECONDS)
             .callTimeout(30, TimeUnit.SECONDS)

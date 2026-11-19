@@ -119,6 +119,11 @@ object SmbConnection {
         .withReadTimeout(30, TimeUnit.SECONDS)
         .withWriteTimeout(30, TimeUnit.SECONDS)
         .withTransactTimeout(30, TimeUnit.SECONDS)
+        // Do not silently negotiate an unsigned session. SMB3-capable servers
+        // also encrypt share traffic; SMB2 servers retain mandatory signing.
+        .withSigningEnabled(true)
+        .withSigningRequired(true)
+        .withEncryptData(true)
         .build()
 
     class SmbException(message: String) : IOException(message)

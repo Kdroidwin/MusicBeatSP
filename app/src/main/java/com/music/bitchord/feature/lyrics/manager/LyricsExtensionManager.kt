@@ -3,6 +3,7 @@ package com.music.bitchord.feature.lyrics.manager
 import android.content.Context
 import android.util.AtomicFile
 import com.music.bitchord.data.Http
+import com.music.bitchord.data.net.PublicInternetDns
 import com.music.bitchord.data.lyrics.LyricsLog
 import com.music.bitchord.data.settings.AppSettings
 import com.music.bitchord.feature.lyrics.domain.LyricsExtension
@@ -439,7 +440,7 @@ object LyricsExtensionManager {
     private fun requestText(url: String, maxBytes: Int): String? {
         if (!extensionsEnabled || !LyricsExtensionSecurity.isHttpsUrl(url)) return null
         val request = Request.Builder().url(url).cacheControl(okhttp3.CacheControl.FORCE_NETWORK).build()
-        val call = Http.lyricsClient.newCall(request)
+        val call = Http.lyricsClient.newBuilder().dns(PublicInternetDns).build().newCall(request)
         activeSyncCalls.add(call)
         return try {
             if (!extensionsEnabled) {

@@ -3,6 +3,7 @@ package com.music.bitchord.data.sources.module
 import android.util.Log
 import com.music.bitchord.data.TrackLog
 import com.music.bitchord.data.Http
+import com.music.bitchord.data.net.PublicInternetDns
 import com.music.bitchord.data.sources.SourceRegistry
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.CoroutineScope
@@ -45,6 +46,8 @@ internal fun redactModuleUrl(url: String): String =
  * engines survive across successive search calls.
  */
 class ModuleManager(private val sourceConfigId: String) {
+
+    private val scriptNetworkClient by lazy { Http.untrustedClient.newBuilder().dns(PublicInternetDns).build() }
 
     private val json = Json {
         isLenient = true
@@ -139,7 +142,7 @@ class ModuleManager(private val sourceConfigId: String) {
                 TrackLog.d(TAG, "▶ fetchIndex(${redactModuleUrl(sourceUrl)})")
                 runCatching {
                     val request = Request.Builder().url(sourceUrl).build()
-                    Http.untrustedClient.newCall(request).execute().use { resp ->
+                    scriptNetworkClient.newCall(request).execute().use { resp ->
                         if (!resp.isSuccessful) {
                             throw Exception("HTTP ${resp.code} from ${redactModuleUrl(sourceUrl)}")
                         }
@@ -227,7 +230,7 @@ class ModuleManager(private val sourceConfigId: String) {
 
             TrackLog.d(TAG, "  Resolved download URL: ${redactModuleUrl(downloadUrl)}")
             val request = Request.Builder().url(downloadUrl).build()
-            val jsCode = Http.untrustedClient.newCall(request).execute().use { resp ->
+            val jsCode = scriptNetworkClient.newCall(request).execute().use { resp ->
                 if (!resp.isSuccessful) {
                     throw Exception("HTTP ${resp.code} downloading module ${module.id}")
                 }

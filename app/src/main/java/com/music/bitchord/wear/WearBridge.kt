@@ -68,10 +68,12 @@ import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.runBlocking
+import kotlinx.coroutines.withContext
 import java.io.ByteArrayOutputStream
 import java.util.concurrent.CountDownLatch
 import java.util.concurrent.TimeUnit
 import com.music.bitchord.wear.WearProtocol as P
+import com.music.bitchord.wear.WearProtocolAuth
 
 /**
  * Tells the watch app what is playing.
@@ -125,6 +127,7 @@ object WearBridge {
 
     @Volatile private var last: Playing? = null
     @Volatile private var art: Art? = null
+    @Volatile private var allowedStreamUris: Set<String> = emptySet()
 
     /** Null until asked. Kept current by a capability listener after that. */
     @Volatile private var watchReachable: Boolean? = null
@@ -136,6 +139,11 @@ object WearBridge {
      * Main thread: the player is read here, not later.
      */
     internal fun publish(context: Context, snapshot: MediaWidgetSnapshot, player: Player, playing: Boolean?) {
+        allowedStreamUris = buildSet {
+            for (index in 0 until player.mediaItemCount) {
+                player.getMediaItemAt(index).localConfiguration?.uri?.toString()?.let(::add)
+            }
+        }
         last = Playing(
             snapshot = snapshot,
             album = player.currentMediaItem?.mediaMetadata?.albumTitle?.toString(),
@@ -163,6 +171,63 @@ object WearBridge {
     internal fun onWatchSeen(context: Context) {
         watchReachable = true
         ensureListening(context.applicationContext)
+    }
+
+    /** Send the per-install HMAC secret only to the paired watch that requested it. */
+    internal fun provisionAuthKey(context: Context, watchNodeId: String) {
+        if (watchNodeId.isBlank() || watchNodeId.length > 256) return
+        scope.launch {
+            runCatching {
+                val secret = WearProtocolAuth.getOrCreate(context.applicationContext)
+                try {
+                    val uri = Uri.Builder()
+                        .scheme(com.google.android.gms.wearable.PutDataRequest.WEAR_URI_SCHEME)
+                        .encodedAuthority(watchNodeId)
+                        .path(P.PATH_AUTH_KEY)
+                        .build()
+                    val request = PutDataMapRequest.create(uri.toString()).apply {
+                        dataMap.putByteArray(P.KEY_AUTH_SECRET, secret)
+                        dataMap.putLong(P.KEY_POSITION_AT, System.currentTimeMillis())
+                    }.asPutDataRequest().setUrgent()
+                    Tasks.await(Wearable.getDataClient(context.applicationContext).putDataItem(request), 10, TimeUnit.SECONDS)
+                } finally {
+                    secret.fill(0)
+                }
+            }.onFailure { Log.w(TAG, "Could not provision the paired watch authentication key") }
+        }
+    }
+
+    /** Rotates the phone's Wear HMAC key and immediately provisions reachable watches. */
+    internal suspend fun rotateAuthKey(context: Context): Int = withContext(Dispatchers.IO) {
+        val app = context.applicationContext
+        val secret = WearProtocolAuth.rotate(app)
+        try {
+            val capability = Tasks.await(
+                Wearable.getCapabilityClient(app).getCapability(P.CAPABILITY_WATCH, CapabilityClient.FILTER_REACHABLE),
+                10,
+                TimeUnit.SECONDS,
+            )
+            var provisioned = 0
+            for (node in capability.nodes) {
+                if (node.id.isBlank() || node.id.length > 256) continue
+                runCatching {
+                    val uri = Uri.Builder()
+                        .scheme(com.google.android.gms.wearable.PutDataRequest.WEAR_URI_SCHEME)
+                        .encodedAuthority(node.id)
+                        .path(P.PATH_AUTH_KEY)
+                        .build()
+                    val request = PutDataMapRequest.create(uri.toString()).apply {
+                        dataMap.putByteArray(P.KEY_AUTH_SECRET, secret)
+                        dataMap.putLong(P.KEY_POSITION_AT, System.currentTimeMillis())
+                    }.asPutDataRequest().setUrgent()
+                    Tasks.await(Wearable.getDataClient(app).putDataItem(request), 10, TimeUnit.SECONDS)
+                    provisioned++
+                }
+            }
+            provisioned
+        } finally {
+            secret.fill(0)
+        }
     }
 
     /**
@@ -381,9 +446,27 @@ object WearBridge {
                 val output = DataOutputStream(
                     BufferedOutputStream(Tasks.await(client.getOutputStream(channel), 10, TimeUnit.SECONDS), STREAM_BUFFER),
                 )
-                val uri = input.readUTF()
-                val position = input.readLong()
-                val length = input.readLong()
+                val packetSize = input.readInt()
+                if (packetSize !in 1..(64 * 1024 + 128)) throw SecurityException("Invalid stream request")
+                val packet = ByteArray(packetSize).also(input::readFully)
+                val secret = WearProtocolAuth.getOrCreate(app)
+                val verified = WearProtocolAuth.verify(secret, "stream", packet)
+                    ?: throw SecurityException("Unauthenticated stream request")
+                secret.fill(0)
+                if (!acceptWearNonce(verified.nonce)) throw SecurityException("Replayed stream request")
+                val request = DataInputStream(verified.body.inputStream())
+                val uri = request.readUTF()
+                val position = request.readLong()
+                val length = request.readLong()
+                if (request.available() != 0 || position < 0L || length < -1L) {
+                    throw SecurityException("Invalid stream range")
+                }
+                val requestedUri = Uri.parse(uri)
+                if (requestedUri.scheme !in setOf("content", "file", "http", "https", "bitchord") ||
+                    uri !in allowedStreamUris
+                ) {
+                    throw SecurityException("Stream URI is outside the published player queue")
+                }
                 val asked = SystemClock.elapsedRealtime()
                 val factory = streams ?: run {
                     // The service builds the chain: bring it up and give it a moment.
@@ -454,6 +537,16 @@ object WearBridge {
     }
 
     private const val STREAM_BUFFER = 32 * 1024
+
+    private val nonceLock = Any()
+    private val seenWearNonces = LinkedHashSet<String>()
+
+    internal fun acceptWearNonce(nonce: String): Boolean = synchronized(nonceLock) {
+        if (nonce.isBlank() || nonce in seenWearNonces) return@synchronized false
+        seenWearNonces += nonce
+        while (seenWearNonces.size > 512) seenWearNonces.remove(seenWearNonces.first())
+        true
+    }
 
     // ---- Internals ----
 
@@ -610,9 +703,29 @@ class WearCommandService : WearableListenerService() {
 
     override fun onMessageReceived(event: MessageEvent) {
         val path = event.path ?: return
+        if (path == P.PATH_AUTH_REQUEST) {
+            WearBridge.onWatchSeen(this)
+            WearBridge.provisionAuthKey(this, event.sourceNodeId)
+            return
+        }
         if (!path.startsWith(P.PATH_COMMAND + "/")) return
         val command = path.substringAfterLast('/')
-        val arg = event.data?.let { String(it, Charsets.UTF_8) }.orEmpty()
+        val packet = event.data ?: ByteArray(0)
+        val body = if (command == P.CMD_SYNC) {
+            // Read-only bootstrap is allowed before the watch receives its key.
+            packet
+        } else {
+            val secret = runCatching { WearProtocolAuth.getOrCreate(this) }.getOrNull() ?: return
+            val verified = WearProtocolAuth.verify(secret, "command:$command", packet)
+            secret.fill(0)
+            val authenticated = verified ?: run {
+                Log.w("BitChordWear", "Rejected unauthenticated watch command")
+                return
+            }
+            if (!WearBridge.acceptWearNonce(authenticated.nonce)) return
+            authenticated.body
+        }
+        val arg = body.toString(Charsets.UTF_8)
         WearBridge.onWatchSeen(this)
 
         when (command) {
@@ -628,7 +741,7 @@ class WearCommandService : WearableListenerService() {
                 return
             }
             P.CMD_SPEAKER_STATUS -> {
-                val map = event.data?.let { runCatching { DataMap.fromByteArray(it) }.getOrNull() } ?: return
+                val map = runCatching { DataMap.fromByteArray(body) }.getOrNull() ?: return
                 main.post { WearBridge.speaker?.onStatus(map) }
                 return
             }

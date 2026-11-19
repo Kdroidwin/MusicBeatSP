@@ -54,7 +54,7 @@ data class SourceConfig(
         get() = when {
             !kind.needsServer -> true
             baseUrl.isBlank() -> false
-            kind.isRemoteMusicServer -> RemoteServerCredentialsStore.read(id)
+            kind.isRemoteMusicServer -> RemoteServerCredentialsStore.read(id, baseUrl)
                 ?.let { it.username.isNotBlank() && it.password.isNotBlank() } == true
             else -> true
         }
@@ -229,7 +229,7 @@ object SourceRegistry {
     fun config(configId: String): SourceConfig? = configs.value.firstOrNull { it.id == configId }
 
     fun serverCredentials(configId: String): RemoteServerCredentials? =
-        RemoteServerCredentialsStore.read(configId)
+        config(configId)?.let { RemoteServerCredentialsStore.read(configId, it.baseUrl) }
 
     fun hasConfiguredRemoteServer(): Boolean = configs.value.any { config ->
         config.enabled && config.kind.isRemoteMusicServer && config.isComplete
@@ -268,7 +268,7 @@ object SourceRegistry {
         this.config(config.id)?.takeIf { it.kind.isRemoteMusicServer }?.let {
             Http.cancelRequestsForOrigin(it.baseUrl)
         }
-        if (!RemoteServerCredentialsStore.save(config.id, credentials)) {
+        if (!RemoteServerCredentialsStore.save(config.id, parsedUrl.toString(), credentials)) {
             return Result.failure(IllegalStateException("Secure credential storage is unavailable on this device"))
         }
         val tidied = config.tidied()
@@ -565,10 +565,10 @@ object SourceRegistry {
         SourceKind.CUSTOM_MODULE -> ModuleSource(config)
         SourceKind.MODULE -> ModuleSource(config)
         SourceKind.JELLYFIN -> JellyfinMusicSource(config) {
-            credentials ?: RemoteServerCredentialsStore.read(config.id)
+            credentials ?: RemoteServerCredentialsStore.read(config.id, config.baseUrl)
         }
         SourceKind.NAVIDROME -> NavidromeMusicSource(config) {
-            credentials ?: RemoteServerCredentialsStore.read(config.id)
+            credentials ?: RemoteServerCredentialsStore.read(config.id, config.baseUrl)
         }
         SourceKind.KHINSIDER -> KhinsiderSource(config)
         SourceKind.YOUTUBE -> YouTubeSource(config)

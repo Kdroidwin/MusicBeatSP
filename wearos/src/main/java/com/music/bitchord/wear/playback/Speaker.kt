@@ -12,11 +12,13 @@ import androidx.media3.exoplayer.ExoPlayer
 import androidx.media3.session.MediaController
 import androidx.media3.session.SessionToken
 import com.google.android.gms.tasks.Tasks
+import android.util.Log
 import com.google.android.gms.wearable.DataMap
 import com.google.android.gms.wearable.Wearable
 import com.google.common.util.concurrent.ListenableFuture
 import java.util.concurrent.Executors
 import java.util.concurrent.TimeUnit
+import com.music.bitchord.wear.WearProtocolAuth
 import com.music.bitchord.wear.WearProtocol as P
 
 /**
@@ -32,6 +34,8 @@ import com.music.bitchord.wear.WearProtocol as P
  * Main thread throughout; the listener service posts here.
  */
 object Speaker {
+
+    private const val TAG = "BitChordWearSpeaker"
 
     private val main = Handler(Looper.getMainLooper())
     private val io = Executors.newSingleThreadExecutor()
@@ -211,11 +215,27 @@ object Speaker {
         val bytes = map.toByteArray()
         io.execute {
             val node = PhoneStreamDataSource.phoneNode(context) ?: return@execute
+            val key = WearProtocolAuth.load(context) ?: return@execute
             runCatching {
-                Tasks.await(
-                    Wearable.getMessageClient(context).sendMessage(node, "${P.PATH_COMMAND}/${P.CMD_SPEAKER_STATUS}", bytes),
-                    10, TimeUnit.SECONDS,
-                )
+                val packet = WearProtocolAuth.encode(key, "command:${P.CMD_SPEAKER_STATUS}", bytes)
+                try {
+                    Tasks.await(
+                        Wearable.getMessageClient(context).sendMessage(
+                            node,
+                            "${P.PATH_COMMAND}/${P.CMD_SPEAKER_STATUS}",
+                            packet,
+                        ),
+                        10,
+                        TimeUnit.SECONDS,
+                    )
+                } finally {
+                    packet.fill(0)
+                }
+            }.onFailure {
+                Log.w(TAG, "Could not authenticate watch-speaker status")
+            }.also {
+                key.fill(0)
+                bytes.fill(0)
             }
         }
         main.removeCallbacks(heartbeat)

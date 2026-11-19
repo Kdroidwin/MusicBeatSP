@@ -6,6 +6,7 @@ import com.dokar.quickjs.binding.AsyncFunctionBinding
 import com.dokar.quickjs.binding.FunctionBinding
 import com.dokar.quickjs.binding.define
 import com.music.bitchord.data.Http
+import com.music.bitchord.data.net.PublicInternetDns
 import com.music.bitchord.data.quickjs.QuickJsLifecycle
 import com.music.bitchord.data.lyrics.LyricsLog
 import com.music.bitchord.feature.lyrics.domain.LyricsExtensionSecurity
@@ -79,6 +80,7 @@ object LyricsExtensionExecutor {
 
     private val httpClient by lazy {
         Http.lyricsClient.newBuilder()
+            .dns(PublicInternetDns)
             .callTimeout(10, TimeUnit.SECONDS)
             .connectTimeout(5, TimeUnit.SECONDS)
             .readTimeout(10, TimeUnit.SECONDS)
