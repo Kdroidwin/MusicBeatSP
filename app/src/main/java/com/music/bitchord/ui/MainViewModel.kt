@@ -2945,13 +2945,11 @@ class MainViewModel(app: Application) : AndroidViewModel(app) {
     private fun applyLocalSongMetadataOverride(song: Song): Song {
         val keys = localSongMetadataKeys(song)
         val override = keys.firstNotNullOfOrNull(localSongMetadataOverrides::get) ?: return song
-        if (
-            song.title == override.title && song.artist == override.artist &&
+        // Keep the override even when MediaStore has caught up. Playlist and
+        // MediaSession copies can still hold the old metadata and arrive later.
+        if (song.title == override.title && song.artist == override.artist &&
             song.albumName == override.albumName && song.albumArtist == override.albumArtist
-        ) {
-            keys.forEach(localSongMetadataOverrides::remove)
-            return song
-        }
+        ) return song
         return song.copy(
             title = override.title,
             artist = override.artist,
@@ -2963,7 +2961,10 @@ class MainViewModel(app: Application) : AndroidViewModel(app) {
     private fun localSongMetadataKeys(song: Song): List<String> = buildList {
         song.localUri?.takeIf(String::isNotBlank)?.let { add("uri:$it") }
         song.localPath?.takeIf(String::isNotBlank)?.let { add("path:${it.replace('\\', '/')}") }
-        if (isEmpty() && song.videoId.isNotBlank()) add("video:${song.videoId}")
+        // Playlist and player snapshots may represent the same downloaded
+        // track with a different URI/path. videoId is the stable cross-snapshot
+        // identity, so index it as well instead of using it only as a fallback.
+        song.videoId.takeIf(String::isNotBlank)?.let { add("video:$it") }
     }
 
     /**
