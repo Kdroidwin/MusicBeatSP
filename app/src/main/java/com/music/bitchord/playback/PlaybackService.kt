@@ -2575,6 +2575,7 @@ class PlaybackService : MediaLibraryService() {
         alreadyAudible: Boolean = false,
     ) {
         val exoPlayer = player ?: return
+        ABRepeatController.clearForDifferentTrack(mediaItem?.mediaId)
         resetCurrentLocalPlayStatsForTrackChange()
         if (alreadyAudible) {
             adoptPreparedReplayGainForCurrentTrack(mediaItem)
