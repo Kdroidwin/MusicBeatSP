@@ -2,6 +2,7 @@ package com.music.bitchord.data.lyrics.providers
 
 import android.util.Base64
 import com.music.bitchord.data.Http
+import com.music.bitchord.data.net.PublicInternetDns
 import com.music.bitchord.data.lyrics.Musixmatch
 import com.music.bitchord.data.lyrics.NetEaseLyrics
 import com.music.bitchord.data.lyrics.QQMusicLyrics
@@ -50,7 +51,8 @@ internal object NativeLyricsHttp {
         "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/131.0.0.0 Safari/537.36"
 
     val fastClient by lazy {
-        Http.client.newBuilder()
+        Http.lyricsClient.newBuilder()
+            .dns(PublicInternetDns)
             .connectTimeout(4, TimeUnit.SECONDS)
             .readTimeout(6, TimeUnit.SECONDS)
             .callTimeout(7, TimeUnit.SECONDS)
@@ -59,7 +61,8 @@ internal object NativeLyricsHttp {
     }
 
     val paxClient by lazy {
-        Http.client.newBuilder()
+        Http.lyricsClient.newBuilder()
+            .dns(PublicInternetDns)
             .connectTimeout(5, TimeUnit.SECONDS)
             .readTimeout(8, TimeUnit.SECONDS)
             .callTimeout(9, TimeUnit.SECONDS)

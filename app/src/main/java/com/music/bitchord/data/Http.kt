@@ -2,6 +2,7 @@ package com.music.bitchord.data
 
 import android.util.Log
 import com.music.bitchord.data.settings.AppSettings
+import com.music.bitchord.data.net.PublicInternetDns
 import okhttp3.ConnectionPool
 import okhttp3.Dispatcher
 import okhttp3.OkHttpClient
@@ -202,7 +203,14 @@ object Http {
         .addInterceptor { chain ->
             if (AppSettings.offlineMode.value) throw IOException("Offline mode is enabled")
             val initialRequest = chain.request()
-            val webDavAuth = com.music.bitchord.data.webdav.WebDavAuth.authHeaderFor(initialRequest.url)
+            // YouTube API/media requests never use WebDAV. Excluding these
+            // hosts here also prevents a coincidental matching WebDAV URL
+            // from attaching storage credentials to artist/search requests.
+            val webDavAuth = if (isYoutubeMusicRelatedHost(initialRequest.url.host)) {
+                null
+            } else {
+                com.music.bitchord.data.webdav.WebDavAuth.authHeaderFor(initialRequest.url)
+            }
             val request = if (webDavAuth != null && initialRequest.header("Authorization") == null) {
                 initialRequest.newBuilder()
                     .header("Authorization", webDavAuth)
@@ -291,6 +299,7 @@ object Http {
         .connectionPool(ConnectionPool(8, 5, TimeUnit.MINUTES))
         .cookieJar(okhttp3.CookieJar.NO_COOKIES)
         .authenticator(okhttp3.Authenticator.NONE)
+        .dns(PublicInternetDns)
         .addInterceptor { chain ->
             val request = chain.request()
             if (AppSettings.offlineMode.value) throw IOException("Offline mode is enabled")
@@ -369,6 +378,10 @@ object Http {
     val lyricsClient: OkHttpClient = OkHttpClient.Builder()
         .connectTimeout(20, TimeUnit.SECONDS)
         .readTimeout(30, TimeUnit.SECONDS)
+        // Provider and extension URLs are untrusted input. Resolve only public
+        // internet addresses so an HTTPS hostname cannot be pointed at a
+        // device, router, or private service on the local network.
+        .dns(PublicInternetDns)
         .retryOnConnectionFailure(true)
         .dispatcher(Dispatcher().apply { maxRequestsPerHost = 16 })
         .connectionPool(ConnectionPool(8, 5, TimeUnit.MINUTES))

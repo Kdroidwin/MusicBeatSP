@@ -46,6 +46,9 @@ object YtMusicRepository {
     private val artistSearchCache = ConcurrentHashMap<String, BrowseItem>()
     private val missingArtistSearchCache = ConcurrentHashMap<String, Long>()
     private const val ARTIST_SEARCH_MISS_TTL_MS = 10 * 60 * 1000L
+    private const val MAX_ARTIST_QUERY_CHARS = 256
+    private const val MAX_BROWSE_ID_CHARS = 128
+    private val SAFE_BROWSE_ID = Regex("[A-Za-z0-9_-]{1,$MAX_BROWSE_ID_CHARS}")
     /** Podcast continuations omit the show header, so retain it by token. */
     private val podcastShowByToken = ConcurrentHashMap<String, String>()
 
@@ -401,7 +404,11 @@ object YtMusicRepository {
 
     /** Resolves a local artist name to the exact YouTube Music artist result, including its thumbnail. */
     suspend fun findArtistPage(name: String): Result<BrowseItem> {
-        val wanted = artistSearchKey(name)
+        val cleanName = name.trim()
+        if (cleanName.length !in 1..MAX_ARTIST_QUERY_CHARS || cleanName.any { it.code in 0x00..0x1f || it.code in 0x7f..0x9f }) {
+            return Result.failure(IllegalArgumentException("Invalid artist name"))
+        }
+        val wanted = artistSearchKey(cleanName)
         if (wanted.isBlank()) return Result.failure(IllegalArgumentException("Artist name is empty"))
         artistSearchCache[wanted]?.let { return Result.success(it) }
         val missAt = missingArtistSearchCache[wanted]
@@ -409,14 +416,14 @@ object YtMusicRepository {
             return Result.failure(NoSuchElementException("No exact artist page found for $name"))
         }
         missingArtistSearchCache.remove(wanted)
-        return search(name.trim(), SearchFilter.ARTISTS).mapCatching { rows ->
+        return search(cleanName, SearchFilter.ARTISTS).mapCatching { rows ->
             rows.asSequence()
                 .filterIsInstance<SearchResult.Browse>()
                 .map { it.item }
                 .filter { it.type == com.music.bitchord.data.model.BrowseType.ARTIST }
                 .firstOrNull { artistSearchKey(it.title) == wanted }
                 ?.also { artistSearchCache[wanted] = it }
-                ?: throw NoSuchElementException("No exact artist page found for $name")
+                ?: throw NoSuchElementException("No exact artist page found for $cleanName")
         }.onFailure { error ->
             if (error is NoSuchElementException) {
                 missingArtistSearchCache[wanted] = System.currentTimeMillis()
@@ -942,16 +949,21 @@ object YtMusicRepository {
      * Artist page. The landing page only lists ~5 songs, so the linked
      * "Top songs" playlist is fetched to fill the list out.
      */
-    suspend fun artistPage(browseId: String): Result<ArtistPage> = call("artist:$browseId") {
+    suspend fun artistPage(browseId: String): Result<ArtistPage> {
+        if (!SAFE_BROWSE_ID.matches(browseId)) {
+            return Result.failure(IllegalArgumentException("Invalid artist browse id"))
+        }
+        return call("artist") {
         // Ask YouTube Music for the overview in the device's language. Other
         // browse operations keep their established English request context.
         val page = InnertubeParser.parseArtistPage(
             Innertube.browse(browseId, language = Innertube.currentLanguage),
         )
-        val fullSongs = page.moreSongsBrowseId?.let { playlistId ->
+        val fullSongs = page.moreSongsBrowseId?.takeIf(SAFE_BROWSE_ID::matches)?.let { playlistId ->
             runCatching { songsPaged(playlistId) }.getOrNull()
         }
         if (!fullSongs.isNullOrEmpty()) page.copy(songs = fullSongs) else page
+        }
     }
 
     private suspend fun <T> call(label: String, block: suspend () -> T): Result<T> =
