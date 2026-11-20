@@ -272,6 +272,10 @@ fun LibraryScreen(
     modifier: Modifier = Modifier,
     onPlayNext: ((Song) -> Unit)? = null,
     onAddToQueue: ((Song) -> Unit)? = null,
+    /** Opens the selected track directly in the tag editor. */
+    onOpenSongTagEditor: ((Song) -> Unit)? = null,
+    /** Opens the selected track directly in its details sheet. */
+    onOpenSongDetails: ((Song) -> Unit)? = null,
     onDeleteSong: ((Song) -> Unit)? = null,
     onSongTagsOrLyricsSaved: ((Song) -> Unit)? = null,
     onSongMetadataUpdated: ((Song) -> Unit)? = null,
@@ -332,8 +336,11 @@ fun LibraryScreen(
     var mostPlayedSongs by remember { mutableStateOf<List<Song>>(emptyList()) }
     var downloadedYoutubeSongs by remember { mutableStateOf<List<Song>>(emptyList()) }
     var historyRefresh by remember { mutableStateOf(0) }
-    val playStatsSnapshot = remember(context, playStatsRevision, historyRefresh) {
-        LocalPlayStatsStore.snapshot(context)
+    var playStatsSnapshot by remember(context) {
+        mutableStateOf<Map<String, com.music.bitchord.feature.localsongactions.domain.model.LocalPlayStats>>(emptyMap())
+    }
+    LaunchedEffect(context, playStatsRevision, historyRefresh) {
+        playStatsSnapshot = withContext(Dispatchers.IO) { LocalPlayStatsStore.snapshot(context) }
     }
     val choosePlaylistCover = rememberPlaylistCoverPicker { playlistId, uri ->
         LocalPlaylistStore.setPlaylistCover(playlistId, uri)
@@ -624,8 +631,9 @@ fun LibraryScreen(
         val refreshedSongs = if (playlist.smartDefinition != null) {
             smartPlaylistSongs[playlistId] ?: emptyList()
         } else {
-            resolvePlaylistSongs(playlist, songs)
+            withContext(Dispatchers.Default) { resolvePlaylistSongs(playlist, songs) }
         }
+        if (drillDownPlaylistId != playlistId) return@LaunchedEffect
         if (refreshedSongs != drillDownSongs) {
             drillDownSongs = refreshedSongs
             drillDownArt = playlist.customCoverUrl
@@ -1004,7 +1012,7 @@ fun LibraryScreen(
             },
             onTagEditor = {
                 activePlaylistMenuSong = null
-                onSongLongPress(song)
+                onOpenSongTagEditor?.invoke(song) ?: onSongLongPress(song)
             },
             onShare = {
                 activePlaylistMenuSong = null
@@ -1016,7 +1024,7 @@ fun LibraryScreen(
             },
             onDetails = {
                 activePlaylistMenuSong = null
-                onSongLongPress(song)
+                onOpenSongDetails?.invoke(song) ?: onSongLongPress(song)
             },
         )
     }

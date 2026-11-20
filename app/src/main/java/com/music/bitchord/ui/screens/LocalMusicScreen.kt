@@ -105,6 +105,7 @@ import androidx.compose.runtime.SideEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.produceState
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberUpdatedState
 import androidx.compose.runtime.rememberCoroutineScope
@@ -343,6 +344,7 @@ fun LocalMusicScreen(
     val visibleLocalLibraryTabs by AppSettings.visibleLocalLibraryTabs.collectAsStateWithLifecycle()
     val localLibraryTabOrder by AppSettings.localLibraryTabOrder.collectAsStateWithLifecycle()
     val artistSlashSeparators by AppSettings.artistSlashSeparators.collectAsStateWithLifecycle()
+    val artistSlashSeparatorExceptions by AppSettings.artistSlashSeparatorExceptions.collectAsStateWithLifecycle()
     val displayedLocalTabs = remember(visibleLocalLibraryTabs, localLibraryTabOrder, isDownloads, showTabRow) {
         val allowedTabs = if (showTabRow) visibleLocalLibraryTabs else LocalLibraryTab.entries.toSet()
         localLibraryTabOrder
@@ -456,7 +458,9 @@ fun LocalMusicScreen(
     } else {
         AppSettings.localDrillDownSongsViewType.collectAsStateWithLifecycle()
     }
-    val sortedSongs = remember(songs, sortOrder) { songs.sortedForLibrary(sortOrder) }
+    val sortedSongs by produceState(songs, songs, sortOrder) {
+        value = withContext(Dispatchers.Default) { songs.sortedForLibrary(sortOrder) }
+    }
     var selectedSongIds by remember { mutableStateOf<Set<String>>(emptySet()) }
     // Kept separately from the tracks selected for deletion: different albums
     // can share tracks, so inferring an album's selection from those track ids
@@ -468,8 +472,11 @@ fun LocalMusicScreen(
     val smartPlaylistsEnabled by AppSettings.smartPlaylistsEnabled.collectAsStateWithLifecycle()
     val favoriteIds by LocalFavoritesStore.favoriteIds.collectAsStateWithLifecycle()
     val playStatsRevision by LocalPlayStatsStore.revision.collectAsStateWithLifecycle()
-    val playStatsSnapshot = remember(context, playStatsRevision) {
-        LocalPlayStatsStore.snapshot(context)
+    var playStatsSnapshot by remember(context) {
+        mutableStateOf<Map<String, com.music.bitchord.feature.localsongactions.domain.model.LocalPlayStats>>(emptyMap())
+    }
+    LaunchedEffect(context, playStatsRevision) {
+        playStatsSnapshot = withContext(Dispatchers.IO) { LocalPlayStatsStore.snapshot(context) }
     }
     var smartPlaylistSongs by remember { mutableStateOf<Map<String, List<Song>>>(emptyMap()) }
     val smartPlaylistTrackCounts = remember(smartPlaylistSongs) {
@@ -1225,15 +1232,28 @@ fun LocalMusicScreen(
 
                 key == "tab:$LOCAL_TAB_ARTISTS" -> {
                     val unknownArtistStr = stringResource(R.string.unknown_artist)
-                    val artists = remember(sortedSongs, unknownArtistStr, artistSort, artistSlashSeparators) {
-                        val grouped = ArtistSplitter.groupSongsByArtist(sortedSongs, unknownArtistStr)
-                        when (artistSort) {
-                            ArtistSort.MOST_SONGS -> grouped.sortedWith(
-                                compareByDescending<ArtistEntry> { it.songs.size }
-                                    .thenBy { it.name.lowercase(Locale.ROOT) }
+                    val artists by produceState(
+                        initialValue = emptyList<ArtistEntry>(),
+                        sortedSongs,
+                        unknownArtistStr,
+                        artistSort,
+                        artistSlashSeparators,
+                        artistSlashSeparatorExceptions,
+                    ) {
+                        value = withContext(Dispatchers.Default) {
+                            val grouped = ArtistSplitter.groupSongsByArtist(
+                                sortedSongs,
+                                unknownArtistStr,
+                                artistSlashSeparators,
                             )
-                            ArtistSort.NAME_ASC -> grouped.sortedBy { it.name.lowercase(Locale.ROOT) }
-                            ArtistSort.NAME_DESC -> grouped.sortedByDescending { it.name.lowercase(Locale.ROOT) }
+                            when (artistSort) {
+                                ArtistSort.MOST_SONGS -> grouped.sortedWith(
+                                    compareByDescending<ArtistEntry> { it.songs.size }
+                                        .thenBy { it.name.lowercase(Locale.ROOT) }
+                                )
+                                ArtistSort.NAME_ASC -> grouped.sortedBy { it.name.lowercase(Locale.ROOT) }
+                                ArtistSort.NAME_DESC -> grouped.sortedByDescending { it.name.lowercase(Locale.ROOT) }
+                            }
                         }
                     }
                     val visibleArtists = remember(artists, quickSearchActive, quickSearchQuery, hideLocalQuickSearch) {
@@ -1281,26 +1301,28 @@ fun LocalMusicScreen(
                 }
 
                 key == "tab:$LOCAL_TAB_ALBUM_ARTISTS" -> {
-                    val albumArtists = remember(sortedSongs, artistSort) {
-                        val grouped = sortedSongs
-                            .filter { !it.albumArtist.isNullOrBlank() }
-                            .groupBy { it.albumArtist!!.trim().lowercase(Locale.ROOT) }
-                            .map { (_, tracks) ->
-                                val displayName = tracks.first().albumArtist!!.trim()
-                                ArtistEntry(
-                                    name = displayName,
-                                    songs = tracks,
-                                    thumbnailUrl = tracks.firstNotNullOfOrNull { it.thumbnailUrl },
-                                    key = "album-artist:${displayName.lowercase(Locale.ROOT)}",
+                    val albumArtists by produceState(emptyList<ArtistEntry>(), sortedSongs, artistSort) {
+                        value = withContext(Dispatchers.Default) {
+                            val grouped = sortedSongs
+                                .filter { !it.albumArtist.isNullOrBlank() }
+                                .groupBy { it.albumArtist!!.trim().lowercase(Locale.ROOT) }
+                                .map { (_, tracks) ->
+                                    val displayName = tracks.first().albumArtist!!.trim()
+                                    ArtistEntry(
+                                        name = displayName,
+                                        songs = tracks,
+                                        thumbnailUrl = tracks.firstNotNullOfOrNull { it.thumbnailUrl },
+                                        key = "album-artist:${displayName.lowercase(Locale.ROOT)}",
+                                    )
+                                }
+                            when (artistSort) {
+                                ArtistSort.MOST_SONGS -> grouped.sortedWith(
+                                    compareByDescending<ArtistEntry> { it.songs.size }
+                                        .thenBy { it.name.lowercase(Locale.ROOT) }
                                 )
+                                ArtistSort.NAME_ASC -> grouped.sortedBy { it.name.lowercase(Locale.ROOT) }
+                                ArtistSort.NAME_DESC -> grouped.sortedByDescending { it.name.lowercase(Locale.ROOT) }
                             }
-                        when (artistSort) {
-                            ArtistSort.MOST_SONGS -> grouped.sortedWith(
-                                compareByDescending<ArtistEntry> { it.songs.size }
-                                    .thenBy { it.name.lowercase(Locale.ROOT) }
-                            )
-                            ArtistSort.NAME_ASC -> grouped.sortedBy { it.name.lowercase(Locale.ROOT) }
-                            ArtistSort.NAME_DESC -> grouped.sortedByDescending { it.name.lowercase(Locale.ROOT) }
                         }
                     }
                     val visibleAlbumArtists = remember(albumArtists, quickSearchActive, quickSearchQuery, hideLocalQuickSearch) {
@@ -1342,8 +1364,8 @@ fun LocalMusicScreen(
                 }
 
                 key == "tab:$LOCAL_TAB_ALBUMS" -> {
-                    val allAlbums = remember(sortedSongs, collections) {
-                        albumEntries(sortedSongs, collections)
+                    val allAlbums by produceState(emptyList<AlbumEntry>(), sortedSongs, collections) {
+                        value = withContext(Dispatchers.Default) { albumEntries(sortedSongs, collections) }
                     }
                     val albums = remember(allAlbums, quickSearchActive, quickSearchQuery, hideLocalQuickSearch) {
                         val query = quickSearchQuery.trim()

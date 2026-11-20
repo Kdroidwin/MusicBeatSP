@@ -2,6 +2,7 @@ package com.music.bitchord.feature.homeai
 
 import android.content.Context
 import android.net.Uri
+import android.os.Process
 import android.util.Log
 import ai.onnxruntime.OnnxTensor
 import ai.onnxruntime.OrtEnvironment
@@ -29,6 +30,7 @@ import kotlinx.coroutines.sync.withLock
 import kotlinx.coroutines.TimeoutCancellationException
 import kotlinx.coroutines.withContext
 import kotlinx.coroutines.withTimeout
+import kotlinx.coroutines.asCoroutineDispatcher
 import java.io.BufferedInputStream
 import java.io.File
 import java.io.FileOutputStream
@@ -36,6 +38,7 @@ import java.net.HttpURLConnection
 import java.net.URL
 import java.nio.FloatBuffer
 import java.security.MessageDigest
+import java.util.concurrent.Executors
 import kotlin.math.min
 import kotlin.math.roundToInt
 
@@ -113,7 +116,6 @@ object LocalHomeAi {
     private const val ANALYSIS_BATCH_SIZE = 4
     private const val ANALYSIS_TRACK_TIMEOUT_MS = 30_000L
     private const val ANALYSIS_BATCH_PAUSE_MS = 500L
-    private val analysisScope = CoroutineScope(SupervisorJob() + Dispatchers.IO)
     private val analysisLock = Any()
     private data class AnalysisRequest(val id: Long, val context: Context, val songs: List<Song>)
     private var analysisRequest: AnalysisRequest? = null
@@ -123,6 +125,15 @@ object LocalHomeAi {
     val analysisProgress = _analysisProgress.asStateFlow()
     private val classificationMutex = Mutex()
     private val modelOperationMutex = Mutex()
+    private val analysisDispatcher = Executors.newSingleThreadExecutor { task ->
+        Thread({
+            runCatching { Process.setThreadPriority(Process.THREAD_PRIORITY_BACKGROUND) }
+            task.run()
+        }, "MusicBeat-LocalMood").apply { isDaemon = true }
+    }.asCoroutineDispatcher()
+    // Keep local inference from competing with UI and playback threads while
+    // allowing the full library scan to continue after leaving Home.
+    private val analysisScope = CoroutineScope(SupervisorJob() + analysisDispatcher)
     @Volatile private var verificationFingerprint: String? = null
     @Volatile private var verificationResult: Boolean = false
     private val verificationLock = Any()
@@ -445,7 +456,7 @@ object LocalHomeAi {
     }
 
     suspend fun classify(context: Context, song: Song): MoodScores? = classificationMutex.withLock {
-      withContext(Dispatchers.IO) {
+      withContext(analysisDispatcher) {
        try {
         cachedScore(context, song)?.let { return@withContext it }
         val audioUri = song.localUri?.takeIf(String::isNotBlank)?.let { runCatching { Uri.parse(it) }.getOrNull() }
@@ -689,7 +700,7 @@ object LocalHomeAi {
         }
     }
 
-    private suspend fun <T> withModels(context: Context, block: (Runtime) -> T): T = withContext(Dispatchers.IO) {
+    private suspend fun <T> withModels(context: Context, block: (Runtime) -> T): T = withContext(analysisDispatcher) {
         check(isModelInstalled(context)) { "AI model files are missing or failed verification" }
         val active = runtime ?: synchronized(runtimeLock) {
             runtime ?: run {

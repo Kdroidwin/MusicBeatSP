@@ -18,6 +18,7 @@ import com.music.bitchord.data.LikeState
 import com.music.bitchord.data.YtMusicRepository
 import com.music.bitchord.feature.localmusic.data.LocalFavoritesStore
 import com.music.bitchord.feature.localmusic.data.LocalPlaylistStore
+import com.music.bitchord.feature.localmusic.data.LocalPlaylistSongResolver
 import com.music.bitchord.feature.localmusic.data.resolvePlaylistSongs
 import com.music.bitchord.feature.tageditor.data.TagLibWriter
 import com.music.bitchord.feature.localsongactions.data.LocalPlayStatsStore
@@ -68,6 +69,7 @@ import kotlinx.coroutines.FlowPreview
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.async
 import kotlinx.coroutines.awaitAll
+import kotlinx.coroutines.withContext
 import kotlinx.coroutines.coroutineScope
 import kotlinx.coroutines.withTimeout
 import kotlinx.coroutines.withTimeoutOrNull
@@ -1384,8 +1386,19 @@ class MainViewModel(app: Application) : AndroidViewModel(app) {
         startSuggestPipeline()
         val appContext = getApplication<Application>()
         if (LocalMediaRepository.hasStoragePermission(appContext)) {
-            LocalLibrarySnapshotStore.read(appContext, localLibrarySnapshotFingerprint())
-                ?.let { cached -> _localSongs.value = UiState.Success(cached) }
+            // The cached library can contain thousands of tracks. Reading and
+            // parsing its JSON on MainActivity's construction path caused a
+            // long first-frame stall (and large temporary allocations) after
+            // process restart. Reuse it off the main thread, but never let a
+            // late cache read overwrite a fresh MediaStore result.
+            viewModelScope.launch {
+                val cached = withContext(Dispatchers.IO) {
+                    LocalLibrarySnapshotStore.read(appContext, localLibrarySnapshotFingerprint())
+                }
+                if (cached != null && _localSongs.value !is UiState.Success) {
+                    _localSongs.value = UiState.Success(cached)
+                }
+            }
         }
         loadLocalMusic()
         viewModelScope.launch {
@@ -2478,28 +2491,39 @@ class MainViewModel(app: Application) : AndroidViewModel(app) {
         songs: List<Song> = emptyList(),
         artistIdentityId: String? = null,
     ) {
-        val artistSongs = if (songs.isNotEmpty()) {
-            songs
-        } else {
-            val allSongs = (_localSongs.value as? UiState.Success)?.data.orEmpty()
-            allSongs.filter {
-                com.music.bitchord.feature.artistimage.util.ArtistSplitter.matchesArtist(it.artist, artistName) ||
-                    com.music.bitchord.feature.artistimage.util.ArtistSplitter.matchesArtist(it.albumArtist.orEmpty(), artistName)
-            }
-        }
-        val allLocalSongs = (_localSongs.value as? UiState.Success)?.data ?: artistSongs
-        val localSections = localArtistShelves(getApplication(), artistName, allLocalSongs)
+        val browseId = "local:artist:$artistName"
         _detailStack.value += DetailPage(
-            browseId = "local:artist:$artistName",
+            browseId = browseId,
             title = artistName,
             subtitle = "Artist",
             thumbnailUrl = thumbnailUrl,
-            songs = UiState.Success(artistSongs),
+            songs = if (songs.isEmpty()) UiState.Loading else UiState.Success(songs),
             type = BrowseType.ARTIST,
-            sections = localSections,
-            localSectionsCount = localSections.size,
             artistIdentityId = artistIdentityId,
         )
+        viewModelScope.launch {
+            val context = getApplication<Application>()
+            val librarySongs = (_localSongs.value as? UiState.Success)?.data
+                ?: LocalMediaRepository.getLocalMusic(context)
+            val (artistSongs, localSections) = withContext(Dispatchers.Default) {
+                val resolvedArtistSongs = if (songs.isNotEmpty()) songs else librarySongs.filter {
+                    com.music.bitchord.feature.artistimage.util.ArtistSplitter.matchesArtist(it.artist, artistName) ||
+                        com.music.bitchord.feature.artistimage.util.ArtistSplitter.matchesArtist(it.albumArtist.orEmpty(), artistName)
+                }
+                resolvedArtistSongs to localArtistShelves(context, artistName, librarySongs)
+            }
+            _detailStack.value = _detailStack.value.map { page ->
+                if (page.browseId != browseId) page
+                else page.copy(
+                    songs = if (page.songs !is UiState.Loading) page.songs
+                        else if (artistSongs.isEmpty()) UiState.Error("No tracks found for this artist")
+                        else UiState.Success(artistSongs),
+                    thumbnailUrl = thumbnailUrl ?: artistSongs.firstNotNullOfOrNull { it.thumbnailUrl?.takeIf(String::isNotBlank) },
+                    sections = localSections,
+                    localSectionsCount = localSections.size,
+                )
+            }
+        }
     }
 
     /** Builds device-owned release and playlist shelves for local and hybrid artist pages. */
@@ -2531,8 +2555,9 @@ class MainViewModel(app: Application) : AndroidViewModel(app) {
             }
         // Resolve from the complete MediaStore snapshot, not the current artist
         // page's rows. Playlists persist URIs/IDs and may predate this scan.
+        val playlistResolver = LocalPlaylistSongResolver(librarySongs)
         val playlists = LocalPlaylistStore.playlists.value.mapNotNull { playlist ->
-            val playlistSongs = resolvePlaylistSongs(playlist, librarySongs, playStats, favoriteIds)
+            val playlistSongs = playlistResolver.resolve(playlist, playStats, favoriteIds)
             val matchingPlaylistSongs = playlistSongs.filter {
                 com.music.bitchord.feature.artistimage.util.ArtistSplitter.matchesArtist(it.artist, artistName) ||
                     com.music.bitchord.feature.artistimage.util.ArtistSplitter.matchesArtist(it.albumArtist.orEmpty(), artistName)
@@ -2564,25 +2589,27 @@ class MainViewModel(app: Application) : AndroidViewModel(app) {
             val context = getApplication<Application>()
             val localSongs = (_localSongs.value as? UiState.Success)?.data
                 ?: LocalMediaRepository.getLocalMusic(context)
-            val matchingSongs = localSongs.filter {
-                com.music.bitchord.feature.artistimage.util.ArtistSplitter.matchesArtist(it.artist, cleanName) ||
-                    com.music.bitchord.feature.artistimage.util.ArtistSplitter.matchesArtist(it.albumArtist.orEmpty(), cleanName)
+            val (popularSongs, localShelves) = withContext(Dispatchers.Default) {
+                val matchingSongs = localSongs.filter {
+                    com.music.bitchord.feature.artistimage.util.ArtistSplitter.matchesArtist(it.artist, cleanName) ||
+                        com.music.bitchord.feature.artistimage.util.ArtistSplitter.matchesArtist(it.albumArtist.orEmpty(), cleanName)
+                }
+                val stats = LocalPlayStatsStore.snapshot(context)
+                val songStats = matchingSongs.associateWith { LocalPlayStatsStore.getStats(it, stats) }
+                val sortedSongs = matchingSongs.sortedWith(
+                    compareByDescending<Song> { songStats[it]?.playedCount ?: 0 }
+                        .thenByDescending { songStats[it]?.lastPlayedTimestamp ?: 0L }
+                        .thenBy { it.title.lowercase(Locale.ROOT) },
+                )
+                val shelves = localArtistShelves(
+                    context = context,
+                    artistName = cleanName,
+                    librarySongs = localSongs,
+                    playStats = stats,
+                    favoriteIds = LocalFavoritesStore.favoriteIds.value,
+                )
+                sortedSongs to shelves
             }
-            val stats = LocalPlayStatsStore.snapshot(context)
-            val songStats = matchingSongs.associateWith { LocalPlayStatsStore.getStats(it, stats) }
-            val popularSongs = matchingSongs.sortedWith(
-                compareByDescending<Song> { songStats[it]?.playedCount ?: 0 }
-                    .thenByDescending { songStats[it]?.lastPlayedTimestamp ?: 0L }
-                    .thenBy { it.title.lowercase(Locale.ROOT) },
-            )
-
-            val localShelves = localArtistShelves(
-                context = context,
-                artistName = cleanName,
-                librarySongs = localSongs,
-                playStats = stats,
-                favoriteIds = LocalFavoritesStore.favoriteIds.value,
-            )
             val initialArt = popularSongs.firstNotNullOfOrNull { it.thumbnailUrl?.takeIf(String::isNotBlank) }
             val page = DetailPage(
                 browseId = artistBrowseId,
@@ -2645,19 +2672,11 @@ class MainViewModel(app: Application) : AndroidViewModel(app) {
                 if (!songs.isNullOrEmpty()) UiState.Success(songs) else UiState.Loading
             }
             browseId.startsWith("local:artist:") -> {
-                val artist = browseId.removePrefix("local:artist:")
-                val songs = cachedLocal?.filter {
-                    com.music.bitchord.feature.artistimage.util.ArtistSplitter.matchesArtist(it.artist, artist) ||
-                        com.music.bitchord.feature.artistimage.util.ArtistSplitter.matchesArtist(it.albumArtist.orEmpty(), artist)
-                }
-                if (!songs.isNullOrEmpty()) UiState.Success(songs) else UiState.Loading
+                UiState.Loading
             }
             else -> UiState.Loading
         }
         val initialArt: String? = thumbnailUrl ?: (initialSongs as? UiState.Success)?.data?.firstNotNullOfOrNull { it.thumbnailUrl?.takeIf { u -> u.isNotBlank() } }
-        val initialLocalArtistSections = if (browseId.startsWith("local:artist:") && cachedLocal != null) {
-            localArtistShelves(getApplication(), browseId.removePrefix("local:artist:"), cachedLocal)
-        } else emptyList()
 
         _detailStack.value += DetailPage(
             browseId = browseId,
@@ -2666,8 +2685,6 @@ class MainViewModel(app: Application) : AndroidViewModel(app) {
             thumbnailUrl = initialArt,
             songs = initialSongs,
             type = resolved,
-            sections = initialLocalArtistSections,
-            localSectionsCount = initialLocalArtistSections.size,
             artistIdentityId = artistIdentityId ?: browseId.takeIf {
                 resolved == BrowseType.ARTIST && !it.startsWith("local:")
             },
@@ -2750,11 +2767,15 @@ class MainViewModel(app: Application) : AndroidViewModel(app) {
                     val context = getApplication<Application>()
                     val allSongs = (_localSongs.value as? UiState.Success)?.data
                         ?: LocalMediaRepository.getLocalMusic(context)
-                    sections = localArtistShelves(context, artistName, allSongs)
-                    val artistSongs = allSongs.filter {
-                        com.music.bitchord.feature.artistimage.util.ArtistSplitter.matchesArtist(it.artist, artistName) ||
-                            com.music.bitchord.feature.artistimage.util.ArtistSplitter.matchesArtist(it.albumArtist.orEmpty(), artistName)
+                    val (artistSongs, artistSections) = withContext(Dispatchers.Default) {
+                        val matchingSongs = allSongs.filter {
+                            com.music.bitchord.feature.artistimage.util.ArtistSplitter.matchesArtist(it.artist, artistName) ||
+                                com.music.bitchord.feature.artistimage.util.ArtistSplitter.matchesArtist(it.albumArtist.orEmpty(), artistName)
+                        }
+                        matchingSongs to localArtistShelves(context, artistName, allSongs)
                     }
+                    sections = artistSections
+                    artwork = artistSongs.firstNotNullOfOrNull { it.thumbnailUrl?.takeIf(String::isNotBlank) }
                     if (artistSongs.isEmpty()) UiState.Error("No tracks found for this artist")
                     else UiState.Success(artistSongs)
                 }

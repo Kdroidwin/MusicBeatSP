@@ -965,6 +965,16 @@ private fun BitChordApp(
         menuFromPlayer = false
         songActions = song
     }
+    val openLibrarySongTagEditor: (Song) -> Unit = { song ->
+        menuFromPlayer = false
+        pendingPlayerQuickAction = PlayerQuickAction.TAG_EDITOR
+        songActions = song
+    }
+    val openLibrarySongDetails: (Song) -> Unit = { song ->
+        menuFromPlayer = false
+        pendingPlayerQuickAction = PlayerQuickAction.DETAILS
+        songActions = song
+    }
     // Whether the player's album/artist lookup (below, for the current track)
     // is still in flight — read by the long-press sheet so it can show a
     // loading row instead of the two just being absent while it waits.
@@ -3733,6 +3743,8 @@ private fun BitChordApp(
                                     isPlaying = player.isPlaying,
                                     onSongClick = play,
                                     onSongLongPress = openSongMenu,
+                                    onOpenSongTagEditor = openLibrarySongTagEditor,
+                                    onOpenSongDetails = openLibrarySongDetails,
                                     onSongSwipe = onSongSwipe,
                                     onShuffle = { songs ->
                                         QueueShuffle.enableForNextQueue()

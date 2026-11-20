@@ -131,8 +131,15 @@ fun HomeScreen(
     val favoriteIds by LocalFavoritesStore.favoriteIds.collectAsState()
     val playStatsRevision by LocalPlayStatsStore.revision.collectAsState()
     val downloadProgress by LocalHomeAi.downloadProgress.collectAsState()
-    val playStats = remember(context, localSongs, playStatsRevision) {
-        LocalPlayStatsStore.snapshot(context)
+    val analysisProgress by LocalHomeAi.analysisProgress.collectAsState()
+    var playStats by remember(context) {
+        mutableStateOf<Map<String, com.music.bitchord.feature.localsongactions.domain.model.LocalPlayStats>>(emptyMap())
+    }
+    var loadedPlayStatsRevision by remember(context) { mutableLongStateOf(Long.MIN_VALUE) }
+    LaunchedEffect(context, playStatsRevision) {
+        val requestedRevision = playStatsRevision
+        playStats = withContext(Dispatchers.IO) { LocalPlayStatsStore.snapshot(context) }
+        loadedPlayStatsRevision = requestedRevision
     }
     var modelInstalled by remember(context) { mutableStateOf(false) }
     var showModelPrompt by remember { mutableStateOf(false) }
@@ -140,10 +147,16 @@ fun HomeScreen(
     var downloadError by remember { mutableStateOf<String?>(null) }
     var modelDeleteError by remember { mutableStateOf<String?>(null) }
     var analysisRetryRevision by remember { mutableIntStateOf(0) }
-    val analysisProgress by LocalHomeAi.analysisProgress.collectAsState()
     var wallClockMinute by remember { mutableLongStateOf(System.currentTimeMillis() / 60_000L) }
-    val cachedMoods = remember(context, localSongs, modelInstalled, analysisProgress) {
-        LocalHomeAi.cachedScores(context, localSongs)
+    // Progress updates arrive once per track. Re-reading every song's cached
+    // score for each update caused O(library-size) allocations while the
+    // background analyzer was working. The result list only needs rebuilding
+    // when analysis starts/finishes, not for each counter tick.
+    var cachedMoods by remember(context) {
+        mutableStateOf<Map<String, LocalHomeAi.MoodScores>>(emptyMap())
+    }
+    LaunchedEffect(context, localSongs, modelInstalled, analysisProgress?.finished) {
+        cachedMoods = withContext(Dispatchers.IO) { LocalHomeAi.cachedScores(context, localSongs) }
     }
 
     LaunchedEffect(context, allowModelDownload) {
@@ -162,8 +175,8 @@ fun HomeScreen(
 
     // Submit a prioritized snapshot to the process-scoped analyzer. Its job is
     // independent of this tab's composition, so switching tabs won't cancel it.
-    LaunchedEffect(context, localSongs, modelInstalled, favoriteIds, playStatsRevision, analysisRetryRevision) {
-        if (!modelInstalled) return@LaunchedEffect
+    LaunchedEffect(context, localSongs, modelInstalled, favoriteIds, loadedPlayStatsRevision, playStatsRevision, analysisRetryRevision) {
+        if (!modelInstalled || loadedPlayStatsRevision != playStatsRevision) return@LaunchedEffect
         if (localSongs.isEmpty()) {
             // A folder-exclusion change can leave an earlier process-scoped
             // scan with now-excluded rows. Replace that request so it stops
@@ -171,14 +184,16 @@ fun HomeScreen(
             LocalHomeAi.requestAnalysis(context, emptyList())
             return@LaunchedEffect
         }
-        val maximumPlayed = localSongs.maxOfOrNull { LocalPlayStatsStore.getStats(it, playStats).playedCount } ?: 0
-        val prioritizedSongs = localSongs
-            .filter { !it.localUri.isNullOrBlank() || !it.localPath.isNullOrBlank() }
-            .sortedByDescending { song ->
-                val stats = LocalPlayStatsStore.getStats(song, playStats)
-                (if (song.favoriteStoreKeys().any(favoriteIds::contains)) 500.0 else 0.0) +
-                    (stats.playedCount.toDouble() / (maximumPlayed + 1.0)) * 300.0 +
-                    (if (stats.lastPlayedTimestamp > 0L) 100.0 else 0.0)
+        val prioritizedSongs = withContext(Dispatchers.Default) {
+            val maximumPlayed = localSongs.maxOfOrNull { LocalPlayStatsStore.getStats(it, playStats).playedCount } ?: 0
+            localSongs
+                .filter { !it.localUri.isNullOrBlank() || !it.localPath.isNullOrBlank() }
+                .sortedByDescending { song ->
+                    val stats = LocalPlayStatsStore.getStats(song, playStats)
+                    (if (song.favoriteStoreKeys().any(favoriteIds::contains)) 500.0 else 0.0) +
+                        (stats.playedCount.toDouble() / (maximumPlayed + 1.0)) * 300.0 +
+                        (if (stats.lastPlayedTimestamp > 0L) 100.0 else 0.0)
+                }
             }
         LocalHomeAi.requestAnalysis(context, prioritizedSongs)
     }

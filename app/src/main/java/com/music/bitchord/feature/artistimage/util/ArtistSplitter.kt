@@ -58,8 +58,23 @@ object ArtistSplitter {
     )
 
     private val SLASH_DELIMITER_REGEX = Regex("""\s*[/／]\s*""")
+    private val SLASH_EXCEPTION_SPACING_REGEX = Regex("""\s*[/／]\s*""")
 
     private val UNWANTED_PUNCTUATION = Regex("""^[^\p{L}\p{N}]+|[^\p{L}\p{N}]+$""")
+
+    private data class ProtectedArtistName(
+        val normalizedName: String,
+        val regex: Regex,
+    )
+
+    private data class CachedSplitRules(
+        val exceptions: List<String>,
+        val protectedNames: List<ProtectedArtistName>,
+        val normalizedNames: Set<String>,
+    )
+
+    @Volatile
+    private var cachedSplitRules: CachedSplitRules? = null
 
     /**
      * Splits a raw artist string into distinct individual artist names.
@@ -79,23 +94,29 @@ object ArtistSplitter {
         val raw = rawArtist?.trim().orEmpty()
         if (raw.isBlank()) return emptyList()
 
-        val userExceptions = AppSettings.artistSlashSeparatorExceptions.value
-        val protectedNames = (INVIOLABLE_BANDS + userExceptions)
-            .distinctBy(::normalizeSlashException)
+        val rules = splitRules()
 
         // Treat ASCII/full-width slashes and spacing around a slash as the same
         // separator spelling. Keep the source spelling in the displayed name.
         val normalizedRaw = normalizeSlashException(raw)
-        if (protectedNames.any { normalizeSlashException(it) == normalizedRaw }) return listOf(raw)
+        if (normalizedRaw in rules.normalizedNames) return listOf(raw)
+
+        // Most library tags contain a single artist. Skip protection and token
+        // splitting entirely for those rows; grouping thousands of ordinary
+        // names should not allocate a matcher/map for every song.
+        if (!hasDelimiter(raw, splitOnSlash)) {
+            val cleaned = cleanToken(raw)
+            return if (cleaned.isNotBlank() && !isPureNoise(cleaned)) listOf(cleaned) else emptyList()
+        }
 
         // Protect configured names before applying any delimiters. Matching
         // slash variants here is important for credits such as "22 ／ 7" when
         // the saved exception is "22/7".
         var protectedString = raw
         val protectedMap = mutableMapOf<String, String>()
-        for ((index, name) in protectedNames.withIndex()) {
-            val regex = slashExceptionRegex(name)
-            protectedString = regex.replace(protectedString) { match ->
+        for ((index, name) in rules.protectedNames.withIndex()) {
+            if (!normalizedRaw.contains(name.normalizedName)) continue
+            protectedString = name.regex.replace(protectedString) { match ->
                 val placeholder = "__ARTIST_${index}_${protectedMap.size}__"
                 protectedMap[placeholder] = match.value
                 placeholder
@@ -139,12 +160,19 @@ object ArtistSplitter {
     fun groupSongsByArtist(
         songs: List<Song>,
         unknownArtistFallback: String = "Unknown Artist",
+        splitOnSlash: Boolean = AppSettings.artistSlashSeparators.value,
     ): List<ArtistEntry> {
-        // Map from lowercase artist name to pair of (canonical display name, list of songs)
-        val artistMap = LinkedHashMap<String, Pair<String, MutableList<Song>>>()
+        // Track IDs are indexed as rows are added. The old list.any check made
+        // large single-artist libraries quadratic while deduplicating rows.
+        data class ArtistBucket(
+            var name: String,
+            val songs: MutableList<Song>,
+            val songIds: MutableSet<String>,
+        )
+        val artistMap = LinkedHashMap<String, ArtistBucket>()
 
         for (song in songs) {
-            val splitArtists = split(song.artist)
+            val splitArtists = split(song.artist, splitOnSlash)
             val names = if (splitArtists.isEmpty()) {
                 listOf(song.artist.ifBlank { unknownArtistFallback })
             } else {
@@ -155,20 +183,21 @@ object ArtistSplitter {
                 val key = artistName.lowercase(Locale.ROOT)
                 val existing = artistMap[key]
                 if (existing == null) {
-                    artistMap[key] = Pair(artistName, mutableListOf(song))
+                    artistMap[key] = ArtistBucket(
+                        name = artistName,
+                        songs = mutableListOf(song),
+                        songIds = mutableSetOf(song.videoId),
+                    )
                 } else {
-                    val canonicalName = selectBestCasing(existing.first, artistName)
-                    val list = existing.second
-                    if (!list.any { it.videoId == song.videoId }) {
-                        list.add(song)
-                    }
-                    artistMap[key] = Pair(canonicalName, list)
+                    existing.name = selectBestCasing(existing.name, artistName)
+                    if (existing.songIds.add(song.videoId)) existing.songs.add(song)
                 }
             }
         }
 
-        return artistMap.values
-            .map { (name, artistSongs) ->
+        return artistMap.values.map { bucket ->
+                val name = bucket.name
+                val artistSongs = bucket.songs
                 ArtistEntry(
                     name = name,
                     songs = artistSongs,
@@ -201,11 +230,14 @@ object ArtistSplitter {
     }
 
     private fun normalizeSlashException(value: String): String = value.trim()
-        .replace(Regex("\\s*[/／]\\s*"), "/")
-        .lowercase(Locale.ROOT)
+        .let { trimmed ->
+            val hasSlash = trimmed.indexOf('/') >= 0 || trimmed.indexOf('／') >= 0
+            (if (hasSlash) SLASH_EXCEPTION_SPACING_REGEX.replace(trimmed, "/") else trimmed)
+                .lowercase(Locale.ROOT)
+        }
 
     private fun slashExceptionRegex(value: String): Regex {
-        val compactSlashes = value.replace(Regex("\\s*[/／]\\s*"), "/")
+        val compactSlashes = SLASH_EXCEPTION_SPACING_REGEX.replace(value, "/")
         return Regex(
             buildString(compactSlashes.length * 2) {
                 compactSlashes.forEach { char ->
@@ -215,6 +247,31 @@ object ArtistSplitter {
             },
             RegexOption.IGNORE_CASE,
         )
+    }
+
+    private fun splitRules(): CachedSplitRules {
+        val currentExceptions = AppSettings.artistSlashSeparatorExceptions.value
+        cachedSplitRules?.let { if (it.exceptions == currentExceptions) return it }
+        return synchronized(this) {
+            cachedSplitRules?.let { if (it.exceptions == currentExceptions) return@synchronized it }
+            val exceptions = currentExceptions.toList()
+            val names = (INVIOLABLE_BANDS + exceptions).distinctBy(::normalizeSlashException)
+            CachedSplitRules(
+                exceptions = exceptions,
+                protectedNames = names.map { name ->
+                    ProtectedArtistName(
+                        normalizedName = normalizeSlashException(name),
+                        regex = slashExceptionRegex(name),
+                    )
+                },
+                normalizedNames = names.mapTo(mutableSetOf(), ::normalizeSlashException),
+            ).also { cachedSplitRules = it }
+        }
+    }
+
+    private fun hasDelimiter(value: String, splitOnSlash: Boolean): Boolean {
+        if (DELIMITER_REGEX.containsMatchIn(value)) return true
+        return splitOnSlash && (value.indexOf('/') >= 0 || value.indexOf('／') >= 0)
     }
 
     private fun isPureNoise(token: String): Boolean {
