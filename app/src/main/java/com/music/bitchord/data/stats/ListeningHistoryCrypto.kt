@@ -29,9 +29,13 @@ internal object ListeningHistoryCrypto {
     private val secureRandom = SecureRandom()
 
     fun encryptLocal(month: String, plaintext: ByteArray): ByteArray {
-        val iv = ByteArray(GCM_IV_BYTES).also(secureRandom::nextBytes)
         val cipher = Cipher.getInstance("AES/GCM/NoPadding")
-        cipher.init(Cipher.ENCRYPT_MODE, localKey(), GCMParameterSpec(GCM_TAG_BITS, iv))
+        // Android Keystore keys configured with randomizedEncryptionRequired
+        // must generate their own GCM IV; supplying one makes init fail and
+        // causes every legacy history read to retry this migration.
+        cipher.init(Cipher.ENCRYPT_MODE, localKey())
+        val iv = requireNotNull(cipher.iv) { "Android Keystore did not return a GCM IV" }
+        require(iv.size == GCM_IV_BYTES) { "Android Keystore returned an invalid GCM IV" }
         cipher.updateAAD(month.toByteArray(Charsets.UTF_8))
         val ciphertext = cipher.doFinal(plaintext)
         return LOCAL_MAGIC.toByteArray(Charsets.US_ASCII) + iv + ciphertext
