@@ -133,6 +133,7 @@ import com.music.bitchord.feature.tageditor.data.TagLibWriter
 import kotlinx.coroutines.launch
 import coil3.compose.AsyncImage
 import com.music.bitchord.feature.localmusic.ui.components.DrillDownSongList
+import com.music.bitchord.ui.screens.PlaylistPlaybackSettingsDialog
 import com.music.bitchord.feature.localmusic.ui.components.rememberPlaylistCoverPicker
 import com.music.bitchord.ui.components.FastScroller
 import com.music.bitchord.ui.components.SectionIndexer
@@ -287,6 +288,7 @@ fun LibraryScreen(
     onPlaylistDetailVisibilityChanged: ((Boolean) -> Unit)? = null,
     onOpenYoutubeCollection: (SavedYoutubeCollection) -> Unit = {},
     onOpenReplay: (() -> Unit)? = null,
+    onOpenArtistPage: ((String) -> Unit)? = null,
 ) {
     val context = LocalContext.current.applicationContext
     val mainViewModel: MainViewModel = viewModel()
@@ -318,6 +320,7 @@ fun LibraryScreen(
     val keepCollectionArtworkAspectRatio by AppSettings.keepCollectionArtworkAspectRatio.collectAsStateWithLifecycle()
     val playlistTrackMenuUsesArtworkColor by AppSettings.playlistTrackMenuUsesArtworkColor.collectAsStateWithLifecycle()
     val hideLibraryGridPlaylistPlayButton by AppSettings.hideLibraryGridPlaylistPlayButton.collectAsStateWithLifecycle()
+    val hideLibraryNewPlaylistTapLabel by AppSettings.hideLibraryNewPlaylistTapLabel.collectAsStateWithLifecycle()
     val libraryGridPlaylistMenuUsesArtworkColor by AppSettings.libraryGridPlaylistMenuUsesArtworkColor.collectAsStateWithLifecycle()
     val favoritesLabel = stringResource(R.string.favorites)
     val playStatsRevision by LocalPlayStatsStore.revision.collectAsStateWithLifecycle()
@@ -497,6 +500,7 @@ fun LibraryScreen(
     var showAddSelectedToPlaylist by remember { mutableStateOf(false) }
     var showBulkTagEditor by remember { mutableStateOf(false) }
     var showFavoriteSortDialog by rememberSaveable { mutableStateOf(false) }
+    var showPlaylistPlaybackSettings by rememberSaveable { mutableStateOf(false) }
     var bulkTagTargets by remember { mutableStateOf<List<Song>>(emptyList()) }
     var bulkArtist by remember { mutableStateOf("") }
     var bulkAlbumArtist by remember { mutableStateOf("") }
@@ -1194,6 +1198,7 @@ fun LibraryScreen(
                         artworkUrl = visibleDrillDownArt,
                         songs = visibleDrillDownSongs,
                         isArtist = false,
+                        onArtistClick = onOpenArtistPage.takeIf { visibleDrillDownPlaylistId != null },
                         // Favorites use the same saved, draggable song ordering as a playlist.
                         isPlaylist = visibleDrillDownPlaylistId != null || visibleDrillDownIsFavorites,
                         showArtworkInList = showPlaylistSongArtwork,
@@ -1270,7 +1275,13 @@ fun LibraryScreen(
                         selectedIds = selectedPlaylistSongIds,
                         currentSong = currentSong,
                         isPlaying = isPlaying,
-                        onSongClick = { list, idx -> onSongClick(list, idx) },
+                        onSongClick = { list, idx ->
+                            val playlistId = visibleDrillDownPlaylistId
+                            onSongClick(
+                                if (playlistId == null) list else list.map { it.copy(playbackPlaylistId = playlistId) },
+                                idx,
+                            )
+                        },
                         onSongLongPress = { song ->
                             if (visibleDrillDownPlaylistId != null || visibleDrillDownIsFavorites) {
                                 val key = song.localUri ?: song.videoId
@@ -1291,8 +1302,14 @@ fun LibraryScreen(
                             { song -> activePlaylistMenuSong = song }
                         } else onSongLongPress,
                         onSongSwipe = onSongSwipe,
-                        onShuffle = onShuffle,
+                        onShuffle = { list ->
+                            val playlistId = visibleDrillDownPlaylistId
+                            onShuffle(if (playlistId == null) list else list.map { it.copy(playbackPlaylistId = playlistId) })
+                        },
                         onMore = if (visibleDrillDownIsFavorites) ({ showFavoriteSortDialog = true }) else null,
+                        onPlaylistPlaybackSettings = if (visibleDrillDownPlaylistId != null) {
+                            { showPlaylistPlaybackSettings = true }
+                        } else null,
                         reorderEnabled = playlistReorderEnabled && (visibleDrillDownIsFavorites || (visibleDrillDownPlaylistId != null && !visibleDrillDownIsSmartPlaylist)),
                         onReorderToggle = if (visibleDrillDownIsFavorites || (visibleDrillDownPlaylistId != null && !visibleDrillDownIsSmartPlaylist)) {
                             {
@@ -1698,11 +1715,15 @@ fun LibraryScreen(
                                 val pSongs = withContext(Dispatchers.Default) {
                                     resolvePlaylistSongs(playlist, songs, playStatsSnapshot, favoriteIds)
                                 }
-                                if (pSongs.isNotEmpty()) onSongClick(pSongs, 0)
+                                if (pSongs.isNotEmpty()) {
+                                    onSongClick(pSongs.map { it.copy(playbackPlaylistId = playlist.id) }, 0)
+                                }
                             }
                         } else {
                             val pSongs = resolvePlaylistSongs(playlist, songs)
-                            if (pSongs.isNotEmpty()) onSongClick(pSongs, 0)
+                            if (pSongs.isNotEmpty()) {
+                                onSongClick(pSongs.map { it.copy(playbackPlaylistId = playlist.id) }, 0)
+                            }
                         }
                     }
 
@@ -1726,6 +1747,7 @@ fun LibraryScreen(
                             smartPlaylistTrackCounts = smartPlaylistTrackCounts,
                             favoriteUsesStar = favoriteUsesStar,
                             hidePlaylistPlayButton = hideLibraryGridPlaylistPlayButton,
+                            showCreatePlaylistTapLabel = !hideLibraryNewPlaylistTapLabel,
                             playlistMenuUsesArtworkColor = libraryGridPlaylistMenuUsesArtworkColor,
                             visibleCategories = visibleLibraryCategories,
                             contentPadding = PaddingValues(
@@ -1831,6 +1853,15 @@ fun LibraryScreen(
                 showCreateSmartPlaylistDialog = false
             },
         )
+    }
+
+    if (showPlaylistPlaybackSettings) {
+        playlists.firstOrNull { it.id == drillDownPlaylistId }?.let { playlist ->
+            PlaylistPlaybackSettingsDialog(
+                playlist = playlist,
+                onDismiss = { showPlaylistPlaybackSettings = false },
+            )
+        }
     }
 
     smartPlaylistToEdit?.let { playlist ->

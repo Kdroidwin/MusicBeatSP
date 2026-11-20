@@ -96,6 +96,10 @@ data class Song(
     val isRssAudio: Boolean = false,
     /** Enclosure MIME type, retained so RSS downloads keep the correct file extension. */
     val radioAudioMimeType: String? = null,
+    /** Local playlist context for optional playlist-specific playback settings. */
+    val playbackPlaylistId: String? = null,
+    /** Temporary generated/user-selected headphone burn-in track; excluded from library history. */
+    val isHeadphoneBurnIn: Boolean = false,
 )
 
 /**

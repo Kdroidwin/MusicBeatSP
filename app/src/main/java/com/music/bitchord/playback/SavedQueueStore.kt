@@ -192,6 +192,7 @@ object SavedQueueStore {
         localStartMs?.let { put("localStartMs", it) }
         localEndMs?.let { put("localEndMs", it) }
         putNullable("downloadFormat", downloadFormat)
+        putNullable("playlistProfileId", playbackPlaylistId)
         if (isExplicit != null) put("isExplicit", isExplicit)
     }
 
@@ -218,6 +219,7 @@ object SavedQueueStore {
             localStartMs = if (has("localStartMs")) optLong("localStartMs").coerceAtLeast(0L) else null,
             localEndMs = if (has("localEndMs")) optLong("localEndMs").coerceAtLeast(0L) else null,
             downloadFormat = optNullableString("downloadFormat"),
+            playbackPlaylistId = optNullableString("playlistProfileId"),
             isExplicit = if (has("isExplicit")) optBoolean("isExplicit") else null,
         )
     }

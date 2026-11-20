@@ -142,6 +142,8 @@ object LastPlayed {
         val album: String? = null,
         val explicit: Boolean? = null,
         val video: Boolean = false,
+        /** Keeps playlist audio overrides attached across process-death resume. */
+        val playlistProfileId: String? = null,
     ) {
         fun toSong() = Song(
             videoId = id,
@@ -155,6 +157,7 @@ object LastPlayed {
             fromAutoplay = auto,
             localUri = local,
             localPath = path,
+            playbackPlaylistId = playlistProfileId,
         )
 
         companion object {
@@ -170,6 +173,7 @@ object LastPlayed {
                 album = song.albumName,
                 explicit = song.isExplicit,
                 video = song.isVideo,
+                playlistProfileId = song.playbackPlaylistId,
             )
         }
     }

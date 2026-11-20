@@ -13,6 +13,8 @@ import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.BoxWithConstraints
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.ExperimentalLayoutApi
+import androidx.compose.foundation.layout.FlowRow
 import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
@@ -44,6 +46,7 @@ import androidx.compose.material.icons.rounded.MusicNote
 import androidx.compose.material.icons.rounded.Person
 import androidx.compose.material.icons.rounded.DragHandle
 import androidx.compose.material.icons.rounded.Reorder
+import androidx.compose.material.icons.rounded.Tune
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
@@ -116,6 +119,7 @@ import com.music.bitchord.ui.components.FastScroller
 import com.music.bitchord.ui.components.SectionIndexer
 import com.music.bitchord.feature.artistimage.model.ArtistImage
 import com.music.bitchord.feature.artistimage.data.ArtistArtworkStore
+import com.music.bitchord.feature.artistimage.util.ArtistSplitter
 import com.music.bitchord.ui.components.ExplicitSongTitle
 import com.music.bitchord.ui.components.SongArtworkImage
 import com.music.bitchord.ui.components.PAGE_GUTTER
@@ -157,9 +161,23 @@ fun DrillDownHeader(
     showArtworkCollage: Boolean = false,
     artHeight: Dp? = null,
     palette: ArtworkPalette? = null,
+    onArtistClick: ((String) -> Unit)? = null,
     modifier: Modifier = Modifier,
 ) {
     val artistSignature = rememberArtistSignature(label, isArtist)
+    val artistSlashSeparators by AppSettings.artistSlashSeparators.collectAsStateWithLifecycle()
+    val artists = remember(songs, artistSlashSeparators) {
+        songs.asSequence()
+            .flatMap { ArtistSplitter.split(it.artist, artistSlashSeparators).asSequence() }
+            .filterNot { name ->
+                name.equals("unknown artist", ignoreCase = true) ||
+                    name.equals("<unknown>", ignoreCase = true) ||
+                    name.equals("various artists", ignoreCase = true)
+            }
+            .distinctBy { it.lowercase(Locale.ROOT) }
+            .take(4)
+            .toList()
+    }
     if (fullScreenArtwork && artHeight != null && palette != null) {
         FullScreenCollectionHeader(
             label = label,
@@ -169,6 +187,8 @@ fun DrillDownHeader(
             artistSignature = artistSignature,
             artHeight = artHeight,
             palette = palette,
+            artists = artists,
+            onArtistClick = onArtistClick,
             modifier = modifier,
         )
     } else {
@@ -179,6 +199,9 @@ fun DrillDownHeader(
             isArtist = isArtist,
             artistSignature = artistSignature,
             onBack = onBack,
+            isPlaylist = isPlaylist,
+            artists = artists,
+            onArtistClick = onArtistClick,
             preserveArtworkAspectRatio = preserveArtworkAspectRatio,
             showArtworkCollage = showArtworkCollage,
             modifier = modifier,
@@ -239,6 +262,9 @@ private fun CompactDrillDownHeader(
     isArtist: Boolean,
     artistSignature: ArtistSignature?,
     onBack: (() -> Unit)?,
+    isPlaylist: Boolean,
+    artists: List<String>,
+    onArtistClick: ((String) -> Unit)?,
     preserveArtworkAspectRatio: Boolean,
     showArtworkCollage: Boolean,
     modifier: Modifier,
@@ -353,6 +379,15 @@ private fun CompactDrillDownHeader(
                 .fillMaxWidth()
                 .padding(horizontal = PAGE_GUTTER),
         )
+        if (isPlaylist && onArtistClick != null && artists.isNotEmpty()) {
+            Spacer(Modifier.height(4.dp))
+            ArtistCreditLinks(
+                artists = artists,
+                color = MaterialTheme.colorScheme.primary,
+                style = MaterialTheme.typography.titleMedium,
+                onArtistClick = onArtistClick,
+            )
+        }
         ArtistSignatureImage(
             signature = artistSignature,
             modifier = Modifier.align(Alignment.CenterHorizontally).padding(top = 8.dp),
@@ -383,16 +418,10 @@ private fun FullScreenCollectionHeader(
     artistSignature: ArtistSignature?,
     artHeight: Dp,
     palette: ArtworkPalette,
+    artists: List<String>,
+    onArtistClick: ((String) -> Unit)?,
     modifier: Modifier,
 ) {
-    val artists = remember(songs) {
-        songs.asSequence()
-            .map { it.artist.trim() }
-            .filter { it.isNotBlank() && !it.equals("Unknown artist", ignoreCase = true) }
-            .distinctBy { it.lowercase() }
-            .take(4)
-            .joinToString(", ")
-    }
     val totalMinutes = remember(songs) {
         songs.sumOf { it.durationMillis().coerceAtLeast(0L) } / 60_000L
     }
@@ -430,15 +459,13 @@ private fun FullScreenCollectionHeader(
                 overflow = TextOverflow.Ellipsis,
             )
             ArtistSignatureImage(artistSignature, Modifier.padding(top = 8.dp))
-            if (artists.isNotBlank()) {
+            if (artists.isNotEmpty()) {
                 Spacer(Modifier.height(3.dp))
-                Text(
-                    text = artists,
-                    style = MaterialTheme.typography.titleMedium,
+                ArtistCreditLinks(
+                    artists = artists,
                     color = palette.accent,
-                    textAlign = TextAlign.Center,
-                    maxLines = 2,
-                    overflow = TextOverflow.Ellipsis,
+                    style = MaterialTheme.typography.titleMedium,
+                    onArtistClick = onArtistClick,
                 )
             }
             Spacer(Modifier.height(6.dp))
@@ -454,6 +481,37 @@ private fun FullScreenCollectionHeader(
     }
 }
 
+@OptIn(ExperimentalLayoutApi::class)
+@Composable
+private fun ArtistCreditLinks(
+    artists: List<String>,
+    color: Color,
+    style: androidx.compose.ui.text.TextStyle,
+    onArtistClick: ((String) -> Unit)?,
+) {
+    FlowRow(
+        modifier = Modifier.fillMaxWidth(),
+        horizontalArrangement = Arrangement.Center,
+        verticalArrangement = Arrangement.spacedBy(1.dp),
+    ) {
+        artists.forEachIndexed { index, artist ->
+            Text(
+                text = (if (index == 0) "" else ", ") + artist,
+                style = style,
+                color = color,
+                textAlign = TextAlign.Center,
+                maxLines = 1,
+                overflow = TextOverflow.Ellipsis,
+                modifier = if (onArtistClick != null) {
+                    Modifier.clickable { onArtistClick(artist) }
+                } else {
+                    Modifier
+                },
+            )
+        }
+    }
+}
+
 @Composable
 fun DrillDownActionRow(
     songs: List<Song>,
@@ -464,6 +522,7 @@ fun DrillDownActionRow(
     onSongClick: (List<Song>, Int) -> Unit,
     onShuffle: (List<Song>) -> Unit,
     onMore: (() -> Unit)? = null,
+    onPlaylistPlaybackSettings: (() -> Unit)? = null,
     isSavedToLibrary: Boolean = false,
     onToggleLibrary: (() -> Unit)? = null,
     reorderEnabled: Boolean = false,
@@ -595,6 +654,24 @@ fun DrillDownActionRow(
                 )
             }
         }
+        if (onPlaylistPlaybackSettings != null) {
+            Box(
+                modifier = Modifier
+                    .size(50.dp)
+                    .clip(CircleShape)
+                    .background(buttonBackground)
+                    .border(0.5.dp, buttonBorder, CircleShape)
+                    .clickable(onClick = onPlaylistPlaybackSettings),
+                contentAlignment = Alignment.Center,
+            ) {
+                Icon(
+                    Icons.Rounded.Tune,
+                    contentDescription = stringResource(R.string.playlist_playback_settings),
+                    tint = buttonContentColor,
+                    modifier = Modifier.size(20.dp),
+                )
+            }
+        }
         if (onMore != null) {
             Box(
                 modifier = Modifier
@@ -720,6 +797,8 @@ fun DrillDownSongList(
     onSongSwipe: (Song) -> Unit,
     onShuffle: (List<Song>) -> Unit,
     onMore: (() -> Unit)? = null,
+    onArtistClick: ((String) -> Unit)? = null,
+    onPlaylistPlaybackSettings: (() -> Unit)? = null,
     isSavedToLibrary: Boolean = false,
     onToggleLibrary: (() -> Unit)? = null,
     isPlaylist: Boolean = false,
@@ -901,6 +980,7 @@ fun DrillDownSongList(
                         preserveArtworkAspectRatio = preserveArtworkAspectRatioInCollections && !isArtist,
                         artHeight = artHeight,
                         palette = artworkPalette,
+                        onArtistClick = onArtistClick,
                     )
                 }
                 if (!selectionMode) item(span = { GridItemSpan(maxLineSpan) }) {
@@ -913,6 +993,7 @@ fun DrillDownSongList(
                         onSongClick = onSongClick,
                         onShuffle = onShuffle,
                         onMore = onMore,
+                        onPlaylistPlaybackSettings = onPlaylistPlaybackSettings,
                         isSavedToLibrary = isSavedToLibrary,
                         onToggleLibrary = onToggleLibrary,
                         reorderEnabled = reorderEnabled,
@@ -1062,6 +1143,7 @@ fun DrillDownSongList(
                         preserveArtworkAspectRatio = preserveArtworkAspectRatioInCollections && !isArtist,
                         artHeight = artHeight,
                         palette = artworkPalette,
+                        onArtistClick = onArtistClick,
                     )
                 }
                 if (!selectionMode) item {
@@ -1074,6 +1156,7 @@ fun DrillDownSongList(
                         onSongClick = onSongClick,
                         onShuffle = onShuffle,
                         onMore = onMore,
+                        onPlaylistPlaybackSettings = onPlaylistPlaybackSettings,
                         isSavedToLibrary = isSavedToLibrary,
                         onToggleLibrary = onToggleLibrary,
                         reorderEnabled = reorderEnabled,

@@ -249,6 +249,8 @@ import com.music.bitchord.playback.toMediaItem
 import com.music.bitchord.playback.toSong
 import com.music.bitchord.playback.toDirectYouTubeMediaItem
 import com.music.bitchord.playback.previewExternalAudio
+import com.music.bitchord.playback.startHeadphoneBurnIn
+import com.music.bitchord.playback.stopHeadphoneBurnIn
 import com.music.bitchord.playback.toggleAutoplay
 import com.music.bitchord.playback.upgradeQuality
 import com.music.bitchord.download.DownloadSession
@@ -3011,6 +3013,10 @@ private fun BitChordApp(
                             onManageSources = { showSources = true },
                             onWearOs = { showWearOs = true },
                             onCdRipComplete = { viewModel.loadLocalMusic(isPullToRefresh = true) },
+                            onStartHeadphoneBurnIn = { source, durationMinutes, musicUri ->
+                                controller?.startHeadphoneBurnIn(source, durationMinutes, musicUri)
+                            },
+                            onStopHeadphoneBurnIn = { controller?.stopHeadphoneBurnIn() },
                             contentPadding = listPadding,
                         )
                     } else if (key == "sources") {
@@ -3760,6 +3766,7 @@ private fun BitChordApp(
                                         )
                                     },
                                     onOpenReplay = { showReplay = true },
+                                    onOpenArtistPage = { artist -> openPlayerArtistPage(artist) },
                                 )
                             }
                         }

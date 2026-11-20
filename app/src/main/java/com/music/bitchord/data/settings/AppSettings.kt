@@ -47,6 +47,12 @@ const val MAX_PLAYER_SIDE_CONTROL_SCALE = 1.6f
 /** The catalogue AutoPlay uses, or no automatic suggestions. */
 enum class AutoplaySource { OFF, YOUTUBE_MUSIC, DEVICE }
 
+/** Lossless containers supported directly by the CD-DA PCM writer. */
+enum class CdRippingOutputFormat { WAV, AIFF }
+
+/** Local signal used by the optional headphone burn-in player. */
+enum class HeadphoneBurnInSource { WHITE_NOISE, PINK_NOISE, FREQUENCY_SWEEP, MUSIC }
+
 /** Source used by the Player Details "Open artist" action. */
 enum class PlayerArtistPageMode { LOCAL, ONLINE, HYBRID, OLD }
 
@@ -621,6 +627,15 @@ object AppSettings {
     val cdRippingOutputTreeUri = MutableStateFlow<String?>(null)
     val cdRippingRetries = MutableStateFlow(2)
     val cdRippingSpeedX = MutableStateFlow(4)
+    val cdRippingOutputFormat = MutableStateFlow(CdRippingOutputFormat.WAV)
+    val cdRippingVerifyReads = MutableStateFlow(false)
+    val cdRippingFilenameTemplate = MutableStateFlow("{track} - {title}")
+
+    /** Explicit opt-in for the isolated headphone burn-in playback mode. */
+    val headphoneBurnInEnabled = MutableStateFlow(false)
+    val headphoneBurnInDurationMinutes = MutableStateFlow(60)
+    val headphoneBurnInSource = MutableStateFlow(HeadphoneBurnInSource.PINK_NOISE)
+    val headphoneBurnInMusicUri = MutableStateFlow<String?>(null)
 
     /** Lets the analyzer plan transition timing from each track; falls back to fixed crossfade while analysis is unavailable. */
     val smartFadeEnabled = MutableStateFlow(false)
@@ -744,6 +759,8 @@ object AppSettings {
     val gridTitleOverlay = MutableStateFlow(false)
     /** Hides the play affordance drawn over playlist covers in the Library grid. */
     val hideLibraryGridPlaylistPlayButton = MutableStateFlow(false)
+    /** Hides the explanatory tap-to-create caption on the new-playlist tile. */
+    val hideLibraryNewPlaylistTapLabel = MutableStateFlow(true)
     /** Tints playlist action menus in the Library grid from their cover art. */
     val libraryGridPlaylistMenuUsesArtworkColor = MutableStateFlow(true)
     /** Uses the playlist page artwork palette for track menus opened inside it. */
@@ -1659,6 +1676,22 @@ object AppSettings {
         cdRippingOutputTreeUri.value = prefs.getString(KEY_CD_RIPPING_OUTPUT_TREE_URI, null)
         cdRippingRetries.value = prefs.getInt(KEY_CD_RIPPING_RETRIES, 2).coerceIn(0, 5)
         cdRippingSpeedX.value = prefs.getInt(KEY_CD_RIPPING_SPEED_X, 4).coerceIn(1, 12)
+        cdRippingOutputFormat.value = runCatching {
+            CdRippingOutputFormat.valueOf(prefs.getString(KEY_CD_RIPPING_FORMAT, CdRippingOutputFormat.WAV.name).orEmpty())
+        }.getOrDefault(CdRippingOutputFormat.WAV)
+        cdRippingVerifyReads.value = prefs.getBoolean(KEY_CD_RIPPING_VERIFY, false)
+        cdRippingFilenameTemplate.value = sanitizeCdRippingFilenameTemplate(
+            prefs.getString(KEY_CD_RIPPING_FILENAME_TEMPLATE, "{track} - {title}"),
+        )
+        headphoneBurnInEnabled.value = prefs.getBoolean(KEY_HEADPHONE_BURN_IN_ENABLED, false)
+        headphoneBurnInDurationMinutes.value = prefs.getInt(KEY_HEADPHONE_BURN_IN_DURATION_MINUTES, 60)
+            .coerceIn(5, MAX_HEADPHONE_BURN_IN_DURATION_MINUTES)
+        headphoneBurnInSource.value = runCatching {
+            HeadphoneBurnInSource.valueOf(
+                prefs.getString(KEY_HEADPHONE_BURN_IN_SOURCE, HeadphoneBurnInSource.PINK_NOISE.name).orEmpty(),
+            )
+        }.getOrDefault(HeadphoneBurnInSource.PINK_NOISE)
+        headphoneBurnInMusicUri.value = prefs.getString(KEY_HEADPHONE_BURN_IN_MUSIC_URI, null)
         skipSilence.value = prefs.getBoolean(KEY_SKIP_SILENCE, false)
         val savedCrossfadeMs = if (prefs.contains(KEY_CROSSFADE_DURATION_MS)) {
             prefs.getInt(KEY_CROSSFADE_DURATION_MS, 0)
@@ -1797,6 +1830,7 @@ object AppSettings {
         }.toMap()
         gridTitleOverlay.value = prefs.getBoolean(KEY_GRID_TITLE_OVERLAY, false)
         hideLibraryGridPlaylistPlayButton.value = prefs.getBoolean(KEY_HIDE_LIBRARY_GRID_PLAY_BUTTON, false)
+        hideLibraryNewPlaylistTapLabel.value = prefs.getBoolean(KEY_HIDE_LIBRARY_NEW_PLAYLIST_TAP_LABEL, true)
         libraryGridPlaylistMenuUsesArtworkColor.value = prefs.getBoolean(KEY_LIBRARY_GRID_PLAYLIST_MENU_ARTWORK_COLOR, true)
         customFontPath.value = prefs.getString(KEY_CUSTOM_FONT_PATH, "").orEmpty()
         customFontName.value = prefs.getString(KEY_CUSTOM_FONT_NAME, "").orEmpty()
@@ -2398,6 +2432,11 @@ object AppSettings {
         prefs.edit().putBoolean(KEY_HIDE_LIBRARY_GRID_PLAY_BUTTON, value).apply()
     }
 
+    fun setHideLibraryNewPlaylistTapLabel(value: Boolean) {
+        hideLibraryNewPlaylistTapLabel.value = value
+        prefs.edit().putBoolean(KEY_HIDE_LIBRARY_NEW_PLAYLIST_TAP_LABEL, value).apply()
+    }
+
     fun setLibraryGridPlaylistMenuUsesArtworkColor(value: Boolean) {
         libraryGridPlaylistMenuUsesArtworkColor.value = value
         prefs.edit().putBoolean(KEY_LIBRARY_GRID_PLAYLIST_MENU_ARTWORK_COLOR, value).apply()
@@ -2531,6 +2570,54 @@ object AppSettings {
         cdRippingSpeedX.value = normalized
         prefs.edit().putInt(KEY_CD_RIPPING_SPEED_X, normalized).apply()
     }
+
+    fun setCdRippingOutputFormat(value: CdRippingOutputFormat) {
+        cdRippingOutputFormat.value = value
+        prefs.edit().putString(KEY_CD_RIPPING_FORMAT, value.name).apply()
+    }
+
+    fun setCdRippingVerifyReads(value: Boolean) {
+        cdRippingVerifyReads.value = value
+        prefs.edit().putBoolean(KEY_CD_RIPPING_VERIFY, value).apply()
+    }
+
+    fun setCdRippingFilenameTemplate(value: String) {
+        val normalized = sanitizeCdRippingFilenameTemplate(value)
+        cdRippingFilenameTemplate.value = normalized
+        prefs.edit().putString(KEY_CD_RIPPING_FILENAME_TEMPLATE, normalized).apply()
+    }
+
+    fun setHeadphoneBurnInEnabled(value: Boolean) {
+        headphoneBurnInEnabled.value = value
+        prefs.edit().putBoolean(KEY_HEADPHONE_BURN_IN_ENABLED, value).apply()
+    }
+
+    fun setHeadphoneBurnInDurationMinutes(value: Int) {
+        val normalized = value.coerceIn(5, MAX_HEADPHONE_BURN_IN_DURATION_MINUTES)
+        headphoneBurnInDurationMinutes.value = normalized
+        prefs.edit().putInt(KEY_HEADPHONE_BURN_IN_DURATION_MINUTES, normalized).apply()
+    }
+
+    fun setHeadphoneBurnInSource(value: HeadphoneBurnInSource) {
+        headphoneBurnInSource.value = value
+        prefs.edit().putString(KEY_HEADPHONE_BURN_IN_SOURCE, value.name).apply()
+    }
+
+    fun setHeadphoneBurnInMusicUri(value: String?) {
+        val normalized = value?.takeIf { it.startsWith("content://") && it.length <= 8_192 }
+        headphoneBurnInMusicUri.value = normalized
+        prefs.edit().apply {
+            if (normalized == null) remove(KEY_HEADPHONE_BURN_IN_MUSIC_URI)
+            else putString(KEY_HEADPHONE_BURN_IN_MUSIC_URI, normalized)
+        }.apply()
+    }
+
+    private fun sanitizeCdRippingFilenameTemplate(value: String?): String = value
+        ?.filterNot { it.isISOControl() }
+        ?.take(160)
+        ?.trim()
+        ?.ifBlank { "{track} - {title}" }
+        ?: "{track} - {title}"
 
     fun setSmartFadeEnabled(value: Boolean) {
         if (value) setAudioOffloadEnabled(false)
@@ -5241,6 +5328,7 @@ object AppSettings {
         KEY_LOCAL_MUSIC_SCOPE_REQUIRED,
         KEY_ALL_FILES_PERMISSION_ASKED,
         KEY_CD_RIPPING_OUTPUT_TREE_URI,
+        KEY_HEADPHONE_BURN_IN_MUSIC_URI,
     )
 
     private val OBSOLETE_ONLINE_KEYS = setOf(
@@ -5267,6 +5355,7 @@ object AppSettings {
     private const val MAX_LYRICS_TRANSPORT_CONTROL_SIZE = 64f
     const val MAX_CROSSFADE_DURATION_MS = 12_000
     const val MAX_CROSSFADE_SECONDS = MAX_CROSSFADE_DURATION_MS / 1000
+    const val MAX_HEADPHONE_BURN_IN_DURATION_MINUTES = 6_000
     const val MAX_RECENT_PLAY_THRESHOLD_SECONDS = 300
     private const val DEFAULT_RECENT_PLAY_THRESHOLD_SECONDS = 30
 
@@ -5291,6 +5380,13 @@ object AppSettings {
     private const val KEY_CD_RIPPING_OUTPUT_TREE_URI = "cd_ripping_output_tree_uri"
     private const val KEY_CD_RIPPING_RETRIES = "cd_ripping_retries"
     private const val KEY_CD_RIPPING_SPEED_X = "cd_ripping_speed_x"
+    private const val KEY_CD_RIPPING_FORMAT = "cd_ripping_format"
+    private const val KEY_CD_RIPPING_VERIFY = "cd_ripping_verify_reads"
+    private const val KEY_CD_RIPPING_FILENAME_TEMPLATE = "cd_ripping_filename_template"
+    private const val KEY_HEADPHONE_BURN_IN_ENABLED = "headphone_burn_in_enabled"
+    private const val KEY_HEADPHONE_BURN_IN_DURATION_MINUTES = "headphone_burn_in_duration_minutes"
+    private const val KEY_HEADPHONE_BURN_IN_SOURCE = "headphone_burn_in_source"
+    private const val KEY_HEADPHONE_BURN_IN_MUSIC_URI = "headphone_burn_in_music_uri"
     private const val KEY_SMART_FADE = "smart_fade_enabled"
     private const val KEY_AUTOMIX_PERFORMANCE_MODE = "automix_performance_mode"
     private const val KEY_RESAMPLER_CUTOFF_HZ = "resampler_cutoff_hz"
@@ -5329,6 +5425,7 @@ object AppSettings {
     private const val KEY_GRID_COLUMNS_PREFIX = "grid_columns_"
     private const val KEY_GRID_TITLE_OVERLAY = "grid_title_overlay"
     private const val KEY_HIDE_LIBRARY_GRID_PLAY_BUTTON = "hide_library_grid_playlist_play_button"
+    private const val KEY_HIDE_LIBRARY_NEW_PLAYLIST_TAP_LABEL = "hide_library_new_playlist_tap_label"
     private const val KEY_LIBRARY_GRID_PLAYLIST_MENU_ARTWORK_COLOR = "library_grid_playlist_menu_artwork_color"
     private const val KEY_CUSTOM_FONT_PATH = "custom_font_path"
     private const val KEY_CUSTOM_FONT_NAME = "custom_font_name"

@@ -42,6 +42,7 @@ fun LibraryGridContent(
     smartPlaylistTrackCounts: Map<String, Int> = emptyMap(),
     favoriteUsesStar: Boolean = false,
     hidePlaylistPlayButton: Boolean = false,
+    showCreatePlaylistTapLabel: Boolean = false,
     playlistMenuUsesArtworkColor: Boolean = true,
     visibleCategories: Set<LibraryCategory> = LibraryCategory.entries.toSet(),
     contentPadding: PaddingValues,
@@ -105,6 +106,7 @@ fun LibraryGridContent(
             item(key = "library_create_playlist") {
                 LibraryCreatePlaylistCard(
                     onClick = onCreatePlaylist,
+                    showTapToCreateLabel = showCreatePlaylistTapLabel,
                 )
             }
         }

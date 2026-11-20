@@ -189,6 +189,7 @@ import com.music.bitchord.data.LocalMediaRepository
 import com.music.bitchord.data.NerdStats
 import com.music.bitchord.data.scrobbling.LastFM
 import com.music.bitchord.data.settings.AppSettings
+import com.music.bitchord.data.settings.HeadphoneBurnInSource
 import com.music.bitchord.data.settings.BluetoothButtonAction
 import com.music.bitchord.ui.player.AudioVisualizationPanel
 import com.music.bitchord.data.settings.FolderArtworkFallbackMode
@@ -1019,6 +1020,14 @@ private fun hideCollectionPlayLabelSearchEntry(hidden: Boolean) = SettingsSearch
 ) { AppSettings.setHidePlaylistPlayButtonLabel(!hidden) }
 
 @Composable
+private fun hideLibraryNewPlaylistTapLabelSearchEntry(hidden: Boolean) = SettingsSearchEntry(
+    title = stringResource(R.string.hide_library_new_playlist_tap_label),
+    subtitle = stringResource(R.string.hide_library_new_playlist_tap_label_subtitle),
+    keywords = listOf("library", "playlist", "create", "hint", "tap to create", "ライブラリ", "プレイリスト", "作成", "案内", "タップして作成"),
+    checked = hidden,
+) { AppSettings.setHideLibraryNewPlaylistTapLabel(!hidden) }
+
+@Composable
 private fun whiteCollectionPlayButtonSearchEntry(enabled: Boolean) = SettingsSearchEntry(
     title = stringResource(R.string.white_collection_play_button),
     subtitle = stringResource(R.string.white_collection_play_button_subtitle),
@@ -1622,6 +1631,8 @@ fun SettingsScreen(
     onManageSources: () -> Unit,
     onWearOs: () -> Unit,
     onCdRipComplete: () -> Unit,
+    onStartHeadphoneBurnIn: (HeadphoneBurnInSource, Int, String?) -> Unit,
+    onStopHeadphoneBurnIn: () -> Unit,
     contentPadding: PaddingValues,
     modifier: Modifier = Modifier,
 ) {
@@ -1716,6 +1727,7 @@ fun SettingsScreen(
     val audioOffloadEnabled by AppSettings.audioOffloadEnabled.collectAsStateWithLifecycle()
     val crossfadeDurationMs by AppSettings.crossfadeDurationMs.collectAsStateWithLifecycle()
     val abRepeatEnabled by AppSettings.abRepeatEnabled.collectAsStateWithLifecycle()
+    val headphoneBurnInEnabled by AppSettings.headphoneBurnInEnabled.collectAsStateWithLifecycle()
     val scheduledPlaylistSpec by ScheduledPlaylistScheduler.spec.collectAsStateWithLifecycle()
     val localPlaylists by LocalPlaylistStore.playlists.collectAsStateWithLifecycle()
     val crossfadeOptions = AppSettings.crossfadeDurationOptionsMs
@@ -2066,6 +2078,7 @@ fun SettingsScreen(
     val filterNonMusicAudio by AppSettings.filterNonMusicAudio.collectAsStateWithLifecycle()
     val showPlaylistSongArtwork by AppSettings.showPlaylistSongArtwork.collectAsStateWithLifecycle()
     val hidePlaylistPlayButtonLabel by AppSettings.hidePlaylistPlayButtonLabel.collectAsStateWithLifecycle()
+    val hideLibraryNewPlaylistTapLabel by AppSettings.hideLibraryNewPlaylistTapLabel.collectAsStateWithLifecycle()
     val showCollectionSongArtwork by AppSettings.showCollectionSongArtwork.collectAsStateWithLifecycle()
     val hideLocalQuickSearch by AppSettings.hideLocalQuickSearch.collectAsStateWithLifecycle()
     val localSearchCollectionSongArtwork by AppSettings.localSearchCollectionSongArtwork.collectAsStateWithLifecycle()
@@ -2101,6 +2114,7 @@ fun SettingsScreen(
     var showScheduledPlaylistDialog by rememberSaveable { mutableStateOf(false) }
     var showAutomixPerformanceSheet by rememberSaveable { mutableStateOf(false) }
     var showCdRippingSheet by rememberSaveable { mutableStateOf(false) }
+    var showHeadphoneBurnInDialog by rememberSaveable { mutableStateOf(false) }
     fun openPlayerInkPicker(group: PlayerInkGroup) {
         val saved = playerInkColors[group] ?: PLAYER_INK_DEFAULT_COLOR
         playerInkAutomaticSelected = saved == PLAYER_INK_AUTOMATIC
@@ -2678,6 +2692,7 @@ fun SettingsScreen(
             activate = { showPlaylistRefreshIndicatorStyleDialog = true },
         ),
         hideCollectionPlayLabelSearchEntry(hidePlaylistPlayButtonLabel),
+        hideLibraryNewPlaylistTapLabelSearchEntry(hideLibraryNewPlaylistTapLabel),
         SettingsSearchEntry(
             stringResource(R.string.collection_song_artwork),
             stringResource(R.string.collection_song_artwork_subtitle),
@@ -3154,6 +3169,13 @@ fun SettingsScreen(
                 keywords = listOf("playlist", "schedule", "time", "alarm", "自動再生", "時刻", "プレイリスト"),
                 checked = scheduledPlaylistSpec.enabled,
                 activate = { showScheduledPlaylistDialog = true },
+            ),
+            SettingsSearchEntry(
+                title = stringResource(R.string.headphone_burn_in),
+                subtitle = stringResource(R.string.headphone_burn_in_subtitle),
+                keywords = listOf("headphones", "earphones", "burn-in", "noise", "sweep", "慣らし", "イヤホン", "ヘッドホン", "ノイズ", "スイープ"),
+                checked = headphoneBurnInEnabled,
+                activate = { showHeadphoneBurnInDialog = true },
             ),
         ) +
         widgetOpacitySearchEntry(widgetOpacity) +
@@ -4200,6 +4222,22 @@ fun SettingsScreen(
                     )
                 },
                 onClick = { showScheduledPlaylistDialog = true },
+            )
+            RowDivider()
+            SettingsRow(
+                icon = Icons.Rounded.Headphones,
+                title = stringResource(R.string.headphone_burn_in),
+                subtitle = stringResource(R.string.headphone_burn_in_subtitle),
+                trailing = {
+                    Switch(
+                        checked = headphoneBurnInEnabled,
+                        onCheckedChange = { enabled ->
+                            if (!enabled) onStopHeadphoneBurnIn()
+                            AppSettings.setHeadphoneBurnInEnabled(enabled)
+                        },
+                    )
+                },
+                onClick = { showHeadphoneBurnInDialog = true },
             )
             RowDivider()
             SettingsRow(
@@ -7847,6 +7885,7 @@ fun SettingsScreen(
             whiteCollectionActionButtons = whiteCollectionActionButtons,
             whiteCollectionPlayButton = whiteCollectionPlayButton,
             hidePlaylistPlayButtonLabel = hidePlaylistPlayButtonLabel,
+            hideLibraryNewPlaylistTapLabel = hideLibraryNewPlaylistTapLabel,
             onManageFolders = { showManageFoldersSheet = true },
             onManageHomeExcludedFolders = { showHomeExcludedFoldersSheet = true },
             onChooseMusicFolder = { musicFolderRootPicker.launch(null) },
@@ -9506,6 +9545,14 @@ fun SettingsScreen(
         )
     }
 
+    if (showHeadphoneBurnInDialog) {
+        HeadphoneBurnInSettingsDialog(
+            onDismiss = { showHeadphoneBurnInDialog = false },
+            onStart = onStartHeadphoneBurnIn,
+            onStop = onStopHeadphoneBurnIn,
+        )
+    }
+
     if (transportActionSlot.isNotBlank()) {
         val isLeft = transportActionSlot == "left"
         val selectedAction = if (isLeft) transportLeftAction else transportRightAction
@@ -9827,6 +9874,7 @@ private fun LocalMusicSettingsGroup(
     whiteCollectionActionButtons: Boolean,
     whiteCollectionPlayButton: Boolean,
     hidePlaylistPlayButtonLabel: Boolean,
+    hideLibraryNewPlaylistTapLabel: Boolean,
     onManageFolders: () -> Unit,
     onManageHomeExcludedFolders: () -> Unit,
     onChooseMusicFolder: () -> Unit,
@@ -10194,6 +10242,19 @@ SettingsGroup(header = stringResource(R.string.local_music)) {
             )
         },
         onClick = { AppSettings.setHidePlaylistPlayButtonLabel(!hidePlaylistPlayButtonLabel) },
+    )
+    RowDivider()
+    SettingsRow(
+        icon = Icons.Rounded.VisibilityOff,
+        title = stringResource(R.string.hide_library_new_playlist_tap_label),
+        subtitle = stringResource(R.string.hide_library_new_playlist_tap_label_subtitle),
+        trailing = {
+            Switch(
+                checked = hideLibraryNewPlaylistTapLabel,
+                onCheckedChange = AppSettings::setHideLibraryNewPlaylistTapLabel,
+            )
+        },
+        onClick = { AppSettings.setHideLibraryNewPlaylistTapLabel(!hideLibraryNewPlaylistTapLabel) },
     )
     RowDivider()
     SettingsRow(

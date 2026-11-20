@@ -110,6 +110,10 @@ import com.music.bitchord.data.scrobbling.ScrobbleManager
 import com.music.bitchord.data.settings.AppSettings
 import com.music.bitchord.data.settings.BluetoothButtonAction
 import com.music.bitchord.data.settings.TrackPlaybackSettings
+import com.music.bitchord.data.settings.PlaylistPlaybackSettings
+import com.music.bitchord.data.settings.HeadphoneBurnInSource
+import com.music.bitchord.data.settings.ParametricEqBand
+import com.music.bitchord.data.settings.ParametricEqFilterType
 import com.music.bitchord.radio.RadioPlaybackSession
 import com.music.bitchord.data.settings.MediaControlSecondaryAction
 import com.music.bitchord.data.settings.OutputPcmMode
@@ -196,6 +200,11 @@ const val ACTION_UPGRADE_QUALITY = "com.music.bitchord.action.UPGRADE_QUALITY"
 /** Opens one local file temporarily without replacing the listener's queue. */
 const val ACTION_PLAY_EXTERNAL_PREVIEW = "com.music.bitchord.action.PLAY_EXTERNAL_PREVIEW"
 const val EXTRA_EXTERNAL_PREVIEW_URI = "bitchord.externalPreviewUri"
+const val ACTION_START_HEADPHONE_BURN_IN = "com.music.bitchord.action.START_HEADPHONE_BURN_IN"
+const val ACTION_STOP_HEADPHONE_BURN_IN = "com.music.bitchord.action.STOP_HEADPHONE_BURN_IN"
+const val EXTRA_HEADPHONE_BURN_IN_SOURCE = "bitchord.headphoneBurnInSource"
+const val EXTRA_HEADPHONE_BURN_IN_DURATION_MINUTES = "bitchord.headphoneBurnInDurationMinutes"
+const val EXTRA_HEADPHONE_BURN_IN_MUSIC_URI = "bitchord.headphoneBurnInMusicUri"
 
 /**
  * Session command for single-trip queue rearrangement.
@@ -541,6 +550,7 @@ class PlaybackService : MediaLibraryService() {
     private var externalPreviewReturnState: ExternalPreviewReturnState? = null
     private var externalPreviewLoadJob: Job? = null
     private var externalPreviewRequestGeneration = 0L
+    private var headphoneBurnInStopJob: Job? = null
     private var suppressRestoredTrackTransition: String? = null
     private var externalAudioPopupWindow: ExternalAudioPopupWindow? = null
     private var suppressedExternalPopupUri: String? = null
@@ -725,6 +735,8 @@ class PlaybackService : MediaLibraryService() {
     private val upgradeQualityCommand = SessionCommand(ACTION_UPGRADE_QUALITY, Bundle.EMPTY)
     private val reorderQueueCommand = SessionCommand(ACTION_REORDER_QUEUE, Bundle.EMPTY)
     private val externalPreviewCommand = SessionCommand(ACTION_PLAY_EXTERNAL_PREVIEW, Bundle.EMPTY)
+    private val startHeadphoneBurnInCommand = SessionCommand(ACTION_START_HEADPHONE_BURN_IN, Bundle.EMPTY)
+    private val stopHeadphoneBurnInCommand = SessionCommand(ACTION_STOP_HEADPHONE_BURN_IN, Bundle.EMPTY)
 
     private var favoriteActionJob: Job? = null
     private var autoplayLoadJob: Job? = null
@@ -790,6 +802,13 @@ class PlaybackService : MediaLibraryService() {
             // The player this fired on, which is by definition the one the
             // session is currently pointed at.
             val exoPlayer = player ?: return
+            if (isHeadphoneBurnInPlaying(exoPlayer)) {
+                // Burn-in audio is intentionally excluded from play history,
+                // scrobbling, progress persistence, and notification overlays.
+                updateReplayGainForCurrentTrack()
+                publishWidgetState()
+                return
+            }
             if (isExternalPreviewPlaying(exoPlayer)) {
                 // The preview replaces the active queue temporarily, but the
                 // audible-time history tracker still follows it. Starting the
@@ -991,6 +1010,7 @@ class PlaybackService : MediaLibraryService() {
             if (suppressRestoredTrackTransition != null) {
                 if (mediaItem?.mediaId == suppressRestoredTrackTransition) {
                     suppressRestoredTrackTransition = null
+                    updateAdvancedAudioEffects()
                     updateReplayGainForCurrentTrack(force = true)
                     loadLyricsForCurrentTrack()
                     if (exoPlayer.isPlaying) startLyricsTicker() else stopLyricsTicker()
@@ -1000,6 +1020,12 @@ class PlaybackService : MediaLibraryService() {
                 suppressRestoredTrackTransition = null
             }
             if (externalPreviewReturnState != null) {
+                if (isHeadphoneBurnInPlaying(exoPlayer)) {
+                    updateReplayGainForCurrentTrack(force = true)
+                    mediaSession?.setCustomLayout(notificationButtons())
+                    publishWidgetState()
+                    return
+                }
                 if (isExternalPreviewPlaying(exoPlayer)) {
                     updateExternalAudioPopup(exoPlayer)
                     autoplayLoadJob?.cancel()
@@ -1029,6 +1055,9 @@ class PlaybackService : MediaLibraryService() {
                 // A normal play request replaced the preview before it ended.
                 // In that case the new request owns the player from here on.
                 externalAudioPopupWindow?.dismiss()
+                headphoneBurnInStopJob?.cancel()
+                headphoneBurnInStopJob = null
+                HeadphoneBurnInRuntime.stop()
                 externalPreviewReturnState = null
             }
             speakers.onLocalTransition(mediaItem, reason)
@@ -1123,6 +1152,14 @@ class PlaybackService : MediaLibraryService() {
             // The player this fired on, which is by definition the one the
             // session is currently pointed at.
             val exoPlayer = player ?: return
+            if (isHeadphoneBurnInPlaying(exoPlayer)) {
+                if (state == Player.STATE_ENDED) {
+                    exoPlayer.seekTo(0L)
+                    exoPlayer.prepare()
+                    if (canStartPlaybackAtCurrentVolume()) exoPlayer.play()
+                }
+                return
+            }
             if (isExternalPreviewPlaying(exoPlayer)) {
                 if (state == Player.STATE_ENDED) {
                     exoPlayer.currentMediaItem?.toSong()?.let {
@@ -1220,6 +1257,10 @@ class PlaybackService : MediaLibraryService() {
             // session is currently pointed at.
             val exoPlayer = player ?: return
             if (externalPreviewReturnState != null) {
+                if (isHeadphoneBurnInPlaying(exoPlayer)) {
+                    retainQueueAddsDuringExternalPreview(exoPlayer)
+                    return
+                }
                 if (isExternalPreviewPlaying(exoPlayer)) {
                     retainQueueAddsDuringExternalPreview(exoPlayer)
                     return
@@ -1227,6 +1268,9 @@ class PlaybackService : MediaLibraryService() {
                 // A new queue replaced the preview; do not later resurrect the
                 // queue that was parked when the preview first opened.
                 externalAudioPopupWindow?.dismiss()
+                headphoneBurnInStopJob?.cancel()
+                headphoneBurnInStopJob = null
+                HeadphoneBurnInRuntime.stop()
                 externalPreviewReturnState = null
             }
             speakers.onLocalQueueChanged()
@@ -2176,6 +2220,7 @@ class PlaybackService : MediaLibraryService() {
         spareReplayGainPendingMediaId = item.mediaId
         val chain = spareAudioChain
         val bitPerfect = BitPerfectOutput.ready.value
+        applyParametricEqToChain(chain, item, bitPerfect)
         chain.replayGain.normalizationMediaId = item.mediaId
         chain.replayGain.normalizationBypassed = bitPerfect
         applyVolumeBoost(chain)
@@ -2274,6 +2319,9 @@ class PlaybackService : MediaLibraryService() {
             TrackPlaybackSettings.profileFor(item.mediaId)
                 ?.takeIf { it.crossfadeOverride }
                 ?.crossfadeDurationMs
+                ?: PlaylistPlaybackSettings.profileFor(
+                    item.mediaMetadata.extras?.getString(EXTRA_PLAYLIST_PROFILE_ID),
+                )?.takeIf { it.crossfadeOverride }?.crossfadeDurationMs
         },
     )
 
@@ -2338,6 +2386,7 @@ class PlaybackService : MediaLibraryService() {
 
     private fun registerCurrentPlay() {
         val song = player?.currentMediaItem?.toSong() ?: return
+        if (song.isHeadphoneBurnIn) return
         PlaybackTracker.onPlaying(song.videoId)
         updateCurrentLocalPlayStats(isPlaying = true, song = song)
     }
@@ -2618,6 +2667,7 @@ class PlaybackService : MediaLibraryService() {
         alreadyAudible: Boolean = false,
     ) {
         val exoPlayer = player ?: return
+        if (exoPlayer.currentMediaItem?.toSong()?.isHeadphoneBurnIn == true) return
         ABRepeatController.clearForDifferentTrack(mediaItem?.mediaId)
         resetCurrentLocalPlayStatsForTrackChange()
         if (alreadyAudible) {
@@ -2635,6 +2685,7 @@ class PlaybackService : MediaLibraryService() {
         // corrects it — see [formatListener]'s onAudioInputFormatChanged.
         activeTrackIsDolbyAtmos = NerdStats.declaredFormat(mediaItem?.mediaId)?.isDolbyAtmos == true
         applySpatialAudioEnabled()
+        updateAdvancedAudioEffects()
         updateAudioEffectsEnabled()
 
         // Keep a real, bounded history in the player rather than merely hiding
@@ -4305,6 +4356,7 @@ class PlaybackService : MediaLibraryService() {
 
     /** Serialize only the bounded window needed for a future cold-start resume. */
     private fun saveQueueSnapshot(player: ExoPlayer) {
+        if (isHeadphoneBurnInPlaying(player)) return
         if (isExternalPreviewPlaying(player)) return
         if (player.currentMediaItem?.toSong()?.let { it.isLiveRadio || it.isOnsenAudio || it.isRssAudio } == true) return
         if (player.mediaItemCount == 0) {
@@ -4324,6 +4376,7 @@ class PlaybackService : MediaLibraryService() {
 
     /** Make the newly installed radio queue the durable cold-start boundary. */
     private fun saveQueueSnapshotImmediately(player: ExoPlayer) {
+        if (isHeadphoneBurnInPlaying(player)) return
         if (isExternalPreviewPlaying(player)) return
         if (player.currentMediaItem?.toSong()?.let { it.isLiveRadio || it.isOnsenAudio || it.isRssAudio } == true) return
         if (player.mediaItemCount == 0) {
@@ -4354,6 +4407,7 @@ class PlaybackService : MediaLibraryService() {
 
     /** Persist index and position without touching or serializing queue contents. */
     private fun savePlaybackState(player: ExoPlayer) {
+        if (isHeadphoneBurnInPlaying(player)) return
         if (isExternalPreviewPlaying(player)) {
             player.currentMediaItem?.toSong()?.let { saveLongTrackPosition(player, it) }
             return
@@ -4404,6 +4458,7 @@ class PlaybackService : MediaLibraryService() {
 
     /** Starts a temporary, one-file session and keeps the existing queue parked. */
     private fun startExternalAudioPreview(uriString: String) {
+        if (player?.let(::isHeadphoneBurnInPlaying) == true) stopHeadphoneBurnIn()
         suppressedExternalPopupUri = null
         externalPreviewLoadJob?.cancel()
         val requestGeneration = ++externalPreviewRequestGeneration
@@ -4453,9 +4508,112 @@ class PlaybackService : MediaLibraryService() {
         }
     }
 
+    /** Plays a private looping signal while parking and later restoring the user's exact queue. */
+    private fun startHeadphoneBurnIn(
+        source: HeadphoneBurnInSource,
+        durationMinutes: Int,
+        musicUri: String?,
+    ) {
+        val active = player ?: return
+        externalPreviewLoadJob?.cancel()
+        externalPreviewRequestGeneration++
+        headphoneBurnInStopJob?.cancel()
+        headphoneBurnInStopJob = null
+        suppressedExternalPopupUri = null
+        externalAudioPopupWindow?.dismiss()
+
+        // Replacing an existing temporary preview first restores its parked
+        // queue, so this mode never mistakes the previous preview for the
+        // listener's permanent queue.
+        if (externalPreviewReturnState != null) restoreExternalPreview(active)
+
+        externalPreviewLoadJob = scope.launch {
+            val song = try {
+                if (source == HeadphoneBurnInSource.MUSIC) {
+                    ExternalAudioPreview.readSong(
+                        applicationContext,
+                        musicUri ?: throw IllegalArgumentException("Music source URI is missing"),
+                    ).copy(isHeadphoneBurnIn = true)
+                } else {
+                    withContext(Dispatchers.IO) {
+                        HeadphoneBurnInAudio.generatedSong(applicationContext, source)
+                    }
+                }
+            } catch (cancelled: CancellationException) {
+                throw cancelled
+            } catch (error: Exception) {
+                TrackLog.w("BitChord", "could not prepare headphone burn-in audio", error)
+                Toast.makeText(applicationContext, R.string.couldnt_open_link, Toast.LENGTH_SHORT).show()
+                return@launch
+            }
+
+            if (!AppSettings.headphoneBurnInEnabled.value || player !== active) return@launch
+            val items = List(active.mediaItemCount) { active.getMediaItemAt(it) }
+            val index = active.currentMediaItemIndex.takeIf { it in items.indices } ?: 0
+            if (items.isNotEmpty()) saveQueueSnapshot(active)
+            externalPreviewReturnState = ExternalPreviewReturnState(
+                items = items,
+                index = index,
+                positionMs = active.currentPosition.coerceAtLeast(0L),
+                playWhenReady = active.playWhenReady,
+                repeatMode = active.repeatMode,
+                shuffleModeEnabled = active.shuffleModeEnabled,
+                playlistMetadata = active.playlistMetadata,
+                persistedQueueStart = persistedQueueStart,
+            )
+
+            val parkedSong = items.getOrNull(index)?.toSong()
+            updateCurrentLocalPlayStats(isPlaying = false, song = parkedSong)
+            resetCurrentLocalPlayStatsForTrackChange()
+            if (active.isPlaying) {
+                scrobbleManager?.onPlayerStateChanged(false, parkedSong, parkedSong?.durationMillis())
+                listenBrainzStartMs = 0L
+                listenBrainzDurationMs = null
+                clearDiscordPresence()
+            }
+            ListeningRecorder.onStopped()
+            stopLyricsTicker()
+
+            autoplayLoadJob?.cancel()
+            autoplayLoadJob = null
+            autoplaySeed = null
+            active.repeatMode = Player.REPEAT_MODE_ONE
+            active.shuffleModeEnabled = false
+            active.setMediaItems(listOf(song.toMediaItem()), 0, 0L)
+            active.prepare()
+            HeadphoneBurnInRuntime.start(durationMinutes)
+            val mediaId = song.videoId
+            headphoneBurnInStopJob = scope.launch {
+                delay(durationMinutes.coerceIn(5, AppSettings.MAX_HEADPHONE_BURN_IN_DURATION_MINUTES) * 60_000L)
+                val current = player
+                headphoneBurnInStopJob = null
+                if (current != null && isHeadphoneBurnInPlaying(current) &&
+                    current.currentMediaItem?.mediaId == mediaId
+                ) {
+                    restoreExternalPreview(current, cancelBurnInTimer = false)
+                } else {
+                    HeadphoneBurnInRuntime.stop()
+                }
+            }
+            if (!canStartPlaybackAtCurrentVolume()) {
+                restoreExternalPreview(active)
+                return@launch
+            }
+            if (prepareReplayGainBeforePlayback(active)) active.play()
+            publishWidgetState()
+        }
+    }
+
+    private fun stopHeadphoneBurnIn() {
+        val active = player ?: return
+        if (isHeadphoneBurnInPlaying(active)) restoreExternalPreview(active)
+    }
+
     /** Shows the optional overlay only while a file-manager preview owns the player. */
     private fun updateExternalAudioPopup(active: ExoPlayer) {
-        val song = active.currentMediaItem?.toSong()?.takeIf { it.isExternalPreview }
+        val song = active.currentMediaItem?.toSong()?.takeIf {
+            it.isExternalPreview && !it.isHeadphoneBurnIn
+        }
         if (
             song == null || !isExternalPreviewPlaying(active) ||
             !AppSettings.popupExternalAudioPlayer.value ||
@@ -4496,7 +4654,12 @@ class PlaybackService : MediaLibraryService() {
     }
 
     /** Restores the listener's parked queue after the preview finishes or fails. */
-    private fun restoreExternalPreview(active: ExoPlayer) {
+    private fun restoreExternalPreview(active: ExoPlayer, cancelBurnInTimer: Boolean = true) {
+        if (cancelBurnInTimer) {
+            headphoneBurnInStopJob?.cancel()
+            headphoneBurnInStopJob = null
+        }
+        HeadphoneBurnInRuntime.stop()
         val parked = externalPreviewReturnState ?: return
         externalAudioPopupWindow?.dismiss()
         persistedQueueStart = parked.persistedQueueStart
@@ -4531,6 +4694,10 @@ class PlaybackService : MediaLibraryService() {
     private fun isExternalPreviewPlaying(active: ExoPlayer): Boolean =
         externalPreviewReturnState != null &&
             active.currentMediaItem?.toSong()?.isExternalPreview == true
+
+    private fun isHeadphoneBurnInPlaying(active: ExoPlayer): Boolean =
+        externalPreviewReturnState != null &&
+            active.currentMediaItem?.toSong()?.isHeadphoneBurnIn == true
 
     /** Keeps "add to queue" actions made during the preview in the parked queue. */
     private fun retainQueueAddsDuringExternalPreview(active: ExoPlayer) {
@@ -4700,6 +4867,10 @@ class PlaybackService : MediaLibraryService() {
                 // that happened to be first would go on reporting a player that
                 // has been silent since the last crossfade.
                 val player = this@PlaybackService.player
+                if (player != null && isHeadphoneBurnInPlaying(player)) {
+                    delay(PROGRESS_SAMPLE_MS)
+                    continue
+                }
                 if (player != null && player.isPlaying) {
                     if (isExternalPreviewPlaying(player)) {
                         // File-manager previews intentionally skip scrobbling
@@ -4948,10 +5119,7 @@ class PlaybackService : MediaLibraryService() {
         chain.resampler.cutoffHz = if (bitPerfect) 0 else AppSettings.resamplerCutoffHz.value
         chain.spatial.enabled = !bitPerfect && AppSettings.spatialAudio.value
         chain.parametricEq.setConfig(
-            AppSettings.parametricEqConfig.value.copy(
-                enabled = AppSettings.parametricEqEnabled.value,
-                swapChannels = AppSettings.channelSwapEnabled.value,
-            ),
+            parametricEqConfigFor(player.currentMediaItem),
             balance = AppSettings.equalizerBalance.value,
             bypassAll = bitPerfect,
         )
@@ -5528,6 +5696,12 @@ class PlaybackService : MediaLibraryService() {
             }
         }
         scope.launch {
+            PlaylistPlaybackSettings.revision.collect {
+                updateAdvancedAudioEffects()
+                eachPlayer(::applyAudioOffloadPreference)
+            }
+        }
+        scope.launch {
             combine(AppSettings.diracAudioEnabled, AppSettings.diracAudioPreset) { enabled, preset -> enabled to preset }
                 .distinctUntilChanged()
                 .collect { updateAudioEffectsEnabled() }
@@ -5593,6 +5767,7 @@ class PlaybackService : MediaLibraryService() {
         val enabled = AppSettings.audioOffloadEnabled.value &&
             AppSettings.crossfadeDurationMs.value == 0 &&
             !TrackPlaybackSettings.hasEnabledTrackCrossfades() &&
+            !PlaylistPlaybackSettings.hasEnabledCrossfades() &&
             !AppSettings.darPcmUpsamplingEnabled.value &&
             !AppSettings.showAnalogDigitalPeakMeter.value &&
             !AppSettings.showSpectrumAnalyzer.value
@@ -5616,28 +5791,55 @@ class PlaybackService : MediaLibraryService() {
     /** Keeps optional PCM and platform effects aligned on both crossfade players. */
     private fun updateAdvancedAudioEffects() {
         val bitPerfect = BitPerfectOutput.ready.value
-        val parametricEqConfig = AppSettings.parametricEqConfig.value.copy(
-            enabled = AppSettings.parametricEqEnabled.value,
-            swapChannels = AppSettings.channelSwapEnabled.value,
-        )
         val balance = AppSettings.equalizerBalance.value
-        activeAudioChain.parametricEq.setConfig(
-            parametricEqConfig,
-            balance = balance,
-            bypassAll = bitPerfect,
-        )
-        activeAudioChain.parametricEq.setTpdfDitherEnabled(AppSettings.tpdfDitherEnabled.value)
-        spareAudioChain.parametricEq.setConfig(
-            parametricEqConfig,
-            balance = balance,
-            bypassAll = bitPerfect,
-        )
-        spareAudioChain.parametricEq.setTpdfDitherEnabled(AppSettings.tpdfDitherEnabled.value)
+        applyParametricEqToChain(activeAudioChain, player?.currentMediaItem, bitPerfect, balance)
+        applyParametricEqToChain(spareAudioChain, spare?.currentMediaItem, bitPerfect, balance)
 
         val reverbEnabled = AppSettings.reverbEnabled.value && !bitPerfect
         val reverbAmount = AppSettings.reverbAmount.value
         audioEffectManager?.applyReverb(reverbEnabled, reverbAmount)
         spareAudioEffectManager?.applyReverb(reverbEnabled, reverbAmount)
+    }
+
+    private fun applyParametricEqToChain(
+        chain: PlaybackAudioChain,
+        item: MediaItem?,
+        bitPerfect: Boolean = BitPerfectOutput.ready.value,
+        balance: Float = AppSettings.equalizerBalance.value,
+    ) {
+        chain.parametricEq.setConfig(
+            parametricEqConfigFor(item),
+            balance = balance,
+            bypassAll = bitPerfect,
+        )
+        chain.parametricEq.setTpdfDitherEnabled(AppSettings.tpdfDitherEnabled.value)
+    }
+
+    private fun parametricEqConfigFor(item: MediaItem?): com.music.bitchord.data.settings.ParametricEqConfig {
+        val base = AppSettings.parametricEqConfig.value.copy(
+            enabled = AppSettings.parametricEqEnabled.value,
+            swapChannels = AppSettings.channelSwapEnabled.value,
+        )
+        val playlistId = item?.mediaMetadata?.extras?.getString(EXTRA_PLAYLIST_PROFILE_ID)
+        val profile = PlaylistPlaybackSettings.profileFor(playlistId)
+            ?.takeIf { it.eqOverride }
+            ?: return base
+        val bands = (0 until profile.eqBandCount.coerceIn(1, PlaylistPlaybackSettings.MAX_EQ_BANDS)).map { index ->
+            ParametricEqBand(
+                frequencyHz = PlaylistPlaybackSettings.eqBandCenterFrequenciesHz[index],
+                q = 1f,
+                gainDb = profile.eqBandGainsCentiDb.getOrElse(index) { 0 } / 100f,
+                filterType = ParametricEqFilterType.PEAKING,
+            )
+        }
+        return base.copy(
+            enabled = profile.eqEnabled,
+            globalBands = bands,
+            leftBands = emptyList(),
+            rightBands = emptyList(),
+            activePresetId = null,
+            activePresetName = null,
+        )
     }
 
     private fun observeScrobbling() {
@@ -5953,10 +6155,15 @@ class PlaybackService : MediaLibraryService() {
         // Close the current audible segment before the service scope/player is
         // torn down. This captures a track that crossed the configured history
         // threshold since the last five-second sampler tick.
-        updateCurrentLocalPlayStats(
-            isPlaying = false,
-            song = player?.currentMediaItem?.toSong(),
-        )
+        if (player?.currentMediaItem?.toSong()?.isHeadphoneBurnIn != true) {
+            updateCurrentLocalPlayStats(
+                isPlaying = false,
+                song = player?.currentMediaItem?.toSong(),
+            )
+        }
+        headphoneBurnInStopJob?.cancel()
+        headphoneBurnInStopJob = null
+        HeadphoneBurnInRuntime.stop()
         WearBridge.attachStreams(null)
         WearBridge.releaseSpeaker()
         externalAudioPopupWindow?.dismiss()
@@ -6535,6 +6742,8 @@ class PlaybackService : MediaLibraryService() {
                     .add(upgradeQualityCommand)
                     .add(reorderQueueCommand)
                     .add(externalPreviewCommand)
+                    .add(startHeadphoneBurnInCommand)
+                    .add(stopHeadphoneBurnInCommand)
             }
             val sessionCommands = sessionCommandsBuilder.build()
             return MediaSession.ConnectionResult.AcceptedResultBuilder(session)
@@ -6568,6 +6777,29 @@ class PlaybackService : MediaLibraryService() {
                         ?: return Futures.immediateFuture(SessionResult(SessionError.ERROR_NOT_SUPPORTED))
                     startExternalAudioPreview(uri)
                 }
+                ACTION_START_HEADPHONE_BURN_IN -> {
+                    if (!AppSettings.headphoneBurnInEnabled.value) {
+                        return Futures.immediateFuture(SessionResult(SessionError.ERROR_PERMISSION_DENIED))
+                    }
+                    val durationMinutes = args.getInt(EXTRA_HEADPHONE_BURN_IN_DURATION_MINUTES, 60)
+                        .coerceIn(5, AppSettings.MAX_HEADPHONE_BURN_IN_DURATION_MINUTES)
+                    val source = runCatching {
+                        HeadphoneBurnInSource.valueOf(
+                            args.getString(EXTRA_HEADPHONE_BURN_IN_SOURCE).orEmpty(),
+                        )
+                    }.getOrNull() ?: return Futures.immediateFuture(
+                        SessionResult(SessionError.ERROR_NOT_SUPPORTED),
+                    )
+                    val musicUri = args.getString(EXTRA_HEADPHONE_BURN_IN_MUSIC_URI)
+                    if (source == HeadphoneBurnInSource.MUSIC &&
+                        (musicUri.isNullOrBlank() || musicUri.length > 8_192 ||
+                            runCatching { Uri.parse(musicUri).scheme != "content" }.getOrDefault(true))
+                    ) {
+                        return Futures.immediateFuture(SessionResult(SessionError.ERROR_NOT_SUPPORTED))
+                    }
+                    startHeadphoneBurnIn(source, durationMinutes, musicUri)
+                }
+                ACTION_STOP_HEADPHONE_BURN_IN -> stopHeadphoneBurnIn()
                 ACTION_TOGGLE_FAVORITE -> session.player.currentMediaItem?.mediaId?.let {
                     toggleFavoriteFromNotification(it)
                 }

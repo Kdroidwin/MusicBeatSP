@@ -33,6 +33,7 @@ import com.music.bitchord.R
 @Composable
 fun LibraryCreatePlaylistCard(
     onClick: () -> Unit,
+    showTapToCreateLabel: Boolean = false,
     modifier: Modifier = Modifier,
 ) {
     Surface(
@@ -78,13 +79,14 @@ fun LibraryCreatePlaylistCard(
                 color = MaterialTheme.colorScheme.primary,
             )
 
-            Spacer(modifier = Modifier.height(2.dp))
-
-            Text(
-                text = stringResource(R.string.tap_to_create),
-                style = MaterialTheme.typography.bodySmall,
-                color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.7f),
-            )
+            if (showTapToCreateLabel) {
+                Spacer(modifier = Modifier.height(2.dp))
+                Text(
+                    text = stringResource(R.string.tap_to_create),
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.7f),
+                )
+            }
         }
     }
 }

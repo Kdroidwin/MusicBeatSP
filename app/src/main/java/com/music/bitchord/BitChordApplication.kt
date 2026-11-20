@@ -82,6 +82,7 @@ class BitChordApplication : Application(), SingletonImageLoader.Factory {
         com.music.bitchord.feature.lyrics.manager.LyricsExtensionManager.init(this)
         com.music.bitchord.data.settings.EqualizerSettings.init(this)
         com.music.bitchord.data.settings.TrackPlaybackSettings.init(this)
+        com.music.bitchord.data.settings.PlaylistPlaybackSettings.init(this)
         SourceRegistry.init(this)
         SearchHistory.init(this)
         LastPlayed.init(this)

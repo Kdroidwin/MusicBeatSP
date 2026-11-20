@@ -26,6 +26,8 @@ import androidx.media3.session.SessionCommand
 import androidx.media3.session.SessionToken
 import com.music.bitchord.data.model.NOTIFICATION_ART_PX
 import com.music.bitchord.data.model.Song
+import com.music.bitchord.data.settings.AppSettings
+import com.music.bitchord.data.settings.HeadphoneBurnInSource
 import com.music.bitchord.data.model.artworkAt
 import com.music.bitchord.data.sources.SourceRegistry
 import com.music.bitchord.data.sources.TrackMatcher
@@ -157,6 +159,33 @@ fun MediaController.previewExternalAudio(uriString: String) {
     sendCustomCommand(
         SessionCommand(ACTION_PLAY_EXTERNAL_PREVIEW, Bundle.EMPTY),
         bundleOf(EXTRA_EXTERNAL_PREVIEW_URI to uriString),
+    )
+}
+
+/** Starts the opt-in headphone burn-in session without altering ordinary queue APIs. */
+fun MediaController.startHeadphoneBurnIn(
+    source: HeadphoneBurnInSource,
+    durationMinutes: Int,
+    musicUri: String? = null,
+) {
+    sendCustomCommand(
+        SessionCommand(ACTION_START_HEADPHONE_BURN_IN, Bundle.EMPTY),
+        bundleOf(
+            EXTRA_HEADPHONE_BURN_IN_SOURCE to source.name,
+            EXTRA_HEADPHONE_BURN_IN_DURATION_MINUTES to durationMinutes.coerceIn(
+                5,
+                AppSettings.MAX_HEADPHONE_BURN_IN_DURATION_MINUTES,
+            ),
+            EXTRA_HEADPHONE_BURN_IN_MUSIC_URI to musicUri,
+        ),
+    )
+}
+
+/** Stops burn-in and resumes the queue that was parked when it began. */
+fun MediaController.stopHeadphoneBurnIn() {
+    sendCustomCommand(
+        SessionCommand(ACTION_STOP_HEADPHONE_BURN_IN, Bundle.EMPTY),
+        Bundle.EMPTY,
     )
 }
 
@@ -317,6 +346,8 @@ fun MediaItem.toSong() = Song(
     isOnsenAudio = mediaMetadata.extras?.getBoolean(EXTRA_ONSEN_AUDIO) == true,
     isRssAudio = mediaMetadata.extras?.getBoolean(EXTRA_RSS_AUDIO) == true,
     radioAudioMimeType = mediaMetadata.extras?.getString(EXTRA_RSS_AUDIO_MIME_TYPE),
+    playbackPlaylistId = mediaMetadata.extras?.getString(EXTRA_PLAYLIST_PROFILE_ID),
+    isHeadphoneBurnIn = mediaMetadata.extras?.getBoolean(EXTRA_HEADPHONE_BURN_IN) == true,
 )
 
 /** @see Song.fromAutoplay */
@@ -356,6 +387,8 @@ private const val EXTRA_ARTWORK_SOURCE_URL = "bitchord.artworkSourceUrl"
 
 /** @see Song.localUri */
 internal const val EXTRA_LOCAL_URI = "bitchord.localUri"
+internal const val EXTRA_PLAYLIST_PROFILE_ID = "bitchord.playlistPlaybackProfileId"
+internal const val EXTRA_HEADPHONE_BURN_IN = "bitchord.headphoneBurnIn"
 
 /** @see Song.localPath */
 internal const val EXTRA_LOCAL_PATH = "bitchord.localPath"
@@ -602,10 +635,10 @@ fun Song.toMediaItem(): MediaItem {
             // back a null duration and later matching loses the `&d=` it
             // depends on.
             .apply {
-                if (fromAutoplay || offlineUri != null || durationText != null || isExternalPreview ||
+                if (fromAutoplay || offlineUri != null || durationText != null || isExternalPreview || isHeadphoneBurnIn ||
                     artistId != null || albumId != null || setVideoId != null || isLiveRadio || isOnsenAudio || isRssAudio ||
                     radioAudioMimeType != null || isExplicit != null || isVideo || isVideoOrigin || radioName != null ||
-                    thumbnailUrl != null
+                    thumbnailUrl != null || playbackPlaylistId != null
                 ) {
                     setExtras(
                         bundleOf(
@@ -631,6 +664,8 @@ fun Song.toMediaItem(): MediaItem {
                             EXTRA_ONSEN_AUDIO to isOnsenAudio,
                             EXTRA_RSS_AUDIO to isRssAudio,
                             EXTRA_RSS_AUDIO_MIME_TYPE to radioAudioMimeType,
+                            EXTRA_PLAYLIST_PROFILE_ID to playbackPlaylistId,
+                            EXTRA_HEADPHONE_BURN_IN to isHeadphoneBurnIn,
                         ),
                     )
                 }
