@@ -34,6 +34,7 @@ import androidx.compose.material3.LinearProgressIndicator
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Surface
+import androidx.compose.material3.Switch
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
@@ -52,8 +53,10 @@ import androidx.compose.ui.window.Dialog
 import androidx.compose.ui.window.DialogProperties
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.lifecycle.viewmodel.compose.viewModel
+import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.music.bitchord.R
 import com.music.bitchord.data.settings.AppSettings
+import com.music.bitchord.data.settings.CdRippingOutputFormat
 import com.music.bitchord.feature.cdripping.CdRippingViewModel
 
 @Composable
@@ -64,6 +67,10 @@ internal fun CdRippingDialog(
     val model: CdRippingViewModel = viewModel()
     val speedX by AppSettings.cdRippingSpeedX.collectAsStateWithLifecycle()
     val retries by AppSettings.cdRippingRetries.collectAsStateWithLifecycle()
+    val outputFormat by AppSettings.cdRippingOutputFormat.collectAsStateWithLifecycle()
+    val verifyReads by AppSettings.cdRippingVerifyReads.collectAsStateWithLifecycle()
+    val savedFilenameTemplate by AppSettings.cdRippingFilenameTemplate.collectAsStateWithLifecycle()
+    var filenameTemplate by remember(savedFilenameTemplate) { mutableStateOf(savedFilenameTemplate) }
     val picker = rememberLauncherForActivityResult(ActivityResultContracts.OpenDocumentTree()) { uri: Uri? ->
         if (uri != null) model.setOutputTree(uri)
     }
@@ -190,6 +197,55 @@ internal fun CdRippingDialog(
                             enabled = !model.isRipping,
                         )
 
+                        Text(stringResource(R.string.cd_ripping_format), style = MaterialTheme.typography.titleSmall)
+                        Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                            CdRippingOutputFormat.entries.forEach { format ->
+                                FilterChip(
+                                    selected = outputFormat == format,
+                                    onClick = { AppSettings.setCdRippingOutputFormat(format) },
+                                    enabled = !model.isRipping,
+                                    label = { Text(if (format == CdRippingOutputFormat.WAV) "WAV" else "AIFF") },
+                                )
+                            }
+                        }
+                        Text(
+                            stringResource(R.string.cd_ripping_native_quality),
+                            style = MaterialTheme.typography.bodySmall,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant,
+                        )
+
+                        OutlinedTextField(
+                            value = filenameTemplate,
+                            onValueChange = {
+                                filenameTemplate = it.take(160)
+                                AppSettings.setCdRippingFilenameTemplate(filenameTemplate)
+                            },
+                            modifier = Modifier.fillMaxWidth(),
+                            label = { Text(stringResource(R.string.cd_ripping_filename_template)) },
+                            supportingText = { Text(stringResource(R.string.cd_ripping_filename_tokens)) },
+                            singleLine = true,
+                            enabled = !model.isRipping,
+                        )
+
+                        Row(
+                            modifier = Modifier.fillMaxWidth(),
+                            verticalAlignment = Alignment.CenterVertically,
+                        ) {
+                            Column(Modifier.weight(1f)) {
+                                Text(stringResource(R.string.cd_ripping_verify_reads), style = MaterialTheme.typography.titleSmall)
+                                Text(
+                                    stringResource(R.string.cd_ripping_verify_reads_subtitle),
+                                    style = MaterialTheme.typography.bodySmall,
+                                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                                )
+                            }
+                            Switch(
+                                checked = verifyReads,
+                                onCheckedChange = AppSettings::setCdRippingVerifyReads,
+                                enabled = !model.isRipping,
+                            )
+                        }
+
                         Row(verticalAlignment = Alignment.CenterVertically) {
                             Text(stringResource(R.string.cd_ripping_tracks), modifier = Modifier.weight(1f), style = MaterialTheme.typography.titleMedium)
                             TextButton(onClick = { model.selectAllTracks(true) }, enabled = !model.isRipping) {
@@ -221,7 +277,11 @@ internal fun CdRippingDialog(
                                         color = MaterialTheme.colorScheme.onSurfaceVariant,
                                     )
                                 }
-                                Text("WAV", style = MaterialTheme.typography.labelMedium, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                                Text(
+                                    if (outputFormat == CdRippingOutputFormat.WAV) "WAV" else "AIFF",
+                                    style = MaterialTheme.typography.labelMedium,
+                                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                                )
                             }
                         }
 

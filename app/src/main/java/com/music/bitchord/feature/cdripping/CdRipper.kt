@@ -12,6 +12,8 @@ internal data class CdRipOptions(
     val sectorsPerRead: Int = 4,
     val retries: Int = 2,
     val offsetSamples: Int = 0,
+    /** Read each block twice and accept it only if the PCM bytes match. */
+    val verifyReads: Boolean = false,
 )
 
 internal data class CdRipResult(val errorSectors: Int)
@@ -96,7 +98,10 @@ internal class CdRipper(
         repeat(options.retries.coerceIn(0, 5) + 1) {
             checkCancelled()
             try {
-                return drive.readCd(lba, count)
+                val first = drive.readCd(lba, count)
+                if (!options.verifyReads) return first
+                val second = drive.readCd(lba, count)
+                if (first.contentEquals(second)) return first
             } catch (error: CdScsiException) {
                 if (error.senseKey < 0) throw error
             }

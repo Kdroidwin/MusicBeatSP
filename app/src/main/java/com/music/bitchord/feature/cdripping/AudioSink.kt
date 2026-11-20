@@ -94,3 +94,90 @@ internal class WavSink(
         return bytes
     }
 }
+
+/** Lossless 16-bit/44.1 kHz/stereo AIFF writer; converts CD little-endian samples to AIFF byte order. */
+internal class AiffSink(
+    private val output: OutputStream,
+    private val expectedPcmBytes: Long,
+    tags: Map<String, String>,
+) : AudioSink {
+    private var written = 0L
+    private var finished = false
+
+    init {
+        require(expectedPcmBytes in 4..(0xFFFF_FFFFL - 128L) && expectedPcmBytes % 4L == 0L) {
+            "Invalid AIFF data size"
+        }
+        val textChunks = listOfNotNull(
+            encodeTextChunk("NAME", tags["TITLE"]),
+            encodeTextChunk("AUTH", tags["ARTIST"]),
+            encodeTextChunk("ANNO", tags["ALBUM"]),
+        )
+        val formSize = 4L + textChunks.sumOf { it.size.toLong() } + (8L + 18L) + (8L + 8L + expectedPcmBytes)
+        require(formSize <= 0xFFFF_FFFFL) { "AIFF exceeds the format limit" }
+        output.write("FORM".toByteArray(Charsets.US_ASCII))
+        writeUInt32(formSize)
+        output.write("AIFF".toByteArray(Charsets.US_ASCII))
+        textChunks.forEach(output::write)
+        output.write("COMM".toByteArray(Charsets.US_ASCII))
+        writeUInt32(18)
+        output.write(ByteBuffer.allocate(8).order(ByteOrder.BIG_ENDIAN).apply {
+            putShort(2)
+            putInt((expectedPcmBytes / 4L).toInt())
+            putShort(16)
+        }.array())
+        output.write(extended80(44_100))
+        output.write("SSND".toByteArray(Charsets.US_ASCII))
+        writeUInt32(expectedPcmBytes + 8L)
+        output.write(ByteBuffer.allocate(8).order(ByteOrder.BIG_ENDIAN).putInt(0).putInt(0).array())
+    }
+
+    override fun write(bytes: ByteArray, offset: Int, length: Int) {
+        check(!finished) { "AIFF writer is already finished" }
+        require(offset >= 0 && length >= 0 && offset <= bytes.size - length)
+        require(length % 4 == 0) { "CD-DA PCM data must be frame-aligned" }
+        require(written <= expectedPcmBytes - length) { "Too much PCM data" }
+        var index = offset
+        val end = offset + length
+        while (index < end) {
+            output.write(bytes[index + 1].toInt())
+            output.write(bytes[index].toInt())
+            output.write(bytes[index + 3].toInt())
+            output.write(bytes[index + 2].toInt())
+            index += 4
+        }
+        written += length
+    }
+
+    override fun finish() {
+        check(!finished) { "AIFF writer is already finished" }
+        check(written == expectedPcmBytes) { "CD read ended before the AIFF track was complete" }
+        output.flush()
+        finished = true
+    }
+
+    private fun encodeTextChunk(id: String, raw: String?): ByteArray? {
+        val value = raw?.trim()?.takeIf(String::isNotEmpty)?.toByteArray(Charsets.UTF_8)?.take(254)?.toByteArray()
+            ?: return null
+        val payloadSize = 1 + value.size
+        val paddedPayloadSize = payloadSize + (payloadSize and 1)
+        return ByteBuffer.allocate(8 + paddedPayloadSize).order(ByteOrder.BIG_ENDIAN).apply {
+            put(id.toByteArray(Charsets.US_ASCII))
+            putInt(payloadSize)
+            put(value.size.toByte())
+            put(value)
+            if (payloadSize % 2 != 0) put(0)
+        }.array()
+    }
+
+    private fun extended80(sampleRate: Int): ByteArray {
+        require(sampleRate == 44_100)
+        // Canonical 80-bit extended encoding of 44,100 Hz.
+        return byteArrayOf(0x40, 0x0e, 0xac.toByte(), 0x44, 0, 0, 0, 0, 0, 0)
+    }
+
+    private fun writeUInt32(value: Long) {
+        require(value in 0..0xFFFF_FFFFL)
+        output.write(ByteBuffer.allocate(4).order(ByteOrder.BIG_ENDIAN).putInt(value.toInt()).array())
+    }
+}

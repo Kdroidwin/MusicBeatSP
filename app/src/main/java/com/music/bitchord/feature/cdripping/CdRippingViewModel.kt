@@ -16,6 +16,7 @@ import androidx.lifecycle.viewModelScope
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.setValue
 import com.music.bitchord.data.settings.AppSettings
+import com.music.bitchord.data.settings.CdRippingOutputFormat
 import java.io.IOException
 import java.util.UUID
 import kotlinx.coroutines.CancellationException
@@ -241,6 +242,10 @@ internal class CdRippingViewModel(application: Application) : AndroidViewModel(a
             statusMessage = "Preparing CD rip"
             val retryCount = AppSettings.cdRippingRetries.value.coerceIn(0, 5)
             val speedX = AppSettings.cdRippingSpeedX.value.coerceIn(1, 12)
+            val verifyReads = AppSettings.cdRippingVerifyReads.value
+            val outputFormat = AppSettings.cdRippingOutputFormat.value
+            val filenameTemplate = AppSettings.cdRippingFilenameTemplate.value
+            val extension = if (outputFormat == CdRippingOutputFormat.AIFF) "aiff" else "wav"
             try {
                 withContext(Dispatchers.IO) {
                     val tree = DocumentFile.fromTreeUri(app, Uri.parse(uriString))
@@ -252,8 +257,15 @@ internal class CdRippingViewModel(application: Application) : AndroidViewModel(a
                             throw IOException("The CD drive was disconnected")
                         }
                         currentTrackNumber = index + 1
-                        val title = "Track %02d".format(track.number)
-                        val requestedName = "%02d %s.wav".format(track.number, sanitizeFilename(title))
+                        val trackNumber = "%02d".format(track.number)
+                        val title = "Track $trackNumber"
+                        val rawStem = filenameTemplate
+                            .replace("{trackNumber}", trackNumber, ignoreCase = true)
+                            .replace("{track}", trackNumber, ignoreCase = true)
+                            .replace("{title}", title, ignoreCase = true)
+                            .replace("{artist}", albumArtist.trim().ifBlank { "Unknown Artist" }, ignoreCase = true)
+                            .replace("{album}", albumTitle.trim().ifBlank { "Audio CD" }, ignoreCase = true)
+                        val requestedName = "${sanitizeFilename(rawStem)}.$extension"
                         if (tree.findFile(requestedName) != null) {
                             skippedCount++
                             return@forEachIndexed
@@ -273,8 +285,14 @@ internal class CdRippingViewModel(application: Application) : AndroidViewModel(a
                                     "ALBUM" to albumTitle.trim().ifBlank { "Audio CD" },
                                     "TRACKNUMBER" to track.number.toString(),
                                 )
-                                val sink = WavSink(stream, pcmBytes, tags)
-                                CdRipper(currentDrive, CdRipOptions(speedX, 4, retryCount)).rip(
+                                val sink = when (outputFormat) {
+                                    CdRippingOutputFormat.WAV -> WavSink(stream, pcmBytes, tags)
+                                    CdRippingOutputFormat.AIFF -> AiffSink(stream, pcmBytes, tags)
+                                }
+                                CdRipper(
+                                    currentDrive,
+                                    CdRipOptions(speedX, 4, retryCount, verifyReads = verifyReads),
+                                ).rip(
                                     track = track,
                                     leadOut = leadOutLba,
                                     sink = sink,
@@ -285,7 +303,7 @@ internal class CdRippingViewModel(application: Application) : AndroidViewModel(a
                                 )
                                 sink.finish()
                             }
-                            moveCompletedFile(tree, partial, requestedName)
+                            moveCompletedFile(tree, partial, requestedName, extension, outputFormat)
                             finalized = true
                             completedCount++
                         } catch (error: CancellationException) {
@@ -318,19 +336,26 @@ internal class CdRippingViewModel(application: Application) : AndroidViewModel(a
         }
     }
 
-    private fun moveCompletedFile(tree: DocumentFile, partial: DocumentFile, requestedName: String) {
+    private fun moveCompletedFile(
+        tree: DocumentFile,
+        partial: DocumentFile,
+        requestedName: String,
+        extension: String,
+        outputFormat: CdRippingOutputFormat,
+    ) {
         var finalName = requestedName
         var suffix = 2
         while (tree.findFile(finalName) != null) {
-            val stem = requestedName.removeSuffix(".wav")
-            finalName = "$stem ($suffix).wav"
+            val stem = requestedName.removeSuffix(".$extension")
+            finalName = "$stem ($suffix).$extension"
             suffix++
         }
         if (partial.renameTo(finalName)) return
 
         // Some SAF providers cannot rename. Copy only the fully written temp
         // file; remove the visible destination again if the copy fails.
-        val destination = tree.createFile("audio/wav", finalName)
+        val mimeType = if (outputFormat == CdRippingOutputFormat.AIFF) "audio/aiff" else "audio/wav"
+        val destination = tree.createFile(mimeType, finalName)
             ?: throw IOException("The SAF provider cannot finalize the ripped file")
         try {
             val input = app.contentResolver.openInputStream(partial.uri)
