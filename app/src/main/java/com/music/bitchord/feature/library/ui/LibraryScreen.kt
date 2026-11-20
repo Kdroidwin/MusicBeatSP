@@ -107,6 +107,7 @@ import com.music.bitchord.data.settings.LibraryViewType
 import com.music.bitchord.data.settings.LibraryCategory
 import com.music.bitchord.data.settings.LibrarySort
 import com.music.bitchord.data.settings.FavoriteSongSort
+import com.music.bitchord.data.settings.PlaylistRefreshIndicatorStyle
 import com.music.bitchord.data.settings.SavedYoutubeCollection
 import com.music.bitchord.data.sources.SourceRegistry
 import com.music.bitchord.download.Downloads
@@ -292,6 +293,7 @@ fun LibraryScreen(
     val isRefreshingPlaylistMetadata by mainViewModel.isRefreshingLocalMusic.collectAsStateWithLifecycle()
     val pinRootFilters by AppSettings.pinMusicLibraryTopBar.collectAsStateWithLifecycle()
     val refreshPlaylistTagsOnPull by AppSettings.refreshPlaylistTagsOnPull.collectAsStateWithLifecycle()
+    val playlistRefreshIndicatorStyle by AppSettings.playlistRefreshIndicatorStyle.collectAsStateWithLifecycle()
     val playlists by LocalPlaylistStore.playlists.collectAsStateWithLifecycle()
     val favoriteIds by LocalFavoritesStore.favoriteIds.collectAsStateWithLifecycle()
     val favoriteOrder by LocalFavoritesStore.favoriteOrder.collectAsStateWithLifecycle()
@@ -1340,13 +1342,22 @@ fun LibraryScreen(
                         state = playlistRefreshState,
                         modifier = Modifier.fillMaxSize(),
                         indicator = {
-                            PullToRefreshDefaults.Indicator(
-                                state = playlistRefreshState,
-                                isRefreshing = isRefreshingPlaylistMetadata,
-                                modifier = Modifier
-                                    .align(Alignment.TopCenter)
-                                    .padding(top = contentPadding.calculateTopPadding()),
-                            )
+                            if (playlistRefreshIndicatorStyle != PlaylistRefreshIndicatorStyle.HIDDEN) {
+                                val indicatorColor = when (playlistRefreshIndicatorStyle) {
+                                    PlaylistRefreshIndicatorStyle.ORIGINAL -> PullToRefreshDefaults.indicatorColor
+                                    PlaylistRefreshIndicatorStyle.SEMI_TRANSPARENT ->
+                                        PullToRefreshDefaults.indicatorColor.copy(alpha = 0.45f)
+                                    PlaylistRefreshIndicatorStyle.HIDDEN -> Color.Transparent
+                                }
+                                PullToRefreshDefaults.Indicator(
+                                    state = playlistRefreshState,
+                                    isRefreshing = isRefreshingPlaylistMetadata,
+                                    color = indicatorColor,
+                                    modifier = Modifier
+                                        .align(Alignment.TopCenter)
+                                        .padding(top = contentPadding.calculateTopPadding()),
+                                )
+                            }
                         },
                     ) {
                         renderDrillDown()

@@ -152,6 +152,13 @@ enum class FolderArtworkFallbackMode(val persistedValue: Int) {
     }
 }
 
+/** Visibility and opacity of the local playlist pull-to-refresh indicator. */
+enum class PlaylistRefreshIndicatorStyle {
+    ORIGINAL,
+    SEMI_TRANSPARENT,
+    HIDDEN,
+}
+
 /** Independently customisable ink groups painted over the expanded player. */
 enum class PlayerInkGroup(val preferenceSuffix: String) {
     BUTTONS("buttons"),
@@ -970,6 +977,8 @@ object AppSettings {
     val persistentLocalArtwork = MutableStateFlow(true)
     /** Refreshes MediaStore tags when a local playlist detail is pulled down. */
     val refreshPlaylistTagsOnPull = MutableStateFlow(true)
+    /** Controls only the indicator shown while refreshing a local playlist. */
+    val playlistRefreshIndicatorStyle = MutableStateFlow(PlaylistRefreshIndicatorStyle.ORIGINAL)
     /** Uses cover/folder/albumart sidecars when an audio file has no embedded cover. */
     val folderArtworkFallbackMode = MutableStateFlow(FolderArtworkFallbackMode.DISABLED)
 
@@ -1960,6 +1969,12 @@ object AppSettings {
             .coerceIn(0f, MAX_PLAYER_ARTWORK_BLUR_DP)
         persistentLocalArtwork.value = prefs.getBoolean(KEY_PERSISTENT_LOCAL_ARTWORK, true)
         refreshPlaylistTagsOnPull.value = prefs.getBoolean(KEY_REFRESH_PLAYLIST_TAGS_ON_PULL, true)
+        playlistRefreshIndicatorStyle.value = runCatching {
+            PlaylistRefreshIndicatorStyle.valueOf(
+                prefs.getString(KEY_PLAYLIST_REFRESH_INDICATOR_STYLE, PlaylistRefreshIndicatorStyle.ORIGINAL.name)
+                    ?: PlaylistRefreshIndicatorStyle.ORIGINAL.name,
+            )
+        }.getOrDefault(PlaylistRefreshIndicatorStyle.ORIGINAL)
         folderArtworkFallbackMode.value = FolderArtworkFallbackMode.fromPersistedValue(
             prefs.getInt(KEY_FOLDER_ARTWORK_FALLBACK_MODE, FolderArtworkFallbackMode.DISABLED.persistedValue),
         ) ?: FolderArtworkFallbackMode.DISABLED
@@ -3598,6 +3613,11 @@ object AppSettings {
     fun setRefreshPlaylistTagsOnPull(value: Boolean) {
         refreshPlaylistTagsOnPull.value = value
         prefs.edit().putBoolean(KEY_REFRESH_PLAYLIST_TAGS_ON_PULL, value).apply()
+    }
+
+    fun setPlaylistRefreshIndicatorStyle(value: PlaylistRefreshIndicatorStyle) {
+        playlistRefreshIndicatorStyle.value = value
+        prefs.edit().putString(KEY_PLAYLIST_REFRESH_INDICATOR_STYLE, value.name).apply()
     }
 
     fun setFolderArtworkFallbackMode(value: FolderArtworkFallbackMode) {
@@ -5448,6 +5468,7 @@ object AppSettings {
     private const val KEY_ARTWORK_BACKDROP_BLUR_DP = "artwork_backdrop_blur_dp"
     private const val KEY_PERSISTENT_LOCAL_ARTWORK = "persistent_local_artwork"
     private const val KEY_REFRESH_PLAYLIST_TAGS_ON_PULL = "refresh_playlist_tags_on_pull"
+    private const val KEY_PLAYLIST_REFRESH_INDICATOR_STYLE = "playlist_refresh_indicator_style"
     private const val KEY_FOLDER_ARTWORK_FALLBACK_MODE = "folder_artwork_fallback_mode"
     private const val KEY_LYRICS_BLUR = "lyrics_blur"
     private const val KEY_PREFER_EMBEDDED_LOCAL_LYRICS = "prefer_embedded_local_lyrics"

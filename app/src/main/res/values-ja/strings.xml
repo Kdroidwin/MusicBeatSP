@@ -1366,6 +1366,11 @@
     <string name="persistent_local_artwork_subtitle">ライブラリやプレイリストの大きなアートをアプリ内に保存し、2回目以降を速く読み込みます</string>
     <string name="refresh_playlist_tags_on_pull">引っ張ってプレイリストのタグを更新</string>
     <string name="refresh_playlist_tags_on_pull_subtitle">端末内プレイリストを下に引っ張ると、曲名・アーティスト名などのタグを読み直します</string>
+    <string name="playlist_refresh_indicator_style">プレイリスト更新アイコンの表示</string>
+    <string name="playlist_refresh_indicator_style_subtitle">端末内プレイリスト詳細で更新中に表示するアイコンの見た目を選びます</string>
+    <string name="playlist_refresh_indicator_original">従来の色</string>
+    <string name="playlist_refresh_indicator_semi_transparent">半透明</string>
+    <string name="playlist_refresh_indicator_hidden">透明（非表示）</string>
     <string name="folder_artwork_fallback">埋め込みアートがない場合にフォルダー画像を使う</string>
     <string name="folder_artwork_fallback_subtitle">folder.jpg、albumart.jpg、cover.jpg など音楽ファイルと同じフォルダーの画像を使います</string>
     <string name="folder_artwork_fallback_disabled">無効</string>

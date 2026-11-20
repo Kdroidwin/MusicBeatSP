@@ -192,6 +192,7 @@ import com.music.bitchord.data.settings.AppSettings
 import com.music.bitchord.data.settings.BluetoothButtonAction
 import com.music.bitchord.ui.player.AudioVisualizationPanel
 import com.music.bitchord.data.settings.FolderArtworkFallbackMode
+import com.music.bitchord.data.settings.PlaylistRefreshIndicatorStyle
 import com.music.bitchord.data.settings.HomeTabTitleMode
 import com.music.bitchord.data.settings.PlayerArtistPageMode
 import com.music.bitchord.data.settings.PlayerArtworkMode
@@ -1777,6 +1778,7 @@ fun SettingsScreen(
     val localMusicFolderRoot by AppSettings.localMusicFolderUri.collectAsStateWithLifecycle()
     val fullScreenCollectionArtwork by AppSettings.fullScreenCollectionArtwork.collectAsStateWithLifecycle()
     val refreshPlaylistTagsOnPull by AppSettings.refreshPlaylistTagsOnPull.collectAsStateWithLifecycle()
+    val playlistRefreshIndicatorStyle by AppSettings.playlistRefreshIndicatorStyle.collectAsStateWithLifecycle()
     val smartPlaylistsEnabled by AppSettings.smartPlaylistsEnabled.collectAsStateWithLifecycle()
     val whiteCollectionActionButtons by AppSettings.whiteCollectionActionButtons.collectAsStateWithLifecycle()
     val whiteCollectionPlayButton by AppSettings.whiteCollectionPlayButton.collectAsStateWithLifecycle()
@@ -1850,6 +1852,7 @@ fun SettingsScreen(
     val persistentLocalArtwork by AppSettings.persistentLocalArtwork.collectAsStateWithLifecycle()
     val folderArtworkFallbackMode by AppSettings.folderArtworkFallbackMode.collectAsStateWithLifecycle()
     var showFolderArtworkFallbackModeDialog by remember { mutableStateOf(false) }
+    var showPlaylistRefreshIndicatorStyleDialog by remember { mutableStateOf(false) }
     var showPlayerArtistPageModeDialog by remember { mutableStateOf(false) }
     var showHomeTabTitleModeDialog by remember { mutableStateOf(false) }
     val resamplerCutoffHz by AppSettings.resamplerCutoffHz.collectAsStateWithLifecycle()
@@ -2661,6 +2664,19 @@ fun SettingsScreen(
         SettingsSearchEntry(stringResource(R.string.filter_non_music_audio), stringResource(R.string.filter_non_music_audio_subtitle), listOf("filter", "audio", "music", "音楽", "フィルター"), filterNonMusicAudio) { AppSettings.setFilterNonMusicAudio(!filterNonMusicAudio) },
         SettingsSearchEntry(stringResource(R.string.playlist_song_artwork), stringResource(R.string.playlist_song_artwork_subtitle), listOf("playlist", "artwork", "プレイリスト", "アルバムアート"), showPlaylistSongArtwork) { AppSettings.setShowPlaylistSongArtwork(!showPlaylistSongArtwork) },
         SettingsSearchEntry(stringResource(R.string.refresh_playlist_tags_on_pull), stringResource(R.string.refresh_playlist_tags_on_pull_subtitle), listOf("playlist", "refresh", "metadata", "tags", "artist", "title", "プレイリスト", "更新", "タグ", "アーティスト", "曲名"), refreshPlaylistTagsOnPull) { AppSettings.setRefreshPlaylistTagsOnPull(!refreshPlaylistTagsOnPull) },
+        SettingsSearchEntry(
+            title = stringResource(R.string.playlist_refresh_indicator_style),
+            subtitle = stringResource(R.string.playlist_refresh_indicator_style_subtitle),
+            keywords = listOf("playlist", "refresh", "indicator", "spinner", "color", "opacity", "hide", "プレイリスト", "更新", "インジケーター", "色", "透明", "非表示"),
+            valueLabel = stringResource(
+                when (playlistRefreshIndicatorStyle) {
+                    PlaylistRefreshIndicatorStyle.ORIGINAL -> R.string.playlist_refresh_indicator_original
+                    PlaylistRefreshIndicatorStyle.SEMI_TRANSPARENT -> R.string.playlist_refresh_indicator_semi_transparent
+                    PlaylistRefreshIndicatorStyle.HIDDEN -> R.string.playlist_refresh_indicator_hidden
+                },
+            ),
+            activate = { showPlaylistRefreshIndicatorStyleDialog = true },
+        ),
         hideCollectionPlayLabelSearchEntry(hidePlaylistPlayButtonLabel),
         SettingsSearchEntry(
             stringResource(R.string.collection_song_artwork),
@@ -7803,6 +7819,7 @@ fun SettingsScreen(
             localMusicFolderRoot = localMusicFolderRoot,
             fullScreenCollectionArtwork = fullScreenCollectionArtwork,
             refreshPlaylistTagsOnPull = refreshPlaylistTagsOnPull,
+            playlistRefreshIndicatorStyle = playlistRefreshIndicatorStyle,
             hideLocalQuickSearch = hideLocalQuickSearch,
             smartPlaylistsEnabled = smartPlaylistsEnabled,
             hideCollectionTopBar = hideCollectionTopBar,
@@ -7840,6 +7857,7 @@ fun SettingsScreen(
             onOpenArtistSignatureEditor = { showArtistSignatureEditor = true },
             onOpenSpotifyCanvasSetup = { showSpotifyCanvasEditor = true },
             onChoosePlayerArtistPageMode = { showPlayerArtistPageModeDialog = true },
+            onChoosePlaylistRefreshIndicatorStyle = { showPlaylistRefreshIndicatorStyleDialog = true },
         )
 
         SettingsGroup(header = stringResource(R.string.storage)) {
@@ -8444,6 +8462,50 @@ fun SettingsScreen(
                 },
                 confirmButton = {
                     TextButton(onClick = { showFolderArtworkFallbackModeDialog = false }) {
+                        Text(stringResource(R.string.cancel))
+                    }
+                },
+            )
+        }
+
+        if (showPlaylistRefreshIndicatorStyleDialog) {
+            AlertDialog(
+                onDismissRequest = { showPlaylistRefreshIndicatorStyleDialog = false },
+                title = { Text(stringResource(R.string.playlist_refresh_indicator_style)) },
+                text = {
+                    Column {
+                        PlaylistRefreshIndicatorStyle.entries.forEach { style ->
+                            val label = stringResource(
+                                when (style) {
+                                    PlaylistRefreshIndicatorStyle.ORIGINAL -> R.string.playlist_refresh_indicator_original
+                                    PlaylistRefreshIndicatorStyle.SEMI_TRANSPARENT -> R.string.playlist_refresh_indicator_semi_transparent
+                                    PlaylistRefreshIndicatorStyle.HIDDEN -> R.string.playlist_refresh_indicator_hidden
+                                },
+                            )
+                            Row(
+                                modifier = Modifier
+                                    .fillMaxWidth()
+                                    .clickable {
+                                        AppSettings.setPlaylistRefreshIndicatorStyle(style)
+                                        showPlaylistRefreshIndicatorStyleDialog = false
+                                    }
+                                    .padding(vertical = 4.dp),
+                                verticalAlignment = Alignment.CenterVertically,
+                            ) {
+                                RadioButton(
+                                    selected = playlistRefreshIndicatorStyle == style,
+                                    onClick = {
+                                        AppSettings.setPlaylistRefreshIndicatorStyle(style)
+                                        showPlaylistRefreshIndicatorStyleDialog = false
+                                    },
+                                )
+                                Text(label, modifier = Modifier.padding(start = 8.dp))
+                            }
+                        }
+                    }
+                },
+                confirmButton = {
+                    TextButton(onClick = { showPlaylistRefreshIndicatorStyleDialog = false }) {
                         Text(stringResource(R.string.cancel))
                     }
                 },
@@ -9737,6 +9799,7 @@ private fun LocalMusicSettingsGroup(
     localMusicFolderRoot: String,
     fullScreenCollectionArtwork: Boolean,
     refreshPlaylistTagsOnPull: Boolean,
+    playlistRefreshIndicatorStyle: PlaylistRefreshIndicatorStyle,
     hideLocalQuickSearch: Boolean,
     smartPlaylistsEnabled: Boolean,
     hideCollectionTopBar: Boolean,
@@ -9771,6 +9834,7 @@ private fun LocalMusicSettingsGroup(
     onOpenArtistSignatureEditor: () -> Unit,
     onOpenSpotifyCanvasSetup: () -> Unit,
     onChoosePlayerArtistPageMode: () -> Unit,
+    onChoosePlaylistRefreshIndicatorStyle: () -> Unit,
 ) {
     val context = LocalContext.current
 SettingsGroup(header = stringResource(R.string.local_music)) {
@@ -10248,6 +10312,28 @@ SettingsGroup(header = stringResource(R.string.local_music)) {
             )
         },
         onClick = { AppSettings.setRefreshPlaylistTagsOnPull(!refreshPlaylistTagsOnPull) },
+    )
+    RowDivider()
+    SettingsRow(
+        icon = Icons.Rounded.Refresh,
+        title = stringResource(R.string.playlist_refresh_indicator_style),
+        subtitle = stringResource(R.string.playlist_refresh_indicator_style_subtitle),
+        trailing = {
+            Row(verticalAlignment = Alignment.CenterVertically) {
+                Text(
+                    stringResource(
+                        when (playlistRefreshIndicatorStyle) {
+                            PlaylistRefreshIndicatorStyle.ORIGINAL -> R.string.playlist_refresh_indicator_original
+                            PlaylistRefreshIndicatorStyle.SEMI_TRANSPARENT -> R.string.playlist_refresh_indicator_semi_transparent
+                            PlaylistRefreshIndicatorStyle.HIDDEN -> R.string.playlist_refresh_indicator_hidden
+                        },
+                    ),
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                )
+                Chevron()
+            }
+        },
+        onClick = onChoosePlaylistRefreshIndicatorStyle,
     )
     RowDivider()
     SettingsRow(

@@ -1480,6 +1480,11 @@
     <string name="persistent_local_artwork_subtitle">Keep full-size library and playlist artwork in app storage for faster repeat loads</string>
     <string name="refresh_playlist_tags_on_pull">Refresh playlist tags on pull</string>
     <string name="refresh_playlist_tags_on_pull_subtitle">Pull down in a local playlist to reload track titles, artists, and other tags from this device</string>
+    <string name="playlist_refresh_indicator_style">Playlist refresh indicator</string>
+    <string name="playlist_refresh_indicator_style_subtitle">Choose the appearance of the refresh indicator in local playlist details</string>
+    <string name="playlist_refresh_indicator_original">Original color</string>
+    <string name="playlist_refresh_indicator_semi_transparent">Semi-transparent</string>
+    <string name="playlist_refresh_indicator_hidden">Transparent (hidden)</string>
     <string name="folder_artwork_fallback">Use folder artwork when no cover is embedded</string>
     <string name="folder_artwork_fallback_subtitle">Use folder.jpg, albumart.jpg, cover.jpg and similar images beside music files</string>
     <string name="folder_artwork_fallback_disabled">Disabled</string>
