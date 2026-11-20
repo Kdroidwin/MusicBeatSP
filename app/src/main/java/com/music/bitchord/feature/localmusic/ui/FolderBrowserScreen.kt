@@ -143,6 +143,7 @@ fun FolderBrowserScreen(
     onArtworkPaletteChanged: ((com.music.bitchord.ui.theme.ArtworkPalette?) -> Unit)? = null,
     onNavigationChanged: ((Boolean, (() -> Unit)?) -> Unit)? = null,
     onLocalFilesChanged: (() -> Unit)? = null,
+    onSongMetadataUpdated: ((Song) -> Unit)? = null,
     onBatchTagEditor: ((List<Song>, List<Song>) -> Unit)? = null,
     modifier: Modifier = Modifier,
 ) {
@@ -170,7 +171,20 @@ fun FolderBrowserScreen(
             renameRows = null
             val resultText = result.message ?: context.getString(R.string.folder_auto_rename_result, result.changed, result.failed)
             Toast.makeText(context, resultText, Toast.LENGTH_LONG).show()
-            if (result.changed > 0) onLocalFilesChanged?.invoke()
+            if (result.changed > 0) {
+                result.updatedRows.forEach { row ->
+                    val updatedTrack = row.track ?: return@forEach
+                    val normalizedRowPath = row.path.replace('\\', '/').trimEnd('/')
+                    val currentSong = songs.firstOrNull { song ->
+                        song.localUri == row.uri.toString() ||
+                            song.localPath?.replace('\\', '/')?.trimEnd('/') == normalizedRowPath
+                    } ?: return@forEach
+                    onSongMetadataUpdated?.invoke(
+                        currentSong.copy(title = updatedTrack.title, artist = updatedTrack.artist),
+                    )
+                }
+                onLocalFilesChanged?.invoke()
+            }
         }
     }
     val renameWritePermission = rememberLauncherForActivityResult(ActivityResultContracts.StartIntentSenderForResult()) { result ->

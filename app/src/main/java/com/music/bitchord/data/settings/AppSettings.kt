@@ -541,6 +541,8 @@ object MainNavigationTabs {
  */
 object AppSettings {
 
+    private val DEFAULT_ARTIST_SLASH_SEPARATOR_EXCEPTIONS = listOf("22/7", "22／7", "AC/CD", "AC/DC")
+
     private lateinit var prefs: SharedPreferences
     private lateinit var appContext: Context
 
@@ -1421,6 +1423,8 @@ object AppSettings {
     val librarySort = MutableStateFlow(LibrarySort.DEFAULT)
     /** Split slash-separated artist credits when grouping songs and opening artist pages. */
     val artistSlashSeparators = MutableStateFlow(true)
+    /** Exact artist names that retain slash characters when slash splitting is enabled. */
+    val artistSlashSeparatorExceptions = MutableStateFlow(DEFAULT_ARTIST_SLASH_SEPARATOR_EXCEPTIONS)
     val youtubeDownloadsSort = MutableStateFlow(LibrarySort.DEFAULT)
 
     /**
@@ -2261,6 +2265,31 @@ object AppSettings {
             ?.let { saved -> LibrarySort.entries.firstOrNull { it.name == saved } }
             ?: LibrarySort.DEFAULT
         artistSlashSeparators.value = prefs.getBoolean(KEY_ARTIST_SLASH_SEPARATORS, true)
+        val savedArtistSlashExceptions = prefs.getString(KEY_ARTIST_SLASH_SEPARATOR_EXCEPTIONS, null)
+            ?.let { raw ->
+                runCatching {
+                    val json = JSONArray(raw)
+                    (0 until json.length()).mapNotNull { index ->
+                        json.optString(index).trim().takeIf(String::isNotBlank)
+                    }.distinctBy { it.lowercase(Locale.ROOT) }.take(100)
+                }.getOrNull()
+            }
+        val artistSlashExceptionMigration = prefs.getInt(KEY_ARTIST_SLASH_EXCEPTION_MIGRATION, 0)
+        val loadedArtistSlashExceptions = when {
+            artistSlashExceptionMigration < 1 -> (DEFAULT_ARTIST_SLASH_SEPARATOR_EXCEPTIONS +
+                savedArtistSlashExceptions.orEmpty())
+                .distinctBy { it.lowercase(Locale.ROOT) }
+                .take(100)
+            savedArtistSlashExceptions != null -> savedArtistSlashExceptions
+            else -> DEFAULT_ARTIST_SLASH_SEPARATOR_EXCEPTIONS
+        }
+        artistSlashSeparatorExceptions.value = loadedArtistSlashExceptions
+        if (artistSlashExceptionMigration < 1) {
+            prefs.edit()
+                .putString(KEY_ARTIST_SLASH_SEPARATOR_EXCEPTIONS, JSONArray(loadedArtistSlashExceptions).toString())
+                .putInt(KEY_ARTIST_SLASH_EXCEPTION_MIGRATION, 1)
+                .apply()
+        }
         youtubeDownloadsSort.value = prefs.getString(KEY_YOUTUBE_DOWNLOADS_SORT, null)
             ?.let { saved -> LibrarySort.entries.firstOrNull { it.name == saved } }
             ?: LibrarySort.DEFAULT
@@ -3089,7 +3118,12 @@ object AppSettings {
             incoming.sanitized().also { existing.add(0, it) }
         }
         saveParametricEqPresets(existing)
-        setParametricEqConfig(saved.toConfig(enabled = true))
+        setParametricEqConfig(
+            saved.toConfig(enabled = true).copy(
+                graphicEqEnabled = parametricEqConfig.value.graphicEqEnabled,
+                graphicEqBands = parametricEqConfig.value.graphicEqBands,
+            ),
+        )
         return result.copy(preset = saved)
     }
 
@@ -3131,7 +3165,13 @@ object AppSettings {
 
     fun selectParametricEqPreset(presetId: String) {
         val preset = parametricEqPresets.value.firstOrNull { it.id == presetId } ?: return
-        setParametricEqConfig(preset.toConfig(enabled = true))
+        val current = parametricEqConfig.value
+        setParametricEqConfig(
+            preset.toConfig(enabled = true).copy(
+                graphicEqEnabled = current.graphicEqEnabled,
+                graphicEqBands = current.graphicEqBands,
+            ),
+        )
     }
 
     fun deleteParametricEqPreset(presetId: String) {
@@ -3146,6 +3186,8 @@ object AppSettings {
             ParametricEqConfig(
                 enabled = parametricEqConfig.value.enabled,
                 globalBands = ParametricEqBand.DEFAULTS,
+                graphicEqEnabled = parametricEqConfig.value.graphicEqEnabled,
+                graphicEqBands = parametricEqConfig.value.graphicEqBands,
             ),
         )
     }
@@ -4798,6 +4840,30 @@ object AppSettings {
         prefs.edit().putBoolean(KEY_ARTIST_SLASH_SEPARATORS, value).apply()
     }
 
+    fun addArtistSlashSeparatorException(value: String) {
+        val candidate = value.trim().take(200)
+        if (candidate.isBlank()) return
+        val updated = (artistSlashSeparatorExceptions.value + candidate)
+            .distinctBy { it.lowercase(Locale.ROOT) }
+            .take(100)
+        setArtistSlashSeparatorExceptions(updated)
+    }
+
+    fun removeArtistSlashSeparatorException(value: String) {
+        setArtistSlashSeparatorExceptions(
+            artistSlashSeparatorExceptions.value.filterNot { it.equals(value, ignoreCase = true) },
+        )
+    }
+
+    private fun setArtistSlashSeparatorExceptions(values: List<String>) {
+        val safe = values.map { it.trim().take(200) }
+            .filter(String::isNotBlank)
+            .distinctBy { it.lowercase(Locale.ROOT) }
+            .take(100)
+        artistSlashSeparatorExceptions.value = safe
+        prefs.edit().putString(KEY_ARTIST_SLASH_SEPARATOR_EXCEPTIONS, JSONArray(safe).toString()).apply()
+    }
+
     fun setYoutubeDownloadsSort(value: LibrarySort) {
         youtubeDownloadsSort.value = value
         prefs.edit().putString(KEY_YOUTUBE_DOWNLOADS_SORT, value.name).apply()
@@ -5727,6 +5793,8 @@ object AppSettings {
     private const val KEY_HIDE_ARTIST_AUDIENCE_STATS = "hide_artist_audience_stats"
     private const val KEY_LIBRARY_SORT = "library_sort"
     private const val KEY_ARTIST_SLASH_SEPARATORS = "artist_slash_separators"
+    private const val KEY_ARTIST_SLASH_SEPARATOR_EXCEPTIONS = "artist_slash_separator_exceptions"
+    private const val KEY_ARTIST_SLASH_EXCEPTION_MIGRATION = "artist_slash_exception_migration"
     private const val KEY_YOUTUBE_DOWNLOADS_SORT = "youtube_downloads_sort"
     private const val KEY_DETAIL_SONG_SORTS = "detail_song_sorts"
     private const val KEY_LIBRARY_FAVORITE_SONG_SORT = "library_favorite_song_sort"

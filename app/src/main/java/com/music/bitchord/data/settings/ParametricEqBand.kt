@@ -174,6 +174,9 @@ data class ParametricEqConfig(
     val leftGainDb: Float = 0f,
     val rightGainDb: Float = 0f,
     val globalBands: List<ParametricEqBand> = ParametricEqBand.DEFAULTS,
+    /** Separate user-adjustable graphic software EQ; independent of device bands and manual PEQ. */
+    val graphicEqEnabled: Boolean = false,
+    val graphicEqBands: List<ParametricEqBand> = emptyList(),
     val leftBands: List<ParametricEqBand> = emptyList(),
     val rightBands: List<ParametricEqBand> = emptyList(),
     val activePresetId: String? = null,
@@ -191,7 +194,14 @@ data class ParametricEqConfig(
         get() = globalPreampDb + lrPreampDb + rightGainDb
 
     val activeGlobalBands: List<ParametricEqBand>
-        get() = globalBands.filter { it.enabled && isBandEffective(it) }
+        get() = (globalBands + (if (graphicEqEnabled) graphicEqBands else emptyList()))
+            .filter { it.enabled && isBandEffective(it) }
+
+    /** Filters that should reach the PCM processor, with each EQ's own enable switch honored. */
+    val processingGlobalBands: List<ParametricEqBand>
+        get() = ((if (enabled) globalBands else emptyList()) +
+            (if (graphicEqEnabled) graphicEqBands else emptyList()))
+            .filter { it.enabled && isBandEffective(it) }
 
     val activeLeftBands: List<ParametricEqBand>
         get() = leftBands.filter { it.enabled && isBandEffective(it) }
@@ -201,17 +211,21 @@ data class ParametricEqConfig(
 
     /** Allocation-free check used on the real-time audio thread. */
     val hasActiveFilters: Boolean
-        get() = globalBands.any { it.enabled && isBandEffective(it) } ||
+        get() = activeGlobalBands.isNotEmpty() ||
             leftBands.any { it.enabled && isBandEffective(it) } ||
             rightBands.any { it.enabled && isBandEffective(it) }
 
     val hasActiveProcessing: Boolean
-        get() = enabled && (
-            swapChannels ||
-                effectiveLeftPreampDb != 0f ||
+        get() = hasActiveEq || (enabled && swapChannels)
+
+    val hasActiveEq: Boolean
+        get() = (enabled && (
+            effectiveLeftPreampDb != 0f ||
                 effectiveRightPreampDb != 0f ||
-                hasActiveFilters
-            )
+                globalBands.any { it.enabled && isBandEffective(it) } ||
+                leftBands.any { it.enabled && isBandEffective(it) } ||
+                rightBands.any { it.enabled && isBandEffective(it) }
+            )) || (graphicEqEnabled && graphicEqBands.any { it.enabled && isBandEffective(it) })
 
     fun sanitized(): ParametricEqConfig = copy(
         globalPreampDb = globalPreampDb.takeIf(Float::isFinite)?.coerceIn(-30f, 20f) ?: 0f,
@@ -219,6 +233,7 @@ data class ParametricEqConfig(
         leftGainDb = leftGainDb.takeIf(Float::isFinite)?.coerceIn(-30f, 20f) ?: 0f,
         rightGainDb = rightGainDb.takeIf(Float::isFinite)?.coerceIn(-30f, 20f) ?: 0f,
         globalBands = globalBands.take(ParametricEqBand.MAX_BANDS_PER_CHANNEL).map { it.sanitized() },
+        graphicEqBands = graphicEqBands.take(MAX_GRAPHIC_EQ_BANDS).map { it.sanitized() },
         leftBands = leftBands.take(ParametricEqBand.MAX_BANDS_PER_CHANNEL).map { it.sanitized() },
         rightBands = rightBands.take(ParametricEqBand.MAX_BANDS_PER_CHANNEL).map { it.sanitized() },
     )
@@ -234,6 +249,8 @@ data class ParametricEqConfig(
         put("leftGainDb", leftGainDb.toDouble())
         put("rightGainDb", rightGainDb.toDouble())
         put("globalBands", JSONArray().apply { globalBands.forEach { put(it.toJson()) } })
+        put("graphicEqEnabled", graphicEqEnabled)
+        put("graphicEqBands", JSONArray().apply { graphicEqBands.forEach { put(it.toJson()) } })
         put("leftBands", JSONArray().apply { leftBands.forEach { put(it.toJson()) } })
         put("rightBands", JSONArray().apply { rightBands.forEach { put(it.toJson()) } })
         if (activePresetId != null) put("activePresetId", activePresetId)
@@ -274,6 +291,8 @@ data class ParametricEqConfig(
                 leftGainDb = obj.optDouble("leftGainDb", 0.0).toFloat(),
                 rightGainDb = obj.optDouble("rightGainDb", 0.0).toFloat(),
                 globalBands = parseBands("globalBands", ParametricEqBand.DEFAULTS),
+                graphicEqEnabled = obj.optBoolean("graphicEqEnabled", false),
+                graphicEqBands = parseBands("graphicEqBands", emptyList()).take(MAX_GRAPHIC_EQ_BANDS),
                 leftBands = parseBands("leftBands", emptyList()),
                 rightBands = parseBands("rightBands", emptyList()),
                 activePresetId = obj.optString("activePresetId", "").takeIf { it.isNotBlank() },
@@ -283,6 +302,7 @@ data class ParametricEqConfig(
             ).sanitized()
         }
 
+        const val MAX_GRAPHIC_EQ_BANDS = 20
         private const val MAX_CONFIG_JSON_CHARS = 1_000_000
     }
 }

@@ -105,7 +105,7 @@ object EelEqParser {
         val linLeft = 10.0.pow(totalLeftDb.toDouble() / 20.0)
         val linRight = 10.0.pow(totalRightDb.toDouble() / 20.0)
 
-        val activeGlobal = config.globalBands.filter { it.enabled }
+        val activeGlobal = config.activeGlobalBands
         val activeLeft = config.leftBands.filter { it.enabled }
         val activeRight = config.rightBands.filter { it.enabled }
 

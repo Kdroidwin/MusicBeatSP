@@ -16,7 +16,6 @@ object ArtistSplitter {
      * otherwise look like multi-artist delimiters (e.g., "&", "/", ",").
      */
     private val INVIOLABLE_BANDS = listOf(
-        "AC/DC",
         "Simon & Garfunkel",
         "Above & Beyond",
         "Earth, Wind & Fire",
@@ -80,20 +79,26 @@ object ArtistSplitter {
         val raw = rawArtist?.trim().orEmpty()
         if (raw.isBlank()) return emptyList()
 
-        // Check if raw matches an inviolable band exactly
-        val exactMatch = INVIOLABLE_BANDS.firstOrNull { it.equals(raw, ignoreCase = true) }
-        if (exactMatch != null) return listOf(exactMatch)
+        val userExceptions = AppSettings.artistSlashSeparatorExceptions.value
+        val protectedNames = (INVIOLABLE_BANDS + userExceptions)
+            .distinctBy(::normalizeSlashException)
 
-        // Protect known inviolable bands before splitting
+        // Treat ASCII/full-width slashes and spacing around a slash as the same
+        // separator spelling. Keep the source spelling in the displayed name.
+        val normalizedRaw = normalizeSlashException(raw)
+        if (protectedNames.any { normalizeSlashException(it) == normalizedRaw }) return listOf(raw)
+
+        // Protect configured names before applying any delimiters. Matching
+        // slash variants here is important for credits such as "22 ／ 7" when
+        // the saved exception is "22/7".
         var protectedString = raw
         val protectedMap = mutableMapOf<String, String>()
-        for ((index, band) in INVIOLABLE_BANDS.withIndex()) {
-            if (protectedString.contains(band, ignoreCase = true)) {
-                val placeholder = "__BAND_${index}__"
-                // Replace case-insensitively while preserving canonical band name
-                val regex = Regex(Regex.escape(band), RegexOption.IGNORE_CASE)
-                protectedString = regex.replace(protectedString, placeholder)
-                protectedMap[placeholder] = band
+        for ((index, name) in protectedNames.withIndex()) {
+            val regex = slashExceptionRegex(name)
+            protectedString = regex.replace(protectedString) { match ->
+                val placeholder = "__ARTIST_${index}_${protectedMap.size}__"
+                protectedMap[placeholder] = match.value
+                placeholder
             }
         }
 
@@ -193,6 +198,23 @@ object ArtistSplitter {
         // Strip leading/trailing punctuation characters (like trailing commas, dots, dashes)
         s = s.replace(UNWANTED_PUNCTUATION, "").trim()
         return s
+    }
+
+    private fun normalizeSlashException(value: String): String = value.trim()
+        .replace(Regex("\\s*[/／]\\s*"), "/")
+        .lowercase(Locale.ROOT)
+
+    private fun slashExceptionRegex(value: String): Regex {
+        val compactSlashes = value.replace(Regex("\\s*[/／]\\s*"), "/")
+        return Regex(
+            buildString(compactSlashes.length * 2) {
+                compactSlashes.forEach { char ->
+                    if (char == '/' || char == '／') append("\\s*[/／]\\s*")
+                    else append(Regex.escape(char.toString()))
+                }
+            },
+            RegexOption.IGNORE_CASE,
+        )
     }
 
     private fun isPureNoise(token: String): Boolean {

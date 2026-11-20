@@ -198,6 +198,9 @@ object TagLibWriter {
                     lyricist = get("LYRICIST"),
                     arranger = get("ARRANGER"),
                     comment = get("COMMENT"),
+                    musicBrainzRecordingId = get("MUSICBRAINZ_TRACKID"),
+                    musicBrainzReleaseId = get("MUSICBRAINZ_ALBUMID"),
+                    musicBrainzArtistId = get("MUSICBRAINZ_ARTISTID"),
                     artworkBitmap = coverBitmap,
                 )
             }
@@ -248,6 +251,11 @@ object TagLibWriter {
                     for (field in TagField.entries) {
                         val key = field.propertyKey ?: continue
                         if (fields == null || field in fields) put(key, field.get(data))
+                    }
+                    if (fields == null && data.musicBrainzMetadataChanged) {
+                        put("MUSICBRAINZ_TRACKID", data.musicBrainzRecordingId)
+                        put("MUSICBRAINZ_ALBUMID", data.musicBrainzReleaseId)
+                        put("MUSICBRAINZ_ARTISTID", data.musicBrainzArtistId)
                     }
                 }
 

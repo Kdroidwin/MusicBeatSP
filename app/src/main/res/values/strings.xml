@@ -1572,6 +1572,10 @@
     <string name="show_lyrics_source_switcher_subtitle">Show the globe button on the lyrics screen to fetch from an available source you choose.</string>
     <string name="artist_slash_separators">Split artist names on slashes</string>
     <string name="artist_slash_separators_subtitle">Treat / and ／ in artist names as separators between multiple artists.</string>
+    <string name="artist_slash_exceptions_title">Preserve slash in artist names</string>
+    <string name="artist_slash_exceptions_subtitle">Names in this list, including 22/7 by default, stay intact when slash splitting is enabled. You can add or remove entries.</string>
+    <string name="artist_slash_exceptions_input">Artist name</string>
+    <string name="artist_slash_exceptions_add">Add</string>
     <string name="lyrics_sync_save">Save synchronized lyrics</string>
     <string name="lyrics_sync_preview_line">Seek to this lyric line</string>
     <string name="lyrics_sync_previous">Previous track</string>
@@ -1674,6 +1678,15 @@
     <string name="tag_editor">Tag editor</string>
     <string name="tag_editor_more_options">More options</string>
     <string name="tag_editor_search_online_image">Search online image</string>
+    <string name="musicbrainz_search_action">Find metadata with MusicBrainz</string>
+    <string name="musicbrainz_results_title">MusicBrainz matches</string>
+    <string name="musicbrainz_searching">Searching MusicBrainz…</string>
+    <string name="musicbrainz_no_results">No matching recordings were found.</string>
+    <string name="musicbrainz_candidate_applied">Metadata added to the editor. Save to write it to the file.</string>
+    <string name="eq_graphic_title">Additional global graphic EQ</string>
+    <string name="eq_graphic_subtitle">Adds software EQ bands alongside the built-in EQ. It is off by default and leaves existing EQ settings unchanged.</string>
+    <string name="eq_graphic_band_count">Number of software bands</string>
+    <string name="eq_graphic_band_gain">%1$s · %2$.1f dB</string>
     <string name="tag_editor_restore_original_tags">Restore original tags</string>
     <string name="tag_editor_select_genre">Select genre</string>
     <string name="tag_editor_search_genre">Search genre…</string>
@@ -2083,6 +2096,9 @@
     <string name="lyrics_editor_insert_timestamp">Insert timestamp [00:00.00]</string>
     <string name="lyrics_editor_select_all">Select all</string>
     <string name="lyrics_editor_clear_all">Clear all</string>
+    <string name="lyrics_editor_remove_timestamps">Remove timestamps</string>
+    <string name="lyrics_editor_no_timestamps">No timestamps were found.</string>
+    <string name="lyrics_editor_timestamps_removed">Removed %1$d timestamps.</string>
     <string name="lyrics_editor_generate_synced_lyrics">Generate synchronized lyrics automatically</string>
     <string name="lyrics_editor_generate_character_synced_lyrics">Generate character-synchronized lyrics</string>
     <string name="lyrics_editor_convert_timed_furigana">Convert timed furigana to double parentheses</string>

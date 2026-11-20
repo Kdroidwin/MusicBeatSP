@@ -69,6 +69,7 @@ fun LyricsEditorBottomBar(
     onGenerateCharacterSyncedLyricsClick: (() -> Unit)? = null,
     onConvertTimedFuriganaClick: (() -> Unit)? = null,
     onCorrectJapaneseOrthographyClick: (() -> Unit)? = null,
+    onRemoveTimestampsClick: (() -> Unit)? = null,
     modifier: Modifier = Modifier,
 ) {
     var menuExpanded by remember { mutableStateOf(false) }
@@ -246,6 +247,23 @@ fun LyricsEditorBottomBar(
                                 onClick = {
                                     menuExpanded = false
                                     onClearAllClick()
+                                },
+                            )
+                        }
+
+                        if (onRemoveTimestampsClick != null) {
+                            DropdownMenuItem(
+                                text = { Text(stringResource(R.string.lyrics_editor_remove_timestamps)) },
+                                leadingIcon = {
+                                    Icon(
+                                        imageVector = Icons.Rounded.ClearAll,
+                                        contentDescription = null,
+                                        modifier = Modifier.size(20.dp),
+                                    )
+                                },
+                                onClick = {
+                                    menuExpanded = false
+                                    onRemoveTimestampsClick()
                                 },
                             )
                         }

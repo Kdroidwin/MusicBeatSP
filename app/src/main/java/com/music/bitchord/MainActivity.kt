@@ -3851,6 +3851,7 @@ private fun BitChordApp(
                                 onArtworkPaletteChanged = onLocalArtworkPaletteChanged,
                                 onNavigationChanged = onCollectionNavigationChanged,
                                 onLocalFilesChanged = { viewModel.loadLocalMusic() },
+                                onSongMetadataUpdated = viewModel::updateLocalSongMetadata,
                                 onBatchTagEditor = { directSongs, songsWithSubfolders ->
                                     folderTagEditorSongs = directSongs to songsWithSubfolders
                                 },

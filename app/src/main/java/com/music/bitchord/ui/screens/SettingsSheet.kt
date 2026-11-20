@@ -1942,6 +1942,7 @@ fun SettingsScreen(
     val syncedLyrics by AppSettings.syncedLyrics.collectAsStateWithLifecycle()
     val showLyricsSourceSwitcher by AppSettings.showLyricsSourceSwitcher.collectAsStateWithLifecycle()
     val artistSlashSeparators by AppSettings.artistSlashSeparators.collectAsStateWithLifecycle()
+    val artistSlashSeparatorExceptions by AppSettings.artistSlashSeparatorExceptions.collectAsStateWithLifecycle()
     val autoEmbedLyrics by AppSettings.autoEmbedLyrics.collectAsStateWithLifecycle()
     val autoShowLyricsOnPlayback by AppSettings.autoShowLyricsOnPlayback.collectAsStateWithLifecycle()
     val autoFetchLyricsOnYoutubePlayback by AppSettings.autoFetchLyricsOnYoutubePlayback.collectAsStateWithLifecycle()
@@ -1963,6 +1964,7 @@ fun SettingsScreen(
         plamoPartialBytes = modelState.second
     }
     var showLyricsWebSearchQueryDialog by remember { mutableStateOf(false) }
+    var showArtistSlashSeparatorExceptionsDialog by remember { mutableStateOf(false) }
     var lyricsWebSearchQueryDraft by remember(lyricsWebSearchQuery) { mutableStateOf(lyricsWebSearchQuery) }
     val lyricsExtensionsEnabled by AppSettings.lyricsExtensionsEnabled.collectAsStateWithLifecycle()
     val lyricsSources by AppSettings.lyricsSources.collectAsStateWithLifecycle()
@@ -2724,6 +2726,13 @@ fun SettingsScreen(
         SettingsSearchEntry(stringResource(R.string.keep_collection_artwork_aspect_ratio), stringResource(R.string.keep_collection_artwork_aspect_ratio_subtitle), listOf("playlist", "album", "artwork", "aspect ratio", "cover", "プレイリスト", "アルバム", "アート", "縦横比"), keepCollectionArtworkAspectRatio) { AppSettings.setKeepCollectionArtworkAspectRatio(!keepCollectionArtworkAspectRatio) },
         SettingsSearchEntry(stringResource(R.string.localize_library_collection_count), stringResource(R.string.localize_library_collection_count_subtitle), listOf("library", "collections", "count", "language", "ライブラリ", "コレクション", "件数", "日本語"), localizeLibraryCollectionCount) { AppSettings.setLocalizeLibraryCollectionCount(!localizeLibraryCollectionCount) },
         SettingsSearchEntry(stringResource(R.string.artist_slash_separators), stringResource(R.string.artist_slash_separators_subtitle), listOf("artist", "split", "slash", "アーティスト", "区切り", "スラッシュ", "/", "／"), artistSlashSeparators) { AppSettings.setArtistSlashSeparators(!artistSlashSeparators) },
+        SettingsSearchEntry(
+            title = stringResource(R.string.artist_slash_exceptions_title),
+            subtitle = stringResource(R.string.artist_slash_exceptions_subtitle),
+            keywords = listOf("artist", "slash", "exception", "22/7", "アイドル", "スラッシュ", "除外", "例外"),
+            valueLabel = artistSlashSeparatorExceptions.size.toString(),
+            activate = { showArtistSlashSeparatorExceptionsDialog = true },
+        ),
         localizeLibraryAllLabelSearchEntry(localizeLibraryAllLabel),
         )
 
@@ -7896,6 +7905,7 @@ fun SettingsScreen(
             onOpenArtistSignatureEditor = { showArtistSignatureEditor = true },
             onOpenSpotifyCanvasSetup = { showSpotifyCanvasEditor = true },
             onChoosePlayerArtistPageMode = { showPlayerArtistPageModeDialog = true },
+            onManageArtistSlashExceptions = { showArtistSlashSeparatorExceptionsDialog = true },
             onChoosePlaylistRefreshIndicatorStyle = { showPlaylistRefreshIndicatorStyleDialog = true },
         )
 
@@ -9744,6 +9754,15 @@ fun SettingsScreen(
         )
     }
 
+    if (showArtistSlashSeparatorExceptionsDialog) {
+        ArtistSlashSeparatorExceptionsDialog(
+            values = artistSlashSeparatorExceptions,
+            onAdd = AppSettings::addArtistSlashSeparatorException,
+            onRemove = AppSettings::removeArtistSlashSeparatorException,
+            onDismiss = { showArtistSlashSeparatorExceptionsDialog = false },
+        )
+    }
+
         }
 }
 
@@ -9857,6 +9876,7 @@ private fun LocalMusicSettingsGroup(
     artistDeezerArtworkEnabled: Boolean,
     playerArtistPageModeLabel: String,
     artistSlashSeparators: Boolean,
+    onManageArtistSlashExceptions: () -> Unit,
     showLocalArtistSections: Boolean,
     showArtistRecommendations: Boolean,
     showArtistOverview: Boolean,
@@ -10101,6 +10121,17 @@ SettingsGroup(header = stringResource(R.string.local_music)) {
             )
         },
         onClick = { AppSettings.setArtistSlashSeparators(!artistSlashSeparators) },
+    )
+    RowDivider()
+    val artistSlashExceptions by AppSettings.artistSlashSeparatorExceptions.collectAsStateWithLifecycle()
+    SettingsRow(
+        icon = Icons.Rounded.Person,
+        title = stringResource(R.string.artist_slash_exceptions_title),
+        subtitle = stringResource(R.string.artist_slash_exceptions_subtitle),
+        trailing = {
+            Text(artistSlashExceptions.size.toString(), color = MaterialTheme.colorScheme.onSurfaceVariant)
+        },
+        onClick = onManageArtistSlashExceptions,
     )
     RowDivider()
     SettingsRow(

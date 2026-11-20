@@ -3,6 +3,7 @@ package com.music.bitchord.feature.localmusic.data
 import android.content.ContentResolver
 import android.content.ContentValues
 import android.content.Context
+import android.media.MediaScannerConnection
 import android.net.Uri
 import android.provider.DocumentsContract
 import android.provider.MediaStore
@@ -45,7 +46,12 @@ data class AutoRenameRow(
     val selected: Boolean = track != null && issue == null && conflict == null,
 )
 
-data class AutoRenameResult(val changed: Int, val failed: Int, val message: String? = null)
+data class AutoRenameResult(
+    val changed: Int,
+    val failed: Int,
+    val message: String? = null,
+    val updatedRows: List<AutoRenameRow> = emptyList(),
+)
 
 /** Apple Music title/artist tagging and filename rename with preview and one-step undo. */
 object AppleMusicAutoRename {
@@ -256,20 +262,43 @@ object AppleMusicAutoRename {
             tracks.sortedWith(compareBy<AppleCatalogTrack> { it.disc }.thenBy { it.track })
         } else tracks
         val assigned = linkedMapOf<String, AppleCatalogTrack>()
-        val issues = hashMapOf<String, String>().apply {
-            orderedFiles.forEach { file ->
-                val issue = file.issue ?: if (
-                    !albumTitle.isNullOrBlank() && !file.albumName.isNullOrBlank() &&
-                    !sameAlbum(file.albumName, albumTitle)
-                ) {
-                    "音源ファイルのアルバム名がApple Musicのアルバムと一致しません"
-                } else null
-                issue?.let { put(file.id, it) }
+        val issues = hashMapOf<String, String>()
+        val albumMismatchIds = hashSetOf<String>()
+        orderedFiles.forEach { file ->
+            val directoryAlbum = file.path.substringBeforeLast('/', "")
+                .substringAfterLast('/')
+                .substringAfterLast('\\')
+            val sourceAlbum = file.albumName?.takeIf(String::isNotBlank) ?: directoryAlbum
+            if (!albumTitle.isNullOrBlank() && sourceAlbum.isNotBlank() && !sameAlbum(sourceAlbum, albumTitle)) {
+                albumMismatchIds += file.id
             }
+            file.issue?.let { issues[file.id] = it }
         }
         val flattenedCatalog = orderedTracks.map(AppleCatalogTrack::disc).distinct().size == 1
         val multipleFileDiscs = orderedFiles.mapNotNull(FileRow::disc).distinct().size > 1
-        fun canMatch(file: FileRow) = issues[file.id] == null
+        fun canMatch(file: FileRow) = issues[file.id] == null && file.id !in assigned
+
+        // The URL ID already selected the Apple Music release. Album tags and
+        // folder names are often translated, abbreviated, or decorated with
+        // edition text, so a text mismatch must not reject otherwise verifiable
+        // files. For those rows require a unique title match (artist and local
+        // disc/track values break ties); never fall back to position-only
+        // matching when the album identity is uncertain.
+        orderedFiles.filter { it.id in albumMismatchIds && issues[it.id] == null }.forEach { file ->
+            val titleCandidates = metadataTrackMatches(file, orderedTracks)
+            val numberMatched = if (titleCandidates.size > 1 && file.number != null) {
+                titleCandidates.filter { candidate ->
+                    candidate.track == file.number && (file.disc == null || candidate.disc == file.disc)
+                }.ifEmpty { titleCandidates }
+            } else titleCandidates
+            when {
+                numberMatched.size > 1 -> issues[file.id] = "アルバム名が異なるため、曲名・アーティスト名と曲番号で一意に照合できません"
+                numberMatched.isEmpty() -> issues[file.id] = "アルバム名が異なり、音源タグの曲名・アーティスト名もApple Musicの曲に一致しません"
+                assigned.values.any { it.id == numberMatched.single().id } ->
+                    issues[file.id] = "同じApple Music曲が複数ファイルに一致しています"
+                else -> assigned[file.id] = numberMatched.single()
+            }
+        }
         if (flattenedCatalog && multipleFileDiscs) {
             val filesByDisc = orderedFiles.groupBy(FileRow::disc)
             val discSpans = filesByDisc.mapValues { (_, diskFiles) -> diskFiles.mapNotNull(FileRow::number).maxOrNull() ?: 0 }
@@ -410,6 +439,7 @@ object AppleMusicAutoRename {
         var failed = 0
         var firstFailure: String? = null
         val completed = mutableListOf<UndoEntry>()
+        val updatedRows = mutableListOf<AutoRenameRow>()
         selected.forEachIndexed { index, row ->
             val oldTags = pending[index].tags
             var currentUri = row.uri
@@ -435,6 +465,7 @@ object AppleMusicAutoRename {
                     }
                 }
                 completed += pending[index].copy(currentUri = currentUri.toString())
+                updatedRows += row
                 UndoJournal(context).save(completed)
                 changed++
             } catch (error: Exception) {
@@ -450,7 +481,14 @@ object AppleMusicAutoRename {
             }
         }
         if (completed.isEmpty()) UndoJournal(context).clear()
-        AutoRenameResult(changed, failed, firstFailure)
+        val renamedPaths = updatedRows.mapNotNull { row ->
+            val targetName = row.newName ?: return@mapNotNull null
+            File(row.path).parentFile?.let { File(it, targetName).absolutePath }
+        }.distinct()
+        if (renamedPaths.isNotEmpty()) {
+            runCatching { MediaScannerConnection.scanFile(context, renamedPaths.toTypedArray(), null, null) }
+        }
+        AutoRenameResult(changed, failed, firstFailure, updatedRows)
     }
 
     fun hasUndo(context: Context): Boolean = UndoJournal(context).load().isNotEmpty()
@@ -622,6 +660,10 @@ object AppleMusicAutoRename {
     }
 
     private fun normalizeAlbum(value: String): String = value.lowercase(Locale.ROOT)
+        // Release folders and embedded tags commonly append year/format
+        // annotations that are not part of the Apple Music catalog title.
+        .replace(Regex("\\s*[（(](?:19|20)\\d{2}[）)]"), "")
+        .replace(Regex("\\s*[（(](?:flac|wav|mp3|aac|alac|lossless|hi[- ]?res|cd|remaster(?:ed)?|deluxe|limited(?: edition)?)[）)]", RegexOption.IGNORE_CASE), "")
         .replace(Regex("[\\s\\p{Punct}　]+"), "")
 
     private fun normalizeTrackText(value: String): String = value.lowercase(Locale.ROOT)

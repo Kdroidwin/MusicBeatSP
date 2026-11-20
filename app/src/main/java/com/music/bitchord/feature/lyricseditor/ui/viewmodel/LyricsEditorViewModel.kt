@@ -6,6 +6,7 @@ import androidx.lifecycle.viewModelScope
 import com.music.bitchord.R
 import com.music.bitchord.data.lyrics.LyricsSource
 import com.music.bitchord.data.lyrics.CtcForcedLyricsAligner
+import com.music.bitchord.data.lyrics.LyricsTimestampRemoval
 import com.music.bitchord.data.model.Song
 import com.music.bitchord.data.model.durationMillis
 import com.music.bitchord.data.settings.AppSettings
@@ -273,7 +274,7 @@ class LyricsEditorViewModel(app: Application) : AndroidViewModel(app) {
         autoSyncJob = viewModelScope.launch {
             try {
                 val embeddedLyrics = editedLyricsMap[LyricsEditorSource.Embedded].orEmpty()
-                val inputLyrics = plainLyrics.takeIf(String::isNotBlank)
+                val sourceLyrics = plainLyrics.takeIf(String::isNotBlank)
                     ?: embeddedLyrics.takeIf(String::isNotBlank)
                     ?: run {
                         _autoSyncProgress.value = AutoSyncProgress(AutoSyncStage.FetchingLyrics)
@@ -285,6 +286,17 @@ class LyricsEditorViewModel(app: Application) : AndroidViewModel(app) {
                     ?: throw IllegalStateException(
                         getApplication<Application>().getString(R.string.lyrics_auto_sync_source_lyrics_not_found),
                     )
+                // Character-level CTC alignment expects only lyric glyphs.
+                // Existing LRC and inline syllable stamps otherwise become
+                // literal input characters and shift the generated alignment.
+                val inputLyrics = if (characterByCharacter) {
+                    LyricsTimestampRemoval.remove(sourceLyrics).text
+                } else sourceLyrics
+                if (inputLyrics.isBlank()) {
+                    throw IllegalStateException(
+                        getApplication<Application>().getString(R.string.lyrics_auto_sync_source_lyrics_not_found),
+                    )
+                }
 
                 val synchronized = CtcForcedLyricsAligner.generate(
                     context = getApplication(),

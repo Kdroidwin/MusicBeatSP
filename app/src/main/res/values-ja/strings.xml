@@ -1458,6 +1458,10 @@
     <string name="show_lyrics_source_switcher_subtitle">歌詞画面に地球儀アイコンを表示し、利用可能な歌詞ソースを手動で切り替えます。</string>
     <string name="artist_slash_separators">アーティスト名のスラッシュ区切り</string>
     <string name="artist_slash_separators_subtitle">アーティスト名の / と ／ を複数アーティストの区切りとして扱います。</string>
+    <string name="artist_slash_exceptions_title">アーティスト名のスラッシュ除外</string>
+    <string name="artist_slash_exceptions_subtitle">一覧に登録した名前は、区切り設定がオンでも分割しません。初期状態で22/7が登録されています。追加・削除できます。</string>
+    <string name="artist_slash_exceptions_input">アーティスト名</string>
+    <string name="artist_slash_exceptions_add">追加</string>
     <string name="lyrics_sync_save">同期歌詞を保存</string>
     <string name="lyrics_sync_preview_line">この歌詞行の位置へ移動</string>
     <string name="lyrics_sync_previous">前の曲</string>
@@ -1560,6 +1564,15 @@
     <string name="tag_editor">タグ編集</string>
     <string name="tag_editor_more_options">その他の操作</string>
     <string name="tag_editor_search_online_image">オンライン画像を検索</string>
+    <string name="musicbrainz_search_action">MusicBrainzでタグ候補を検索</string>
+    <string name="musicbrainz_results_title">MusicBrainzの候補</string>
+    <string name="musicbrainz_searching">MusicBrainzを検索中…</string>
+    <string name="musicbrainz_no_results">一致する録音が見つかりません。</string>
+    <string name="musicbrainz_candidate_applied">候補を編集画面に反映しました。ファイルへの書き込みは保存を押してください。</string>
+    <string name="eq_graphic_title">全体に適用する追加グラフィックEQ</string>
+    <string name="eq_graphic_subtitle">端末内蔵バンドにソフトウェアEQを追加します。初期設定はオフで、既存のEQ設定は変更しません。</string>
+    <string name="eq_graphic_band_count">ソフトウェアバンド数</string>
+    <string name="eq_graphic_band_gain">%1$s · %2$.1f dB</string>
     <string name="tag_editor_restore_original_tags">元のタグに戻す</string>
     <string name="tag_editor_select_genre">ジャンルを選択</string>
     <string name="tag_editor_search_genre">ジャンルを検索…</string>
@@ -2056,6 +2069,9 @@
     <string name="lyrics_editor_insert_timestamp">タイムスタンプを挿入 [00:00.00]</string>
     <string name="lyrics_editor_select_all">すべて選択</string>
     <string name="lyrics_editor_clear_all">すべて消去</string>
+    <string name="lyrics_editor_remove_timestamps">タイムスタンプを外す</string>
+    <string name="lyrics_editor_no_timestamps">タイムスタンプが見つかりません。</string>
+    <string name="lyrics_editor_timestamps_removed">%1$d 個のタイムスタンプを外しました。</string>
     <string name="lyrics_editor_generate_synced_lyrics">同期歌詞を自動生成</string>
     <string name="lyrics_editor_generate_character_synced_lyrics">同期歌詞を1文字単位で自動生成</string>
     <string name="lyrics_editor_convert_timed_furigana">時刻付きルビを二重括弧に変換</string>

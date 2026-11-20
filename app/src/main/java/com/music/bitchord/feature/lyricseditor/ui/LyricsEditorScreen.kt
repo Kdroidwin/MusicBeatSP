@@ -86,6 +86,7 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.lifecycle.viewmodel.compose.viewModel
 import com.music.bitchord.data.model.Song
+import com.music.bitchord.data.lyrics.LyricsTimestampRemoval
 import com.music.bitchord.data.lyrics.LyricsStrictness
 import com.music.bitchord.data.settings.AppSettings
 import com.music.bitchord.feature.lyricseditor.data.TimedFuriganaConverter
@@ -371,6 +372,23 @@ fun LyricsEditorScreen(
                     textFieldValue = TextFieldValue("")
                     viewModel.updateText("")
                     Toast.makeText(context, context.getString(R.string.lyrics_cleared), Toast.LENGTH_SHORT).show()
+                },
+                onRemoveTimestampsClick = {
+                    val result = LyricsTimestampRemoval.remove(textFieldValue.text)
+                    if (result.removedCount == 0) {
+                        Toast.makeText(context, R.string.lyrics_editor_no_timestamps, Toast.LENGTH_SHORT).show()
+                    } else {
+                        textFieldValue = TextFieldValue(
+                            result.text,
+                            selection = TextRange(result.text.length),
+                        )
+                        viewModel.updateText(result.text)
+                        Toast.makeText(
+                            context,
+                            context.getString(R.string.lyrics_editor_timestamps_removed, result.removedCount),
+                            Toast.LENGTH_SHORT,
+                        ).show()
+                    }
                 },
                 onShiftTimestampsClick = {
                     timestampInput = "[00:00.0]"

@@ -173,11 +173,7 @@ class ParametricEqAudioProcessor : BaseAudioProcessor() {
             return
         }
 
-        val applyEq = current.enabled && (
-            current.hasActiveFilters ||
-                current.effectiveLeftPreampDb != 0f ||
-                current.effectiveRightPreampDb != 0f
-            )
+        val applyEq = current.hasActiveEq
         val swap = current.swapChannels && channelCount >= 2
         val targetBalance = if (channelCount == 2) balance else 0f
         val applyBalance = channelCount == 2 && (targetBalance != 0f || currentBalance != 0f)
@@ -374,12 +370,12 @@ class ParametricEqAudioProcessor : BaseAudioProcessor() {
 
     private fun rebuildFilterPipeline(target: ParametricEqConfig) {
         val sr = sampleRateHz.toDouble()
-        leftLinearGain = 10.0.pow(target.effectiveLeftPreampDb.toDouble() / 20.0)
-        rightLinearGain = 10.0.pow(target.effectiveRightPreampDb.toDouble() / 20.0)
+        leftLinearGain = if (target.enabled) 10.0.pow(target.effectiveLeftPreampDb.toDouble() / 20.0) else 1.0
+        rightLinearGain = if (target.enabled) 10.0.pow(target.effectiveRightPreampDb.toDouble() / 20.0) else 1.0
 
-        val activeG = target.activeGlobalBands
-        val activeL = target.activeLeftBands
-        val activeR = target.activeRightBands
+        val activeG = target.processingGlobalBands
+        val activeL = if (target.enabled) target.activeLeftBands else emptyList()
+        val activeR = if (target.enabled) target.activeRightBands else emptyList()
 
         globalCoeffs = Array(activeG.size) { i -> BiquadUtils.computeCoefficients(activeG[i], sr) }
         leftCoeffs = Array(activeL.size) { i -> BiquadUtils.computeCoefficients(activeL[i], sr) }

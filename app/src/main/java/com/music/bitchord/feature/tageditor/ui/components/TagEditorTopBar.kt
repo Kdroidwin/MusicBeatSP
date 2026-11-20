@@ -28,6 +28,7 @@ import com.music.bitchord.R
 fun TagEditorTopBar(
     onBackClick: () -> Unit,
     onSearchOnlineImage: () -> Unit,
+    onSearchMusicBrainz: (() -> Unit)? = null,
     onResetTags: () -> Unit,
     modifier: Modifier = Modifier,
 ) {
@@ -61,6 +62,15 @@ fun TagEditorTopBar(
                     expanded = menuOpen,
                     onDismissRequest = { menuOpen = false },
                 ) {
+                    if (onSearchMusicBrainz != null) {
+                        DropdownMenuItem(
+                            text = { Text(stringResource(R.string.musicbrainz_search_action)) },
+                            onClick = {
+                                menuOpen = false
+                                onSearchMusicBrainz()
+                            },
+                        )
+                    }
                     DropdownMenuItem(
                         text = { Text(stringResource(R.string.tag_editor_search_online_image)) },
                         onClick = {

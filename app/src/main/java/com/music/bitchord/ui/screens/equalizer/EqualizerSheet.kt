@@ -57,6 +57,7 @@ import com.music.bitchord.ui.screens.equalizer.components.ReplayGainControls
 import com.music.bitchord.ui.screens.equalizer.components.ParametricEqControls
 import com.music.bitchord.ui.screens.equalizer.components.ReverbControls
 import com.music.bitchord.ui.screens.equalizer.components.BalanceControl
+import com.music.bitchord.ui.screens.equalizer.components.GlobalGraphicEqControls
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -250,6 +251,11 @@ fun EqualizerSheet(
                 onBandLevelChange = { band, level ->
                     EqualizerSettings.setBandLevel(band, level)
                 },
+            )
+
+            GlobalGraphicEqControls(
+                config = parametricEqConfig,
+                onConfigChange = AppSettings::setParametricEqConfig,
             )
 
             ParametricEqControls(

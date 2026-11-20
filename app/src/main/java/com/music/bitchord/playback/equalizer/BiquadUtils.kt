@@ -235,7 +235,7 @@ object BiquadUtils {
         val leftGains = DoubleArray(numPoints)
         val rightGains = DoubleArray(numPoints)
 
-        val globalCoeffs = config.globalBands.filter { it.enabled }.map { computeCoefficients(it, sampleRate) }
+        val globalCoeffs = config.activeGlobalBands.map { computeCoefficients(it, sampleRate) }
         val leftCoeffs = config.leftBands.filter { it.enabled }.map { computeCoefficients(it, sampleRate) }
         val rightCoeffs = config.rightBands.filter { it.enabled }.map { computeCoefficients(it, sampleRate) }
 
@@ -355,7 +355,7 @@ object BiquadUtils {
         sb.appendLine(");")
         sb.appendLine()
 
-        val activeGlobal = config.globalBands.filter { it.enabled }
+        val activeGlobal = config.activeGlobalBands
         val activeLeft = config.leftBands.filter { it.enabled }
         val activeRight = config.rightBands.filter { it.enabled }
 

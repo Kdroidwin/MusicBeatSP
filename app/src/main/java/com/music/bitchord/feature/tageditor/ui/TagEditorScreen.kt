@@ -40,6 +40,7 @@ import com.music.bitchord.feature.tageditor.ui.components.TagEditorGenreDialog
 import com.music.bitchord.feature.tageditor.ui.components.TagEditorImageOptionsDialog
 import com.music.bitchord.feature.tageditor.ui.components.TagEditorSaveFab
 import com.music.bitchord.feature.tageditor.ui.components.TagEditorTopBar
+import com.music.bitchord.feature.tageditor.ui.components.MusicBrainzResultsDialog
 import com.music.bitchord.feature.tageditor.ui.viewmodel.TagEditorViewModel
 import com.music.bitchord.feature.tageditor.domain.model.TagField
 import com.music.bitchord.feature.tageditor.data.TagLibWriter
@@ -67,6 +68,7 @@ fun TagEditorScreen(
     val batch by viewModel.batch.collectAsStateWithLifecycle()
     val mixed by viewModel.mixed.collectAsStateWithLifecycle()
     val batchLoadFailed by viewModel.batchLoadFailed.collectAsStateWithLifecycle()
+    val musicBrainzSearch by viewModel.musicBrainzSearch.collectAsStateWithLifecycle()
     val includeSubfolders by viewModel.includeSubfolders.collectAsStateWithLifecycle()
     val toggledFields by viewModel.toggledFields.collectAsStateWithLifecycle()
     var confirmTargets by remember { mutableStateOf<List<Song>?>(null) }
@@ -77,6 +79,7 @@ fun TagEditorScreen(
 
     var showImageOptions by remember { mutableStateOf(false) }
     var showGenreDialog by remember { mutableStateOf(false) }
+    var showMusicBrainzDialog by remember { mutableStateOf(false) }
 
     val photoPickerLauncher = rememberLauncherForActivityResult(
         contract = ActivityResultContracts.PickVisualMedia(),
@@ -218,6 +221,12 @@ fun TagEditorScreen(
                 onSearchOnlineImage = {
                     openWebSearch("${tags.artist} ${tags.album.ifEmpty { tags.title }} album cover")
                 },
+                onSearchMusicBrainz = if (batch == null) {
+                    {
+                        showMusicBrainzDialog = true
+                        viewModel.searchMusicBrainz(song)
+                    }
+                } else null,
                 onResetTags = { viewModel.resetTags() },
             )
         },
@@ -301,6 +310,22 @@ fun TagEditorScreen(
             },
             onRestoreDefault = { viewModel.restoreArtwork() },
             onRemoveCover = { viewModel.deleteArtwork() },
+        )
+    }
+
+    if (showMusicBrainzDialog) {
+        MusicBrainzResultsDialog(
+            state = musicBrainzSearch,
+            onSelect = { candidate ->
+                viewModel.applyMusicBrainzCandidate(candidate)
+                showMusicBrainzDialog = false
+                Toast.makeText(context, R.string.musicbrainz_candidate_applied, Toast.LENGTH_SHORT).show()
+            },
+            onRetry = { viewModel.searchMusicBrainz(song) },
+            onDismiss = {
+                showMusicBrainzDialog = false
+                viewModel.clearMusicBrainzSearch()
+            },
         )
     }
 

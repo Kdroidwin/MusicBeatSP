@@ -7,6 +7,9 @@ import android.net.Uri
 import androidx.lifecycle.AndroidViewModel
 import androidx.lifecycle.viewModelScope
 import com.music.bitchord.data.model.Song
+import com.music.bitchord.data.model.durationMillis
+import com.music.bitchord.feature.tageditor.data.musicbrainz.MusicBrainzApi
+import com.music.bitchord.feature.tageditor.data.musicbrainz.MusicBrainzCandidate
 import com.music.bitchord.feature.tageditor.data.TagLibWriter
 import com.music.bitchord.feature.tageditor.domain.model.SongTagData
 import com.music.bitchord.feature.tageditor.domain.model.TagField
@@ -35,6 +38,12 @@ data class TagSaveResult(
     val success: Boolean get() = written == total
 }
 
+data class MusicBrainzSearchState(
+    val isSearching: Boolean = false,
+    val results: List<MusicBrainzCandidate> = emptyList(),
+    val error: String? = null,
+)
+
 class TagEditorViewModel(app: Application) : AndroidViewModel(app) {
 
     private val _tags = MutableStateFlow(SongTagData())
@@ -57,6 +66,10 @@ class TagEditorViewModel(app: Application) : AndroidViewModel(app) {
 
     private val _batchLoadFailed = MutableStateFlow(false)
     val batchLoadFailed: StateFlow<Boolean> = _batchLoadFailed.asStateFlow()
+
+    private val _musicBrainzSearch = MutableStateFlow(MusicBrainzSearchState())
+    val musicBrainzSearch: StateFlow<MusicBrainzSearchState> = _musicBrainzSearch.asStateFlow()
+    private var musicBrainzSearchJob: kotlinx.coroutines.Job? = null
 
     val includeSubfolders = MutableStateFlow(false)
     val toggledFields = MutableStateFlow<Set<TagField>>(emptySet())
@@ -144,6 +157,48 @@ class TagEditorViewModel(app: Application) : AndroidViewModel(app) {
 
     fun updateTags(newTags: SongTagData) {
         _tags.value = newTags
+    }
+
+    fun searchMusicBrainz(song: Song) {
+        musicBrainzSearchJob?.cancel()
+        _musicBrainzSearch.value = MusicBrainzSearchState(isSearching = true)
+        musicBrainzSearchJob = viewModelScope.launch {
+            try {
+                val current = _tags.value
+                val results = MusicBrainzApi.search(
+                    song = song,
+                    title = current.title.ifBlank { song.title },
+                    artist = current.artist.ifBlank { song.artist },
+                    album = current.album.ifBlank { song.albumName.orEmpty() },
+                )
+                _musicBrainzSearch.value = MusicBrainzSearchState(results = results)
+            } catch (cancelled: CancellationException) {
+                throw cancelled
+            } catch (error: Exception) {
+                _musicBrainzSearch.value = MusicBrainzSearchState(error = error.message)
+            }
+        }
+    }
+
+    fun clearMusicBrainzSearch() {
+        musicBrainzSearchJob?.cancel()
+        musicBrainzSearchJob = null
+        _musicBrainzSearch.value = MusicBrainzSearchState()
+    }
+
+    fun applyMusicBrainzCandidate(candidate: MusicBrainzCandidate) {
+        val current = _tags.value
+        _tags.value = current.copy(
+            title = candidate.title.ifBlank { current.title },
+            artist = candidate.artist.ifBlank { current.artist },
+            album = candidate.album.ifBlank { current.album },
+            year = candidate.year.takeIf { it > 0 }?.toString() ?: current.year,
+            musicBrainzRecordingId = candidate.recordingId,
+            musicBrainzReleaseId = candidate.releaseId.orEmpty(),
+            musicBrainzArtistId = candidate.artistId.orEmpty(),
+            musicBrainzMetadataChanged = true,
+        )
+        clearMusicBrainzSearch()
     }
 
     fun toggleField(field: TagField) {
@@ -234,7 +289,7 @@ class TagEditorViewModel(app: Application) : AndroidViewModel(app) {
                 val failed = ArrayList<String>()
                 val writtenSongs = ArrayList<Song>()
                 if (batchScope == null) {
-                    val metadataChanged = changedFields().any { it.propertyKey != null }
+                    val metadataChanged = changedFields().any { it.propertyKey != null } || current.musicBrainzMetadataChanged
                     val success = TagLibWriter.writeTags(
                         context = getApplication(),
                         song = song,
