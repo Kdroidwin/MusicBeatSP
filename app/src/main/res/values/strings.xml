@@ -2057,6 +2057,9 @@
     <string name="lyrics_editor_clear_all">Clear all</string>
     <string name="lyrics_editor_generate_synced_lyrics">Generate synchronized lyrics automatically</string>
     <string name="lyrics_editor_generate_character_synced_lyrics">Generate character-synchronized lyrics</string>
+    <string name="lyrics_editor_convert_timed_furigana">Convert timed furigana to double parentheses</string>
+    <string name="lyrics_editor_no_timed_furigana">No timed furigana found to convert</string>
+    <string name="lyrics_editor_timed_furigana_converted">Converted %1$d furigana reading(s)</string>
     <string name="lyrics_auto_sync_title">Generating synchronized lyrics</string>
     <string name="lyrics_auto_sync_fetching_lyrics">Fetching plain lyrics from the Heuristic Sync sources…</string>
     <string name="lyrics_auto_sync_source_lyrics_not_found">No lyrics were found in the embedded field or Heuristic Sync sources.</string>

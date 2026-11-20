@@ -2030,6 +2030,9 @@
     <string name="lyrics_editor_clear_all">すべて消去</string>
     <string name="lyrics_editor_generate_synced_lyrics">同期歌詞を自動生成</string>
     <string name="lyrics_editor_generate_character_synced_lyrics">同期歌詞を1文字単位で自動生成</string>
+    <string name="lyrics_editor_convert_timed_furigana">時刻付きルビを二重括弧に変換</string>
+    <string name="lyrics_editor_no_timed_furigana">変換できる時刻付きルビがありません</string>
+    <string name="lyrics_editor_timed_furigana_converted">%1$d件のルビを変換しました</string>
     <string name="lyrics_auto_sync_title">同期歌詞を生成中</string>
     <string name="lyrics_auto_sync_fetching_lyrics">Heuristic Syncの歌詞ソースから歌詞を取得しています…</string>
     <string name="lyrics_auto_sync_source_lyrics_not_found">埋め込み歌詞にもHeuristic Syncの歌詞ソースにも歌詞が見つかりませんでした。</string>

@@ -67,6 +67,7 @@ fun LyricsEditorBottomBar(
     onSearchEngineClick: (() -> Unit)? = null,
     onGenerateSyncedLyricsClick: (() -> Unit)? = null,
     onGenerateCharacterSyncedLyricsClick: (() -> Unit)? = null,
+    onConvertTimedFuriganaClick: (() -> Unit)? = null,
     onCorrectJapaneseOrthographyClick: (() -> Unit)? = null,
     modifier: Modifier = Modifier,
 ) {
@@ -330,6 +331,23 @@ fun LyricsEditorBottomBar(
                                 onClick = {
                                     menuExpanded = false
                                     onSetFirstTimestampClick()
+                                },
+                            )
+                        }
+
+                        if (onConvertTimedFuriganaClick != null) {
+                            DropdownMenuItem(
+                                text = { Text(stringResource(R.string.lyrics_editor_convert_timed_furigana)) },
+                                leadingIcon = {
+                                    Icon(
+                                        imageVector = Icons.Rounded.Edit,
+                                        contentDescription = null,
+                                        modifier = Modifier.size(20.dp),
+                                    )
+                                },
+                                onClick = {
+                                    menuExpanded = false
+                                    onConvertTimedFuriganaClick()
                                 },
                             )
                         }

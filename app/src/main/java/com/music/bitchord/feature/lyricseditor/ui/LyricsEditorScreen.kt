@@ -88,6 +88,7 @@ import androidx.lifecycle.viewmodel.compose.viewModel
 import com.music.bitchord.data.model.Song
 import com.music.bitchord.data.lyrics.LyricsStrictness
 import com.music.bitchord.data.settings.AppSettings
+import com.music.bitchord.feature.lyricseditor.data.TimedFuriganaConverter
 import com.music.bitchord.feature.lyrics.PlamoLyricsTranslation
 import com.music.bitchord.R
 import com.music.bitchord.feature.lyricseditor.domain.model.LyricsEditorSource
@@ -385,6 +386,23 @@ fun LyricsEditorScreen(
                 },
                 onGenerateCharacterSyncedLyricsClick = {
                     viewModel.generateSyncedLyrics(song, textFieldValue.text, characterByCharacter = true)
+                },
+                onConvertTimedFuriganaClick = {
+                    val converted = TimedFuriganaConverter.convert(textFieldValue.text)
+                    if (converted.convertedCount == 0) {
+                        Toast.makeText(context, R.string.lyrics_editor_no_timed_furigana, Toast.LENGTH_SHORT).show()
+                    } else {
+                        textFieldValue = TextFieldValue(
+                            converted.text,
+                            selection = TextRange(converted.text.length),
+                        )
+                        viewModel.updateText(converted.text)
+                        Toast.makeText(
+                            context,
+                            context.getString(R.string.lyrics_editor_timed_furigana_converted, converted.convertedCount),
+                            Toast.LENGTH_SHORT,
+                        ).show()
+                    }
                 },
                 onCorrectJapaneseOrthographyClick = {
                     val source = textFieldValue.text
