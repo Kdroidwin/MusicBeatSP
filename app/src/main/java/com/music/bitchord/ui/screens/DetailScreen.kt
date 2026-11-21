@@ -462,8 +462,9 @@ private fun ArtistHero(
                     color = palette.onBackground,
                     textAlign = if (centerTitle) androidx.compose.ui.text.style.TextAlign.Center else androidx.compose.ui.text.style.TextAlign.Start,
                     modifier = Modifier.fillMaxWidth(),
-                    maxLines = 2,
-                    overflow = TextOverflow.Ellipsis,
+                    maxLines = Int.MAX_VALUE,
+                    softWrap = true,
+                    overflow = TextOverflow.Clip,
                 )
             }
         }

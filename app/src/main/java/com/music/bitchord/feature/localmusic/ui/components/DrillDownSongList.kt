@@ -180,7 +180,6 @@ fun DrillDownHeader(
                     name.equals("various artists", ignoreCase = true)
             }
             .distinctBy { it.lowercase(Locale.ROOT) }
-            .take(4)
             .toList()
     }
     if (fullScreenArtwork && artHeight != null && palette != null) {
@@ -505,8 +504,9 @@ private fun ArtistCreditLinks(
                 style = style,
                 color = color,
                 textAlign = TextAlign.Center,
-                maxLines = 1,
-                overflow = TextOverflow.Ellipsis,
+                maxLines = Int.MAX_VALUE,
+                softWrap = true,
+                overflow = TextOverflow.Clip,
                 modifier = if (onArtistClick != null) {
                     Modifier.clickable { onArtistClick(artist) }
                 } else {

@@ -525,6 +525,18 @@ class PlaybackService : MediaLibraryService() {
     /** Idle peer, used only while the active track is nearing its end. */
     private var spare: ExoPlayer? = null
 
+    /**
+     * Re-opens a stalled audio output after repeated READY/BUFFERING flips.
+     * The watchdog is called only for the active local session player.
+     */
+    private val audioStallWatchdog = AudioStallWatchdog { message ->
+        TrackLog.w(
+            "PLAYBACK_BUFFER",
+            message,
+            about = player?.currentMediaItem?.mediaId,
+        )
+    }
+
     /** Local queue openings already read once so MediaStore/SD-card pages stay warm. */
     private val warmedLocalAudioHeaders = ConcurrentHashMap.newKeySet<String>()
     private var localAudioPrefetchJob: Job? = null
@@ -1171,6 +1183,15 @@ class PlaybackService : MediaLibraryService() {
                 }
                 return
             }
+            // A wedged AudioTrack can alternate READY and BUFFERING despite
+            // data already being decoded. Recover only after repeated,
+            // position-stationary flips; never seek while crossfade audio is
+            // being handed over to the standby player.
+            audioStallWatchdog.onPlaybackStateChanged(
+                exoPlayer,
+                state,
+                busy = spare?.isPlaying == true,
+            )
             if (state == Player.STATE_ENDED) {
                 exoPlayer.currentMediaItem?.toSong()?.let {
                     LongTrackResumeStore.clear(applicationContext, it)
