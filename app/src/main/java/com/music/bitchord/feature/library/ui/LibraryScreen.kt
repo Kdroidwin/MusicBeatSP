@@ -152,10 +152,31 @@ private data class PendingBulkArtworkWrite(
 private fun String.isYoutubeVideoId(): Boolean = length == 11 &&
     all { it.isLetterOrDigit() || it == '_' || it == '-' }
 
+private fun isUsableFavoriteArtist(artist: String): Boolean = artist.isNotBlank() &&
+    artist.trim().lowercase(Locale.ROOT) !in setOf(
+        "unknown artist", "unknown artists", "<unknown>", "曲", "楽曲", "歌曲", "song", "track",
+    )
+
 private fun Song.favoriteStoreKey(): String = when {
     videoId.isYoutubeVideoId() -> videoId
     SourceRegistry.parseTrackKey(videoId) != null -> videoId
     else -> localUri ?: videoId
+}
+
+private fun favoriteAliasesForSong(
+    song: Song,
+    favoriteIds: Set<String>,
+    downloadRecords: Map<String, String>,
+    savedSongs: Map<String, Song>,
+): Set<String> = favoriteIds.filterTo(LinkedHashSet()) { id ->
+    id == song.favoriteStoreKey() ||
+        id == song.videoId ||
+        id == song.localUri ||
+        savedSongs[id]?.let { saved ->
+            saved.videoId == song.videoId ||
+                (!song.localUri.isNullOrBlank() && saved.localUri == song.localUri)
+        } == true ||
+        (!song.localUri.isNullOrBlank() && downloadRecords[id] == song.localUri)
 }
 
 private fun Song.isEditableLocalTrack(): Boolean = !videoId.isYoutubeVideoId() &&
@@ -521,6 +542,20 @@ fun LibraryScreen(
     var bulkArtworkTargetsForPicker by remember { mutableStateOf<List<Song>>(emptyList()) }
     var pendingBulkArtworkWrite by remember { mutableStateOf<PendingBulkArtworkWrite?>(null) }
     val scope = rememberCoroutineScope()
+
+    fun removeFavoriteEntry(song: Song) {
+        val aliases = favoriteAliasesForSong(
+            song = song,
+            favoriteIds = favoriteIds,
+            downloadRecords = savedDownloadRecords,
+            savedSongs = savedFavoriteSongs,
+        )
+        if (aliases.isEmpty()) {
+            LocalFavoritesStore.removeFavorite(song.favoriteStoreKey())
+        } else {
+            aliases.forEach(LocalFavoritesStore::removeFavorite)
+        }
+    }
 
     suspend fun writeBulkTags(targets: List<Song>) {
         val updatedTracks = withContext(Dispatchers.IO) {
@@ -964,7 +999,7 @@ fun LibraryScreen(
                 {
                     activePlaylistMenuSong = null
                     if (drillDownIsFavorites) {
-                        LocalFavoritesStore.removeFavorite(song.favoriteStoreKey())
+                        removeFavoriteEntry(song)
                     } else {
                         val playlistId = drillDownPlaylistId ?: return@LocalSongDropdownMenu
                         LocalPlaylistStore.removeSongFromPlaylist(playlistId, songKey)
@@ -1072,20 +1107,31 @@ fun LibraryScreen(
         downloadedYoutubeSongs,
         savedDownloadRecords,
     ) {
-        val downloadedFavorites = downloadedYoutubeSongs
-            .filter { it.videoId in favoriteIds }
-            .map { downloaded ->
-                val saved = savedFavoriteSongs[downloaded.videoId]
-                if (saved == null) downloaded else downloaded.copy(
-                    title = downloaded.title.takeIf(String::isNotBlank) ?: saved.title,
-                    artist = downloaded.artist.takeIf { it.isNotBlank() && !it.equals("Unknown artist", true) }
-                        ?: saved.artist,
-                    thumbnailUrl = downloaded.thumbnailUrl?.takeIf(String::isNotBlank)
-                        ?: saved.thumbnailUrl,
-                    albumName = downloaded.albumName?.takeIf(String::isNotBlank) ?: saved.albumName,
-                    durationText = downloaded.durationText?.takeIf(String::isNotBlank) ?: saved.durationText,
-                )
-            }
+        val downloadedFavorites = downloadedYoutubeSongs.mapNotNull { downloaded ->
+            val aliases = favoriteAliasesForSong(
+                song = downloaded,
+                favoriteIds = favoriteIds,
+                downloadRecords = savedDownloadRecords,
+                savedSongs = savedFavoriteSongs,
+            )
+            if (aliases.isEmpty()) return@mapNotNull null
+
+            val saved = savedFavoriteSongs[downloaded.videoId]
+                ?: aliases.firstNotNullOfOrNull(savedFavoriteSongs::get)
+            if (saved == null) downloaded else downloaded.copy(
+                title = downloaded.title.takeIf(String::isNotBlank) ?: saved.title,
+                artist = downloaded.artist.takeIf(::isUsableFavoriteArtist) ?: saved.artist,
+                thumbnailUrl = downloaded.thumbnailUrl?.takeIf(String::isNotBlank)
+                    ?: saved.thumbnailUrl,
+                albumName = downloaded.albumName?.takeIf(String::isNotBlank) ?: saved.albumName,
+                durationText = downloaded.durationText?.takeIf(String::isNotBlank) ?: saved.durationText,
+                artistId = downloaded.artistId ?: saved.artistId,
+                albumId = downloaded.albumId ?: saved.albumId,
+                albumArtist = downloaded.albumArtist ?: saved.albumArtist,
+                isVideo = downloaded.isVideo || saved.isVideo,
+                isVideoOrigin = downloaded.isVideoOrigin || saved.isVideoOrigin,
+            )
+        }
         // A valid download URI can survive in the download index even if an
         // older or interrupted metadata write omitted the corresponding row.
         // Favorites intentionally do not persist a YouTube MediaStore URI, so
@@ -1121,7 +1167,14 @@ fun LibraryScreen(
             .distinctBy { if (it.videoId.isYoutubeVideoId()) it.videoId else it.localUri ?: it.videoId }
         val orderIndex = favoriteOrder.withIndex().associate { (index, id) -> id to index }
         val storedOrder = availableFavorites.sortedBy { song ->
-            orderIndex[song.favoriteStoreKey()] ?: Int.MAX_VALUE
+            orderIndex[song.favoriteStoreKey()]
+                ?: favoriteAliasesForSong(
+                    song = song,
+                    favoriteIds = favoriteIds,
+                    downloadRecords = savedDownloadRecords,
+                    savedSongs = savedFavoriteSongs,
+                ).mapNotNull { orderIndex[it] }.minOrNull()
+                ?: Int.MAX_VALUE
         }
         when (favoriteSongSort) {
             FavoriteSongSort.DEFAULT -> storedOrder
@@ -1143,6 +1196,33 @@ fun LibraryScreen(
             FavoriteSongSort.ALBUM_DESC -> storedOrder.sortedWith(
                 compareByDescending<Song> { it.albumName.orEmpty().lowercase(Locale.ROOT) }.thenBy { it.title.lowercase(Locale.ROOT) },
             )
+        }
+    }
+
+    // Normalize favorites left under a transient local URI by older versions.
+    // The downloaded file index is the durable link between that old key and
+    // the YouTube video ID, so migrate only aliases proven to point at this
+    // exact downloaded file.
+    LaunchedEffect(downloadedYoutubeSongs, favoriteIds, savedDownloadRecords, savedFavoriteSongs) {
+        downloadedYoutubeSongs.forEach { downloaded ->
+            val aliases = favoriteAliasesForSong(
+                song = downloaded,
+                favoriteIds = favoriteIds,
+                downloadRecords = savedDownloadRecords,
+                savedSongs = savedFavoriteSongs,
+            ).filterNot { it == downloaded.videoId }
+            if (aliases.isNotEmpty()) {
+                val saved = aliases.firstNotNullOfOrNull(savedFavoriteSongs::get)
+                val normalizedSong = if (saved == null) downloaded else downloaded.copy(
+                    artist = downloaded.artist.takeIf(::isUsableFavoriteArtist) ?: saved.artist,
+                    thumbnailUrl = downloaded.thumbnailUrl?.takeIf(String::isNotBlank) ?: saved.thumbnailUrl,
+                    artistId = downloaded.artistId ?: saved.artistId,
+                    albumId = downloaded.albumId ?: saved.albumId,
+                    albumName = downloaded.albumName ?: saved.albumName,
+                    albumArtist = downloaded.albumArtist ?: saved.albumArtist,
+                )
+                LocalFavoritesStore.migrateDownloadedFavoriteAliases(aliases, normalizedSong)
+            }
         }
     }
 
@@ -2001,7 +2081,7 @@ fun LibraryScreen(
                     enabled = selectedIds.isNotEmpty(),
                     onClick = {
                         if (drillDownIsFavorites) {
-                            selectedPlaylistSongs.forEach { song -> LocalFavoritesStore.removeFavorite(song.favoriteStoreKey()) }
+                            selectedPlaylistSongs.forEach(::removeFavoriteEntry)
                         } else {
                             playlistId?.let { LocalPlaylistStore.removeSongsFromPlaylist(it, selectedIds) }
                         }

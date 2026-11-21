@@ -174,6 +174,38 @@ object LocalFavoritesStore {
         }
     }
 
+    /**
+     * Move legacy aliases for a downloaded YouTube track onto its durable
+     * video ID. Older releases could store the transient MediaStore URI as the
+     * favorite key; after a rescan that URI changes, so the favorite stopped
+     * resolving and could no longer be removed from the list.
+     *
+     * Preserve the earliest existing position, and refresh the saved metadata
+     * with the current download row so playback, artwork, and removal all use
+     * one stable identity from this point on.
+     */
+    fun migrateDownloadedFavoriteAliases(aliases: Collection<String>, song: Song) {
+        val canonicalId = song.videoId.takeIf { it.isYouTubeVideoId() } ?: return
+        synchronized(persistLock) {
+            val currentIds = _favoriteIds.value
+            val matchingAliases = aliases.filterTo(LinkedHashSet()) { it in currentIds }
+            if (canonicalId !in currentIds && matchingAliases.isEmpty()) return
+
+            val oldOrder = _favoriteOrder.value
+            val insertAt = matchingAliases.mapNotNull(oldOrder::indexOf).filter { it >= 0 }.minOrNull()
+                ?: oldOrder.indexOf(canonicalId).takeIf { it >= 0 }
+                ?: oldOrder.size
+            val ordered = oldOrder.filterNot { it in matchingAliases || it == canonicalId }.toMutableList()
+            ordered.add(insertAt.coerceIn(0, ordered.size), canonicalId)
+            currentIds.forEach { if (it !in matchingAliases && it !in ordered) ordered += it }
+
+            _favoriteOrder.value = ordered
+            _favoriteIds.value = LinkedHashSet(ordered)
+            _favoriteSongs.value = (_favoriteSongs.value - matchingAliases + (canonicalId to song.forFavoriteStorage()))
+            persist()
+        }
+    }
+
     /** Persist a user-selected order, retaining IDs that are temporarily unresolved. */
     fun setFavoriteOrder(orderedIds: List<String>) {
         synchronized(persistLock) {

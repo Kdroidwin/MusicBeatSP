@@ -779,13 +779,13 @@ fun DrillDownSongList(
         artworkUrl
             ?.takeIf { it.isNotBlank() && it != "favorites" }
             ?.artworkAt(artworkRequestPx)
-            ?: songs.firstNotNullOfOrNull { it.artworkAt(artworkRequestPx) }
+            ?: songs.firstNotNullOfOrNull { it.collectionArtworkAt(artworkRequestPx) }
     }
     // The playlist/album card has usually already loaded its original thumbnail.
     // Keep it visible while the larger full-screen rendition is fetched.
     val previewArtworkUrl = if (fullScreenArtwork) {
         artworkUrl?.takeIf { it.isNotBlank() && it != "favorites" }?.artworkAt(CARD_ART_PX)
-            ?: songs.firstNotNullOfOrNull { it.artworkAt(CARD_ART_PX) }
+            ?: songs.firstNotNullOfOrNull { it.collectionArtworkAt(CARD_ART_PX) }
     } else null
     val pageArtworkUrl = selectionArtworkUrl.takeIf { fullScreenArtwork }
     val artworkPalette = rememberArtworkPalette(
@@ -1279,12 +1279,32 @@ private data class CollectionArtworkRun(val firstTrackIndex: Int, val artworkUrl
 private data class CollectionArtworkColorPoint(val firstTrackIndex: Int, val color: Color)
 private data class CollectionVisibleTrackRow(val trackIndex: Int, val top: Int, val bottom: Int)
 
+/**
+ * A downloaded YouTube row has two artwork sources: the embedded cover in its
+ * local audio file and the original catalogue thumbnail saved with the track.
+ * The embedded source is preferred by [Song.artworkAt] for playback, but it
+ * may be absent in an otherwise valid download. Collection backgrounds need a
+ * stable image immediately, so use the known catalogue thumbnail first and
+ * fall back to the local extraction path if that thumbnail is unavailable.
+ */
+private fun Song.collectionArtworkAt(px: Int): String? {
+    val isYoutubeId = videoId.length == 11 && videoId.all { it.isLetterOrDigit() || it == '_' || it == '-' }
+    val hasLocalFile = !localUri.isNullOrBlank() || !localPath.isNullOrBlank()
+    val remoteThumbnail = thumbnailUrl?.takeIf { raw ->
+        runCatching { Uri.parse(raw).scheme in setOf("http", "https") }.getOrDefault(false)
+    }
+    if (isYoutubeId && hasLocalFile && remoteThumbnail != null) {
+        return remoteThumbnail.artworkAt(px) ?: artworkAt(px)
+    }
+    return artworkAt(px)
+}
+
 @Composable
 private fun rememberCollectionArtworkRuns(songs: List<Song>): List<CollectionArtworkRun> = remember(songs) {
     buildList {
         var previousArtworkIdentity: String? = null
         songs.forEachIndexed { index, song ->
-            val url = song.artworkAt(CARD_ART_PX) ?: return@forEachIndexed
+            val url = song.collectionArtworkAt(CARD_ART_PX) ?: return@forEachIndexed
             val identity = song.collectionArtworkIdentity(url)
             if (identity != previousArtworkIdentity) add(CollectionArtworkRun(index, url))
             previousArtworkIdentity = identity

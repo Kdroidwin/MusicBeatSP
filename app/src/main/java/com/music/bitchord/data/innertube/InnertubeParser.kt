@@ -1500,9 +1500,17 @@ object InnertubeParser {
     )
     /** Header lines that name the artist, in either header shape. */
     private val HEADER_CREDIT_LINES = listOf("straplineTextOne", "subtitle")
+    // YT Music localizes the first subtitle segment (for example, Japanese
+    // search rows say "曲 • Artist • Album"). These are row-type labels, not
+    // credits. Keeping them here prevents the localized label from leaking
+    // into saved/downloaded song metadata as the artist name.
     private val TYPE_WORDS = setOf(
         "song", "video", "album", "single", "ep", "artist",
         "playlist", "podcast", "episode",
+        "曲", "楽曲", "音楽", "動画", "アルバム", "シングル", "アーティスト",
+        "プレイリスト", "ポッドキャスト", "エピソード",
+        "歌曲", "音乐", "视频", "专辑", "单曲", "艺人", "艺术家", "播放列表", "播客", "节目",
+        "곡", "노래", "동영상", "앨범", "싱글", "아티스트", "재생목록", "팟캐스트", "에피소드",
     )
     /**
      * Flags a browse card as video content: "50 videos" in a subtitle

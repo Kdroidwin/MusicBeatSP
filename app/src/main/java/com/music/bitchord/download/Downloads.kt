@@ -281,6 +281,10 @@ object Downloads {
         null
     }
 
+    /** Original catalogue art saved with a downloaded track, if available. */
+    fun artworkFor(videoId: String): String? =
+        _savedMetadata.value[videoId]?.thumbnailUrl?.takeIf(String::isNotBlank)
+
     /**
      * True when [uriString] names a `file://` path that is not there.
      *

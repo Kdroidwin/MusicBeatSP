@@ -51,6 +51,7 @@ import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import coil3.compose.AsyncImage
+import com.music.bitchord.download.Downloads
 import com.music.bitchord.data.model.ROW_ART_PX
 import com.music.bitchord.data.model.Song
 import com.music.bitchord.data.model.artworkAt
@@ -149,15 +150,20 @@ fun MiniPlayer(
     queue: List<Song> = emptyList(),
 ) {
     val folderArtworkFallbackMode by AppSettings.folderArtworkFallbackMode.collectAsStateWithLifecycle()
+    val savedDownloadRecords by Downloads.saved.collectAsStateWithLifecycle()
     val localAwareArtworkModel = remember(song, folderArtworkFallbackMode) { song.artworkAt(ROW_ART_PX) }
-    val remoteArtworkFallback = remember(song.thumbnailUrl) {
-        song.thumbnailUrl
+    val savedDownloadArtwork = remember(song.videoId, song.thumbnailUrl, savedDownloadRecords) {
+        song.thumbnailUrl?.takeIf(String::isNotBlank) ?: Downloads.artworkFor(song.videoId)
+    }
+    val remoteArtworkFallback = remember(savedDownloadArtwork) {
+        savedDownloadArtwork
             ?.takeIf { it.startsWith("https://", ignoreCase = true) }
             .artworkAt(ROW_ART_PX)
     }
     var useRemoteArtworkFallback by remember(song, folderArtworkFallbackMode) {
         mutableStateOf(localAwareArtworkModel == null && remoteArtworkFallback != null)
     }
+    var triedArtworkFallback by remember(song, folderArtworkFallbackMode) { mutableStateOf(false) }
     val artworkModel = if (useRemoteArtworkFallback) remoteArtworkFallback else localAwareArtworkModel
     val reduceDynamicBlur by AppSettings.reduceDynamicBlur.collectAsStateWithLifecycle()
     val useArtworkColor by AppSettings.miniPlayerArtworkColor.collectAsStateWithLifecycle()
@@ -169,7 +175,7 @@ fun MiniPlayer(
     val swipeUpExpands by AppSettings.miniPlayerSwipeUpExpands.collectAsStateWithLifecycle()
     val swipeDownDismisses by AppSettings.miniPlayerSwipeDownDismisses.collectAsStateWithLifecycle()
     val artworkPalette = rememberArtworkPalette(
-        imageUrl = song.thumbnailUrl.takeIf { useArtworkColor },
+        imageUrl = savedDownloadArtwork.takeIf { useArtworkColor },
         artPx = ROW_ART_PX,
     )
     val playerBackgroundColors = if (usePlayerBackgroundColor) {
@@ -342,12 +348,20 @@ fun MiniPlayer(
                     model = artworkModel,
                     contentDescription = null,
                     onError = {
-                        if (
-                            !useRemoteArtworkFallback &&
-                            remoteArtworkFallback != null &&
-                            remoteArtworkFallback != localAwareArtworkModel
-                        ) {
-                            useRemoteArtworkFallback = true
+                        val alternateArtwork = if (useRemoteArtworkFallback) {
+                            localAwareArtworkModel
+                        } else {
+                            remoteArtworkFallback
+                        }
+                        if (!triedArtworkFallback && alternateArtwork != null && alternateArtwork != artworkModel) {
+                            // Downloaded files do not always contain readable
+                            // embedded art, and the saved online thumbnail may
+                            // also be unavailable (for example offline). Try
+                            // the other persisted source once in either
+                            // direction; this avoids an empty mini-player and
+                            // avoids an error-driven loop if both are missing.
+                            triedArtworkFallback = true
+                            useRemoteArtworkFallback = !useRemoteArtworkFallback
                         }
                     },
                     // The mini-player has a fixed square thumbnail. Keep it square
