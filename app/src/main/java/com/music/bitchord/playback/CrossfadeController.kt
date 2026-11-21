@@ -203,6 +203,8 @@ class CrossfadeController(
     private val trackCrossfadeDurationMs: (MediaItem) -> Int? = { null },
     /** Effective listener playback speed for a media item, including playlist overrides. */
     private val playbackSpeedFor: (MediaItem?) -> Float = { AppSettings.playbackSpeed.value },
+    /** Effective silence-skip choice for the incoming item, including playlist overrides. */
+    private val skipSilenceFor: (MediaItem?) -> Boolean = { AppSettings.skipSilence.value },
 ) {
 
     private enum class Phase {
@@ -1236,7 +1238,7 @@ class CrossfadeController(
 
         // Carried across so the incoming track inherits the listener's own
         // settings rather than whatever the standby was left on last time.
-        into.skipSilenceEnabled = out.skipSilenceEnabled
+        into.skipSilenceEnabled = skipSilenceFor(items.getOrNull(nextIndex))
         into.repeatMode = out.repeatMode
         into.shuffleModeEnabled = out.shuffleModeEnabled
         // Stacks on top of the listener's speed control rather than replacing

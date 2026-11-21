@@ -43,6 +43,7 @@ import androidx.compose.material.icons.rounded.AudioFile
 import androidx.compose.material.icons.rounded.ArrowDownward
 import androidx.compose.material.icons.rounded.ArrowUpward
 import androidx.compose.material.icons.rounded.BarChart
+import androidx.compose.material.icons.rounded.BookmarkAdd
 import androidx.compose.material.icons.rounded.AutoAwesome
 import androidx.compose.material.icons.rounded.BlurOff
 import androidx.compose.material.icons.rounded.BlurOn
@@ -87,6 +88,7 @@ import androidx.compose.material.icons.rounded.PlaylistPlay
 import androidx.compose.material.icons.rounded.Pause
 import androidx.compose.material.icons.rounded.PlayArrow
 import androidx.compose.material.icons.rounded.Radio
+import androidx.compose.material.icons.rounded.Reorder
 import androidx.compose.material.icons.rounded.Repeat
 import androidx.compose.material.icons.rounded.Refresh
 import androidx.compose.material.icons.rounded.Search
@@ -205,6 +207,7 @@ import com.music.bitchord.feature.artistimage.data.DeezerArtistService
 import com.music.bitchord.data.settings.AutomixPerformanceMode
 import com.music.bitchord.data.settings.LocalLibraryTab
 import com.music.bitchord.data.settings.LibraryCategory
+import com.music.bitchord.data.settings.PlaylistDetailActionButton
 import com.music.bitchord.data.settings.LauncherIcon
 import com.music.bitchord.data.settings.SeekButtonMode
 import com.music.bitchord.data.settings.TransportSideAction
@@ -766,6 +769,7 @@ private fun additionalArtworkSettingsSearchEntries(
     showArtistRecommendations: Boolean,
     showArtistOverview: Boolean,
     centerArtistDetailName: Boolean,
+    artistDetailMostPlayedLabelAsTracks: Boolean,
     hideArtistAudienceStats: Boolean,
     onChoosePlayerArtistPageMode: () -> Unit,
     folderArtworkFallbackLabel: String,
@@ -851,6 +855,12 @@ private fun additionalArtworkSettingsSearchEntries(
         listOf("artist", "detail", "name", "center", "alignment", "アーティスト", "詳細", "名前", "中央揃え"),
         centerArtistDetailName,
     ) { AppSettings.setCenterArtistDetailName(!centerArtistDetailName) },
+    SettingsSearchEntry(
+        stringResource(R.string.artist_detail_most_played_label_as_tracks),
+        stringResource(R.string.artist_detail_most_played_label_as_tracks_subtitle),
+        listOf("artist", "tracks", "top songs", "label", "アーティスト", "よく聴いた曲", "曲", "見出し"),
+        artistDetailMostPlayedLabelAsTracks,
+    ) { AppSettings.setArtistDetailMostPlayedLabelAsTracks(!artistDetailMostPlayedLabelAsTracks) },
     SettingsSearchEntry(
         stringResource(R.string.hide_artist_audience_stats),
         stringResource(R.string.hide_artist_audience_stats_subtitle),
@@ -1803,6 +1813,7 @@ fun SettingsScreen(
     val rememberLastOpenedFolder by AppSettings.rememberLastOpenedFolder.collectAsStateWithLifecycle()
     val localMusicFolderRoot by AppSettings.localMusicFolderUri.collectAsStateWithLifecycle()
     val fullScreenCollectionArtwork by AppSettings.fullScreenCollectionArtwork.collectAsStateWithLifecycle()
+    val persistentPlaylistArtwork by AppSettings.persistentPlaylistArtwork.collectAsStateWithLifecycle()
     val refreshPlaylistTagsOnPull by AppSettings.refreshPlaylistTagsOnPull.collectAsStateWithLifecycle()
     val playlistRefreshIndicatorStyle by AppSettings.playlistRefreshIndicatorStyle.collectAsStateWithLifecycle()
     val smartPlaylistsEnabled by AppSettings.smartPlaylistsEnabled.collectAsStateWithLifecycle()
@@ -1838,6 +1849,7 @@ fun SettingsScreen(
     val showArtistRecommendations by AppSettings.showArtistRecommendations.collectAsStateWithLifecycle()
     val showArtistOverview by AppSettings.showArtistOverview.collectAsStateWithLifecycle()
     val centerArtistDetailName by AppSettings.centerArtistDetailName.collectAsStateWithLifecycle()
+    val artistDetailMostPlayedLabelAsTracks by AppSettings.artistDetailMostPlayedLabelAsTracks.collectAsStateWithLifecycle()
     val hideArtistAudienceStats by AppSettings.hideArtistAudienceStats.collectAsStateWithLifecycle()
     val playerArtistPageModeLabel = stringResource(
         when (playerArtistPageMode) {
@@ -3091,6 +3103,12 @@ fun SettingsScreen(
             fullScreenCollectionArtwork,
         ) { AppSettings.setFullScreenCollectionArtwork(!fullScreenCollectionArtwork) },
         SettingsSearchEntry(
+            stringResource(R.string.persistent_playlist_artwork),
+            stringResource(R.string.persistent_playlist_artwork_subtitle),
+            listOf("playlist", "artwork", "cache", "cover", "プレイリスト", "アート", "永続", "キャッシュ", "読み込み"),
+            persistentPlaylistArtwork,
+        ) { AppSettings.setPersistentPlaylistArtwork(!persistentPlaylistArtwork) },
+        SettingsSearchEntry(
             stringResource(R.string.white_collection_action_buttons),
             stringResource(R.string.white_collection_action_buttons_subtitle),
             listOf("album", "playlist", "play", "shuffle", "white", "アルバム", "プレイリスト", "再生", "シャッフル", "白背景"),
@@ -3260,6 +3278,7 @@ fun SettingsScreen(
             showArtistRecommendations = showArtistRecommendations,
             showArtistOverview = showArtistOverview,
             centerArtistDetailName = centerArtistDetailName,
+            artistDetailMostPlayedLabelAsTracks = artistDetailMostPlayedLabelAsTracks,
             hideArtistAudienceStats = hideArtistAudienceStats,
             onChoosePlayerArtistPageMode = { showPlayerArtistPageModeDialog = true },
             folderArtworkFallbackLabel = stringResource(
@@ -9944,6 +9963,9 @@ private fun LocalMusicSettingsGroup(
     onChoosePlaylistRefreshIndicatorStyle: () -> Unit,
 ) {
     val context = LocalContext.current
+    val persistentPlaylistArtwork by AppSettings.persistentPlaylistArtwork.collectAsStateWithLifecycle()
+    val playlistDetailActionOrder by AppSettings.playlistDetailActionOrder.collectAsStateWithLifecycle()
+    val artistDetailMostPlayedLabelAsTracks by AppSettings.artistDetailMostPlayedLabelAsTracks.collectAsStateWithLifecycle()
 SettingsGroup(header = stringResource(R.string.local_music)) {
     SettingsRow(
         icon = Icons.Rounded.Tune,
@@ -10227,6 +10249,19 @@ SettingsGroup(header = stringResource(R.string.local_music)) {
     RowDivider()
     SettingsRow(
         icon = Icons.Rounded.Person,
+        title = stringResource(R.string.artist_detail_most_played_label_as_tracks),
+        subtitle = stringResource(R.string.artist_detail_most_played_label_as_tracks_subtitle),
+        trailing = {
+            Switch(
+                checked = artistDetailMostPlayedLabelAsTracks,
+                onCheckedChange = AppSettings::setArtistDetailMostPlayedLabelAsTracks,
+            )
+        },
+        onClick = { AppSettings.setArtistDetailMostPlayedLabelAsTracks(!artistDetailMostPlayedLabelAsTracks) },
+    )
+    RowDivider()
+    SettingsRow(
+        icon = Icons.Rounded.Person,
         title = stringResource(R.string.hide_artist_audience_stats),
         subtitle = stringResource(R.string.hide_artist_audience_stats_subtitle),
         trailing = {
@@ -10277,6 +10312,48 @@ SettingsGroup(header = stringResource(R.string.local_music)) {
         },
         onClick = { AppSettings.setFullScreenCollectionArtwork(!fullScreenCollectionArtwork) },
     )
+    RowDivider()
+    SettingsRow(
+        icon = Icons.Rounded.Album,
+        title = stringResource(R.string.persistent_playlist_artwork),
+        subtitle = stringResource(R.string.persistent_playlist_artwork_subtitle),
+        trailing = {
+            Switch(checked = persistentPlaylistArtwork, onCheckedChange = AppSettings::setPersistentPlaylistArtwork)
+        },
+        onClick = { AppSettings.setPersistentPlaylistArtwork(!persistentPlaylistArtwork) },
+    )
+    RowDivider()
+    SettingsRow(
+        icon = Icons.Rounded.Tune,
+        title = stringResource(R.string.playlist_detail_action_order),
+        subtitle = stringResource(R.string.playlist_detail_action_order_subtitle),
+    )
+    playlistDetailActionOrder.forEachIndexed { index, action ->
+        val (icon, titleRes) = when (action) {
+            PlaylistDetailActionButton.SHUFFLE -> Icons.Rounded.Shuffle to R.string.shuffle
+            PlaylistDetailActionButton.PLAY -> Icons.Rounded.PlayArrow to R.string.play
+            PlaylistDetailActionButton.VIEW_TYPE -> Icons.Rounded.Album to R.string.playlist_action_view_type
+            PlaylistDetailActionButton.REORDER -> Icons.Rounded.Reorder to R.string.toggle_playlist_reorder
+            PlaylistDetailActionButton.SAVE_TO_LIBRARY -> Icons.Rounded.BookmarkAdd to R.string.add_to_library
+            PlaylistDetailActionButton.PLAYBACK_SETTINGS -> Icons.Rounded.Tune to R.string.playlist_playback_settings
+            PlaylistDetailActionButton.MORE -> Icons.Rounded.MoreHoriz to R.string.more
+        }
+        SettingsRow(
+            icon = icon,
+            title = stringResource(titleRes),
+            subtitle = stringResource(R.string.playlist_detail_action_order_row_subtitle),
+            trailing = {
+                Row(verticalAlignment = Alignment.CenterVertically) {
+                    IconButton(enabled = index > 0, onClick = { AppSettings.movePlaylistDetailAction(action, -1) }) {
+                        Icon(Icons.Rounded.ArrowUpward, stringResource(R.string.move_up))
+                    }
+                    IconButton(enabled = index < playlistDetailActionOrder.lastIndex, onClick = { AppSettings.movePlaylistDetailAction(action, 1) }) {
+                        Icon(Icons.Rounded.ArrowDownward, stringResource(R.string.move_down))
+                    }
+                }
+            },
+        )
+    }
     RowDivider()
     SettingsRow(
         icon = Icons.Rounded.Tune,

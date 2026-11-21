@@ -1160,6 +1160,12 @@
     <string name="local_folder_hierarchy_subtitle">親フォルダーと子フォルダーが分かるようにインデントします</string>
     <string name="full_screen_collection_artwork">アルバム・プレイリストの全画面アート</string>
     <string name="full_screen_collection_artwork_subtitle">端末内・YouTube Musicのアルバムやプレイリスト、アーティストから開いたリリースを全画面アートで表示します。</string>
+    <string name="persistent_playlist_artwork">プレイリストの全画面アートを永続保存</string>
+    <string name="persistent_playlist_artwork_subtitle">高解像度のアートをアプリ内に保存し、次回以降の表示を速くします。引っ張って更新すると再取得します。初期設定はONです。</string>
+    <string name="playlist_detail_action_order">プレイリスト詳細ボタンの並び順</string>
+    <string name="playlist_detail_action_order_subtitle">曲一覧上部のボタンを左右に並び替えます。</string>
+    <string name="playlist_detail_action_order_row_subtitle">矢印でこのボタンを移動します。</string>
+    <string name="playlist_action_view_type">表示形式</string>
     <string name="smart_playlists_enabled">スマートプレイリスト</string>
     <string name="smart_playlists_enabled_subtitle">端末内の音楽に条件を設定するプレイリスト機能を有効にします。初期設定はオフです。</string>
     <string name="create_smart_playlist">スマートプレイリストを作成</string>
@@ -2402,8 +2408,12 @@
     <string name="hide_library_new_playlist_tap_label_subtitle">「タップして作成」の文字だけを隠します。作成カードとタップ操作はそのままです。初期設定はONです。</string>
     <string name="playlist_playback_speed_override">プレイリストごとの再生速度</string>
     <string name="playlist_playback_speed_override_subtitle">このプレイリストだけ再生速度を上書きします。OFFではアプリ全体の速度を使います。</string>
+    <string name="playlist_skip_silence_override">プレイリストごとの無音スキップ</string>
+    <string name="playlist_skip_silence_override_subtitle">このプレイリストだけ無音スキップを設定します。アプリ全体の設定には影響しません。</string>
     <string name="playlist_playback_settings_artwork_color">再生設定のポップアップをアルバムアートの色に合わせる</string>
     <string name="playlist_playback_settings_artwork_color_subtitle">このプレイリストの再生設定ダイアログにアルバムアートの色を使います。初期設定はONです。</string>
     <string name="center_artist_detail_name">アーティスト詳細の名前を中央揃えにする</string>
     <string name="center_artist_detail_name_subtitle">全画面アーティスト画像上の名前を中央に配置します。初期設定はONです。</string>
+    <string name="artist_detail_most_played_label_as_tracks">「よく聴いた曲」を「曲」と表示</string>
+    <string name="artist_detail_most_played_label_as_tracks_subtitle">アーティスト詳細の再生回数セクション名を「曲」に変更します。初期設定はONです。</string>
 </resources>

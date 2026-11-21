@@ -494,6 +494,8 @@ fun LibraryScreen(
     var drillDownLabel by remember { mutableStateOf<String?>(null) }
     var drillDownSongs by remember { mutableStateOf<List<Song>>(emptyList()) }
     var drillDownArt by remember { mutableStateOf<String?>(null) }
+    var playlistArtworkRefreshTarget by remember { mutableStateOf<String?>(null) }
+    var playlistArtworkRefreshSequence by remember { mutableStateOf(0L) }
     var drillDownPlaylistId by remember { mutableStateOf<String?>(null) }
     val drillDownIsSmartPlaylist = remember(playlists, drillDownPlaylistId) {
         playlists.firstOrNull { it.id == drillDownPlaylistId }?.smartDefinition != null
@@ -1212,6 +1214,14 @@ fun LibraryScreen(
                         showArtworkInList = showPlaylistSongArtwork,
                         showCollectionArtworkInList = visibleDrillDownPlaylistId == null && showCollectionSongArtwork,
                         fullScreenArtwork = fullScreenCollectionArtwork,
+                        playlistArtworkRefreshRequested = visibleDrillDownPlaylistId != null &&
+                            playlistArtworkRefreshTarget == visibleDrillDownPlaylistId,
+                        playlistArtworkRefreshKey = playlistArtworkRefreshSequence,
+                        onPlaylistArtworkRefreshComplete = {
+                            if (playlistArtworkRefreshTarget == visibleDrillDownPlaylistId) {
+                                playlistArtworkRefreshTarget = null
+                            }
+                        },
                         preserveArtworkAspectRatioInCollections = keepCollectionArtworkAspectRatio,
                         viewType = songsViewType,
                         onViewTypeToggle = {
@@ -1358,6 +1368,10 @@ fun LibraryScreen(
                         isRefreshing = isRefreshingPlaylistMetadata,
                         onRefresh = {
                             if (!isRefreshingPlaylistMetadata) {
+                                visibleDrillDownPlaylistId?.let { playlistId ->
+                                    playlistArtworkRefreshTarget = playlistId
+                                    playlistArtworkRefreshSequence += 1L
+                                }
                                 mainViewModel.loadLocalMusic(
                                     isPullToRefresh = true,
                                     playlistSongsToRefresh = drillDownSongs,

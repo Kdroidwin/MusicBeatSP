@@ -113,6 +113,7 @@ fun DetailScreen(
     val songs = (songsState as? UiState.Success)?.data.orEmpty()
     val showArtistOverview by AppSettings.showArtistOverview.collectAsStateWithLifecycle()
     val centerArtistDetailName by AppSettings.centerArtistDetailName.collectAsStateWithLifecycle()
+    val artistDetailMostPlayedLabelAsTracks by AppSettings.artistDetailMostPlayedLabelAsTracks.collectAsStateWithLifecycle()
     val hideArtistAudienceStats by AppSettings.hideArtistAudienceStats.collectAsStateWithLifecycle()
     val showLocalArtistSections by AppSettings.showLocalArtistSections.collectAsStateWithLifecycle()
     val showArtistRecommendations by AppSettings.showArtistRecommendations.collectAsStateWithLifecycle()
@@ -230,7 +231,10 @@ fun DetailScreen(
             is UiState.Success -> {
                 if (songs.isNotEmpty()) {
                     item(key = "top-songs-heading") {
-                        SectionTitle(stringResource(R.string.top_songs), palette)
+                        SectionTitle(
+                            stringResource(if (artistDetailMostPlayedLabelAsTracks) R.string.songs else R.string.top_songs),
+                            palette,
+                        )
                     }
                     if (page.hybridArtist || page.browseId.startsWith("local:artist:")) {
                         itemsIndexed(songs, key = { _, song -> "artist-local-${song.localUri ?: song.videoId}" }) { index, song ->

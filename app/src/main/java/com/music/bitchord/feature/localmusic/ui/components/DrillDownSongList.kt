@@ -110,6 +110,8 @@ import com.music.bitchord.data.model.durationMillis
 import com.music.bitchord.data.model.isSameTrackAs
 import com.music.bitchord.data.settings.LibraryViewType
 import com.music.bitchord.data.settings.AppSettings
+import com.music.bitchord.data.settings.DEFAULT_PLAYLIST_DETAIL_ACTION_ORDER
+import com.music.bitchord.data.settings.PlaylistDetailActionButton
 import com.music.bitchord.data.settings.GridKind
 import com.music.bitchord.data.canvas.ArtistSignature
 import com.music.bitchord.data.canvas.ArtistSignatureRepository
@@ -539,6 +541,76 @@ fun DrillDownActionRow(
     val playButtonBackground = if (isCollectionDetail && whitePlayButton) Color.White else buttonBackground
     val playButtonBorder = if (isCollectionDetail && whitePlayButton) Color.Transparent else buttonBorder
     val playButtonContentColor = if (isCollectionDetail && whitePlayButton) Color.Black else buttonContentColor
+    val configuredActionOrder by AppSettings.playlistDetailActionOrder.collectAsStateWithLifecycle()
+    val actionOrder = if (isPlaylist) configuredActionOrder else DEFAULT_PLAYLIST_DETAIL_ACTION_ORDER
+
+    @Composable
+    fun RoundAction(icon: androidx.compose.ui.graphics.vector.ImageVector, description: String, onClick: () -> Unit) {
+        Box(
+            modifier = Modifier.size(50.dp).clip(CircleShape).background(buttonBackground)
+                .border(0.5.dp, buttonBorder, CircleShape).clickable(onClick = onClick),
+            contentAlignment = Alignment.Center,
+        ) {
+            Icon(icon, contentDescription = description, tint = buttonContentColor, modifier = Modifier.size(20.dp))
+        }
+    }
+
+    @Composable
+    fun ShuffleAction() {
+        Box(
+            modifier = Modifier.size(50.dp).clip(CircleShape).background(buttonBackground)
+                .border(0.5.dp, buttonBorder, CircleShape)
+                .clickable { if (songs.isNotEmpty()) onShuffle(songs) },
+            contentAlignment = Alignment.Center,
+        ) {
+            Icon(BitChordIcons.Shuffle, stringResource(R.string.shuffle), tint = buttonContentColor, modifier = Modifier.size(18.dp))
+        }
+    }
+
+    @Composable
+    fun PlayAction() {
+        Row(
+            modifier = Modifier.height(50.dp).clip(CircleShape).background(playButtonBackground)
+                .border(0.5.dp, playButtonBorder, CircleShape)
+                .clickable { if (songs.isNotEmpty()) onSongClick(songs, 0) }
+                .padding(horizontal = if (showPlayLabel) 32.dp else 16.dp),
+            verticalAlignment = Alignment.CenterVertically,
+            horizontalArrangement = Arrangement.Center,
+        ) {
+            Icon(BitChordIcons.Play, if (showPlayLabel) null else stringResource(R.string.play), tint = playButtonContentColor, modifier = Modifier.size(18.dp))
+            if (showPlayLabel) Spacer(Modifier.width(6.dp))
+            if (showPlayLabel) Text(stringResource(R.string.play), style = MaterialTheme.typography.titleMedium, color = playButtonContentColor)
+        }
+    }
+
+    @Composable
+    fun ReorderAction() {
+        Box(
+            modifier = Modifier.size(50.dp).clip(CircleShape)
+                .background(if (reorderEnabled) MaterialTheme.colorScheme.primary.copy(alpha = 0.16f) else buttonBackground)
+                .border(0.5.dp, if (reorderEnabled) MaterialTheme.colorScheme.primary.copy(alpha = 0.38f) else buttonBorder, CircleShape)
+                .clickable { onReorderToggle?.invoke() },
+            contentAlignment = Alignment.Center,
+        ) {
+            Icon(Icons.Rounded.Reorder, stringResource(R.string.toggle_playlist_reorder), tint = if (reorderEnabled) MaterialTheme.colorScheme.primary else buttonContentColor, modifier = Modifier.size(20.dp))
+        }
+    }
+
+    @Composable
+    fun SaveAction() {
+        Box(
+            modifier = Modifier.size(50.dp).clip(CircleShape).background(buttonBackground)
+                .border(0.5.dp, buttonBorder, CircleShape).clickable { onToggleLibrary?.invoke() },
+            contentAlignment = Alignment.Center,
+        ) {
+            Icon(
+                if (isSavedToLibrary) Icons.Rounded.Bookmark else Icons.Rounded.BookmarkAdd,
+                stringResource(if (isSavedToLibrary) R.string.remove_from_library else R.string.add_to_library),
+                tint = buttonContentColor,
+                modifier = Modifier.size(20.dp),
+            )
+        }
+    }
 
     Row(
         modifier = modifier
@@ -547,147 +619,25 @@ fun DrillDownActionRow(
         horizontalArrangement = Arrangement.spacedBy(10.dp, Alignment.CenterHorizontally),
         verticalAlignment = Alignment.CenterVertically,
     ) {
-        Box(
-            modifier = Modifier
-                .size(50.dp)
-                .clip(CircleShape)
-                .background(buttonBackground)
-                .border(0.5.dp, buttonBorder, CircleShape)
-                .clickable { if (songs.isNotEmpty()) onShuffle(songs) },
-            contentAlignment = Alignment.Center,
-        ) {
-            Icon(
-                BitChordIcons.Shuffle,
-                contentDescription = stringResource(R.string.shuffle),
-                tint = buttonContentColor,
-                modifier = Modifier.size(18.dp),
-            )
-        }
-        Row(
-            modifier = Modifier
-                .height(50.dp)
-                .clip(CircleShape)
-                .background(playButtonBackground)
-                .border(0.5.dp, playButtonBorder, CircleShape)
-                .clickable { if (songs.isNotEmpty()) onSongClick(songs, 0) }
-                .padding(horizontal = if (showPlayLabel) 32.dp else 16.dp),
-            verticalAlignment = Alignment.CenterVertically,
-            horizontalArrangement = Arrangement.Center,
-        ) {
-            Icon(
-                BitChordIcons.Play,
-                contentDescription = if (showPlayLabel) null else stringResource(R.string.play),
-                tint = playButtonContentColor,
-                modifier = Modifier.size(18.dp),
-            )
-            if (showPlayLabel) Spacer(Modifier.width(6.dp))
-            if (showPlayLabel) {
-                Text(
-                    text = stringResource(R.string.play),
-                    style = MaterialTheme.typography.titleMedium,
-                    color = playButtonContentColor,
-                )
-            }
-        }
-        if (onViewTypeToggle != null && viewType != null) {
-            Box(
-                modifier = Modifier
-                    .size(50.dp)
-                    .clip(CircleShape)
-                    .background(buttonBackground)
-                    .border(0.5.dp, buttonBorder, CircleShape)
-                    .clickable(onClick = onViewTypeToggle),
-                contentAlignment = Alignment.Center,
-            ) {
-                Icon(
-                    imageVector = if (viewType == LibraryViewType.GRID) BitChordIcons.ListView else BitChordIcons.GridView,
-                    contentDescription = stringResource(
-                        if (viewType == LibraryViewType.GRID) R.string.switch_to_list_view else R.string.switch_to_grid_view,
-                    ),
-                    tint = buttonContentColor,
-                    modifier = Modifier.size(20.dp),
-                )
-            }
-        }
-        if (onReorderToggle != null) {
-            Box(
-                modifier = Modifier
-                    .size(50.dp)
-                    .clip(CircleShape)
-                    .background(
-                        if (reorderEnabled) MaterialTheme.colorScheme.primary.copy(alpha = 0.16f)
-                        else buttonBackground,
+        actionOrder.forEach { action ->
+            when (action) {
+                PlaylistDetailActionButton.SHUFFLE -> ShuffleAction()
+                PlaylistDetailActionButton.PLAY -> PlayAction()
+                PlaylistDetailActionButton.VIEW_TYPE -> if (onViewTypeToggle != null && viewType != null) {
+                    RoundAction(
+                        icon = if (viewType == LibraryViewType.GRID) BitChordIcons.ListView else BitChordIcons.GridView,
+                        description = stringResource(if (viewType == LibraryViewType.GRID) R.string.switch_to_list_view else R.string.switch_to_grid_view),
+                        onClick = onViewTypeToggle,
                     )
-                    .border(
-                        0.5.dp,
-                        if (reorderEnabled) MaterialTheme.colorScheme.primary.copy(alpha = 0.38f) else buttonBorder,
-                        CircleShape,
-                    )
-                    .clickable(onClick = onReorderToggle),
-                contentAlignment = Alignment.Center,
-            ) {
-                Icon(
-                    Icons.Rounded.Reorder,
-                    contentDescription = stringResource(R.string.toggle_playlist_reorder),
-                    tint = if (reorderEnabled) MaterialTheme.colorScheme.primary else buttonContentColor,
-                    modifier = Modifier.size(20.dp),
-                )
-            }
-        }
-        if (onToggleLibrary != null) {
-            Box(
-                modifier = Modifier
-                    .size(50.dp)
-                    .clip(CircleShape)
-                    .background(buttonBackground)
-                    .border(0.5.dp, buttonBorder, CircleShape)
-                    .clickable(onClick = onToggleLibrary),
-                contentAlignment = Alignment.Center,
-            ) {
-                Icon(
-                    imageVector = if (isSavedToLibrary) Icons.Rounded.Bookmark else Icons.Rounded.BookmarkAdd,
-                    contentDescription = stringResource(
-                        if (isSavedToLibrary) R.string.remove_from_library else R.string.add_to_library,
-                    ),
-                    tint = buttonContentColor,
-                    modifier = Modifier.size(20.dp),
-                )
-            }
-        }
-        if (onPlaylistPlaybackSettings != null) {
-            Box(
-                modifier = Modifier
-                    .size(50.dp)
-                    .clip(CircleShape)
-                    .background(buttonBackground)
-                    .border(0.5.dp, buttonBorder, CircleShape)
-                    .clickable(onClick = onPlaylistPlaybackSettings),
-                contentAlignment = Alignment.Center,
-            ) {
-                Icon(
-                    Icons.Rounded.Tune,
-                    contentDescription = stringResource(R.string.playlist_playback_settings),
-                    tint = buttonContentColor,
-                    modifier = Modifier.size(20.dp),
-                )
-            }
-        }
-        if (onMore != null) {
-            Box(
-                modifier = Modifier
-                    .size(50.dp)
-                    .clip(CircleShape)
-                    .background(buttonBackground)
-                    .border(0.5.dp, buttonBorder, CircleShape)
-                    .clickable(onClick = onMore),
-                contentAlignment = Alignment.Center,
-            ) {
-                Icon(
-                    Icons.Rounded.MoreHoriz,
-                    contentDescription = stringResource(R.string.more),
-                    tint = buttonContentColor,
-                    modifier = Modifier.size(20.dp),
-                )
+                }
+                PlaylistDetailActionButton.REORDER -> if (onReorderToggle != null) ReorderAction()
+                PlaylistDetailActionButton.SAVE_TO_LIBRARY -> if (onToggleLibrary != null) SaveAction()
+                PlaylistDetailActionButton.PLAYBACK_SETTINGS -> if (onPlaylistPlaybackSettings != null) {
+                    RoundAction(Icons.Rounded.Tune, stringResource(R.string.playlist_playback_settings), onPlaylistPlaybackSettings)
+                }
+                PlaylistDetailActionButton.MORE -> if (onMore != null) {
+                    RoundAction(Icons.Rounded.MoreHoriz, stringResource(R.string.more), onMore)
+                }
             }
         }
     }
@@ -807,6 +757,9 @@ fun DrillDownSongList(
     showArtworkInList: Boolean = false,
     showCollectionArtworkInList: Boolean = false,
     fullScreenArtwork: Boolean = false,
+    playlistArtworkRefreshRequested: Boolean = false,
+    playlistArtworkRefreshKey: Long = 0L,
+    onPlaylistArtworkRefreshComplete: (() -> Unit)? = null,
     preserveArtworkAspectRatioInCollections: Boolean = false,
     reorderEnabled: Boolean = false,
     onReorderToggle: (() -> Unit)? = null,
@@ -944,6 +897,10 @@ fun DrillDownSongList(
                     previewImageUrl = previewArtworkUrl,
                     palette = artworkPalette,
                     artHeight = artHeight,
+                    isPlaylist = isPlaylist,
+                    refreshRequested = playlistArtworkRefreshRequested,
+                    refreshKey = playlistArtworkRefreshKey,
+                    onRefreshComplete = onPlaylistArtworkRefreshComplete,
                     artTopPx = {
                         if (gridState.firstVisibleItemIndex == 0) {
                             -gridState.firstVisibleItemScrollOffset.toFloat()
@@ -1116,6 +1073,10 @@ fun DrillDownSongList(
                     previewImageUrl = previewArtworkUrl,
                     palette = artworkPalette,
                     artHeight = artHeight,
+                    isPlaylist = isPlaylist,
+                    refreshRequested = playlistArtworkRefreshRequested,
+                    refreshKey = playlistArtworkRefreshKey,
+                    onRefreshComplete = onPlaylistArtworkRefreshComplete,
                     artTopPx = {
                         if (listState.firstVisibleItemIndex == 0) {
                             -listState.firstVisibleItemScrollOffset.toFloat()
@@ -1541,8 +1502,61 @@ private fun CollectionPageBackground(
     previewImageUrl: String?,
     palette: ArtworkPalette,
     artHeight: Dp,
+    isPlaylist: Boolean,
+    refreshRequested: Boolean,
+    refreshKey: Long,
+    onRefreshComplete: (() -> Unit)?,
     artTopPx: () -> Float,
 ) {
+    val context = LocalContext.current.applicationContext
+    val persistentPlaylistArtwork by AppSettings.persistentPlaylistArtwork.collectAsStateWithLifecycle()
+    val usePersistentCache = isPlaylist && persistentPlaylistArtwork && !imageUrl.isNullOrBlank()
+    var cachedArtworkModel by remember(imageUrl, usePersistentCache) {
+        mutableStateOf<Any?>(
+            if (usePersistentCache) {
+                PersistentPlaylistArtworkCache.cachedFile(context, imageUrl)?.let {
+                    PersistentPlaylistArtworkCache.imageRequest(context, it)
+                }
+            } else null,
+        )
+    }
+    LaunchedEffect(imageUrl, usePersistentCache, refreshRequested, refreshKey) {
+        if (imageUrl.isNullOrBlank()) {
+            cachedArtworkModel = null
+            if (refreshRequested) onRefreshComplete?.invoke()
+            return@LaunchedEffect
+        }
+        if (!usePersistentCache) {
+            if (refreshRequested) {
+                cachedArtworkModel = PersistentPlaylistArtworkCache.fetchFresh(context, imageUrl, refreshKey)
+                onRefreshComplete?.invoke()
+            }
+            return@LaunchedEffect
+        }
+        if (refreshRequested) {
+            PersistentPlaylistArtworkCache.cachedFile(context, imageUrl)?.let { cached ->
+                if (cachedArtworkModel == null) {
+                    cachedArtworkModel = PersistentPlaylistArtworkCache.imageRequest(context, cached)
+                }
+            }
+        } else {
+            PersistentPlaylistArtworkCache.cachedFile(context, imageUrl)?.let { cached ->
+                cachedArtworkModel = PersistentPlaylistArtworkCache.imageRequest(context, cached)
+                return@LaunchedEffect
+            }
+        }
+        val refreshedFile = PersistentPlaylistArtworkCache.load(
+            context = context,
+            url = imageUrl,
+            refresh = refreshRequested,
+            refreshKey = refreshKey,
+        )
+        if (refreshedFile != null) {
+            cachedArtworkModel = PersistentPlaylistArtworkCache.imageRequest(context, refreshedFile)
+        }
+        if (refreshRequested) onRefreshComplete?.invoke()
+    }
+    val artworkModel: Any? = cachedArtworkModel ?: if (usePersistentCache) previewImageUrl ?: imageUrl else imageUrl
     val reduceDynamicBlur by AppSettings.reduceDynamicBlur.collectAsStateWithLifecycle()
     val softenFoot = !reduceDynamicBlur && Build.VERSION.SDK_INT >= Build.VERSION_CODES.S
 
@@ -1565,7 +1579,7 @@ private fun CollectionPageBackground(
                     )
                 }
                 AsyncImage(
-                    model = imageUrl,
+                    model = artworkModel,
                     contentDescription = null,
                     contentScale = ContentScale.Crop,
                     modifier = Modifier
@@ -1577,7 +1591,7 @@ private fun CollectionPageBackground(
                 // fifth so it merges naturally into the artwork-derived wash.
                 if (softenFoot) {
                     AsyncImage(
-                        model = imageUrl,
+                        model = artworkModel,
                         contentDescription = null,
                         contentScale = ContentScale.Crop,
                         modifier = Modifier
@@ -1614,7 +1628,7 @@ private val SOFT_FOOT_MASK = Brush.verticalGradient(
 )
 
 private val SOFT_FOOT_BLUR = 48.dp
-private const val FULL_SCREEN_COLLECTION_ART_PX = 1440
+private const val FULL_SCREEN_COLLECTION_ART_PX = PersistentPlaylistArtworkCache.ARTWORK_SIZE_PX
 private const val COLLECTION_COLOR_TRANSITION_HALF_HEIGHT = 40
 
 /** Drag-to-reorder state for the song section below the two static header rows. */

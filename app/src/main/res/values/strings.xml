@@ -1276,6 +1276,12 @@
     <string name="local_folder_hierarchy_subtitle">Indent folders to show their parent and child structure</string>
     <string name="full_screen_collection_artwork">Full-screen album and playlist artwork</string>
     <string name="full_screen_collection_artwork_subtitle">Show full-screen cover art on album and playlist pages, including YouTube Music and releases opened from artist pages.</string>
+    <string name="persistent_playlist_artwork">Keep playlist full-screen artwork</string>
+    <string name="persistent_playlist_artwork_subtitle">Save the full-resolution playlist cover in app storage for faster later opens. Pull-to-refresh fetches it again. On by default.</string>
+    <string name="playlist_detail_action_order">Playlist detail action order</string>
+    <string name="playlist_detail_action_order_subtitle">Choose the left-to-right order of the actions above playlist tracks.</string>
+    <string name="playlist_detail_action_order_row_subtitle">Use the arrows to move this action.</string>
+    <string name="playlist_action_view_type">View type</string>
     <string name="smart_playlists_enabled">Smart playlists</string>
     <string name="smart_playlists_enabled_subtitle">Enable rule-based playlists for your local music library. Off by default.</string>
     <string name="create_smart_playlist">Create smart playlist</string>
@@ -2429,8 +2435,12 @@
     <string name="hide_library_new_playlist_tap_label_subtitle">Hides only “Tap to create”; the new-playlist card and its action remain available. On by default.</string>
     <string name="playlist_playback_speed_override">Playlist playback speed</string>
     <string name="playlist_playback_speed_override_subtitle">Override the app playback speed for this playlist. When off, the app speed is used.</string>
+    <string name="playlist_skip_silence_override">Playlist silence-skip override</string>
+    <string name="playlist_skip_silence_override_subtitle">Use a separate silence-skip choice for this playlist. It does not change the app-wide setting.</string>
     <string name="playlist_playback_settings_artwork_color">Color playlist playback settings from artwork</string>
     <string name="playlist_playback_settings_artwork_color_subtitle">Use this playlist’s album-art colors for its playback settings dialog. On by default.</string>
     <string name="center_artist_detail_name">Center artist name on artist page</string>
     <string name="center_artist_detail_name_subtitle">Center the artist name over the full-screen artist artwork. On by default.</string>
+    <string name="artist_detail_most_played_label_as_tracks">Show “Tracks” instead of “Top songs”</string>
+    <string name="artist_detail_most_played_label_as_tracks_subtitle">Rename the artist detail page’s frequently played section to the general tracks label. On by default.</string>
 </resources>

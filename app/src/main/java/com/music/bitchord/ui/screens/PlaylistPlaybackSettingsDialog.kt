@@ -96,6 +96,21 @@ fun PlaylistPlaybackSettingsDialog(playlist: LocalPlaylist, onDismiss: () -> Uni
                     }
 
                     PlaylistSettingToggle(
+                        title = stringResource(R.string.playlist_skip_silence_override),
+                        subtitle = stringResource(R.string.playlist_skip_silence_override_subtitle),
+                        checked = profile.skipSilenceOverride,
+                        onCheckedChange = { profile = profile.copy(skipSilenceOverride = it) },
+                    )
+                    if (profile.skipSilenceOverride) {
+                        PlaylistSettingToggle(
+                            title = stringResource(R.string.skip_silence),
+                            subtitle = stringResource(R.string.skip_silence_subtitle),
+                            checked = profile.skipSilenceEnabled,
+                            onCheckedChange = { profile = profile.copy(skipSilenceEnabled = it) },
+                        )
+                    }
+
+                    PlaylistSettingToggle(
                         title = stringResource(R.string.playlist_crossfade_override),
                         subtitle = stringResource(R.string.playlist_crossfade_override_subtitle),
                         checked = profile.crossfadeOverride,

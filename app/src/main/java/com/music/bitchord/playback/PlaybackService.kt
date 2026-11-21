@@ -1007,6 +1007,7 @@ class PlaybackService : MediaLibraryService() {
             // The player this fired on, which is by definition the one the
             // session is currently pointed at.
             val exoPlayer = player ?: return
+            applySkipSilenceFor(exoPlayer, mediaItem)
             if (suppressRestoredTrackTransition != null) {
                 if (mediaItem?.mediaId == suppressRestoredTrackTransition) {
                     suppressRestoredTrackTransition = null
@@ -2325,6 +2326,7 @@ class PlaybackService : MediaLibraryService() {
                 )?.takeIf { it.crossfadeOverride }?.crossfadeDurationMs
         },
         playbackSpeedFor = ::effectivePlaybackSpeed,
+        skipSilenceFor = ::effectiveSkipSilence,
     )
 
     /** Moves the session onto the already-playing incoming decoder at mid-fade. */
@@ -5118,7 +5120,7 @@ class PlaybackService : MediaLibraryService() {
         configureDarOutputCapabilities(chain.darUpsampler)
         applyVolumeBoost(chain)
         applyAudioOffloadPreference(player)
-        player.skipSilenceEnabled = AppSettings.skipSilence.value && !bitPerfect
+        player.skipSilenceEnabled = effectiveSkipSilence(player.currentMediaItem)
         chain.resampler.cutoffHz = if (bitPerfect) 0 else AppSettings.resamplerCutoffHz.value
         chain.spatial.enabled = !bitPerfect && AppSettings.spatialAudio.value
         chain.parametricEq.setConfig(
@@ -5148,6 +5150,18 @@ class PlaybackService : MediaLibraryService() {
             ?.playbackSpeed
             ?.coerceIn(0.1f, 10f)
             ?: AppSettings.playbackSpeed.value
+    }
+
+    private fun effectiveSkipSilence(item: MediaItem?): Boolean {
+        if (BitPerfectOutput.ready.value) return false
+        val playlistId = item?.mediaMetadata?.extras?.getString(EXTRA_PLAYLIST_PROFILE_ID)
+        val profile = PlaylistPlaybackSettings.profileFor(playlistId)
+            ?.takeIf { it.skipSilenceOverride }
+        return profile?.skipSilenceEnabled ?: AppSettings.skipSilence.value
+    }
+
+    private fun applySkipSilenceFor(target: ExoPlayer, item: MediaItem? = target.currentMediaItem) {
+        target.skipSilenceEnabled = effectiveSkipSilence(item)
     }
 
     private fun applyPlaybackParameters(
@@ -5512,9 +5526,12 @@ class PlaybackService : MediaLibraryService() {
                 }
         }
         scope.launch {
-            AppSettings.skipSilence.collect { on ->
-                eachPlayer { it.skipSilenceEnabled = on && !BitPerfectOutput.ready.value }
-            }
+            combine(
+                AppSettings.skipSilence,
+                PlaylistPlaybackSettings.revision,
+                BitPerfectOutput.ready,
+            ) { _, _, _ -> Unit }
+                .collect { eachPlayer(::applySkipSilenceFor) }
         }
         scope.launch {
             combine(
@@ -5565,7 +5582,7 @@ class PlaybackService : MediaLibraryService() {
                 applyVolumeBoost(activeAudioChain)
                 applyVolumeBoost(spareAudioChain)
                 eachPlayer { current ->
-                    current.skipSilenceEnabled = AppSettings.skipSilence.value && !enabled
+                    applySkipSilenceFor(current)
                     applyPlaybackParameters(current, enabled)
                 }
                 val effectiveCutoff = if (enabled) 0 else AppSettings.resamplerCutoffHz.value

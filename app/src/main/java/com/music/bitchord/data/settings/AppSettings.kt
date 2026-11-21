@@ -238,6 +238,13 @@ enum class LocalLibraryTab { SONGS, ALBUMS, ARTISTS, FOLDERS, PLAYLISTS, ALBUM_A
 /** Filter destinations shown in the Library header, independent of the always-visible All destination. */
 enum class LibraryCategory { FAVORITES, PLAYLISTS, YOUTUBE_MUSIC, YOUTUBE_DOWNLOADS, MOST_PLAYED, RECENTLY_PLAYED, REPLAY }
 
+/** Actions shown above a playlist's tracks. Their order is user configurable. */
+enum class PlaylistDetailActionButton {
+    SHUFFLE, PLAY, VIEW_TYPE, REORDER, SAVE_TO_LIBRARY, PLAYBACK_SETTINGS, MORE,
+}
+
+val DEFAULT_PLAYLIST_DETAIL_ACTION_ORDER = PlaylistDetailActionButton.entries.toList()
+
 /**
  * What to keep when a track is saved to the device.
  *
@@ -1373,6 +1380,9 @@ object AppSettings {
     /** Last folder is device-local because paths and storage permissions are device-specific. */
     val lastOpenedFolderPath = MutableStateFlow("")
     val fullScreenCollectionArtwork = MutableStateFlow(true)
+    /** Keeps the full-resolution cover for playlist art pages in app-private persistent storage. */
+    val persistentPlaylistArtwork = MutableStateFlow(true)
+    val playlistDetailActionOrder = MutableStateFlow(DEFAULT_PLAYLIST_DETAIL_ACTION_ORDER)
     /** Enables creation of rule-based local smart playlists; kept opt-in. */
     val smartPlaylistsEnabled = MutableStateFlow(false)
     /** On wide layouts, replaces the left page with synced lyrics beside the docked player. */
@@ -1401,6 +1411,8 @@ object AppSettings {
     val showArtistOverview = MutableStateFlow(true)
     /** Centers the artist name in the artist detail hero. */
     val centerArtistDetailName = MutableStateFlow(true)
+    /** Labels the artist-page top-song shelf as the general track list by default. */
+    val artistDetailMostPlayedLabelAsTracks = MutableStateFlow(true)
     /** Hides subscriber and monthly-listener counts without hiding the artist description. */
     val hideArtistAudienceStats = MutableStateFlow(false)
     val localMusicViewType = MutableStateFlow(LibraryViewType.LIST)
@@ -1973,6 +1985,7 @@ object AppSettings {
         mainNavigationTabsPopup.value = prefs.getBoolean(KEY_MAIN_NAVIGATION_TABS_POPUP, false)
         visibleLocalLibraryTabs.value = readVisibleLocalLibraryTabs()
         localLibraryTabOrder.value = readLocalLibraryTabOrder()
+        playlistDetailActionOrder.value = readPlaylistDetailActionOrder()
         visibleLibraryCategories.value = readVisibleLibraryCategories()
         libraryCategoryOrder.value = readLibraryCategoryOrder()
         visibleMainNavigationTabs.value = readVisibleMainNavigationTabs()
@@ -2236,6 +2249,7 @@ object AppSettings {
             webdavUrl.value, webdavUsername.value, webdavPassword.value,
         )
         fullScreenCollectionArtwork.value = prefs.getBoolean(KEY_FULL_SCREEN_COLLECTION_ARTWORK, true)
+        persistentPlaylistArtwork.value = prefs.getBoolean(KEY_PERSISTENT_PLAYLIST_ARTWORK, true)
         smartPlaylistsEnabled.value = prefs.getBoolean(KEY_SMART_PLAYLISTS_ENABLED, false)
         tabletFullscreenPlayer.value = prefs.getBoolean(KEY_TABLET_LYRICS_BESIDE_PLAYER, false)
         savedYoutubeCollections.value = readSavedYoutubeCollections()
@@ -2253,6 +2267,7 @@ object AppSettings {
         showArtistRecommendations.value = prefs.getBoolean(KEY_SHOW_ARTIST_RECOMMENDATIONS, true)
         showArtistOverview.value = prefs.getBoolean(KEY_SHOW_ARTIST_OVERVIEW, true)
         centerArtistDetailName.value = prefs.getBoolean(KEY_CENTER_ARTIST_DETAIL_NAME, true)
+        artistDetailMostPlayedLabelAsTracks.value = prefs.getBoolean(KEY_ARTIST_DETAIL_MOST_PLAYED_LABEL_AS_TRACKS, true)
         hideArtistAudienceStats.value = prefs.getBoolean(KEY_HIDE_ARTIST_AUDIENCE_STATS, false)
         downloadedMusicViewType.value = readLibraryViewType(KEY_DOWNLOADED_MUSIC_VIEW_TYPE, LibraryViewType.LIST)
         downloadedSongsViewType.value = readLibraryViewType(KEY_DOWNLOADED_SONGS_VIEW_TYPE, downloadedMusicViewType.value)
@@ -3568,6 +3583,14 @@ object AppSettings {
         return (stored + LibraryCategory.entries.filterNot { it in stored }).distinct()
     }
 
+    private fun readPlaylistDetailActionOrder(): List<PlaylistDetailActionButton> {
+        val stored = prefs.getString(KEY_PLAYLIST_DETAIL_ACTION_ORDER, null)
+            ?.split(',')
+            ?.mapNotNull { name -> PlaylistDetailActionButton.entries.firstOrNull { it.name == name } }
+            .orEmpty()
+        return (stored + DEFAULT_PLAYLIST_DETAIL_ACTION_ORDER.filterNot { it in stored }).distinct()
+    }
+
     fun setLibraryCategoryVisible(category: LibraryCategory, visible: Boolean) {
         val current = visibleLibraryCategories.value
         val updated = if (visible) current + category else current - category
@@ -3585,6 +3608,17 @@ object AppSettings {
         val updated = current.toMutableList().apply { add(to, removeAt(from)) }
         libraryCategoryOrder.value = updated
         prefs.edit().putString(KEY_LIBRARY_CATEGORY_ORDER, updated.joinToString(",") { it.name }).apply()
+    }
+
+    fun movePlaylistDetailAction(action: PlaylistDetailActionButton, offset: Int) {
+        val current = playlistDetailActionOrder.value
+        val from = current.indexOf(action)
+        if (from < 0 || offset !in -1..1) return
+        val to = (from + offset).coerceIn(0, current.lastIndex)
+        if (from == to) return
+        val updated = current.toMutableList().apply { add(to, removeAt(from)) }
+        playlistDetailActionOrder.value = updated
+        prefs.edit().putString(KEY_PLAYLIST_DETAIL_ACTION_ORDER, updated.joinToString(",") { it.name }).apply()
     }
 
     fun setShowStatusBar(value: Boolean) {
@@ -5058,6 +5092,16 @@ object AppSettings {
         prefs.edit().putBoolean(KEY_FULL_SCREEN_COLLECTION_ARTWORK, value).apply()
     }
 
+    fun setPersistentPlaylistArtwork(value: Boolean) {
+        persistentPlaylistArtwork.value = value
+        prefs.edit().putBoolean(KEY_PERSISTENT_PLAYLIST_ARTWORK, value).apply()
+    }
+
+    fun setArtistDetailMostPlayedLabelAsTracks(value: Boolean) {
+        artistDetailMostPlayedLabelAsTracks.value = value
+        prefs.edit().putBoolean(KEY_ARTIST_DETAIL_MOST_PLAYED_LABEL_AS_TRACKS, value).apply()
+    }
+
     fun setSmartPlaylistsEnabled(value: Boolean) {
         smartPlaylistsEnabled.value = value
         prefs.edit().putBoolean(KEY_SMART_PLAYLISTS_ENABLED, value).apply()
@@ -5795,6 +5839,8 @@ object AppSettings {
     private const val KEY_SMB_USERNAME = "smb_username"
     private const val KEY_SMB_PASSWORD = "smb_password"
     private const val KEY_FULL_SCREEN_COLLECTION_ARTWORK = "full_screen_collection_artwork"
+    private const val KEY_PERSISTENT_PLAYLIST_ARTWORK = "persistent_playlist_artwork"
+    private const val KEY_PLAYLIST_DETAIL_ACTION_ORDER = "playlist_detail_action_order"
     private const val KEY_SMART_PLAYLISTS_ENABLED = "smart_playlists_enabled"
     private const val KEY_HIDE_COLLECTION_TOP_BAR = "hide_collection_top_bar"
     private const val KEY_HIDE_FLOATING_COLLECTION_CONTROLS = "hide_floating_collection_controls"
@@ -5808,6 +5854,7 @@ object AppSettings {
     private const val KEY_SHOW_ARTIST_RECOMMENDATIONS = "show_artist_recommendations"
     private const val KEY_SHOW_ARTIST_OVERVIEW = "show_artist_overview"
     private const val KEY_CENTER_ARTIST_DETAIL_NAME = "center_artist_detail_name"
+    private const val KEY_ARTIST_DETAIL_MOST_PLAYED_LABEL_AS_TRACKS = "artist_detail_most_played_label_as_tracks"
     private const val KEY_HIDE_ARTIST_AUDIENCE_STATS = "hide_artist_audience_stats"
     private const val KEY_LIBRARY_SORT = "library_sort"
     private const val KEY_ARTIST_SLASH_SEPARATORS = "artist_slash_separators"
