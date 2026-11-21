@@ -1291,6 +1291,7 @@ fun LibraryScreen(
                         onArtistClick = onOpenArtistPage,
                         // Favorites use the same saved, draggable song ordering as a playlist.
                         isPlaylist = visibleDrillDownPlaylistId != null || visibleDrillDownIsFavorites,
+                        prefetchLocalPlaylistAudio = visibleDrillDownPlaylistId != null,
                         showArtworkInList = showPlaylistSongArtwork,
                         showCollectionArtworkInList = visibleDrillDownPlaylistId == null && showCollectionSongArtwork,
                         fullScreenArtwork = fullScreenCollectionArtwork,

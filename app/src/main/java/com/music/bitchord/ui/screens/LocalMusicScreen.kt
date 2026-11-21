@@ -1133,6 +1133,7 @@ fun LocalMusicScreen(
                             songs = drillDownSongs,
                             isArtist = drillDownIsArtist,
                             isPlaylist = drillDownPlaylistId != null,
+                            prefetchLocalPlaylistAudio = drillDownPlaylistId != null,
                             showCollectionArtworkInList = showCollectionSongArtwork &&
                                 drillDownPlaylistId == null && (drillDownIsArtist || drillDownFullScreenArtwork),
                             preserveArtworkAspectRatioInCollections =

@@ -100,6 +100,8 @@ import coil3.request.ImageRequest
 import coil3.request.transformations
 import androidx.compose.ui.platform.LocalContext
 import kotlinx.coroutines.flow.distinctUntilChanged
+import kotlinx.coroutines.flow.collectLatest
+import kotlinx.coroutines.delay
 import java.util.Locale
 import com.music.bitchord.R
 import com.music.bitchord.data.model.CARD_ART_PX
@@ -138,6 +140,7 @@ import com.music.bitchord.ui.icons.BitChordIcons
 import com.music.bitchord.ui.theme.ArtworkPalette
 import com.music.bitchord.ui.theme.pageBackgroundColor
 import com.music.bitchord.ui.theme.rememberArtworkPalette
+import com.music.bitchord.playback.LocalAudioHeaderPrefetcher
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import kotlin.math.abs
 import kotlin.math.roundToInt
@@ -753,6 +756,7 @@ fun DrillDownSongList(
     onToggleLibrary: (() -> Unit)? = null,
     isPlaylist: Boolean = false,
     isCollectionDetail: Boolean = true,
+    prefetchLocalPlaylistAudio: Boolean = false,
     showHistoryArtworkCollage: Boolean = false,
     showArtworkInList: Boolean = false,
     showCollectionArtworkInList: Boolean = false,
@@ -772,6 +776,7 @@ fun DrillDownSongList(
     onRootListScrollOffsetChanged: ((Float) -> Unit)? = null,
     modifier: Modifier = Modifier,
 ) {
+    val prefetchContext = LocalContext.current.applicationContext
     val folderArtworkFallbackMode by AppSettings.folderArtworkFallbackMode.collectAsStateWithLifecycle()
     val hideUnknownPlaylistArtist by AppSettings.hideUnknownPlaylistArtist.collectAsStateWithLifecycle()
     val artworkRequestPx = if (fullScreenArtwork) FULL_SCREEN_COLLECTION_ART_PX else HEADER_ART_PX
@@ -849,6 +854,29 @@ fun DrillDownSongList(
 
     if (viewType == LibraryViewType.GRID) {
         val gridState = rememberLazyGridState()
+        if (prefetchLocalPlaylistAudio) {
+            LaunchedEffect(prefetchContext, gridState, songs, collectionHeaderItemCount) {
+                snapshotFlow {
+                    val visibleIndexes = gridState.layoutInfo.visibleItemsInfo
+                        .asSequence()
+                        .map { it.index - collectionHeaderItemCount }
+                        .filter { it in songs.indices }
+                        .toList()
+                    (listOfNotNull(0.takeIf { songs.isNotEmpty() }) + visibleIndexes)
+                        .distinct()
+                        .filter { index -> songs.getOrNull(index)?.let(LocalAudioHeaderPrefetcher::canPrefetch) == true }
+                        .take(LocalAudioHeaderPrefetcher.MAX_TRACKS_PER_PASS)
+                }
+                    .distinctUntilChanged()
+                    .collectLatest { indexes ->
+                        delay(300L)
+                        LocalAudioHeaderPrefetcher.prefetch(
+                            prefetchContext,
+                            indexes.mapNotNull(songs::getOrNull),
+                        )
+                    }
+            }
+        }
         LaunchedEffect(gridState, rootListScrollThresholdPx) {
             snapshotFlow {
                 gridState.firstVisibleItemIndex > 0 ||
@@ -1013,6 +1041,31 @@ fun DrillDownSongList(
                 .collect { rootListScrollOffsetCallback.value?.invoke(it) }
         }
         var displayedSongs by remember(songs) { mutableStateOf(songs) }
+        if (prefetchLocalPlaylistAudio) {
+            LaunchedEffect(prefetchContext, listState, displayedSongs, collectionHeaderItemCount) {
+                snapshotFlow {
+                    val visibleIndexes = listState.layoutInfo.visibleItemsInfo
+                        .asSequence()
+                        .map { it.index - collectionHeaderItemCount }
+                        .filter { it in displayedSongs.indices }
+                        .toList()
+                    (listOfNotNull(0.takeIf { displayedSongs.isNotEmpty() }) + visibleIndexes)
+                        .distinct()
+                        .filter { index ->
+                            displayedSongs.getOrNull(index)?.let(LocalAudioHeaderPrefetcher::canPrefetch) == true
+                        }
+                        .take(LocalAudioHeaderPrefetcher.MAX_TRACKS_PER_PASS)
+                }
+                    .distinctUntilChanged()
+                    .collectLatest { indexes ->
+                        delay(300L)
+                        LocalAudioHeaderPrefetcher.prefetch(
+                            prefetchContext,
+                            indexes.mapNotNull(displayedSongs::getOrNull),
+                        )
+                    }
+            }
+        }
         val dragState = rememberPlaylistSongDragState(listState, displayedSongs.size) { from, to, draggedKey, insertAfter, groupedKeys ->
             val current = displayedSongs
             if (from !in current.indices || to !in current.indices || from == to) return@rememberPlaylistSongDragState null
