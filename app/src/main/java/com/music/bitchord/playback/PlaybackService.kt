@@ -2315,6 +2315,7 @@ class PlaybackService : MediaLibraryService() {
             spareAudioChain.replayGain.blendTrim = trim
         },
         versionSwapActive = { false },
+        onSettled = { eachPlayer { applyPlaybackParameters(it) } },
         trackCrossfadeDurationMs = { item ->
             TrackPlaybackSettings.profileFor(item.mediaId)
                 ?.takeIf { it.crossfadeOverride }
@@ -2323,6 +2324,7 @@ class PlaybackService : MediaLibraryService() {
                     item.mediaMetadata.extras?.getString(EXTRA_PLAYLIST_PROFILE_ID),
                 )?.takeIf { it.crossfadeOverride }?.crossfadeDurationMs
         },
+        playbackSpeedFor = ::effectivePlaybackSpeed,
     )
 
     /** Moves the session onto the already-playing incoming decoder at mid-fade. */
@@ -2668,6 +2670,7 @@ class PlaybackService : MediaLibraryService() {
     ) {
         val exoPlayer = player ?: return
         if (exoPlayer.currentMediaItem?.toSong()?.isHeadphoneBurnIn == true) return
+        if (crossfade?.isTransitioning() != true) applyPlaybackParameters(exoPlayer)
         ABRepeatController.clearForDifferentTrack(mediaItem?.mediaId)
         resetCurrentLocalPlayStatsForTrackChange()
         if (alreadyAudible) {
@@ -5124,10 +5127,7 @@ class PlaybackService : MediaLibraryService() {
             bypassAll = bitPerfect,
         )
         chain.parametricEq.setTpdfDitherEnabled(AppSettings.tpdfDitherEnabled.value)
-        player.playbackParameters = PlaybackParameters(
-            if (bitPerfect) 1f else AppSettings.playbackSpeed.value,
-            if (bitPerfect) 1f else AppSettings.playbackPitch.value,
-        )
+        applyPlaybackParameters(player, bitPerfect)
         // Restore persisted shuffle and repeat states on startup.
         if (AppSettings.shuffleEnabled.value) {
             QueueShuffle.setEnabled(true)
@@ -5139,6 +5139,26 @@ class PlaybackService : MediaLibraryService() {
         chain.replayGain.volumeBoostDb = if (
             !BitPerfectOutput.ready.value && AppSettings.volumeBoostEnabled.value
         ) AppSettings.volumeBoostDb.value else 0f
+    }
+
+    private fun effectivePlaybackSpeed(item: MediaItem?): Float {
+        val playlistId = item?.mediaMetadata?.extras?.getString(EXTRA_PLAYLIST_PROFILE_ID)
+        return PlaylistPlaybackSettings.profileFor(playlistId)
+            ?.takeIf { it.speedOverride }
+            ?.playbackSpeed
+            ?.coerceIn(0.1f, 10f)
+            ?: AppSettings.playbackSpeed.value
+    }
+
+    private fun applyPlaybackParameters(
+        target: ExoPlayer,
+        bitPerfect: Boolean = BitPerfectOutput.ready.value,
+    ) {
+        target.playbackParameters = if (bitPerfect) {
+            PlaybackParameters(1f, 1f)
+        } else {
+            PlaybackParameters(effectivePlaybackSpeed(target.currentMediaItem), AppSettings.playbackPitch.value)
+        }
     }
 
     /**
@@ -5546,10 +5566,7 @@ class PlaybackService : MediaLibraryService() {
                 applyVolumeBoost(spareAudioChain)
                 eachPlayer { current ->
                     current.skipSilenceEnabled = AppSettings.skipSilence.value && !enabled
-                    current.playbackParameters = if (enabled) PlaybackParameters(1f, 1f) else PlaybackParameters(
-                        AppSettings.playbackSpeed.value,
-                        AppSettings.playbackPitch.value,
-                    )
+                    applyPlaybackParameters(current, enabled)
                 }
                 val effectiveCutoff = if (enabled) 0 else AppSettings.resamplerCutoffHz.value
                 activeAudioChain.resampler.cutoffHz = effectiveCutoff
@@ -5622,13 +5639,16 @@ class PlaybackService : MediaLibraryService() {
             AppSettings.outputPcmMode.drop(1).collect { requestOutputReconfiguration() }
         }
         scope.launch {
-            // Keep speed and pitch together. At present the player has no
-            // secondary speed writer; combine also ensures changing one slider
-            // never resets the other parameter back to 1.0.
-            combine(AppSettings.playbackSpeed, AppSettings.playbackPitch, BitPerfectOutput.ready) { speed, pitch, bitPerfect ->
-                if (bitPerfect) PlaybackParameters(1f, 1f) else PlaybackParameters(speed, pitch)
-            }.collect { parameters ->
-                eachPlayer { it.playbackParameters = parameters }
+            // Keep speed and pitch together. During an overlap, the transition
+            // controller owns tempo ratios and restores each deck's playlist
+            // speed once the handoff settles.
+            combine(
+                AppSettings.playbackSpeed,
+                AppSettings.playbackPitch,
+                BitPerfectOutput.ready,
+                PlaylistPlaybackSettings.revision,
+            ) { _, _, _, _ -> Unit }.collect {
+                if (crossfade?.isTransitioning() != true) eachPlayer { applyPlaybackParameters(it) }
             }
         }
         scope.launch {

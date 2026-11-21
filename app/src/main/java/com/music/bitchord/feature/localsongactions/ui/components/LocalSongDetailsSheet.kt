@@ -181,7 +181,10 @@ fun LocalSongDetailsSheet(
                         .navigationBarsPadding(),
                     contentPadding = PaddingValues(
                         start = 20.dp,
-                        top = if (showPlayerActions) 16.dp else 0.dp,
+                        // Playlist-row detail sheets use the normal Material
+                        // drag handle too; start the artwork below it so the
+                        // cover never touches the sheet's upper edge.
+                        top = if (showPlayerActions) 20.dp else 24.dp,
                         end = 20.dp,
                         bottom = 24.dp,
                     ),

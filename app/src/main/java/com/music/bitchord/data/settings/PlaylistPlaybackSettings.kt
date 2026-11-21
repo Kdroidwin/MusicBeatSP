@@ -14,6 +14,8 @@ import java.security.MessageDigest
 data class PlaylistPlaybackProfile(
     val crossfadeOverride: Boolean = false,
     val crossfadeDurationMs: Int = 0,
+    val speedOverride: Boolean = false,
+    val playbackSpeed: Float = 1.0f,
     val eqOverride: Boolean = false,
     val eqEnabled: Boolean = true,
     val eqBandCount: Int = DEFAULT_EQ_BAND_COUNT,
@@ -74,6 +76,7 @@ object PlaylistPlaybackSettings {
         val safeDuration = profile.crossfadeDurationMs.coerceIn(0, AppSettings.MAX_CROSSFADE_DURATION_MS)
         val safe = profile.copy(
             crossfadeDurationMs = AppSettings.crossfadeDurationOptionsMs.minByOrNull { kotlin.math.abs(it - safeDuration) } ?: 0,
+            playbackSpeed = profile.playbackSpeed.coerceIn(0.1f, 10f),
             eqBandCount = profile.eqBandCount.coerceIn(1, MAX_EQ_BANDS),
             eqBandGainsCentiDb = (0 until MAX_EQ_BANDS).map { index ->
                 profile.eqBandGainsCentiDb.getOrNull(index)?.coerceIn(-1_500, 1_500) ?: 0
@@ -101,6 +104,8 @@ object PlaylistPlaybackSettings {
             put(key, JSONObject().apply {
                 put("crossfadeOverride", profile.crossfadeOverride)
                 put("crossfadeMs", profile.crossfadeDurationMs)
+                put("speedOverride", profile.speedOverride)
+                put("playbackSpeed", profile.playbackSpeed.coerceIn(0.1f, 10f).toDouble())
                 put("eqOverride", profile.eqOverride)
                 put("eqEnabled", profile.eqEnabled)
                 put("eqBandCount", profile.eqBandCount)
@@ -121,6 +126,8 @@ object PlaylistPlaybackSettings {
             decoded[key] = PlaylistPlaybackProfile(
                 crossfadeOverride = row.optBoolean("crossfadeOverride", false),
                 crossfadeDurationMs = row.optInt("crossfadeMs", 0).coerceIn(0, AppSettings.MAX_CROSSFADE_DURATION_MS),
+                speedOverride = row.optBoolean("speedOverride", false),
+                playbackSpeed = row.optDouble("playbackSpeed", 1.0).toFloat().coerceIn(0.1f, 10f),
                 eqOverride = row.optBoolean("eqOverride", false),
                 eqEnabled = row.optBoolean("eqEnabled", true),
                 eqBandCount = row.optInt("eqBandCount", PlaylistPlaybackProfile.DEFAULT_EQ_BAND_COUNT).coerceIn(1, MAX_EQ_BANDS),

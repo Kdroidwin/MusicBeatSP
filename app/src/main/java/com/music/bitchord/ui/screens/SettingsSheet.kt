@@ -754,6 +754,7 @@ private fun resetDeezerArtistArtwork(context: Context) {
 private fun additionalArtworkSettingsSearchEntries(
     playerPopupsUseArtworkColor: Boolean,
     playerMenusUsePlayerBackgroundColor: Boolean,
+    playlistPlaybackSettingsUseArtworkColor: Boolean,
     hidePlayerPopupHandles: Boolean,
     hideUnknownMiniPlayerArtist: Boolean,
     queueHeadingMusicNoteIcon: Boolean,
@@ -764,6 +765,7 @@ private fun additionalArtworkSettingsSearchEntries(
     showLocalArtistSections: Boolean,
     showArtistRecommendations: Boolean,
     showArtistOverview: Boolean,
+    centerArtistDetailName: Boolean,
     hideArtistAudienceStats: Boolean,
     onChoosePlayerArtistPageMode: () -> Unit,
     folderArtworkFallbackLabel: String,
@@ -776,6 +778,12 @@ private fun additionalArtworkSettingsSearchEntries(
         listOf("player", "popup", "artwork", "color", "プレーヤー", "ポップアップ", "アルバムアート", "色"),
         playerPopupsUseArtworkColor,
     ) { AppSettings.setPlayerPopupsUseArtworkColor(!playerPopupsUseArtworkColor) },
+    SettingsSearchEntry(
+        stringResource(R.string.playlist_playback_settings_artwork_color),
+        stringResource(R.string.playlist_playback_settings_artwork_color_subtitle),
+        listOf("playlist", "playback", "settings", "popup", "album art", "color", "プレイリスト", "再生設定", "ポップアップ", "アルバムアート", "色"),
+        playlistPlaybackSettingsUseArtworkColor,
+    ) { AppSettings.setPlaylistPlaybackSettingsUseArtworkColor(!playlistPlaybackSettingsUseArtworkColor) },
     SettingsSearchEntry(
         stringResource(R.string.player_menus_player_background_color),
         stringResource(R.string.player_menus_player_background_color_subtitle),
@@ -837,6 +845,12 @@ private fun additionalArtworkSettingsSearchEntries(
         listOf("artist", "overview", "about", "description", "アーティスト", "概要", "説明"),
         showArtistOverview,
     ) { AppSettings.setShowArtistOverview(!showArtistOverview) },
+    SettingsSearchEntry(
+        stringResource(R.string.center_artist_detail_name),
+        stringResource(R.string.center_artist_detail_name_subtitle),
+        listOf("artist", "detail", "name", "center", "alignment", "アーティスト", "詳細", "名前", "中央揃え"),
+        centerArtistDetailName,
+    ) { AppSettings.setCenterArtistDetailName(!centerArtistDetailName) },
     SettingsSearchEntry(
         stringResource(R.string.hide_artist_audience_stats),
         stringResource(R.string.hide_artist_audience_stats_subtitle),
@@ -1823,6 +1837,7 @@ fun SettingsScreen(
     val showLocalArtistSections by AppSettings.showLocalArtistSections.collectAsStateWithLifecycle()
     val showArtistRecommendations by AppSettings.showArtistRecommendations.collectAsStateWithLifecycle()
     val showArtistOverview by AppSettings.showArtistOverview.collectAsStateWithLifecycle()
+    val centerArtistDetailName by AppSettings.centerArtistDetailName.collectAsStateWithLifecycle()
     val hideArtistAudienceStats by AppSettings.hideArtistAudienceStats.collectAsStateWithLifecycle()
     val playerArtistPageModeLabel = stringResource(
         when (playerArtistPageMode) {
@@ -1991,6 +2006,7 @@ fun SettingsScreen(
     val miniPlayerSwipeUpExpands by AppSettings.miniPlayerSwipeUpExpands.collectAsStateWithLifecycle()
     val miniPlayerSwipeDownDismisses by AppSettings.miniPlayerSwipeDownDismisses.collectAsStateWithLifecycle()
     val playlistTrackMenuUsesArtworkColor by AppSettings.playlistTrackMenuUsesArtworkColor.collectAsStateWithLifecycle()
+    val playlistPlaybackSettingsUseArtworkColor by AppSettings.playlistPlaybackSettingsUseArtworkColor.collectAsStateWithLifecycle()
     val playerTitleFontSizeSp by AppSettings.playerTitleFontSizeSp.collectAsStateWithLifecycle()
     val playerArtistFontSizeSp by AppSettings.playerArtistFontSizeSp.collectAsStateWithLifecycle()
     val playerPlayPauseIconSizeDp by AppSettings.playerPlayPauseIconSizeDp.collectAsStateWithLifecycle()
@@ -3232,6 +3248,7 @@ fun SettingsScreen(
         additionalArtworkSettingsSearchEntries(
             playerPopupsUseArtworkColor = playerPopupsUseArtworkColor,
             playerMenusUsePlayerBackgroundColor = playerMenusUsePlayerBackgroundColor,
+            playlistPlaybackSettingsUseArtworkColor = playlistPlaybackSettingsUseArtworkColor,
             hidePlayerPopupHandles = hidePlayerPopupHandles,
             hideUnknownMiniPlayerArtist = hideUnknownMiniPlayerArtist,
             queueHeadingMusicNoteIcon = queueHeadingMusicNoteIcon,
@@ -3242,6 +3259,7 @@ fun SettingsScreen(
             showLocalArtistSections = showLocalArtistSections,
             showArtistRecommendations = showArtistRecommendations,
             showArtistOverview = showArtistOverview,
+            centerArtistDetailName = centerArtistDetailName,
             hideArtistAudienceStats = hideArtistAudienceStats,
             onChoosePlayerArtistPageMode = { showPlayerArtistPageModeDialog = true },
             folderArtworkFallbackLabel = stringResource(
@@ -6286,6 +6304,25 @@ fun SettingsScreen(
             )
             RowDivider()
             SettingsRow(
+                icon = Icons.Rounded.AutoAwesome,
+                title = stringResource(R.string.playlist_playback_settings_artwork_color),
+                subtitle = stringResource(R.string.playlist_playback_settings_artwork_color_subtitle),
+                trailing = {
+                    Switch(
+                        checked = playlistPlaybackSettingsUseArtworkColor,
+                        onCheckedChange = AppSettings::setPlaylistPlaybackSettingsUseArtworkColor,
+                        colors = SwitchDefaults.colors(
+                            checkedTrackColor = MaterialTheme.colorScheme.primary,
+                            checkedBorderColor = MaterialTheme.colorScheme.primary,
+                        ),
+                    )
+                },
+                onClick = {
+                    AppSettings.setPlaylistPlaybackSettingsUseArtworkColor(!playlistPlaybackSettingsUseArtworkColor)
+                },
+            )
+            RowDivider()
+            SettingsRow(
                 icon = Icons.Rounded.BlurOn,
                 title = stringResource(R.string.frosted_queue_manager),
                 subtitle = stringResource(R.string.frosted_queue_manager_subtitle),
@@ -7880,6 +7917,7 @@ fun SettingsScreen(
             showLocalArtistSections = showLocalArtistSections,
             showArtistRecommendations = showArtistRecommendations,
             showArtistOverview = showArtistOverview,
+            centerArtistDetailName = centerArtistDetailName,
             hideArtistAudienceStats = hideArtistAudienceStats,
             filterNonMusicAudio = filterNonMusicAudio,
             showPlaylistSongArtwork = showPlaylistSongArtwork,
@@ -9880,6 +9918,7 @@ private fun LocalMusicSettingsGroup(
     showLocalArtistSections: Boolean,
     showArtistRecommendations: Boolean,
     showArtistOverview: Boolean,
+    centerArtistDetailName: Boolean,
     hideArtistAudienceStats: Boolean,
     filterNonMusicAudio: Boolean,
     showPlaylistSongArtwork: Boolean,
@@ -10171,6 +10210,19 @@ SettingsGroup(header = stringResource(R.string.local_music)) {
             )
         },
         onClick = { AppSettings.setShowArtistOverview(!showArtistOverview) },
+    )
+    RowDivider()
+    SettingsRow(
+        icon = Icons.Rounded.Person,
+        title = stringResource(R.string.center_artist_detail_name),
+        subtitle = stringResource(R.string.center_artist_detail_name_subtitle),
+        trailing = {
+            Switch(
+                checked = centerArtistDetailName,
+                onCheckedChange = AppSettings::setCenterArtistDetailName,
+            )
+        },
+        onClick = { AppSettings.setCenterArtistDetailName(!centerArtistDetailName) },
     )
     RowDivider()
     SettingsRow(

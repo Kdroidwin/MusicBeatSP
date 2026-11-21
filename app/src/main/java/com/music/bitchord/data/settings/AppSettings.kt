@@ -767,6 +767,8 @@ object AppSettings {
     val libraryGridPlaylistMenuUsesArtworkColor = MutableStateFlow(true)
     /** Uses the playlist page artwork palette for track menus opened inside it. */
     val playlistTrackMenuUsesArtworkColor = MutableStateFlow(true)
+    /** Uses the playlist artwork palette for its per-playlist playback settings dialog. */
+    val playlistPlaybackSettingsUseArtworkColor = MutableStateFlow(true)
     /** Optional typography overrides on the expanded player header, in scaled-independent units. */
     val playerTitleFontSizeSp = MutableStateFlow(20f)
     val playerArtistFontSizeSp = MutableStateFlow(20f)
@@ -1397,6 +1399,8 @@ object AppSettings {
     val showArtistRecommendations = MutableStateFlow(true)
     /** The artist overview remains visible unless explicitly hidden. */
     val showArtistOverview = MutableStateFlow(true)
+    /** Centers the artist name in the artist detail hero. */
+    val centerArtistDetailName = MutableStateFlow(true)
     /** Hides subscriber and monthly-listener counts without hiding the artist description. */
     val hideArtistAudienceStats = MutableStateFlow(false)
     val localMusicViewType = MutableStateFlow(LibraryViewType.LIST)
@@ -1839,6 +1843,7 @@ object AppSettings {
         customFontPath.value = prefs.getString(KEY_CUSTOM_FONT_PATH, "").orEmpty()
         customFontName.value = prefs.getString(KEY_CUSTOM_FONT_NAME, "").orEmpty()
         playlistTrackMenuUsesArtworkColor.value = prefs.getBoolean(KEY_PLAYLIST_TRACK_MENU_ARTWORK_COLOR, true)
+        playlistPlaybackSettingsUseArtworkColor.value = prefs.getBoolean(KEY_PLAYLIST_PLAYBACK_SETTINGS_ARTWORK_COLOR, true)
         playerTitleFontSizeSp.value = prefs.getFloat(KEY_PLAYER_TITLE_FONT_SIZE_SP, 20f).coerceIn(12f, 36f)
         playerArtistFontSizeSp.value = prefs.getFloat(KEY_PLAYER_ARTIST_FONT_SIZE_SP, 20f).coerceIn(12f, 36f)
         playerPlayPauseIconSizeDp.value = prefs.getFloat(KEY_PLAYER_PLAY_PAUSE_ICON_SIZE_DP, 62f).coerceIn(40f, 78f)
@@ -2247,6 +2252,7 @@ object AppSettings {
         showLocalArtistSections.value = prefs.getBoolean(KEY_SHOW_LOCAL_ARTIST_SECTIONS, true)
         showArtistRecommendations.value = prefs.getBoolean(KEY_SHOW_ARTIST_RECOMMENDATIONS, true)
         showArtistOverview.value = prefs.getBoolean(KEY_SHOW_ARTIST_OVERVIEW, true)
+        centerArtistDetailName.value = prefs.getBoolean(KEY_CENTER_ARTIST_DETAIL_NAME, true)
         hideArtistAudienceStats.value = prefs.getBoolean(KEY_HIDE_ARTIST_AUDIENCE_STATS, false)
         downloadedMusicViewType.value = readLibraryViewType(KEY_DOWNLOADED_MUSIC_VIEW_TYPE, LibraryViewType.LIST)
         downloadedSongsViewType.value = readLibraryViewType(KEY_DOWNLOADED_SONGS_VIEW_TYPE, downloadedMusicViewType.value)
@@ -2796,6 +2802,11 @@ object AppSettings {
     fun setPlaylistTrackMenuUsesArtworkColor(value: Boolean) {
         playlistTrackMenuUsesArtworkColor.value = value
         prefs.edit().putBoolean(KEY_PLAYLIST_TRACK_MENU_ARTWORK_COLOR, value).apply()
+    }
+
+    fun setPlaylistPlaybackSettingsUseArtworkColor(value: Boolean) {
+        playlistPlaybackSettingsUseArtworkColor.value = value
+        prefs.edit().putBoolean(KEY_PLAYLIST_PLAYBACK_SETTINGS_ARTWORK_COLOR, value).apply()
     }
 
     fun setPlayerTitleFontSizeSp(value: Float) {
@@ -5107,6 +5118,11 @@ object AppSettings {
         prefs.edit().putBoolean(KEY_SHOW_ARTIST_OVERVIEW, value).apply()
     }
 
+    fun setCenterArtistDetailName(value: Boolean) {
+        centerArtistDetailName.value = value
+        prefs.edit().putBoolean(KEY_CENTER_ARTIST_DETAIL_NAME, value).apply()
+    }
+
     fun setHideArtistAudienceStats(value: Boolean) {
         hideArtistAudienceStats.value = value
         prefs.edit().putBoolean(KEY_HIDE_ARTIST_AUDIENCE_STATS, value).apply()
@@ -5496,6 +5512,7 @@ object AppSettings {
     private const val KEY_CUSTOM_FONT_PATH = "custom_font_path"
     private const val KEY_CUSTOM_FONT_NAME = "custom_font_name"
     private const val KEY_PLAYLIST_TRACK_MENU_ARTWORK_COLOR = "playlist_track_menu_artwork_color"
+    private const val KEY_PLAYLIST_PLAYBACK_SETTINGS_ARTWORK_COLOR = "playlist_playback_settings_artwork_color"
     private const val KEY_PLAYER_TITLE_FONT_SIZE_SP = "player_title_font_size_sp"
     private const val KEY_PLAYER_ARTIST_FONT_SIZE_SP = "player_artist_font_size_sp"
     private const val KEY_PLAYER_PLAY_PAUSE_ICON_SIZE_DP = "player_play_pause_icon_size_dp"
@@ -5790,6 +5807,7 @@ object AppSettings {
     private const val KEY_SHOW_LOCAL_ARTIST_SECTIONS = "show_local_artist_sections"
     private const val KEY_SHOW_ARTIST_RECOMMENDATIONS = "show_artist_recommendations"
     private const val KEY_SHOW_ARTIST_OVERVIEW = "show_artist_overview"
+    private const val KEY_CENTER_ARTIST_DETAIL_NAME = "center_artist_detail_name"
     private const val KEY_HIDE_ARTIST_AUDIENCE_STATS = "hide_artist_audience_stats"
     private const val KEY_LIBRARY_SORT = "library_sort"
     private const val KEY_ARTIST_SLASH_SEPARATORS = "artist_slash_separators"

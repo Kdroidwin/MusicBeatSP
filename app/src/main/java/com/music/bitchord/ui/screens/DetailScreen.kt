@@ -112,6 +112,7 @@ fun DetailScreen(
     val songsState = page.songs
     val songs = (songsState as? UiState.Success)?.data.orEmpty()
     val showArtistOverview by AppSettings.showArtistOverview.collectAsStateWithLifecycle()
+    val centerArtistDetailName by AppSettings.centerArtistDetailName.collectAsStateWithLifecycle()
     val hideArtistAudienceStats by AppSettings.hideArtistAudienceStats.collectAsStateWithLifecycle()
     val showLocalArtistSections by AppSettings.showLocalArtistSections.collectAsStateWithLifecycle()
     val showArtistRecommendations by AppSettings.showArtistRecommendations.collectAsStateWithLifecycle()
@@ -153,6 +154,7 @@ fun DetailScreen(
                     title = page.title,
                     artHeight = artHeight,
                     palette = palette,
+                    centerTitle = centerArtistDetailName,
                     onPlay = { if (songs.isNotEmpty()) onSongClick(songs, 0) },
                     onShuffle = { if (songs.isNotEmpty()) onShuffle(songs) },
                     subscriptionLabel = subscriptionLabel,
@@ -366,6 +368,7 @@ private fun ArtistHero(
     title: String,
     artHeight: Dp,
     palette: ArtworkPalette,
+    centerTitle: Boolean,
     onPlay: () -> Unit,
     onShuffle: () -> Unit,
     subscriptionLabel: String?,
@@ -447,12 +450,14 @@ private fun ArtistHero(
             }
             Column(
                 modifier = Modifier.align(Alignment.BottomStart).fillMaxWidth().padding(PAGE_GUTTER),
-                horizontalAlignment = Alignment.Start,
+                horizontalAlignment = if (centerTitle) Alignment.CenterHorizontally else Alignment.Start,
             ) {
                 Text(
                     text = title,
                     style = MaterialTheme.typography.displaySmall.copy(fontWeight = FontWeight.Bold),
                     color = palette.onBackground,
+                    textAlign = if (centerTitle) androidx.compose.ui.text.style.TextAlign.Center else androidx.compose.ui.text.style.TextAlign.Start,
+                    modifier = Modifier.fillMaxWidth(),
                     maxLines = 2,
                     overflow = TextOverflow.Ellipsis,
                 )

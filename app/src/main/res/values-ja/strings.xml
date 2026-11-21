@@ -2400,4 +2400,10 @@
     <string name="scheduled_playlist_requires_permission">指定時刻に再生するには、正確なアラームの使用を許可してください。</string>
     <string name="hide_library_new_playlist_tap_label">新規プレイリストの案内を隠す</string>
     <string name="hide_library_new_playlist_tap_label_subtitle">「タップして作成」の文字だけを隠します。作成カードとタップ操作はそのままです。初期設定はONです。</string>
+    <string name="playlist_playback_speed_override">プレイリストごとの再生速度</string>
+    <string name="playlist_playback_speed_override_subtitle">このプレイリストだけ再生速度を上書きします。OFFではアプリ全体の速度を使います。</string>
+    <string name="playlist_playback_settings_artwork_color">再生設定のポップアップをアルバムアートの色に合わせる</string>
+    <string name="playlist_playback_settings_artwork_color_subtitle">このプレイリストの再生設定ダイアログにアルバムアートの色を使います。初期設定はONです。</string>
+    <string name="center_artist_detail_name">アーティスト詳細の名前を中央揃えにする</string>
+    <string name="center_artist_detail_name_subtitle">全画面アーティスト画像上の名前を中央に配置します。初期設定はONです。</string>
 </resources>
