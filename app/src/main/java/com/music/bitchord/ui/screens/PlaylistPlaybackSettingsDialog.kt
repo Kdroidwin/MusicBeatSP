@@ -8,6 +8,7 @@ import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.RadioButton
 import androidx.compose.material3.Slider
 import androidx.compose.material3.Switch
 import androidx.compose.material3.Text
@@ -27,6 +28,7 @@ import com.music.bitchord.R
 import com.music.bitchord.data.settings.AppSettings
 import com.music.bitchord.data.settings.PlaylistPlaybackProfile
 import com.music.bitchord.data.settings.PlaylistPlaybackSettings
+import com.music.bitchord.data.settings.PlayerArtworkMode
 import com.music.bitchord.feature.localmusic.domain.model.LocalPlaylist
 import com.music.bitchord.ui.theme.rememberArtworkPalette
 import java.util.Locale
@@ -74,6 +76,30 @@ fun PlaylistPlaybackSettingsDialog(playlist: LocalPlaylist, onDismiss: () -> Uni
                     verticalArrangement = Arrangement.spacedBy(8.dp),
                 ) {
                     Text(playlist.name, style = MaterialTheme.typography.titleSmall)
+                    PlaylistSettingToggle(
+                        title = stringResource(R.string.playlist_artwork_mode_override),
+                        subtitle = stringResource(R.string.playlist_artwork_mode_override_subtitle),
+                        checked = profile.artworkModeOverride,
+                        onCheckedChange = { profile = profile.copy(artworkModeOverride = it) },
+                    )
+                    if (profile.artworkModeOverride) {
+                        PlayerArtworkMode.entries.forEach { mode ->
+                            Row(
+                                modifier = Modifier.fillMaxWidth(),
+                                verticalAlignment = Alignment.CenterVertically,
+                            ) {
+                                RadioButton(
+                                    selected = profile.artworkMode == mode,
+                                    onClick = { profile = profile.copy(artworkMode = mode) },
+                                )
+                                Text(
+                                    text = artworkModeLabel(mode),
+                                    modifier = Modifier.weight(1f),
+                                    style = MaterialTheme.typography.bodyMedium,
+                                )
+                            }
+                        }
+                    }
                     PlaylistSettingToggle(
                         title = stringResource(R.string.playlist_playback_speed_override),
                         subtitle = stringResource(R.string.playlist_playback_speed_override_subtitle),
@@ -208,6 +234,17 @@ fun PlaylistPlaybackSettingsDialog(playlist: LocalPlaylist, onDismiss: () -> Uni
         )
     }
 }
+
+@Composable
+private fun artworkModeLabel(mode: PlayerArtworkMode): String = stringResource(
+    when (mode) {
+        PlayerArtworkMode.FULL_SCREEN -> R.string.artwork_mode_full_screen
+        PlayerArtworkMode.FULL_SCREEN_LARGER -> R.string.artwork_mode_full_screen_larger
+        PlayerArtworkMode.AURIS_FULL_SCREEN -> R.string.artwork_mode_auris_full_screen
+        PlayerArtworkMode.STANDARD_SQUARE -> R.string.artwork_mode_standard_square
+        PlayerArtworkMode.STANDARD_ORIGINAL_ASPECT -> R.string.artwork_mode_standard_original_aspect
+    },
+)
 
 @Composable
 private fun PlaylistSettingToggle(

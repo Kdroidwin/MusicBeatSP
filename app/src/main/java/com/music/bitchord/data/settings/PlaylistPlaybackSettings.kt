@@ -23,6 +23,9 @@ data class PlaylistPlaybackProfile(
     val eqBandCount: Int = DEFAULT_EQ_BAND_COUNT,
     /** Gain in centibels (100 units = 1 dB). */
     val eqBandGainsCentiDb: List<Int> = List(PlaylistPlaybackSettings.MAX_EQ_BANDS) { 0 },
+    /** Player artwork mode for this playlist only; disabled profiles inherit the app setting. */
+    val artworkModeOverride: Boolean = false,
+    val artworkMode: PlayerArtworkMode = PlayerArtworkMode.STANDARD_SQUARE,
 ) {
     companion object {
         const val DEFAULT_EQ_BAND_COUNT = 10
@@ -114,6 +117,8 @@ object PlaylistPlaybackSettings {
                 put("eqEnabled", profile.eqEnabled)
                 put("eqBandCount", profile.eqBandCount)
                 put("eqBandGains", JSONArray(profile.eqBandGainsCentiDb.take(MAX_EQ_BANDS)))
+                put("artworkModeOverride", profile.artworkModeOverride)
+                put("artworkMode", profile.artworkMode.persistedValue)
             })
         }
     }.toString()
@@ -140,6 +145,9 @@ object PlaylistPlaybackSettings {
                 eqBandGainsCentiDb = (0 until MAX_EQ_BANDS).map { index ->
                     gains?.optInt(index, 0)?.coerceIn(-1_500, 1_500) ?: 0
                 },
+                artworkModeOverride = row.optBoolean("artworkModeOverride", false),
+                artworkMode = PlayerArtworkMode.fromPersistedValue(row.optInt("artworkMode", PlayerArtworkMode.STANDARD_SQUARE.persistedValue))
+                    ?: PlayerArtworkMode.STANDARD_SQUARE,
             )
         }
         decoded

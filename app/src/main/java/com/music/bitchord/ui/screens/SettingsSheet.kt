@@ -1897,6 +1897,8 @@ fun SettingsScreen(
     val resamplerCutoffHz by AppSettings.resamplerCutoffHz.collectAsStateWithLifecycle()
     val darPcmUpsamplingEnabled by AppSettings.darPcmUpsamplingEnabled.collectAsStateWithLifecycle()
     val dsdPlaybackEnabled by AppSettings.dsdPlaybackEnabled.collectAsStateWithLifecycle()
+    val ffmpegUnsupportedAudioTranscodeEnabled by AppSettings.ffmpegUnsupportedAudioTranscodeEnabled.collectAsStateWithLifecycle()
+    val inAppVideoPlaybackEnabled by AppSettings.inAppVideoPlaybackEnabled.collectAsStateWithLifecycle()
     val loudnessNormalization by AppSettings.loudnessNormalization.collectAsStateWithLifecycle()
     val loudnessOffOnSpeaker by AppSettings.loudnessOffOnSpeaker.collectAsStateWithLifecycle()
     val volumeBoostEnabled by AppSettings.volumeBoostEnabled.collectAsStateWithLifecycle()
@@ -3179,7 +3181,22 @@ fun SettingsScreen(
             onSelect = { openPlayerInkPicker(group) },
         )
     }
-    val settingsSearchEntries = buildSettingsSearchEntries() +
+    val settingsSearchEntries = buildSettingsSearchEntries() + listOf(
+        SettingsSearchEntry(
+            title = stringResource(R.string.ffmpeg_unsupported_audio_transcode),
+            subtitle = stringResource(R.string.ffmpeg_unsupported_audio_transcode_subtitle),
+            keywords = listOf("FFmpeg", "unsupported audio", "APE", "WavPack", "TTA", "TAK", "PCM", "未対応音源", "デコード", "変換"),
+            checked = ffmpegUnsupportedAudioTranscodeEnabled,
+            activate = { AppSettings.setFfmpegUnsupportedAudioTranscodeEnabled(!ffmpegUnsupportedAudioTranscodeEnabled) },
+        ),
+        SettingsSearchEntry(
+            title = stringResource(R.string.in_app_video_playback),
+            subtitle = stringResource(R.string.in_app_video_playback_subtitle),
+            keywords = listOf("video", "YouTube video", "local video", "動画", "映像", "ローカル動画", "YouTube"),
+            checked = inAppVideoPlaybackEnabled,
+            activate = { AppSettings.setInAppVideoPlaybackEnabled(!inAppVideoPlaybackEnabled) },
+        ),
+    ) +
         songsShuffleFloatingButtonSearchEntry(songsShuffleFloatingButton) +
         playerBackdropColorSearchEntries(
             miniPlayerEnabled = miniPlayerPlayerBackgroundColor,
@@ -4661,6 +4678,25 @@ fun SettingsScreen(
                     )
                 },
                 onClick = { AppSettings.setDsdPlaybackEnabled(!dsdPlaybackEnabled) },
+            )
+            RowDivider()
+            SettingsRow(
+                icon = Icons.Rounded.GraphicEq,
+                title = stringResource(R.string.ffmpeg_unsupported_audio_transcode),
+                subtitle = stringResource(R.string.ffmpeg_unsupported_audio_transcode_subtitle),
+                trailing = {
+                    Switch(
+                        checked = ffmpegUnsupportedAudioTranscodeEnabled,
+                        onCheckedChange = AppSettings::setFfmpegUnsupportedAudioTranscodeEnabled,
+                        colors = SwitchDefaults.colors(
+                            checkedTrackColor = MaterialTheme.colorScheme.primary,
+                            checkedBorderColor = MaterialTheme.colorScheme.primary,
+                        ),
+                    )
+                },
+                onClick = {
+                    AppSettings.setFfmpegUnsupportedAudioTranscodeEnabled(!ffmpegUnsupportedAudioTranscodeEnabled)
+                },
             )
             RowDivider()
             SettingsRow(
@@ -8287,6 +8323,23 @@ fun SettingsScreen(
                 onClick = {
                     AppSettings.setIncludeYoutubeMusicVideosInSearch(!includeYoutubeMusicVideosInSearch)
                 },
+            )
+            RowDivider()
+            SettingsRow(
+                icon = Icons.Rounded.MusicNote,
+                title = stringResource(R.string.in_app_video_playback),
+                subtitle = stringResource(R.string.in_app_video_playback_subtitle),
+                trailing = {
+                    Switch(
+                        checked = inAppVideoPlaybackEnabled,
+                        onCheckedChange = AppSettings::setInAppVideoPlaybackEnabled,
+                        colors = SwitchDefaults.colors(
+                            checkedTrackColor = MaterialTheme.colorScheme.primary,
+                            checkedBorderColor = MaterialTheme.colorScheme.primary,
+                        ),
+                    )
+                },
+                onClick = { AppSettings.setInAppVideoPlaybackEnabled(!inAppVideoPlaybackEnabled) },
             )
             RowDivider()
             SettingsRow(

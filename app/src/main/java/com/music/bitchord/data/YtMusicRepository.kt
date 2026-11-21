@@ -69,6 +69,12 @@ object YtMusicRepository {
         HomeFeed(InnertubeParser.parseHome(home), InnertubeParser.continuationToken(home))
     }
 
+    /** YouTube Music's public Podcasts landing shelves, also used by Radio's service picker. */
+    suspend fun podcastsLanding(): Result<List<HomeShelf>> = call("podcasts:landing") {
+        val response = Innertube.browse("FEmusic_non_music_audio", language = Innertube.currentLanguage)
+        InnertubeParser.parsePodcastShelves(response)
+    }
+
     /** Recently played is rendered independently, at the top of the Play page. */
     suspend fun homeRecentlyPlayed(): Result<HomeShelf?> = call("home:recent") { recentlyPlayed() }
 

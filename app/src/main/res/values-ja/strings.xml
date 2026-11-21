@@ -424,6 +424,8 @@
     <string name="artwork_mode_auris_full_screen">Auris風全画面</string>
     <string name="artwork_mode_standard_square">全画面にしない（正方形に切り抜き）</string>
     <string name="artwork_mode_standard_original_aspect">全画面にしない（縦横比を維持）</string>
+    <string name="playlist_artwork_mode_override">このプレイリスト専用のアート表示を使う</string>
+    <string name="playlist_artwork_mode_override_subtitle">このプレイリストから再生した曲だけに適用します。</string>
     <string name="auris_full_screen_cover_art">Auris風全画面アルバムアート</string>
     <string name="auris_full_screen_cover_art_subtitle">Aurisの全画面アート表示を使用します。既存の全画面カバーアート設定と同じ機能です。</string>
     <string name="larger_full_screen_cover_art">全画面カバーアートを拡大</string>
@@ -1840,6 +1842,8 @@
     <string name="youtube_music_search_default_subtitle">有効時は検索画面をYouTube Musicから開始します。YouTube Musicが無効またはオフライン時はこの端末を検索します。</string>
     <string name="youtube_music_include_videos">YouTube Music検索に動画を含める</string>
     <string name="youtube_music_include_videos_subtitle">音楽の検索結果に通常のYouTube動画も表示します。初期設定はオンです。</string>
+    <string name="in_app_video_playback">アプリ内で動画を再生</string>
+    <string name="in_app_video_playback_subtitle">YouTube動画と、外部アプリから開いたローカル動画の映像をプレイヤーに表示します。YouTube動画は追加の通信を使います。初期設定はオフです。</string>
     <string name="redesigned_saved_queue_manager">新しい再生キュー管理画面を使う</string>
     <string name="redesigned_saved_queue_manager_subtitle">保存済みキューを、保存・読み込み・置き換え・削除できるシンプルな一覧で表示します。初期設定はオンです。</string>
     <string name="collection_song_artwork">アルバムなどの曲一覧にアートを表示</string>
@@ -2198,6 +2202,10 @@
     <string name="lyrics_plain_loaded_from">%1$sから通常の歌詞を読み込みました</string>
     <string name="lyrics_editor_workspace">歌詞編集</string>
     <string name="radio_service_rss">RSS</string>
+    <string name="radio_service_youtube_podcasts">YouTube ポッドキャスト</string>
+    <string name="radio_youtube_podcasts_enable_youtube">ポッドキャストを表示するには、設定でYouTube Musicを有効にしてください。</string>
+    <string name="radio_youtube_podcasts_failed">YouTube ポッドキャストを読み込めませんでした。</string>
+    <string name="radio_youtube_podcasts_empty">現在表示できる番組やエピソードはありません。</string>
     <string name="radio_recording_favorite_count">ラジオ録音のお気に入り %1$d 件</string>
     <string name="rss_feed_count">フィード %1$d 件</string>
     <string name="rss_feed_name_hint">番組名</string>
@@ -2317,6 +2325,8 @@
     <string name="audio_offload_disabled_by_dsp">DAR PCMアップサンプリング中はオーディオオフロードを無効にします。</string>
     <string name="dsd_playback_pcm">DSF・DFFをPCM再生</string>
     <string name="dsd_playback_pcm_subtitle">DSFと非圧縮DSDIFFをMedia3経由で24bit PCMにデコードします。Native DSD、DoP、DST圧縮DFFは含みません。初期設定はオフです。</string>
+    <string name="ffmpeg_unsupported_audio_transcode">未対応音源を一時PCM変換</string>
+    <string name="ffmpeg_unsupported_audio_transcode_subtitle">Media3未対応のローカル音源だけをFFmpegで32bit PCM WAVにデコードし、一時キャッシュから再生します。MP3・FLAC・WAVなど対応済み形式、WMA、DSD、MIDI、動画は対象外です。初期設定はオンです。</string>
     <string name="service_enable">有効にする</string>
     <string name="service_disable">無効にする</string>
     <string name="service_enabled">有効</string>

@@ -249,6 +249,7 @@ import com.music.bitchord.playback.toMediaItem
 import com.music.bitchord.playback.toSong
 import com.music.bitchord.playback.toDirectYouTubeMediaItem
 import com.music.bitchord.playback.previewExternalAudio
+import com.music.bitchord.playback.previewExternalVideo
 import com.music.bitchord.playback.startHeadphoneBurnIn
 import com.music.bitchord.playback.stopHeadphoneBurnIn
 import com.music.bitchord.playback.toggleAutoplay
@@ -318,6 +319,7 @@ import com.music.bitchord.ui.player.PlayerMenuBackdropState
 import com.music.bitchord.ui.player.LocalSharedPlayerBackdrop
 import com.music.bitchord.ui.player.LocalPlayerDock
 import com.music.bitchord.ui.player.PlayerDock
+import com.music.bitchord.ui.player.MusicVideoEngine
 import com.music.bitchord.ui.player.PlayerSheetMotion
 import com.music.bitchord.ui.player.ThinSlider
 import com.music.bitchord.ui.player.dockedPlayerAvailable
@@ -405,6 +407,10 @@ class MainActivity : AppCompatActivity() {
             val matchButtonAccentToArtwork by AppSettings.matchButtonAccentToArtwork.collectAsStateWithLifecycle()
             val folderArtworkFallbackMode by AppSettings.folderArtworkFallbackMode.collectAsStateWithLifecycle()
             val controller = rememberMediaController()
+            DisposableEffect(controller) {
+                MusicVideoEngine.attach(controller)
+                onDispose { MusicVideoEngine.attach(null) }
+            }
             val player = rememberPlayerState(controller)
             val currentArtwork = remember(
                 theme,
@@ -1990,6 +1996,10 @@ private fun BitChordApp(
                 session.previewExternalAudio(request.uri)
                 openNowPlaying()
             }
+            is LinkRequest.ExternalVideo -> {
+                session.previewExternalVideo(request.uri)
+                openNowPlaying()
+            }
             is LinkRequest.ExternalZip -> {
                 val archiveUri = runCatching { Uri.parse(request.uri) }.getOrNull()
                 if (archiveUri == null) {
@@ -3346,6 +3356,7 @@ private fun BitChordApp(
                             showArtworkInList = showPlaylistSongArtwork && page.type == BrowseType.PLAYLIST,
                             fullScreenArtwork = fullScreenCollectionArtwork &&
                                 page.type in setOf(BrowseType.ALBUM, BrowseType.PLAYLIST),
+                            onArtistClick = { artist -> openPlayerArtistPage(artist) },
                             selectedIds = selectedLocalArtistSongIds,
                             selectionMode = isEditableLocalArtist && localArtistSelectionMode,
                             onSelectionToggle = if (isEditableLocalArtist) toggleLocalArtistSelection else null,
@@ -3875,6 +3886,15 @@ private fun BitChordApp(
                             isPlaying = player.isPlaying,
                             contentPadding = listPadding,
                             onDownloadRssEpisode = downloadSong,
+                            onOpenYoutubePodcast = { browseId, title, subtitle, thumbnailUrl ->
+                                viewModel.openDetail(
+                                    browseId = browseId,
+                                    title = title,
+                                    subtitle = subtitle,
+                                    thumbnailUrl = thumbnailUrl,
+                                    type = BrowseType.PODCAST,
+                                )
+                            },
                         )
                         TAB_HOME -> HomeTabRoute(
                             state = homeState,

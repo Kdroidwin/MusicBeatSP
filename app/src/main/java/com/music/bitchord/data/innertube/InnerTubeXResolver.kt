@@ -32,7 +32,10 @@ import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.delay
+import kotlinx.coroutines.flow.MutableStateFlow
+import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.flow.update
 import kotlinx.serialization.json.Json
 import java.io.File
 import java.util.concurrent.ConcurrentHashMap
@@ -54,6 +57,19 @@ object InnerTubeXResolver {
         val profileId: String,
         val headers: Map<String, String>,
     )
+
+    /** A video-only rendition shown over the normal audio playback path. */
+    class VideoStream(
+        val videoId: String,
+        val url: String,
+        val width: Int,
+        val height: Int,
+        val mimeType: String,
+        val headers: Map<String, String>,
+        val profileId: String,
+    ) {
+        val aspect: Float get() = if (height > 0) width.toFloat() / height else 0f
+    }
 
     /**
      * Where the remote player config is remembered between runs — the phone's
@@ -213,6 +229,9 @@ object InnerTubeXResolver {
     /** Clients refused a track mid-playback, by videoId, and until when. */
     private val excluded = ConcurrentHashMap<String, ConcurrentHashMap<String, Long>>()
 
+    private val _sessionGeneration = MutableStateFlow(0)
+    val sessionGeneration = _sessionGeneration.asStateFlow()
+
     /**
      * InnerTubeX picks one format per ask and has no bitrate ceiling of its own:
      * [maxKbps] only chooses between its smallest and best rungs, and
@@ -266,6 +285,48 @@ object InnerTubeXResolver {
         return extracted
     }
 
+    /** Resolve the separate video track; the main player continues to own audio and DSP. */
+    suspend fun extractVideo(
+        videoId: String,
+        maxHeight: Int,
+        skipClients: Set<String> = emptySet(),
+    ): VideoStream? {
+        if (!AppSettings.youtubeMusicNetworkAllowed) {
+            throw java.io.IOException("YouTube Music is disabled or offline mode is enabled")
+        }
+        innerTube.cookie = Innertube.cookie
+        innerTube.visitorData = Innertube.ensureVisitorData()
+        if (!AppSettings.youtubeMusicNetworkAllowed) {
+            throw java.io.IOException("YouTube Music was disabled during video resolution")
+        }
+        innerTube.locale = YouTubeLocale(gl = Innertube.currentRegion, hl = Innertube.currentLanguage)
+        val stream = extractor.extract(
+            videoId = videoId,
+            hints = ContentHints(wantVideo = true, maxVideoHeight = maxHeight)
+                .withStreamCapabilities(allowHls = false, allowSabr = false, allowBoundedRange = true),
+            excludedClients = excludedFor(videoId) + skipClients,
+            audioQuality = AudioQuality.LOW,
+            clientPlaybackNonce = generateClientPlaybackNonce(),
+        ) ?: return null
+        val url = stream.videoUrl?.takeIf { it.startsWith("https://") } ?: return null
+        val result = VideoStream(
+            videoId = videoId,
+            url = url,
+            width = stream.videoWidth ?: 0,
+            height = stream.videoHeight ?: 0,
+            mimeType = stream.videoMimeType.orEmpty(),
+            headers = stream.headers,
+            profileId = stream.profileId,
+        )
+        TrackLog.d(TAG, "InnerTubeX video: ${result.width}x${result.height} ${result.mimeType} via ${result.profileId}", about = videoId)
+        return result
+    }
+
+    /** A video URL refusal can indicate that the remote cipher config rotated. */
+    fun onVideoRefused() {
+        scope.launch { runCatching { cipherService.refreshAfterStreamRejection() } }
+    }
+
     /** Headers the media fetch for [url] must carry, when InnerTubeX minted it. */
     fun headersFor(url: String): Map<String, String>? = minted[url]?.headers
 
@@ -290,6 +351,7 @@ object InnerTubeXResolver {
     fun onSessionChanged() {
         excluded.clear()
         minted.clear()
+        _sessionGeneration.update { it + 1 }
         // A new cookie or visitor means a new player config and PoToken binding.
         if (prefs != null) warm(0)
     }

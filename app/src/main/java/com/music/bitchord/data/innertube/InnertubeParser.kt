@@ -253,6 +253,47 @@ object InnertubeParser {
         }
     }
 
+    /** YouTube Music's Podcasts landing page, following the upstream Dial browse shape. */
+    fun parsePodcastShelves(root: JsonElement): List<HomeShelf> {
+        val out = mutableListOf<HomeShelf>()
+        fun walk(node: JsonElement) {
+            when (node) {
+                is JsonObject -> {
+                    (node["musicCarouselShelfRenderer"] as? JsonObject)?.let { carousel ->
+                        podcastShelf(carousel)?.let(out::add)
+                    }
+                    node.values.forEach(::walk)
+                }
+                is JsonArray -> node.forEach(::walk)
+                else -> Unit
+            }
+        }
+        walk(root)
+        return out.distinctBy { it.title to it.items.map(ShelfItem::browseId) }
+    }
+
+    private fun podcastShelf(carousel: JsonObject): HomeShelf? {
+        val header = carousel.o("header").o("musicCarouselShelfBasicHeaderRenderer")
+        val title = header.o("title").runs().trim()
+        if (title.isBlank()) return null
+        val items = carousel.a("contents").orEmpty().mapNotNull { item ->
+            val episodeRenderer = item.o("musicMultiRowListItemRenderer")
+            val episode = parseMultiRowListItem(episodeRenderer, show = null)
+            if (episode != null) {
+                ShelfItem(
+                    title = episode.title,
+                    subtitle = episodeRenderer.o("secondTitle").runs(),
+                    thumbnailUrl = episode.thumbnailUrl,
+                    videoId = episode.videoId,
+                    browseId = null,
+                )
+            } else {
+                parseTwoRowItem(item.o("musicTwoRowItemRenderer"))
+            }
+        }
+        return if (items.isEmpty()) null else HomeShelf(title, items, header.o("strapline").runs())
+    }
+
     /**
      * The Moods & genres browse page is a set of navigation-button grids, not
      * a normal carousel. Keep the browse params on every button: they select

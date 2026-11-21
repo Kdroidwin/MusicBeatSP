@@ -32,6 +32,7 @@ import com.music.bitchord.data.model.Song
 import com.music.bitchord.data.model.artworkAt
 import com.music.bitchord.data.settings.AppSettings
 import com.music.bitchord.data.settings.PlayerArtworkMode
+import com.music.bitchord.data.settings.PlaylistPlaybackSettings
 import com.music.bitchord.data.settings.RetroPlayerBackground
 import com.music.bitchord.feature.localmusic.coil.LocalAudioArtworkFetcher
 import com.music.bitchord.ui.theme.rememberArtworkPalette
@@ -73,10 +74,17 @@ fun PlayerBackgroundThemeBackdrop(
     val retroPlayerMode by AppSettings.retroPlayerMode.collectAsStateWithLifecycle()
     val retroPlayerBackground by AppSettings.retroPlayerBackground.collectAsStateWithLifecycle()
     val playerArtworkMode by AppSettings.playerArtworkMode.collectAsStateWithLifecycle()
+    val playlistPlaybackSettingsRevision by PlaylistPlaybackSettings.revision.collectAsStateWithLifecycle()
+    val effectivePlayerArtworkMode = remember(song.playbackPlaylistId, playlistPlaybackSettingsRevision, playerArtworkMode) {
+        PlaylistPlaybackSettings.profileFor(song.playbackPlaylistId)
+            ?.takeIf { it.artworkModeOverride }
+            ?.artworkMode
+            ?: playerArtworkMode
+    }
     val artworkBlurDp by AppSettings.artworkBackdropBlurDp.collectAsStateWithLifecycle()
     val fullBleedBlurDp by AppSettings.fullBleedArtworkBottomBlurStrengthDp.collectAsStateWithLifecycle()
     val activeBlurDp = if (
-        playerArtworkMode == PlayerArtworkMode.AURIS_FULL_SCREEN && !retroPlayerMode
+        effectivePlayerArtworkMode == PlayerArtworkMode.AURIS_FULL_SCREEN && !retroPlayerMode
     ) {
         fullBleedBlurDp.toFloat()
     } else {
@@ -161,12 +169,19 @@ fun rememberPlayerBackdropSurfaceModifier(
     val retroPlayerMode by AppSettings.retroPlayerMode.collectAsStateWithLifecycle()
     val retroPlayerBackground by AppSettings.retroPlayerBackground.collectAsStateWithLifecycle()
     val playerArtworkMode by AppSettings.playerArtworkMode.collectAsStateWithLifecycle()
+    val playlistPlaybackSettingsRevision by PlaylistPlaybackSettings.revision.collectAsStateWithLifecycle()
+    val effectivePlayerArtworkMode = remember(song.playbackPlaylistId, playlistPlaybackSettingsRevision, playerArtworkMode) {
+        PlaylistPlaybackSettings.profileFor(song.playbackPlaylistId)
+            ?.takeIf { it.artworkModeOverride }
+            ?.artworkMode
+            ?: playerArtworkMode
+    }
     val artworkBlurDp by AppSettings.artworkBackdropBlurDp.collectAsStateWithLifecycle()
     val fullBleedBlurDp by AppSettings.fullBleedArtworkBottomBlurStrengthDp.collectAsStateWithLifecycle()
     val reduceDynamicBlur by AppSettings.reduceDynamicBlur.collectAsStateWithLifecycle()
     val reduceAnimation by AppSettings.reduceAnimation.collectAsStateWithLifecycle()
     val activeBlurDp = if (
-        playerArtworkMode == PlayerArtworkMode.AURIS_FULL_SCREEN && !retroPlayerMode
+        effectivePlayerArtworkMode == PlayerArtworkMode.AURIS_FULL_SCREEN && !retroPlayerMode
     ) {
         fullBleedBlurDp.toFloat()
     } else {

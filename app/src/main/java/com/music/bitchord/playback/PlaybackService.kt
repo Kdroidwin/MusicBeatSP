@@ -200,6 +200,7 @@ const val ACTION_UPGRADE_QUALITY = "com.music.bitchord.action.UPGRADE_QUALITY"
 /** Opens one local file temporarily without replacing the listener's queue. */
 const val ACTION_PLAY_EXTERNAL_PREVIEW = "com.music.bitchord.action.PLAY_EXTERNAL_PREVIEW"
 const val EXTRA_EXTERNAL_PREVIEW_URI = "bitchord.externalPreviewUri"
+const val EXTRA_EXTERNAL_PREVIEW_IS_VIDEO = "bitchord.externalPreviewIsVideo"
 const val ACTION_START_HEADPHONE_BURN_IN = "com.music.bitchord.action.START_HEADPHONE_BURN_IN"
 const val ACTION_STOP_HEADPHONE_BURN_IN = "com.music.bitchord.action.STOP_HEADPHONE_BURN_IN"
 const val EXTRA_HEADPHONE_BURN_IN_SOURCE = "bitchord.headphoneBurnInSource"
@@ -1729,10 +1730,13 @@ class PlaybackService : MediaLibraryService() {
         val routedDataSourceFactory = SmbDataSource.RoutingFactory(defaultDataSourceFactory)
         val dsdPcmFactory = DsdPcmDataSource.Factory(this, routedDataSourceFactory)
         val wmaPcmFactory = WmaPcmDataSource.Factory(this, dsdPcmFactory)
-        AudioCache.setUpstream(wmaPcmFactory)
+        // FFmpeg sits outside the existing WMA and DSD routes. It only handles
+        // MediaItems carrying its own opt-in cache key; all existing paths pass through.
+        val unsupportedAudioPcmFactory = UnsupportedAudioPcmDataSource.Factory(this, wmaPcmFactory)
+        AudioCache.setUpstream(unsupportedAudioPcmFactory)
         // The watch speaker reads through the same resolver/cache route as this player.
-        WearBridge.attachStreams(AudioCache.playbackFactory(wmaPcmFactory))
-        mediaSourceFactory = DefaultMediaSourceFactory(AudioCache.playbackFactory(wmaPcmFactory))
+        WearBridge.attachStreams(AudioCache.playbackFactory(unsupportedAudioPcmFactory))
+        mediaSourceFactory = DefaultMediaSourceFactory(AudioCache.playbackFactory(unsupportedAudioPcmFactory))
             .setLoadErrorHandlingPolicy(PermanentAwareLoadErrorPolicy())
 
         configuredFloatOutput = shouldEnableFloatOutput()
@@ -4462,14 +4466,14 @@ class PlaybackService : MediaLibraryService() {
     }
 
     /** Starts a temporary, one-file session and keeps the existing queue parked. */
-    private fun startExternalAudioPreview(uriString: String) {
+    private fun startExternalAudioPreview(uriString: String, isVideo: Boolean = false) {
         if (player?.let(::isHeadphoneBurnInPlaying) == true) stopHeadphoneBurnIn()
         suppressedExternalPopupUri = null
         externalPreviewLoadJob?.cancel()
         val requestGeneration = ++externalPreviewRequestGeneration
         externalPreviewLoadJob = scope.launch {
             val song = try {
-                ExternalAudioPreview.readSong(applicationContext, uriString)
+                ExternalAudioPreview.readSong(applicationContext, uriString, isVideo)
             } catch (cancelled: CancellationException) {
                 throw cancelled
             } catch (error: Exception) {
@@ -6812,7 +6816,7 @@ class PlaybackService : MediaLibraryService() {
                     val uri = args.getString(EXTRA_EXTERNAL_PREVIEW_URI)
                         ?.takeIf(String::isNotBlank)
                         ?: return Futures.immediateFuture(SessionResult(SessionError.ERROR_NOT_SUPPORTED))
-                    startExternalAudioPreview(uri)
+                    startExternalAudioPreview(uri, args.getBoolean(EXTRA_EXTERNAL_PREVIEW_IS_VIDEO, false))
                 }
                 ACTION_START_HEADPHONE_BURN_IN -> {
                     if (!AppSettings.headphoneBurnInEnabled.value) {

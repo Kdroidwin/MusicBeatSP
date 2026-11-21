@@ -30,6 +30,9 @@ sealed interface LinkRequest {
     /** An audio file handed to the app by a file manager or document provider. */
     data class ExternalAudio(val uri: String) : LinkRequest
 
+    /** A video file handed to the app by a file manager or document provider. */
+    data class ExternalVideo(val uri: String) : LinkRequest
+
     /** A ZIP archive handed to the app by a file manager such as MiXplorer. */
     data class ExternalZip(val uri: String) : LinkRequest
 
@@ -83,6 +86,8 @@ object MusicLink {
                     when {
                         uri != null && isSafeLocalUri(uri) && isZipArchiveIntent(intent.type, uri) ->
                             LinkRequest.ExternalZip(uri.toString())
+                        uri != null && isSafeLocalUri(uri) && isVideoFileIntent(intent.type, uri) ->
+                            LinkRequest.ExternalVideo(uri.toString())
                         uri != null && isSafeLocalUri(uri) && isAudioFileIntent(intent.type, uri) ->
                             LinkRequest.ExternalAudio(uri.toString())
                         else -> uri?.let(::parse)
@@ -93,6 +98,8 @@ object MusicLink {
                     val sharedUri = sharedUri(intent)
                     if (sharedUri != null && isSafeLocalUri(sharedUri) && isZipArchiveIntent(mimeType, sharedUri)) {
                         LinkRequest.ExternalZip(sharedUri.toString())
+                    } else if (sharedUri != null && isSafeLocalUri(sharedUri) && isVideoFileIntent(mimeType, sharedUri)) {
+                        LinkRequest.ExternalVideo(sharedUri.toString())
                     } else if (mimeType == "text/plain") {
                         intent.getStringExtra(Intent.EXTRA_TEXT)
                             ?.takeIf { it.length <= MAX_SHARED_TEXT_CHARS }
@@ -141,7 +148,8 @@ object MusicLink {
         }.getOrNull() ?: return
         if (!isSafeLocalUri(uri)) return
         val mimeType = normalizedMimeType(intent.type)
-        val supported = isAudioFileIntent(mimeType, uri) || isZipArchiveIntent(mimeType, uri)
+        val supported = isAudioFileIntent(mimeType, uri) || isVideoFileIntent(mimeType, uri) ||
+            isZipArchiveIntent(mimeType, uri)
         if (!supported || uri.scheme != "content") return
         val persistable = intent.flags and Intent.FLAG_GRANT_PERSISTABLE_URI_PERMISSION != 0
         val readable = intent.flags and Intent.FLAG_GRANT_READ_URI_PERMISSION != 0
@@ -209,7 +217,15 @@ object MusicLink {
             return true
         }
         val name = uri.lastPathSegment.orEmpty().substringBefore('?').lowercase()
-        return AUDIO_EXTENSIONS.any(name::endsWith)
+        return AUDIO_EXTENSIONS.any(name::endsWith) || FFMPEG_AUDIO_EXTENSIONS.any(name::endsWith)
+    }
+
+    private fun isVideoFileIntent(mimeType: String?, uri: Uri): Boolean {
+        val normalized = mimeType?.substringBefore(';')?.trim()?.lowercase()
+        if (normalized?.startsWith("video/") == true) return true
+        if (normalized?.startsWith("audio/") == true) return false
+        val name = uri.lastPathSegment.orEmpty().substringBefore('?').lowercase()
+        return VIDEO_EXTENSIONS.any(name::endsWith)
     }
 
     private fun isZipArchiveIntent(mimeType: String?, uri: Uri): Boolean {
@@ -269,7 +285,17 @@ object MusicLink {
     private val AUDIO_EXTENSIONS = setOf(
         ".mp3", ".m4a", ".flac", ".ogg", ".opus", ".aac", ".webm",
         ".wav", ".aiff", ".aif", ".alac", ".ape", ".wma", ".wv", ".3gp", ".mid", ".midi",
+        ".tta", ".tak", ".mpc", ".mka", ".caf", ".au", ".snd", ".ac3", ".dts",
     )
+
+    private val FFMPEG_AUDIO_EXTENSIONS = setOf(
+        ".ape", ".wv", ".tta", ".tak", ".mpc", ".mka", ".caf", ".au", ".snd", ".aif", ".aiff", ".ac3", ".dts",
+    )
+
+    // WebM and 3GP can be audio-only containers and were already handed to
+    // the audio preview when the sender supplied no media type. Keep those
+    // ambiguous extensions on that existing path; video/* MIME still wins.
+    private val VIDEO_EXTENSIONS = setOf(".mp4", ".m4v", ".mkv", ".mov", ".ts", ".avi")
 
     private val ZIP_MIME_TYPES = setOf("application/zip", "application/x-zip-compressed")
 

@@ -16,6 +16,7 @@ import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
@@ -56,6 +57,7 @@ import com.music.bitchord.data.model.artworkAt
 import com.music.bitchord.data.settings.AppSettings
 import com.music.bitchord.ui.components.thumbnailBorder
 import com.music.bitchord.ui.player.LocalPlayerDock
+import com.music.bitchord.ui.player.AndroidMusicVideo
 import com.music.bitchord.ui.player.playerDockArt
 import com.music.bitchord.ui.player.rememberPlayerBackdropSurfaceModifier
 import com.music.bitchord.ui.theme.rememberArtworkPalette
@@ -335,30 +337,35 @@ fun MiniPlayer(
                 ),
             verticalAlignment = Alignment.CenterVertically,
         ) {
-            AsyncImage(
-                model = artworkModel,
-                contentDescription = null,
-                onError = {
-                    if (
-                        !useRemoteArtworkFallback &&
-                        remoteArtworkFallback != null &&
-                        remoteArtworkFallback != localAwareArtworkModel
-                    ) {
-                        useRemoteArtworkFallback = true
-                    }
-                },
-                // The mini-player has a fixed square thumbnail. Keep it square
-                // even when the full player is configured to preserve a sleeve's
-                // original aspect ratio; transition settings must not letterbox
-                // this compact, fixed-size slot.
-                contentScale = ContentScale.Crop,
-                modifier = Modifier
-                    .size(40.dp)
-                    .playerDockArt(LocalPlayerDock.current, ART_CORNER)
-                    .clip(RoundedCornerShape(ART_CORNER))
-                    .thumbnailBorder(RoundedCornerShape(ART_CORNER))
-                    .background(MaterialTheme.colorScheme.surfaceVariant),
-            )
+            Box(Modifier.size(40.dp)) {
+                AsyncImage(
+                    model = artworkModel,
+                    contentDescription = null,
+                    onError = {
+                        if (
+                            !useRemoteArtworkFallback &&
+                            remoteArtworkFallback != null &&
+                            remoteArtworkFallback != localAwareArtworkModel
+                        ) {
+                            useRemoteArtworkFallback = true
+                        }
+                    },
+                    // The mini-player has a fixed square thumbnail. Keep it square
+                    // even when the full player preserves the sleeve's aspect ratio.
+                    contentScale = ContentScale.Crop,
+                    modifier = Modifier
+                        .fillMaxSize()
+                        .playerDockArt(LocalPlayerDock.current, ART_CORNER)
+                        .clip(RoundedCornerShape(ART_CORNER))
+                        .thumbnailBorder(RoundedCornerShape(ART_CORNER))
+                        .background(MaterialTheme.colorScheme.surfaceVariant),
+                )
+                AndroidMusicVideo(
+                    song,
+                    Modifier.size(40.dp).clip(RoundedCornerShape(ART_CORNER)),
+                    priority = 1,
+                )
+            }
             Spacer(Modifier.width(10.dp))
             Column(Modifier.weight(1f)) {
                 ExplicitSongTitle(

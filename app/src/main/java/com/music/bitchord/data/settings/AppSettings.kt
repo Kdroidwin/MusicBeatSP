@@ -996,6 +996,10 @@ object AppSettings {
     val darPcmUpsamplingEnabled = MutableStateFlow(false)
     /** DSD-to-PCM playback path; disabled until explicitly selected. */
     val dsdPlaybackEnabled = MutableStateFlow(false)
+    /** Converts selected local formats that Media3 cannot decode into disposable PCM WAV files. */
+    val ffmpegUnsupportedAudioTranscodeEnabled = MutableStateFlow(true)
+    /** Renders local and YouTube video frames in the app alongside the audio player. */
+    val inAppVideoPlaybackEnabled = MutableStateFlow(false)
     val hiddenPlayerDetailsActions = MutableStateFlow<Set<PlayerDetailsAction>>(emptySet())
     val playerDetailsActionOrder = MutableStateFlow(DEFAULT_PLAYER_DETAILS_ACTION_ORDER)
     /** The cutter is opt-in because it exports a re-encoded, edited copy of a track. */
@@ -2018,6 +2022,8 @@ object AppSettings {
         spotifyIntegrationEnabled.value = prefs.getBoolean(KEY_SPOTIFY_INTEGRATION_ENABLED, false)
         darPcmUpsamplingEnabled.value = prefs.getBoolean(KEY_DAR_PCM_UPSAMPLING_ENABLED, false)
         dsdPlaybackEnabled.value = prefs.getBoolean(KEY_DSD_PLAYBACK_ENABLED, false)
+        ffmpegUnsupportedAudioTranscodeEnabled.value = prefs.getBoolean(KEY_FFMPEG_UNSUPPORTED_AUDIO_TRANSCODE_ENABLED, true)
+        inAppVideoPlaybackEnabled.value = prefs.getBoolean(KEY_IN_APP_VIDEO_PLAYBACK_ENABLED, false)
         hiddenPlayerDetailsActions.value = readHiddenPlayerDetailsActions()
         playerDetailsActionOrder.value = readPlayerDetailsActionOrder()
         audioCutterEnabled.value = prefs.getBoolean(KEY_AUDIO_CUTTER_ENABLED, false)
@@ -3710,6 +3716,16 @@ object AppSettings {
     fun setDsdPlaybackEnabled(value: Boolean) {
         dsdPlaybackEnabled.value = value
         prefs.edit().putBoolean(KEY_DSD_PLAYBACK_ENABLED, value).apply()
+    }
+
+    fun setFfmpegUnsupportedAudioTranscodeEnabled(value: Boolean) {
+        ffmpegUnsupportedAudioTranscodeEnabled.value = value
+        prefs.edit().putBoolean(KEY_FFMPEG_UNSUPPORTED_AUDIO_TRANSCODE_ENABLED, value).apply()
+    }
+
+    fun setInAppVideoPlaybackEnabled(value: Boolean) {
+        inAppVideoPlaybackEnabled.value = value
+        prefs.edit().putBoolean(KEY_IN_APP_VIDEO_PLAYBACK_ENABLED, value).apply()
     }
 
     fun setPlayerDetailsActionVisible(action: PlayerDetailsAction, visible: Boolean) {
@@ -5686,6 +5702,8 @@ object AppSettings {
     private const val KEY_SPOTIFY_INTEGRATION_ENABLED = "spotify_integration_enabled"
     private const val KEY_DAR_PCM_UPSAMPLING_ENABLED = "dar_pcm_upsampling_enabled"
     private const val KEY_DSD_PLAYBACK_ENABLED = "dsd_playback_enabled"
+    private const val KEY_FFMPEG_UNSUPPORTED_AUDIO_TRANSCODE_ENABLED = "ffmpeg_unsupported_audio_transcode_enabled"
+    private const val KEY_IN_APP_VIDEO_PLAYBACK_ENABLED = "in_app_video_playback_enabled"
     private const val KEY_HIDDEN_PLAYER_DETAILS_ACTIONS = "hidden_player_details_actions"
     private const val KEY_PLAYER_DETAILS_ACTION_ORDER = "player_details_action_order"
     private const val KEY_AUDIO_CUTTER_ENABLED = "audio_cutter_enabled"

@@ -115,6 +115,7 @@ fun RadioScreen(
     isPlaying: Boolean,
     contentPadding: PaddingValues,
     onDownloadRssEpisode: (Song) -> Unit,
+    onOpenYoutubePodcast: (String, String, String, String?) -> Unit = { _, _, _, _ -> },
 ) {
     val context = LocalContext.current
     val offlineMode by AppSettings.offlineMode.collectAsStateWithLifecycle()
@@ -619,6 +620,16 @@ fun RadioScreen(
             onPlayEpisode = { episode -> playOnsenEpisode(episode, onsenProgram) },
             onDownloadEpisode = { episode -> downloadOnsenEpisode(episode, onsenProgram) },
         )
+    } else if (station == null && selectedRadioService == RadioService.YOUTUBE_PODCASTS) {
+        YoutubePodcastsRadioScreen(
+            controller = controller,
+            currentSong = currentSong,
+            isPlaying = isPlaying,
+            contentPadding = contentPadding,
+            networkUnavailable = networkUnavailable,
+            onChangeService = { showServicePicker = true },
+            onOpenShow = onOpenYoutubePodcast,
+        )
     } else if (station == null && selectedRadioService == RadioService.RSS) {
         RssRadioScreen(
             controller = controller,
@@ -896,6 +907,11 @@ private fun RadioServiceDialog(
                     selected = selectedService == RadioService.RSS,
                     onClick = { onSelect(RadioService.RSS) },
                     label = { Text(stringResource(R.string.radio_service_rss)) },
+                )
+                FilterChip(
+                    selected = selectedService == RadioService.YOUTUBE_PODCASTS,
+                    onClick = { onSelect(RadioService.YOUTUBE_PODCASTS) },
+                    label = { Text(stringResource(R.string.radio_service_youtube_podcasts)) },
                 )
             }
         },

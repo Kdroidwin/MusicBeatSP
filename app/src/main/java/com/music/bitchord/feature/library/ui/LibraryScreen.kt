@@ -1208,7 +1208,7 @@ fun LibraryScreen(
                         artworkUrl = visibleDrillDownArt,
                         songs = visibleDrillDownSongs,
                         isArtist = false,
-                        onArtistClick = onOpenArtistPage.takeIf { visibleDrillDownPlaylistId != null },
+                        onArtistClick = onOpenArtistPage,
                         // Favorites use the same saved, draggable song ordering as a playlist.
                         isPlaylist = visibleDrillDownPlaylistId != null || visibleDrillDownIsFavorites,
                         showArtworkInList = showPlaylistSongArtwork,

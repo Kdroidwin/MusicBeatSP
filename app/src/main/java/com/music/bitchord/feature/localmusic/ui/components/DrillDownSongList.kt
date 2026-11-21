@@ -381,7 +381,7 @@ private fun CompactDrillDownHeader(
                 .fillMaxWidth()
                 .padding(horizontal = PAGE_GUTTER),
         )
-        if (isPlaylist && onArtistClick != null && artists.isNotEmpty()) {
+        if (!isArtist && onArtistClick != null && artists.isNotEmpty()) {
             Spacer(Modifier.height(4.dp))
             ArtistCreditLinks(
                 artists = artists,

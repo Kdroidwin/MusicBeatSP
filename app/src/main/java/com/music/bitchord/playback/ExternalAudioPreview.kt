@@ -15,7 +15,7 @@ import java.util.Locale
 /** Reads just enough metadata to show a file-manager item in the existing player. */
 object ExternalAudioPreview {
 
-    suspend fun readSong(context: Context, uriString: String): Song = withContext(Dispatchers.IO) {
+    suspend fun readSong(context: Context, uriString: String, isVideo: Boolean = false): Song = withContext(Dispatchers.IO) {
         val appContext = context.applicationContext
         if (uriString.length > MAX_EXTERNAL_URI_LENGTH) throw IOException("Audio URI is too long")
         val uri = runCatching { Uri.parse(uriString) }.getOrElse {
@@ -43,7 +43,7 @@ object ExternalAudioPreview {
             val title = hasDataSource
                 .let { if (it) retriever.extractMetadata(MediaMetadataRetriever.METADATA_KEY_TITLE) else null }
                 ?.takeIf(String::isNotBlank)
-                ?: fileName.substringBeforeLast('.', fileName).ifBlank { "Audio" }
+                ?: fileName.substringBeforeLast('.', fileName).ifBlank { if (isVideo) "Video" else "Audio" }
             val artist = if (hasDataSource) {
                 retriever.extractMetadata(MediaMetadataRetriever.METADATA_KEY_ARTIST)
                     ?.takeIf(String::isNotBlank)
@@ -65,11 +65,13 @@ object ExternalAudioPreview {
                 videoId = uri.toString(),
                 title = title,
                 artist = artist ?: appContext.getString(R.string.unknown_artist),
-                thumbnailUrl = uri.toString(),
+                thumbnailUrl = uri.toString().takeUnless { isVideo },
                 durationText = durationText,
                 albumName = album,
                 localUri = uri.toString(),
                 localPath = filePath,
+                isVideo = isVideo,
+                isVideoOrigin = isVideo,
                 isExternalPreview = true,
             )
         } finally {

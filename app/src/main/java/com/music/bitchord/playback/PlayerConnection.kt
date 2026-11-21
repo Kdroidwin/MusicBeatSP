@@ -158,7 +158,15 @@ fun MediaController.upgradeQuality() {
 fun MediaController.previewExternalAudio(uriString: String) {
     sendCustomCommand(
         SessionCommand(ACTION_PLAY_EXTERNAL_PREVIEW, Bundle.EMPTY),
-        bundleOf(EXTRA_EXTERNAL_PREVIEW_URI to uriString),
+        bundleOf(EXTRA_EXTERNAL_PREVIEW_URI to uriString, EXTRA_EXTERNAL_PREVIEW_IS_VIDEO to false),
+    )
+}
+
+/** Requests a local video preview, retaining the regular audio session for its soundtrack. */
+fun MediaController.previewExternalVideo(uriString: String) {
+    sendCustomCommand(
+        SessionCommand(ACTION_PLAY_EXTERNAL_PREVIEW, Bundle.EMPTY),
+        bundleOf(EXTRA_EXTERNAL_PREVIEW_URI to uriString, EXTRA_EXTERNAL_PREVIEW_IS_VIDEO to true),
     )
 }
 
@@ -531,6 +539,10 @@ fun Song.toMediaItem(): MediaItem {
         ?: offlineUri?.let { runCatching { Uri.parse(it).lastPathSegment?.substringAfterLast('.', "") }.getOrNull() }
     val needsWmaPcmDecode = localAudioExtension.equals("wma", ignoreCase = true) &&
         offlineUri?.let { runCatching { Uri.parse(it).scheme in setOf("file", "content") }.getOrDefault(false) } == true
+    val needsFfmpegPcmDecode = !isVideo &&
+        AppSettings.ffmpegUnsupportedAudioTranscodeEnabled.value &&
+        localAudioExtension?.lowercase(Locale.ROOT) in FFMPEG_ONLY_AUDIO_EXTENSIONS &&
+        offlineUri?.let { runCatching { Uri.parse(it).scheme in setOf("file", "content") }.getOrDefault(false) } == true
     val shouldProbeMediaStoreForWma = localAudioExtension.isNullOrBlank() && offlineUri?.let { uriString ->
         runCatching {
             Uri.parse(uriString).let { it.scheme == "content" && it.authority == "media" }
@@ -586,9 +598,23 @@ fun Song.toMediaItem(): MediaItem {
                 // extension from their URI. Let the WMA source check the
                 // MediaStore display name, then delegate every other file.
                 setCustomCacheKey("$WMA_MEDIASTORE_PROBE_CACHE_KEY_PREFIX${Uri.encode(offlineUri)}")
+            } else if (needsFfmpegPcmDecode) {
+                setCustomCacheKey("$UNSUPPORTED_AUDIO_PCM_CACHE_KEY_PREFIX${Uri.encode(offlineUri)}")
             }
         }
-        .apply { if (isLiveRadio || isOnsenAudio) setMimeType(MimeTypes.APPLICATION_M3U8) }
+        .apply {
+            when {
+                isLiveRadio || isOnsenAudio -> setMimeType(MimeTypes.APPLICATION_M3U8)
+                needsFfmpegPcmDecode -> setMimeType("audio/wav")
+                isVideo && offlineUri != null -> {
+                    val extension = localAudioExtension?.lowercase(Locale.ROOT)
+                    val videoMimeType = extension?.let {
+                        android.webkit.MimeTypeMap.getSingleton().getMimeTypeFromExtension(it)
+                    }?.takeIf { it.startsWith("video/") }
+                    setMimeType(videoMimeType ?: "video/mp4")
+                }
+            }
+        }
         .apply { clipping?.let(::setClippingConfiguration) }
     .setMediaMetadata(
         MediaMetadata.Builder()

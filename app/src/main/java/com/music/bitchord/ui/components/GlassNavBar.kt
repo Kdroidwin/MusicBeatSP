@@ -30,6 +30,7 @@ import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.navigationBarsPadding
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
@@ -69,6 +70,7 @@ import com.music.bitchord.data.model.artworkAt
 import com.music.bitchord.data.settings.AppSettings
 import com.music.bitchord.data.settings.ThemeMode
 import com.music.bitchord.ui.player.LocalPlayerDock
+import com.music.bitchord.ui.player.AndroidMusicVideo
 import com.music.bitchord.ui.player.playerDockArt
 import com.music.bitchord.ui.player.rememberPlayerBackdropSurfaceModifier
 import com.music.bitchord.ui.components.floatingtabbar.FloatingTabBar
@@ -511,16 +513,19 @@ private fun GlassNowPlaying(
                     vertical = if (isInline) 4.dp else 8.dp,
                 ),
         ) {
-                AsyncImage(
-                model = song.artworkAt(ROW_ART_PX),
-                contentDescription = null,
-                modifier = Modifier
-                    .size(artSize)
-                    .playerDockArt(LocalPlayerDock.current, if (isInline) 6.dp else 8.dp)
-                    .clip(RoundedCornerShape(if (isInline) 6.dp else 8.dp))
-                    .thumbnailBorder(RoundedCornerShape(if (isInline) 6.dp else 8.dp))
-                    .background(MaterialTheme.colorScheme.surfaceVariant),
-            )
+                Box(Modifier.size(artSize)) {
+                    AsyncImage(
+                        model = song.artworkAt(ROW_ART_PX),
+                        contentDescription = null,
+                        modifier = Modifier
+                            .fillMaxSize()
+                            .playerDockArt(LocalPlayerDock.current, if (isInline) 6.dp else 8.dp)
+                            .clip(RoundedCornerShape(if (isInline) 6.dp else 8.dp))
+                            .thumbnailBorder(RoundedCornerShape(if (isInline) 6.dp else 8.dp))
+                            .background(MaterialTheme.colorScheme.surfaceVariant),
+                    )
+                    AndroidMusicVideo(song, Modifier.fillMaxSize(), priority = 0)
+                }
             Spacer(Modifier.width(if (isInline) 8.dp else 10.dp))
             if (isInline) {
                 Text(

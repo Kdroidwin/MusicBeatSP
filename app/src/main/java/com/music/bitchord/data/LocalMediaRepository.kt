@@ -17,6 +17,7 @@ import com.music.bitchord.download.DownloadStore
 import com.music.bitchord.download.Downloads
 import com.music.bitchord.feature.localmusic.domain.model.LocalFolder
 import com.music.bitchord.feature.tageditor.data.TagLibWriter
+import com.music.bitchord.playback.FFMPEG_ONLY_AUDIO_EXTENSIONS
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
 import java.io.File
@@ -30,7 +31,7 @@ object LocalMediaRepository {
     private val localMusicExtensions = setOf(
         "mp3", "m4a", "flac", "wav", "wma", "ogg", "opus", "aac", "webm", "dsf", "dff",
         "mid", "midi",
-    )
+    ) + FFMPEG_ONLY_AUDIO_EXTENSIONS
     private val midiExtensions = setOf("mid", "midi")
 
     private val nonMusicPathSegments = listOf(
@@ -255,7 +256,10 @@ object LocalMediaRepository {
         val dsdSelection = if (dsdAllowed) {
             " OR ${MediaStore.Audio.Media.DISPLAY_NAME} LIKE '%.dsf' OR ${MediaStore.Audio.Media.DISPLAY_NAME} LIKE '%.dff'"
         } else ""
-        val midiSelection = " OR ${MediaStore.Audio.Media.DISPLAY_NAME} LIKE '%.mid' OR ${MediaStore.Audio.Media.DISPLAY_NAME} LIKE '%.midi'"
+        val ffmpegSelection = if (AppSettings.ffmpegUnsupportedAudioTranscodeEnabled.value) {
+            FFMPEG_ONLY_AUDIO_EXTENSIONS.joinToString("") { " OR ${MediaStore.Audio.Media.DISPLAY_NAME} LIKE '%.$it'" }
+        } else ""
+        val midiSelection = " OR ${MediaStore.Audio.Media.DISPLAY_NAME} LIKE '%.mid' OR ${MediaStore.Audio.Media.DISPLAY_NAME} LIKE '%.midi'$ffmpegSelection"
         val extraAudioSelection = " OR ${MediaStore.Audio.Media.DISPLAY_NAME} LIKE '%.wav' OR ${MediaStore.Audio.Media.DISPLAY_NAME} LIKE '%.wma'$midiSelection$dsdSelection"
         val selection = if (filterNonMusic) {
             buildString {
@@ -530,7 +534,10 @@ object LocalMediaRepository {
         val dsdSelection = if (dsdAllowed) {
             " OR ${MediaStore.Audio.Media.DISPLAY_NAME} LIKE '%.dsf' OR ${MediaStore.Audio.Media.DISPLAY_NAME} LIKE '%.dff'"
         } else ""
-        val selection = "(${MediaStore.Audio.Media.IS_MUSIC} != 0 OR ${MediaStore.Audio.Media.DISPLAY_NAME} LIKE '%.wav' OR ${MediaStore.Audio.Media.DISPLAY_NAME} LIKE '%.wma' OR ${MediaStore.Audio.Media.DISPLAY_NAME} LIKE '%.mid' OR ${MediaStore.Audio.Media.DISPLAY_NAME} LIKE '%.midi'$dsdSelection)"
+        val ffmpegSelection = if (AppSettings.ffmpegUnsupportedAudioTranscodeEnabled.value) {
+            FFMPEG_ONLY_AUDIO_EXTENSIONS.joinToString("") { " OR ${MediaStore.Audio.Media.DISPLAY_NAME} LIKE '%.$it'" }
+        } else ""
+        val selection = "(${MediaStore.Audio.Media.IS_MUSIC} != 0 OR ${MediaStore.Audio.Media.DISPLAY_NAME} LIKE '%.wav' OR ${MediaStore.Audio.Media.DISPLAY_NAME} LIKE '%.wma' OR ${MediaStore.Audio.Media.DISPLAY_NAME} LIKE '%.mid' OR ${MediaStore.Audio.Media.DISPLAY_NAME} LIKE '%.midi'$dsdSelection$ffmpegSelection)"
 
         val volumeUris = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
             runCatching {
@@ -630,6 +637,7 @@ object LocalMediaRepository {
             ?: displayName
         val extension = fileName.substringAfterLast('.', "").lowercase(Locale.ROOT)
         if (extension !in localMusicExtensions) return false
+        if (extension in FFMPEG_ONLY_AUDIO_EXTENSIONS && !AppSettings.ffmpegUnsupportedAudioTranscodeEnabled.value) return false
         // MediaStore often reports MIDI duration as zero even though it is a
         // playable file. Keep short MIDI files in the library without relaxing
         // the existing duration filter for any other audio format.
@@ -653,7 +661,9 @@ object LocalMediaRepository {
 
     private fun isAudioFileName(name: String): Boolean {
         val lower = name.lowercase(Locale.ROOT)
-        return lower.endsWith(".mp3") || lower.endsWith(".m4a") ||
+        val ffmpegOnly = AppSettings.ffmpegUnsupportedAudioTranscodeEnabled.value &&
+            FFMPEG_ONLY_AUDIO_EXTENSIONS.any { lower.endsWith(".$it") }
+        return ffmpegOnly || lower.endsWith(".mp3") || lower.endsWith(".m4a") ||
             lower.endsWith(".flac") || lower.endsWith(".wav") || lower.endsWith(".wma") ||
             lower.endsWith(".ogg") || lower.endsWith(".opus") ||
             lower.endsWith(".aac") || lower.endsWith(".webm") ||

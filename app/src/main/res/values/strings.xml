@@ -480,6 +480,8 @@
     <string name="artwork_mode_auris_full_screen">Auris-style full-screen</string>
     <string name="artwork_mode_standard_square">Standard (square crop)</string>
     <string name="artwork_mode_standard_original_aspect">Standard (preserve aspect ratio)</string>
+    <string name="playlist_artwork_mode_override">Use a playlist-specific artwork style</string>
+    <string name="playlist_artwork_mode_override_subtitle">This changes the player artwork only for tracks started from this playlist.</string>
     <string name="auris_full_screen_cover_art">Auris-style full-screen album artwork</string>
     <string name="auris_full_screen_cover_art_subtitle">Use the full-bleed album-art player layout from Auris. This reuses the existing full-screen artwork setting.</string>
     <string name="larger_full_screen_cover_art">Larger full-screen cover art</string>
@@ -1942,6 +1944,8 @@
     <string name="youtube_music_search_default_subtitle">Start searches on YouTube Music when it is enabled; otherwise search this device.</string>
     <string name="youtube_music_include_videos">Include video uploads in YouTube Music search</string>
     <string name="youtube_music_include_videos_subtitle">Show ordinary YouTube videos alongside music results. On by default.</string>
+    <string name="in_app_video_playback">Play videos in the app</string>
+    <string name="in_app_video_playback_subtitle">Show YouTube video frames and local videos opened from another app in the player. YouTube video playback uses extra network data. Off by default.</string>
     <string name="redesigned_saved_queue_manager">New saved-queue manager</string>
     <string name="redesigned_saved_queue_manager_subtitle">Use a compact list layout for saving, loading, replacing, and deleting saved queues. On by default.</string>
     <string name="collection_song_artwork">Show album art in artist and album song lists</string>
@@ -2225,6 +2229,10 @@
     <string name="lyrics_plain_loaded_from">Loaded plain lyrics from %1$s</string>
     <string name="lyrics_editor_workspace">Lyrics workspace</string>
     <string name="radio_service_rss">RSS</string>
+    <string name="radio_service_youtube_podcasts">YouTube Podcasts</string>
+    <string name="radio_youtube_podcasts_enable_youtube">Enable YouTube Music in settings to browse podcasts.</string>
+    <string name="radio_youtube_podcasts_failed">Could not load YouTube Podcasts.</string>
+    <string name="radio_youtube_podcasts_empty">No podcast shows or episodes are available right now.</string>
     <string name="radio_recording_favorite_count">%1$d radio recording favorites</string>
     <string name="rss_feed_count">%1$d feeds</string>
     <string name="rss_feed_name_hint">Podcast name</string>
@@ -2344,6 +2352,8 @@
     <string name="audio_offload_disabled_by_dsp">Audio offload is disabled while DAR PCM upsampling is active.</string>
     <string name="dsd_playback_pcm">Play DSF/DFF as PCM</string>
     <string name="dsd_playback_pcm_subtitle">Decode DSF and uncompressed DSDIFF to 24-bit PCM through Media3. Native DSD, DoP and DST-compressed DFF are not included. Off by default.</string>
+    <string name="ffmpeg_unsupported_audio_transcode">Temporarily decode unsupported audio</string>
+    <string name="ffmpeg_unsupported_audio_transcode_subtitle">Decode only unsupported local formats to 32-bit PCM WAV with FFmpeg and play from temporary cache. Supported formats such as MP3, FLAC and WAV, WMA, DSD, MIDI and video are skipped. On by default.</string>
     <string name="service_enable">Enable</string>
     <string name="service_disable">Disable</string>
     <string name="service_enabled">Enabled</string>

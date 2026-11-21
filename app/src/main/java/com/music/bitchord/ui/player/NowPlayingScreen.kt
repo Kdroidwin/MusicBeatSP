@@ -299,6 +299,7 @@ import com.music.bitchord.data.settings.PlayerControl
 import com.music.bitchord.data.settings.PlayerQuickAction
 import com.music.bitchord.data.settings.AudioQuality
 import com.music.bitchord.data.settings.PlayerArtworkMode
+import com.music.bitchord.data.settings.PlaylistPlaybackSettings
 import com.music.bitchord.data.settings.PlayerInkGroup
 import com.music.bitchord.data.settings.PLAYER_INK_DEFAULT_COLOR
 import com.music.bitchord.data.model.LikeStatus
@@ -1115,12 +1116,19 @@ fun NowPlayingScreen(
     val playerArtworkTransitionEnabled by AppSettings.playerArtworkTransition.collectAsStateWithLifecycle()
     val preserveArtworkShapeInCompactTransitions by AppSettings.preserveArtworkShapeInCompactTransitions.collectAsStateWithLifecycle()
     val playerArtworkMode by AppSettings.playerArtworkMode.collectAsStateWithLifecycle()
+    val playlistPlaybackSettingsRevision by PlaylistPlaybackSettings.revision.collectAsStateWithLifecycle()
+    val effectivePlayerArtworkMode = remember(song.playbackPlaylistId, playlistPlaybackSettingsRevision, playerArtworkMode) {
+        PlaylistPlaybackSettings.profileFor(song.playbackPlaylistId)
+            ?.takeIf { it.artworkModeOverride }
+            ?.artworkMode
+            ?: playerArtworkMode
+    }
     val retroPlayerMode by AppSettings.retroPlayerMode.collectAsStateWithLifecycle()
     val retroPlayerBackground by AppSettings.retroPlayerBackground.collectAsStateWithLifecycle()
-    val fullBleedArt = playerArtworkMode.usesFullScreenArtwork && !retroPlayerMode
-    val largerFullBleedArtwork = playerArtworkMode == PlayerArtworkMode.FULL_SCREEN_LARGER && !retroPlayerMode
-    val aurisFullBleedArtwork = playerArtworkMode == PlayerArtworkMode.AURIS_FULL_SCREEN && !retroPlayerMode
-    val preserveSleeveArtworkShape = playerArtworkMode == PlayerArtworkMode.STANDARD_ORIGINAL_ASPECT
+    val fullBleedArt = effectivePlayerArtworkMode.usesFullScreenArtwork && !retroPlayerMode
+    val largerFullBleedArtwork = effectivePlayerArtworkMode == PlayerArtworkMode.FULL_SCREEN_LARGER && !retroPlayerMode
+    val aurisFullBleedArtwork = effectivePlayerArtworkMode == PlayerArtworkMode.AURIS_FULL_SCREEN && !retroPlayerMode
+    val preserveSleeveArtworkShape = effectivePlayerArtworkMode == PlayerArtworkMode.STANDARD_ORIGINAL_ASPECT
     val preserveTransitionArtworkProportions =
         preserveArtworkShapeInCompactTransitions && preserveSleeveArtworkShape
     val dock = if (playerArtworkTransitionEnabled) LocalPlayerDock.current?.takeUnless { docked } else null
@@ -2971,6 +2979,10 @@ fun NowPlayingScreen(
                                 .fillMaxSize()
                                 .drawWithContent { if (artLoaded || !canvasRendered) drawContent() },
                         )
+
+                        if (song.isVideo && p < 0.5f && !queueOpen && !lyricsOpen) {
+                            AndroidMusicVideo(song, Modifier.fillMaxSize(), priority = 2)
+                        }
 
                         // Where the clip plays when it can't have the banner:
                         // inside the same clip as the still art, taking the
