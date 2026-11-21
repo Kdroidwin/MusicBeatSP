@@ -472,6 +472,13 @@ fun RadioScreen(
                 AppSettings.setRadioService(service)
                 stationDetail = null
                 selectedOnsenProgram = null
+                selectedProgram = null
+                keywordFavoriteStation = null
+                pendingAutoRecordProgram = null
+                pendingOnsenDownload = null
+                showRecordingFavorites = false
+                showRegionPicker = false
+                query = ""
                 showServicePicker = false
             },
             onDismiss = { showServicePicker = false },

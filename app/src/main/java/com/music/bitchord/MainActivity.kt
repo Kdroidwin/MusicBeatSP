@@ -3161,6 +3161,7 @@ private fun BitChordApp(
                             showTabRow = true,
                             onArtworkPaletteChanged = onLocalArtworkPaletteChanged,
                             onCollectionNavigationChanged = onCollectionNavigationChanged,
+                            onOpenArtistPage = { artist, _ -> openPlayerArtistPage(artist) },
                         )
                     } else if (page != null) {
                         val withAlbum: (Song) -> Song = { song ->
@@ -3586,6 +3587,7 @@ private fun BitChordApp(
                                 onSongTagsOrLyricsSaved = { viewModel.reloadLyrics(it) },
                                 onSongMetadataUpdated = viewModel::updateLocalSongMetadata,
                                 onCollectionNavigationChanged = onCollectionNavigationChanged,
+                                onOpenArtistPage = { artist, _ -> openPlayerArtistPage(artist) },
                             )
                         }
                         TAB_ALBUMS -> if (!hasStoragePermission && catalogSongs.isEmpty()) {
@@ -3635,6 +3637,7 @@ private fun BitChordApp(
                                 onSongTagsOrLyricsSaved = { viewModel.reloadLyrics(it) },
                                 onSongMetadataUpdated = viewModel::updateLocalSongMetadata,
                                 onCollectionNavigationChanged = onCollectionNavigationChanged,
+                                onOpenArtistPage = { artist, _ -> openPlayerArtistPage(artist) },
                             )
                         }
                         TAB_ARTISTS -> if (!hasStoragePermission && catalogSongs.isEmpty()) {
@@ -3732,6 +3735,7 @@ private fun BitChordApp(
                                 onSongTagsOrLyricsSaved = { viewModel.reloadLyrics(it) },
                                 onSongMetadataUpdated = viewModel::updateLocalSongMetadata,
                                 onCollectionNavigationChanged = onCollectionNavigationChanged,
+                                onOpenArtistPage = { artist, _ -> openPlayerArtistPage(artist) },
                             )
                         }
                         TAB_LIBRARY -> if (!hasStoragePermission && catalogSongs.isEmpty()) {
@@ -3833,6 +3837,7 @@ private fun BitChordApp(
                                 configuredSourceResults = configuredSourceSearchResults,
                                 onConfiguredSourceSearch = viewModel::searchConfiguredSource,
                                 onConfiguredSourceTrackClick = { song -> play(listOf(song), 0) },
+                                onArtistCreditClick = { artist -> openPlayerArtistPage(artist) },
                                 onYoutubeMusicBrowseClick = { item ->
                                     viewModel.openDetail(
                                         browseId = item.browseId,
@@ -3974,6 +3979,7 @@ private fun BitChordApp(
                                 onSongTagsOrLyricsSaved = { viewModel.reloadLyrics(it) },
                                 onSongMetadataUpdated = viewModel::updateLocalSongMetadata,
                                 onCollectionNavigationChanged = onCollectionNavigationChanged,
+                                onOpenArtistPage = { artist, _ -> openPlayerArtistPage(artist) },
                             )
                         }
                         TAB_SERVICES -> Box(modifier = Modifier.fillMaxSize())

@@ -2204,6 +2204,7 @@
     <string name="radio_service_rss">RSS</string>
     <string name="radio_service_youtube_podcasts">YouTube ポッドキャスト</string>
     <string name="radio_youtube_podcasts_enable_youtube">ポッドキャストを表示するには、設定でYouTube Musicを有効にしてください。</string>
+    <string name="radio_youtube_podcasts_enable_button">YouTube Musicを有効にする</string>
     <string name="radio_youtube_podcasts_failed">YouTube ポッドキャストを読み込めませんでした。</string>
     <string name="radio_youtube_podcasts_empty">現在表示できる番組やエピソードはありません。</string>
     <string name="radio_recording_favorite_count">ラジオ録音のお気に入り %1$d 件</string>

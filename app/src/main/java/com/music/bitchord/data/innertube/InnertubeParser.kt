@@ -269,17 +269,23 @@ object InnertubeParser {
             }
         }
         walk(root)
-        return out.distinctBy { it.title to it.items.map(ShelfItem::browseId) }
+        return out.distinctBy { shelf ->
+            shelf.title to shelf.items.map { it.browseId ?: it.videoId ?: it.title }
+        }
     }
 
     private fun podcastShelf(carousel: JsonObject): HomeShelf? {
         val header = carousel.o("header").o("musicCarouselShelfBasicHeaderRenderer")
         val title = header.o("title").runs().trim()
         if (title.isBlank()) return null
-        val items = carousel.a("contents").orEmpty().mapNotNull { item ->
+        val contents = carousel.a("contents").orEmpty()
+        // Podcast shelves use two different renderer shapes. Episodes are
+        // multi-row entries; shows are two-row cards whose MPSP browse id is
+        // the reliable type marker. The generic music-card parser intentionally
+        // filters some non-music/video cards, so it must not classify shows.
+        val episodes = contents.mapNotNull { item ->
             val episodeRenderer = item.o("musicMultiRowListItemRenderer")
-            val episode = parseMultiRowListItem(episodeRenderer, show = null)
-            if (episode != null) {
+            parseMultiRowListItem(episodeRenderer, show = null)?.let { episode ->
                 ShelfItem(
                     title = episode.title,
                     subtitle = episodeRenderer.o("secondTitle").runs(),
@@ -287,12 +293,31 @@ object InnertubeParser {
                     videoId = episode.videoId,
                     browseId = null,
                 )
-            } else {
-                parseTwoRowItem(item.o("musicTwoRowItemRenderer"))
             }
         }
-        return if (items.isEmpty()) null else HomeShelf(title, items, header.o("strapline").runs())
+        if (episodes.isNotEmpty()) return HomeShelf(title, episodes, header.o("strapline").runs())
+
+        val shows = contents.mapNotNull { item ->
+            val renderer = item.o("musicTwoRowItemRenderer")
+            val browseId = renderer.o("navigationEndpoint").o("browseEndpoint").s("browseId")
+                ?.takeIf { it.startsWith(PODCAST_SHOW_PREFIX) }
+                ?: return@mapNotNull null
+            val showTitle = renderer.o("title").runs().trim().takeIf(String::isNotBlank)
+                ?: return@mapNotNull null
+            ShelfItem(
+                title = showTitle,
+                subtitle = renderer.o("subtitle").runs(),
+                thumbnailUrl = renderer.o("thumbnailRenderer").o("musicThumbnailRenderer")
+                    .o("thumbnail").a("thumbnails").best(),
+                videoId = null,
+                browseId = browseId,
+            )
+        }
+        if (shows.isEmpty()) return null
+        return HomeShelf(title, shows, header.o("strapline").runs())
     }
+
+    private const val PODCAST_SHOW_PREFIX = "MPSP"
 
     /**
      * The Moods & genres browse page is a set of navigation-button grids, not

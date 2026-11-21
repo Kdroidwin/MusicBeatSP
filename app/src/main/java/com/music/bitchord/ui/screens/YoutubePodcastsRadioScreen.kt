@@ -107,22 +107,34 @@ internal fun YoutubePodcastsRadioScreen(
                 IconButton(onClick = { refreshKey++ }, enabled = youtubeAllowed && !loading) {
                     Icon(Icons.Rounded.Refresh, contentDescription = stringResource(R.string.service_refresh))
                 }
-                IconButton(onClick = onChangeService) {
-                    Icon(Icons.Rounded.Tune, contentDescription = stringResource(R.string.radio_select_service))
+                TextButton(onClick = onChangeService) {
+                    Icon(Icons.Rounded.Tune, contentDescription = null)
+                    Spacer(Modifier.width(4.dp))
+                    Text(stringResource(R.string.radio_change_service))
                 }
             }
         }
         if (!youtubeAllowed) {
             item(key = "youtube-podcasts-disabled") {
-                Text(
-                    text = if (networkUnavailable || appOffline) {
-                        stringResource(R.string.radio_offline_unavailable)
-                    } else {
-                        stringResource(R.string.radio_youtube_podcasts_enable_youtube)
-                    },
+                Column(
                     modifier = Modifier.fillMaxWidth().padding(20.dp),
-                    color = MaterialTheme.colorScheme.onSurfaceVariant,
-                )
+                    horizontalAlignment = Alignment.CenterHorizontally,
+                    verticalArrangement = Arrangement.spacedBy(8.dp),
+                ) {
+                    Text(
+                        text = if (networkUnavailable || appOffline) {
+                            stringResource(R.string.radio_offline_unavailable)
+                        } else {
+                            stringResource(R.string.radio_youtube_podcasts_enable_youtube)
+                        },
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    )
+                    if (!networkUnavailable && !appOffline && !youtubeMusicEnabled) {
+                        TextButton(onClick = { AppSettings.setYoutubeMusicEnabled(true) }) {
+                            Text(stringResource(R.string.radio_youtube_podcasts_enable_button))
+                        }
+                    }
+                }
             }
         } else if (loading && shelves.isEmpty()) {
             item(key = "youtube-podcasts-loading") {

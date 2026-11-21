@@ -2231,6 +2231,7 @@
     <string name="radio_service_rss">RSS</string>
     <string name="radio_service_youtube_podcasts">YouTube Podcasts</string>
     <string name="radio_youtube_podcasts_enable_youtube">Enable YouTube Music in settings to browse podcasts.</string>
+    <string name="radio_youtube_podcasts_enable_button">Enable YouTube Music</string>
     <string name="radio_youtube_podcasts_failed">Could not load YouTube Podcasts.</string>
     <string name="radio_youtube_podcasts_empty">No podcast shows or episodes are available right now.</string>
     <string name="radio_recording_favorite_count">%1$d radio recording favorites</string>

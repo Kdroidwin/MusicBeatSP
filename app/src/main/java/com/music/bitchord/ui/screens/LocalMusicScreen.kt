@@ -1147,6 +1147,7 @@ fun LocalMusicScreen(
                             selectedIds = selectedSongIds,
                             currentSong = currentSong,
                             isPlaying = isPlaying,
+                            onArtistClick = { artist -> onOpenArtistPage?.invoke(artist, drillDownSongs) },
                             onSongClick = { tracks, index ->
                                 val song = tracks[index]
                                 if (selectingSongs) toggleDownloadSelection(song) else onSongClick(tracks, index)

@@ -71,9 +71,45 @@ object YtMusicRepository {
 
     /** YouTube Music's public Podcasts landing shelves, also used by Radio's service picker. */
     suspend fun podcastsLanding(): Result<List<HomeShelf>> = call("podcasts:landing") {
-        val response = Innertube.browse("FEmusic_non_music_audio", language = Innertube.currentLanguage)
-        InnertubeParser.parsePodcastShelves(response)
+        // Dial's podcast page is assembled from the Podcasts chip on Home and
+        // the public non-music-audio landing page. The earlier Radio port only
+        // queried the latter, which can return no shelves for some client
+        // contexts, and then treated podcast show cards as ordinary music
+        // cards. Ask both endpoints and accept either response.
+        val (homeResult, landingResult) = coroutineScope {
+            val home = async {
+                try {
+                    Result.success(Innertube.browse("FEmusic_home", PODCASTS_CHIP_PARAMS, Innertube.currentLanguage))
+                } catch (cancelled: CancellationException) {
+                    throw cancelled
+                } catch (failure: Throwable) {
+                    Result.failure(failure)
+                }
+            }
+            val landing = async {
+                try {
+                    Result.success(Innertube.browse("FEmusic_non_music_audio", language = Innertube.currentLanguage))
+                } catch (cancelled: CancellationException) {
+                    throw cancelled
+                } catch (failure: Throwable) {
+                    Result.failure(failure)
+                }
+            }
+            home.await() to landing.await()
+        }
+        val shelves = buildList {
+            landingResult.getOrNull()?.let { addAll(InnertubeParser.parsePodcastShelves(it)) }
+            homeResult.getOrNull()?.let { addAll(InnertubeParser.parsePodcastShelves(it)) }
+        }.distinctBy { shelf ->
+            shelf.title.trim().lowercase(Locale.ROOT) to shelf.items.map { it.browseId ?: it.videoId ?: it.title }
+        }
+        if (shelves.isNotEmpty()) return@call shelves
+        throw landingResult.exceptionOrNull()
+            ?: homeResult.exceptionOrNull()
+            ?: IllegalStateException("YouTube Music returned no podcast shelves")
     }
+
+    private const val PODCASTS_CHIP_PARAMS = "ggMGSgQIDBAD"
 
     /** Recently played is rendered independently, at the top of the Play page. */
     suspend fun homeRecentlyPlayed(): Result<HomeShelf?> = call("home:recent") { recentlyPlayed() }

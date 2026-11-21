@@ -101,6 +101,7 @@ fun LocalSearchScreen(
     onSongSwipe: (Song) -> Unit,
     onAlbumClick: ((String, List<Song>, String?) -> Unit)? = null,
     onArtistClick: ((String, List<Song>) -> Unit)? = null,
+    onArtistCreditClick: ((String) -> Unit)? = null,
     onFolderClick: ((String, List<Song>) -> Unit)? = null,
     onShuffle: ((List<Song>) -> Unit)? = null,
     focusTrigger: Int = 0,
@@ -337,6 +338,7 @@ fun LocalSearchScreen(
                 selectedIds = selectedSongIds,
                 currentSong = currentSong,
                 isPlaying = isPlaying,
+                onArtistClick = onArtistCreditClick,
                 onSongClick = { list, index ->
                     val song = list.getOrNull(index) ?: return@DrillDownSongList
                     if (selectedSongIds.isNotEmpty()) {
