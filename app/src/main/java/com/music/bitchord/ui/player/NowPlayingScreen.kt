@@ -273,7 +273,9 @@ import coil3.request.ImageRequest
 import coil3.request.SuccessResult
 import coil3.request.allowHardware
 import coil3.toBitmap
+import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.withContext
 import com.music.bitchord.ui.theme.SystemBarIcons
 import com.music.bitchord.ui.theme.SystemBarVisibility
@@ -479,6 +481,7 @@ private const val HERO_BLUR_CACHE_BYTES = 4 * 1024 * 1024
 private val heroBlurBitmapCache = object : LruCache<String, Bitmap>(HERO_BLUR_CACHE_BYTES) {
     override fun sizeOf(key: String, value: Bitmap): Int = value.byteCount
 }
+private val heroBlurCacheScope = CoroutineScope(SupervisorJob() + Dispatchers.Main.immediate)
 
 private fun Bitmap.retainedHeroBlurCopy(): Bitmap {
     val longestEdge = maxOf(width, height).coerceAtLeast(1)
@@ -489,22 +492,40 @@ private fun Bitmap.retainedHeroBlurCopy(): Bitmap {
     return if (scaled === this) copy(Bitmap.Config.ARGB_8888, false) ?: this else scaled
 }
 
+/** Prepare the softened sleeve as soon as the ordinary player image is ready. */
+private fun cacheHeroBlurBitmap(
+    cacheKey: String,
+    source: Bitmap,
+    onCached: (Bitmap) -> Unit,
+) {
+    heroBlurBitmapCache.get(cacheKey)?.let {
+        onCached(it)
+        return
+    }
+    heroBlurCacheScope.launch {
+        val retained = withContext(Dispatchers.Default) { source.retainedHeroBlurCopy() }
+        val cached = heroBlurBitmapCache.get(cacheKey) ?: retained.also {
+            heroBlurBitmapCache.put(cacheKey, it)
+        }
+        onCached(cached)
+    }
+}
+
 /** Restored artwork-derived blur used by the standard and enlarged full-screen modes. */
 @Composable
 private fun HeroArtworkBottomBlur(
     model: ImageRequest,
     cacheKey: String?,
+    cachedBlurImage: ImageBitmap?,
     alpha: Float,
     zoom: Float,
+    onBlurReady: (Bitmap) -> Unit,
     includeRightEdge: Boolean = false,
     modifier: Modifier = Modifier,
 ) {
     val strengthDp by AppSettings.fullBleedArtworkBottomBlurStrengthDp.collectAsStateWithLifecycle()
     if (strengthDp <= 0) return
 
-    var cachedBlurImage by remember(cacheKey) {
-        mutableStateOf(cacheKey?.let(heroBlurBitmapCache::get)?.asImageBitmap())
-    }
     val intensity = (strengthDp / 42f).coerceIn(0f, 1f)
     val maskZoom = zoom.takeIf { it.isFinite() && it >= 1f } ?: 1f
     val blurModifier = modifier
@@ -521,10 +542,10 @@ private fun HeroArtworkBottomBlur(
             drawRect(
                 brush = Brush.verticalGradient(
                     colorStops = arrayOf(
-                        (0.58f / maskZoom) to Color.Transparent,
-                        (0.72f / maskZoom) to Color.Black.copy(alpha = 0.48f * intensity),
-                        (0.88f / maskZoom) to Color.Black.copy(alpha = 0.82f * intensity),
-                        (1f / maskZoom) to Color.Transparent,
+                        (0.48f / maskZoom) to Color.Transparent,
+                        (0.66f / maskZoom) to Color.Black.copy(alpha = 0.72f),
+                        (0.84f / maskZoom) to Color.Black,
+                        (1f / maskZoom) to Color.Black,
                     ),
                 ),
                 blendMode = BlendMode.DstIn,
@@ -534,8 +555,8 @@ private fun HeroArtworkBottomBlur(
                     brush = Brush.horizontalGradient(
                         colorStops = arrayOf(
                             (0.58f / maskZoom) to Color.Transparent,
-                            (0.72f / maskZoom) to Color.Black.copy(alpha = 0.48f * intensity),
-                            (0.88f / maskZoom) to Color.Black.copy(alpha = 0.82f * intensity),
+                            (0.72f / maskZoom) to Color.Black.copy(alpha = 0.48f),
+                            (0.88f / maskZoom) to Color.Black.copy(alpha = 0.82f),
                             (1f / maskZoom) to Color.Transparent,
                         ),
                     ),
@@ -544,6 +565,25 @@ private fun HeroArtworkBottomBlur(
             }
         }
         .blur(strengthDp.dp, BlurredEdgeTreatment.Rectangle)
+        // Keep the blur strong through the lower edge, then dissolve that
+        // softened copy into the player backdrop. BitChord uses a page-colour
+        // wash here; the player already has its artwork-derived backdrop.
+        .graphicsLayer { compositingStrategy = CompositingStrategy.Offscreen }
+        .drawWithContent {
+            drawContent()
+            drawRect(
+                brush = Brush.verticalGradient(
+                    colorStops = arrayOf(
+                        (0.82f / maskZoom) to Color.Black,
+                        (0.90f / maskZoom) to Color.Black,
+                        (0.94f / maskZoom) to Color.Black.copy(alpha = 0.72f),
+                        (0.98f / maskZoom) to Color.Black.copy(alpha = 0.24f),
+                        (1f / maskZoom) to Color.Transparent,
+                    ),
+                ),
+                blendMode = BlendMode.DstIn,
+            )
+        }
 
     if (cachedBlurImage != null) {
         Image(
@@ -559,9 +599,7 @@ private fun HeroArtworkBottomBlur(
             contentScale = ContentScale.Crop,
             onSuccess = { success ->
                 val key = cacheKey ?: return@AsyncImage
-                val retained = success.result.image.toBitmap().retainedHeroBlurCopy()
-                heroBlurBitmapCache.put(key, retained)
-                cachedBlurImage = retained.asImageBitmap()
+                cacheHeroBlurBitmap(key, success.result.image.toBitmap(), onBlurReady)
             },
             modifier = blurModifier,
         )
@@ -1993,6 +2031,12 @@ fun NowPlayingScreen(
     } else {
         displayedArtUrl
     }
+    val heroBlurRequired = fullBleedArtworkBottomBlurStrengthDp > 0 && requestedArtUrl != null
+    var heroBlurImage by remember(requestedArtUrl, heroBlurRequired) {
+        mutableStateOf(requestedArtUrl?.let(heroBlurBitmapCache::get)?.asImageBitmap())
+    }
+    val heroBlurReady = !heroBlurRequired || heroBlurImage != null
+    val currentRequestedArtUrl by rememberUpdatedState(requestedArtUrl)
     var artLoaded by remember(requestedArtUrl) { mutableStateOf(false) }
     /**
      * Which go at this cover we are on, and the reason there is more than one.
@@ -2080,7 +2124,7 @@ fun NowPlayingScreen(
     // — see [heroVisible].
     val heroT by animateFloatAsState(
         targetValue = if (
-            heroMode && (canvasRendered || artLoaded || heroSettled)
+            heroMode && (canvasRendered || ((artLoaded || heroSettled || artFailed) && heroBlurReady))
         ) 1f else 0f,
         animationSpec = if (reducePlayerAnimations) snap() else tween(durationMillis = 420, easing = FastOutSlowInEasing),
         label = "heroCanvas",
@@ -2371,9 +2415,11 @@ fun NowPlayingScreen(
                 HeroArtworkBottomBlur(
                     model = artRequest,
                     cacheKey = requestedArtUrl,
+                    cachedBlurImage = heroBlurImage,
                     alpha = heroVisible *
                         (1f - if (heroClip != null) canvasCover.floatValue else 0f),
                     zoom = heroArtworkZoom,
+                    onBlurReady = { bitmap -> heroBlurImage = bitmap.asImageBitmap() },
                     includeRightEdge = tabletFullscreenPlayer,
                     modifier = Modifier
                         .align(Alignment.TopStart)
@@ -3032,10 +3078,18 @@ fun NowPlayingScreen(
                             // Video thumbnails are 16:9; letterboxing them inside
                             // the square sleeve looks like a broken frame.
                             contentScale = sleeveContentScale,
-                            onState = {
-                                artLoaded = it is AsyncImagePainter.State.Success
-                                if (it is AsyncImagePainter.State.Success) {
-                                    val image = it.result.image
+                            onState = { state ->
+                                artLoaded = state is AsyncImagePainter.State.Success
+                                if (state is AsyncImagePainter.State.Success) {
+                                    val image = state.result.image
+                                    val blurCacheKey = requestedArtUrl
+                                    if (blurCacheKey != null && fullBleedArtworkBottomBlurStrengthDp > 0) {
+                                        cacheHeroBlurBitmap(blurCacheKey, image.toBitmap()) { bitmap ->
+                                            if (currentRequestedArtUrl == blurCacheKey) {
+                                                heroBlurImage = bitmap.asImageBitmap()
+                                            }
+                                        }
+                                    }
                                     val aspectRatio = image.width.toFloat() / image.height.coerceAtLeast(1)
                                     if (aspectRatio.isFinite() && aspectRatio in 0.25f..4f) {
                                         loadedArtworkAspectRatio = aspectRatio
@@ -3046,7 +3100,7 @@ fun NowPlayingScreen(
                                 // effect, and clearing it from a Loading state
                                 // here would cancel that effect's wait every time
                                 // the painter passed back through Loading.
-                                if (it is AsyncImagePainter.State.Error) {
+                                if (state is AsyncImagePainter.State.Error) {
                                     if (localPreviewArtUrl != null && !fullLocalArtworkAllowed) {
                                         // If the platform thumbnail is unavailable,
                                         // still try the exact embedded cover before
