@@ -271,7 +271,7 @@ object LocalMediaRepository {
                 if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
                     append(" AND ${MediaStore.Audio.Media.IS_PODCAST} = 0")
                 }
-                append("))")
+                append(")")
             }
         } else {
             "(${MediaStore.Audio.Media.IS_MUSIC} != 0$extraAudioSelection)"
