@@ -301,7 +301,10 @@ object LocalMediaRepository {
         }
 
         fun queryVolume(knownVolumeName: String?, collectionUri: Uri): Boolean {
-            var cursorReturned = false
+            var querySucceeded = false
+            val originalSongCount = songs.size
+            val originalWavCount = wavSongsWithoutMediaStoreArtist.size
+            val originalWmaCount = wmaSongsWithoutMediaStoreTags.size
             runCatching {
                 context.contentResolver.query(
                     collectionUri,
@@ -310,7 +313,6 @@ object LocalMediaRepository {
                     selectionArgs,
                     sortOrder,
                 )?.use { cursor ->
-                    cursorReturned = true
                     val idCol = cursor.getColumnIndexOrThrow(MediaStore.Audio.Media._ID)
                     val displayNameCol = cursor.getColumnIndexOrThrow(MediaStore.Audio.Media.DISPLAY_NAME)
                     val titleCol = cursor.getColumnIndexOrThrow(MediaStore.Audio.Media.TITLE)
@@ -320,7 +322,11 @@ object LocalMediaRepository {
                     val trackCol = cursor.getColumnIndexOrThrow(MediaStore.Audio.Media.TRACK)
                     val albumIdCol = cursor.getColumnIndexOrThrow(MediaStore.Audio.Media.ALBUM_ID)
                     val durationCol = cursor.getColumnIndexOrThrow(MediaStore.Audio.Media.DURATION)
-                    val dataCol = cursor.getColumnIndexOrThrow(MediaStore.Audio.Media.DATA)
+                    // DATA may be omitted by scoped-storage MediaStore
+                    // providers, especially for a removable volume. Folder
+                    // paths are resolved from RELATIVE_PATH/VOLUME_NAME when
+                    // possible, so the column is only a compatibility fallback.
+                    val dataCol = cursor.getColumnIndex(MediaStore.Audio.Media.DATA)
                     val relativePathCol = cursor.getColumnIndex(MediaStore.MediaColumns.RELATIVE_PATH)
                     val volumeNameCol = cursor.getColumnIndex(MediaStore.MediaColumns.VOLUME_NAME)
                     val dateAddedCol = cursor.getColumnIndexOrThrow(MediaStore.Audio.Media.DATE_ADDED)
@@ -335,7 +341,13 @@ object LocalMediaRepository {
                         val rawAlbum = cursor.getString(albumCol)
                         val albumId = cursor.getLong(albumIdCol)
                         val durationMs = cursor.getLong(durationCol)
-                        val path = dataCol.takeIf { it >= 0 }?.let(cursor::getString)
+                        // Some scoped MediaStore providers expose DATA in the
+                        // projection but reject access to its value for a row.
+                        // A path is only a fallback for folder resolution; a
+                        // denied path must not discard the whole volume scan.
+                        val path = dataCol.takeIf { it >= 0 }?.let { column ->
+                            runCatching { cursor.getString(column) }.getOrNull()
+                        }
                         if (filterNonMusic && !isEligibleLocalMusic(durationMs, displayName, path)) continue
                         val relativePath = relativePathCol.takeIf { it >= 0 }?.let(cursor::getString)
                         val rowVolumeName = volumeNameCol.takeIf { it >= 0 }
@@ -407,11 +419,23 @@ object LocalMediaRepository {
                             wmaSongsWithoutMediaStoreTags += (songs.lastIndex to song)
                         }
                     }
+                    querySucceeded = true
                 }
             }.onFailure {
+                // A provider can fail after returning a cursor. Do not leave
+                // half a volume in the result or count that cursor as a
+                // successful scan; the aggregate fallback may still work.
+                querySucceeded = false
+                while (songs.size > originalSongCount) songs.removeAt(songs.lastIndex)
+                while (wavSongsWithoutMediaStoreArtist.size > originalWavCount) {
+                    wavSongsWithoutMediaStoreArtist.removeAt(wavSongsWithoutMediaStoreArtist.lastIndex)
+                }
+                while (wmaSongsWithoutMediaStoreTags.size > originalWmaCount) {
+                    wmaSongsWithoutMediaStoreTags.removeAt(wmaSongsWithoutMediaStoreTags.lastIndex)
+                }
                 Log.w(TAG, "Failed scanning device local music from $knownVolumeName: ${it.message}")
             }
-            return cursorReturned
+            return querySucceeded
         }
 
         var anyVolumeQueryReturned = false
