@@ -359,9 +359,9 @@ private const val LARGER_AURIS_FULL_BLEED_ZOOM = 1.36f
 /** The subtle downward drift used by Auris' expanded artwork. */
 private const val AURIS_FULL_BLEED_DRIFT = 0.016f
 /** The established dissolve used by the standard full-screen artwork mode. */
-private const val HERO_FADE_FRACTION = 0.42f
-/** BitChord's full-bleed still artwork uses this same 42% lower-edge dissolve. */
-private const val BITCHORD_HERO_FADE_FRACTION = 0.42f
+private const val HERO_FADE_FRACTION = 0.24f
+/** BitChord-style lower-edge dissolve, kept short so the cover stays visible. */
+private const val BITCHORD_HERO_FADE_FRACTION = 0.24f
 
 private class CenteredPlayerButtonArrangement(private val gapDp: Float) : Arrangement.Horizontal {
     override fun Density.arrange(
@@ -1237,11 +1237,10 @@ fun NowPlayingScreen(
         }
     }
     val dockFrame = remember { DockFrame() }
-    // The full-bleed sleeve is drawn as one root-level image so it can move
-    // through the status-bar area without drawing a second copy in the card.
-    // Keep the artwork box's root position observable for its layout pass.
-    var artworkBoxPosition by remember { mutableStateOf(Offset.Zero) }
-    var artworkBoxMeasured by remember { mutableStateOf(false) }
+    // Full-bleed artwork is laid out by the same BoxWithConstraints as the
+    // compact sleeve. This keeps its banner → queue/lyrics thumbnail geometry
+    // in the same measure pass as `p`, instead of reading a stale rect from a
+    // separate root overlay.
     val sleeveLayer = rememberGraphicsLayer()
     fun dockFraction(): Float {
         val activeDock = dock ?: return 1f
@@ -2325,163 +2324,6 @@ fun NowPlayingScreen(
         }
 
         if (heroHeight > 0.dp) {
-        // One artwork layer morphs card → full-bleed banner → compact header.
-        // Keeping the still image here (rather than cross-fading a second
-        // full-screen copy against the card) is the sleeve behavior used by
-        // BitChord for both panel collapse and the mini-player hand-off.
-        if (heroMode && heroHeight > 0.dp && artworkBoxMeasured) {
-            Box(
-                modifier = Modifier
-                    .layout { measurable, constraints ->
-                        // artworkRect is measured in BoxWithConstraints space;
-                        // place this one image at that same rectangle in the
-                        // player's root so it can reach behind the status bar.
-                        val rect = dockFrame.artworkRect
-                        val width = rect.width.roundToInt().coerceAtLeast(1)
-                        val height = rect.height.roundToInt().coerceAtLeast(1)
-                        val placeable = measurable.measure(Constraints.fixed(width, height))
-                        val x = (artworkBoxPosition.x + rect.left).roundToInt()
-                        val y = (artworkBoxPosition.y + rect.top).roundToInt()
-                        layout(constraints.maxWidth, constraints.maxHeight) {
-                            placeable.place(x, y)
-                        }
-                    }
-                    .drawWithContent {
-                        if (isDocking()) {
-                            sleeveLayer.record { this@drawWithContent.drawContent() }
-                        } else {
-                            drawContent()
-                        }
-                    }
-                    .then(
-                        if (aurisHeroMode) {
-                            Modifier.aurisHeroArtworkBottomFade(heroArtworkZoom) {
-                                heroVisible * dockFraction()
-                            }
-                        } else {
-                            Modifier.heroArtworkBottomFade(heroFadeFraction, heroArtworkZoom) {
-                                heroVisible * dockFraction()
-                            }
-                        },
-                    )
-                    .hazeSource(playerHaze)
-                    .graphicsLayer {
-                        // BitChord eases the dissolve, crop and drift out with
-                        // the same sleeve share while docking. If these only
-                        // follow the queue/lyrics progress, the mini-player is
-                        // left with a cropped/faded copy of the banner art.
-                        val bannerShown = (heroVisible * dockFraction()).coerceIn(0f, 1f)
-                        val idleScale = artScale + (1f - artScale) * p
-                        val scale = idleScale + (1f - idleScale) * heroT
-                        scaleX = scale
-                        scaleY = scale
-                        translationX = swipeSettle * (1f - p) * (1f - heroT)
-                        shadowElevation = if (artLoaded) {
-                            10.dp.toPx() * (1f - 2f * bannerShown).coerceAtLeast(0f) * dockFraction()
-                        } else 0f
-                        shape = RoundedCornerShape(with(density) { dockFrame.artworkCornerPx.toDp() })
-                        clip = true
-                        compositingStrategy = if (bannerShown > 0f) {
-                            CompositingStrategy.Offscreen
-                        } else {
-                            CompositingStrategy.Auto
-                        }
-                    },
-                contentAlignment = Alignment.Center,
-            ) {
-                Box(
-                    Modifier
-                        .fillMaxSize()
-                        .background(Color.Black.copy(alpha = 0.18f)),
-                    contentAlignment = Alignment.Center,
-                ) {
-                    if (!artLoaded && !canvasRendered) {
-                        Icon(
-                            imageVector = BitChordIcons.MusicNote,
-                            contentDescription = null,
-                            tint = Color.White.copy(alpha = 0.35f),
-                            modifier = Modifier.size(lerp(40.dp, 20.dp, p)),
-                        )
-                    }
-                    if (!useRemoteArtworkFallback) {
-                        localPreviewRequest?.let { previewRequest ->
-                            AsyncImage(
-                                model = previewRequest,
-                                contentDescription = null,
-                                contentScale = ContentScale.Crop,
-                                modifier = Modifier.fillMaxSize(),
-                            )
-                        }
-                    }
-                    AsyncImage(
-                        model = artRequest,
-                        contentDescription = null,
-                        contentScale = ContentScale.Crop,
-                        modifier = Modifier
-                            .fillMaxSize()
-                            .graphicsLayer {
-                                val targetScale = if (aurisHeroMode) {
-                                    aurisHeroArtworkScale(size.width, size.height, heroArtworkZoom)
-                                } else heroArtworkZoom
-                                val sleeveShown = (heroVisible * dockFraction()).coerceIn(0f, 1f)
-                                val cropScale = 1f + (targetScale - 1f) * sleeveShown
-                                scaleX = cropScale
-                                scaleY = cropScale
-                                transformOrigin = TransformOrigin(0.5f, 0f)
-                                if (aurisHeroMode) {
-                                    translationY = size.width * AURIS_FULL_BLEED_DRIFT * sleeveShown
-                                }
-                            },
-                    )
-                    HeroArtworkBottomBlur(
-                        model = artRequest,
-                        cacheKey = requestedArtUrl,
-                        cachedBlurImage = heroBlurImage,
-                        alpha = heroVisible * dockFraction() *
-                            (1f - if (heroClip != null) canvasCover.floatValue else 0f),
-                        zoom = heroArtworkZoom,
-                        onBlurReady = { bitmap -> heroBlurImage = bitmap.asImageBitmap() },
-                        includeRightEdge = tabletFullscreenPlayer,
-                        modifier = Modifier.fillMaxSize(),
-                    )
-                }
-            }
-        }
-
-            // Motion artwork over it, in the same frame.
-            //
-            // Always composed while there's a clip to play, never gated on
-            // [heroVisible]: the clip has to be mounted and decoding *before*
-            // it can report the first frame that raises heroT in the first place.
-            if (heroMode) {
-                heroClip?.let { clip ->
-                    CanvasArtworkPlayer(
-                        canvas = clip,
-                        isPlaying = isPlaying,
-                        onRenderedChanged = { canvasRendered = it },
-                        onFrameCaptured = { canvasFrame = it },
-                        refreshFrameEveryMs = meshRefreshMs,
-                        onCoverChanged = { canvasCover.floatValue = it },
-                        bottomFade = heroFadeFraction,
-                        bottomFadeEased = aurisHeroMode,
-                        extraZoom = with(density) {
-                            val artworkWidthPx = dockFrame.host?.size?.width?.toFloat()
-                                ?: windowWidth.toPx()
-                            if (aurisHeroMode) {
-                                aurisHeroArtworkScale(artworkWidthPx, heroHeight.toPx(), heroArtworkZoom)
-                            } else {
-                                heroArtworkZoom
-                            }
-                        },
-                        modifier = Modifier
-                            .align(Alignment.TopStart)
-                            .fillMaxWidth()
-                            .height(heroHeight)
-                            .hazeSource(playerHaze),
-                    )
-                }
-            }
-
             // The clock, the signal bars and the drag handle are all white, and
             // the banner puts whatever the artwork happens to have up there
             // directly behind them — a bright frame or a pale sleeve leaves the
@@ -2694,9 +2536,6 @@ fun NowPlayingScreen(
                     )
                     .onGloballyPositioned {
                         dockFrame.artworkBox = it
-                        val position = it.positionInRoot()
-                        if (artworkBoxPosition != position) artworkBoxPosition = position
-                        artworkBoxMeasured = true
                     },
             ) {
                 // The height this box would have if the controls at the foot of
@@ -2890,6 +2729,168 @@ fun NowPlayingScreen(
                     lerp(10.dp, 7.dp, p).toPx() * (1f - bannerShown)
                 }
 
+                // Keep a single sleeve for all three states: card, full-bleed
+                // art, and the compact header used by the queue/lyrics screens.
+                // It lives in this BoxWithConstraints so its measured rect is
+                // recalculated with `p` on the same frame as those panels. The
+                // former root overlay read a mutable rect written later in the
+                // composition, so it lagged behind panel state and left the
+                // cover stuck at its expanded size.
+                if (heroMode && heroHeight > 0.dp) {
+                    Box(
+                        modifier = Modifier
+                            .layout { measurable, constraints ->
+                                val width = sleeveRect.width.roundToInt().coerceAtLeast(1)
+                                val height = sleeveRect.height.roundToInt().coerceAtLeast(1)
+                                val placeable = measurable.measure(Constraints.fixed(width, height))
+                                layout(constraints.maxWidth, 0) {
+                                    placeable.place(sleeveRect.left.roundToInt(), sleeveRect.top.roundToInt())
+                                }
+                            }
+                            .drawWithContent {
+                                if (isDocking()) {
+                                    sleeveLayer.record { this@drawWithContent.drawContent() }
+                                } else {
+                                    drawContent()
+                                }
+                            }
+                            .graphicsLayer {
+                                val shown = (heroVisible * dockFraction()).coerceIn(0f, 1f)
+                                val idleScale = artScale + (1f - artScale) * p
+                                val scale = idleScale + (1f - idleScale) * heroT
+                                scaleX = scale
+                                scaleY = scale
+                                translationX = swipeSettle * (1f - p) * (1f - heroT)
+                                shadowElevation = if (artLoaded) {
+                                    10.dp.toPx() * (1f - 2f * shown).coerceAtLeast(0f) * dockFraction()
+                                } else 0f
+                            }
+                            .hazeSource(playerHaze)
+                            .graphicsLayer {
+                                val shown = (heroVisible * dockFraction()).coerceIn(0f, 1f)
+                                shape = RoundedCornerShape(with(density) { dockFrame.artworkCornerPx.toDp() })
+                                clip = true
+                                // DstIn below must operate inside this isolated
+                                // sleeve. Otherwise the fade erases the player
+                                // layer too and exposes the library underneath.
+                                compositingStrategy = if (shown > 0f) {
+                                    CompositingStrategy.Offscreen
+                                } else {
+                                    CompositingStrategy.Auto
+                                }
+                            }
+                            // Keep the mask after the isolated graphics layer;
+                            // applying it before that layer cut through sibling
+                            // screens and made the cover's lower half transparent.
+                            .then(
+                                if (aurisHeroMode) {
+                                    Modifier.aurisHeroArtworkBottomFade(heroArtworkZoom) {
+                                        heroVisible * dockFraction()
+                                    }
+                                } else {
+                                    Modifier.heroArtworkBottomFade(heroFadeFraction, heroArtworkZoom) {
+                                        heroVisible * dockFraction()
+                                    }
+                                },
+                            ),
+                        contentAlignment = Alignment.Center,
+                    ) {
+                        Box(
+                            Modifier
+                                .fillMaxSize()
+                                .background(Color.Black.copy(alpha = 0.18f)),
+                            contentAlignment = Alignment.Center,
+                        ) {
+                            if (!artLoaded && !canvasRendered) {
+                                Icon(
+                                    imageVector = BitChordIcons.MusicNote,
+                                    contentDescription = null,
+                                    tint = Color.White.copy(alpha = 0.35f),
+                                    modifier = Modifier.size(lerp(40.dp, 20.dp, p)),
+                                )
+                            }
+                            if (!useRemoteArtworkFallback) {
+                                localPreviewRequest?.let { previewRequest ->
+                                    AsyncImage(
+                                        model = previewRequest,
+                                        contentDescription = null,
+                                        contentScale = ContentScale.Crop,
+                                        modifier = Modifier.fillMaxSize(),
+                                    )
+                                }
+                            }
+                            AsyncImage(
+                                model = artRequest,
+                                contentDescription = null,
+                                contentScale = ContentScale.Crop,
+                                modifier = Modifier
+                                    .fillMaxSize()
+                                    .graphicsLayer {
+                                        val targetScale = if (aurisHeroMode) {
+                                            aurisHeroArtworkScale(size.width, size.height, heroArtworkZoom)
+                                        } else {
+                                            heroArtworkZoom
+                                        }
+                                        val shown = (heroVisible * dockFraction()).coerceIn(0f, 1f)
+                                        val cropScale = 1f + (targetScale - 1f) * shown
+                                        scaleX = cropScale
+                                        scaleY = cropScale
+                                        transformOrigin = TransformOrigin(0.5f, 0f)
+                                        if (aurisHeroMode) {
+                                            translationY = size.width * AURIS_FULL_BLEED_DRIFT * shown
+                                        }
+                                    },
+                            )
+                            HeroArtworkBottomBlur(
+                                model = artRequest,
+                                cacheKey = requestedArtUrl,
+                                cachedBlurImage = heroBlurImage,
+                                alpha = heroVisible * dockFraction() *
+                                    (1f - if (heroClip != null) canvasCover.floatValue else 0f),
+                                zoom = heroArtworkZoom,
+                                onBlurReady = { bitmap -> heroBlurImage = bitmap.asImageBitmap() },
+                                includeRightEdge = tabletFullscreenPlayer,
+                                modifier = Modifier.fillMaxSize(),
+                            )
+                        }
+                    }
+
+                    // The clip is a sibling above the still sleeve, matching
+                    // BitChord's video-over-cover stack. Its rect is measured
+                    // from the same banner geometry and is removed halfway
+                    // through panel collapse, while the still sleeve continues
+                    // smoothly to the thumbnail.
+                    heroClip?.let { clip ->
+                        CanvasArtworkPlayer(
+                            canvas = clip,
+                            isPlaying = isPlaying,
+                            onRenderedChanged = { canvasRendered = it },
+                            onFrameCaptured = { canvasFrame = it },
+                            refreshFrameEveryMs = meshRefreshMs,
+                            onCoverChanged = { canvasCover.floatValue = it },
+                            bottomFade = heroFadeFraction,
+                            bottomFadeEased = aurisHeroMode,
+                            extraZoom = with(density) {
+                                if (aurisHeroMode) {
+                                    aurisHeroArtworkScale(playerWidthPx, heroHeight.toPx(), heroArtworkZoom)
+                                } else {
+                                    heroArtworkZoom
+                                }
+                            },
+                            modifier = Modifier
+                                .layout { measurable, constraints ->
+                                    val width = playerWidthPx.roundToInt().coerceAtLeast(1)
+                                    val height = heroHeight.roundToPx().coerceAtLeast(1)
+                                    val placeable = measurable.measure(Constraints.fixed(width, height))
+                                    layout(constraints.maxWidth, 0) {
+                                        placeable.place(bannerLeftPx.roundToInt(), bannerTopPx.roundToInt())
+                                    }
+                                }
+                                .hazeSource(playerHaze),
+                        )
+                    }
+                }
+
                 // How far down the *screen* the sleeve's bottom edge sits, which
                 // is where the full-bleed banner has to stop for the credits
                 // below it not to move when it appears. Everything between the
@@ -3065,7 +3066,7 @@ fun NowPlayingScreen(
                             // for loading, gestures, and its normal endpoint,
                             // but never blend it with the travelling image.
                             .graphicsLayer {
-                                alpha = if (heroMode && artworkBoxMeasured && heroHeight > 0.dp) 0f else 1f
+                                alpha = if (heroMode && heroHeight > 0.dp) 0f else 1f
                             }
                             // A drop shadow grounds a photo; on the flat
                             // placeholder tile it has nothing to sit behind, so
