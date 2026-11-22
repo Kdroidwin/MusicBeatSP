@@ -1,12 +1,15 @@
 package com.music.bitchord.data.settings
 
+import android.Manifest
 import android.content.Context
 import android.content.Intent
 import android.content.SharedPreferences
+import android.content.pm.PackageManager
 import android.net.ConnectivityManager
 import android.net.Network
 import android.net.NetworkCapabilities
 import android.net.Uri
+import android.os.Build
 import androidx.media3.common.Player
 import com.music.bitchord.BuildConfig
 import com.music.bitchord.auth.AuthStore
@@ -1597,8 +1600,43 @@ object AppSettings {
         authStore = AuthStore(appContext)
         migratePlaintextCredentials()
         migrateScopedMusicAccessBackToAudioPermission()
+        migrateLegacyAllFilesPermissionToScopedAudioPermission()
         readAll()
         watchConnection(context)
+    }
+
+    /**
+     * 3.3.0 removed MANAGE_EXTERNAL_STORAGE in favor of the narrower audio
+     * library permission. Existing installs that had only granted All Files
+     * Access still had KEY_ALL_FILES_PERMISSION_ASKED=true, which suppressed
+     * the audio permission dialog even though MediaStore now correctly
+     * requires READ_MEDIA_AUDIO. Re-open the existing permission explanation
+     * once for those installs; the marker keeps a denial or dismissal from
+     * prompting on every subsequent launch.
+     */
+    private fun migrateLegacyAllFilesPermissionToScopedAudioPermission() {
+        if (prefs.getBoolean(KEY_SCOPED_AUDIO_PERMISSION_MIGRATION_DONE, false)) return
+
+        val audioPermission = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
+            Manifest.permission.READ_MEDIA_AUDIO
+        } else {
+            Manifest.permission.READ_EXTERNAL_STORAGE
+        }
+        val hasScopedAudioPermission = appContext.checkSelfPermission(audioPermission) ==
+            PackageManager.PERMISSION_GRANTED
+        val hadLegacyPermissionPrompt = prefs.getBoolean(KEY_ALL_FILES_PERMISSION_ASKED, false)
+
+        val migrated = prefs.edit()
+            .putBoolean(KEY_SCOPED_AUDIO_PERMISSION_MIGRATION_DONE, true)
+            .apply {
+                if (hadLegacyPermissionPrompt && !hasScopedAudioPermission) {
+                    putBoolean(KEY_ALL_FILES_PERMISSION_ASKED, false)
+                }
+            }
+            .commit()
+        if (!migrated) {
+            android.util.Log.w("BitChord", "Could not migrate legacy all-files audio access state")
+        }
     }
 
     /** Removes the short-lived SAF-only library gate and releases its persisted grant. */
@@ -5469,6 +5507,7 @@ object AppSettings {
         KEY_LOCAL_MUSIC_ACCESS_TREE_URI,
         KEY_LOCAL_MUSIC_SCOPE_REQUIRED,
         KEY_ALL_FILES_PERMISSION_ASKED,
+        KEY_SCOPED_AUDIO_PERMISSION_MIGRATION_DONE,
         KEY_CD_RIPPING_OUTPUT_TREE_URI,
         KEY_HEADPHONE_BURN_IN_MUSIC_URI,
     )
@@ -5904,6 +5943,7 @@ object AppSettings {
     private const val KEY_HOME_EXCLUDED_FOLDERS = "home_excluded_folders"
     private const val KEY_PINNED_PLAYLISTS = "pinned_playlists"
     private const val KEY_ALL_FILES_PERMISSION_ASKED = "all_files_permission_asked"
+    private const val KEY_SCOPED_AUDIO_PERMISSION_MIGRATION_DONE = "scoped_audio_permission_migration_done"
 
     private const val KEY_LASTFM_ENABLED = "lastfm_enabled"
     private const val KEY_LASTFM_USERNAME = "lastfm_username"

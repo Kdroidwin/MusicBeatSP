@@ -1230,6 +1230,15 @@ private fun BitChordApp(
     var showFirstLaunchPermissionDialog by rememberSaveable {
         mutableStateOf(!allFilesAsked)
     }
+    // The saveable dialog flag can survive Activity recreation while the
+    // permission migration updates the persisted prompt state. Re-evaluate it
+    // from the scoped audio permission so upgraded 3.2.x installs are not left
+    // with an empty local library and no way to reach Android's permission UI.
+    LaunchedEffect(allFilesAsked, hasStoragePermission) {
+        if (!allFilesAsked && !hasStoragePermission) {
+            showFirstLaunchPermissionDialog = true
+        }
+    }
 
     val localSongsState by viewModel.localSongs.collectAsStateWithLifecycle()
     val youtubeMusicSearchResults by viewModel.results.collectAsStateWithLifecycle()
