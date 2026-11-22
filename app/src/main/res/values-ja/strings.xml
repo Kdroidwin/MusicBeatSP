@@ -421,10 +421,11 @@
     <string name="reduce_dynamic_blur_subtitle">アプリ全体ですりガラス効果を単色の塗りつぶしに置き換えます</string>
     <string name="full_screen_cover_art">全画面カバーアート</string>
     <string name="player_artwork_mode">プレイヤーのアルバムアート表示</string>
-    <string name="player_artwork_mode_subtitle">全画面、Auris風、通常表示から選択します。</string>
+    <string name="player_artwork_mode_subtitle">全画面、BitChord風、Auris風、通常表示から選択します。</string>
     <string name="artwork_mode_full_screen">全画面</string>
     <string name="artwork_mode_full_screen_larger">全画面より拡大</string>
     <string name="artwork_mode_auris_full_screen">Auris風全画面</string>
+    <string name="artwork_mode_bitchord_full_screen">BitChord風全画面</string>
     <string name="artwork_mode_standard_square">全画面にしない（正方形に切り抜き）</string>
     <string name="artwork_mode_standard_original_aspect">全画面にしない（縦横比を維持）</string>
     <string name="playlist_artwork_mode_override">このプレイリスト専用のアート表示を使う</string>
@@ -434,7 +435,7 @@
     <string name="larger_full_screen_cover_art">全画面カバーアートを拡大</string>
     <string name="larger_full_screen_cover_art_subtitle">全画面カバーアートをさらに拡大して表示します。全画面カバーアートが有効な場合のみ使用できます。</string>
     <string name="full_screen_artwork_bottom_blur_strength">全画面アート下部のぼかし強度</string>
-    <string name="full_screen_artwork_bottom_blur_strength_subtitle">通常の全画面、拡大全画面、Auris風全画面アートの下部にかかるグラデーションぼかしを0〜200dpで調整します。</string>
+    <string name="full_screen_artwork_bottom_blur_strength_subtitle">通常、BitChord風、拡大、Auris風の全画面アート下部にかかるぼかしを0〜200dpで調整します。</string>
     <string name="artwork_blur_strength_value">%1$d dp</string>
     <string name="keep_original_artwork_aspect_ratio">カバーアートの縦横比を維持</string>
     <string name="keep_original_artwork_aspect_ratio_subtitle">全画面カバーアートがオフのとき、縦長・横長の画像を正方形に切り抜かず表示します</string>

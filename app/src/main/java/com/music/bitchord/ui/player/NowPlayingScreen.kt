@@ -52,6 +52,7 @@ import androidx.compose.foundation.background
 import androidx.compose.ui.draw.drawBehind
 import androidx.compose.foundation.border
 import androidx.compose.foundation.Canvas
+import androidx.compose.foundation.Image
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.combinedClickable
 import androidx.compose.foundation.gestures.awaitEachGesture
@@ -201,9 +202,11 @@ import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.CompositingStrategy
 import androidx.compose.ui.graphics.Shadow
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.ImageBitmap
 import androidx.compose.ui.geometry.CornerRadius
 import androidx.compose.ui.graphics.Path
 import androidx.compose.ui.graphics.TransformOrigin
+import androidx.compose.ui.graphics.asImageBitmap
 import androidx.compose.ui.graphics.painter.Painter
 import androidx.compose.ui.graphics.drawscope.ContentDrawScope
 import androidx.compose.ui.graphics.drawscope.clipRect
@@ -354,6 +357,8 @@ private const val LARGER_AURIS_FULL_BLEED_ZOOM = 1.36f
 private const val AURIS_FULL_BLEED_DRIFT = 0.016f
 /** The established dissolve used by the standard full-screen artwork mode. */
 private const val HERO_FADE_FRACTION = 0.42f
+/** BitChord's full-bleed still artwork uses this same 42% lower-edge dissolve. */
+private const val BITCHORD_HERO_FADE_FRACTION = 0.42f
 
 private class CenteredPlayerButtonArrangement(private val gapDp: Float) : Arrangement.Horizontal {
     override fun Density.arrange(
@@ -464,10 +469,31 @@ private fun aurisHeroArtworkScale(width: Float, height: Float, zoom: Float): Flo
         ?: 1f
 }
 
+/**
+ * Keep small copies of recent covers for the lower blurred layer. The player
+ * sheet is recreated after collapsing to the mini-player, while Coil's sharp
+ * cover request can be ready before a separate blur painter finishes loading.
+ */
+private const val HERO_BLUR_CACHE_EDGE_PX = 512
+private const val HERO_BLUR_CACHE_BYTES = 4 * 1024 * 1024
+private val heroBlurBitmapCache = object : LruCache<String, Bitmap>(HERO_BLUR_CACHE_BYTES) {
+    override fun sizeOf(key: String, value: Bitmap): Int = value.byteCount
+}
+
+private fun Bitmap.retainedHeroBlurCopy(): Bitmap {
+    val longestEdge = maxOf(width, height).coerceAtLeast(1)
+    val scale = minOf(1f, HERO_BLUR_CACHE_EDGE_PX.toFloat() / longestEdge)
+    val targetWidth = (width * scale).roundToInt().coerceAtLeast(1)
+    val targetHeight = (height * scale).roundToInt().coerceAtLeast(1)
+    val scaled = Bitmap.createScaledBitmap(this, targetWidth, targetHeight, true)
+    return if (scaled === this) copy(Bitmap.Config.ARGB_8888, false) ?: this else scaled
+}
+
 /** Restored artwork-derived blur used by the standard and enlarged full-screen modes. */
 @Composable
 private fun HeroArtworkBottomBlur(
     model: ImageRequest,
+    cacheKey: String?,
     alpha: Float,
     zoom: Float,
     includeRightEdge: Boolean = false,
@@ -476,25 +502,36 @@ private fun HeroArtworkBottomBlur(
     val strengthDp by AppSettings.fullBleedArtworkBottomBlurStrengthDp.collectAsStateWithLifecycle()
     if (strengthDp <= 0) return
 
+    var cachedBlurImage by remember(cacheKey) {
+        mutableStateOf(cacheKey?.let(heroBlurBitmapCache::get)?.asImageBitmap())
+    }
     val intensity = (strengthDp / 42f).coerceIn(0f, 1f)
     val maskZoom = zoom.takeIf { it.isFinite() && it >= 1f } ?: 1f
-    AsyncImage(
-        model = model,
-        contentDescription = null,
-        contentScale = ContentScale.Crop,
-        modifier = modifier
-            .clipToBounds()
-            .graphicsLayer {
-                this.alpha = alpha * intensity
-                scaleX = zoom
-                scaleY = zoom
-                transformOrigin = TransformOrigin(0.5f, 0f)
-                compositingStrategy = CompositingStrategy.Offscreen
-            }
-            .drawWithContent {
-                drawContent()
+    val blurModifier = modifier
+        .clipToBounds()
+        .graphicsLayer {
+            this.alpha = alpha * intensity
+            scaleX = zoom
+            scaleY = zoom
+            transformOrigin = TransformOrigin(0.5f, 0f)
+            compositingStrategy = CompositingStrategy.Offscreen
+        }
+        .drawWithContent {
+            drawContent()
+            drawRect(
+                brush = Brush.verticalGradient(
+                    colorStops = arrayOf(
+                        (0.58f / maskZoom) to Color.Transparent,
+                        (0.72f / maskZoom) to Color.Black.copy(alpha = 0.48f * intensity),
+                        (0.88f / maskZoom) to Color.Black.copy(alpha = 0.82f * intensity),
+                        (1f / maskZoom) to Color.Transparent,
+                    ),
+                ),
+                blendMode = BlendMode.DstIn,
+            )
+            if (includeRightEdge) {
                 drawRect(
-                    brush = Brush.verticalGradient(
+                    brush = Brush.horizontalGradient(
                         colorStops = arrayOf(
                             (0.58f / maskZoom) to Color.Transparent,
                             (0.72f / maskZoom) to Color.Black.copy(alpha = 0.48f * intensity),
@@ -504,22 +541,31 @@ private fun HeroArtworkBottomBlur(
                     ),
                     blendMode = BlendMode.DstIn,
                 )
-                if (includeRightEdge) {
-                    drawRect(
-                        brush = Brush.horizontalGradient(
-                            colorStops = arrayOf(
-                                (0.58f / maskZoom) to Color.Transparent,
-                                (0.72f / maskZoom) to Color.Black.copy(alpha = 0.48f * intensity),
-                                (0.88f / maskZoom) to Color.Black.copy(alpha = 0.82f * intensity),
-                                (1f / maskZoom) to Color.Transparent,
-                            ),
-                        ),
-                        blendMode = BlendMode.DstIn,
-                    )
-                }
             }
-            .blur(strengthDp.dp, BlurredEdgeTreatment.Rectangle),
-    )
+        }
+        .blur(strengthDp.dp, BlurredEdgeTreatment.Rectangle)
+
+    if (cachedBlurImage != null) {
+        Image(
+            bitmap = cachedBlurImage!!,
+            contentDescription = null,
+            contentScale = ContentScale.Crop,
+            modifier = blurModifier,
+        )
+    } else {
+        AsyncImage(
+            model = model,
+            contentDescription = null,
+            contentScale = ContentScale.Crop,
+            onSuccess = { success ->
+                val key = cacheKey ?: return@AsyncImage
+                val retained = success.result.image.toBitmap().retainedHeroBlurCopy()
+                heroBlurBitmapCache.put(key, retained)
+                cachedBlurImage = retained.asImageBitmap()
+            },
+            modifier = blurModifier,
+        )
+    }
 }
 
 /** Restored linear fade used by the standard and enlarged full-screen modes. */
@@ -715,6 +761,9 @@ private val CONTROL_GAP_SPREAD_MAX = 48.dp
  * that is all it is, a cache of a measurement, not state anything observes.
  */
 private var lastControlSpread: Dp = 0.dp
+
+/** BitChord keeps a settled full-bleed banner settled when the player reopens. */
+private var lastHeroSettled = false
 
 /**
  * How long the shuffle glyph ignores further taps after one lands.
@@ -1141,6 +1190,7 @@ fun NowPlayingScreen(
     val fullBleedArt = effectivePlayerArtworkMode.usesFullScreenArtwork
     val largerFullBleedArtwork = effectivePlayerArtworkMode == PlayerArtworkMode.FULL_SCREEN_LARGER
     val aurisFullBleedArtwork = effectivePlayerArtworkMode == PlayerArtworkMode.AURIS_FULL_SCREEN
+    val bitChordFullBleedArtwork = effectivePlayerArtworkMode == PlayerArtworkMode.BITCHORD_FULL_SCREEN
     val preserveSleeveArtworkShape = effectivePlayerArtworkMode == PlayerArtworkMode.STANDARD_ORIGINAL_ASPECT
     val preserveTransitionArtworkProportions =
         preserveArtworkShapeInCompactTransitions && preserveSleeveArtworkShape
@@ -1906,6 +1956,7 @@ fun NowPlayingScreen(
     val heroArtworkZoom = when {
         aurisHeroMode -> AURIS_FULL_BLEED_ZOOM
         useLargerHeroArtwork -> LARGER_AURIS_FULL_BLEED_ZOOM
+        bitChordFullBleedArtwork -> 1f
         else -> 1f
     }
     // Whether there's a still image to blow out — a placeholder tile is a card
@@ -2010,9 +2061,12 @@ fun NowPlayingScreen(
     // gives its frame up and takes it back every time the app leaves the screen,
     // and a banner that answered only to that would collapse behind the user's
     // back and blow itself out again in front of them on the way in.
-    var heroSettled by remember { mutableStateOf(false) }
+    var heroSettled by remember { mutableStateOf(lastHeroSettled) }
     LaunchedEffect(artLoaded, canvasRendered) {
-        if (artLoaded || canvasRendered) heroSettled = true
+        if (artLoaded || canvasRendered) {
+            heroSettled = true
+            lastHeroSettled = true
+        }
     }
     // The clip that gets the banner, if any. Hoisted because the still frame
     // underneath keys its handover on exactly what is mounted here: both are
@@ -2065,7 +2119,11 @@ fun NowPlayingScreen(
                 ((heightPx - fadeStart) / heightPx).coerceIn(0f, 1f)
             }
         }
-    } else HERO_FADE_FRACTION
+    } else if (bitChordFullBleedArtwork) {
+        BITCHORD_HERO_FADE_FRACTION
+    } else {
+        HERO_FADE_FRACTION
+    }
     // What sits between the status bar and the artwork: the drag strip in a
     // sheet, plain padding in a pane. Read in three places — the strip itself,
     // the scrim drawn over it and the banner's own height — which all have to
@@ -2312,6 +2370,7 @@ fun NowPlayingScreen(
                 )
                 HeroArtworkBottomBlur(
                     model = artRequest,
+                    cacheKey = requestedArtUrl,
                     alpha = heroVisible *
                         (1f - if (heroClip != null) canvasCover.floatValue else 0f),
                     zoom = heroArtworkZoom,
@@ -6739,12 +6798,10 @@ private fun OutputDeviceControl(
 ) {
     val ink = LocalPlayerButtonControlInk.current
     val haptics = rememberHaptics()
-    Row(
+    val accessibilityLabel = stringResource(R.string.audio_output)
+    Box(
         modifier = Modifier
-            .height(44.dp)
-            .widthIn(min = 44.dp, max = 118.dp)
-            .clip(CircleShape)
-            .background(ink.copy(alpha = 0.10f))
+            .size(44.dp)
             .clickable(
                 interactionSource = remember { MutableInteractionSource() },
                 indication = null,

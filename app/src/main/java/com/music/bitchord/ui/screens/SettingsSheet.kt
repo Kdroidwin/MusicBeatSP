@@ -1373,6 +1373,7 @@ private fun PlayerArtworkMode.localizedLabel(): String = stringResource(
         PlayerArtworkMode.FULL_SCREEN -> R.string.artwork_mode_full_screen
         PlayerArtworkMode.FULL_SCREEN_LARGER -> R.string.artwork_mode_full_screen_larger
         PlayerArtworkMode.AURIS_FULL_SCREEN -> R.string.artwork_mode_auris_full_screen
+        PlayerArtworkMode.BITCHORD_FULL_SCREEN -> R.string.artwork_mode_bitchord_full_screen
         PlayerArtworkMode.STANDARD_SQUARE -> R.string.artwork_mode_standard_square
         PlayerArtworkMode.STANDARD_ORIGINAL_ASPECT -> R.string.artwork_mode_standard_original_aspect
     },

@@ -135,10 +135,12 @@ enum class PlayerArtworkMode(val persistedValue: Int) {
     AURIS_FULL_SCREEN(2),
     STANDARD_SQUARE(3),
     STANDARD_ORIGINAL_ASPECT(4),
+    BITCHORD_FULL_SCREEN(5),
     ;
 
     val usesFullScreenArtwork: Boolean
-        get() = this == FULL_SCREEN || this == FULL_SCREEN_LARGER || this == AURIS_FULL_SCREEN
+        get() = this == FULL_SCREEN || this == FULL_SCREEN_LARGER ||
+            this == AURIS_FULL_SCREEN || this == BITCHORD_FULL_SCREEN
 
     companion object {
         fun fromPersistedValue(value: Int): PlayerArtworkMode? =
