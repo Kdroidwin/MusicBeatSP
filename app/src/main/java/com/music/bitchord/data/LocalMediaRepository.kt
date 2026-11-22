@@ -260,7 +260,10 @@ object LocalMediaRepository {
             FFMPEG_ONLY_AUDIO_EXTENSIONS.joinToString("") { " OR ${MediaStore.Audio.Media.DISPLAY_NAME} LIKE '%.$it'" }
         } else ""
         val midiSelection = " OR ${MediaStore.Audio.Media.DISPLAY_NAME} LIKE '%.mid' OR ${MediaStore.Audio.Media.DISPLAY_NAME} LIKE '%.midi'$ffmpegSelection"
-        val extraAudioSelection = " OR ${MediaStore.Audio.Media.DISPLAY_NAME} LIKE '%.wav' OR ${MediaStore.Audio.Media.DISPLAY_NAME} LIKE '%.wma'$midiSelection$dsdSelection"
+        // Some MediaStore providers index Ogg/Opus as audio but leave IS_MUSIC
+        // unset. Include these known music extensions explicitly, then apply
+        // the same duration, path and supported-extension checks below.
+        val extraAudioSelection = " OR ${MediaStore.Audio.Media.DISPLAY_NAME} LIKE '%.wav' OR ${MediaStore.Audio.Media.DISPLAY_NAME} LIKE '%.wma' OR ${MediaStore.Audio.Media.DISPLAY_NAME} LIKE '%.ogg' OR ${MediaStore.Audio.Media.DISPLAY_NAME} LIKE '%.opus'$midiSelection$dsdSelection"
         val selection = if (filterNonMusic) {
             buildString {
                 append("((${MediaStore.Audio.Media.IS_MUSIC} != 0$extraAudioSelection)")
@@ -561,7 +564,9 @@ object LocalMediaRepository {
         val ffmpegSelection = if (AppSettings.ffmpegUnsupportedAudioTranscodeEnabled.value) {
             FFMPEG_ONLY_AUDIO_EXTENSIONS.joinToString("") { " OR ${MediaStore.Audio.Media.DISPLAY_NAME} LIKE '%.$it'" }
         } else ""
-        val selection = "(${MediaStore.Audio.Media.IS_MUSIC} != 0 OR ${MediaStore.Audio.Media.DISPLAY_NAME} LIKE '%.wav' OR ${MediaStore.Audio.Media.DISPLAY_NAME} LIKE '%.wma' OR ${MediaStore.Audio.Media.DISPLAY_NAME} LIKE '%.mid' OR ${MediaStore.Audio.Media.DISPLAY_NAME} LIKE '%.midi'$dsdSelection$ffmpegSelection)"
+        // Keep folder discovery aligned with the local music query: some
+        // MediaStore implementations do not set IS_MUSIC for Ogg/Opus rows.
+        val selection = "(${MediaStore.Audio.Media.IS_MUSIC} != 0 OR ${MediaStore.Audio.Media.DISPLAY_NAME} LIKE '%.wav' OR ${MediaStore.Audio.Media.DISPLAY_NAME} LIKE '%.wma' OR ${MediaStore.Audio.Media.DISPLAY_NAME} LIKE '%.ogg' OR ${MediaStore.Audio.Media.DISPLAY_NAME} LIKE '%.opus' OR ${MediaStore.Audio.Media.DISPLAY_NAME} LIKE '%.mid' OR ${MediaStore.Audio.Media.DISPLAY_NAME} LIKE '%.midi'$dsdSelection$ffmpegSelection)"
 
         val volumeUris = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
             runCatching {
