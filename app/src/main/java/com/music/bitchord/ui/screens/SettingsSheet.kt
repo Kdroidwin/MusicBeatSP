@@ -1395,8 +1395,8 @@ private fun fullBleedArtworkBottomBlurSearchEntry(strengthDp: Int) = SettingsSea
     keywords = listOf("artwork", "cover", "blur", "gradient", "full screen", "アート", "カバー", "ぼかし", "グラデーション", "全画面", "強さ"),
     valueLabel = stringResource(R.string.artwork_blur_strength_value, strengthDp),
     sliderValue = strengthDp.toFloat(),
-    sliderValueRange = 0f..96f,
-    sliderSteps = 95,
+    sliderValueRange = 0f..200f,
+    sliderSteps = 199,
     onSliderValueChange = { AppSettings.setFullBleedArtworkBottomBlurStrengthDp(it.roundToInt()) },
     activate = {},
 )
@@ -1448,8 +1448,8 @@ private fun FullBleedArtworkBottomBlurSettingsRow(strengthDp: Int) {
     Slider(
         value = strengthDp.toFloat(),
         onValueChange = { AppSettings.setFullBleedArtworkBottomBlurStrengthDp(it.roundToInt()) },
-        steps = 95,
-        valueRange = 0f..96f,
+        steps = 199,
+        valueRange = 0f..200f,
         modifier = Modifier.padding(start = ROW_INSET, end = ROW_INSET, bottom = 14.dp),
     )
 }
@@ -5321,6 +5321,7 @@ fun SettingsScreen(
                     PlayerControl.LYRICS -> stringResource(R.string.player_control_lyrics)
                     PlayerControl.LIKE -> stringResource(R.string.player_control_like)
                     PlayerControl.QUEUE -> stringResource(R.string.player_control_queue)
+                    PlayerControl.OUTPUT -> stringResource(R.string.player_control_output)
                     PlayerControl.CHROMECAST -> stringResource(R.string.player_control_chromecast)
                     PlayerControl.PLAYLIST -> stringResource(R.string.player_control_playlist)
                     PlayerControl.SEARCH -> stringResource(R.string.player_control_search)
@@ -11234,6 +11235,7 @@ private fun PlayerDetailsAction.localizedLabel(): String = stringResource(
         PlayerDetailsAction.DELETE_DOWNLOAD -> R.string.delete_download
         PlayerDetailsAction.ALBUM -> R.string.go_to_album
         PlayerDetailsAction.ARTIST -> R.string.go_to_artist
+        PlayerDetailsAction.OPEN_FOLDER -> R.string.open_folder
         PlayerDetailsAction.ADD_TO_PLAYLIST -> R.string.add_to_playlist
         PlayerDetailsAction.CHANGE_ARTIST_IMAGE -> R.string.change_artist_image
         PlayerDetailsAction.EQUALIZER -> R.string.equalizer

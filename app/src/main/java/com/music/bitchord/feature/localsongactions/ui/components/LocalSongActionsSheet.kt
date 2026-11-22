@@ -27,6 +27,7 @@ import androidx.compose.material.icons.rounded.Bedtime
 import androidx.compose.material.icons.rounded.Edit
 import androidx.compose.material.icons.rounded.Delete
 import androidx.compose.material.icons.rounded.FileDownload
+import androidx.compose.material.icons.rounded.FolderOpen
 import androidx.compose.material.icons.rounded.GraphicEq
 import androidx.compose.material.icons.rounded.Image
 import androidx.compose.material.icons.rounded.Info
@@ -56,6 +57,7 @@ import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.music.bitchord.R
 import com.music.bitchord.data.model.Song
 import com.music.bitchord.data.model.CARD_ART_PX
+import com.music.bitchord.feature.localmusic.data.FolderNavigationRequests
 import com.music.bitchord.data.settings.AppSettings
 import com.music.bitchord.data.settings.PlayerDetailsAction
 import com.music.bitchord.download.Downloads
@@ -311,6 +313,15 @@ fun LocalSongActionsSheet(
                                 trailingIcon = if (artists.size > 1) Icons.AutoMirrored.Rounded.KeyboardArrowRight else null,
                                 onClick = onGoToArtist,
                             )
+                            PlayerDetailsAction.OPEN_FOLDER -> if (showPlayerActions) {
+                                FolderNavigationRequests.folderPathFor(song)?.let { folderPath ->
+                                    LocalSongActionItem(
+                                        icon = Icons.Rounded.FolderOpen,
+                                        label = stringResource(R.string.open_folder),
+                                        onClick = { FolderNavigationRequests.request(folderPath) },
+                                    )
+                                }
+                            }
                             PlayerDetailsAction.ADD_TO_PLAYLIST -> LocalSongActionItem(
                                 icon = Icons.AutoMirrored.Rounded.PlaylistAdd,
                                 label = stringResource(R.string.add_to_playlist),

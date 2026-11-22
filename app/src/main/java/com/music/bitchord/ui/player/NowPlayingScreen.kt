@@ -3,6 +3,7 @@ package com.music.bitchord.ui.player
 import com.music.bitchord.R
 import com.music.bitchord.playback.ABRepeatController
 import com.music.bitchord.playback.ABRepeatPhase
+import com.music.bitchord.playback.AudioOutputStatus
 import com.music.bitchord.ui.components.ExplicitSongTitle
 
 import android.database.ContentObserver
@@ -1329,6 +1330,7 @@ fun NowPlayingScreen(
     val offlineMode by AppSettings.offlineMode.collectAsStateWithLifecycle()
     val visiblePlayerControls by AppSettings.visiblePlayerControls.collectAsStateWithLifecycle()
     val playerControlOrder by AppSettings.playerControlOrder.collectAsStateWithLifecycle()
+    val outputSnapshot by AudioOutputStatus.current.collectAsStateWithLifecycle()
     val appleMusicLyricsButtonStyle by AppSettings.appleMusicLyricsButtonStyle.collectAsStateWithLifecycle()
     val appleMusicChromecastButtonStyle by AppSettings.appleMusicChromecastButtonStyle.collectAsStateWithLifecycle()
     val appleMusicQueueButtonStyle by AppSettings.appleMusicQueueButtonStyle.collectAsStateWithLifecycle()
@@ -1504,6 +1506,8 @@ fun NowPlayingScreen(
     val savedQueues by SavedQueueStore.queues.collectAsStateWithLifecycle()
     var savedQueueManagerOpen by remember { mutableStateOf(false) }
     var quickSleepTimerOpen by remember { mutableStateOf(false) }
+    var audioOutputSheetOpen by remember { mutableStateOf(false) }
+    var audioPipelineSheetOpen by remember { mutableStateOf(false) }
     var lyricsOpen by remember { mutableStateOf(false) }
     var lyricsLogsOpen by remember { mutableStateOf(false) }
     LaunchedEffect(openLyricsOnShow, openQueueOnShow) {
@@ -1633,6 +1637,24 @@ fun NowPlayingScreen(
                 }
             }
         }
+    }
+
+    if (audioOutputSheetOpen) {
+        AudioOutputSheet(
+            artworkPalette = popupPalette,
+            artworkUrl = song.thumbnailUrl,
+            useArtworkColor = playerPopupsUseArtworkColor || playerMenuPalette != null,
+            onDismiss = { audioOutputSheetOpen = false },
+            onOpenPipeline = { audioPipelineSheetOpen = true },
+        )
+    }
+    if (audioPipelineSheetOpen) {
+        AudioPipelineDialog(
+            artworkPalette = popupPalette,
+            artworkUrl = song.thumbnailUrl,
+            useArtworkColor = playerPopupsUseArtworkColor || playerMenuPalette != null,
+            onDismiss = { audioPipelineSheetOpen = false },
+        )
     }
 
     // Back out of the lyrics panel to the player, and only from the player
@@ -4145,6 +4167,12 @@ fun NowPlayingScreen(
                                 highlighted = queueOpen,
                                 haptic = if (queueOpen) Haptic.Tap else Haptic.Expand,
                             )
+                            PlayerControl.OUTPUT -> OutputDeviceControl(
+                                label = outputSnapshot.deviceName.takeUnless {
+                                    it.isBlank() || it == "System default"
+                                } ?: stringResource(R.string.audio_output_system_default),
+                                onClick = { audioOutputSheetOpen = true },
+                            )
                             PlayerControl.CHROMECAST -> Box(
                                 modifier = Modifier
                                     .size(44.dp)
@@ -4283,6 +4311,7 @@ private suspend fun AwaitPointerEventScope.dragQueueIn(
  * whole line would recompose sixty times a second.
  */
 private const val SAME_CLOCK_NANOS = 250_000_000L
+private val LYRIC_WIPE_FEATHER = 30.dp
 
 @Composable
 private fun rememberLyricClock(
@@ -4391,6 +4420,7 @@ private fun SweptLyricLine(
     val dimRichText = remember(line.text, style, showFurigana, lyricInk, dimAlpha) {
         makeLyricRichText(line.text, style, lyricInk.copy(alpha = dimAlpha), showFurigana)
     }
+    val smoothCharacterLyrics by AppSettings.smoothCharacterLyrics.collectAsStateWithLifecycle()
 
     // Carried by every copy: identical insets keep them laying out identically,
     // and the inset is what gives the blurred copy's layer somewhere to put the
@@ -4404,31 +4434,46 @@ private fun SweptLyricLine(
     // a pocket of air with the chevron pushed off it.
     val room = if (glowRoom > 0.dp) Modifier.padding(glowRoom) else Modifier
 
-    val sweep = Modifier.drawWithContent {
-        val position = clock.doubleValue
-        when {
-            // Sung and done with: all of it is lit. Checked first so the lines
-            // above and below the playing one — which are in this same state
-            // for minutes at a time — cost a comparison per frame rather than
-            // a walk of their words.
-            position >= line.endMs.toDouble() -> drawContent()
-            // Not started: nothing lit, the dim copy is the whole of it.
-            position <= line.timeMs.toDouble() -> Unit
-            else -> layout?.let {
-                // Word timings can come from remote karaoke sources with
-                // offsets that are not safe to use directly as Compose text
-                // offsets (notably after a one-line layout clips the visual
-                // line). Keep the sweep inside the measured UTF-16 range.
-                try {
-                    sweepTo(it, richText.renderedOffset(line.revealedChars(position)))
-                } catch (_: RuntimeException) {
-                    // Bad third-party syllable offsets should degrade to a
-                    // static readable line, never crash the render thread.
-                    drawContent()
+    val sweep = Modifier
+        .graphicsLayer {
+            val position = clock.doubleValue
+            val isSoftSweep = smoothCharacterLyrics && line.isWordSynced &&
+                position > line.timeMs && position < line.endMs
+            compositingStrategy = if (isSoftSweep) {
+                CompositingStrategy.Offscreen
+            } else {
+                CompositingStrategy.Auto
+            }
+        }
+        .drawWithContent {
+            val position = clock.doubleValue
+            when {
+                // Sung and done with: all of it is lit. Checked first so the lines
+                // above and below the playing one — which are in this same state
+                // for minutes at a time — cost a comparison per frame rather than
+                // a walk of their words.
+                position >= line.endMs.toDouble() -> drawContent()
+                // Not started: nothing lit, the dim copy is the whole of it.
+                position <= line.timeMs.toDouble() -> Unit
+                else -> layout?.let {
+                    // Word timings can come from remote karaoke sources with
+                    // offsets that are not safe to use directly as Compose text
+                    // offsets (notably after a one-line layout clips the visual
+                    // line). Keep the sweep inside the measured UTF-16 range.
+                    try {
+                        sweepTo(
+                            layout = it,
+                            revealedChars = richText.renderedOffset(line.revealedChars(position)),
+                            feather = smoothCharacterLyrics && line.isWordSynced,
+                        )
+                    } catch (_: RuntimeException) {
+                        // Bad third-party syllable offsets should degrade to a
+                        // static readable line, never crash the render thread.
+                        drawContent()
+                    }
                 }
             }
         }
-    }
 
     BoxWithConstraints(modifier) {
         val density = LocalDensity.current
@@ -4562,7 +4607,11 @@ private fun ContentDrawScope.glowAt(
     val lineStart = layout.getLineStart(visualLine)
     val lineEnd = layout.getLineEnd(visualLine, visibleEnd = true)
 
-    val right = horizontalAt(layout, edge.coerceIn(lineStart.toFloat(), lineEnd.toFloat()), lineStart, lineEnd)
+    val right = horizontalAt(
+        layout,
+        edge.coerceIn(lineStart.toFloat(), lineEnd.toFloat()),
+        visualLine,
+    )
     val trail = GLOW_TRAIL.toPx() * (GLOW_TRAIL_FLOOR + (1f - GLOW_TRAIL_FLOOR) * intensity)
     val left = (right - trail).coerceAtLeast(layout.getLineLeft(visualLine))
     if (!left.isFinite() || !right.isFinite() || right <= left) return
@@ -4603,22 +4652,46 @@ private fun ContentDrawScope.glowAt(
 private fun horizontalAt(
     layout: TextLayoutResult,
     chars: Float,
-    lineStart: Int,
-    lineEnd: Int,
+    visualLine: Int,
 ): Float {
     if (!chars.isFinite()) return 0f
     val textLength = layout.layoutInput.text.length
-    val safeStart = lineStart.coerceIn(0, textLength)
-    val safeEnd = lineEnd.coerceIn(safeStart, textLength)
-    val boundedChars = chars.coerceIn(safeStart.toFloat(), safeEnd.toFloat())
-    val index = boundedChars.toInt().coerceIn(safeStart, safeEnd)
-    val here = layout.getHorizontalPosition(index, usePrimaryDirection = true)
-    val next = layout.getHorizontalPosition(
-        (index + 1).coerceAtMost(safeEnd),
-        usePrimaryDirection = true,
-    )
+    val lineStart = layout.getLineStart(visualLine).coerceIn(0, textLength)
+    val lineEndVisible = layout.getLineEnd(visualLine, visibleEnd = true).coerceIn(lineStart, textLength)
+    val lineEndAll = layout.getLineEnd(visualLine, visibleEnd = false).coerceIn(lineEndVisible, textLength)
+    val boundedChars = chars.coerceIn(lineStart.toFloat(), lineEndAll.toFloat())
+    val index = boundedChars.toInt().coerceIn(lineStart, lineEndAll)
+    val here = layout.lyricXOn(index, visualLine)
+    val rawNext = index + 1
+    val spillsToNextLine = layout.getLineForOffset(rawNext.coerceIn(0, textLength)) != visualLine
+    val next = when {
+        spillsToNextLine && rawNext > lineEndVisible -> {
+            val rtl = layout.getParagraphDirection(
+                visualLine.coerceIn(0, (textLength - 1).coerceAtLeast(0)),
+            ) == androidx.compose.ui.text.style.ResolvedTextDirection.Rtl
+            if (rtl) layout.getLineLeft(visualLine) else layout.getLineRight(visualLine)
+        }
+        spillsToNextLine -> layout.lyricXOn(rawNext.coerceAtMost(lineEndVisible), visualLine)
+        else -> layout.lyricXOn(rawNext.coerceAtMost(lineEndAll), visualLine)
+    }
     val position = here + (next - here) * (boundedChars - index)
     return position.takeIf(Float::isFinite) ?: here.takeIf(Float::isFinite) ?: 0f
+}
+
+/** Resolve a text offset on its visual row, including the two wrapped-row edges. */
+private fun TextLayoutResult.lyricXOn(offset: Int, visualLine: Int): Float {
+    val lineStart = getLineStart(visualLine)
+    val lineEndVisible = getLineEnd(visualLine, visibleEnd = true)
+    val left = getLineLeft(visualLine)
+    val right = getLineRight(visualLine)
+    val rtl = getParagraphDirection(
+        lineStart.coerceIn(0, (layoutInput.text.length - 1).coerceAtLeast(0)),
+    ) == androidx.compose.ui.text.style.ResolvedTextDirection.Rtl
+    return when {
+        offset <= lineStart -> if (rtl) right else left
+        offset >= lineEndVisible -> if (rtl) left else right
+        else -> getHorizontalPosition(offset, usePrimaryDirection = true).coerceIn(left, right)
+    }
 }
 
 /**
@@ -4630,7 +4703,11 @@ private fun horizontalAt(
  * positions, so the edge advances smoothly rather than jumping a letter at a
  * time.
  */
-private fun ContentDrawScope.sweepTo(layout: TextLayoutResult, revealedChars: Float) {
+private fun ContentDrawScope.sweepTo(
+    layout: TextLayoutResult,
+    revealedChars: Float,
+    feather: Boolean,
+) {
     val textLength = layout.layoutInput.text.length
     if (textLength == 0 || layout.lineCount <= 0 || !revealedChars.isFinite()) return
     val safeReveal = revealedChars.coerceIn(0f, textLength.toFloat())
@@ -4639,30 +4716,54 @@ private fun ContentDrawScope.sweepTo(layout: TextLayoutResult, revealedChars: Fl
         drawContent()
         return
     }
+    val paragraphOffset = layout.getLineStart(0).coerceIn(0, (textLength - 1).coerceAtLeast(0))
+    val rtl = layout.getParagraphDirection(paragraphOffset) ==
+        androidx.compose.ui.text.style.ResolvedTextDirection.Rtl
     for (visualLine in 0 until layout.lineCount) {
         val start = layout.getLineStart(visualLine).coerceIn(0, textLength)
         // Lines beyond the boundary have nothing lit on them, and neither has
         // anything after them.
         if (safeReveal <= start) return
-        val end = layout.getLineEnd(visualLine, visibleEnd = true).coerceIn(start, textLength)
-        if (end <= start) continue
-        val right = if (safeReveal >= end) {
-            layout.getLineRight(visualLine)
+        val endVisible = layout.getLineEnd(visualLine, visibleEnd = true).coerceIn(start, textLength)
+        val endAll = layout.getLineEnd(visualLine, visibleEnd = false).coerceIn(endVisible, textLength)
+        if (endAll <= start) continue
+        val cut = safeReveal < endAll
+        val charPosition = if (cut) {
+            horizontalAt(layout, safeReveal, visualLine)
         } else {
-            horizontalAt(layout, safeReveal, start, end)
+            if (rtl) layout.getLineLeft(visualLine) else layout.getLineRight(visualLine)
         }
         val left = layout.getLineLeft(visualLine)
+        val right = layout.getLineRight(visualLine)
         val top = layout.getLineTop(visualLine)
         val bottom = layout.getLineBottom(visualLine)
         // Compose's clipRect requires ordered finite bounds. A malformed or
         // clipped remote lyric layout should degrade to an un-swept line rather
         // than take down playback from the render thread.
-        if (!left.isFinite() || !right.isFinite() || !top.isFinite() || !bottom.isFinite() || bottom <= top) {
+        if (!left.isFinite() || !right.isFinite() || !charPosition.isFinite() ||
+            !top.isFinite() || !bottom.isFinite() || bottom <= top
+        ) {
             drawContent()
             return
         }
-        val clippedLeft = left.coerceIn(0f, size.width)
-        val clippedRight = right.coerceIn(0f, size.width)
+        val safePosition = charPosition.coerceIn(left, right)
+        val featherPx = if (feather && cut) {
+            minOf(
+                LYRIC_WIPE_FEATHER.toPx(),
+                if (rtl) safePosition - left else right - safePosition,
+            ).coerceAtLeast(0f)
+        } else {
+            0f
+        }
+        val leadingEdge = if (rtl) {
+            (safePosition - featherPx).coerceAtLeast(left)
+        } else {
+            (safePosition + featherPx).coerceAtMost(right)
+        }
+        val clipLeft = if (rtl) leadingEdge else left
+        val clipRight = if (rtl) right else leadingEdge
+        val clippedLeft = clipLeft.coerceIn(0f, size.width)
+        val clippedRight = clipRight.coerceIn(0f, size.width)
         val clippedTop = top.coerceIn(0f, size.height)
         val clippedBottom = bottom.coerceIn(0f, size.height)
         if (clippedRight <= clippedLeft || clippedBottom <= clippedTop) continue
@@ -4673,6 +4774,26 @@ private fun ContentDrawScope.sweepTo(layout: TextLayoutResult, revealedChars: Fl
             bottom = clippedBottom,
         ) {
             this@sweepTo.drawContent()
+        }
+        if (featherPx >= 0.5f) {
+            val mask = if (rtl) {
+                Brush.horizontalGradient(
+                    0f to Color.Transparent,
+                    1f to Color.White,
+                    startX = leadingEdge,
+                    endX = safePosition,
+                )
+            } else {
+                Brush.horizontalGradient(
+                    0f to Color.White,
+                    1f to Color.Transparent,
+                    startX = safePosition,
+                    endX = leadingEdge,
+                )
+            }
+            clipRect(top = clippedTop, bottom = clippedBottom) {
+                drawRect(brush = mask, blendMode = BlendMode.DstIn)
+            }
         }
     }
 }
@@ -6603,6 +6724,47 @@ private fun WalkmanShuffleGlyph(
         outlined = true,
         glyphScale = glyphScale,
     )
+}
+
+@Composable
+private fun OutputDeviceControl(
+    label: String,
+    onClick: () -> Unit,
+) {
+    val ink = LocalPlayerButtonControlInk.current
+    val haptics = rememberHaptics()
+    Row(
+        modifier = Modifier
+            .height(44.dp)
+            .widthIn(min = 44.dp, max = 118.dp)
+            .clip(CircleShape)
+            .background(ink.copy(alpha = 0.10f))
+            .clickable(
+                interactionSource = remember { MutableInteractionSource() },
+                indication = null,
+            ) {
+                haptics.play(Haptic.Select)
+                onClick()
+            }
+            .semantics { contentDescription = label },
+        verticalAlignment = Alignment.CenterVertically,
+        horizontalArrangement = Arrangement.Center,
+    ) {
+        Icon(
+            imageVector = Icons.Rounded.Headphones,
+            contentDescription = null,
+            tint = ink,
+            modifier = Modifier.size(18.dp),
+        )
+        Text(
+            text = label,
+            color = ink,
+            fontSize = 9.sp,
+            maxLines = 1,
+            overflow = TextOverflow.Ellipsis,
+            modifier = Modifier.widthIn(max = 68.dp).padding(start = 4.dp, end = 8.dp),
+        )
+    }
 }
 
 @Composable

@@ -100,6 +100,7 @@ import com.music.bitchord.feature.localmusic.domain.FolderNode
 import com.music.bitchord.feature.localmusic.domain.FolderTreeBuilder
 import com.music.bitchord.feature.localmusic.data.ZipAudioArchive
 import com.music.bitchord.feature.localmusic.data.ZipAudioEntry
+import com.music.bitchord.feature.localmusic.data.FolderNavigationRequests
 import com.music.bitchord.feature.localmusic.data.AppleMusicAutoRename
 import com.music.bitchord.feature.localmusic.data.AutoRenameRow
 import com.music.bitchord.feature.localsongactions.ui.components.LocalAddToPlaylistSheet
@@ -237,6 +238,7 @@ fun FolderBrowserScreen(
     val tree = remember(songs, selectedRoots) {
         FolderTreeBuilder.build(songs, customRoots = selectedRoots)
     }
+    val folderNavigationRequest by FolderNavigationRequests.pending.collectAsStateWithLifecycle()
     val rootKey = selectedRoots.sorted().joinToString("|").ifBlank { tree.path }
     val pathStack = rememberSaveable(rootKey, saver = FolderPathStackSaver) {
         mutableStateListOf<String>().apply {
@@ -253,12 +255,31 @@ fun FolderBrowserScreen(
     val currentNode by remember(tree, stackSnapshot) {
         mutableStateOf(stackSnapshot.lastOrNull()?.let(tree::findByPath) ?: tree)
     }
-    LaunchedEffect(tree, rememberLastOpenedFolder, lastOpenedFolderPath) {
+    LaunchedEffect(tree, rememberLastOpenedFolder, lastOpenedFolderPath, folderNavigationRequest) {
+        if (folderNavigationRequest != null) return@LaunchedEffect
         if (!rememberLastOpenedFolder || pathStack.isNotEmpty() || lastOpenedFolderPath.isBlank()) {
             return@LaunchedEffect
         }
         val restoredPath = folderPathStack(tree, lastOpenedFolderPath)
         if (!restoredPath.isNullOrEmpty()) pathStack.addAll(restoredPath)
+    }
+    LaunchedEffect(tree, songs, folderNavigationRequest) {
+        val request = folderNavigationRequest ?: return@LaunchedEffect
+        // A player can be opened from a restored session before MediaStore has
+        // finished its first library load. Keep the request armed until the
+        // folder tree has data, instead of consuming it against the empty tree.
+        if (songs.isEmpty()) return@LaunchedEffect
+        val targetStack = folderPathStack(tree, request.path)
+        if (targetStack == null) {
+            Toast.makeText(context, R.string.folder_open_unavailable, Toast.LENGTH_SHORT).show()
+        } else {
+            pathStack.clear()
+            pathStack.addAll(targetStack)
+            if (rememberLastOpenedFolder) {
+                onLastOpenedFolderPathChange?.invoke(targetStack.lastOrNull() ?: tree.path)
+            }
+        }
+        FolderNavigationRequests.handled(request)
     }
     var selectedSongIds by remember { mutableStateOf<Set<String>>(emptySet()) }
     var selectedFolderPaths by remember { mutableStateOf<Set<String>>(emptySet()) }

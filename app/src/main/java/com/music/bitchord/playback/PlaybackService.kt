@@ -484,6 +484,9 @@ class PlaybackService : MediaLibraryService() {
             )
         }
         override fun onAudioDevicesRemoved(removedDevices: Array<AudioDeviceInfo>) {
+            if (removedDevices.any { it.id == AudioRouting.selectedId.value }) {
+                AudioRouting.forget()
+            }
             requestOutputReconfiguration()
             if (removedDevices.any { it.isHeadphoneOrHeadset() }) {
                 Handler(Looper.getMainLooper()).postDelayed({
@@ -5208,7 +5211,8 @@ class PlaybackService : MediaLibraryService() {
     private fun applyOutputRoute() {
         val manager = audioManager ?: return
         val usb = preferredUsbDevice()
-        val preferred = usb.takeIf { AppSettings.preferUsbDac.value }
+        val chosen = AudioRouting.infoFor(manager, AudioRouting.selectedId.value)
+        val preferred = chosen ?: usb.takeIf { AppSettings.preferUsbDac.value }
         eachPlayer { it.setPreferredAudioDevice(preferred) }
         val routedDevice = currentOutputDevice(manager, preferred)
         phoneSpeakerOutputActive = !castPlayback.active &&
@@ -5230,7 +5234,7 @@ class PlaybackService : MediaLibraryService() {
         AudioOutputStatus.publish(
             manager = manager,
             requestedPcmMode = AppSettings.outputPcmMode.value,
-            preferred = preferred,
+            preferred = routedDevice,
             floatEnabled = shouldEnableFloatOutput(),
         )
         // BitPerfectOutput owns Android 14's mixer attributes for the lifetime
@@ -5333,6 +5337,7 @@ class PlaybackService : MediaLibraryService() {
         )
 
     private fun currentOutputDevice(manager: AudioManager, preferredUsb: AudioDeviceInfo?): AudioDeviceInfo? {
+        AudioRouting.infoFor(manager, AudioRouting.selectedId.value)?.let { return it }
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
             val attributes = android.media.AudioAttributes.Builder()
                 .setUsage(android.media.AudioAttributes.USAGE_MEDIA)
@@ -5673,6 +5678,11 @@ class PlaybackService : MediaLibraryService() {
         }
         scope.launch {
             AppSettings.preferUsbDac.drop(1).collect { requestOutputReconfiguration() }
+        }
+        scope.launch {
+            AudioRouting.selectedId.drop(1).distinctUntilChanged().collect {
+                requestOutputReconfiguration()
+            }
         }
         scope.launch {
             AppSettings.speakerPlaybackAllowed.drop(1).collect { requestOutputReconfiguration() }

@@ -17,6 +17,7 @@ object AudioOutputStatus {
         val sink: String = "AudioTrack",
         val requestedPcmMode: OutputPcmMode = OutputPcmMode.PCM_16,
         val deviceName: String = "System default",
+        val activeDeviceId: Int? = null,
         val sampleRatesHz: IntArray = IntArray(0),
         val encodings: IntArray = IntArray(0),
         val isUsb: Boolean = false,
@@ -37,11 +38,15 @@ object AudioOutputStatus {
         preferred: AudioDeviceInfo?,
         floatEnabled: Boolean,
     ) {
-        val device = preferred ?: manager.getDevices(AudioManager.GET_DEVICES_OUTPUTS)
-            .firstOrNull { it.isSink }
+        val outputs = runCatching { manager.getDevices(AudioManager.GET_DEVICES_OUTPUTS) }
+            .getOrDefault(emptyArray())
+        val device = preferred
+            ?: AudioRouting.infoFor(manager, AudioRouting.selectedId.value)
+            ?: AudioRouting.activeOf(outputs, null)
         current.value = Snapshot(
             requestedPcmMode = requestedPcmMode,
             deviceName = device?.productName?.toString()?.ifBlank { null } ?: "System default",
+            activeDeviceId = device?.id,
             sampleRatesHz = device?.sampleRates ?: IntArray(0),
             encodings = device?.encodings ?: IntArray(0),
             isUsb = device?.type in setOf(

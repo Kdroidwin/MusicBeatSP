@@ -959,6 +959,12 @@ private fun BitChordApp(
      * question has to be answered by whoever opened the menu.
      */
     var menuFromPlayer by remember { mutableStateOf(false) }
+    com.music.bitchord.feature.localmusic.ui.FolderNavigationCoordinator {
+        songActions = null
+        viewModel.clearDetail()
+        selectedTab = TAB_FOLDERS
+        dismissNowPlaying()
+    }
     var pendingPlayerQuickAction by remember { mutableStateOf<PlayerQuickAction?>(null) }
     val openEqualizerFromTrackMenu: () -> Unit = {
         songActions = null
@@ -4518,7 +4524,7 @@ private fun BitChordApp(
 
         // ---- Album / playlist detail ----
         // ---- Long-press track actions ----
-        songActions?.let { originalSong ->
+        com.music.bitchord.ui.player.PlayerSongActionsHost(songActions) { originalSong ->
             // Local tracks can share a title, artist, and even an imported ID.
             // Resolve by the stable file URI first so opening actions for one
             // playlist row can never silently switch to another folder's file.
@@ -4543,7 +4549,6 @@ private fun BitChordApp(
             var showAddToPlaylist by remember { mutableStateOf(false) }
             var showArtistPicker by remember { mutableStateOf(false) }
             var showArtistPickerForArtwork by remember(songIdentityKey) { mutableStateOf(false) }
-
             if (showTagEditor) {
                 Dialog(
                     onDismissRequest = {

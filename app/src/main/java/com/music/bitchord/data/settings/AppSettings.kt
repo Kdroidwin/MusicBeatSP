@@ -338,6 +338,7 @@ enum class PlayerControl {
     LYRICS,
     LIKE,
     QUEUE,
+    OUTPUT,
     CHROMECAST,
     PLAYLIST,
     SEARCH,
@@ -361,6 +362,7 @@ private val DEFAULT_PLAYER_CONTROLS = setOf(
     PlayerControl.REPEAT,
     PlayerControl.LIKE,
     PlayerControl.QUEUE,
+    PlayerControl.OUTPUT,
 )
 
 /**
@@ -454,6 +456,7 @@ enum class PlayerDetailsAction {
     DELETE_DOWNLOAD,
     ALBUM,
     ARTIST,
+    OPEN_FOLDER,
     ADD_TO_PLAYLIST,
     CHANGE_ARTIST_IMAGE,
     EQUALIZER,
@@ -473,6 +476,7 @@ val DEFAULT_PLAYER_DETAILS_ACTION_ORDER = listOf(
     PlayerDetailsAction.DELETE_DOWNLOAD,
     PlayerDetailsAction.ALBUM,
     PlayerDetailsAction.ARTIST,
+    PlayerDetailsAction.OPEN_FOLDER,
     PlayerDetailsAction.ADD_TO_PLAYLIST,
     PlayerDetailsAction.CHANGE_ARTIST_IMAGE,
     PlayerDetailsAction.EQUALIZER,
@@ -1969,7 +1973,7 @@ object AppSettings {
             legacyVerticalOffset,
         ).coerceIn(MIN_PLAYER_CONTROLS_VERTICAL_OFFSET_DP, MAX_PLAYER_CONTROLS_VERTICAL_OFFSET_DP)
         fullBleedArtworkBottomBlurStrengthDp.value =
-            prefs.getInt(KEY_FULL_BLEED_ARTWORK_BOTTOM_BLUR_STRENGTH_DP, 42).coerceIn(0, 96)
+            prefs.getInt(KEY_FULL_BLEED_ARTWORK_BOTTOM_BLUR_STRENGTH_DP, 42).coerceIn(0, 200)
         hidePlaylistPlayButtonLabel.value = prefs.getBoolean(KEY_HIDE_PLAYLIST_PLAY_BUTTON_LABEL, false)
         whiteCollectionPlayButton.value = prefs.getBoolean(KEY_WHITE_COLLECTION_PLAY_BUTTON, true)
         showPlayerTopGrabber.value = prefs.getBoolean(KEY_SHOW_PLAYER_TOP_GRABBER, true)
@@ -4359,7 +4363,12 @@ object AppSettings {
         }
         if (updated.isEmpty()) return
         visiblePlayerControls.value = updated
-        prefs.edit().putStringSet(KEY_VISIBLE_PLAYER_CONTROLS, updated.mapTo(mutableSetOf()) { it.name }).apply()
+        prefs.edit()
+            .putStringSet(KEY_VISIBLE_PLAYER_CONTROLS, updated.mapTo(mutableSetOf()) { it.name })
+            .apply {
+                if (control == PlayerControl.OUTPUT) putBoolean(KEY_PLAYER_OUTPUT_CONTROL_CONFIGURED, true)
+            }
+            .apply()
     }
 
     fun setAppleMusicLyricsButtonStyle(value: Boolean) {
@@ -4382,11 +4391,17 @@ object AppSettings {
         prefs.edit().putBoolean(KEY_APPLE_MUSIC_STYLE_MENUS, value).apply()
     }
 
-    private fun readVisiblePlayerControls(): Set<PlayerControl> =
-        prefs.getStringSet(KEY_VISIBLE_PLAYER_CONTROLS, null)
-            ?.mapNotNullTo(mutableSetOf()) { saved -> PlayerControl.entries.firstOrNull { it.name == saved } }
-            ?.takeIf { it.isNotEmpty() }
-            ?: DEFAULT_PLAYER_CONTROLS
+    private fun readVisiblePlayerControls(): Set<PlayerControl> {
+        val saved = prefs.getStringSet(KEY_VISIBLE_PLAYER_CONTROLS, null)
+            ?.mapNotNullTo(mutableSetOf()) { name -> PlayerControl.entries.firstOrNull { it.name == name } }
+        if (saved == null || saved.isEmpty()) return DEFAULT_PLAYER_CONTROLS
+        // Add the new output control for existing installations without
+        // overriding a listener's explicit choice to hide it.
+        if (!prefs.getBoolean(KEY_PLAYER_OUTPUT_CONTROL_CONFIGURED, false)) {
+            saved += PlayerControl.OUTPUT
+        }
+        return saved
+    }
 
     fun setSyncedLyrics(value: Boolean) {
         syncedLyrics.value = value
@@ -4629,7 +4644,7 @@ object AppSettings {
     }
 
     fun setFullBleedArtworkBottomBlurStrengthDp(value: Int) {
-        val safe = value.coerceIn(0, 96)
+        val safe = value.coerceIn(0, 200)
         fullBleedArtworkBottomBlurStrengthDp.value = safe
         prefs.edit().putInt(KEY_FULL_BLEED_ARTWORK_BOTTOM_BLUR_STRENGTH_DP, safe).apply()
     }
@@ -5960,6 +5975,7 @@ object AppSettings {
     private const val KEY_PREVENT_PLAY_AT_ZERO_VOLUME = "prevent_play_at_zero_volume"
     private const val KEY_PAUSE_PLAYBACK_AT_ZERO_VOLUME = "pause_playback_at_zero_volume"
     private const val KEY_VISIBLE_PLAYER_CONTROLS = "visible_player_controls"
+    private const val KEY_PLAYER_OUTPUT_CONTROL_CONFIGURED = "player_output_control_configured"
     private const val KEY_PLAYER_CONTROL_ORDER = "player_control_order"
     private const val KEY_AURIS_PLAYER_ACTION_STYLE = "auris_player_action_style"
     private const val KEY_APPLE_MUSIC_LYRICS_BUTTON_STYLE = "apple_music_lyrics_button_style"

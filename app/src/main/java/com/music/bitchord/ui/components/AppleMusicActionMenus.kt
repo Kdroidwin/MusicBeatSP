@@ -27,6 +27,7 @@ import androidx.compose.material.icons.rounded.Delete
 import androidx.compose.material.icons.rounded.Download
 import androidx.compose.material.icons.rounded.Edit
 import androidx.compose.material.icons.rounded.FileDownload
+import androidx.compose.material.icons.rounded.FolderOpen
 import androidx.compose.material.icons.rounded.GraphicEq
 import androidx.compose.material.icons.rounded.Image
 import androidx.compose.material.icons.rounded.Info
@@ -66,6 +67,7 @@ import androidx.compose.ui.window.DialogProperties
 import coil3.compose.AsyncImage
 import com.music.bitchord.R
 import com.music.bitchord.data.model.Song
+import com.music.bitchord.feature.localmusic.data.FolderNavigationRequests
 import com.music.bitchord.playback.SleepTimer
 import com.music.bitchord.ui.player.ThinSlider
 import com.music.bitchord.ui.screens.TrackPlaybackSettingsDialog
@@ -127,6 +129,13 @@ fun AppleMusicTrackActionsMenu(
                 IosMenuSeparator()
                 MenuRow(R.string.go_to_album, Icons.Rounded.Album, onCloseMenu, onOpenAlbum)
                 MenuRow(R.string.go_to_artist, Icons.Rounded.Person, onCloseMenu, onOpenArtist)
+                if (showPlayerActions) {
+                    FolderNavigationRequests.folderPathFor(selectedSong)?.let { folderPath ->
+                        MenuRow(R.string.open_folder, Icons.Rounded.FolderOpen, onCloseMenu) {
+                            FolderNavigationRequests.request(folderPath)
+                        }
+                    }
+                }
                 MenuRow(R.string.add_to_playlist, Icons.AutoMirrored.Rounded.PlaylistAdd, onCloseMenu, onAddToPlaylist)
                 onChangeArtistImage?.let { MenuRow(R.string.change_artist_image, Icons.Rounded.Image, onCloseMenu, it) }
                 if (onDownload != null) MenuRow(R.string.download, Icons.Rounded.FileDownload, onCloseMenu, onDownload)
