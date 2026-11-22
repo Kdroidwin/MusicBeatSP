@@ -181,6 +181,7 @@ import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.key
 import androidx.compose.runtime.setValue
 import androidx.compose.runtime.snapshotFlow
+import androidx.compose.runtime.snapshots.Snapshot
 import kotlinx.coroutines.flow.first
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -1582,6 +1583,7 @@ fun NowPlayingScreen(
     var scrubValue by remember { mutableFloatStateOf(0f) }
     // The queue lives inside the player, Apple-style, rather than in a sheet.
     var queueOpen by remember { mutableStateOf(false) }
+    val queueSlide = remember { mutableFloatStateOf(0f) }
     val savedQueues by SavedQueueStore.queues.collectAsStateWithLifecycle()
     var savedQueueManagerOpen by remember { mutableStateOf(false) }
     var quickSleepTimerOpen by remember { mutableStateOf(false) }
@@ -1589,15 +1591,27 @@ fun NowPlayingScreen(
     var audioPipelineSheetOpen by remember { mutableStateOf(false) }
     var lyricsOpen by remember { mutableStateOf(false) }
     var lyricsLogsOpen by remember { mutableStateOf(false) }
+
+    // Queue and lyrics share the same collapsed sleeve. Carry the queue's
+    // settled endpoint across when switching from lyrics to queue; otherwise
+    // the queue progress starts at zero and the artwork briefly expands first.
+    fun openLyricsPanel() {
+        if (queueOpen) queueSlide.floatValue = 1f
+        lyricsOpen = true
+        queueOpen = false
+    }
+    fun openQueuePanel() {
+        if (lyricsOpen) queueSlide.floatValue = 1f
+        queueOpen = true
+        lyricsOpen = false
+    }
     LaunchedEffect(openLyricsOnShow, openQueueOnShow) {
         when {
             openLyricsOnShow -> {
-                lyricsOpen = true
-                queueOpen = false
+                openLyricsPanel()
             }
             openQueueOnShow -> {
-                queueOpen = true
-                lyricsOpen = false
+                openQueuePanel()
             }
             else -> return@LaunchedEffect
         }
@@ -1605,8 +1619,7 @@ fun NowPlayingScreen(
     }
     LaunchedEffect(song.videoId, lyricsReadyForCurrentSong, lyrics, autoShowLyricsOnPlayback) {
         if (autoShowLyricsOnPlayback && lyricsReadyForCurrentSong && !lyrics.isNullOrEmpty()) {
-            lyricsOpen = true
-            queueOpen = false
+            openLyricsPanel()
         }
     }
     // The state flow is shared across tracks. During the frame before the new
@@ -1805,7 +1818,6 @@ fun NowPlayingScreen(
     // [queueOpen] cannot be pushed around mid-flight by a drag — and a drag that
     // could only move the *target* would have nothing to show for itself until
     // it was released, then jump from wherever the animation had got to.
-    val queueSlide = remember { mutableFloatStateOf(0f) }
     val queueProgress = queueSlide.floatValue
     // Whether a finger is on the sleeve right now. Parks the settle below rather
     // than leaving the two to write the same value on alternate frames.
@@ -1815,10 +1827,10 @@ fun NowPlayingScreen(
     // [QUEUE_CARRY_FRACTION] has to fall back to 0 just as surely as one that
     // carried has to finish reaching 1.
     var queueReleased by remember { mutableIntStateOf(0) }
-    LaunchedEffect(queueOpen, queueDragging, queueReleased, reducePlayerAnimations) {
+    LaunchedEffect(queueOpen, queueDragging, queueReleased, reducePlayerAnimations, playerArtworkTransitionEnabled) {
         if (queueDragging) return@LaunchedEffect
         val target = if (queueOpen) 1f else 0f
-        if (reducePlayerAnimations) {
+        if (reducePlayerAnimations || !playerArtworkTransitionEnabled) {
             queueSlide.floatValue = target
             return@LaunchedEffect
         }
@@ -1907,17 +1919,12 @@ fun NowPlayingScreen(
         onDispose { context.contentResolver.unregisterContentObserver(observer) }
     }
 
-    // 0 = the expanded sleeve, 1 = the compact header. The banner only ever
-    // shows over a settled player: opening the queue or lyrics hands the sleeve
-    // back its card first. Both panels share this one collapse animation.
-    //
-    // This used to read `if (lyricsOpen) 1f else queueProgress`, which gave the
-    // queue a 420ms ease and the lyrics nothing at all: opening them snapped
-    // the sleeve to a thumbnail in a single frame while [heroT] — reading off
-    // this same value — went on fading the banner out over the full 420. One
-    // half of the artwork jumped, the other half glided after it, and the pair
-    // read as a stutter rather than as either. One animation, both surfaces.
-    val p by animateFloatAsState(
+    // 0 = the expanded sleeve, 1 = the compact header. The queue's own progress
+    // already follows its drag and settle, so the sleeve and the queue must use
+    // that same value. Lyrics use the matching 420ms collapse. Keeping one
+    // progress source prevents the cover and panel from briefly showing two
+    // different positions of the same artwork.
+    val animatedPanelCollapse by animateFloatAsState(
         targetValue = if (queueOpen || lyricsOpen) 1f else 0f,
         animationSpec = if (playerArtworkTransitionEnabled) {
             tween(durationMillis = 420, easing = FastOutSlowInEasing)
@@ -1926,6 +1933,21 @@ fun NowPlayingScreen(
         },
         label = "sleeveCollapse",
     )
+    val p = if (!lyricsOpen && (queueOpen || queueDragging || queueProgress > 0.001f)) {
+        queueProgress
+    } else {
+        animatedPanelCollapse
+    }
+    val collapseDone = p >= 0.999f
+    val panelFade = remember {
+        Animatable(if (Snapshot.withoutReadObservation { collapseDone }) 1f else 0f)
+    }
+    LaunchedEffect(collapseDone) {
+        panelFade.animateTo(
+            if (collapseDone) 1f else 0f,
+            tween(durationMillis = 200, easing = FastOutSlowInEasing),
+        )
+    }
     // Keep the new transport treatment on the settled, expanded player only.
     // Queue and lyrics surfaces retain their established controls and gestures.
     val walkmanControlsActive = retroPlayerLayout && p < 0.01f && !queueOpen && !lyricsOpen
@@ -2197,7 +2219,12 @@ fun NowPlayingScreen(
     } else {
         artworkBackdropBlurDp.dp
     }
-    Box(modifier = modifier.fillMaxSize().then(dockCoordinates).then(dockSurfaceFade)) {
+    Box(modifier = modifier.fillMaxSize().then(dockCoordinates)) {
+        // Fade the stationary player surface as it leaves. The artwork portal
+        // is drawn by the sibling below, outside this layer, just like the
+        // BitChord dock host; otherwise the travelling cover fades with the
+        // full-screen copy and appears doubled/ghosted on its way down.
+        Box(Modifier.matchParentSize().then(dockSurfaceFade)) {
         // Keep the configured blur radius constant while fading the entire
         // moving surface as one cached layer. This also clears the backdrop
         // with the sheet instead of leaving a colour wash after the cover goes.
@@ -2468,7 +2495,6 @@ fun NowPlayingScreen(
                 )
             }
         }
-
         Column(
             modifier = Modifier
                 .fillMaxSize()
@@ -2962,8 +2988,7 @@ fun NowPlayingScreen(
                         seekIntervalSeconds = seekIntervalSeconds,
                         onSingleTap = if (artworkGesturesEnabled && artworkTapOpensLyrics && !queueOpen && !lyricsOpen && p < 0.5f) {
                             {
-                                queueOpen = false
-                                lyricsOpen = true
+                                openLyricsPanel()
                             }
                         } else {
                             null
@@ -3417,8 +3442,8 @@ fun NowPlayingScreen(
                                     } else Haptic.Tap,
                                     onClick = {
                                         when (action) {
-                                            PlayerQuickAction.LYRICS -> { lyricsOpen = true; queueOpen = false }
-                                            PlayerQuickAction.QUEUE -> { queueOpen = true; lyricsOpen = false }
+                                            PlayerQuickAction.LYRICS -> openLyricsPanel()
+                                            PlayerQuickAction.QUEUE -> openQueuePanel()
                                             PlayerQuickAction.ADD_TO_PLAYLIST -> onQuickAddToPlaylist()
                                             PlayerQuickAction.PLAYBACK_TUNING -> onQuickPlaybackTuning()
                                             PlayerQuickAction.PLAYLISTS -> onOpenPlaylists()
@@ -3484,17 +3509,14 @@ fun NowPlayingScreen(
                     }
                 }
 
-                if (lyricsReplaceArtworkOnly && lyricsOpen) {
+                if (lyricsReplaceArtworkOnly && lyricsOpen && collapseDone) {
                     val lyricsTopPadding = if (hidePlayerHeaderDuringLyrics) 0.dp else HEADER_HEIGHT
                     Box(
                         modifier = Modifier
                             .fillMaxSize()
                             .padding(top = lyricsTopPadding)
                             .zIndex(2f)
-                            .graphicsLayer {
-                                alpha = ((p - 0.45f) / 0.55f).coerceIn(0f, 1f)
-                                translationY = (1f - p) * 26.dp.toPx()
-                            },
+                            .graphicsLayer { alpha = panelFade.value },
                     ) {
                         // Keep this layer transparent. The player's artwork mesh
                         // already provides the backdrop; a separate haze surface
@@ -3576,7 +3598,7 @@ fun NowPlayingScreen(
                             }
                         }
                     }
-                } else if (lyricsOpen && lyricsLogsOpen) {
+                } else if (lyricsOpen && collapseDone && lyricsLogsOpen) {
                         // Full-screen log console — replaces the lyrics list while
                         // the debug panel is open. Same fade-in timing as the lyrics
                         // panel so the transition is identical from the user's side.
@@ -3584,12 +3606,9 @@ fun NowPlayingScreen(
                             modifier = Modifier
                                 .fillMaxSize()
                                 .padding(top = if (hidePlayerHeaderDuringLyrics) 0.dp else HEADER_HEIGHT)
-                                .graphicsLayer {
-                                    alpha = ((p - 0.45f) / 0.55f).coerceIn(0f, 1f)
-                                    translationY = (1f - p) * 26.dp.toPx()
-                                },
+                                .graphicsLayer { alpha = panelFade.value },
                         )
-                } else if (lyricsOpen) {
+                } else if (lyricsOpen && collapseDone) {
                         LyricsPanel(
                             lines = currentSongLyrics.orEmpty(),
                             trackKey = song.videoId,
@@ -3601,15 +3620,7 @@ fun NowPlayingScreen(
                             modifier = Modifier
                                 .fillMaxSize()
                                 .padding(top = if (hidePlayerHeaderDuringLyrics) 0.dp else HEADER_HEIGHT)
-                                // Arrives once the sleeve has finished collapsing
-                                // into the header, the same beat the queue below
-                                // already waits for — fading lyrics in over a
-                                // sleeve still mid-collapse doubled the same
-                                // movement in two places on screen at once.
-                                .graphicsLayer {
-                                    alpha = ((p - 0.45f) / 0.55f).coerceIn(0f, 1f)
-                                    translationY = (1f - p) * 26.dp.toPx()
-                                },
+                                .graphicsLayer { alpha = panelFade.value },
                             isLoading = !lyricsReadyForCurrentSong,
                             sourceSwitcher = if (showLyricsSourceSwitcher) { sourceModifier ->
                                 LyricsSourceSwitcherButton(
@@ -3629,16 +3640,28 @@ fun NowPlayingScreen(
                         )
                 }
 
-                // Toggles and the queue arrive after the sleeve has finished
-                // travelling, and leave before it starts coming back.
-                if (!lyricsOpen && queueProgress > 0.01f) {
+                // On a button open, wait until the sleeve has reached its header
+                // before drawing the queue over it. Direct drags keep the queue
+                // under the finger, as in BitChord.
+                val queuePanelVisible = !lyricsOpen && (
+                    queueDragging || (queueOpen && queueProgress > 0.01f && collapseDone)
+                )
+                if (queuePanelVisible) {
                     Column(
                         modifier = Modifier
                             .fillMaxSize()
                             .padding(top = HEADER_HEIGHT)
                             .graphicsLayer {
-                                alpha = ((queueProgress - 0.45f) / 0.55f).coerceIn(0f, 1f)
-                                translationY = (1f - queueProgress) * 26.dp.toPx()
+                                alpha = if (queueDragging) {
+                                    ((queueProgress - 0.45f) / 0.55f).coerceIn(0f, 1f)
+                                } else {
+                                    panelFade.value
+                                }
+                                translationY = if (queueDragging) {
+                                    (1f - queueProgress) * 26.dp.toPx()
+                                } else {
+                                    0f
+                                }
                             },
                     ) {
                         InlineQueue(
@@ -3704,8 +3727,7 @@ fun NowPlayingScreen(
                             // closing the queue behind it the same way the "Up
                             // next" glyph closes lyrics behind the queue.
                             onClick = {
-                                queueOpen = false
-                                lyricsOpen = true
+                                openLyricsPanel()
                             },
                             modifier = Modifier.fillMaxWidth(),
                         )
@@ -3987,8 +4009,8 @@ fun NowPlayingScreen(
                         onToggleShuffle = onToggleShuffle,
                         onCycleRepeat = onCycleRepeat,
                         onToggleFavorite = toggleLike,
-                        onOpenLyrics = { lyricsOpen = true; queueOpen = false },
-                        onOpenQueue = { queueOpen = true; lyricsOpen = false },
+                        onOpenLyrics = ::openLyricsPanel,
+                        onOpenQueue = ::openQueuePanel,
                         onOpenPlaylists = onOpenPlaylists,
                         onOpenSearch = onOpenSearch,
                     )
@@ -4136,8 +4158,8 @@ fun NowPlayingScreen(
                         onToggleShuffle = onToggleShuffle,
                         onCycleRepeat = onCycleRepeat,
                         onToggleFavorite = toggleLike,
-                        onOpenLyrics = { lyricsOpen = true; queueOpen = false },
-                        onOpenQueue = { queueOpen = true; lyricsOpen = false },
+                        onOpenLyrics = ::openLyricsPanel,
+                        onOpenQueue = ::openQueuePanel,
                         onOpenPlaylists = onOpenPlaylists,
                         onOpenSearch = onOpenSearch,
                     )
@@ -4244,8 +4266,7 @@ fun NowPlayingScreen(
                                 icon = if (appleMusicLyricsButtonStyle) BitChordIcons.AurisLyrics else Icons.AutoMirrored.Rounded.Notes,
                                 contentDescription = stringResource(R.string.quick_action_lyrics),
                                 onClick = {
-                                    lyricsOpen = !lyricsOpen
-                                    if (lyricsOpen) queueOpen = false
+                                    if (lyricsOpen) lyricsOpen = false else openLyricsPanel()
                                 },
                                 highlighted = lyricsOpen,
                                 haptic = if (lyricsOpen) Haptic.Tap else Haptic.Select,
@@ -4262,8 +4283,7 @@ fun NowPlayingScreen(
                                 icon = if (appleMusicQueueButtonStyle) BitChordIcons.AurisQueue else Icons.AutoMirrored.Rounded.QueueMusic,
                                 contentDescription = stringResource(R.string.up_next),
                                 onClick = {
-                                    lyricsOpen = false
-                                    queueOpen = !queueOpen
+                                    if (queueOpen) queueOpen = false else openQueuePanel()
                                 },
                                 highlighted = queueOpen,
                                 haptic = if (queueOpen) Haptic.Tap else Haptic.Expand,
@@ -4319,6 +4339,7 @@ fun NowPlayingScreen(
             }
             }
             }
+        }
         }
         }
         if (dock != null) {

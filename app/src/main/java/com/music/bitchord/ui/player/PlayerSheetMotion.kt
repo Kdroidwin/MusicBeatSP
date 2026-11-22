@@ -1,6 +1,7 @@
 package com.music.bitchord.ui.player
 
 import android.view.Window
+import android.view.WindowManager
 import androidx.compose.animation.core.Spring
 import androidx.compose.animation.core.animate
 import androidx.compose.animation.core.spring
@@ -169,7 +170,20 @@ class PlayerSheetMotion(
 
     /** A tap on the mini player. */
     fun open() {
-        if (shown()) return
+        if (shown()) {
+            // A tap while the player is still travelling down reverses it
+            // from its current position instead of ignoring the tap.
+            if (closing && holding) {
+                settle?.cancel()
+                reopening()
+                val from = held
+                settle = scope.launch {
+                    slide(from = from, to = 0f)
+                    held = Float.NaN
+                }
+            }
+            return
+        }
         settle?.cancel()
         closing = false
         held = travel()
@@ -230,11 +244,29 @@ class PlayerSheetMotion(
         window?.setWindowAnimations(0)
     }
 
+    /** Let the page beneath receive input while the sheet travels away. */
+    private fun passTouchesThrough(pass: Boolean) {
+        val activeWindow = window ?: return
+        if (pass) {
+            activeWindow.addFlags(WindowManager.LayoutParams.FLAG_NOT_TOUCHABLE)
+        } else {
+            activeWindow.clearFlags(WindowManager.LayoutParams.FLAG_NOT_TOUCHABLE)
+        }
+    }
+
+    /** The mini player caught a close in flight; restore its window and reverse. */
+    private fun reopening() {
+        closing = false
+        passTouchesThrough(false)
+        window?.setWindowAnimations(windowAnimations)
+    }
+
     /** From the sheet: whatever asked for it to hide, this is how it goes. */
     fun close() {
         if (!shown() || closing) return
         closing = true
         quietWindow()
+        passTouchesThrough(true)
         settle?.cancel()
         val from = position().takeUnless { it.isNaN() } ?: run {
             dismissQuietly()
@@ -285,6 +317,9 @@ class PlayerSheetMotion(
         if (!open) {
             closing = true
             quietWindow()
+            passTouchesThrough(true)
+        } else if (closing) {
+            reopening()
         }
         val from = held
         settle = scope.launch {
