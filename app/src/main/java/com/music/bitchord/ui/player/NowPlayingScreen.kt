@@ -359,9 +359,9 @@ private const val LARGER_AURIS_FULL_BLEED_ZOOM = 1.36f
 /** The subtle downward drift used by Auris' expanded artwork. */
 private const val AURIS_FULL_BLEED_DRIFT = 0.016f
 /** The established dissolve used by the standard full-screen artwork mode. */
-private const val HERO_FADE_FRACTION = 0.24f
+private const val HERO_FADE_FRACTION = 0.16f
 /** BitChord-style lower-edge dissolve, kept short so the cover stays visible. */
-private const val BITCHORD_HERO_FADE_FRACTION = 0.24f
+private const val BITCHORD_HERO_FADE_FRACTION = 0.16f
 
 private class CenteredPlayerButtonArrangement(private val gapDp: Float) : Arrangement.Horizontal {
     override fun Density.arrange(
