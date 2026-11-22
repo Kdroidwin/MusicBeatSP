@@ -67,6 +67,19 @@ import java.util.Locale
 class PlaybackPosition internal constructor() {
     var positionMs by mutableLongStateOf(0L)
         internal set
+    var sampledAtNanos by mutableLongStateOf(System.nanoTime())
+        internal set
+    var discontinuity by mutableLongStateOf(0L)
+        internal set
+
+    internal fun update(positionMs: Long) {
+        this.positionMs = positionMs.coerceAtLeast(0L)
+        sampledAtNanos = System.nanoTime()
+    }
+
+    internal fun markDiscontinuity() {
+        discontinuity += 1L
+    }
 }
 
 /** Snapshot of playback state, driven by the MediaController. */
@@ -260,7 +273,7 @@ fun rememberPlayerState(controller: MediaController?): PlayerState {
             }
             // Synced here too, so seeking while paused or buffering still moves
             // the scrubber (the poll loop only runs on play).
-            position.positionMs = player.currentPosition.coerceAtLeast(0L)
+            position.update(player.currentPosition)
             state = state.copy(
                 song = item?.toSong(),
                 isPlaying = player.isPlaying,
@@ -278,6 +291,14 @@ fun rememberPlayerState(controller: MediaController?): PlayerState {
         }
 
         val listener = object : Player.Listener {
+            override fun onPositionDiscontinuity(
+                oldPosition: Player.PositionInfo,
+                newPosition: Player.PositionInfo,
+                reason: Int,
+            ) {
+                position.markDiscontinuity()
+            }
+
             override fun onEvents(p: Player, events: Player.Events) = sync(
                 error = state.error,
                 rebuildQueue = events.contains(Player.EVENT_TIMELINE_CHANGED),
@@ -304,7 +325,7 @@ fun rememberPlayerState(controller: MediaController?): PlayerState {
     val foreground = rememberIsForeground()
     LaunchedEffect(controller, state.isPlaying, foreground) {
         while (controller != null && state.isPlaying && foreground) {
-            position.positionMs = controller.currentPosition.coerceAtLeast(0L)
+            position.update(controller.currentPosition)
             val duration = controller.duration.coerceAtLeast(0L)
             if (duration != state.durationMs) state = state.copy(durationMs = duration)
             delay(500)

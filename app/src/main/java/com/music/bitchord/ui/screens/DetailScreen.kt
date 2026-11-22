@@ -41,6 +41,7 @@ import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
+import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
@@ -111,6 +112,8 @@ fun DetailScreen(
 ) {
     val songsState = page.songs
     val songs = (songsState as? UiState.Success)?.data.orEmpty()
+    var artistOverviewExpanded by remember(page.browseId, page.description) { mutableStateOf(false) }
+    var artistOverviewOverflows by remember(page.browseId, page.description) { mutableStateOf(false) }
     val showArtistOverview by AppSettings.showArtistOverview.collectAsStateWithLifecycle()
     val centerArtistDetailName by AppSettings.centerArtistDetailName.collectAsStateWithLifecycle()
     val artistDetailMostPlayedLabelAsTracks by AppSettings.artistDetailMostPlayedLabelAsTracks.collectAsStateWithLifecycle()
@@ -183,9 +186,24 @@ fun DetailScreen(
                             text = page.description,
                             color = palette.onBackgroundVariant,
                             style = MaterialTheme.typography.bodyMedium,
-                            maxLines = 4,
+                            maxLines = if (artistOverviewExpanded) Int.MAX_VALUE else 4,
                             overflow = TextOverflow.Ellipsis,
+                            onTextLayout = { artistOverviewOverflows = it.hasVisualOverflow },
                         )
+                        if (artistOverviewOverflows || artistOverviewExpanded) {
+                            TextButton(
+                                onClick = { artistOverviewExpanded = !artistOverviewExpanded },
+                                contentPadding = PaddingValues(horizontal = 0.dp, vertical = 2.dp),
+                            ) {
+                                Text(
+                                    text = stringResource(
+                                        if (artistOverviewExpanded) R.string.artist_overview_less
+                                        else R.string.artist_overview_more,
+                                    ),
+                                    color = palette.accent,
+                                )
+                            }
+                        }
                     }
                     if (audienceStats.isNotEmpty()) {
                         Spacer(Modifier.height(8.dp))

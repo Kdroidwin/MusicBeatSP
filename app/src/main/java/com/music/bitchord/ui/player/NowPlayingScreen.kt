@@ -950,6 +950,8 @@ fun NowPlayingScreen(
     isPlaying: Boolean,
     isLoading: Boolean,
     positionMs: Long,
+    positionSampledAtNanos: Long,
+    positionDiscontinuity: Long,
     durationMs: Long,
     /** True only while this current item is the manual catalogue-audio match. */
     isAudioVersion: Boolean,
@@ -3381,6 +3383,8 @@ fun NowPlayingScreen(
                                 lines = currentSongLyrics.orEmpty(),
                                 trackKey = song.videoId,
                                 positionMs = positionMs,
+                                positionSampledAtNanos = positionSampledAtNanos,
+                                positionDiscontinuity = positionDiscontinuity,
                                 isPlaying = isPlaying,
                                 onSeekToLine = onSeek,
                                 modifier = Modifier.fillMaxSize(),
@@ -3467,6 +3471,8 @@ fun NowPlayingScreen(
                             lines = currentSongLyrics.orEmpty(),
                             trackKey = song.videoId,
                             positionMs = positionMs,
+                            positionSampledAtNanos = positionSampledAtNanos,
+                            positionDiscontinuity = positionDiscontinuity,
                             isPlaying = isPlaying,
                             onSeekToLine = onSeek,
                             modifier = Modifier
@@ -3566,6 +3572,8 @@ fun NowPlayingScreen(
                             lines = currentSongLyrics,
                             trackKey = song.videoId,
                             positionMs = positionMs,
+                            positionSampledAtNanos = positionSampledAtNanos,
+                            positionDiscontinuity = positionDiscontinuity,
                             isPlaying = isPlaying,
                             durationMs = durationMs,
                             // Still visible over the queue, so still a valid way
@@ -4274,29 +4282,62 @@ private suspend fun AwaitPointerEventScope.dragQueueIn(
  * lambda, only the draw phase re-runs each frame. Read in composition, the
  * whole line would recompose sixty times a second.
  */
+private const val SAME_CLOCK_NANOS = 250_000_000L
+
 @Composable
-private fun rememberLyricClock(positionMs: Long, isPlaying: Boolean): MutableDoubleState {
-    val clock = remember { mutableDoubleStateOf(positionMs.toDouble()) }
+private fun rememberLyricClock(
+    trackKey: Any,
+    positionMs: Long,
+    sampledAtNanos: Long,
+    discontinuity: Long,
+    isPlaying: Boolean,
+): MutableDoubleState {
+    val clock = remember(trackKey) { mutableDoubleStateOf(positionMs.toDouble()) }
+    val engine = remember(trackKey) { LyricClock(positionMs) }
+    val reading by rememberUpdatedState(
+        LyricClockReading(
+            positionMs = positionMs,
+            sampledAtMs = sampledAtNanos / 1_000_000.0,
+            discontinuity = discontinuity,
+            isPlaying = isPlaying,
+        ),
+    )
     val smoothCharacterLyrics by AppSettings.smoothCharacterLyrics.collectAsStateWithLifecycle()
-    // Gated on the app being on screen. The loop asks for a frame, writes a
-    // value that invalidates a drawing, and is handed the next frame for it —
-    // which is a request to render continuously for as long as it runs. That is
-    // the right trade for a lyric being read and the wrong one for a phone in a
-    // pocket, and the composition alone cannot tell the two apart.
-    //
-    // Resuming needs no catch-up: [positionMs] is a key, so coming back
-    // restarts the effect and the clock is set from the player's own position
-    // before the first frame is asked for.
     val foreground = rememberIsForeground()
-    LaunchedEffect(positionMs, isPlaying, foreground, smoothCharacterLyrics) {
-        clock.doubleValue = positionMs.toDouble()
-        if (!isPlaying || !foreground) return@LaunchedEffect
-        var previousFrame = withFrameNanos { it }
+
+    // Player reports also steer the clock when it is paused or the lyric panel
+    // is retained off-screen. A report never restarts the frame loop.
+    LaunchedEffect(engine, foreground) {
+        snapshotFlow { reading }.collect { latest ->
+            engine.observe(
+                latest,
+                System.nanoTime() / 1_000_000.0,
+                active = foreground,
+            )?.let { clock.doubleValue = it }
+        }
+    }
+
+    // Keep one compositor-clock loop alive between the player's 500 ms
+    // position samples. Dated samples steer the playhead, while bounded rate
+    // correction absorbs callback jitter without snapping the highlight back.
+    LaunchedEffect(engine, isPlaying, foreground, smoothCharacterLyrics) {
+        val initial = reading
+        if (!initial.isPlaying || !foreground) {
+            engine.observe(initial, System.nanoTime() / 1_000_000.0, active = foreground)
+                ?.let { clock.doubleValue = it }
+            return@LaunchedEffect
+        }
+        engine.restart()
         while (true) {
-            withFrameNanos { frame ->
-                val elapsedMs = (frame - previousFrame).coerceAtLeast(0L) / 1_000_000.0
-                clock.doubleValue += if (smoothCharacterLyrics) elapsedMs else elapsedMs.toLong().toDouble()
-                previousFrame = frame
+            withFrameNanos { frameNanos ->
+                val systemNanos = System.nanoTime()
+                val nowNanos = if (abs(systemNanos - frameNanos) < SAME_CLOCK_NANOS) {
+                    frameNanos
+                } else {
+                    systemNanos
+                }
+                val position = engine.frame(nowNanos / 1_000_000.0, reading)
+                clock.doubleValue = if (smoothCharacterLyrics) position else position.toLong().toDouble()
             }
         }
     }
@@ -4650,6 +4691,8 @@ fun TabletLyricsPane(
     lines: List<LyricLine>?,
     trackKey: String,
     positionMs: Long,
+    positionSampledAtNanos: Long,
+    positionDiscontinuity: Long,
     isPlaying: Boolean,
     onSeek: (Long) -> Unit,
     artworkUrl: String?,
@@ -4677,6 +4720,8 @@ fun TabletLyricsPane(
                     lines = lines,
                     trackKey = trackKey,
                     positionMs = positionMs,
+                    positionSampledAtNanos = positionSampledAtNanos,
+                    positionDiscontinuity = positionDiscontinuity,
                     isPlaying = isPlaying,
                     onSeekToLine = onSeek,
                     modifier = Modifier.weight(1f),
@@ -4901,13 +4946,21 @@ private fun LyricsPanel(
     lines: List<LyricLine>,
     trackKey: Any,
     positionMs: Long,
+    positionSampledAtNanos: Long,
+    positionDiscontinuity: Long,
     isPlaying: Boolean,
     onSeekToLine: (Long) -> Unit,
     modifier: Modifier = Modifier,
     isLoading: Boolean = false,
     sourceSwitcher: (@Composable (Modifier) -> Unit)? = null,
 ) {
-    val clock = rememberLyricClock(positionMs, isPlaying)
+    val clock = rememberLyricClock(
+        trackKey = trackKey,
+        positionMs = positionMs,
+        sampledAtNanos = positionSampledAtNanos,
+        discontinuity = positionDiscontinuity,
+        isPlaying = isPlaying,
+    )
     val context = LocalContext.current
     val translateLyrics by AppSettings.translateLyricsWithPlamo.collectAsStateWithLifecycle()
     val hideTranslationProgress by AppSettings.hideLyricsTranslationProgress.collectAsStateWithLifecycle()
@@ -5781,6 +5834,8 @@ private fun CurrentLyricLine(
     lines: List<LyricLine>,
     trackKey: Any,
     positionMs: Long,
+    positionSampledAtNanos: Long,
+    positionDiscontinuity: Long,
     isPlaying: Boolean,
     durationMs: Long,
     onClick: () -> Unit,
@@ -5826,7 +5881,13 @@ private fun CurrentLyricLine(
         return
     }
 
-    val clock = rememberLyricClock(positionMs, isPlaying)
+    val clock = rememberLyricClock(
+        trackKey = trackKey,
+        positionMs = positionMs,
+        sampledAtNanos = positionSampledAtNanos,
+        discontinuity = positionDiscontinuity,
+        isPlaying = isPlaying,
+    )
 
     val index by remember(lines) {
         derivedStateOf { lines.indexOfLast { it.timeMs.toDouble() <= clock.doubleValue } }

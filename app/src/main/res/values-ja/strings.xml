@@ -609,6 +609,8 @@
     <string name="your_playlists">あなたのプレイリスト</string>
     <string name="who_can_see_it">公開範囲</string>
     <string name="about_artist">アーティストについて</string>
+    <string name="artist_overview_more">続き</string>
+    <string name="artist_overview_less">折りたたむ</string>
     <string name="about_album">アルバムについて</string>
     <string name="nothing_matches">「%1$s」に一致するものはありません</string>
     <string name="close_search">検索を閉じる</string>

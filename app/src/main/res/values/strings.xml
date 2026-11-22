@@ -676,6 +676,8 @@
     <string name="your_playlists">Your playlists</string>
     <string name="who_can_see_it">Who can see it</string>
     <string name="about_artist">About the artist</string>
+    <string name="artist_overview_more">Continue reading</string>
+    <string name="artist_overview_less">Show less</string>
     <string name="about_album">About the album</string>
     <string name="nothing_matches">Nothing here matches “%1$s”</string>
     <string name="close_search">Close search</string>
