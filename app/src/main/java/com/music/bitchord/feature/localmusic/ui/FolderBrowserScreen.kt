@@ -221,7 +221,15 @@ fun FolderBrowserScreen(
     val tree = remember(songs, customRootPath) { FolderTreeBuilder.build(songs, customRootPath) }
     val rootKey = customRootPath ?: tree.path
     val pathStack = rememberSaveable(rootKey, saver = FolderPathStackSaver) {
-        mutableStateListOf<String>()
+        mutableStateListOf<String>().apply {
+            // Restore the last folder as part of the initial state. If this is
+            // deferred to LaunchedEffect, the activity-level back handler can
+            // briefly win before this screen registers its folder back handler
+            // and switch to Songs instead of returning to the storage root.
+            if (rememberLastOpenedFolder && lastOpenedFolderPath.isNotBlank()) {
+                addAll(folderPathStack(tree, lastOpenedFolderPath).orEmpty())
+            }
+        }
     }
     val stackSnapshot = pathStack.toList()
     val currentNode by remember(tree, stackSnapshot) {
@@ -284,7 +292,9 @@ fun FolderBrowserScreen(
         }
     }
     val latestNavigationCallback = rememberUpdatedState(onNavigationChanged)
-    LaunchedEffect(canGoBack) {
+    SideEffect {
+        // Keep the toolbar's back button in sync with the folder stack in the
+        // same composition that changes the visible directory.
         latestNavigationCallback.value?.invoke(canGoBack, popBack.takeIf { canGoBack })
     }
     DisposableEffect(Unit) {
