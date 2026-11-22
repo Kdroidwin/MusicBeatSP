@@ -1402,7 +1402,7 @@ class MainViewModel(app: Application) : AndroidViewModel(app) {
         }
         loadLocalMusic()
         viewModelScope.launch {
-            AppSettings.blacklistedFolders.drop(1).collect {
+            AppSettings.localFolderFilterRevision.drop(1).collect {
                 loadLocalMusic()
             }
         }
@@ -2995,6 +2995,10 @@ class MainViewModel(app: Application) : AndroidViewModel(app) {
         append(";dsd=").append(AppSettings.dsdPlaybackEnabled.value)
         append(";blacklist=")
         AppSettings.blacklistedFolders.value.sorted().forEach { path ->
+            append(path.length).append(':').append(path).append(';')
+        }
+        append(";includedFolders=")
+        AppSettings.includedFolderOverrides.value.sorted().forEach { path ->
             append(path.length).append(':').append(path).append(';')
         }
     }

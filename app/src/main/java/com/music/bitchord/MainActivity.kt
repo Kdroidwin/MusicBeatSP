@@ -8,6 +8,7 @@ import android.content.pm.PackageManager
 import android.net.Uri
 import android.os.Build
 import android.os.Bundle
+import android.os.Environment
 import android.os.Process
 import android.provider.MediaStore
 import android.provider.OpenableColumns
@@ -1226,6 +1227,9 @@ private fun BitChordApp(
     var hasStoragePermission by remember {
         mutableStateOf(LocalMediaRepository.hasStoragePermission(context))
     }
+    var hasAllFilesAccess by remember {
+        mutableStateOf(Build.VERSION.SDK_INT >= Build.VERSION_CODES.R && Environment.isExternalStorageManager())
+    }
     val allFilesAsked by AppSettings.allFilesPermissionAsked.collectAsStateWithLifecycle()
     var showFirstLaunchPermissionDialog by rememberSaveable {
         mutableStateOf(!allFilesAsked)
@@ -1332,11 +1336,17 @@ private fun BitChordApp(
         val observer = LifecycleEventObserver { _, event ->
             if (event == Lifecycle.Event.ON_RESUME) {
                 val currentStorage = LocalMediaRepository.hasStoragePermission(context)
-                if (currentStorage != hasStoragePermission) {
+                val currentAllFilesAccess = Build.VERSION.SDK_INT >= Build.VERSION_CODES.R &&
+                    Environment.isExternalStorageManager()
+                val allFilesFolderDefaultsApplied = AppSettings.applyAllFilesAccessFolderDefaultsIfNeeded()
+                val permissionStateChanged = currentStorage != hasStoragePermission ||
+                    currentAllFilesAccess != hasAllFilesAccess
+                if (permissionStateChanged) {
                     hasStoragePermission = currentStorage
+                    hasAllFilesAccess = currentAllFilesAccess
                     if (currentStorage) {
                         viewModel.reloadLocalDetail("local:all")
-                        viewModel.loadLocalMusic()
+                        if (!allFilesFolderDefaultsApplied) viewModel.loadLocalMusic()
                     }
                 }
             }

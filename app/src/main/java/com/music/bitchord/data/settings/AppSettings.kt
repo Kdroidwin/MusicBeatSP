@@ -10,6 +10,7 @@ import android.net.Network
 import android.net.NetworkCapabilities
 import android.net.Uri
 import android.os.Build
+import android.os.Environment
 import androidx.media3.common.Player
 import com.music.bitchord.BuildConfig
 import com.music.bitchord.auth.AuthStore
@@ -1477,6 +1478,10 @@ object AppSettings {
 
     /** Normalized paths of folders blacklisted/excluded from local music scanning. */
     val blacklistedFolders = MutableStateFlow<Set<String>>(emptySet())
+    /** Explicitly included folders override a blacklisted ancestor. */
+    val includedFolderOverrides = MutableStateFlow<Set<String>>(emptySet())
+    /** Single invalidation signal for local folder visibility and scan caches. */
+    val localFolderFilterRevision = MutableStateFlow(0L)
 
     /** Home-only folder exclusions. These do not remove tracks from the library or scanner. */
     val homeExcludedFolders = MutableStateFlow<Set<String>>(emptySet())
@@ -1604,7 +1609,30 @@ object AppSettings {
         migrateScopedMusicAccessBackToAudioPermission()
         migrateLegacyAllFilesPermissionToScopedAudioPermission()
         readAll()
+        applyAllFilesAccessFolderDefaultsIfNeeded()
         watchConnection(context)
+    }
+
+    /**
+     * Before All Files Access was available in Settings, excluded roots could
+     * hide newly discoverable descendants. Include everything on the first
+     * grant, then preserve any folder choices the user makes afterwards.
+     */
+    fun applyAllFilesAccessFolderDefaultsIfNeeded(): Boolean {
+        if (Build.VERSION.SDK_INT < Build.VERSION_CODES.R || !Environment.isExternalStorageManager()) {
+            return false
+        }
+        if (prefs.getBoolean(KEY_ALL_FILES_ACCESS_FOLDER_DEFAULTS_APPLIED, false)) return false
+
+        blacklistedFolders.value = emptySet()
+        includedFolderOverrides.value = emptySet()
+        prefs.edit()
+            .putStringSet(KEY_BLACKLISTED_FOLDERS, emptySet())
+            .putStringSet(KEY_INCLUDED_FOLDER_OVERRIDES, emptySet())
+            .putBoolean(KEY_ALL_FILES_ACCESS_FOLDER_DEFAULTS_APPLIED, true)
+            .apply()
+        localFolderFilterRevision.value += 1L
+        return true
     }
 
     /**
@@ -2383,7 +2411,9 @@ object AppSettings {
             ?: FavoriteSongSort.DEFAULT
         LauncherIconManager.apply(appContext, launcherIcon.value)
         blacklistedFolders.value = prefs.getStringSet(KEY_BLACKLISTED_FOLDERS, emptySet()).orEmpty()
-            .mapTo(mutableSetOf(), ::normalizeFolderPath)
+            .mapNotNullTo(mutableSetOf(), ::normalizeOptionalFolderPath)
+        includedFolderOverrides.value = prefs.getStringSet(KEY_INCLUDED_FOLDER_OVERRIDES, emptySet()).orEmpty()
+            .mapNotNullTo(mutableSetOf(), ::normalizeOptionalFolderPath)
         homeExcludedFolders.value = prefs.getStringSet(KEY_HOME_EXCLUDED_FOLDERS, emptySet()).orEmpty()
             .mapTo(mutableSetOf(), ::normalizeFolderPath)
         pinnedPlaylists.value = readPinnedPlaylists()
@@ -5347,19 +5377,51 @@ object AppSettings {
 
 
     fun setFolderBlacklisted(folderPath: String, blacklisted: Boolean) {
-        val normalized = folderPath.replace('\\', '/').trimEnd('/').lowercase(Locale.ROOT)
-        val current = blacklistedFolders.value
-        val updated = if (blacklisted) current + normalized else current - normalized
-        blacklistedFolders.value = updated
-        prefs.edit().putStringSet(KEY_BLACKLISTED_FOLDERS, updated).apply()
+        val normalized = normalizeOptionalFolderPath(folderPath) ?: return
+        val currentBlacklisted = blacklistedFolders.value
+        val currentIncluded = includedFolderOverrides.value
+        val updatedBlacklisted: Set<String>
+        val updatedIncluded: Set<String>
+        if (blacklisted) {
+            updatedBlacklisted = currentBlacklisted + normalized
+            // Excluding a parent should continue to exclude its whole subtree.
+            updatedIncluded = currentIncluded.filterNot { it == normalized || it.startsWith("$normalized/") }.toSet()
+        } else {
+            updatedBlacklisted = currentBlacklisted - normalized
+            // A child can now opt back in even if one of its ancestors remains excluded.
+            updatedIncluded = currentIncluded + normalized
+        }
+        if (updatedBlacklisted == currentBlacklisted && updatedIncluded == currentIncluded) return
+
+        blacklistedFolders.value = updatedBlacklisted
+        includedFolderOverrides.value = updatedIncluded
+        prefs.edit()
+            .putStringSet(KEY_BLACKLISTED_FOLDERS, updatedBlacklisted)
+            .putStringSet(KEY_INCLUDED_FOLDER_OVERRIDES, updatedIncluded)
+            .apply()
+        localFolderFilterRevision.value += 1L
     }
 
     fun isFolderBlacklisted(folderPath: String?): Boolean {
         if (folderPath.isNullOrBlank()) return false
-        val normalized = folderPath.replace('\\', '/').trimEnd('/').lowercase(Locale.ROOT)
-        val blacklisted = blacklistedFolders.value
-        return blacklisted.any { b ->
-            normalized == b || normalized.startsWith("$b/")
+        val normalized = normalizeOptionalFolderPath(folderPath) ?: return false
+        var closestInclusion = -1
+        for (included in includedFolderOverrides.value) {
+            if ((normalized == included || normalized.startsWith("$included/")) && included.length > closestInclusion) {
+                closestInclusion = included.length
+            }
+        }
+        var closestExclusion = -1
+        for (excluded in blacklistedFolders.value) {
+            if ((normalized == excluded || normalized.startsWith("$excluded/")) && excluded.length > closestExclusion) {
+                closestExclusion = excluded.length
+            }
+        }
+        return when {
+            closestExclusion < 0 -> false
+            closestInclusion < 0 -> true
+            closestExclusion >= closestInclusion -> true
+            else -> false
         }
     }
 
@@ -5397,6 +5459,12 @@ object AppSettings {
 
     private fun normalizeFolderPath(folderPath: String): String =
         folderPath.replace('\\', '/').trimEnd('/').lowercase(Locale.ROOT)
+
+    private fun normalizeOptionalFolderPath(folderPath: String?): String? = folderPath
+        ?.replace('\\', '/')
+        ?.trimEnd('/')
+        ?.lowercase(Locale.ROOT)
+        ?.takeIf(String::isNotBlank)
 
     private fun readLocalMusicSort(key: String): LocalMusicSort =
         prefs.getString(key, null)
@@ -5991,6 +6059,8 @@ object AppSettings {
     private const val KEY_LOCAL_DRILLDOWN_SONGS_VIEW_TYPE = "local_drilldown_songs_view_type"
     private const val KEY_DOWNLOADED_DRILLDOWN_SONGS_VIEW_TYPE = "downloaded_drilldown_songs_view_type"
     private const val KEY_BLACKLISTED_FOLDERS = "blacklisted_folders"
+    private const val KEY_INCLUDED_FOLDER_OVERRIDES = "included_folder_overrides"
+    private const val KEY_ALL_FILES_ACCESS_FOLDER_DEFAULTS_APPLIED = "all_files_access_folder_defaults_applied"
     private const val KEY_HOME_EXCLUDED_FOLDERS = "home_excluded_folders"
     private const val KEY_PINNED_PLAYLISTS = "pinned_playlists"
     private const val KEY_ALL_FILES_PERMISSION_ASKED = "all_files_permission_asked"
