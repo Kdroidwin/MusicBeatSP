@@ -6752,23 +6752,16 @@ private fun OutputDeviceControl(
                 haptics.play(Haptic.Select)
                 onClick()
             }
-            .semantics { contentDescription = label },
-        verticalAlignment = Alignment.CenterVertically,
-        horizontalArrangement = Arrangement.Center,
+            .semantics {
+                contentDescription = "$accessibilityLabel: $label"
+            },
+        contentAlignment = Alignment.Center,
     ) {
         Icon(
             imageVector = if (appleMusicStyle) BitChordIcons.AurisOutput else Icons.Rounded.Headphones,
             contentDescription = null,
             tint = ink,
-            modifier = Modifier.size(18.dp),
-        )
-        Text(
-            text = label,
-            color = ink,
-            fontSize = 9.sp,
-            maxLines = 1,
-            overflow = TextOverflow.Ellipsis,
-            modifier = Modifier.widthIn(max = 68.dp).padding(start = 4.dp, end = 8.dp),
+            modifier = Modifier.size(24.dp),
         )
     }
 }
