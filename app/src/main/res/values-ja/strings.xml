@@ -1007,6 +1007,8 @@
     <string name="player_control_lyrics">歌詞表示ボタン</string>
     <string name="apple_music_lyrics_button_style">Apple Music風の歌詞ボタン</string>
     <string name="apple_music_chromecast_button_style">Apple Music風のChromecastボタン</string>
+    <string name="apple_music_output_device_button_style">出力デバイスをApple Music風のアイコンにする</string>
+    <string name="apple_music_output_device_button_style_subtitle">Apple Music風Chromecastボタンと同じアイコンを使います。初期設定はオンです。</string>
     <string name="apple_music_queue_button_style">Apple Music風のキューボタン</string>
     <string name="apple_music_style_menus">メニューをApple Music風に</string>
     <string name="apple_music_style_menus_subtitle">詳細メニューやスリープタイマーをApple Music風のポップアップで表示します（初期設定ではオフ）</string>

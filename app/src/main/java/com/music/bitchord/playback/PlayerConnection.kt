@@ -365,6 +365,7 @@ fun MediaItem.toSong() = Song(
     radioName = mediaMetadata.extras?.getString(EXTRA_RADIO_NAME),
     localUri = mediaMetadata.extras?.getString(EXTRA_LOCAL_URI),
     localPath = mediaMetadata.extras?.getString(EXTRA_LOCAL_PATH),
+    localFolderPath = mediaMetadata.extras?.getString(EXTRA_LOCAL_FOLDER_PATH),
     albumArtist = mediaMetadata.extras?.getString(EXTRA_ALBUM_ARTIST),
     trackNumber = mediaMetadata.extras?.get(EXTRA_TRACK_NUMBER) as? Int,
     localStartMs = mediaMetadata.extras?.get(EXTRA_LOCAL_START_MS) as? Long,
@@ -421,6 +422,8 @@ internal const val EXTRA_HEADPHONE_BURN_IN = "bitchord.headphoneBurnIn"
 
 /** @see Song.localPath */
 internal const val EXTRA_LOCAL_PATH = "bitchord.localPath"
+/** @see Song.localFolderPath */
+private const val EXTRA_LOCAL_FOLDER_PATH = "bitchord.localFolderPath"
 internal const val EXTRA_EXTERNAL_PREVIEW = "bitchord.externalPreview"
 private const val EXTRA_LIVE_RADIO = "bitchord.liveRadio"
 private const val EXTRA_RADIO_STREAM_URL = "bitchord.radioStreamUrl"
@@ -685,6 +688,7 @@ fun Song.toMediaItem(): MediaItem {
                 if (fromAutoplay || offlineUri != null || durationText != null || isExternalPreview || isHeadphoneBurnIn ||
                     artistId != null || albumId != null || setVideoId != null || isLiveRadio || isOnsenAudio || isRssAudio ||
                     radioAudioMimeType != null || isExplicit != null || isVideo || isVideoOrigin || radioName != null ||
+                    localFolderPath != null ||
                     thumbnailUrl != null || playbackPlaylistId != null
                 ) {
                     setExtras(
@@ -693,6 +697,7 @@ fun Song.toMediaItem(): MediaItem {
                             EXTRA_RADIO_NAME to radioName,
                             EXTRA_LOCAL_URI to offlineUri,
                             EXTRA_LOCAL_PATH to localPath,
+                            EXTRA_LOCAL_FOLDER_PATH to localFolderPath,
                             EXTRA_ALBUM_ARTIST to albumArtist,
                             EXTRA_TRACK_NUMBER to trackNumber,
                             EXTRA_LOCAL_START_MS to localStartMs,

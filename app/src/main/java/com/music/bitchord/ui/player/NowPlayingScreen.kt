@@ -1336,6 +1336,7 @@ fun NowPlayingScreen(
     val outputSnapshot by AudioOutputStatus.current.collectAsStateWithLifecycle()
     val appleMusicLyricsButtonStyle by AppSettings.appleMusicLyricsButtonStyle.collectAsStateWithLifecycle()
     val appleMusicChromecastButtonStyle by AppSettings.appleMusicChromecastButtonStyle.collectAsStateWithLifecycle()
+    val appleMusicOutputDeviceButtonStyle by AppSettings.appleMusicOutputDeviceButtonStyle.collectAsStateWithLifecycle()
     val appleMusicQueueButtonStyle by AppSettings.appleMusicQueueButtonStyle.collectAsStateWithLifecycle()
     val appleMusicStyleMenus by AppSettings.appleMusicStyleMenus.collectAsStateWithLifecycle()
     val hidePlayerArtist by AppSettings.hidePlayerArtist.collectAsStateWithLifecycle()
@@ -4174,6 +4175,7 @@ fun NowPlayingScreen(
                                 label = outputSnapshot.deviceName.takeUnless {
                                     it.isBlank() || it == "System default"
                                 } ?: stringResource(R.string.audio_output_system_default),
+                                appleMusicStyle = appleMusicOutputDeviceButtonStyle,
                                 onClick = { audioOutputSheetOpen = true },
                             )
                             PlayerControl.CHROMECAST -> Box(
@@ -6732,6 +6734,7 @@ private fun WalkmanShuffleGlyph(
 @Composable
 private fun OutputDeviceControl(
     label: String,
+    appleMusicStyle: Boolean,
     onClick: () -> Unit,
 ) {
     val ink = LocalPlayerButtonControlInk.current
@@ -6754,7 +6757,7 @@ private fun OutputDeviceControl(
         horizontalArrangement = Arrangement.Center,
     ) {
         Icon(
-            imageVector = Icons.Rounded.Headphones,
+            imageVector = if (appleMusicStyle) BitChordIcons.AurisOutput else Icons.Rounded.Headphones,
             contentDescription = null,
             tint = ink,
             modifier = Modifier.size(18.dp),

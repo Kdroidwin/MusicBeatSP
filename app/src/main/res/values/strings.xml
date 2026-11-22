@@ -1123,6 +1123,8 @@
     <string name="player_control_lyrics">Lyrics button</string>
     <string name="apple_music_lyrics_button_style">Apple Music-style lyrics button</string>
     <string name="apple_music_chromecast_button_style">Apple Music-style Chromecast button</string>
+    <string name="apple_music_output_device_button_style">Apple Music-style audio output icon</string>
+    <string name="apple_music_output_device_button_style_subtitle">Use the same icon style as the Apple Music-inspired Chromecast button. On by default.</string>
     <string name="apple_music_queue_button_style">Apple Music-style queue button</string>
     <string name="apple_music_style_menus">Apple Music-style menus</string>
     <string name="apple_music_style_menus_subtitle">Use Apple Music-style popovers for detail menus and the sleep timer. Off by default.</string>

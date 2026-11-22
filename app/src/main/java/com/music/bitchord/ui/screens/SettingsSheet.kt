@@ -1516,6 +1516,15 @@ private fun appleMusicChromecastButtonStyleSearchEntry(enabled: Boolean) = Setti
 )
 
 @Composable
+private fun appleMusicOutputDeviceButtonStyleSearchEntry(enabled: Boolean) = SettingsSearchEntry(
+    title = stringResource(R.string.apple_music_output_device_button_style),
+    subtitle = stringResource(R.string.apple_music_output_device_button_style_subtitle),
+    keywords = listOf("player", "audio output", "device", "Apple Music", "chromecast", "output", "プレーヤー", "出力デバイス", "デバイス", "Apple Music風", "アイコン"),
+    checked = enabled,
+    activate = { AppSettings.setAppleMusicOutputDeviceButtonStyle(!enabled) },
+)
+
+@Composable
 private fun appleMusicQueueButtonStyleSearchEntry(enabled: Boolean) = SettingsSearchEntry(
     title = stringResource(R.string.apple_music_queue_button_style),
     subtitle = stringResource(R.string.apple_music_button_style_subtitle),
@@ -1996,6 +2005,7 @@ fun SettingsScreen(
     val playerControlOrder by AppSettings.playerControlOrder.collectAsStateWithLifecycle()
     val appleMusicLyricsButtonStyle by AppSettings.appleMusicLyricsButtonStyle.collectAsStateWithLifecycle()
     val appleMusicChromecastButtonStyle by AppSettings.appleMusicChromecastButtonStyle.collectAsStateWithLifecycle()
+    val appleMusicOutputDeviceButtonStyle by AppSettings.appleMusicOutputDeviceButtonStyle.collectAsStateWithLifecycle()
     val appleMusicQueueButtonStyle by AppSettings.appleMusicQueueButtonStyle.collectAsStateWithLifecycle()
     val appleMusicStyleMenus by AppSettings.appleMusicStyleMenus.collectAsStateWithLifecycle()
     val hidePlayerArtist by AppSettings.hidePlayerArtist.collectAsStateWithLifecycle()
@@ -2610,6 +2620,7 @@ fun SettingsScreen(
         SettingsSearchEntry(stringResource(R.string.player_playlist_library_icon), stringResource(R.string.player_playlist_library_icon_subtitle), listOf("playlist", "library", "プレイリスト", "ライブラリ", "icon"), useLibraryIconForPlaylistControl) { AppSettings.setUseLibraryIconForPlaylistControl(!useLibraryIconForPlaylistControl) },
         appleMusicLyricsButtonStyleSearchEntry(appleMusicLyricsButtonStyle),
         appleMusicChromecastButtonStyleSearchEntry(appleMusicChromecastButtonStyle),
+        appleMusicOutputDeviceButtonStyleSearchEntry(appleMusicOutputDeviceButtonStyle),
         appleMusicQueueButtonStyleSearchEntry(appleMusicQueueButtonStyle),
         appleMusicStyleMenusSearchEntry(appleMusicStyleMenus),
         SettingsSearchEntry(stringResource(R.string.prevent_play_at_zero_volume), stringResource(R.string.prevent_play_at_zero_volume_subtitle), listOf("volume", "音量", "zero", "0"), preventPlayAtZeroVolume) { AppSettings.setPreventPlayAtZeroVolume(!preventPlayAtZeroVolume) },
@@ -5377,6 +5388,13 @@ fun SettingsScreen(
                 titleRes = R.string.apple_music_chromecast_button_style,
                 checked = appleMusicChromecastButtonStyle,
                 onCheckedChange = AppSettings::setAppleMusicChromecastButtonStyle,
+            )
+            RowDivider()
+            PlayerActionButtonStyleRow(
+                icon = Icons.Rounded.Headphones,
+                titleRes = R.string.apple_music_output_device_button_style,
+                checked = appleMusicOutputDeviceButtonStyle,
+                onCheckedChange = AppSettings::setAppleMusicOutputDeviceButtonStyle,
             )
             RowDivider()
             PlayerActionButtonStyleRow(

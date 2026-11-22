@@ -362,7 +362,6 @@ private val DEFAULT_PLAYER_CONTROLS = setOf(
     PlayerControl.REPEAT,
     PlayerControl.LIKE,
     PlayerControl.QUEUE,
-    PlayerControl.OUTPUT,
 )
 
 /**
@@ -1188,6 +1187,8 @@ object AppSettings {
     /** Independent Apple Music-inspired glyph styles for the three player actions. */
     val appleMusicLyricsButtonStyle = MutableStateFlow(false)
     val appleMusicChromecastButtonStyle = MutableStateFlow(false)
+    /** Uses the same Auris/Apple Music-inspired output glyph as the Cast button. */
+    val appleMusicOutputDeviceButtonStyle = MutableStateFlow(true)
     val appleMusicQueueButtonStyle = MutableStateFlow(false)
     /** Uses BitChord's Apple Music-style popover menus instead of the legacy sheets. */
     val appleMusicStyleMenus = MutableStateFlow(false)
@@ -2209,6 +2210,7 @@ object AppSettings {
         }
         appleMusicLyricsButtonStyle.value = prefs.getBoolean(KEY_APPLE_MUSIC_LYRICS_BUTTON_STYLE, legacyStyleDefault)
         appleMusicChromecastButtonStyle.value = prefs.getBoolean(KEY_APPLE_MUSIC_CHROMECAST_BUTTON_STYLE, legacyStyleDefault)
+        appleMusicOutputDeviceButtonStyle.value = prefs.getBoolean(KEY_APPLE_MUSIC_OUTPUT_DEVICE_BUTTON_STYLE, true)
         appleMusicQueueButtonStyle.value = prefs.getBoolean(KEY_APPLE_MUSIC_QUEUE_BUTTON_STYLE, legacyStyleDefault)
         appleMusicStyleMenus.value = prefs.getBoolean(KEY_APPLE_MUSIC_STYLE_MENUS, false)
         useLibraryIconForPlaylistControl.value = prefs.getBoolean(KEY_LIBRARY_ICON_FOR_PLAYLIST_CONTROL, false)
@@ -3853,9 +3855,6 @@ object AppSettings {
         hiddenPlayerDetailsActions.value = hidden
         prefs.edit().apply {
             putStringSet(KEY_HIDDEN_PLAYER_DETAILS_ACTIONS, hidden.map { it.name }.toSet())
-            if (action == PlayerDetailsAction.OPEN_FOLDER) {
-                putBoolean(KEY_OPEN_FOLDER_VISIBILITY_CONFIGURED, true)
-            }
         }.apply()
     }
 
@@ -3880,14 +3879,9 @@ object AppSettings {
             .orEmpty()
             .mapNotNull { name -> PlayerDetailsAction.entries.firstOrNull { it.name == name } }
             .toSet()
-        // The Open Folder action was added after the action-visibility setting
-        // shipped. Hide it for existing installs as well as fresh ones, while
-        // preserving a listener's explicit choice once they change its switch.
-        return if (prefs.getBoolean(KEY_OPEN_FOLDER_VISIBILITY_CONFIGURED, false)) {
-            saved
-        } else {
-            saved + PlayerDetailsAction.OPEN_FOLDER
-        }
+        // Open Folder is available by default. Preserve only an explicit saved
+        // visibility choice; an older migration must not hide it globally.
+        return saved
     }
 
     private fun readPlayerDetailsActionOrder(): List<PlayerDetailsAction> {
@@ -4408,6 +4402,11 @@ object AppSettings {
         prefs.edit().putBoolean(KEY_APPLE_MUSIC_CHROMECAST_BUTTON_STYLE, value).apply()
     }
 
+    fun setAppleMusicOutputDeviceButtonStyle(value: Boolean) {
+        appleMusicOutputDeviceButtonStyle.value = value
+        prefs.edit().putBoolean(KEY_APPLE_MUSIC_OUTPUT_DEVICE_BUTTON_STYLE, value).apply()
+    }
+
     fun setAppleMusicQueueButtonStyle(value: Boolean) {
         appleMusicQueueButtonStyle.value = value
         prefs.edit().putBoolean(KEY_APPLE_MUSIC_QUEUE_BUTTON_STYLE, value).apply()
@@ -4422,12 +4421,12 @@ object AppSettings {
         val saved = prefs.getStringSet(KEY_VISIBLE_PLAYER_CONTROLS, null)
             ?.mapNotNullTo(mutableSetOf()) { name -> PlayerControl.entries.firstOrNull { it.name == name } }
         if (saved == null || saved.isEmpty()) return DEFAULT_PLAYER_CONTROLS
-        // Add the new output control for existing installations without
-        // overriding a listener's explicit choice to hide it.
+        // Keep the output-device button hidden on upgraded installs unless the
+        // listener explicitly changed its visibility after the control shipped.
         if (!prefs.getBoolean(KEY_PLAYER_OUTPUT_CONTROL_CONFIGURED, false)) {
-            saved += PlayerControl.OUTPUT
+            saved -= PlayerControl.OUTPUT
         }
-        return saved
+        return saved.ifEmpty { DEFAULT_PLAYER_CONTROLS }
     }
 
     fun setSyncedLyrics(value: Boolean) {
@@ -5940,7 +5939,6 @@ object AppSettings {
     private const val KEY_IN_APP_VIDEO_PLAYBACK_ENABLED = "in_app_video_playback_enabled"
     private const val KEY_HIDDEN_PLAYER_DETAILS_ACTIONS = "hidden_player_details_actions"
     private const val KEY_PLAYER_DETAILS_ACTION_ORDER = "player_details_action_order"
-    private const val KEY_OPEN_FOLDER_VISIBILITY_CONFIGURED = "open_folder_visibility_configured"
     private const val KEY_AUDIO_CUTTER_ENABLED = "audio_cutter_enabled"
     private const val KEY_ARTWORK_BACKDROP_BLUR_DP = "artwork_backdrop_blur_dp"
     private const val KEY_PERSISTENT_LOCAL_ARTWORK = "persistent_local_artwork"
@@ -6008,6 +6006,7 @@ object AppSettings {
     private const val KEY_AURIS_PLAYER_ACTION_STYLE = "auris_player_action_style"
     private const val KEY_APPLE_MUSIC_LYRICS_BUTTON_STYLE = "apple_music_lyrics_button_style"
     private const val KEY_APPLE_MUSIC_CHROMECAST_BUTTON_STYLE = "apple_music_chromecast_button_style"
+    private const val KEY_APPLE_MUSIC_OUTPUT_DEVICE_BUTTON_STYLE = "apple_music_output_device_button_style"
     private const val KEY_APPLE_MUSIC_QUEUE_BUTTON_STYLE = "apple_music_queue_button_style"
     private const val KEY_APPLE_MUSIC_STYLE_MENUS = "apple_music_style_menus"
     private const val KEY_LIBRARY_ICON_FOR_PLAYLIST_CONTROL = "library_icon_for_playlist_control"

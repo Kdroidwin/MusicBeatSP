@@ -14,8 +14,10 @@ object FolderNavigationRequests {
     private val _pending = MutableStateFlow<Request?>(null)
     val pending = _pending.asStateFlow()
 
-    fun folderPathFor(song: Song): String? = song.localFolderPath?.takeIf(String::isNotBlank)
-        ?: localPath(song)?.substringBeforeLast('/')?.takeIf(String::isNotBlank)
+    fun folderPathFor(song: Song): String? = song.localFolderPath
+        ?.takeIf(String::isNotBlank)
+        ?.let(::normalizeFolderPath)
+        ?: localPath(song)?.let(::parentFolderPath)
 
     /**
      * Playlist rows can retain an older MediaStore URI than the library row
@@ -52,6 +54,22 @@ object FolderNavigationRequests {
             ?.let { runCatching { Uri.decode(Uri.parse(it).path.orEmpty()) }.getOrNull() }
         return path?.replace('\\', '/')?.trimEnd('/')?.takeIf(String::isNotBlank)
     }
+
+    private fun parentFolderPath(path: String): String? {
+        val normalized = path.replace('\\', '/').trim()
+        val separator = normalized.lastIndexOf('/')
+        return when {
+            separator < 0 -> null
+            separator == 0 -> "/"
+            else -> normalized.substring(0, separator).trimEnd('/').takeIf(String::isNotBlank)
+        }
+    }
+
+    private fun normalizeFolderPath(path: String): String = path
+        .replace('\\', '/')
+        .trim()
+        .trimEnd('/')
+        .ifBlank { "/" }
 
     fun request(path: String) {
         val normalized = path.replace('\\', '/').trimEnd('/').ifBlank { "/" }
