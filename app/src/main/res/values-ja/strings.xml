@@ -352,6 +352,7 @@
     <string name="music_folder_root_subtitle">フォルダータブで最初に表示するフォルダーを複数選択できます</string>
     <string name="music_folder_root_auto">端末内のすべての音楽フォルダー</string>
     <string name="music_folder_root_auto_subtitle">カスタムルートは未選択です</string>
+    <string name="music_folder_root_all_files_access">すべてのファイルへのアクセスが有効な間は端末内のすべての音楽フォルダーを対象にします</string>
     <string name="music_folder_root_unavailable">フォルダーの保存場所を解決できません。内部ストレージまたはSDカードのフォルダーを選択してください。</string>
     <string name="folder_no_tracks">このフォルダーに再生可能なローカル曲はありません</string>
     <string name="folder_open_zip">ZIPを開く</string>

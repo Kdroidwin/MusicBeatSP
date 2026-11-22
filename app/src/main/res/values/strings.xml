@@ -386,6 +386,7 @@
     <string name="music_folder_root_subtitle">Choose one or more starting folders for the Folders tab</string>
     <string name="music_folder_root_auto">All local music folders</string>
     <string name="music_folder_root_auto_subtitle">No custom roots selected</string>
+    <string name="music_folder_root_all_files_access">All local music folders are used while All Files Access is enabled</string>
     <string name="music_folder_root_unavailable">Could not resolve that storage folder. Choose a folder on internal storage or an SD card.</string>
     <string name="folder_no_tracks">No playable local tracks were found in this folder.</string>
     <string name="folder_open_zip">Open ZIP</string>

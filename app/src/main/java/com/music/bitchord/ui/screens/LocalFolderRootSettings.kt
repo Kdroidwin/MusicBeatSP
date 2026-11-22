@@ -13,6 +13,7 @@ import androidx.compose.material.icons.rounded.SwapHoriz
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Switch
 import androidx.compose.material3.SwitchDefaults
+import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.platform.LocalContext
@@ -48,9 +49,25 @@ internal fun rememberMusicFolderRootPicker(
 @Composable
 internal fun LocalMusicFolderRootsSettingsRows(
     paths: List<String>,
+    allFilesAccessEnabled: Boolean = false,
     onChoose: () -> Unit,
     onRemove: (String) -> Unit,
 ) {
+    if (allFilesAccessEnabled) {
+        SettingsRow(
+            icon = Icons.Rounded.Folder,
+            title = stringResource(R.string.music_folder_root),
+            subtitle = stringResource(R.string.music_folder_root_all_files_access),
+            trailing = {
+                Text(
+                    text = stringResource(R.string.music_folder_root_auto),
+                    style = MaterialTheme.typography.bodyMedium,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                )
+            },
+        )
+        return
+    }
     SettingsRow(
         icon = Icons.Rounded.Folder,
         title = stringResource(R.string.music_folder_root),

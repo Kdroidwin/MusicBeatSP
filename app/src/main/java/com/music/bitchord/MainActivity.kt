@@ -3891,7 +3891,7 @@ private fun BitChordApp(
                                     playFromFolder(songs, songs.indices.random())
                                 },
                                 contentPadding = listPadding,
-                                customRootPaths = localMusicFolderRoots,
+                                customRootPaths = if (hasAllFilesAccess) emptyList() else localMusicFolderRoots,
                                 rememberLastOpenedFolder = rememberLastOpenedFolder,
                                 lastOpenedFolderPath = lastOpenedFolderPath,
                                 onLastOpenedFolderPathChange = AppSettings::setLastOpenedFolderPath,

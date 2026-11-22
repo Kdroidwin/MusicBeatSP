@@ -1091,12 +1091,22 @@ private fun playerInkSearchEntry(
 )
 
 @Composable
-private fun musicFolderRootSearchEntry(paths: List<String>, onPick: () -> Unit) = SettingsSearchEntry(
+private fun musicFolderRootSearchEntry(
+    paths: List<String>,
+    allFilesAccessEnabled: Boolean,
+    onPick: () -> Unit,
+) = SettingsSearchEntry(
     title = stringResource(R.string.music_folder_root),
-    subtitle = stringResource(R.string.music_folder_root_subtitle),
+    subtitle = stringResource(
+        if (allFilesAccessEnabled) R.string.music_folder_root_all_files_access
+        else R.string.music_folder_root_subtitle,
+    ),
     keywords = listOf("folder", "root", "sd card", "storage", "フォルダー", "ルート", "SDカード", "ストレージ"),
-    valueLabel = paths.takeIf { it.isNotEmpty() }?.joinToString(" • ")
+    valueLabel = if (allFilesAccessEnabled) {
+        stringResource(R.string.music_folder_root_auto)
+    } else paths.takeIf { it.isNotEmpty() }?.joinToString(" • ")
         ?: stringResource(R.string.music_folder_root_auto),
+    enabled = !allFilesAccessEnabled,
     activate = onPick,
 )
 
@@ -3127,7 +3137,9 @@ fun SettingsScreen(
             listOf("library", "remote", "server", "webdav", "jellyfin", "navidrome", "subsonic", "nextcloud", "ライブラリ", "リモート", "サーバー", "音源"),
             includeRemoteSourceMediaInLibrary,
         ) { AppSettings.setIncludeRemoteSourceMediaInLibrary(!includeRemoteSourceMediaInLibrary) },
-        musicFolderRootSearchEntry(localMusicFolderRoots) { musicFolderRootPicker.launch(null) },
+        musicFolderRootSearchEntry(localMusicFolderRoots, allFilesAccessGranted) {
+            musicFolderRootPicker.launch(null)
+        },
         SettingsSearchEntry(
             stringResource(R.string.full_screen_collection_artwork),
             stringResource(R.string.full_screen_collection_artwork_subtitle),
@@ -7997,6 +8009,7 @@ fun SettingsScreen(
             rememberLastOpenedFolder = rememberLastOpenedFolder,
             includeRemoteSourceMediaInLibrary = includeRemoteSourceMediaInLibrary,
             localMusicFolderRoots = localMusicFolderRoots,
+            allFilesAccessEnabled = allFilesAccessGranted,
             fullScreenCollectionArtwork = fullScreenCollectionArtwork,
             refreshPlaylistTagsOnPull = refreshPlaylistTagsOnPull,
             playlistRefreshIndicatorStyle = playlistRefreshIndicatorStyle,
@@ -10027,6 +10040,7 @@ private fun LocalMusicSettingsGroup(
     rememberLastOpenedFolder: Boolean,
     includeRemoteSourceMediaInLibrary: Boolean,
     localMusicFolderRoots: List<String>,
+    allFilesAccessEnabled: Boolean,
     fullScreenCollectionArtwork: Boolean,
     refreshPlaylistTagsOnPull: Boolean,
     playlistRefreshIndicatorStyle: PlaylistRefreshIndicatorStyle,
@@ -10406,6 +10420,7 @@ SettingsGroup(header = stringResource(R.string.local_music)) {
     RowDivider()
     LocalMusicFolderRootsSettingsRows(
         paths = localMusicFolderRoots,
+        allFilesAccessEnabled = allFilesAccessEnabled,
         onChoose = onChooseMusicFolder,
         onRemove = onRemoveMusicFolder,
     )
