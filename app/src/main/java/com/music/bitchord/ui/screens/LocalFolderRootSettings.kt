@@ -33,7 +33,7 @@ internal fun rememberMusicFolderRootPicker(
                     Intent.FLAG_GRANT_READ_URI_PERMISSION or Intent.FLAG_GRANT_WRITE_URI_PERMISSION,
                 )
             }.isSuccess
-            if (persistedGrant) LocalFolderGrantStore.set(context, treeUri)
+            if (persistedGrant) LocalFolderGrantStore.add(context, treeUri)
             val path = LocalFolderRootResolver.resolve(context, treeUri)
             if (path != null) {
                 onFolderSelected(path)
@@ -46,29 +46,42 @@ internal fun rememberMusicFolderRootPicker(
 
 
 @Composable
-internal fun LocalMusicFolderRootSettingsRow(
-    path: String,
+internal fun LocalMusicFolderRootsSettingsRows(
+    paths: List<String>,
     onChoose: () -> Unit,
-    onClear: () -> Unit,
+    onRemove: (String) -> Unit,
 ) {
     SettingsRow(
         icon = Icons.Rounded.Folder,
         title = stringResource(R.string.music_folder_root),
-        subtitle = path.ifBlank { stringResource(R.string.music_folder_root_subtitle) },
-        trailing = {
-            if (path.isBlank()) {
-                Chevron()
-            } else {
-                androidx.compose.material3.IconButton(onClick = onClear) {
-                    androidx.compose.material3.Icon(
-                        Icons.Rounded.Clear,
-                        contentDescription = stringResource(R.string.clear_search),
-                    )
-                }
-            }
-        },
+        subtitle = stringResource(R.string.music_folder_root_subtitle),
+        trailing = { Chevron() },
         onClick = onChoose,
     )
+    if (paths.isEmpty()) {
+        SettingsRow(
+            icon = Icons.Rounded.Folder,
+            title = stringResource(R.string.music_folder_root_auto),
+            subtitle = stringResource(R.string.music_folder_root_auto_subtitle),
+            onClick = onChoose,
+        )
+    } else {
+        paths.forEach { path ->
+            SettingsRow(
+                icon = Icons.Rounded.Folder,
+                title = path.substringAfterLast('/').ifBlank { path },
+                subtitle = path,
+                trailing = {
+                    androidx.compose.material3.IconButton(onClick = { onRemove(path) }) {
+                        androidx.compose.material3.Icon(
+                            Icons.Rounded.Clear,
+                            contentDescription = stringResource(R.string.remove),
+                        )
+                    }
+                },
+            )
+        }
+    }
 }
 
 @Composable

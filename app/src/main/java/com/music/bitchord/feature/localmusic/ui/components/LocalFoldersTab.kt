@@ -31,7 +31,9 @@ import androidx.compose.runtime.Composable
 import androidx.compose.runtime.remember
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.unit.dp
+import com.music.bitchord.R
 import com.music.bitchord.feature.localmusic.domain.model.LocalFolder
 
 /**
@@ -63,10 +65,15 @@ fun LocalFoldersTab(
                 )
                 Spacer(modifier = Modifier.height(12.dp))
                 Text(
-                    text = "No audio folders found",
+                    text = stringResource(R.string.home_excluded_folders_empty),
                     style = MaterialTheme.typography.bodyLarge,
                     color = MaterialTheme.colorScheme.onSurfaceVariant,
                 )
+                OutlinedButton(onClick = onOpenManageFolders) {
+                    Icon(Icons.Rounded.FolderSpecial, contentDescription = null, modifier = Modifier.size(18.dp))
+                    Spacer(Modifier.width(6.dp))
+                    Text(stringResource(R.string.manage_folders))
+                }
             }
         }
         return
@@ -114,7 +121,7 @@ fun LocalFoldersTab(
                             modifier = Modifier.size(18.dp),
                         )
                         Spacer(modifier = Modifier.width(6.dp))
-                        Text(text = "Manage Blacklist", style = MaterialTheme.typography.labelMedium)
+                        Text(text = stringResource(R.string.manage_folders), style = MaterialTheme.typography.labelMedium)
                     }
                 }
             }

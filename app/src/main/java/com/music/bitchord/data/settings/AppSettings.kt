@@ -1460,6 +1460,8 @@ object AppSettings {
 
     /** Optional root path selected for the folders tab. */
     val localMusicFolderUri = MutableStateFlow("")
+    /** One or more selected roots for the Folders tab; the singular flow remains for old callers. */
+    val localMusicFolderRoots = MutableStateFlow<List<String>>(emptyList())
     /** Remote file-library connection details. Credentials are Keystore-backed. */
     val webdavUrl = MutableStateFlow("")
     val webdavUsername = MutableStateFlow("")
@@ -2277,7 +2279,24 @@ object AppSettings {
         localFolderHierarchy.value = prefs.getBoolean(KEY_LOCAL_FOLDER_HIERARCHY, false)
         rememberLastOpenedFolder.value = prefs.getBoolean(KEY_REMEMBER_LAST_OPENED_FOLDER, true)
         lastOpenedFolderPath.value = prefs.getString(KEY_LAST_OPENED_FOLDER_PATH, "").orEmpty()
-        localMusicFolderUri.value = prefs.getString(KEY_LOCAL_MUSIC_FOLDER_PATH, "").orEmpty()
+        val savedMusicFolderRoots = prefs.getStringSet(KEY_LOCAL_MUSIC_FOLDER_ROOTS, null)
+            ?.mapNotNull(::normalizeLocalMusicFolderRoot)
+            ?.distinct()
+            .orEmpty()
+        val legacyMusicFolderRoot = prefs.getString(KEY_LOCAL_MUSIC_FOLDER_PATH, "")
+            ?.let(::normalizeLocalMusicFolderRoot)
+        val loadedMusicFolderRoots = if (savedMusicFolderRoots.isNotEmpty()) {
+            savedMusicFolderRoots
+        } else {
+            listOfNotNull(legacyMusicFolderRoot)
+        }
+        localMusicFolderRoots.value = loadedMusicFolderRoots
+        localMusicFolderUri.value = loadedMusicFolderRoots.firstOrNull().orEmpty()
+        if (savedMusicFolderRoots.isEmpty() && loadedMusicFolderRoots.isNotEmpty()) {
+            prefs.edit()
+                .putStringSet(KEY_LOCAL_MUSIC_FOLDER_ROOTS, loadedMusicFolderRoots.toSet())
+                .apply()
+        }
         webdavUrl.value = prefs.getString(KEY_WEBDAV_URL, "").orEmpty()
         webdavUsername.value = authStore.getProtectedValue(KEY_WEBDAV_USERNAME).orEmpty()
         webdavPassword.value = authStore.getProtectedValue(KEY_WEBDAV_PASSWORD).orEmpty()
@@ -5054,10 +5073,41 @@ object AppSettings {
     }
 
     fun setLocalMusicFolderPath(path: String) {
-        val safePath = path.trim().take(4096)
-        localMusicFolderUri.value = safePath
-        prefs.edit().putString(KEY_LOCAL_MUSIC_FOLDER_PATH, safePath).apply()
+        val roots = normalizeLocalMusicFolderRoot(path)?.let(::listOf).orEmpty()
+        setLocalMusicFolderRoots(roots)
     }
+
+    fun addLocalMusicFolderPath(path: String) {
+        val root = normalizeLocalMusicFolderRoot(path) ?: return
+        if (root in localMusicFolderRoots.value) return
+        setLocalMusicFolderRoots(localMusicFolderRoots.value + root)
+    }
+
+    fun removeLocalMusicFolderPath(path: String) {
+        val root = normalizeLocalMusicFolderRoot(path) ?: return
+        setLocalMusicFolderRoots(localMusicFolderRoots.value.filterNot { it == root })
+    }
+
+    fun clearLocalMusicFolderPaths() {
+        setLocalMusicFolderRoots(emptyList())
+    }
+
+    private fun setLocalMusicFolderRoots(paths: List<String>) {
+        val roots = paths.mapNotNull(::normalizeLocalMusicFolderRoot).distinct()
+        localMusicFolderRoots.value = roots
+        localMusicFolderUri.value = roots.firstOrNull().orEmpty()
+        prefs.edit()
+            .putStringSet(KEY_LOCAL_MUSIC_FOLDER_ROOTS, roots.toSet())
+            .putString(KEY_LOCAL_MUSIC_FOLDER_PATH, roots.firstOrNull().orEmpty())
+            .apply()
+    }
+
+    private fun normalizeLocalMusicFolderRoot(path: String?): String? = path
+        ?.trim()
+        ?.take(4096)
+        ?.replace('\\', '/')
+        ?.trimEnd('/')
+        ?.takeIf(String::isNotBlank)
 
     fun setWebDavUrl(value: String) {
         val normalized = value.trim().trimEnd('/')
@@ -5885,6 +5935,7 @@ object AppSettings {
     private const val KEY_LAST_OPENED_FOLDER_PATH = "last_opened_folder_path"
     private const val KEY_INCLUDE_REMOTE_SOURCE_MEDIA_IN_LIBRARY = "include_remote_source_media_in_library"
     private const val KEY_LOCAL_MUSIC_FOLDER_PATH = "local_music_folder_path"
+    private const val KEY_LOCAL_MUSIC_FOLDER_ROOTS = "local_music_folder_roots"
     private const val KEY_LOCAL_MUSIC_ACCESS_TREE_URI = "local_music_access_tree_uri"
     private const val KEY_LOCAL_MUSIC_SCOPE_REQUIRED = "local_music_scope_required"
     private const val KEY_WEBDAV_URL = "webdav_url"

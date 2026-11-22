@@ -382,9 +382,10 @@
     <string name="equalizer_balance_subtitle">Shifts stereo audio toward one side by reducing the other channel. Bit-perfect playback bypasses this processing.</string>
     <string name="channel_swap">Swap stereo channels</string>
     <string name="channel_swap_subtitle">Swap left and right channels in stereo playback. Bit-perfect playback bypasses this processing.</string>
-    <string name="music_folder_root">Music folder root</string>
-    <string name="music_folder_root_subtitle">Choose the starting folder for the Folders tab</string>
+    <string name="music_folder_root">Music folder roots</string>
+    <string name="music_folder_root_subtitle">Choose one or more starting folders for the Folders tab</string>
     <string name="music_folder_root_auto">All local music folders</string>
+    <string name="music_folder_root_auto_subtitle">No custom roots selected</string>
     <string name="music_folder_root_unavailable">Could not resolve that storage folder. Choose a folder on internal storage or an SD card.</string>
     <string name="folder_no_tracks">No playable local tracks were found in this folder.</string>
     <string name="folder_open_zip">Open ZIP</string>
@@ -1035,6 +1036,7 @@
     <string name="profile_unavailable">No signed-in profile is available on this page yet.</string>
     <string name="music_folders">Music folders</string>
     <string name="music_folders_subtitle">Manage and exclude audio folders from library</string>
+    <string name="manage_folders">Manage folders</string>
     <string name="include_remote_source_media_in_library">Show remote source media in library</string>
     <string name="include_remote_source_media_in_library_subtitle">Include tracks from WebDAV, Jellyfin, Navidrome, and OpenSubsonic in Songs, Albums, Artists, and Album Artists. Off by default.</string>
     <string name="hide_lyrics_status_text">Hide lyrics status text</string>
@@ -1824,6 +1826,8 @@
     <string name="lyrics_extensions_enabled_subtitle">Allows bundled and downloaded lyrics scripts to run. Extensions may access the network; enable only when you trust them.</string>
     <string name="all_files_access">All files access</string>
     <string name="all_files_access_granted">Granted</string>
+    <string name="all_files_access_not_granted">Not granted</string>
+    <string name="all_files_access_settings_unavailable">Could not open Android’s All Files Access settings.</string>
     <string name="original_developer">Original developer</string>
     <string name="details">Details</string>
     <string name="manage_queues">Manage queues</string>

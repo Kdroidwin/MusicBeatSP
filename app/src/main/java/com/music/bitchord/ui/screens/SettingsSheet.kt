@@ -7,6 +7,7 @@ import android.content.Intent
 import android.media.audiofx.AudioEffect
 import android.net.Uri
 import android.os.Build
+import android.os.Environment
 import android.provider.Settings
 import android.widget.Toast
 import androidx.compose.animation.animateColorAsState
@@ -1090,11 +1091,12 @@ private fun playerInkSearchEntry(
 )
 
 @Composable
-private fun musicFolderRootSearchEntry(path: String, onPick: () -> Unit) = SettingsSearchEntry(
+private fun musicFolderRootSearchEntry(paths: List<String>, onPick: () -> Unit) = SettingsSearchEntry(
     title = stringResource(R.string.music_folder_root),
     subtitle = stringResource(R.string.music_folder_root_subtitle),
     keywords = listOf("folder", "root", "sd card", "storage", "フォルダー", "ルート", "SDカード", "ストレージ"),
-    valueLabel = path.ifBlank { stringResource(R.string.music_folder_root_auto) },
+    valueLabel = paths.takeIf { it.isNotEmpty() }?.joinToString(" • ")
+        ?: stringResource(R.string.music_folder_root_auto),
     activate = onPick,
 )
 
@@ -1661,7 +1663,35 @@ fun SettingsScreen(
     modifier: Modifier = Modifier,
 ) {
     val context = LocalContext.current
-    val musicFolderRootPicker = rememberMusicFolderRootPicker(AppSettings::setLocalMusicFolderPath)
+    var allFilesAccessGranted by remember(context) {
+        mutableStateOf(Build.VERSION.SDK_INT >= Build.VERSION_CODES.R && Environment.isExternalStorageManager())
+    }
+    val allFilesAccessSettingsLauncher = rememberLauncherForActivityResult(
+        ActivityResultContracts.StartActivityForResult(),
+    ) {
+        allFilesAccessGranted = Build.VERSION.SDK_INT >= Build.VERSION_CODES.R &&
+            Environment.isExternalStorageManager()
+    }
+    val openAllFilesAccessSettings: () -> Unit = {
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.R) {
+            val appSettingsIntent = Intent(Settings.ACTION_MANAGE_APP_ALL_FILES_ACCESS_PERMISSION).apply {
+                data = Uri.parse("package:${context.packageName}")
+            }
+            val generalSettingsIntent = Intent(Settings.ACTION_MANAGE_ALL_FILES_ACCESS_PERMISSION)
+            runCatching { allFilesAccessSettingsLauncher.launch(appSettingsIntent) }
+                .onFailure {
+                    runCatching { allFilesAccessSettingsLauncher.launch(generalSettingsIntent) }
+                        .onFailure {
+                            Toast.makeText(
+                                context,
+                                R.string.all_files_access_settings_unavailable,
+                                Toast.LENGTH_LONG,
+                            ).show()
+                        }
+                }
+        }
+    }
+    val musicFolderRootPicker = rememberMusicFolderRootPicker(AppSettings::addLocalMusicFolderPath)
     val settingsScrollState = rememberScrollState()
     val setAudioVisualization: (Int, Boolean) -> Unit = { setting, enabled ->
         when (setting) {
@@ -1811,7 +1841,7 @@ fun SettingsScreen(
     val libraryCategoryOrder by AppSettings.libraryCategoryOrder.collectAsStateWithLifecycle()
     val localFolderHierarchy by AppSettings.localFolderHierarchy.collectAsStateWithLifecycle()
     val rememberLastOpenedFolder by AppSettings.rememberLastOpenedFolder.collectAsStateWithLifecycle()
-    val localMusicFolderRoot by AppSettings.localMusicFolderUri.collectAsStateWithLifecycle()
+    val localMusicFolderRoots by AppSettings.localMusicFolderRoots.collectAsStateWithLifecycle()
     val fullScreenCollectionArtwork by AppSettings.fullScreenCollectionArtwork.collectAsStateWithLifecycle()
     val persistentPlaylistArtwork by AppSettings.persistentPlaylistArtwork.collectAsStateWithLifecycle()
     val refreshPlaylistTagsOnPull by AppSettings.refreshPlaylistTagsOnPull.collectAsStateWithLifecycle()
@@ -3097,7 +3127,7 @@ fun SettingsScreen(
             listOf("library", "remote", "server", "webdav", "jellyfin", "navidrome", "subsonic", "nextcloud", "ライブラリ", "リモート", "サーバー", "音源"),
             includeRemoteSourceMediaInLibrary,
         ) { AppSettings.setIncludeRemoteSourceMediaInLibrary(!includeRemoteSourceMediaInLibrary) },
-        musicFolderRootSearchEntry(localMusicFolderRoot) { musicFolderRootPicker.launch(null) },
+        musicFolderRootSearchEntry(localMusicFolderRoots) { musicFolderRootPicker.launch(null) },
         SettingsSearchEntry(
             stringResource(R.string.full_screen_collection_artwork),
             stringResource(R.string.full_screen_collection_artwork_subtitle),
@@ -4148,7 +4178,18 @@ fun SettingsScreen(
                 activate = { AppSettings.setLastfmNowPlaying(!lastfmNowPlayingEnabled) },
             ),
         )
-        val allSettingsSearchEntries = settingsSearchEntries + scrobblingSearchEntries +
+        val allFilesAccessSearchEntries = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.R) {
+            listOf(
+                SettingsSearchEntry(
+                    title = stringResource(R.string.all_files_access),
+                    subtitle = stringResource(R.string.all_files_access_warning_body),
+                    keywords = listOf("all files", "storage access", "manage external storage", "すべてのファイル", "全ファイル", "ストレージ権限"),
+                    checked = allFilesAccessGranted,
+                    activate = openAllFilesAccessSettings,
+                ),
+            )
+        } else emptyList()
+        val allSettingsSearchEntries = settingsSearchEntries + scrobblingSearchEntries + allFilesAccessSearchEntries +
             audioVisualizationSearchEntries(
                 analogPeakEnabled = showAnalogDigitalPeakMeter,
                 spectrumEnabled = showSpectrumAnalyzer,
@@ -7955,7 +7996,7 @@ fun SettingsScreen(
             localFolderHierarchy = localFolderHierarchy,
             rememberLastOpenedFolder = rememberLastOpenedFolder,
             includeRemoteSourceMediaInLibrary = includeRemoteSourceMediaInLibrary,
-            localMusicFolderRoot = localMusicFolderRoot,
+            localMusicFolderRoots = localMusicFolderRoots,
             fullScreenCollectionArtwork = fullScreenCollectionArtwork,
             refreshPlaylistTagsOnPull = refreshPlaylistTagsOnPull,
             playlistRefreshIndicatorStyle = playlistRefreshIndicatorStyle,
@@ -7991,9 +8032,9 @@ fun SettingsScreen(
             onManageFolders = { showManageFoldersSheet = true },
             onManageHomeExcludedFolders = { showHomeExcludedFoldersSheet = true },
             onChooseMusicFolder = { musicFolderRootPicker.launch(null) },
-            onClearMusicFolder = {
-                LocalFolderGrantStore.clear(context)
-                AppSettings.setLocalMusicFolderPath("")
+            onRemoveMusicFolder = { path ->
+                LocalFolderGrantStore.removeRoot(context, path)
+                AppSettings.removeLocalMusicFolderPath(path)
             },
             onOpenArtistSignatureEditor = { showArtistSignatureEditor = true },
             onOpenSpotifyCanvasSetup = { showSpotifyCanvasEditor = true },
@@ -8003,6 +8044,19 @@ fun SettingsScreen(
         )
 
         SettingsGroup(header = stringResource(R.string.storage)) {
+            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.R) {
+                SettingsRow(
+                    icon = Icons.Rounded.FolderSpecial,
+                    title = stringResource(R.string.all_files_access),
+                    subtitle = stringResource(R.string.all_files_access_warning_body),
+                    value = stringResource(
+                        if (allFilesAccessGranted) R.string.all_files_access_granted
+                        else R.string.all_files_access_not_granted,
+                    ),
+                    onClick = openAllFilesAccessSettings,
+                )
+                RowDivider()
+            }
             SettingsRow(
                 icon = Icons.Rounded.Album,
                 title = stringResource(R.string.cd_ripping_settings),
@@ -9972,7 +10026,7 @@ private fun LocalMusicSettingsGroup(
     localFolderHierarchy: Boolean,
     rememberLastOpenedFolder: Boolean,
     includeRemoteSourceMediaInLibrary: Boolean,
-    localMusicFolderRoot: String,
+    localMusicFolderRoots: List<String>,
     fullScreenCollectionArtwork: Boolean,
     refreshPlaylistTagsOnPull: Boolean,
     playlistRefreshIndicatorStyle: PlaylistRefreshIndicatorStyle,
@@ -10009,7 +10063,7 @@ private fun LocalMusicSettingsGroup(
     onManageFolders: () -> Unit,
     onManageHomeExcludedFolders: () -> Unit,
     onChooseMusicFolder: () -> Unit,
-    onClearMusicFolder: () -> Unit,
+    onRemoveMusicFolder: (String) -> Unit,
     onOpenArtistSignatureEditor: () -> Unit,
     onOpenSpotifyCanvasSetup: () -> Unit,
     onChoosePlayerArtistPageMode: () -> Unit,
@@ -10350,10 +10404,10 @@ SettingsGroup(header = stringResource(R.string.local_music)) {
     RowDivider()
     SpotifyCanvasSettingsRows(onOpenSetup = onOpenSpotifyCanvasSetup)
     RowDivider()
-    LocalMusicFolderRootSettingsRow(
-        path = localMusicFolderRoot,
+    LocalMusicFolderRootsSettingsRows(
+        paths = localMusicFolderRoots,
         onChoose = onChooseMusicFolder,
-        onClear = onClearMusicFolder,
+        onRemove = onRemoveMusicFolder,
     )
     RowDivider()
     SettingsRow(

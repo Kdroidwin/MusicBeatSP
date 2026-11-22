@@ -9,6 +9,7 @@ import android.graphics.BitmapFactory
 import android.media.MediaScannerConnection
 import android.net.Uri
 import android.os.Build
+import android.os.Environment
 import android.os.ParcelFileDescriptor
 import android.provider.MediaStore
 import android.system.Os
@@ -345,12 +346,18 @@ object TagLibWriter {
     }
 
     private fun resolveSafDocument(context: Context, absolutePath: String): Uri? = runCatching {
-        val treeUri = LocalFolderGrantStore.get(context) ?: return null
-        val rootPath = LocalFolderRootResolver.resolve(context, treeUri) ?: return null
-        val root = File(rootPath).canonicalPath.trimEnd(File.separatorChar)
         val target = File(absolutePath).canonicalPath
-        if (!target.startsWith(root + File.separator)) return null
-        val relative = target.removePrefix(root + File.separator)
+        val matchingGrant = LocalFolderGrantStore.getAll(context)
+            .mapNotNull { treeUri ->
+                val rootPath = LocalFolderRootResolver.resolve(context, treeUri) ?: return@mapNotNull null
+                val root = File(rootPath).canonicalPath.trimEnd(File.separatorChar)
+                val containsTarget = target == root || target.startsWith(root + File.separator)
+                if (containsTarget) treeUri to root else null
+            }
+            .maxByOrNull { (_, root) -> root.length }
+            ?: return null
+        val (treeUri, root) = matchingGrant
+        val relative = target.removePrefix(root).trimStart(File.separatorChar)
         var document = DocumentFile.fromTreeUri(context, treeUri) ?: return null
         for (segment in relative.split(File.separatorChar).filter(String::isNotBlank)) {
             document = document.findFile(segment) ?: return null
@@ -431,7 +438,8 @@ object TagLibWriter {
         } else {
             Manifest.permission.READ_EXTERNAL_STORAGE
         }
-        return ContextCompat.checkSelfPermission(context, permission) == PackageManager.PERMISSION_GRANTED
+        return ContextCompat.checkSelfPermission(context, permission) == PackageManager.PERMISSION_GRANTED ||
+            Build.VERSION.SDK_INT >= Build.VERSION_CODES.R && Environment.isExternalStorageManager()
     }
 
     private fun canWriteDirectFile(context: Context, file: File): Boolean {
@@ -443,7 +451,7 @@ object TagLibWriter {
                 Manifest.permission.WRITE_EXTERNAL_STORAGE,
             ) == PackageManager.PERMISSION_GRANTED
         } else {
-            false
+            Build.VERSION.SDK_INT >= Build.VERSION_CODES.R && Environment.isExternalStorageManager()
         }
     }
 

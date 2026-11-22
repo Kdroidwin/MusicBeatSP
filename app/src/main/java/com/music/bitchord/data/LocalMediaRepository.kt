@@ -46,9 +46,9 @@ object LocalMediaRepository {
         "/whatsapp voice notes/",
     )
 
-    /** Check only the scoped audio-library permission; other files use per-folder SAF grants. */
+    /** Check scoped audio access or the user's optional All Files Access grant. */
     fun hasStoragePermission(context: Context): Boolean {
-        return if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
+        val scopedAudioPermission = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
             ContextCompat.checkSelfPermission(
                 context,
                 Manifest.permission.READ_MEDIA_AUDIO,
@@ -59,6 +59,9 @@ object LocalMediaRepository {
                 Manifest.permission.READ_EXTERNAL_STORAGE,
             ) == PackageManager.PERMISSION_GRANTED
         }
+        val allFilesAccess = Build.VERSION.SDK_INT >= Build.VERSION_CODES.R &&
+            Environment.isExternalStorageManager()
+        return scopedAudioPermission || allFilesAccess
     }
 
     /**
@@ -546,7 +549,6 @@ object LocalMediaRepository {
         val counts = mutableMapOf<String, Int>()
         val folderDisplayNames = mutableMapOf<String, String>()
         val projection = buildList {
-            add(MediaStore.Audio.Media.DATA)
             add(MediaStore.Audio.Media.DURATION)
             add(MediaStore.Audio.Media.DISPLAY_NAME)
             if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
@@ -555,6 +557,11 @@ object LocalMediaRepository {
                 // Some providers retain a bucket label even when DATA is
                 // omitted. It is only a last-resort display name below.
                 add(MediaStore.MediaColumns.BUCKET_DISPLAY_NAME)
+            } else {
+                // DATA can be unavailable or rejected on scoped-storage
+                // providers. Use it only on legacy Android where it is needed
+                // to recover physical folder paths.
+                add(MediaStore.Audio.Media.DATA)
             }
         }.toTypedArray()
         val dsdAllowed = AppSettings.dsdPlaybackEnabled.value
@@ -612,7 +619,6 @@ object LocalMediaRepository {
                         val folderPath = resolveMediaStoreFolderPath(context, relativePath, volumeName)
                             ?: rawPath?.let(::folderForMediaPath)
                             ?: continue
-                        if (AppSettings.isFolderBlacklisted(folderPath)) continue
                         val count = counts[folderPath] ?: 0
                         counts[folderPath] = count + 1
                         val relativeName = relativePath

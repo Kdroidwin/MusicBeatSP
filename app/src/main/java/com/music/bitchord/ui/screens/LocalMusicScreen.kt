@@ -1094,7 +1094,13 @@ fun LocalMusicScreen(
                                 .verticalScroll(rememberScrollState())
                                 .padding(bodyContentPadding),
                         ) {
-                            MessageState(message = emptyMessage)
+                            MessageState(
+                                message = emptyMessage,
+                                actionLabel = if (!isDownloads) stringResource(R.string.manage_folders) else null,
+                                onAction = if (!isDownloads) {
+                                    { showManageFoldersSheet = true }
+                                } else null,
+                            )
                         }
                     }
 

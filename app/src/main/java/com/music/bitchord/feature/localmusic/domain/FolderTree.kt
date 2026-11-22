@@ -41,7 +41,11 @@ data class FolderNode(
 }
 
 object FolderTreeBuilder {
-    fun build(songs: List<Song>, customRoot: String? = null): FolderNode {
+    fun build(
+        songs: List<Song>,
+        customRoot: String? = null,
+        customRoots: List<String> = emptyList(),
+    ): FolderNode {
         val songsByDir = songs.asSequence()
             .mapNotNull { song ->
                 val directory = song.localFolderPath?.takeIf(String::isNotBlank)
@@ -54,13 +58,24 @@ object FolderTreeBuilder {
             }
             .groupBy({ it.first }, { it.second })
 
-        val normalizedRoot = customRoot?.takeIf(String::isNotBlank)?.let(::normalizeFolderPath)
-        val rootPath = normalizedRoot ?: findCommonRoot(songsByDir.keys)
+        val normalizedRoots = (customRoots + listOfNotNull(customRoot))
+            .map(String::trim)
+            .filter(String::isNotBlank)
+            .map(::normalizeFolderPath)
+            .distinct()
+        val rootPath = if (normalizedRoots.isEmpty()) {
+            findCommonRoot(songsByDir.keys)
+        } else {
+            findCommonRoot(normalizedRoots)
+        }
         val rootName = rootPath.substringAfterLast('/').ifBlank { "Music" }
         val root = FolderNodeBuilder(rootPath, rootName)
 
         for ((directory, directorySongs) in songsByDir) {
-            if (normalizedRoot != null && !isSameOrChildPath(directory, normalizedRoot)) continue
+            if (normalizedRoots.isNotEmpty() && normalizedRoots.none { selectedRoot ->
+                    isSameOrChildPath(directory, selectedRoot)
+                }
+            ) continue
             val relative = relativeTo(directory, rootPath) ?: continue
             if (relative.isEmpty()) {
                 root.directSongs.addAll(directorySongs)

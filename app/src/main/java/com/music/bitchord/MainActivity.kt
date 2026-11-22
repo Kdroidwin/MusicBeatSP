@@ -769,7 +769,7 @@ private fun BitChordApp(
     val radioAvailable = !offlineMode && !context.packageName.endsWith(".nointernet")
     val homeAvailable = !offlineMode && youtubeMusicEnabled && !context.packageName.endsWith(".nointernet")
     val visibleLocalLibraryTabs by AppSettings.visibleLocalLibraryTabs.collectAsStateWithLifecycle()
-    val localMusicFolderRoot by AppSettings.localMusicFolderUri.collectAsStateWithLifecycle()
+    val localMusicFolderRoots by AppSettings.localMusicFolderRoots.collectAsStateWithLifecycle()
     val rememberLastOpenedFolder by AppSettings.rememberLastOpenedFolder.collectAsStateWithLifecycle()
     val lastOpenedFolderPath by AppSettings.lastOpenedFolderPath.collectAsStateWithLifecycle()
     val mainNavigationTabOrder by AppSettings.mainNavigationTabOrder.collectAsStateWithLifecycle()
@@ -3881,7 +3881,7 @@ private fun BitChordApp(
                                     playFromFolder(songs, songs.indices.random())
                                 },
                                 contentPadding = listPadding,
-                                customRootPath = localMusicFolderRoot.ifBlank { null },
+                                customRootPaths = localMusicFolderRoots,
                                 rememberLastOpenedFolder = rememberLastOpenedFolder,
                                 lastOpenedFolderPath = lastOpenedFolderPath,
                                 onLastOpenedFolderPathChange = AppSettings::setLastOpenedFolderPath,

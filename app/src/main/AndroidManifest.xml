@@ -34,6 +34,8 @@
 
     <!-- Reading local audio files across the device -->
     <uses-permission android:name="android.permission.READ_MEDIA_AUDIO" />
+    <!-- Optional user-granted special access for full-device file operations. -->
+    <uses-permission android:name="android.permission.MANAGE_EXTERNAL_STORAGE" />
     <uses-permission
         android:name="android.permission.READ_EXTERNAL_STORAGE"
         android:maxSdkVersion="32" />

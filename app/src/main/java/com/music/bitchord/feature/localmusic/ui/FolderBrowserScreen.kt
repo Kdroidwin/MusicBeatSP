@@ -49,6 +49,7 @@ import androidx.compose.material3.Checkbox
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.DropdownMenu
 import androidx.compose.material3.DropdownMenuItem
+import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
@@ -57,6 +58,7 @@ import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
+import androidx.compose.material3.rememberModalBottomSheetState
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.LaunchedEffect
@@ -92,6 +94,8 @@ import com.music.bitchord.data.model.Song
 import com.music.bitchord.data.model.ROW_ART_PX
 import com.music.bitchord.data.model.artworkAt
 import com.music.bitchord.data.settings.AppSettings
+import com.music.bitchord.data.LocalMediaRepository
+import com.music.bitchord.feature.localmusic.domain.model.LocalFolder
 import com.music.bitchord.feature.localmusic.domain.FolderNode
 import com.music.bitchord.feature.localmusic.domain.FolderTreeBuilder
 import com.music.bitchord.feature.localmusic.data.ZipAudioArchive
@@ -99,6 +103,7 @@ import com.music.bitchord.feature.localmusic.data.ZipAudioEntry
 import com.music.bitchord.feature.localmusic.data.AppleMusicAutoRename
 import com.music.bitchord.feature.localmusic.data.AutoRenameRow
 import com.music.bitchord.feature.localsongactions.ui.components.LocalAddToPlaylistSheet
+import com.music.bitchord.feature.localmusic.ui.components.BlacklistedFoldersSheet
 import com.music.bitchord.ui.components.SongRow
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
@@ -126,6 +131,7 @@ private fun folderPathStack(root: FolderNode, targetPath: String): List<String>?
 }
 
 /** Hierarchical browser for the device's indexed local music folders. */
+@OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun FolderBrowserScreen(
     songs: List<Song>,
@@ -137,6 +143,7 @@ fun FolderBrowserScreen(
     onShuffle: (List<Song>) -> Unit,
     contentPadding: PaddingValues,
     customRootPath: String? = null,
+    customRootPaths: List<String> = emptyList(),
     rememberLastOpenedFolder: Boolean = true,
     lastOpenedFolderPath: String = "",
     onLastOpenedFolderPathChange: ((String) -> Unit)? = null,
@@ -149,6 +156,9 @@ fun FolderBrowserScreen(
 ) {
     val context = LocalContext.current
     val scope = rememberCoroutineScope()
+    val manageFoldersSheetState = rememberModalBottomSheetState(skipPartiallyExpanded = true)
+    var showManageFoldersSheet by remember { mutableStateOf(false) }
+    var discoveredFolders by remember { mutableStateOf<List<LocalFolder>>(emptyList()) }
     var zipEntries by remember { mutableStateOf<List<ZipAudioEntry>?>(null) }
     var zipArchiveUri by remember { mutableStateOf<Uri?>(null) }
     var zipArchiveName by remember { mutableStateOf("") }
@@ -218,8 +228,16 @@ fun FolderBrowserScreen(
             }
         }
     }
-    val tree = remember(songs, customRootPath) { FolderTreeBuilder.build(songs, customRootPath) }
-    val rootKey = customRootPath ?: tree.path
+    val selectedRoots = remember(customRootPath, customRootPaths) {
+        (customRootPaths + listOfNotNull(customRootPath))
+            .map { it.replace('\\', '/').trimEnd('/') }
+            .filter(String::isNotBlank)
+            .distinct()
+    }
+    val tree = remember(songs, selectedRoots) {
+        FolderTreeBuilder.build(songs, customRoots = selectedRoots)
+    }
+    val rootKey = selectedRoots.sorted().joinToString("|").ifBlank { tree.path }
     val pathStack = rememberSaveable(rootKey, saver = FolderPathStackSaver) {
         mutableStateListOf<String>().apply {
             // Restore the last folder as part of the initial state. If this is
@@ -372,6 +390,12 @@ fun FolderBrowserScreen(
                 onPlay = { if (currentNode.allSongs.isNotEmpty()) onSongClick(currentNode.allSongs, 0) },
                 onShuffle = { if (currentNode.allSongs.isNotEmpty()) onShuffle(currentNode.allSongs) },
                 onAutoRename = { showAppleUrlDialog = true },
+                onManageFolders = {
+                    showManageFoldersSheet = true
+                    scope.launch {
+                        discoveredFolders = LocalMediaRepository.getAllDiscoveredFolders(context)
+                    }
+                },
                 onOpenZip = {
                     zipPicker.launch(arrayOf("application/zip", "application/x-zip-compressed", "application/octet-stream"))
                 },
@@ -648,6 +672,20 @@ fun FolderBrowserScreen(
         )
     }
 
+    if (showManageFoldersSheet) {
+        BlacklistedFoldersSheet(
+            folders = discoveredFolders,
+            onToggleBlacklist = { path, isBlacklisted ->
+                AppSettings.setFolderBlacklisted(path, isBlacklisted)
+                discoveredFolders = discoveredFolders.map { folder ->
+                    if (folder.path == path) folder.copy(isBlacklisted = isBlacklisted) else folder
+                }
+            },
+            sheetState = manageFoldersSheetState,
+            onDismiss = { showManageFoldersSheet = false },
+        )
+    }
+
     zipEntries?.let { entries ->
         AlertDialog(
             onDismissRequest = { if (!isOpeningZipTrack) zipEntries = null },
@@ -707,6 +745,7 @@ private fun FolderHeader(
     onPlay: () -> Unit,
     onShuffle: () -> Unit,
     onAutoRename: () -> Unit,
+    onManageFolders: () -> Unit,
     onOpenZip: () -> Unit,
     modifier: Modifier = Modifier,
 ) {
@@ -747,6 +786,13 @@ private fun FolderHeader(
                     Spacer(Modifier.width(6.dp))
                     Text(stringResource(R.string.folder_auto_rename))
                 }
+            }
+        }
+        if (node.relativePath.isBlank()) {
+            OutlinedButton(onClick = onManageFolders, modifier = Modifier.padding(top = 8.dp)) {
+                Icon(Icons.Rounded.FolderOff, contentDescription = null, modifier = Modifier.size(18.dp))
+                Spacer(Modifier.width(6.dp))
+                Text(stringResource(R.string.manage_folders))
             }
         }
         OutlinedButton(onClick = onOpenZip, modifier = Modifier.padding(top = 8.dp)) {
