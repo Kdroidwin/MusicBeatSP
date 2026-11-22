@@ -1947,6 +1947,8 @@
     <string name="profile_unavailable">このページではログイン済みプロフィールを利用できません。</string>
     <string name="hide_saved_queue_heading">「現在のキューを保存」の見出しを隠す</string>
     <string name="hide_saved_queue_heading_subtitle">保存済みキュー管理画面で、キュー名入力欄の上にある見出しを隠します。初期設定はオンです。</string>
+    <string name="hide_saved_queues_heading">「保存済み再生キュー」の見出しを隠す</string>
+    <string name="hide_saved_queues_heading_subtitle">再生キュー管理画面で、保存済みキュー一覧の上にある見出しを隠します。初期設定はオンです。</string>
     <string name="hide_queue_manager_title">「再生キューを管理」のタイトルを隠す</string>
     <string name="hide_queue_manager_title_subtitle">保存済みキュー管理画面の上部タイトルだけを隠します。初期設定はオフです。</string>
 

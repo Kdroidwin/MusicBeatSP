@@ -1974,6 +1974,8 @@
     <string name="saved_queues_section">Saved queues</string>
     <string name="hide_saved_queue_heading">Hide save-current-queue heading</string>
     <string name="hide_saved_queue_heading_subtitle">Hide the heading above the queue name field in the saved-queue manager. On by default.</string>
+    <string name="hide_saved_queues_heading">Hide the saved-queues heading</string>
+    <string name="hide_saved_queues_heading_subtitle">Hide the “Saved queues” label above saved queues in the queue manager. On by default.</string>
     <string name="hide_queue_manager_title">Hide the Manage queues title</string>
     <string name="hide_queue_manager_title_subtitle">Hide only the title at the top of the saved-queue manager. Off by default.</string>
 

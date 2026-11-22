@@ -855,6 +855,8 @@ object AppSettings {
     val hideQueueManagerTitle = MutableStateFlow(false)
     /** Hides only the save-current-queue section heading in the redesigned queue manager. */
     val hideSavedQueueHeading = MutableStateFlow(true)
+    /** Hides the saved-queues section heading in the redesigned queue manager. */
+    val hideSavedQueuesHeading = MutableStateFlow(true)
     /** Hides the queue heading while keeping its actions available. */
     val hideQueueLabel = MutableStateFlow(true)
     /** Replaces the queue heading text with a music-note glyph. */
@@ -1991,6 +1993,7 @@ object AppSettings {
         redesignedSavedQueueManager.value = prefs.getBoolean(KEY_REDESIGNED_SAVED_QUEUE_MANAGER, true)
         hideQueueManagerTitle.value = prefs.getBoolean(KEY_HIDE_QUEUE_MANAGER_TITLE, false)
         hideSavedQueueHeading.value = prefs.getBoolean(KEY_HIDE_SAVED_QUEUE_HEADING, true)
+        hideSavedQueuesHeading.value = prefs.getBoolean(KEY_HIDE_SAVED_QUEUES_HEADING, true)
         hideQueueLabel.value = prefs.getBoolean(KEY_HIDE_QUEUE_LABEL, true)
         queueHeadingMusicNoteIcon.value = prefs.getBoolean(KEY_QUEUE_HEADING_MUSIC_NOTE_ICON, false)
         queueHeadingItalicPlayQueue.value = prefs.getBoolean(KEY_QUEUE_HEADING_ITALIC_PLAY_QUEUE, false)
@@ -3387,6 +3390,11 @@ object AppSettings {
     fun setHideSavedQueueHeading(value: Boolean) {
         hideSavedQueueHeading.value = value
         prefs.edit().putBoolean(KEY_HIDE_SAVED_QUEUE_HEADING, value).apply()
+    }
+
+    fun setHideSavedQueuesHeading(value: Boolean) {
+        hideSavedQueuesHeading.value = value
+        prefs.edit().putBoolean(KEY_HIDE_SAVED_QUEUES_HEADING, value).apply()
     }
 
     fun setHideQueueLabel(value: Boolean) {
@@ -5792,6 +5800,7 @@ object AppSettings {
     private const val KEY_HIDE_PLAYBACK_TUNING_TITLE = "hide_playback_tuning_title"
     private const val KEY_REDESIGNED_SAVED_QUEUE_MANAGER = "redesigned_saved_queue_manager"
     private const val KEY_HIDE_SAVED_QUEUE_HEADING = "hide_saved_queue_heading"
+    private const val KEY_HIDE_SAVED_QUEUES_HEADING = "hide_saved_queues_heading"
     private const val KEY_HIDE_QUEUE_MANAGER_TITLE = "hide_queue_manager_title"
     private const val KEY_PAXSENIX_API_KEY = "paxsenix_api_key"
     private const val KEY_PLAYBACK_TUNING_THIN_SLIDERS = "playback_tuning_thin_sliders"

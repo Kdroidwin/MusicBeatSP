@@ -69,6 +69,7 @@ import androidx.lifecycle.compose.collectAsStateWithLifecycle
 internal fun SavedQueuesDialog(
     redesigned: Boolean,
     hideSaveCurrentQueueHeading: Boolean,
+    hideSavedQueuesHeading: Boolean,
     hideManageQueueTitle: Boolean,
     queues: List<SavedQueue>,
     artworkPalette: ArtworkPalette,
@@ -91,6 +92,7 @@ internal fun SavedQueuesDialog(
     if (redesigned) {
         ModernSavedQueuesDialog(
             hideSaveCurrentQueueHeading = hideSaveCurrentQueueHeading,
+            hideSavedQueuesHeading = hideSavedQueuesHeading,
             hideManageQueueTitle = hideManageQueueTitle,
             queues = queues,
             artworkPalette = menuPalette,
@@ -296,12 +298,6 @@ private fun LegacySavedQueuesDialog(
                         }
                     }
                 }
-                Row(
-                    modifier = Modifier.fillMaxWidth().padding(top = 8.dp),
-                    horizontalArrangement = Arrangement.End,
-                ) {
-                    TextButton(onClick = onDismiss) { Text(stringResource(R.string.done), color = accent) }
-                }
             }
         }
     }
@@ -326,6 +322,7 @@ private fun LegacySavedQueuesDialog(
 @Composable
 private fun ModernSavedQueuesDialog(
     hideSaveCurrentQueueHeading: Boolean,
+    hideSavedQueuesHeading: Boolean,
     hideManageQueueTitle: Boolean,
     queues: List<SavedQueue>,
     artworkPalette: ArtworkPalette,
@@ -464,13 +461,15 @@ private fun ModernSavedQueuesDialog(
                 }
 
                 Spacer(Modifier.height(14.dp))
-                Text(
-                    text = stringResource(R.string.saved_queues_section),
-                    style = MaterialTheme.typography.titleSmall,
-                    color = foreground,
-                )
-                Spacer(Modifier.height(6.dp))
-                HorizontalDivider(color = foreground.copy(alpha = 0.14f))
+                if (!hideSavedQueuesHeading) {
+                    Text(
+                        text = stringResource(R.string.saved_queues_section),
+                        style = MaterialTheme.typography.titleSmall,
+                        color = foreground,
+                    )
+                    Spacer(Modifier.height(6.dp))
+                    HorizontalDivider(color = foreground.copy(alpha = 0.14f))
+                }
 
                 if (queues.isEmpty()) {
                     Text(
@@ -544,14 +543,6 @@ private fun ModernSavedQueuesDialog(
                     }
                 }
 
-                Row(
-                    Modifier.fillMaxWidth().padding(top = 10.dp),
-                    horizontalArrangement = Arrangement.End,
-                ) {
-                    TextButton(onClick = onDismiss) {
-                        Text(stringResource(R.string.done), color = accent)
-                    }
-                }
             }
         }
     }

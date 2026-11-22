@@ -1310,6 +1310,7 @@ fun NowPlayingScreen(
     val hidePlayerPopupHandles by AppSettings.hidePlayerPopupHandles.collectAsStateWithLifecycle()
     val redesignedSavedQueueManager by AppSettings.redesignedSavedQueueManager.collectAsStateWithLifecycle()
     val hideSavedQueueHeading by AppSettings.hideSavedQueueHeading.collectAsStateWithLifecycle()
+    val hideSavedQueuesHeading by AppSettings.hideSavedQueuesHeading.collectAsStateWithLifecycle()
     val hideQueueManagerTitle by AppSettings.hideQueueManagerTitle.collectAsStateWithLifecycle()
     val showPlayerLyricsStrip by AppSettings.showPlayerLyricsStrip.collectAsStateWithLifecycle()
     val offlineMode by AppSettings.offlineMode.collectAsStateWithLifecycle()
@@ -1550,6 +1551,7 @@ fun NowPlayingScreen(
         SavedQueuesDialog(
             redesigned = redesignedSavedQueueManager,
             hideSaveCurrentQueueHeading = hideSavedQueueHeading,
+            hideSavedQueuesHeading = hideSavedQueuesHeading,
             hideManageQueueTitle = hideQueueManagerTitle,
             queues = savedQueues,
             // Use the same thumbnail size, source URL and dark palette as the

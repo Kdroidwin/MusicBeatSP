@@ -1865,6 +1865,7 @@ fun SettingsScreen(
     val frostedQueueManager by AppSettings.frostedQueueManager.collectAsStateWithLifecycle()
     val redesignedSavedQueueManager by AppSettings.redesignedSavedQueueManager.collectAsStateWithLifecycle()
     val hideSavedQueueHeading by AppSettings.hideSavedQueueHeading.collectAsStateWithLifecycle()
+    val hideSavedQueuesHeading by AppSettings.hideSavedQueuesHeading.collectAsStateWithLifecycle()
     val hideQueueManagerTitle by AppSettings.hideQueueManagerTitle.collectAsStateWithLifecycle()
     val frostedPlayerDetails by AppSettings.frostedPlayerDetails.collectAsStateWithLifecycle()
     val playerPopupsUseArtworkColor by AppSettings.playerPopupsUseArtworkColor.collectAsStateWithLifecycle()
@@ -2275,6 +2276,12 @@ fun SettingsScreen(
             listOf("queue", "save queue", "heading", "再生キュー", "現在のキュー", "見出し"),
             hideSavedQueueHeading,
         ) { AppSettings.setHideSavedQueueHeading(!hideSavedQueueHeading) },
+        SettingsSearchEntry(
+            stringResource(R.string.hide_saved_queues_heading),
+            stringResource(R.string.hide_saved_queues_heading_subtitle),
+            listOf("queue", "saved queues", "heading", "再生キュー", "保存済み再生キュー", "見出し"),
+            hideSavedQueuesHeading,
+        ) { AppSettings.setHideSavedQueuesHeading(!hideSavedQueuesHeading) },
         hideQueueManagerTitleSearchEntry(hideQueueManagerTitle),
         SettingsSearchEntry(
             stringResource(R.string.frosted_player_details),
@@ -6467,6 +6474,19 @@ fun SettingsScreen(
                     )
                 },
                 onClick = { AppSettings.setHideSavedQueueHeading(!hideSavedQueueHeading) },
+            )
+            RowDivider()
+            SettingsRow(
+                icon = Icons.AutoMirrored.Rounded.QueueMusic,
+                title = stringResource(R.string.hide_saved_queues_heading),
+                subtitle = stringResource(R.string.hide_saved_queues_heading_subtitle),
+                trailing = {
+                    Switch(
+                        checked = hideSavedQueuesHeading,
+                        onCheckedChange = AppSettings::setHideSavedQueuesHeading,
+                    )
+                },
+                onClick = { AppSettings.setHideSavedQueuesHeading(!hideSavedQueuesHeading) },
             )
             RowDivider()
             SettingsRow(
