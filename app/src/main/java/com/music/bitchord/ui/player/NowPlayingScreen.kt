@@ -595,10 +595,15 @@ private fun HeroArtworkBottomBlur(
 }
 
 /** BitChord-style eased fade used by the full-screen artwork modes. */
-private fun Modifier.heroArtworkBottomFade(fadeFraction: Float, zoom: Float): Modifier =
+private fun Modifier.heroArtworkBottomFade(
+    fadeFraction: Float,
+    zoom: Float,
+    shown: () -> Float = { 1f },
+): Modifier =
     drawWithContent {
         drawContent()
-        if (size.height <= 0f) return@drawWithContent
+        val visibility = shown().coerceIn(0f, 1f)
+        if (size.height <= 0f || visibility <= 0f) return@drawWithContent
         val safeZoom = zoom.takeIf { it.isFinite() && it >= 1f } ?: 1f
         val localStartFraction = (1f - fadeFraction.coerceIn(0f, 1f)) / safeZoom
         val localEndFraction = 1f / safeZoom
@@ -606,7 +611,7 @@ private fun Modifier.heroArtworkBottomFade(fadeFraction: Float, zoom: Float): Mo
             brush = Brush.verticalGradient(
                 colorStops = Array(HERO_FADE_CURVE_STOPS + 1) { index ->
                     val t = index / HERO_FADE_CURVE_STOPS.toFloat()
-                    t to Color.Black.copy(alpha = 1f - heroSmootherStep(t))
+                    t to Color.Black.copy(alpha = 1f - visibility * heroSmootherStep(t))
                 },
                 startY = size.height * localStartFraction,
                 endY = size.height * localEndFraction,
@@ -616,10 +621,14 @@ private fun Modifier.heroArtworkBottomFade(fadeFraction: Float, zoom: Float): Mo
     }
 
 /** Fade from the title row through the expanded stage, as in Auris. */
-private fun Modifier.aurisHeroArtworkBottomFade(zoom: Float): Modifier =
+private fun Modifier.aurisHeroArtworkBottomFade(
+    zoom: Float,
+    shown: () -> Float = { 1f },
+): Modifier =
     drawWithContent {
         drawContent()
-        if (size.height <= 0f) return@drawWithContent
+        val visibility = shown().coerceIn(0f, 1f)
+        if (size.height <= 0f || visibility <= 0f) return@drawWithContent
         val safeZoom = zoom.takeIf { it.isFinite() && it >= 1f } ?: 1f
         val fadeStart = size.height / safeZoom + ART_TITLE_GAP.toPx() / 2f
         if (fadeStart >= size.height) return@drawWithContent
@@ -627,7 +636,7 @@ private fun Modifier.aurisHeroArtworkBottomFade(zoom: Float): Modifier =
         val colorStops = Array(steps + 1) { index ->
             val t = index / steps.toFloat()
             val eased = heroSmootherStep(t)
-            t to Color.Black.copy(alpha = 1f - eased)
+            t to Color.Black.copy(alpha = 1f - visibility * eased)
         }
         drawRect(
             brush = Brush.verticalGradient(
@@ -1004,6 +1013,7 @@ private class DockFrame {
     var host: LayoutCoordinates? = null
     var artworkBox: LayoutCoordinates? = null
     var artworkRect: Rect = Rect.Zero
+    var artworkCornerPx: Float = 0f
 }
 
 private fun lerpRect(start: Rect, end: Rect, fraction: Float): Rect = Rect(
@@ -1227,6 +1237,11 @@ fun NowPlayingScreen(
         }
     }
     val dockFrame = remember { DockFrame() }
+    // The full-bleed sleeve is drawn as one root-level image so it can move
+    // through the status-bar area without drawing a second copy in the card.
+    // Keep the artwork box's root position observable for its layout pass.
+    var artworkBoxPosition by remember { mutableStateOf(Offset.Zero) }
+    var artworkBoxMeasured by remember { mutableStateOf(false) }
     val sleeveLayer = rememberGraphicsLayer()
     fun dockFraction(): Float {
         val activeDock = dock ?: return 1f
@@ -1283,9 +1298,10 @@ fun NowPlayingScreen(
                 // rounded artwork shape all the way to the destination. The
                 // previous rectangular clip exposed one square frame before
                 // MiniPlayer's own rounded image became visible.
-                val cornerPx = with(density) {
-                    lerp(activeDock.miniArtCorner(), 8.dp, fraction).toPx()
-                }.coerceAtMost(minOf(sleeve.width, sleeve.height) / 2f)
+                val cornerPx = (
+                    with(density) { activeDock.miniArtCorner().toPx() } +
+                        (dockFrame.artworkCornerPx - with(density) { activeDock.miniArtCorner().toPx() }) * fraction
+                    ).coerceAtMost(minOf(sleeve.width, sleeve.height) / 2f)
                 val sleeveClip = Path().apply {
                     addRoundRect(RoundRect(sleeve, CornerRadius(cornerPx)))
                 }
@@ -2308,136 +2324,129 @@ fun NowPlayingScreen(
             )
         }
 
-        // The artwork, edge to edge and running up behind the status bar,
-        // dissolving into the backdrop where the sleeve's bottom edge would
-        // have been. It lives out here rather than in the sleeve because that
-        // is the only way to escape the player's side gutter and its status-bar
-        // inset — a banner that stops short of either reads as a misplaced card
-        // rather than as the artwork the screen is made of.
         if (heroHeight > 0.dp) {
-            // The still sleeve first, so a clip fading in on top of it never
-            // shows the backdrop through the gap between them — and only until
-            // that fade has run. Both layers carry the same bottom gradient, so
-            // a still frame left lit under a settled clip is not hidden by it:
-            // down in the fade the clip is only part-opaque, and what shows
-            // through it there is the cover art rather than the backdrop. That
-            // is the artwork and the clip on screen at once.
-            //
-            // So it is dropped outright once the clip is opaque, rather than
-            // held at alpha 0: nothing under a full-bleed clip is ever visible,
-            // and a full-screen AsyncImage kept mounted for no one is a bitmap
-            // and a layer the compositor still has to carry.
-            //
-            // Kept mounted through the handover in either direction rather than
-            // dropped the moment [p] crosses the collapse threshold: the sleeve
-            // behind it is still transparent at that point, so pulling the
-            // banner straight out leaves a frame or two with no artwork anywhere
-            // on screen before the card catches up.
-            if (heroMode && !(stillCovered && heroClip != null) &&
-                (p < 0.5f || heroVisible > 0.001f)
+        // One artwork layer morphs card → full-bleed banner → compact header.
+        // Keeping the still image here (rather than cross-fading a second
+        // full-screen copy against the card) is the sleeve behavior used by
+        // BitChord for both panel collapse and the mini-player hand-off.
+        if (heroMode && heroHeight > 0.dp && artworkBoxMeasured) {
+            Box(
+                modifier = Modifier
+                    .layout { measurable, constraints ->
+                        // artworkRect is measured in BoxWithConstraints space;
+                        // place this one image at that same rectangle in the
+                        // player's root so it can reach behind the status bar.
+                        val rect = dockFrame.artworkRect
+                        val width = rect.width.roundToInt().coerceAtLeast(1)
+                        val height = rect.height.roundToInt().coerceAtLeast(1)
+                        val placeable = measurable.measure(Constraints.fixed(width, height))
+                        val x = (artworkBoxPosition.x + rect.left).roundToInt()
+                        val y = (artworkBoxPosition.y + rect.top).roundToInt()
+                        layout(constraints.maxWidth, constraints.maxHeight) {
+                            placeable.place(x, y)
+                        }
+                    }
+                    .drawWithContent {
+                        if (isDocking()) {
+                            sleeveLayer.record { this@drawWithContent.drawContent() }
+                        } else {
+                            drawContent()
+                        }
+                    }
+                    .then(
+                        if (aurisHeroMode) {
+                            Modifier.aurisHeroArtworkBottomFade(heroArtworkZoom) {
+                                heroVisible * dockFraction()
+                            }
+                        } else {
+                            Modifier.heroArtworkBottomFade(heroFadeFraction, heroArtworkZoom) {
+                                heroVisible * dockFraction()
+                            }
+                        },
+                    )
+                    .hazeSource(playerHaze)
+                    .graphicsLayer {
+                        // BitChord eases the dissolve, crop and drift out with
+                        // the same sleeve share while docking. If these only
+                        // follow the queue/lyrics progress, the mini-player is
+                        // left with a cropped/faded copy of the banner art.
+                        val bannerShown = (heroVisible * dockFraction()).coerceIn(0f, 1f)
+                        val idleScale = artScale + (1f - artScale) * p
+                        val scale = idleScale + (1f - idleScale) * heroT
+                        scaleX = scale
+                        scaleY = scale
+                        translationX = swipeSettle * (1f - p) * (1f - heroT)
+                        shadowElevation = if (artLoaded) {
+                            10.dp.toPx() * (1f - 2f * bannerShown).coerceAtLeast(0f) * dockFraction()
+                        } else 0f
+                        shape = RoundedCornerShape(with(density) { dockFrame.artworkCornerPx.toDp() })
+                        clip = true
+                        compositingStrategy = if (bannerShown > 0f) {
+                            CompositingStrategy.Offscreen
+                        } else {
+                            CompositingStrategy.Auto
+                        }
+                    },
+                contentAlignment = Alignment.Center,
             ) {
-                if (!useRemoteArtworkFallback) {
-                    localPreviewRequest?.let { previewRequest ->
-                        AsyncImage(
-                            model = previewRequest,
+                Box(
+                    Modifier
+                        .fillMaxSize()
+                        .background(Color.Black.copy(alpha = 0.18f)),
+                    contentAlignment = Alignment.Center,
+                ) {
+                    if (!artLoaded && !canvasRendered) {
+                        Icon(
+                            imageVector = BitChordIcons.MusicNote,
                             contentDescription = null,
-                            contentScale = ContentScale.Crop,
-                            modifier = Modifier
-                                .align(Alignment.TopStart)
-                                .fillMaxWidth()
-                                .height(heroHeight)
-                                .clipToBounds()
-                                // Match the full-size image's bottom dissolve.
-                                // Without this mask the fast preview stayed
-                                // opaque underneath it and covered the blurred
-                                // backdrop along the hero's lower edge.
-                                .graphicsLayer {
-                                    alpha = heroVisible
-                                    val cropScale = if (aurisHeroMode) {
-                                        aurisHeroArtworkScale(size.width, size.height, heroArtworkZoom)
-                                    } else {
-                                        heroArtworkZoom
-                                    }
-                                    scaleX = cropScale
-                                    scaleY = cropScale
-                                    transformOrigin = TransformOrigin(0.5f, 0f)
-                                    if (aurisHeroMode) translationY = size.width * AURIS_FULL_BLEED_DRIFT
-                                    compositingStrategy = CompositingStrategy.Offscreen
-                                }
-                                .then(
-                                    if (aurisHeroMode) {
-                                        Modifier.aurisHeroArtworkBottomFade(heroArtworkZoom)
-                                    } else {
-                                        Modifier.heroArtworkBottomFade(heroFadeFraction, heroArtworkZoom)
-                                    },
-                                ),
+                            tint = Color.White.copy(alpha = 0.35f),
+                            modifier = Modifier.size(lerp(40.dp, 20.dp, p)),
                         )
                     }
-                }
-                AsyncImage(
-                    // Decoded at the same size the sleeve asks for, so the two
-                    // share one entry in Coil's cache and one bitmap: the pair
-                    // cross-fade into each other, and asking twice at two sizes
-                    // would decode the same art twice and let the banner fade in
-                    // before its own copy had arrived.
-                    //
-                    // Literally the same request object as the sleeve's, not an
-                    // identical one — see [artRequest] for why that distinction
-                    // is the whole of it.
-                    model = artRequest,
-                    contentDescription = null,
-                    contentScale = ContentScale.Crop,
-                    modifier = Modifier
-                        .align(Alignment.TopStart)
-                        .fillMaxWidth()
-                        .height(heroHeight)
-                        .clipToBounds()
-                        // Haze must observe the drawable layer itself. A
-                        // source on the surrounding layout only captured its
-                        // mesh backdrop, leaving the cover sharp in the pill.
-                        .hazeSource(playerHaze)
-                        .graphicsLayer {
-                            // Hands its opacity to the clip as the clip takes
-                            // over, and takes it straight back if there is no
-                            // clip mounted to hand it to.
-                            alpha = heroVisible *
-                                (1f - if (heroClip != null) canvasCover.floatValue else 0f)
-                            val cropScale = if (aurisHeroMode) {
-                                aurisHeroArtworkScale(size.width, size.height, heroArtworkZoom)
-                            } else {
-                                heroArtworkZoom
-                            }
-                            scaleX = cropScale
-                            scaleY = cropScale
-                            transformOrigin = TransformOrigin(0.5f, 0f)
-                            if (aurisHeroMode) translationY = size.width * AURIS_FULL_BLEED_DRIFT
-                            // The mask below erases part of what this layer
-                            // drew, which it can only do in a buffer of its own.
-                            compositingStrategy = CompositingStrategy.Offscreen
+                    if (!useRemoteArtworkFallback) {
+                        localPreviewRequest?.let { previewRequest ->
+                            AsyncImage(
+                                model = previewRequest,
+                                contentDescription = null,
+                                contentScale = ContentScale.Crop,
+                                modifier = Modifier.fillMaxSize(),
+                            )
                         }
-                        .then(
-                            if (aurisHeroMode) {
-                                Modifier.aurisHeroArtworkBottomFade(heroArtworkZoom)
-                            } else {
-                                Modifier.heroArtworkBottomFade(heroFadeFraction, heroArtworkZoom)
+                    }
+                    AsyncImage(
+                        model = artRequest,
+                        contentDescription = null,
+                        contentScale = ContentScale.Crop,
+                        modifier = Modifier
+                            .fillMaxSize()
+                            .graphicsLayer {
+                                val targetScale = if (aurisHeroMode) {
+                                    aurisHeroArtworkScale(size.width, size.height, heroArtworkZoom)
+                                } else heroArtworkZoom
+                                val sleeveShown = (heroVisible * dockFraction()).coerceIn(0f, 1f)
+                                val cropScale = 1f + (targetScale - 1f) * sleeveShown
+                                scaleX = cropScale
+                                scaleY = cropScale
+                                transformOrigin = TransformOrigin(0.5f, 0f)
+                                if (aurisHeroMode) {
+                                    translationY = size.width * AURIS_FULL_BLEED_DRIFT * sleeveShown
+                                }
                             },
-                        ),
-                )
-                HeroArtworkBottomBlur(
-                    model = artRequest,
-                    cacheKey = requestedArtUrl,
-                    cachedBlurImage = heroBlurImage,
-                    alpha = heroVisible *
-                        (1f - if (heroClip != null) canvasCover.floatValue else 0f),
-                    zoom = heroArtworkZoom,
-                    onBlurReady = { bitmap -> heroBlurImage = bitmap.asImageBitmap() },
-                    includeRightEdge = tabletFullscreenPlayer,
-                    modifier = Modifier
-                        .align(Alignment.TopStart)
-                        .fillMaxWidth()
-                        .height(heroHeight),
-                )
+                    )
+                    HeroArtworkBottomBlur(
+                        model = artRequest,
+                        cacheKey = requestedArtUrl,
+                        cachedBlurImage = heroBlurImage,
+                        alpha = heroVisible * dockFraction() *
+                            (1f - if (heroClip != null) canvasCover.floatValue else 0f),
+                        zoom = heroArtworkZoom,
+                        onBlurReady = { bitmap -> heroBlurImage = bitmap.asImageBitmap() },
+                        includeRightEdge = tabletFullscreenPlayer,
+                        modifier = Modifier.fillMaxSize(),
+                    )
+                }
             }
+        }
 
             // Motion artwork over it, in the same frame.
             //
@@ -2683,7 +2692,12 @@ fun NowPlayingScreen(
                         top = if (compactTabletLandscape) 0.dp else ART_BOX_TOP_PAD,
                         bottom = if (compactTabletLandscape) 4.dp else 18.dp,
                     )
-                    .onGloballyPositioned { dockFrame.artworkBox = it },
+                    .onGloballyPositioned {
+                        dockFrame.artworkBox = it
+                        val position = it.positionInRoot()
+                        if (artworkBoxPosition != position) artworkBoxPosition = position
+                        artworkBoxMeasured = true
+                    },
             ) {
                 // The height this box would have if the controls at the foot of
                 // the screen were at their natural size. They aren't: they are
@@ -2863,7 +2877,18 @@ fun NowPlayingScreen(
                     bottom = bannerTopPx + with(density) { heroHeight.toPx() },
                 )
                 val bannerShare = if (heroMode && heroHeight > 0.dp) heroT else 0f
-                dockFrame.artworkRect = lerpRect(cardRect, bannerRect, bannerShare)
+                // BitChord keeps one sleeve and morphs it from the card through
+                // the banner to the queue/lyrics thumbnail. The old local code
+                // cross-faded a stationary full-screen image against this card,
+                // so both sizes were visible at once during either collapse.
+                val thumbSidePx = with(density) { THUMB_SIZE.toPx() }
+                val thumbRect = Rect(0f, 0f, thumbSidePx, thumbSidePx)
+                val sleeveRect = lerpRect(cardRect, lerpRect(bannerRect, thumbRect, p), bannerShare)
+                dockFrame.artworkRect = sleeveRect
+                val bannerShown = bannerShare * (1f - p)
+                dockFrame.artworkCornerPx = with(density) {
+                    lerp(10.dp, 7.dp, p).toPx() * (1f - bannerShown)
+                }
 
                 // How far down the *screen* the sleeve's bottom edge sits, which
                 // is where the full-bleed banner has to stop for the credits
@@ -2936,7 +2961,10 @@ fun NowPlayingScreen(
                         .offset { IntOffset(artStart.roundToPx(), artTop.roundToPx()) }
                         .size(width = artWidth, height = artHeight)
                         .drawWithContent {
-                            if (isDocking()) {
+                            // Ordinary card artwork still supplies the dock
+                            // portal; full-bleed modes record the unified root
+                            // sleeve instead, so only one copy can travel.
+                            if (isDocking() && !heroMode) {
                                 sleeveLayer.record { this@drawWithContent.drawContent() }
                             } else {
                                 drawContent()
@@ -3032,7 +3060,13 @@ fun NowPlayingScreen(
                             // The compact sleeve is the source while full
                             // bleed artwork is off, including its Canvas.
                             .hazeSource(playerHaze)
-                            .graphicsLayer { alpha = if (artLoaded && !isDocking()) 1f - heroVisible else 1f }
+                            // In full-bleed modes the root-level sleeve above
+                            // is the only visible copy. Keep this card mounted
+                            // for loading, gestures, and its normal endpoint,
+                            // but never blend it with the travelling image.
+                            .graphicsLayer {
+                                alpha = if (heroMode && artworkBoxMeasured && heroHeight > 0.dp) 0f else 1f
+                            }
                             // A drop shadow grounds a photo; on the flat
                             // placeholder tile it has nothing to sit behind, so
                             // it just reads as a second, darker square ringing
