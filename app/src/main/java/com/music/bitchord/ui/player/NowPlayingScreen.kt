@@ -478,6 +478,7 @@ private fun aurisHeroArtworkScale(width: Float, height: Float, zoom: Float): Flo
  */
 private const val HERO_BLUR_CACHE_EDGE_PX = 512
 private const val HERO_BLUR_CACHE_BYTES = 4 * 1024 * 1024
+private const val HERO_FADE_CURVE_STOPS = 16
 private val heroBlurBitmapCache = object : LruCache<String, Bitmap>(HERO_BLUR_CACHE_BYTES) {
     override fun sizeOf(key: String, value: Bitmap): Int = value.byteCount
 }
@@ -490,6 +491,12 @@ private fun Bitmap.retainedHeroBlurCopy(): Bitmap {
     val targetHeight = (height * scale).roundToInt().coerceAtLeast(1)
     val scaled = Bitmap.createScaledBitmap(this, targetWidth, targetHeight, true)
     return if (scaled === this) copy(Bitmap.Config.ARGB_8888, false) ?: this else scaled
+}
+
+/** BitChord's eased fade avoids a visible slope change at either end. */
+private fun heroSmootherStep(value: Float): Float {
+    val t = value.coerceIn(0f, 1f)
+    return t * t * t * (t * (t * 6f - 15f) + 10f)
 }
 
 /** Prepare the softened sleeve as soon as the ordinary player image is ready. */
@@ -526,7 +533,7 @@ private fun HeroArtworkBottomBlur(
     val strengthDp by AppSettings.fullBleedArtworkBottomBlurStrengthDp.collectAsStateWithLifecycle()
     if (strengthDp <= 0) return
 
-    val intensity = (strengthDp / 42f).coerceIn(0f, 1f)
+    val intensity = (strengthDp / 48f).coerceIn(0f, 1f)
     val maskZoom = zoom.takeIf { it.isFinite() && it >= 1f } ?: 1f
     val blurModifier = modifier
         .clipToBounds()
@@ -541,12 +548,11 @@ private fun HeroArtworkBottomBlur(
             drawContent()
             drawRect(
                 brush = Brush.verticalGradient(
-                    colorStops = arrayOf(
-                        (0.48f / maskZoom) to Color.Transparent,
-                        (0.66f / maskZoom) to Color.Black.copy(alpha = 0.72f),
-                        (0.84f / maskZoom) to Color.Black,
-                        (1f / maskZoom) to Color.Black,
-                    ),
+                    colorStops = Array(HERO_FADE_CURVE_STOPS + 1) { index ->
+                        val t = index / HERO_FADE_CURVE_STOPS.toFloat()
+                        (0.52f + 0.33f * t) / maskZoom to
+                            Color.Black.copy(alpha = heroSmootherStep(t))
+                    },
                 ),
                 blendMode = BlendMode.DstIn,
             )
@@ -565,25 +571,6 @@ private fun HeroArtworkBottomBlur(
             }
         }
         .blur(strengthDp.dp, BlurredEdgeTreatment.Rectangle)
-        // Keep the blur strong through the lower edge, then dissolve that
-        // softened copy into the player backdrop. BitChord uses a page-colour
-        // wash here; the player already has its artwork-derived backdrop.
-        .graphicsLayer { compositingStrategy = CompositingStrategy.Offscreen }
-        .drawWithContent {
-            drawContent()
-            drawRect(
-                brush = Brush.verticalGradient(
-                    colorStops = arrayOf(
-                        (0.82f / maskZoom) to Color.Black,
-                        (0.90f / maskZoom) to Color.Black,
-                        (0.94f / maskZoom) to Color.Black.copy(alpha = 0.72f),
-                        (0.98f / maskZoom) to Color.Black.copy(alpha = 0.24f),
-                        (1f / maskZoom) to Color.Transparent,
-                    ),
-                ),
-                blendMode = BlendMode.DstIn,
-            )
-        }
 
     if (cachedBlurImage != null) {
         Image(
@@ -606,7 +593,7 @@ private fun HeroArtworkBottomBlur(
     }
 }
 
-/** Restored linear fade used by the standard and enlarged full-screen modes. */
+/** BitChord-style eased fade used by the full-screen artwork modes. */
 private fun Modifier.heroArtworkBottomFade(fadeFraction: Float, zoom: Float): Modifier =
     drawWithContent {
         drawContent()
@@ -616,7 +603,10 @@ private fun Modifier.heroArtworkBottomFade(fadeFraction: Float, zoom: Float): Mo
         val localEndFraction = 1f / safeZoom
         drawRect(
             brush = Brush.verticalGradient(
-                colors = listOf(Color.Black, Color.Transparent),
+                colorStops = Array(HERO_FADE_CURVE_STOPS + 1) { index ->
+                    val t = index / HERO_FADE_CURVE_STOPS.toFloat()
+                    t to Color.Black.copy(alpha = 1f - heroSmootherStep(t))
+                },
                 startY = size.height * localStartFraction,
                 endY = size.height * localEndFraction,
             ),
@@ -635,7 +625,7 @@ private fun Modifier.aurisHeroArtworkBottomFade(zoom: Float): Modifier =
         val steps = 16
         val colorStops = Array(steps + 1) { index ->
             val t = index / steps.toFloat()
-            val eased = t * t * (3f - 2f * t)
+            val eased = heroSmootherStep(t)
             t to Color.Black.copy(alpha = 1f - eased)
         }
         drawRect(
@@ -799,9 +789,6 @@ private val CONTROL_GAP_SPREAD_MAX = 48.dp
  * that is all it is, a cache of a measurement, not state anything observes.
  */
 private var lastControlSpread: Dp = 0.dp
-
-/** BitChord keeps a settled full-bleed banner settled when the player reopens. */
-private var lastHeroSettled = false
 
 /**
  * How long the shuffle glyph ignores further taps after one lands.
@@ -2105,12 +2092,9 @@ fun NowPlayingScreen(
     // gives its frame up and takes it back every time the app leaves the screen,
     // and a banner that answered only to that would collapse behind the user's
     // back and blow itself out again in front of them on the way in.
-    var heroSettled by remember { mutableStateOf(lastHeroSettled) }
+    var heroSettled by remember { mutableStateOf(false) }
     LaunchedEffect(artLoaded, canvasRendered) {
-        if (artLoaded || canvasRendered) {
-            heroSettled = true
-            lastHeroSettled = true
-        }
+        if (artLoaded || canvasRendered) heroSettled = true
     }
     // The clip that gets the banner, if any. Hoisted because the still frame
     // underneath keys its handover on exactly what is mounted here: both are
