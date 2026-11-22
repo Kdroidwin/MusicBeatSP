@@ -67,6 +67,8 @@ import androidx.compose.ui.window.DialogProperties
 import coil3.compose.AsyncImage
 import com.music.bitchord.R
 import com.music.bitchord.data.model.Song
+import com.music.bitchord.data.settings.AppSettings
+import com.music.bitchord.data.settings.PlayerDetailsAction
 import com.music.bitchord.feature.localmusic.data.FolderNavigationRequests
 import com.music.bitchord.playback.SleepTimer
 import com.music.bitchord.ui.player.ThinSlider
@@ -101,6 +103,8 @@ fun AppleMusicTrackActionsMenu(
     onMore: () -> Unit,
 ) {
     var showTrackPlaybackSettings by remember(song.videoId) { mutableStateOf(false) }
+    val hiddenPlayerActions by AppSettings.hiddenPlayerDetailsActions.collectAsStateWithLifecycle()
+    val playerActionOrder by AppSettings.playerDetailsActionOrder.collectAsStateWithLifecycle()
     val menu: @Composable () -> Unit = {
         IosMenuPopover(
             item = song.takeIf { open },
@@ -129,14 +133,23 @@ fun AppleMusicTrackActionsMenu(
                 IosMenuSeparator()
                 MenuRow(R.string.go_to_album, Icons.Rounded.Album, onCloseMenu, onOpenAlbum)
                 MenuRow(R.string.go_to_artist, Icons.Rounded.Person, onCloseMenu, onOpenArtist)
-                if (showPlayerActions) {
-                    FolderNavigationRequests.folderPathFor(selectedSong)?.let { folderPath ->
-                        MenuRow(R.string.open_folder, Icons.Rounded.FolderOpen, onCloseMenu) {
-                            FolderNavigationRequests.request(folderPath)
-                        }
+                val folderPath = FolderNavigationRequests.folderPathFor(selectedSong)
+                val showOpenFolder = showPlayerActions &&
+                    PlayerDetailsAction.OPEN_FOLDER !in hiddenPlayerActions && folderPath != null
+                val folderIndex = playerActionOrder.indexOf(PlayerDetailsAction.OPEN_FOLDER)
+                val addIndex = playerActionOrder.indexOf(PlayerDetailsAction.ADD_TO_PLAYLIST)
+                val folderBeforePlaylist = folderIndex <= addIndex
+                if (showOpenFolder && folderBeforePlaylist) {
+                    MenuRow(R.string.open_folder, Icons.Rounded.FolderOpen, onCloseMenu) {
+                        FolderNavigationRequests.request(folderPath)
                     }
                 }
                 MenuRow(R.string.add_to_playlist, Icons.AutoMirrored.Rounded.PlaylistAdd, onCloseMenu, onAddToPlaylist)
+                if (showOpenFolder && !folderBeforePlaylist) {
+                    MenuRow(R.string.open_folder, Icons.Rounded.FolderOpen, onCloseMenu) {
+                        FolderNavigationRequests.request(folderPath)
+                    }
+                }
                 onChangeArtistImage?.let { MenuRow(R.string.change_artist_image, Icons.Rounded.Image, onCloseMenu, it) }
                 if (onDownload != null) MenuRow(R.string.download, Icons.Rounded.FileDownload, onCloseMenu, onDownload)
                 if (onDeleteDownload != null) MenuRow(R.string.delete_download, Icons.Rounded.Delete, onCloseMenu, onDeleteDownload)

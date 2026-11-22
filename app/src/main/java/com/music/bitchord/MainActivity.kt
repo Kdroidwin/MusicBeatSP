@@ -128,6 +128,7 @@ import com.music.bitchord.feature.localmusic.ui.components.LocalPermissionCard
 import com.music.bitchord.feature.localmusic.ui.FolderBrowserScreen
 import com.music.bitchord.feature.localmusic.data.ZipAudioArchive
 import com.music.bitchord.feature.localmusic.data.ZipAudioEntry
+import com.music.bitchord.feature.localmusic.data.FolderNavigationRequests
 import androidx.compose.material.icons.rounded.LibraryMusic
 import androidx.compose.material.icons.rounded.LocalOffer
 import com.music.bitchord.feature.library.ui.LibraryScreen
@@ -4525,13 +4526,12 @@ private fun BitChordApp(
         // ---- Album / playlist detail ----
         // ---- Long-press track actions ----
         com.music.bitchord.ui.player.PlayerSongActionsHost(songActions) { originalSong ->
-            // Local tracks can share a title, artist, and even an imported ID.
-            // Resolve by the stable file URI first so opening actions for one
-            // playlist row can never silently switch to another folder's file.
-            val originalSongKey = originalSong.localUri ?: originalSong.videoId
-            val resolvedSong = localSongs.firstOrNull { local ->
-                (local.localUri ?: local.videoId) == originalSongKey
-            } ?: originalSong
+            // Playlist rows can hold stale MediaStore URIs after a library
+            // rescan. Resolve the action target by URI, then its real path; do
+            // not fall back to title/artist matching, which can open another
+            // copy of a track from a different folder.
+            val resolvedSong = FolderNavigationRequests.resolveLocalSong(originalSong, localSongs)
+                ?: originalSong
             val song = resolvedSong
             val songIdentityKey = song.localUri ?: song.videoId
             var showTagEditor by remember(songIdentityKey, pendingPlayerQuickAction) {

@@ -40,6 +40,7 @@ fun PlaylistPlaybackSettingsDialog(playlist: LocalPlaylist, onDismiss: () -> Uni
     }
     val options = AppSettings.crossfadeDurationOptionsMs
     val crossfadeIndex = options.indices.minByOrNull { kotlin.math.abs(options[it] - profile.crossfadeDurationMs) } ?: 0
+    val appArtworkMode by AppSettings.playerArtworkMode.collectAsStateWithLifecycle()
     val storageAvailable = PlaylistPlaybackSettings.secureStorageAvailable
     val useArtworkColor by AppSettings.playlistPlaybackSettingsUseArtworkColor.collectAsStateWithLifecycle()
     val palette = rememberArtworkPalette(imageUrl = playlist.customCoverUrl ?: playlist.coverUrl, dark = true)
@@ -82,22 +83,31 @@ fun PlaylistPlaybackSettingsDialog(playlist: LocalPlaylist, onDismiss: () -> Uni
                         checked = profile.artworkModeOverride,
                         onCheckedChange = { profile = profile.copy(artworkModeOverride = it) },
                     )
-                    if (profile.artworkModeOverride) {
-                        PlayerArtworkMode.entries.forEach { mode ->
-                            Row(
-                                modifier = Modifier.fillMaxWidth(),
-                                verticalAlignment = Alignment.CenterVertically,
-                            ) {
-                                RadioButton(
-                                    selected = profile.artworkMode == mode,
-                                    onClick = { profile = profile.copy(artworkMode = mode) },
-                                )
-                                Text(
-                                    text = artworkModeLabel(mode),
-                                    modifier = Modifier.weight(1f),
-                                    style = MaterialTheme.typography.bodyMedium,
-                                )
-                            }
+                    // Keep the choices visible. Selecting one opts this
+                    // playlist into its own artwork mode; before that, the
+                    // selected marker reflects the app-wide mode. Hiding the
+                    // entire list behind the switch made these modes appear
+                    // unavailable from playlist playback settings.
+                    PlayerArtworkMode.entries.forEach { mode ->
+                        Row(
+                            modifier = Modifier.fillMaxWidth(),
+                            verticalAlignment = Alignment.CenterVertically,
+                        ) {
+                            RadioButton(
+                                selected = if (profile.artworkModeOverride) {
+                                    profile.artworkMode == mode
+                                } else {
+                                    appArtworkMode == mode
+                                },
+                                onClick = {
+                                    profile = profile.copy(artworkModeOverride = true, artworkMode = mode)
+                                },
+                            )
+                            Text(
+                                text = artworkModeLabel(mode),
+                                modifier = Modifier.weight(1f),
+                                style = MaterialTheme.typography.bodyMedium,
+                            )
                         }
                     }
                     PlaylistSettingToggle(

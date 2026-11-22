@@ -3851,7 +3851,12 @@ object AppSettings {
             if (visible) remove(action) else add(action)
         }
         hiddenPlayerDetailsActions.value = hidden
-        prefs.edit().putStringSet(KEY_HIDDEN_PLAYER_DETAILS_ACTIONS, hidden.map { it.name }.toSet()).apply()
+        prefs.edit().apply {
+            putStringSet(KEY_HIDDEN_PLAYER_DETAILS_ACTIONS, hidden.map { it.name }.toSet())
+            if (action == PlayerDetailsAction.OPEN_FOLDER) {
+                putBoolean(KEY_OPEN_FOLDER_VISIBILITY_CONFIGURED, true)
+            }
+        }.apply()
     }
 
     fun setPlayerDetailsActionOrder(actions: List<PlayerDetailsAction>) {
@@ -3870,18 +3875,40 @@ object AppSettings {
         setPlayerDetailsActionOrder(ordered)
     }
 
-    private fun readHiddenPlayerDetailsActions(): Set<PlayerDetailsAction> =
-        prefs.getStringSet(KEY_HIDDEN_PLAYER_DETAILS_ACTIONS, emptySet())
+    private fun readHiddenPlayerDetailsActions(): Set<PlayerDetailsAction> {
+        val saved = prefs.getStringSet(KEY_HIDDEN_PLAYER_DETAILS_ACTIONS, emptySet())
             .orEmpty()
             .mapNotNull { name -> PlayerDetailsAction.entries.firstOrNull { it.name == name } }
             .toSet()
+        // The Open Folder action was added after the action-visibility setting
+        // shipped. Hide it for existing installs as well as fresh ones, while
+        // preserving a listener's explicit choice once they change its switch.
+        return if (prefs.getBoolean(KEY_OPEN_FOLDER_VISIBILITY_CONFIGURED, false)) {
+            saved
+        } else {
+            saved + PlayerDetailsAction.OPEN_FOLDER
+        }
+    }
 
-    private fun readPlayerDetailsActionOrder(): List<PlayerDetailsAction> =
-        (prefs.getString(KEY_PLAYER_DETAILS_ACTION_ORDER, null)
+    private fun readPlayerDetailsActionOrder(): List<PlayerDetailsAction> {
+        val saved = prefs.getString(KEY_PLAYER_DETAILS_ACTION_ORDER, null)
             ?.split(",")
             ?.mapNotNull { name -> PlayerDetailsAction.entries.firstOrNull { it.name == name } }
             ?.distinct()
-            .orEmpty() + DEFAULT_PLAYER_DETAILS_ACTION_ORDER).distinct()
+            .orEmpty()
+        val completed = (saved + DEFAULT_PLAYER_DETAILS_ACTION_ORDER).distinct().toMutableList()
+        // Older saved orders predate Open Folder. Insert this new action at its
+        // intended default position instead of appending it after every action.
+        if (PlayerDetailsAction.OPEN_FOLDER !in saved) {
+            completed.remove(PlayerDetailsAction.OPEN_FOLDER)
+            val addToPlaylistIndex = completed.indexOf(PlayerDetailsAction.ADD_TO_PLAYLIST)
+            completed.add(
+                if (addToPlaylistIndex >= 0) addToPlaylistIndex else completed.size,
+                PlayerDetailsAction.OPEN_FOLDER,
+            )
+        }
+        return completed
+    }
 
     fun setAudioCutterEnabled(value: Boolean) {
         audioCutterEnabled.value = value
@@ -5913,6 +5940,7 @@ object AppSettings {
     private const val KEY_IN_APP_VIDEO_PLAYBACK_ENABLED = "in_app_video_playback_enabled"
     private const val KEY_HIDDEN_PLAYER_DETAILS_ACTIONS = "hidden_player_details_actions"
     private const val KEY_PLAYER_DETAILS_ACTION_ORDER = "player_details_action_order"
+    private const val KEY_OPEN_FOLDER_VISIBILITY_CONFIGURED = "open_folder_visibility_configured"
     private const val KEY_AUDIO_CUTTER_ENABLED = "audio_cutter_enabled"
     private const val KEY_ARTWORK_BACKDROP_BLUR_DP = "artwork_backdrop_blur_dp"
     private const val KEY_PERSISTENT_LOCAL_ARTWORK = "persistent_local_artwork"

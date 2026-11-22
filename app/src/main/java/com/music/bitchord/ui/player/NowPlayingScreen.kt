@@ -1135,9 +1135,12 @@ fun NowPlayingScreen(
     }
     val retroPlayerMode by AppSettings.retroPlayerMode.collectAsStateWithLifecycle()
     val retroPlayerBackground by AppSettings.retroPlayerBackground.collectAsStateWithLifecycle()
-    val fullBleedArt = effectivePlayerArtworkMode.usesFullScreenArtwork && !retroPlayerMode
-    val largerFullBleedArtwork = effectivePlayerArtworkMode == PlayerArtworkMode.FULL_SCREEN_LARGER && !retroPlayerMode
-    val aurisFullBleedArtwork = effectivePlayerArtworkMode == PlayerArtworkMode.AURIS_FULL_SCREEN && !retroPlayerMode
+    // Artwork geometry is its own setting. The retro layout changes the
+    // controls and the backdrop treatment; it must not silently turn a chosen
+    // full-screen, larger full-screen, or Auris artwork mode back into a tile.
+    val fullBleedArt = effectivePlayerArtworkMode.usesFullScreenArtwork
+    val largerFullBleedArtwork = effectivePlayerArtworkMode == PlayerArtworkMode.FULL_SCREEN_LARGER
+    val aurisFullBleedArtwork = effectivePlayerArtworkMode == PlayerArtworkMode.AURIS_FULL_SCREEN
     val preserveSleeveArtworkShape = effectivePlayerArtworkMode == PlayerArtworkMode.STANDARD_ORIGINAL_ASPECT
     val preserveTransitionArtworkProportions =
         preserveArtworkShapeInCompactTransitions && preserveSleeveArtworkShape

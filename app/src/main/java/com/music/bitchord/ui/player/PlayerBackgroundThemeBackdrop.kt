@@ -83,9 +83,7 @@ fun PlayerBackgroundThemeBackdrop(
     }
     val artworkBlurDp by AppSettings.artworkBackdropBlurDp.collectAsStateWithLifecycle()
     val fullBleedBlurDp by AppSettings.fullBleedArtworkBottomBlurStrengthDp.collectAsStateWithLifecycle()
-    val activeBlurDp = if (
-        effectivePlayerArtworkMode == PlayerArtworkMode.AURIS_FULL_SCREEN && !retroPlayerMode
-    ) {
+    val activeBlurDp = if (effectivePlayerArtworkMode == PlayerArtworkMode.AURIS_FULL_SCREEN) {
         fullBleedBlurDp.toFloat()
     } else {
         artworkBlurDp
@@ -180,9 +178,7 @@ fun rememberPlayerBackdropSurfaceModifier(
     val fullBleedBlurDp by AppSettings.fullBleedArtworkBottomBlurStrengthDp.collectAsStateWithLifecycle()
     val reduceDynamicBlur by AppSettings.reduceDynamicBlur.collectAsStateWithLifecycle()
     val reduceAnimation by AppSettings.reduceAnimation.collectAsStateWithLifecycle()
-    val activeBlurDp = if (
-        effectivePlayerArtworkMode == PlayerArtworkMode.AURIS_FULL_SCREEN && !retroPlayerMode
-    ) {
+    val activeBlurDp = if (effectivePlayerArtworkMode == PlayerArtworkMode.AURIS_FULL_SCREEN) {
         fullBleedBlurDp.toFloat()
     } else {
         artworkBlurDp
