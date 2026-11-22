@@ -1529,6 +1529,8 @@
     <string name="resampler_cutoff_value">%1$d Hz</string>
     <string name="lyrics_display">Lyrics display</string>
     <string name="lyrics_font_size">Lyrics text size</string>
+    <string name="smooth_character_lyrics">Smooth character-by-character lyrics</string>
+    <string name="smooth_character_lyrics_subtitle">Use sub-millisecond frame interpolation for word-synced lyric highlighting. On by default.</string>
     <string name="lyrics_font_size_value">%1$d%%</string>
     <string name="lyrics_text_alignment">Lyrics alignment</string>
     <string name="lyrics_align_left">Left</string>
@@ -2051,6 +2053,10 @@
     <string name="player_font_size_value">%1$d sp</string>
     <string name="player_play_pause_icon_size">Play/pause icon size</string>
     <string name="player_play_pause_icon_size_subtitle">Adjust the central play and pause icon size on the player screen.</string>
+    <string name="player_play_pause_animation">Play/pause animation</string>
+    <string name="player_play_pause_animation_subtitle">Use a BitChord-style scale and fade when playback state changes. On by default.</string>
+    <string name="player_skip_animations">Previous/next animations</string>
+    <string name="player_skip_animations_subtitle">Slide the previous and next icons when tapped. Off by default.</string>
     <string name="player_icon_size_value">%1$d dp</string>
     <string name="player_queue_rainbow_backdrop">Gradient the player background from queue artwork</string>
     <string name="player_queue_rainbow_backdrop_subtitle">Blend up to 8 distinct album-cover colours in queue order into the player screen background only. This setting changes the player screen background colour; the displayed album art stays the same. Off by default.</string>

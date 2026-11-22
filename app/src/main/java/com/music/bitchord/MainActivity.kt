@@ -982,6 +982,11 @@ private fun BitChordApp(
         pendingPlayerQuickAction = PlayerQuickAction.DETAILS
         songActions = song
     }
+    val openQueuedSongDetails: (Song) -> Unit = { song ->
+        menuFromPlayer = true
+        pendingPlayerQuickAction = PlayerQuickAction.DETAILS
+        songActions = song
+    }
     // Whether the player's album/artist lookup (below, for the current track)
     // is still in flight — read by the long-press sheet so it can show a
     // loading row instead of the two just being absent while it waits.
@@ -2784,6 +2789,7 @@ private fun BitChordApp(
                 menuFromPlayer = true
                 songActions = song
             },
+            onOpenQueuedSongDetails = openQueuedSongDetails,
             onQuickAddToPlaylist = {
                 if (signedIn) {
                     playlistTarget = song

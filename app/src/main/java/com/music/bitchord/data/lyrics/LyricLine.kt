@@ -112,8 +112,12 @@ data class LyricLine(
      * words is credited to the gap between them: it fills as the singer moves
      * on rather than jumping ahead of the next word's first letter.
      */
-    fun revealedChars(positionMs: Long): Float {
-        if (words.isEmpty()) return if (positionMs >= timeMs) text.length.toFloat() else 0f
+    fun revealedChars(positionMs: Long): Float = revealedChars(positionMs.toDouble())
+
+    /** Same sweep evaluated with the sub-millisecond player frame clock. */
+    fun revealedChars(positionMs: Double): Float {
+        if (!positionMs.isFinite()) return 0f
+        if (words.isEmpty()) return if (positionMs >= timeMs.toDouble()) text.length.toFloat() else 0f
 
         val annotations = LyricsFurigana.annotations(text)
         val surface = text.rubySurfaceText(annotations)
@@ -163,23 +167,23 @@ data class LyricLine(
             }
         }
 
-        if (positionMs >= endMs) return text.length.toFloat()
+        if (positionMs >= endMs.toDouble()) return text.length.toFloat()
         if (matched.isEmpty()) return 0f
 
         var previous: MatchedLyricWord? = null
         matched.forEach { current ->
-            if (positionMs < current.startMs) {
+            if (positionMs < current.startMs.toDouble()) {
                 val prior = previous ?: return sourceOffsetForRubySurface(text, annotations, 0f)
                 val span = (current.startMs.toDouble() - prior.endMs.toDouble()).coerceAtLeast(1.0)
-                val through = ((positionMs.toDouble() - prior.endMs.toDouble()) / span)
+                val through = ((positionMs - prior.endMs.toDouble()) / span)
                     .takeIf(Double::isFinite)?.toFloat()?.coerceIn(0f, 1f) ?: 0f
                 val gapStart = prior.endChar.toFloat()
                 val gapEnd = maxOf(gapStart, current.startChar.toFloat())
                 return sourceOffsetForRubySurface(text, annotations, gapStart + through * (gapEnd - gapStart))
             }
-            if (positionMs < current.endMs) {
+            if (positionMs < current.endMs.toDouble()) {
                 val span = (current.endMs.toDouble() - current.startMs.toDouble()).coerceAtLeast(1.0)
-                val through = ((positionMs.toDouble() - current.startMs.toDouble()) / span)
+                val through = ((positionMs - current.startMs.toDouble()) / span)
                     .takeIf(Double::isFinite)?.toFloat()?.coerceIn(0f, 1f) ?: 0f
                 val reveal = current.startChar + through * (current.endChar - current.startChar)
                 return sourceOffsetForRubySurface(text, annotations, reveal)
@@ -293,12 +297,16 @@ data class LyricLine(
      * Zero between words and after the last one, which is what keeps the
      * pauses dark and costs nothing to draw.
      */
-    fun glowIntensity(positionMs: Long): Float {
-        val word = words.firstOrNull { positionMs < it.endMs } ?: return 0f
-        if (positionMs < word.startMs) return 0f
+    fun glowIntensity(positionMs: Long): Float = glowIntensity(positionMs.toDouble())
+
+    /** Evaluates the current-word bloom against a high-precision frame position. */
+    fun glowIntensity(positionMs: Double): Float {
+        if (!positionMs.isFinite()) return 0f
+        val word = words.firstOrNull { positionMs < it.endMs.toDouble() } ?: return 0f
+        if (positionMs < word.startMs.toDouble()) return 0f
 
         val held = (word.endMs.toDouble() - word.startMs.toDouble()).coerceAtLeast(1.0)
-        val through = ((positionMs.toDouble() - word.startMs.toDouble()) / held)
+        val through = ((positionMs - word.startMs.toDouble()) / held)
             .takeIf(Double::isFinite)?.toFloat()?.coerceIn(0f, 1f) ?: 0f
         val envelope = when {
             through < GLOW_ATTACK -> through / GLOW_ATTACK

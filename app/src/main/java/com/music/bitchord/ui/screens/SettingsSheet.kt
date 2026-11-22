@@ -1950,6 +1950,7 @@ fun SettingsScreen(
     val lyricsFontScale by AppSettings.lyricsFontScale.collectAsStateWithLifecycle()
     val lyricsTextAlignment by AppSettings.lyricsTextAlignment.collectAsStateWithLifecycle()
     val showLyricsFurigana by AppSettings.showLyricsFurigana.collectAsStateWithLifecycle()
+    val smoothCharacterLyrics by AppSettings.smoothCharacterLyrics.collectAsStateWithLifecycle()
     val autoFitOneLineLyrics by AppSettings.autoFitOneLineLyrics.collectAsStateWithLifecycle()
     val compactLyricsSearchSources by AppSettings.compactLyricsSearchSources.collectAsStateWithLifecycle()
     val preferEmbeddedLocalLyrics by AppSettings.preferEmbeddedLocalLyrics.collectAsStateWithLifecycle()
@@ -2066,6 +2067,8 @@ fun SettingsScreen(
     val playerArtistFontSizeSp by AppSettings.playerArtistFontSizeSp.collectAsStateWithLifecycle()
     val playerPlayPauseIconSizeDp by AppSettings.playerPlayPauseIconSizeDp.collectAsStateWithLifecycle()
     val playerPlayPauseCornerRadiusPercent by AppSettings.playerPlayPauseCornerRadiusPercent.collectAsStateWithLifecycle()
+    val playerPlayPauseAnimation by AppSettings.playerPlayPauseAnimation.collectAsStateWithLifecycle()
+    val playerSkipAnimations by AppSettings.playerSkipAnimations.collectAsStateWithLifecycle()
     val playerTransportButtonSpacingDp by AppSettings.playerTransportButtonSpacingDp.collectAsStateWithLifecycle()
     val playerActionButtonSpacingDp by AppSettings.playerActionButtonSpacingDp.collectAsStateWithLifecycle()
     val playerQueueRainbowBackdrop by AppSettings.playerQueueRainbowBackdrop.collectAsStateWithLifecycle()
@@ -2586,6 +2589,7 @@ fun SettingsScreen(
             },
         ),
         SettingsSearchEntry(stringResource(R.string.lyrics_furigana), stringResource(R.string.lyrics_furigana_subtitle), listOf("lyrics", "furigana", "ruby", "ふりがな", "ルビ"), showLyricsFurigana) { AppSettings.setShowLyricsFurigana(!showLyricsFurigana) },
+        SettingsSearchEntry(stringResource(R.string.smooth_character_lyrics), stringResource(R.string.smooth_character_lyrics_subtitle), listOf("lyrics", "character", "syllable", "smooth", "歌詞", "一文字", "文字単位", "滑らか"), smoothCharacterLyrics) { AppSettings.setSmoothCharacterLyrics(!smoothCharacterLyrics) },
         SettingsSearchEntry(stringResource(R.string.lyrics_auto_fit), stringResource(R.string.lyrics_auto_fit_subtitle), listOf("lyrics", "one line", "fit", "歌詞", "一行", "文字サイズ"), autoFitOneLineLyrics) { AppSettings.setAutoFitOneLineLyrics(!autoFitOneLineLyrics) },
         SettingsSearchEntry(stringResource(R.string.lyrics_translation_plamo), stringResource(R.string.lyrics_translation_plamo_subtitle), stringResource(R.string.lyrics_translation_plamo_search_keywords).split(' '), translateLyricsWithPlamo) { AppSettings.setTranslateLyricsWithPlamo(!translateLyricsWithPlamo) },
         SettingsSearchEntry(stringResource(R.string.hide_lyrics_translation_progress), stringResource(R.string.hide_lyrics_translation_progress_subtitle), listOf("lyrics", "translation", "progress", "status", "歌詞", "翻訳", "進捗", "翻訳中"), hideLyricsTranslationProgress) { AppSettings.setHideLyricsTranslationProgress(!hideLyricsTranslationProgress) },
@@ -2632,6 +2636,8 @@ fun SettingsScreen(
         SettingsSearchEntry(stringResource(R.string.reduce_animation), stringResource(R.string.reduce_animation_subtitle), listOf("animation", "reduce", "アニメーション"), reduceAnimation) { AppSettings.setReduceAnimation(!reduceAnimation) },
         SettingsSearchEntry(stringResource(R.string.player_artwork_transition), stringResource(R.string.player_artwork_transition_subtitle), listOf("player", "artwork", "cover", "lyrics", "animation", "transition", "プレイヤー", "アート", "歌詞", "遷移", "アニメーション"), playerArtworkTransition) { AppSettings.setPlayerArtworkTransition(!playerArtworkTransition) },
         SettingsSearchEntry(stringResource(R.string.walkman_player_style), stringResource(R.string.walkman_player_style_subtitle), listOf("player", "walkman", "sony", "controls", "ウォークマン", "ソニー", "プレイヤー", "再生ボタン"), walkmanPlayerStyle) { AppSettings.setWalkmanPlayerStyle(!walkmanPlayerStyle) },
+        SettingsSearchEntry(stringResource(R.string.player_play_pause_animation), stringResource(R.string.player_play_pause_animation_subtitle), listOf("player", "play", "pause", "animation", "motion", "再生", "一時停止", "アニメーション"), playerPlayPauseAnimation) { AppSettings.setPlayerPlayPauseAnimation(!playerPlayPauseAnimation) },
+        SettingsSearchEntry(stringResource(R.string.player_skip_animations), stringResource(R.string.player_skip_animations_subtitle), listOf("player", "next", "previous", "skip", "animation", "motion", "次へ", "前へ", "アニメーション"), playerSkipAnimations) { AppSettings.setPlayerSkipAnimations(!playerSkipAnimations) },
         SettingsSearchEntry(stringResource(R.string.retro_player_mode), stringResource(R.string.retro_player_mode_subtitle), listOf("player", "retro", "classic", "remote", "レトロ", "プレーヤー", "リモコン"), retroPlayerMode) { AppSettings.setRetroPlayerMode(!retroPlayerMode) },
         SettingsSearchEntry(
             title = stringResource(R.string.pill_motion_style),
@@ -5612,6 +5618,22 @@ fun SettingsScreen(
             )
             RowDivider()
             SettingsRow(
+                icon = Icons.Rounded.PlayArrow,
+                title = stringResource(R.string.player_play_pause_animation),
+                subtitle = stringResource(R.string.player_play_pause_animation_subtitle),
+                trailing = { Switch(checked = playerPlayPauseAnimation, onCheckedChange = AppSettings::setPlayerPlayPauseAnimation) },
+                onClick = { AppSettings.setPlayerPlayPauseAnimation(!playerPlayPauseAnimation) },
+            )
+            RowDivider()
+            SettingsRow(
+                icon = Icons.Rounded.FastForward,
+                title = stringResource(R.string.player_skip_animations),
+                subtitle = stringResource(R.string.player_skip_animations_subtitle),
+                trailing = { Switch(checked = playerSkipAnimations, onCheckedChange = AppSettings::setPlayerSkipAnimations) },
+                onClick = { AppSettings.setPlayerSkipAnimations(!playerSkipAnimations) },
+            )
+            RowDivider()
+            SettingsRow(
                 icon = Icons.Rounded.Tune,
                 title = stringResource(R.string.player_side_control_size),
                 subtitle = stringResource(R.string.player_side_control_size_subtitle),
@@ -5952,6 +5974,14 @@ fun SettingsScreen(
                 subtitle = stringResource(R.string.lyrics_furigana_subtitle),
                 trailing = { Switch(checked = showLyricsFurigana, onCheckedChange = AppSettings::setShowLyricsFurigana) },
                 onClick = { AppSettings.setShowLyricsFurigana(!showLyricsFurigana) },
+            )
+            RowDivider()
+            SettingsRow(
+                icon = Icons.AutoMirrored.Rounded.Notes,
+                title = stringResource(R.string.smooth_character_lyrics),
+                subtitle = stringResource(R.string.smooth_character_lyrics_subtitle),
+                trailing = { Switch(checked = smoothCharacterLyrics, onCheckedChange = AppSettings::setSmoothCharacterLyrics) },
+                onClick = { AppSettings.setSmoothCharacterLyrics(!smoothCharacterLyrics) },
             )
             RowDivider()
             SettingsRow(

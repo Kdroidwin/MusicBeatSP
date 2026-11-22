@@ -787,6 +787,10 @@ object AppSettings {
     val playerPlayPauseIconSizeDp = MutableStateFlow(62f)
     /** Corner rounding of the central play/pause button; 100 keeps the original circle. */
     val playerPlayPauseCornerRadiusPercent = MutableStateFlow(100)
+    /** BitChord-style scale/fade handoff for the expanded player's play/pause glyph. */
+    val playerPlayPauseAnimation = MutableStateFlow(true)
+    /** BitChord-style conveyor motion for expanded-player previous/next controls. */
+    val playerSkipAnimations = MutableStateFlow(false)
     /** Extra spacing between player transport buttons, up to the available row width. */
     val playerTransportButtonSpacingDp = MutableStateFlow(0f)
     /** Extra spacing between the player action buttons below the volume row. */
@@ -1093,6 +1097,8 @@ object AppSettings {
     val lyricsFontScale = MutableStateFlow(1f)
     /** Shows Japanese readings written as `漢字((かんじ))` above their base text. */
     val showLyricsFurigana = MutableStateFlow(false)
+    /** Uses sub-millisecond frame-clock interpolation for word/character lyric sweeps. */
+    val smoothCharacterLyrics = MutableStateFlow(true)
     /** Shrinks one-line lyric text to fit the available width without truncation. */
     val autoFitOneLineLyrics = MutableStateFlow(false)
     /** Shows compact source chips and caps the lyric-search provider list at roughly half a screen. */
@@ -1934,6 +1940,8 @@ object AppSettings {
         playerArtistFontSizeSp.value = prefs.getFloat(KEY_PLAYER_ARTIST_FONT_SIZE_SP, 20f).coerceIn(12f, 36f)
         playerPlayPauseIconSizeDp.value = prefs.getFloat(KEY_PLAYER_PLAY_PAUSE_ICON_SIZE_DP, 62f).coerceIn(40f, 78f)
         playerPlayPauseCornerRadiusPercent.value = prefs.getInt(KEY_PLAYER_PLAY_PAUSE_CORNER_RADIUS_PERCENT, 100).coerceIn(0, 100)
+        playerPlayPauseAnimation.value = prefs.getBoolean(KEY_PLAYER_PLAY_PAUSE_ANIMATION, true)
+        playerSkipAnimations.value = prefs.getBoolean(KEY_PLAYER_SKIP_ANIMATIONS, false)
         playerTransportButtonSpacingDp.value = prefs.getFloat(KEY_PLAYER_TRANSPORT_BUTTON_SPACING_DP, 0f).coerceIn(0f, MAX_PLAYER_BUTTON_SPACING_DP)
         playerActionButtonSpacingDp.value = prefs.getFloat(KEY_PLAYER_ACTION_BUTTON_SPACING_DP, 0f).coerceIn(0f, MAX_PLAYER_BUTTON_SPACING_DP)
         playerQueueRainbowBackdrop.value = prefs.getBoolean(KEY_PLAYER_QUEUE_RAINBOW_BACKDROP, false)
@@ -2262,6 +2270,7 @@ object AppSettings {
         syncedLyrics.value = prefs.getBoolean(KEY_SYNCED_LYRICS, true)
         showLyricsSourceSwitcher.value = prefs.getBoolean(KEY_SHOW_LYRICS_SOURCE_SWITCHER, true)
         showLyricsFurigana.value = prefs.getBoolean(KEY_SHOW_LYRICS_FURIGANA, false)
+        smoothCharacterLyrics.value = prefs.getBoolean(KEY_SMOOTH_CHARACTER_LYRICS, true)
         autoFitOneLineLyrics.value = prefs.getBoolean(KEY_AUTO_FIT_ONE_LINE_LYRICS, false)
         compactLyricsSearchSources.value = prefs.getBoolean(KEY_COMPACT_LYRICS_SEARCH_SOURCES, true)
         prioritizeSyllableSync.value = prefs.getBoolean(KEY_PRIORITIZE_SYLLABLE_SYNC, false)
@@ -2942,6 +2951,16 @@ object AppSettings {
         val safe = value.coerceIn(0, 100)
         playerPlayPauseCornerRadiusPercent.value = safe
         prefs.edit().putInt(KEY_PLAYER_PLAY_PAUSE_CORNER_RADIUS_PERCENT, safe).apply()
+    }
+
+    fun setPlayerPlayPauseAnimation(value: Boolean) {
+        playerPlayPauseAnimation.value = value
+        prefs.edit().putBoolean(KEY_PLAYER_PLAY_PAUSE_ANIMATION, value).apply()
+    }
+
+    fun setPlayerSkipAnimations(value: Boolean) {
+        playerSkipAnimations.value = value
+        prefs.edit().putBoolean(KEY_PLAYER_SKIP_ANIMATIONS, value).apply()
     }
 
     fun setPlayerTransportButtonSpacingDp(value: Float) {
@@ -4384,6 +4403,11 @@ object AppSettings {
         prefs.edit().putBoolean(KEY_SHOW_LYRICS_FURIGANA, value).apply()
     }
 
+    fun setSmoothCharacterLyrics(value: Boolean) {
+        smoothCharacterLyrics.value = value
+        prefs.edit().putBoolean(KEY_SMOOTH_CHARACTER_LYRICS, value).apply()
+    }
+
     fun setAutoFitOneLineLyrics(value: Boolean) {
         autoFitOneLineLyrics.value = value
         prefs.edit().putBoolean(KEY_AUTO_FIT_ONE_LINE_LYRICS, value).apply()
@@ -5742,6 +5766,8 @@ object AppSettings {
     private const val KEY_PLAYER_ARTIST_FONT_SIZE_SP = "player_artist_font_size_sp"
     private const val KEY_PLAYER_PLAY_PAUSE_ICON_SIZE_DP = "player_play_pause_icon_size_dp"
     private const val KEY_PLAYER_PLAY_PAUSE_CORNER_RADIUS_PERCENT = "player_play_pause_corner_radius_percent"
+    private const val KEY_PLAYER_PLAY_PAUSE_ANIMATION = "player_play_pause_animation"
+    private const val KEY_PLAYER_SKIP_ANIMATIONS = "player_skip_animations"
     private const val KEY_PLAYER_TRANSPORT_BUTTON_SPACING_DP = "player_transport_button_spacing_dp"
     private const val KEY_PLAYER_ACTION_BUTTON_SPACING_DP = "player_action_button_spacing_dp"
     private const val KEY_PLAYER_QUEUE_RAINBOW_BACKDROP = "player_queue_rainbow_backdrop"
@@ -5975,6 +6001,7 @@ object AppSettings {
     private const val KEY_SYNCED_LYRICS = "synced_lyrics"
     private const val KEY_SHOW_LYRICS_SOURCE_SWITCHER = "show_lyrics_source_switcher"
     private const val KEY_SHOW_LYRICS_FURIGANA = "show_lyrics_furigana"
+    private const val KEY_SMOOTH_CHARACTER_LYRICS = "smooth_character_lyrics"
     private const val KEY_AUTO_FIT_ONE_LINE_LYRICS = "auto_fit_one_line_lyrics"
     private const val KEY_COMPACT_LYRICS_SEARCH_SOURCES = "compact_lyrics_search_sources"
     private const val KEY_LYRICS_SOURCES = "lyrics_sources"

@@ -149,6 +149,12 @@ private fun LegacySavedQueuesDialog(
     var name by remember { mutableStateOf("") }
     var saveError by remember { mutableStateOf(false) }
     var deleting by remember { mutableStateOf<SavedQueue?>(null) }
+    val saveCurrentQueue = {
+        if (onSave(name, currentSongs, currentIndex, positionMs)) {
+            name = ""
+            saveError = false
+        } else saveError = true
+    }
     // Match the player-details sheet: the enabled setting uses the same
     // BitChord artwork palette, while disabled returns to the app surface.
     val foreground = if (useFrostedGlass) artworkPalette.onBackground else MaterialTheme.colorScheme.onSurface
@@ -219,6 +225,18 @@ private fun LegacySavedQueuesDialog(
                     label = { Text(stringResource(R.string.queue_name)) },
                     singleLine = true,
                     modifier = Modifier.fillMaxWidth(),
+                    trailingIcon = {
+                        IconButton(
+                            enabled = name.isNotBlank() && currentSongs.isNotEmpty(),
+                            onClick = saveCurrentQueue,
+                        ) {
+                            Icon(
+                                imageVector = Icons.Rounded.Save,
+                                contentDescription = stringResource(R.string.save),
+                                tint = if (name.isNotBlank() && currentSongs.isNotEmpty()) accent else secondary.copy(alpha = 0.5f),
+                            )
+                        }
+                    },
                     colors = OutlinedTextFieldDefaults.colors(
                         focusedTextColor = foreground,
                         unfocusedTextColor = foreground,
@@ -230,20 +248,6 @@ private fun LegacySavedQueuesDialog(
                     ),
                 )
                 Spacer(Modifier.height(6.dp))
-                TextButton(
-                    enabled = name.isNotBlank() && currentSongs.isNotEmpty(),
-                    onClick = {
-                        if (onSave(name, currentSongs, currentIndex, positionMs)) {
-                            name = ""
-                            saveError = false
-                        } else saveError = true
-                    },
-                ) {
-                    Text(
-                        stringResource(R.string.save_current_queue),
-                        color = accent,
-                    )
-                }
                 if (saveError) {
                     Text(
                         text = stringResource(
@@ -298,6 +302,17 @@ private fun LegacySavedQueuesDialog(
                         }
                     }
                 }
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.End,
+                ) {
+                    // Keep the footer's original touch-target height so the
+                    // bottom of the saved-queue list stays above the system
+                    // navigation area, while honoring the request to hide its label.
+                    TextButton(onClick = onDismiss) {
+                        Text(stringResource(R.string.done), color = Color.Transparent)
+                    }
+                }
             }
         }
     }
@@ -341,6 +356,12 @@ private fun ModernSavedQueuesDialog(
     var name by remember { mutableStateOf("") }
     var saveError by remember { mutableStateOf(false) }
     var deleting by remember { mutableStateOf<SavedQueue?>(null) }
+    val saveCurrentQueue = {
+        if (onSave(name, currentSongs, currentIndex, positionMs)) {
+            name = ""
+            saveError = false
+        } else saveError = true
+    }
     val foreground = if (useFrostedGlass) artworkPalette.onBackground else MaterialTheme.colorScheme.onSurface
     val secondary = if (useFrostedGlass) artworkPalette.onBackgroundVariant else MaterialTheme.colorScheme.onSurfaceVariant
     val accent = MaterialTheme.colorScheme.primary
@@ -420,6 +441,18 @@ private fun ModernSavedQueuesDialog(
                         placeholder = { Text(stringResource(R.string.queue_name_placeholder)) },
                         singleLine = true,
                         modifier = Modifier.weight(1f),
+                        trailingIcon = {
+                            IconButton(
+                                enabled = name.isNotBlank() && currentSongs.isNotEmpty(),
+                                onClick = saveCurrentQueue,
+                            ) {
+                                Icon(
+                                    imageVector = Icons.Rounded.Save,
+                                    contentDescription = stringResource(R.string.save),
+                                    tint = if (name.isNotBlank() && currentSongs.isNotEmpty()) accent else secondary.copy(alpha = 0.5f),
+                                )
+                            }
+                        },
                         shape = RoundedCornerShape(12.dp),
                         colors = OutlinedTextFieldDefaults.colors(
                             focusedTextColor = foreground,
@@ -431,22 +464,6 @@ private fun ModernSavedQueuesDialog(
                             unfocusedBorderColor = foreground.copy(alpha = 0.16f),
                         ),
                     )
-                    Spacer(Modifier.width(8.dp))
-                    IconButton(
-                        enabled = name.isNotBlank() && currentSongs.isNotEmpty(),
-                        onClick = {
-                            if (onSave(name, currentSongs, currentIndex, positionMs)) {
-                                name = ""
-                                saveError = false
-                            } else saveError = true
-                        },
-                    ) {
-                        Icon(
-                            imageVector = Icons.Rounded.Save,
-                            contentDescription = stringResource(R.string.save),
-                            tint = if (name.isNotBlank() && currentSongs.isNotEmpty()) accent else secondary.copy(alpha = 0.5f),
-                        )
-                    }
                 }
                 if (saveError) {
                     Text(
@@ -542,7 +559,16 @@ private fun ModernSavedQueuesDialog(
                         }
                     }
                 }
-
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.End,
+                ) {
+                    // Retain the Done footer's measured slot without showing
+                    // its text; this keeps saved queues clear of system bars.
+                    TextButton(onClick = onDismiss) {
+                        Text(stringResource(R.string.done), color = Color.Transparent)
+                    }
+                }
             }
         }
     }

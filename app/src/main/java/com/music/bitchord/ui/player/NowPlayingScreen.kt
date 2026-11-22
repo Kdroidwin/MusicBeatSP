@@ -26,6 +26,10 @@ import androidx.compose.animation.AnimatedContent
 import androidx.compose.animation.Crossfade
 import androidx.compose.animation.fadeIn
 import androidx.compose.animation.fadeOut
+import androidx.compose.animation.scaleIn
+import androidx.compose.animation.scaleOut
+import androidx.compose.animation.slideInHorizontally
+import androidx.compose.animation.slideOutHorizontally
 import androidx.compose.animation.slideInVertically
 import androidx.compose.animation.slideOutVertically
 import androidx.compose.animation.togetherWith
@@ -48,6 +52,7 @@ import androidx.compose.ui.draw.drawBehind
 import androidx.compose.foundation.border
 import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.combinedClickable
 import androidx.compose.foundation.gestures.awaitEachGesture
 import androidx.compose.foundation.gestures.awaitFirstDown
 import androidx.compose.foundation.gestures.awaitVerticalTouchSlopOrCancellation
@@ -158,13 +163,14 @@ import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.MutableState
 import androidx.compose.runtime.SideEffect
 import androidx.compose.runtime.MutableFloatState
+import androidx.compose.runtime.MutableDoubleState
 import androidx.compose.runtime.MutableLongState
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.derivedStateOf
+import androidx.compose.runtime.mutableDoubleStateOf
 import androidx.compose.runtime.mutableFloatStateOf
 import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.mutableLongStateOf
-import androidx.compose.runtime.withFrameMillis
 import androidx.compose.runtime.withFrameNanos
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
@@ -986,6 +992,7 @@ fun NowPlayingScreen(
     onMoveInQueue: (Int, Int) -> Unit,
     onClearQueue: () -> Unit,
     onOpenMenu: () -> Unit,
+    onOpenQueuedSongDetails: (Song) -> Unit,
     onQuickAddToPlaylist: () -> Unit,
     onQuickPlaybackTuning: () -> Unit,
     onQuickMenuAction: (PlayerQuickAction) -> Unit,
@@ -1268,6 +1275,8 @@ fun NowPlayingScreen(
     val playerArtistFontSizeSp by AppSettings.playerArtistFontSizeSp.collectAsStateWithLifecycle()
     val playerPlayPauseIconSizeDp by AppSettings.playerPlayPauseIconSizeDp.collectAsStateWithLifecycle()
     val playerPlayPauseCornerRadiusPercent by AppSettings.playerPlayPauseCornerRadiusPercent.collectAsStateWithLifecycle()
+    val playerPlayPauseAnimationEnabled by AppSettings.playerPlayPauseAnimation.collectAsStateWithLifecycle()
+    val playerSkipAnimationsEnabled by AppSettings.playerSkipAnimations.collectAsStateWithLifecycle()
     val playerTransportButtonSpacingDp by AppSettings.playerTransportButtonSpacingDp.collectAsStateWithLifecycle()
     val playerActionButtonSpacingDp by AppSettings.playerActionButtonSpacingDp.collectAsStateWithLifecycle()
     val playerSideControlScale by AppSettings.playerSideControlScale.collectAsStateWithLifecycle()
@@ -1305,6 +1314,8 @@ fun NowPlayingScreen(
     val lyricsReplaceArtworkOnly by AppSettings.lyricsReplaceArtworkOnly.collectAsStateWithLifecycle()
     val hidePlayerHeaderDuringLyrics by AppSettings.hidePlayerHeaderDuringLyrics.collectAsStateWithLifecycle()
     val reducePlayerAnimations by AppSettings.reduceAnimation.collectAsStateWithLifecycle()
+    val animatePlayerPlayPause = playerPlayPauseAnimationEnabled && !reducePlayerAnimations
+    val animatePlayerSkip = playerSkipAnimationsEnabled && !reducePlayerAnimations
     val frostedQueueManager by AppSettings.frostedQueueManager.collectAsStateWithLifecycle()
     val playerPopupsUseArtworkColor by AppSettings.playerPopupsUseArtworkColor.collectAsStateWithLifecycle()
     val hidePlayerPopupHandles by AppSettings.hidePlayerPopupHandles.collectAsStateWithLifecycle()
@@ -3511,6 +3522,7 @@ fun NowPlayingScreen(
                             onMove = onMoveInQueue,
                             onClear = onClearQueue,
                             onManageQueues = { savedQueueManagerOpen = true },
+                            onOpenSongDetails = onOpenQueuedSongDetails,
                             modifier = Modifier.weight(1f),
                         )
                     }
@@ -3869,6 +3881,7 @@ fun NowPlayingScreen(
                     enabled = hasPrevious || positionMs > BACK_RESTARTS_AFTER_MS,
                     haptic = Haptic.SkipPrevious,
                     outlined = walkmanControlsActive,
+                    skipAnimation = animatePlayerSkip,
                 )
                 if (transportLeftAction == TransportSideAction.NONE && seekButtonsVisible && seekButtonsInsideTrackControls) {
                     SeekTransportGlyph(
@@ -3916,6 +3929,7 @@ fun NowPlayingScreen(
                         haptic = if (isPlaying) Haptic.Pause else Haptic.Resume,
                         outlined = walkmanControlsActive,
                         cornerRadiusPercent = playerPlayPauseCornerRadiusPercent,
+                        playPauseAnimation = animatePlayerPlayPause,
                     )
                 }
                 if (transportRightAction == TransportSideAction.NONE && seekButtonsVisible && seekButtonsInsideTrackControls) {
@@ -3939,6 +3953,7 @@ fun NowPlayingScreen(
                     enabled = hasNext,
                     haptic = Haptic.SkipNext,
                     outlined = walkmanControlsActive,
+                    skipAnimation = animatePlayerSkip,
                 )
                 if (walkmanControlsActive && PlayerControl.REPEAT in visiblePlayerControls &&
                     transportLeftAction != TransportSideAction.REPEAT &&
@@ -4260,8 +4275,9 @@ private suspend fun AwaitPointerEventScope.dragQueueIn(
  * whole line would recompose sixty times a second.
  */
 @Composable
-private fun rememberLyricClock(positionMs: Long, isPlaying: Boolean): MutableLongState {
-    val clock = remember { mutableLongStateOf(positionMs) }
+private fun rememberLyricClock(positionMs: Long, isPlaying: Boolean): MutableDoubleState {
+    val clock = remember { mutableDoubleStateOf(positionMs.toDouble()) }
+    val smoothCharacterLyrics by AppSettings.smoothCharacterLyrics.collectAsStateWithLifecycle()
     // Gated on the app being on screen. The loop asks for a frame, writes a
     // value that invalidates a drawing, and is handed the next frame for it —
     // which is a request to render continuously for as long as it runs. That is
@@ -4272,13 +4288,14 @@ private fun rememberLyricClock(positionMs: Long, isPlaying: Boolean): MutableLon
     // restarts the effect and the clock is set from the player's own position
     // before the first frame is asked for.
     val foreground = rememberIsForeground()
-    LaunchedEffect(positionMs, isPlaying, foreground) {
-        clock.longValue = positionMs
+    LaunchedEffect(positionMs, isPlaying, foreground, smoothCharacterLyrics) {
+        clock.doubleValue = positionMs.toDouble()
         if (!isPlaying || !foreground) return@LaunchedEffect
-        var previousFrame = withFrameMillis { it }
+        var previousFrame = withFrameNanos { it }
         while (true) {
-            withFrameMillis { frame ->
-                clock.longValue += frame - previousFrame
+            withFrameNanos { frame ->
+                val elapsedMs = (frame - previousFrame).coerceAtLeast(0L) / 1_000_000.0
+                clock.doubleValue += if (smoothCharacterLyrics) elapsedMs else elapsedMs.toLong().toDouble()
                 previousFrame = frame
             }
         }
@@ -4308,7 +4325,7 @@ private fun rememberLyricClock(positionMs: Long, isPlaying: Boolean): MutableLon
 @Composable
 private fun SweptLyricLine(
     line: LyricLine,
-    clock: MutableLongState,
+    clock: MutableDoubleState,
     style: TextStyle,
     dimAlpha: Float,
     modifier: Modifier = Modifier,
@@ -4347,15 +4364,15 @@ private fun SweptLyricLine(
     val room = if (glowRoom > 0.dp) Modifier.padding(glowRoom) else Modifier
 
     val sweep = Modifier.drawWithContent {
-        val position = clock.longValue
+        val position = clock.doubleValue
         when {
             // Sung and done with: all of it is lit. Checked first so the lines
             // above and below the playing one — which are in this same state
             // for minutes at a time — cost a comparison per frame rather than
             // a walk of their words.
-            position >= line.endMs -> drawContent()
+            position >= line.endMs.toDouble() -> drawContent()
             // Not started: nothing lit, the dim copy is the whole of it.
-            position <= line.timeMs -> Unit
+            position <= line.timeMs.toDouble() -> Unit
             else -> layout?.let {
                 // Word timings can come from remote karaoke sources with
                 // offsets that are not safe to use directly as Compose text
@@ -4432,7 +4449,7 @@ private fun SweptLyricLine(
                     // intensity changes every frame, and this way only the
                     // layer's alpha is recomputed, not the line.
                     .graphicsLayer {
-                        val intensity = runCatching { line.glowIntensity(clock.longValue) }
+                        val intensity = runCatching { line.glowIntensity(clock.doubleValue) }
                             .getOrDefault(0f).takeIf(Float::isFinite)?.coerceIn(0f, 1f) ?: 0f
                         alpha = (glowAlpha * intensity).coerceIn(0f, 1f)
                     }
@@ -4449,7 +4466,7 @@ private fun SweptLyricLine(
                         // exists for the line being sung, so it is one line's
                         // worth of arithmetic, not the whole panel's.
                         val measured = layout ?: return@drawWithContent
-                        val position = clock.longValue
+                        val position = clock.doubleValue
                         runCatching {
                             glowAt(
                                 layout = measured,
@@ -4950,7 +4967,7 @@ private fun LyricsPanel(
     // Which line is playing right now: the last one whose stamp has passed.
     val activeLine by remember(lines, isSynced) {
         derivedStateOf {
-            if (!isSynced) -1 else lines.indexOfLast { it.timeMs <= clock.longValue }
+            if (!isSynced) -1 else lines.indexOfLast { it.timeMs.toDouble() <= clock.doubleValue }
         }
     }
     val alsoActive by remember(lines, isSynced) {
@@ -4958,7 +4975,7 @@ private fun LyricsPanel(
             if (!isSynced) return@derivedStateOf -1
             val previous = activeLine - 1
             val line = lines.getOrNull(previous)
-            if (line != null && line.hasKnownEnd && clock.longValue < line.endMs) previous else -1
+            if (line != null && line.hasKnownEnd && clock.doubleValue < line.endMs.toDouble()) previous else -1
         }
     }
     val listState = rememberLazyListState()
@@ -5357,7 +5374,7 @@ private fun LyricsPanel(
 @Composable
 private fun PanelVoice(
     line: LyricLine,
-    clock: MutableLongState,
+    clock: MutableDoubleState,
     style: TextStyle,
     isActive: Boolean,
     browsing: Boolean,
@@ -5812,7 +5829,7 @@ private fun CurrentLyricLine(
     val clock = rememberLyricClock(positionMs, isPlaying)
 
     val index by remember(lines) {
-        derivedStateOf { lines.indexOfLast { it.timeMs <= clock.longValue } }
+        derivedStateOf { lines.indexOfLast { it.timeMs.toDouble() <= clock.doubleValue } }
     }
     val current = lines.getOrNull(index)?.takeIf(LyricsStripText::isLyricLine)
     val firstSung = remember(lines) { LyricsStripText.firstLyricIndex(lines) }
@@ -5857,7 +5874,7 @@ private fun CurrentLyricLine(
                     ?: (start + 4_000L)
                 val fade = ((end - start) * LYRIC_FADE_FRACTION)
                     .coerceIn(LYRIC_FADE_MIN_MS, LYRIC_FADE_MAX_MS)
-                val remaining = (end - clock.longValue).toFloat()
+                val remaining = (end.toDouble() - clock.doubleValue).toFloat()
                 alpha = 0.78f * (remaining / fade).coerceIn(0f, 1f)
             },
     ) {
@@ -6139,9 +6156,15 @@ private fun TransportGlyph(
     haptic: Haptic = Haptic.Tap,
     outlined: Boolean = false,
     cornerRadiusPercent: Int? = null,
+    playPauseAnimation: Boolean = false,
+    skipAnimation: Boolean = false,
 ) {
     val ink = LocalPlayerButtonControlInk.current
     val haptics = rememberHaptics()
+    var skipAnimationFrame by remember { mutableIntStateOf(0) }
+    val isPlayPause = icon == Icons.Rounded.PlayArrow || icon == Icons.Rounded.Pause
+    val isSkip = icon == Icons.Rounded.FastRewind || icon == Icons.Rounded.FastForward
+    val motionDirection = if (icon == Icons.Rounded.FastForward) 1 else -1
     // Faded rather than hidden: the row keeps its shape at the ends of a queue.
     val alpha by animateFloatAsState(
         targetValue = if (enabled) 1f else 0.3f,
@@ -6160,14 +6183,60 @@ private fun TransportGlyph(
                 enabled = enabled,
             ) {
                 haptics.play(haptic)
+                if (skipAnimation && isSkip) skipAnimationFrame++
                 onClick()
             },
         contentAlignment = Alignment.Center,
     ) {
+        when {
+            playPauseAnimation && isPlayPause -> AnimatedContent(
+                targetState = icon,
+                transitionSpec = {
+                    (fadeIn(tween(180)) + scaleIn(
+                        initialScale = 0.38f,
+                        animationSpec = spring(dampingRatio = 0.68f, stiffness = 170f),
+                    )) togetherWith (fadeOut(tween(130)) + scaleOut(
+                        targetScale = 0.38f,
+                        animationSpec = spring(dampingRatio = 0.68f, stiffness = 170f),
+                    ))
+                },
+                label = "bitChordPlayPauseMotion",
+            ) { glyph ->
+                TransportGlyphIcon(glyph, contentDescription, size, ink.copy(alpha = alpha), cornerRadiusPercent)
+            }
+            skipAnimation && isSkip -> AnimatedContent(
+                targetState = skipAnimationFrame,
+                transitionSpec = {
+                    (slideInHorizontally(
+                        initialOffsetX = { width -> width * motionDirection / 2 },
+                        animationSpec = tween(240, easing = FastOutSlowInEasing),
+                    ) + fadeIn(tween(180)) + scaleIn(initialScale = 0.76f)) togetherWith
+                        (slideOutHorizontally(
+                            targetOffsetX = { width -> -width * motionDirection / 2 },
+                            animationSpec = tween(240, easing = FastOutSlowInEasing),
+                        ) + fadeOut(tween(180)) + scaleOut(targetScale = 0.76f))
+                },
+                label = "bitChordSkipMotion",
+            ) {
+                TransportGlyphIcon(icon, contentDescription, size, ink.copy(alpha = alpha), cornerRadiusPercent)
+            }
+            else -> TransportGlyphIcon(icon, contentDescription, size, ink.copy(alpha = alpha), cornerRadiusPercent)
+        }
+    }
+}
+
+@Composable
+private fun TransportGlyphIcon(
+    icon: ImageVector,
+    contentDescription: String,
+    size: androidx.compose.ui.unit.Dp,
+    tint: Color,
+    cornerRadiusPercent: Int?,
+) {
         if (icon == Icons.Rounded.PlayArrow && cornerRadiusPercent != null) {
             RoundedPlayTriangle(
                 size = size,
-                color = ink.copy(alpha = alpha),
+                color = tint,
                 cornerRoundnessPercent = cornerRadiusPercent,
                 contentDescription = contentDescription,
             )
@@ -6175,11 +6244,10 @@ private fun TransportGlyph(
             Icon(
                 imageVector = icon,
                 contentDescription = contentDescription,
-                tint = ink.copy(alpha = alpha),
+                tint = tint,
                 modifier = Modifier.size(size),
             )
         }
-    }
 }
 
 /** Keeps the lyrics transport out of NowPlayingScreen's generated DEX method. */
@@ -6787,6 +6855,7 @@ private fun InlineQueue(
     onMove: (Int, Int) -> Unit,
     onClear: () -> Unit,
     onManageQueues: () -> Unit,
+    onOpenSongDetails: (Song) -> Unit,
     modifier: Modifier = Modifier,
 ) {
     val useEqualsForManage by AppSettings.queueManagerEqualsIcon.collectAsStateWithLifecycle()
@@ -6975,6 +7044,7 @@ private fun InlineQueue(
                     song = song,
                     isCurrent = index == currentIndex,
                     onClick = { onJumpTo(index) },
+                    onLongClick = { onOpenSongDetails(song) },
                     onRemove = { onRemove(index) },
                     // Only what's still queued ahead. The playing track and
                     // everything already played sit above the line a drag
@@ -7048,6 +7118,7 @@ private fun InlineQueue(
                     song = song,
                     isCurrent = at == currentIndex,
                     onClick = { onJumpTo(at) },
+                    onLongClick = { onOpenSongDetails(song) },
                     onRemove = { onRemove(at) },
                     draggable = true,
                     dragging = dragging,
@@ -7458,6 +7529,7 @@ private fun InlineQueueRow(
     song: Song,
     isCurrent: Boolean,
     onClick: () -> Unit,
+    onLongClick: () -> Unit,
     onRemove: () -> Unit,
     modifier: Modifier = Modifier,
     draggable: Boolean = false,
@@ -7486,7 +7558,7 @@ private fun InlineQueueRow(
             .fillMaxWidth()
             .clip(RoundedCornerShape(8.dp))
             .background(if (dragging) Color.White.copy(alpha = 0.06f) else Color.Transparent)
-            .clickable(onClick = onClick)
+            .combinedClickable(onClick = onClick, onLongClick = onLongClick)
             .padding(vertical = 6.dp),
         verticalAlignment = Alignment.CenterVertically,
     ) {

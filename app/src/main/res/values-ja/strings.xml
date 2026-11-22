@@ -1415,6 +1415,8 @@
     <string name="resampler_cutoff_value">%1$d Hz</string>
     <string name="lyrics_display">歌詞の表示</string>
     <string name="lyrics_font_size">歌詞の文字サイズ</string>
+    <string name="smooth_character_lyrics">1文字ごとの歌詞を滑らかに表示</string>
+    <string name="smooth_character_lyrics_subtitle">文字単位の同期歌詞で再生位置をフレーム単位で補間します。初期設定はオンです。</string>
     <string name="lyrics_font_size_value">%1$d%%</string>
     <string name="lyrics_text_alignment">歌詞の配置</string>
     <string name="lyrics_align_left">左揃え</string>
@@ -2024,6 +2026,10 @@
     <string name="player_font_size_value">%1$d sp</string>
     <string name="player_play_pause_icon_size">再生・一時停止アイコンのサイズ</string>
     <string name="player_play_pause_icon_size_subtitle">プレイヤー画面中央の再生・一時停止アイコンの大きさを調整します。</string>
+    <string name="player_play_pause_animation">再生・一時停止のアニメーション</string>
+    <string name="player_play_pause_animation_subtitle">再生状態の切り替わりにBitChord風の拡大・フェードを行います。初期設定はオンです。</string>
+    <string name="player_skip_animations">前へ・次へのアニメーション</string>
+    <string name="player_skip_animations_subtitle">前へ／次へを押したときにBitChord風のスライドを行います。初期設定はオフです。</string>
     <string name="player_icon_size_value">%1$d dp</string>
     <string name="player_queue_rainbow_backdrop">再生キューのアート色をプレイヤー背景に反映</string>
     <string name="player_queue_rainbow_backdrop_subtitle">再生キュー順に最大8種類のアルバムアートの色を、プレイヤー画面の背景だけに重ねます。画面の色が変わりますが、表示中のアルバムアートは変わりません。初期設定はオフです。</string>
