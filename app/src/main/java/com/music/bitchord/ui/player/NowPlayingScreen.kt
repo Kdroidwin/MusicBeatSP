@@ -362,6 +362,8 @@ private const val AURIS_FULL_BLEED_DRIFT = 0.016f
 private const val HERO_FADE_FRACTION = 0.42f
 /** Keep both full-screen modes aligned with BitChord's 42% artwork fade. */
 private const val BITCHORD_HERO_FADE_FRACTION = 0.42f
+/** Carry full-bleed art a little below the title instead of ending at its baseline. */
+private val HERO_BOTTOM_EXTENSION = 24.dp
 
 private class CenteredPlayerButtonArrangement(private val gapDp: Float) : Arrangement.Horizontal {
     override fun Density.arrange(
@@ -2902,8 +2904,8 @@ fun NowPlayingScreen(
                     targetGroupTop + targetArtHeight + ART_TITLE_GAP / 2
                 val standardBannerBottom = when {
                     aurisHeroMode -> baseBannerBottom * heroArtworkZoom
-                    useLargerHeroArtwork -> baseBannerBottom + HEADER_HEIGHT + ART_TITLE_GAP / 2
-                    else -> baseBannerBottom
+                    useLargerHeroArtwork -> baseBannerBottom + HEADER_HEIGHT + ART_TITLE_GAP / 2 + HERO_BOTTOM_EXTENSION
+                    else -> baseBannerBottom + HERO_BOTTOM_EXTENSION
                 }
                 // In landscape, the normal banner was sized to the short
                 // square-art slot left after controls. Filling a wide banner
