@@ -45,6 +45,7 @@ import com.music.bitchord.R
 import coil3.compose.AsyncImage
 import com.music.bitchord.feature.localmusic.domain.model.LocalPlaylist
 import com.music.bitchord.data.model.Song
+import com.music.bitchord.feature.library.ui.components.AutoFitPlaylistName
 import com.music.bitchord.data.model.ROW_ART_PX
 import com.music.bitchord.data.settings.AppSettings
 import com.music.bitchord.ui.theme.rememberArtworkPalette
@@ -124,13 +125,10 @@ fun LocalPlaylistItem(
                 modifier = Modifier.weight(1f),
                 verticalArrangement = Arrangement.Center,
             ) {
-                Text(
-                    text = playlist.name,
-                    style = MaterialTheme.typography.titleMedium,
-                    fontWeight = FontWeight.SemiBold,
+                AutoFitPlaylistName(
+                    name = playlist.name,
+                    style = MaterialTheme.typography.titleMedium.copy(fontWeight = FontWeight.SemiBold),
                     color = MaterialTheme.colorScheme.onSurface,
-                    maxLines = 1,
-                    overflow = TextOverflow.Ellipsis,
                 )
 
                 Text(

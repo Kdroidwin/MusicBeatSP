@@ -532,7 +532,14 @@
     <string name="dont_repeat_songs_subtitle">AutoPlay won’t suggest a song already played or suggested this session</string>
     <string name="download_quality_subtitle">%1$s per track, whatever the connection</string>
     <string name="filter_non_music_audio">Filter non-music audio</string>
-    <string name="filter_non_music_audio_subtitle">Hides clips under 30 seconds, WAV files, voice notes, recordings and system sounds</string>
+    <string name="filter_non_music_audio_subtitle">Hides short clips, voice notes, recordings and system sounds from Local Music</string>
+    <string name="local_music_minimum_duration">Minimum audio length for music filter</string>
+    <string name="local_music_minimum_duration_subtitle">When the filter is on, hide non-WAV audio shorter than this. MIDI and DSD keep their existing handling.</string>
+    <string name="local_music_minimum_duration_value">%1$d sec</string>
+    <string name="keep_wav_when_filtering_non_music">Keep WAV files when filtering non-music audio</string>
+    <string name="keep_wav_when_filtering_non_music_subtitle">WAV files remain visible even when shorter than the selected length or stored in recorder and system folders.</string>
+    <string name="auto_fit_library_playlist_names">Fit long playlist names in Library</string>
+    <string name="auto_fit_library_playlist_names_subtitle">Reduce text size to show long names; wrap at the minimum size instead of truncating. On by default.</string>
     <string name="performance">Performance</string>
     <string name="high_performance_mode">High performance mode</string>
     <string name="high_performance_subtitle">Uses full animations and blur, and requests a higher display refresh rate</string>

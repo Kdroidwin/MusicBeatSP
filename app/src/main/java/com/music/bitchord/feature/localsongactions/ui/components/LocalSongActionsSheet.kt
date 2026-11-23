@@ -314,13 +314,13 @@ fun LocalSongActionsSheet(
                                 onClick = onGoToArtist,
                             )
                             PlayerDetailsAction.OPEN_FOLDER -> if (showPlayerActions) {
-                                FolderNavigationRequests.folderPathFor(song)?.let { folderPath ->
-                                    LocalSongActionItem(
-                                        icon = Icons.Rounded.FolderOpen,
-                                        label = stringResource(R.string.open_folder),
-                                        onClick = { FolderNavigationRequests.request(folderPath) },
-                                    )
-                                }
+                                val folderPath = FolderNavigationRequests.folderPathFor(song)
+                                LocalSongActionItem(
+                                    icon = Icons.Rounded.FolderOpen,
+                                    label = stringResource(R.string.open_folder),
+                                    onClick = { folderPath?.let(FolderNavigationRequests::request) },
+                                    enabled = folderPath != null,
+                                )
                             }
                             PlayerDetailsAction.ADD_TO_PLAYLIST -> LocalSongActionItem(
                                 icon = Icons.AutoMirrored.Rounded.PlaylistAdd,

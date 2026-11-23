@@ -2163,6 +2163,9 @@ fun SettingsScreen(
     val swipeToPlayNext by AppSettings.swipeToPlayNext.collectAsStateWithLifecycle()
     val dontRepeatSuggestions by AppSettings.dontRepeatSuggestions.collectAsStateWithLifecycle()
     val filterNonMusicAudio by AppSettings.filterNonMusicAudio.collectAsStateWithLifecycle()
+    val localMusicMinimumDurationSeconds by AppSettings.localMusicMinimumDurationSeconds.collectAsStateWithLifecycle()
+    val keepWavWhenFilteringNonMusicAudio by AppSettings.keepWavWhenFilteringNonMusicAudio.collectAsStateWithLifecycle()
+    val autoFitLibraryPlaylistNames by AppSettings.autoFitLibraryPlaylistNames.collectAsStateWithLifecycle()
     val showPlaylistSongArtwork by AppSettings.showPlaylistSongArtwork.collectAsStateWithLifecycle()
     val hidePlaylistPlayButtonLabel by AppSettings.hidePlaylistPlayButtonLabel.collectAsStateWithLifecycle()
     val hideLibraryNewPlaylistTapLabel by AppSettings.hideLibraryNewPlaylistTapLabel.collectAsStateWithLifecycle()
@@ -2772,6 +2775,29 @@ fun SettingsScreen(
             listOf("player", "grabber", "handle", "line", "プレーヤー", "上部", "線", "バー"),
             showPlayerTopGrabber,
         ) { AppSettings.setShowPlayerTopGrabber(!showPlayerTopGrabber) },
+        SettingsSearchEntry(
+            title = stringResource(R.string.local_music_minimum_duration),
+            subtitle = stringResource(R.string.local_music_minimum_duration_subtitle),
+            keywords = listOf("filter", "audio", "music", "duration", "seconds", "clip", "音楽", "フィルター", "秒数", "時間", "音声"),
+            valueLabel = stringResource(R.string.local_music_minimum_duration_value, localMusicMinimumDurationSeconds),
+            sliderValue = localMusicMinimumDurationSeconds.toFloat(),
+            sliderValueRange = AppSettings.MIN_LOCAL_MUSIC_DURATION_SECONDS.toFloat()..AppSettings.MAX_LOCAL_MUSIC_DURATION_SECONDS.toFloat(),
+            sliderSteps = 59,
+            onSliderValueChange = { AppSettings.setLocalMusicMinimumDurationSeconds(it.roundToInt()) },
+            activate = {},
+        ),
+        SettingsSearchEntry(
+            stringResource(R.string.keep_wav_when_filtering_non_music),
+            stringResource(R.string.keep_wav_when_filtering_non_music_subtitle),
+            listOf("filter", "audio", "music", "wav", "音楽", "フィルター", "音声", "WAV"),
+            keepWavWhenFilteringNonMusicAudio,
+        ) { AppSettings.setKeepWavWhenFilteringNonMusicAudio(!keepWavWhenFilteringNonMusicAudio) },
+        SettingsSearchEntry(
+            stringResource(R.string.auto_fit_library_playlist_names),
+            stringResource(R.string.auto_fit_library_playlist_names_subtitle),
+            listOf("library", "playlist", "name", "text size", "ライブラリ", "プレイリスト", "名前", "文字", "縮小"),
+            autoFitLibraryPlaylistNames,
+        ) { AppSettings.setAutoFitLibraryPlaylistNames(!autoFitLibraryPlaylistNames) },
         SettingsSearchEntry(stringResource(R.string.filter_non_music_audio), stringResource(R.string.filter_non_music_audio_subtitle), listOf("filter", "audio", "music", "音楽", "フィルター"), filterNonMusicAudio) { AppSettings.setFilterNonMusicAudio(!filterNonMusicAudio) },
         SettingsSearchEntry(stringResource(R.string.playlist_song_artwork), stringResource(R.string.playlist_song_artwork_subtitle), listOf("playlist", "artwork", "プレイリスト", "アルバムアート"), showPlaylistSongArtwork) { AppSettings.setShowPlaylistSongArtwork(!showPlaylistSongArtwork) },
         SettingsSearchEntry(stringResource(R.string.refresh_playlist_tags_on_pull), stringResource(R.string.refresh_playlist_tags_on_pull_subtitle), listOf("playlist", "refresh", "metadata", "tags", "artist", "title", "プレイリスト", "更新", "タグ", "アーティスト", "曲名"), refreshPlaylistTagsOnPull) { AppSettings.setRefreshPlaylistTagsOnPull(!refreshPlaylistTagsOnPull) },
@@ -8099,6 +8125,9 @@ fun SettingsScreen(
             centerArtistDetailName = centerArtistDetailName,
             hideArtistAudienceStats = hideArtistAudienceStats,
             filterNonMusicAudio = filterNonMusicAudio,
+            localMusicMinimumDurationSeconds = localMusicMinimumDurationSeconds,
+            keepWavWhenFilteringNonMusicAudio = keepWavWhenFilteringNonMusicAudio,
+            autoFitLibraryPlaylistNames = autoFitLibraryPlaylistNames,
             showPlaylistSongArtwork = showPlaylistSongArtwork,
             showCollectionSongArtwork = showCollectionSongArtwork,
             localSearchCollectionSongArtwork = localSearchCollectionSongArtwork,
@@ -10131,6 +10160,9 @@ private fun LocalMusicSettingsGroup(
     centerArtistDetailName: Boolean,
     hideArtistAudienceStats: Boolean,
     filterNonMusicAudio: Boolean,
+    localMusicMinimumDurationSeconds: Int,
+    keepWavWhenFilteringNonMusicAudio: Boolean,
+    autoFitLibraryPlaylistNames: Boolean,
     showPlaylistSongArtwork: Boolean,
     showCollectionSongArtwork: Boolean,
     localSearchCollectionSongArtwork: Boolean,
@@ -10691,6 +10723,56 @@ SettingsGroup(header = stringResource(R.string.local_music)) {
             )
         },
         onClick = { AppSettings.setFilterNonMusicAudio(!filterNonMusicAudio) },
+    )
+    RowDivider()
+    SettingsRow(
+        icon = Icons.Rounded.Schedule,
+        title = stringResource(R.string.local_music_minimum_duration),
+        subtitle = stringResource(R.string.local_music_minimum_duration_subtitle),
+        value = stringResource(R.string.local_music_minimum_duration_value, localMusicMinimumDurationSeconds),
+    )
+    Slider(
+        value = localMusicMinimumDurationSeconds.toFloat(),
+        onValueChange = { AppSettings.setLocalMusicMinimumDurationSeconds(it.roundToInt()) },
+        steps = 59,
+        valueRange = AppSettings.MIN_LOCAL_MUSIC_DURATION_SECONDS.toFloat()..AppSettings.MAX_LOCAL_MUSIC_DURATION_SECONDS.toFloat(),
+        modifier = Modifier.padding(start = ROW_INSET, end = ROW_INSET, bottom = 12.dp),
+    )
+    RowDivider()
+    SettingsRow(
+        icon = Icons.Rounded.AudioFile,
+        title = stringResource(R.string.keep_wav_when_filtering_non_music),
+        subtitle = stringResource(R.string.keep_wav_when_filtering_non_music_subtitle),
+        trailing = {
+            Switch(
+                checked = keepWavWhenFilteringNonMusicAudio,
+                onCheckedChange = AppSettings::setKeepWavWhenFilteringNonMusicAudio,
+                colors = SwitchDefaults.colors(
+                    checkedTrackColor = MaterialTheme.colorScheme.primary,
+                    checkedBorderColor = MaterialTheme.colorScheme.primary,
+                ),
+            )
+        },
+        onClick = {
+            AppSettings.setKeepWavWhenFilteringNonMusicAudio(!keepWavWhenFilteringNonMusicAudio)
+        },
+    )
+    RowDivider()
+    SettingsRow(
+        icon = Icons.Rounded.AutoAwesome,
+        title = stringResource(R.string.auto_fit_library_playlist_names),
+        subtitle = stringResource(R.string.auto_fit_library_playlist_names_subtitle),
+        trailing = {
+            Switch(
+                checked = autoFitLibraryPlaylistNames,
+                onCheckedChange = AppSettings::setAutoFitLibraryPlaylistNames,
+                colors = SwitchDefaults.colors(
+                    checkedTrackColor = MaterialTheme.colorScheme.primary,
+                    checkedBorderColor = MaterialTheme.colorScheme.primary,
+                ),
+            )
+        },
+        onClick = { AppSettings.setAutoFitLibraryPlaylistNames(!autoFitLibraryPlaylistNames) },
     )
     RowDivider()
     SettingsRow(

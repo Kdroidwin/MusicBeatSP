@@ -475,7 +475,14 @@
     <string name="dont_repeat_songs_subtitle">オートプレイは、このセッションで既に再生または提案された曲を再度提案しません</string>
     <string name="download_quality_subtitle">接続にかかわらず、1トラックあたり%1$s</string>
     <string name="filter_non_music_audio">音楽以外の音声を除外</string>
-    <string name="filter_non_music_audio_subtitle">30秒未満のクリップ、WAVファイル、ボイスメモ、録音、システム音を非表示にします</string>
+    <string name="filter_non_music_audio_subtitle">短いクリップ、ボイスメモ、録音、システム音をライブラリから非表示にします</string>
+    <string name="local_music_minimum_duration">音楽以外の音声を除外する最短時間</string>
+    <string name="local_music_minimum_duration_subtitle">除外設定がオンのとき、指定時間より短いWAV以外の音声を非表示にします。MIDIとDSDの扱いは変わりません。</string>
+    <string name="local_music_minimum_duration_value">%1$d秒</string>
+    <string name="keep_wav_when_filtering_non_music">音楽以外の音声を除外してもWAVは残す</string>
+    <string name="keep_wav_when_filtering_non_music_subtitle">WAVは指定時間より短い場合や録音・システム用フォルダー内でも表示します。</string>
+    <string name="auto_fit_library_playlist_names">ライブラリの長いプレイリスト名を縮小表示</string>
+    <string name="auto_fit_library_playlist_names_subtitle">長い名前は文字を小さくして表示し、最小サイズでも収まらない場合は折り返します。初期設定はオンです。</string>
     <string name="performance">パフォーマンス</string>
     <string name="high_performance_mode">高パフォーマンスモード</string>
     <string name="high_performance_subtitle">フルアニメーションとぼかしを使用し、より高いディスプレイリフレッシュレートをリクエストします</string>

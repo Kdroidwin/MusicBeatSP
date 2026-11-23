@@ -123,6 +123,7 @@ import com.music.bitchord.feature.localmusic.data.resolvePlaylistSongs
 import com.music.bitchord.feature.localmusic.data.resolveSmartPlaylistSongs
 import com.music.bitchord.feature.localsongactions.data.LocalPlayStatsStore
 import com.music.bitchord.feature.localmusic.domain.model.LocalPlaylist
+import com.music.bitchord.feature.library.ui.components.AutoFitPlaylistName
 import com.music.bitchord.feature.artistimage.util.ArtistSplitter
 import com.music.bitchord.feature.localmusic.ui.components.CreatePlaylistDialog
 import com.music.bitchord.feature.localmusic.ui.components.SmartPlaylistEditorDialog
@@ -1566,12 +1567,20 @@ fun LibraryScreen(
                                             )
                                         }
                                         Column(modifier = Modifier.weight(1f).padding(horizontal = 12.dp)) {
-                                            Text(
-                                                text = collection.title,
-                                                style = MaterialTheme.typography.titleMedium,
-                                                maxLines = 1,
-                                                overflow = androidx.compose.ui.text.style.TextOverflow.Ellipsis,
-                                            )
+                                            if (collection.type == "PLAYLIST") {
+                                                AutoFitPlaylistName(
+                                                    name = collection.title,
+                                                    style = MaterialTheme.typography.titleMedium,
+                                                    color = MaterialTheme.colorScheme.onSurface,
+                                                )
+                                            } else {
+                                                Text(
+                                                    text = collection.title,
+                                                    style = MaterialTheme.typography.titleMedium,
+                                                    maxLines = 1,
+                                                    overflow = androidx.compose.ui.text.style.TextOverflow.Ellipsis,
+                                                )
+                                            }
                                             Text(
                                                 text = collection.subtitle.ifBlank {
                                                     stringResource(

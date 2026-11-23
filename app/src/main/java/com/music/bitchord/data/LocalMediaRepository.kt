@@ -26,8 +26,6 @@ import java.util.Locale
 object LocalMediaRepository {
 
     private const val TAG = "BitChord"
-    private const val MIN_LOCAL_MUSIC_DURATION_MS = 30_000L
-
     private val localMusicExtensions = setOf(
         "mp3", "m4a", "flac", "wav", "wma", "ogg", "opus", "aac", "webm", "dsf", "dff",
         "mid", "midi",
@@ -255,6 +253,7 @@ object LocalMediaRepository {
         }.toTypedArray()
 
         val filterNonMusic = AppSettings.filterNonMusicAudio.value
+        val keepWavWhenFilteringNonMusic = AppSettings.keepWavWhenFilteringNonMusicAudio.value
         val dsdAllowed = AppSettings.dsdPlaybackEnabled.value
         val dsdSelection = if (dsdAllowed) {
             " OR ${MediaStore.Audio.Media.DISPLAY_NAME} LIKE '%.dsf' OR ${MediaStore.Audio.Media.DISPLAY_NAME} LIKE '%.dff'"
@@ -268,14 +267,22 @@ object LocalMediaRepository {
         // the same duration, path and supported-extension checks below.
         val extraAudioSelection = " OR ${MediaStore.Audio.Media.DISPLAY_NAME} LIKE '%.wav' OR ${MediaStore.Audio.Media.DISPLAY_NAME} LIKE '%.wma' OR ${MediaStore.Audio.Media.DISPLAY_NAME} LIKE '%.ogg' OR ${MediaStore.Audio.Media.DISPLAY_NAME} LIKE '%.opus'$midiSelection$dsdSelection"
         val selection = if (filterNonMusic) {
-            buildString {
-                append("((${MediaStore.Audio.Media.IS_MUSIC} != 0$extraAudioSelection)")
-                append(" AND (${MediaStore.Audio.Media.DURATION} >= ?$midiSelection)")
+            val musicOnlyConditions = buildString {
+                append("(${MediaStore.Audio.Media.DURATION} >= ?$midiSelection)")
                 append(" AND ${MediaStore.Audio.Media.IS_ALARM} = 0")
                 append(" AND ${MediaStore.Audio.Media.IS_NOTIFICATION} = 0")
                 append(" AND ${MediaStore.Audio.Media.IS_RINGTONE} = 0")
                 if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
                     append(" AND ${MediaStore.Audio.Media.IS_PODCAST} = 0")
+                }
+            }
+            buildString {
+                append("((${MediaStore.Audio.Media.IS_MUSIC} != 0$extraAudioSelection)")
+                append(" AND ")
+                if (keepWavWhenFilteringNonMusic) {
+                    append("(($musicOnlyConditions) OR ${MediaStore.Audio.Media.DISPLAY_NAME} LIKE '%.wav')")
+                } else {
+                    append("($musicOnlyConditions)")
                 }
                 append(")")
             }
@@ -283,7 +290,7 @@ object LocalMediaRepository {
             "(${MediaStore.Audio.Media.IS_MUSIC} != 0$extraAudioSelection)"
         }
         val selectionArgs = if (filterNonMusic) {
-            arrayOf(MIN_LOCAL_MUSIC_DURATION_MS.toString())
+            arrayOf((AppSettings.localMusicMinimumDurationSeconds.value * 1_000L).toString())
         } else {
             null
         }
@@ -673,10 +680,16 @@ object LocalMediaRepository {
         val extension = fileName.substringAfterLast('.', "").lowercase(Locale.ROOT)
         if (extension !in localMusicExtensions) return false
         if (extension in FFMPEG_ONLY_AUDIO_EXTENSIONS && !AppSettings.ffmpegUnsupportedAudioTranscodeEnabled.value) return false
+        if (!AppSettings.filterNonMusicAudio.value) return true
+        if (extension == "wav" && AppSettings.keepWavWhenFilteringNonMusicAudio.value) return true
         // MediaStore often reports MIDI duration as zero even though it is a
         // playable file. Keep short MIDI files in the library without relaxing
         // the existing duration filter for any other audio format.
-        if (extension !in DSD_EXTENSIONS && extension !in midiExtensions && durationMs < MIN_LOCAL_MUSIC_DURATION_MS) return false
+        val minimumDurationMs = AppSettings.localMusicMinimumDurationSeconds.value.coerceIn(
+            AppSettings.MIN_LOCAL_MUSIC_DURATION_SECONDS,
+            AppSettings.MAX_LOCAL_MUSIC_DURATION_SECONDS,
+        ) * 1_000L
+        if (extension !in DSD_EXTENSIONS && extension !in midiExtensions && durationMs < minimumDurationMs) return false
 
         val normalizedPath = path
             ?.replace('\\', '/')

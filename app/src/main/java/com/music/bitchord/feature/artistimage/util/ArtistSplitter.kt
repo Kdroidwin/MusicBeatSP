@@ -60,10 +60,10 @@ object ArtistSplitter {
     private val SLASH_DELIMITER_REGEX = Regex("""\s*[/／]\s*""")
     private val SLASH_EXCEPTION_SPACING_REGEX = Regex("""\s*[/／]\s*""")
 
-    // Preserve parentheses in artist credits such as "Artist (Project)".
-    // The previous edge cleanup treated the final ')' as disposable
-    // punctuation and silently changed the displayed artist name.
-    private val UNWANTED_PUNCTUATION = Regex("""^[^\p{L}\p{N}()（）]+|[^\p{L}\p{N}()（）]+$""")
+    // Preserve paired punctuation that can be part of a display name. The
+    // edge cleanup used to discard Japanese opening quotes such as 「 at the
+    // start of an artist credit (and could also trim its closing pair).
+    private val UNWANTED_PUNCTUATION = Regex("""^[^\p{L}\p{N}()（）「」『』“”‘’]+|[^\p{L}\p{N}()（）「」『』“”‘’]+$""")
 
     private data class ProtectedArtistName(
         val normalizedName: String,

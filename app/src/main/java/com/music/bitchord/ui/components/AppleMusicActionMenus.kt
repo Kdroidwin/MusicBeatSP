@@ -135,20 +135,36 @@ fun AppleMusicTrackActionsMenu(
                 MenuRow(R.string.go_to_artist, Icons.Rounded.Person, onCloseMenu, onOpenArtist)
                 val folderPath = FolderNavigationRequests.folderPathFor(selectedSong)
                 val showOpenFolder = showPlayerActions &&
-                    PlayerDetailsAction.OPEN_FOLDER !in hiddenPlayerActions && folderPath != null
+                    PlayerDetailsAction.OPEN_FOLDER !in hiddenPlayerActions
                 val folderIndex = playerActionOrder.indexOf(PlayerDetailsAction.OPEN_FOLDER)
                 val addIndex = playerActionOrder.indexOf(PlayerDetailsAction.ADD_TO_PLAYLIST)
                 val folderBeforePlaylist = folderIndex <= addIndex
                 if (showOpenFolder && folderBeforePlaylist) {
-                    MenuRow(R.string.open_folder, Icons.Rounded.FolderOpen, onCloseMenu) {
-                        FolderNavigationRequests.request(folderPath)
-                    }
+                    IosMenuRow(
+                        label = stringResource(R.string.open_folder),
+                        icon = Icons.Rounded.FolderOpen,
+                        onClick = folderPath?.let { path ->
+                            {
+                                onCloseMenu()
+                                FolderNavigationRequests.request(path)
+                            }
+                        },
+                        enabled = folderPath != null,
+                    )
                 }
                 MenuRow(R.string.add_to_playlist, Icons.AutoMirrored.Rounded.PlaylistAdd, onCloseMenu, onAddToPlaylist)
                 if (showOpenFolder && !folderBeforePlaylist) {
-                    MenuRow(R.string.open_folder, Icons.Rounded.FolderOpen, onCloseMenu) {
-                        FolderNavigationRequests.request(folderPath)
-                    }
+                    IosMenuRow(
+                        label = stringResource(R.string.open_folder),
+                        icon = Icons.Rounded.FolderOpen,
+                        onClick = folderPath?.let { path ->
+                            {
+                                onCloseMenu()
+                                FolderNavigationRequests.request(path)
+                            }
+                        },
+                        enabled = folderPath != null,
+                    )
                 }
                 onChangeArtistImage?.let { MenuRow(R.string.change_artist_image, Icons.Rounded.Image, onCloseMenu, it) }
                 if (onDownload != null) MenuRow(R.string.download, Icons.Rounded.FileDownload, onCloseMenu, onDownload)

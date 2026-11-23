@@ -997,7 +997,7 @@ object AppSettings {
     /** Keeps the display awake while the full lyrics panel is open. */
     val keepScreenOnDuringLyrics = MutableStateFlow(true)
     val screenOrientationMode = MutableStateFlow(ScreenOrientationMode.SYSTEM)
-    val favoriteUsesStar = MutableStateFlow(false)
+    val favoriteUsesStar = MutableStateFlow(true)
     val playerQuickActions = MutableStateFlow<List<PlayerQuickAction>>(emptyList())
     /** Removes translucent circular discs behind quick action glyphs. */
     val hidePlayerQuickActionCircles = MutableStateFlow(false)
@@ -1175,7 +1175,7 @@ object AppSettings {
     val loudnessOffOnSpeaker = MutableStateFlow(true)
 
     /** Places the favorite action beside the track menu instead of under playback controls. */
-    val favoriteBesideTrackMenu = MutableStateFlow(false)
+    val favoriteBesideTrackMenu = MutableStateFlow(true)
 
     /** Refuses a play command while Android's music stream volume is zero. */
     val preventPlayAtZeroVolume = MutableStateFlow(false)
@@ -1385,6 +1385,12 @@ object AppSettings {
 
     /** Hides short clips, recorder output and non-music formats from Local Music. */
     val filterNonMusicAudio = MutableStateFlow(true)
+    /** Minimum length used by the non-music filter; 30 seconds preserves the former fixed threshold. */
+    val localMusicMinimumDurationSeconds = MutableStateFlow(30)
+    /** Lets WAV files bypass the non-music filter's duration and recorder-folder checks. */
+    val keepWavWhenFilteringNonMusicAudio = MutableStateFlow(false)
+    /** Shrinks long playlist names and wraps only when they still cannot fit at the minimum size. */
+    val autoFitLibraryPlaylistNames = MutableStateFlow(true)
     /** Includes configured WebDAV/Jellyfin/OpenSubsonic libraries in local collection views. */
     val includeRemoteSourceMediaInLibrary = MutableStateFlow(false)
 
@@ -2100,8 +2106,10 @@ object AppSettings {
         screenOrientationMode.value = runCatching {
             ScreenOrientationMode.valueOf(prefs.getString(KEY_SCREEN_ORIENTATION, ScreenOrientationMode.SYSTEM.name) ?: ScreenOrientationMode.SYSTEM.name)
         }.getOrDefault(ScreenOrientationMode.SYSTEM)
-        favoriteUsesStar.value = prefs.getBoolean(KEY_FAVORITE_USES_STAR, false)
-        playerQuickActions.value = readPlayerQuickActions()
+        favoriteUsesStar.value = prefs.getBoolean(KEY_FAVORITE_USES_STAR, true)
+        val loadedPlayerQuickActions = readPlayerQuickActions()
+        playerQuickActions.value = loadedPlayerQuickActions
+        favoriteBesideTrackMenu.value = PlayerQuickAction.FAVORITE in loadedPlayerQuickActions
         hidePlayerQuickActionCircles.value = prefs.getBoolean(KEY_HIDE_PLAYER_QUICK_ACTION_CIRCLES, false)
         hidePlayerControlHighlightCircles.value = prefs.getBoolean(KEY_HIDE_PLAYER_CONTROL_HIGHLIGHT_CIRCLES, false)
         externalMediaControlEnabled.value = prefs.getBoolean(KEY_EXTERNAL_MEDIA_CONTROL_ENABLED, false)
@@ -2193,7 +2201,6 @@ object AppSettings {
         ).coerceIn(0f, 100f)
         loudnessNormalization.value = prefs.getBoolean(KEY_LOUDNESS_NORMALIZATION, true)
         loudnessOffOnSpeaker.value = prefs.getBoolean(KEY_LOUDNESS_OFF_ON_SPEAKER, true)
-        favoriteBesideTrackMenu.value = prefs.getBoolean(KEY_FAVORITE_BESIDE_TRACK_MENU, false)
         preventPlayAtZeroVolume.value = prefs.getBoolean(KEY_PREVENT_PLAY_AT_ZERO_VOLUME, false)
         pausePlaybackAtZeroVolume.value = prefs.getBoolean(KEY_PAUSE_PLAYBACK_AT_ZERO_VOLUME, false)
         visiblePlayerControls.value = readVisiblePlayerControls()
@@ -2315,6 +2322,10 @@ object AppSettings {
         spotifySpdcToken.value = authStore.getProtectedValue(KEY_SPOTIFY_SPDC_TOKEN).orEmpty()
         replayGenres.value = prefs.getBoolean(KEY_REPLAY_GENRES, true)
         filterNonMusicAudio.value = prefs.getBoolean(KEY_FILTER_NON_MUSIC_AUDIO, true)
+        localMusicMinimumDurationSeconds.value = prefs.getInt(KEY_LOCAL_MUSIC_MINIMUM_DURATION_SECONDS, 30)
+            .coerceIn(MIN_LOCAL_MUSIC_DURATION_SECONDS, MAX_LOCAL_MUSIC_DURATION_SECONDS)
+        keepWavWhenFilteringNonMusicAudio.value = prefs.getBoolean(KEY_KEEP_WAV_WHEN_FILTERING_NON_MUSIC, false)
+        autoFitLibraryPlaylistNames.value = prefs.getBoolean(KEY_AUTO_FIT_LIBRARY_PLAYLIST_NAMES, true)
         includeRemoteSourceMediaInLibrary.value = prefs.getBoolean(KEY_INCLUDE_REMOTE_SOURCE_MEDIA_IN_LIBRARY, false)
         localMusicSort.value = readLocalMusicSort(KEY_LOCAL_MUSIC_SORT)
         downloadedMusicSort.value = readLocalMusicSort(KEY_DOWNLOADED_MUSIC_SORT)
@@ -3927,14 +3938,20 @@ object AppSettings {
         setPlayerQuickActions(ordered)
     }
 
-    private fun readPlayerQuickActions(): List<PlayerQuickAction> =
-        (prefs.getString(KEY_PLAYER_QUICK_ACTIONS, null)
+    private fun readPlayerQuickActions(): List<PlayerQuickAction> {
+        val savedActions = prefs.getString(KEY_PLAYER_QUICK_ACTIONS, null)
+        val favoriteBesideMenu = prefs.getBoolean(
+            KEY_FAVORITE_BESIDE_TRACK_MENU,
+            savedActions == null,
+        )
+        return (savedActions
             ?.split(",")
             ?.mapNotNull { name -> PlayerQuickAction.entries.firstOrNull { it.name == name } }
             ?.distinct()
-            .orEmpty() + if (prefs.getBoolean(KEY_FAVORITE_BESIDE_TRACK_MENU, false)) {
+            .orEmpty() + if (favoriteBesideMenu) {
                 listOf(PlayerQuickAction.FAVORITE)
             } else emptyList()).distinct()
+    }
 
     fun setPersistentLocalArtwork(value: Boolean) {
         persistentLocalArtwork.value = value
@@ -5028,6 +5045,22 @@ object AppSettings {
         prefs.edit().putBoolean(KEY_FILTER_NON_MUSIC_AUDIO, value).apply()
     }
 
+    fun setLocalMusicMinimumDurationSeconds(value: Int) {
+        val normalized = value.coerceIn(MIN_LOCAL_MUSIC_DURATION_SECONDS, MAX_LOCAL_MUSIC_DURATION_SECONDS)
+        localMusicMinimumDurationSeconds.value = normalized
+        prefs.edit().putInt(KEY_LOCAL_MUSIC_MINIMUM_DURATION_SECONDS, normalized).apply()
+    }
+
+    fun setKeepWavWhenFilteringNonMusicAudio(value: Boolean) {
+        keepWavWhenFilteringNonMusicAudio.value = value
+        prefs.edit().putBoolean(KEY_KEEP_WAV_WHEN_FILTERING_NON_MUSIC, value).apply()
+    }
+
+    fun setAutoFitLibraryPlaylistNames(value: Boolean) {
+        autoFitLibraryPlaylistNames.value = value
+        prefs.edit().putBoolean(KEY_AUTO_FIT_LIBRARY_PLAYLIST_NAMES, value).apply()
+    }
+
     fun setAllFilesPermissionAsked(value: Boolean) {
         allFilesPermissionAsked.value = value
         prefs.edit().putBoolean(KEY_ALL_FILES_PERMISSION_ASKED, value).apply()
@@ -5732,6 +5765,8 @@ object AppSettings {
     const val MAX_HEADPHONE_BURN_IN_DURATION_MINUTES = 6_000
     const val MAX_RECENT_PLAY_THRESHOLD_SECONDS = 300
     private const val DEFAULT_RECENT_PLAY_THRESHOLD_SECONDS = 30
+    const val MIN_LOCAL_MUSIC_DURATION_SECONDS = 0
+    const val MAX_LOCAL_MUSIC_DURATION_SECONDS = 300
 
     private fun normalizeResamplerCutoffHz(value: Int): Int =
         if (value <= 0) 0 else value.coerceIn(8_000, 22_000)
@@ -6072,6 +6107,9 @@ object AppSettings {
     private const val KEY_LAST_LYRICS_EXTENSION_SYNC = "last_lyrics_extension_sync"
     private const val KEY_REPLAY_GENRES = "replay_genres"
     private const val KEY_FILTER_NON_MUSIC_AUDIO = "filter_non_music_audio"
+    private const val KEY_LOCAL_MUSIC_MINIMUM_DURATION_SECONDS = "local_music_minimum_duration_seconds"
+    private const val KEY_KEEP_WAV_WHEN_FILTERING_NON_MUSIC = "keep_wav_when_filtering_non_music"
+    private const val KEY_AUTO_FIT_LIBRARY_PLAYLIST_NAMES = "auto_fit_library_playlist_names"
     private const val KEY_LOCAL_MUSIC_SORT = "local_music_sort"
     private const val KEY_DOWNLOADED_MUSIC_SORT = "downloaded_music_sort"
     private const val KEY_LOCAL_ARTIST_SORT = "local_artist_sort"

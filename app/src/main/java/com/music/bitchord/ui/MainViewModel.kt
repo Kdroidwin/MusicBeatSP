@@ -83,6 +83,8 @@ import kotlinx.coroutines.flow.collectLatest
 import kotlinx.coroutines.flow.combine
 import kotlinx.coroutines.flow.debounce
 import kotlinx.coroutines.flow.drop
+import kotlinx.coroutines.flow.map
+import kotlinx.coroutines.flow.merge
 import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
@@ -1407,7 +1409,11 @@ class MainViewModel(app: Application) : AndroidViewModel(app) {
             }
         }
         viewModelScope.launch {
-            AppSettings.filterNonMusicAudio.drop(1).collect {
+            merge(
+                AppSettings.filterNonMusicAudio.drop(1).map { Unit },
+                AppSettings.localMusicMinimumDurationSeconds.drop(1).map { Unit },
+                AppSettings.keepWavWhenFilteringNonMusicAudio.drop(1).map { Unit },
+            ).collect {
                 loadLocalMusic()
                 if (_detailStack.value.any { page -> page.browseId == "local:all" }) {
                     reloadLocalDetail("local:all")
@@ -2992,6 +2998,8 @@ class MainViewModel(app: Application) : AndroidViewModel(app) {
     /** Only reuse a snapshot when the preferences that shape the scan still match. */
     private fun localLibrarySnapshotFingerprint(): String = buildString {
         append("filterNonMusic=").append(AppSettings.filterNonMusicAudio.value)
+        append(";minimumDurationSeconds=").append(AppSettings.localMusicMinimumDurationSeconds.value)
+        append(";keepWavWhenFilteringNonMusic=").append(AppSettings.keepWavWhenFilteringNonMusicAudio.value)
         append(";dsd=").append(AppSettings.dsdPlaybackEnabled.value)
         append(";blacklist=")
         AppSettings.blacklistedFolders.value.sorted().forEach { path ->
