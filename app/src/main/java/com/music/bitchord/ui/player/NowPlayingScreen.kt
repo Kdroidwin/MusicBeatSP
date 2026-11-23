@@ -553,8 +553,10 @@ private fun HeroArtworkBottomBlur(
                 brush = Brush.verticalGradient(
                     colorStops = Array(HERO_FADE_CURVE_STOPS + 1) { index ->
                         val t = index / HERO_FADE_CURVE_STOPS.toFloat()
-                        (0.52f + 0.33f * t) / maskZoom to
-                            Color.Black.copy(alpha = heroSmootherStep(t))
+                        val reveal = heroSmootherStep((t / 0.72f).coerceIn(0f, 1f))
+                        val dissolve = heroSmootherStep(((t - 0.72f) / 0.28f).coerceIn(0f, 1f))
+                        val opacity = reveal * (1f - dissolve)
+                        (0.52f + 0.48f * t) / maskZoom to Color.Black.copy(alpha = opacity)
                     },
                 ),
                 blendMode = BlendMode.DstIn,
@@ -2264,6 +2266,10 @@ fun NowPlayingScreen(
         } else if (!sharedPlayerBackdrop) {
             ArtworkMeshBackdrop(
                 mesh = artMesh,
+                // BitChord anchors the mesh to the artwork's lower edge. Keep
+                // this seam there even when the optional blurred lower sleeve
+                // is enabled; moving it to the screen top makes the mesh jump
+                // in colour exactly where the image fades out.
                 seam = if (heroMode) heroHeight else 0.dp,
                 fallback = artworkPalette.wash,
                 blurRadius = activeBackdropBlur,
@@ -2780,29 +2786,48 @@ fun NowPlayingScreen(
                                 } else {
                                     CompositingStrategy.Auto
                                 }
-                            }
-                            // Keep the mask after the isolated graphics layer;
-                            // applying it before that layer cut through sibling
-                            // screens and made the cover's lower half transparent.
-                            .then(
-                                if (aurisHeroMode) {
-                                    Modifier.aurisHeroArtworkBottomFade(heroArtworkZoom) {
-                                        heroVisible * dockFraction()
-                                    }
-                                } else {
-                                    Modifier.heroArtworkBottomFade(heroFadeFraction, heroArtworkZoom) {
-                                        heroVisible * dockFraction()
-                                    }
-                                },
-                            ),
+                            },
+                            // Keep the sleeve isolated and clipped here. The
+                            // sharp cover gets its fade below, while the blurred
+                            // underlay remains visible through the lower edge.
                         contentAlignment = Alignment.Center,
                     ) {
+                        if (!aurisHeroMode) {
+                            HeroArtworkBottomBlur(
+                                model = artRequest,
+                                cacheKey = requestedArtUrl,
+                                cachedBlurImage = heroBlurImage,
+                                alpha = heroVisible * dockFraction() *
+                                    (1f - if (heroClip != null) canvasCover.floatValue else 0f),
+                                zoom = heroArtworkZoom,
+                                onBlurReady = { bitmap -> heroBlurImage = bitmap.asImageBitmap() },
+                                includeRightEdge = tabletFullscreenPlayer,
+                                modifier = Modifier.fillMaxSize(),
+                            )
+                        }
                         Box(
                             Modifier
                                 .fillMaxSize()
-                                .background(Color.Black.copy(alpha = 0.18f)),
+                                .graphicsLayer {
+                                    compositingStrategy = CompositingStrategy.Offscreen
+                                }
+                                .then(
+                                    if (aurisHeroMode) {
+                                        Modifier.aurisHeroArtworkBottomFade(heroArtworkZoom) {
+                                            heroVisible * dockFraction()
+                                        }
+                                    } else {
+                                        Modifier.heroArtworkBottomFade(heroFadeFraction, heroArtworkZoom) {
+                                            heroVisible * dockFraction()
+                                        }
+                                    },
+                                ),
                             contentAlignment = Alignment.Center,
                         ) {
+                            // Fade the scrim with the cover. Leaving it outside
+                            // the masked layer creates a dark horizontal band at
+                            // the sleeve edge over the artwork-derived backdrop.
+                            Box(Modifier.fillMaxSize().background(Color.Black.copy(alpha = 0.18f)))
                             if (!artLoaded && !canvasRendered) {
                                 Icon(
                                     imageVector = BitChordIcons.MusicNote,
@@ -2843,17 +2868,19 @@ fun NowPlayingScreen(
                                         }
                                     },
                             )
-                            HeroArtworkBottomBlur(
-                                model = artRequest,
-                                cacheKey = requestedArtUrl,
-                                cachedBlurImage = heroBlurImage,
-                                alpha = heroVisible * dockFraction() *
-                                    (1f - if (heroClip != null) canvasCover.floatValue else 0f),
-                                zoom = heroArtworkZoom,
-                                onBlurReady = { bitmap -> heroBlurImage = bitmap.asImageBitmap() },
-                                includeRightEdge = tabletFullscreenPlayer,
-                                modifier = Modifier.fillMaxSize(),
-                            )
+                            if (aurisHeroMode) {
+                                HeroArtworkBottomBlur(
+                                    model = artRequest,
+                                    cacheKey = requestedArtUrl,
+                                    cachedBlurImage = heroBlurImage,
+                                    alpha = heroVisible * dockFraction() *
+                                        (1f - if (heroClip != null) canvasCover.floatValue else 0f),
+                                    zoom = heroArtworkZoom,
+                                    onBlurReady = { bitmap -> heroBlurImage = bitmap.asImageBitmap() },
+                                    includeRightEdge = tabletFullscreenPlayer,
+                                    modifier = Modifier.fillMaxSize(),
+                                )
+                            }
                         }
                     }
 
