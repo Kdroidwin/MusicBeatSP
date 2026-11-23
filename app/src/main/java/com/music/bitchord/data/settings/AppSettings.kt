@@ -814,7 +814,7 @@ object AppSettings {
     val playerTransportVerticalOffsetDp = MutableStateFlow(0)
     val playerBottomActionsVerticalOffsetDp = MutableStateFlow(0)
     /** Strength of the artwork-matched lower blur in the full-screen player. */
-    val fullBleedArtworkBottomBlurStrengthDp = MutableStateFlow(48)
+    val fullBleedArtworkBottomBlurStrengthDp = MutableStateFlow(0)
     /** Hides only the word label on the play button in collection detail pages. */
     val hidePlaylistPlayButtonLabel = MutableStateFlow(false)
     /** Uses a white background and black play glyph for collection detail pages. */
@@ -1976,7 +1976,7 @@ object AppSettings {
             legacyVerticalOffset,
         ).coerceIn(MIN_PLAYER_CONTROLS_VERTICAL_OFFSET_DP, MAX_PLAYER_CONTROLS_VERTICAL_OFFSET_DP)
         fullBleedArtworkBottomBlurStrengthDp.value =
-            prefs.getInt(KEY_FULL_BLEED_ARTWORK_BOTTOM_BLUR_STRENGTH_DP, 48).coerceIn(0, 200)
+            prefs.getInt(KEY_FULL_BLEED_ARTWORK_BOTTOM_BLUR_STRENGTH_DP, 0).coerceIn(0, 200)
         hidePlaylistPlayButtonLabel.value = prefs.getBoolean(KEY_HIDE_PLAYLIST_PLAY_BUTTON_LABEL, false)
         whiteCollectionPlayButton.value = prefs.getBoolean(KEY_WHITE_COLLECTION_PLAY_BUTTON, true)
         showPlayerTopGrabber.value = prefs.getBoolean(KEY_SHOW_PLAYER_TOP_GRABBER, true)
