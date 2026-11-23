@@ -130,6 +130,7 @@ private fun resolvePlaylistSongsInternal(
                     isVideoOrigin = metadata?.isVideoOrigin ?: false,
                     localUri = id,
                     localPath = uri?.takeIf { it.scheme == "file" }?.path,
+                    localFolderPath = metadata?.localFolderPath,
                 )
             }
             // Remote catalogue rows (including YouTube Music) are not in the

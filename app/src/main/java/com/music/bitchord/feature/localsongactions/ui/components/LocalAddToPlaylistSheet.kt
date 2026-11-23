@@ -92,6 +92,7 @@ fun LocalAddToPlaylistSheet(
                 isVideo = song.isVideo,
                 isVideoOrigin = song.isVideoOrigin,
                 localPath = song.localPath,
+                localFolderPath = song.localFolderPath,
             )
         }
     }

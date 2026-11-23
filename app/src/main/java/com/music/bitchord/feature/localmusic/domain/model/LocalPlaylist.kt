@@ -42,5 +42,7 @@ data class LocalPlaylistSongMetadata(
     val isVideoOrigin: Boolean = isVideo,
     /** Stable path hint used to refresh a local playlist row after MediaStore reindexes its URI. */
     val localPath: String? = null,
+    /** MediaStore directory for local rows when scoped storage hides the filesystem path. */
+    val localFolderPath: String? = null,
     val albumArtist: String? = null,
 )

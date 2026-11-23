@@ -217,6 +217,7 @@ object LocalPlaylistStore {
                     isVideo = previous?.isVideo ?: metadata.isVideo,
                     isVideoOrigin = previous?.isVideoOrigin ?: metadata.isVideoOrigin,
                     localPath = path ?: metadata.localPath,
+                    localFolderPath = previous?.localFolderPath ?: metadata.localFolderPath,
                 )
             }
             playlist.copy(editedSongMetadata = overrides)
@@ -243,6 +244,7 @@ object LocalPlaylistStore {
             isVideo = song.isVideo,
             isVideoOrigin = song.isVideoOrigin,
             localPath = song.localPath,
+            localFolderPath = song.localFolderPath,
             albumArtist = albumArtist.trim().takeIf(String::isNotEmpty),
         )
         return updateEditedSongMetadata(
