@@ -2500,4 +2500,13 @@
     <string name="center_artist_detail_name_subtitle">Center the artist name over the full-screen artist artwork. On by default.</string>
     <string name="artist_detail_most_played_label_as_tracks">Show “Tracks” instead of “Top songs”</string>
     <string name="artist_detail_most_played_label_as_tracks_subtitle">Rename the artist detail page’s frequently played section to the general tracks label. On by default.</string>
+    <string name="download_storage_mode">Online download destination</string>
+    <string name="download_storage_mode_subtitle">Keep the existing in-app download flow, or save the online source’s best available audio to a chosen folder. Unsupported formats are reported instead of silently replaced.</string>
+    <string name="download_storage_app_managed">In-app downloads</string>
+    <string name="download_storage_source_best">Best available audio to folder</string>
+    <string name="download_destination_folder">Download folder</string>
+    <string name="download_destination_folder_not_set">Not selected</string>
+    <string name="download_destination_folder_selected">Folder selected</string>
+    <string name="download_destination_folder_required">Choose a download folder in Settings before downloading in this mode.</string>
+    <string name="download_destination_folder_permission_failed">Could not keep access to that folder. Choose another folder.</string>
 </resources>

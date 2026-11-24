@@ -288,6 +288,12 @@ enum class DownloadQuality(
     ),
 }
 
+/** Destination and source-quality policy for regular online audio downloads. */
+enum class DownloadStorageMode {
+    APP_MANAGED,
+    SOURCE_BEST_TO_FOLDER,
+}
+
 enum class ThemeMode(val label: String) {
     SYSTEM("System"),
     LIGHT("Light"),
@@ -595,6 +601,11 @@ object AppSettings {
      * keeps it that way for the people it didn't.
      */
     val downloadQuality = MutableStateFlow(DownloadQuality.LOSSLESS)
+
+    /** Existing app-managed download workflow, or best source audio in a SAF folder. */
+    val downloadStorageMode = MutableStateFlow(DownloadStorageMode.APP_MANAGED)
+    /** SAF grant for the folder used only by [DownloadStorageMode.SOURCE_BEST_TO_FOLDER]. */
+    val downloadDestinationTreeUri = MutableStateFlow<String?>(null)
 
     /**
      * Refuse to start a download while the connection charges for data.
@@ -1784,6 +1795,12 @@ object AppSettings {
         audioQualityCellular.value = readQuality(KEY_QUALITY_CELLULAR)
         migrateDownloadQuality()
         downloadQuality.value = readDownloadQuality()
+        downloadStorageMode.value = runCatching {
+            DownloadStorageMode.valueOf(
+                prefs.getString(KEY_DOWNLOAD_STORAGE_MODE, DownloadStorageMode.APP_MANAGED.name).orEmpty(),
+            )
+        }.getOrDefault(DownloadStorageMode.APP_MANAGED)
+        downloadDestinationTreeUri.value = prefs.getString(KEY_DOWNLOAD_DESTINATION_TREE_URI, null)
         wifiOnlyDownloads.value = prefs.getBoolean(KEY_WIFI_ONLY_DOWNLOADS, true)
         exportDownloads.value = prefs.getBoolean(KEY_EXPORT_DOWNLOADS, false)
         cdRippingOutputTreeUri.value = prefs.getString(KEY_CD_RIPPING_OUTPUT_TREE_URI, null)
@@ -2675,6 +2692,20 @@ object AppSettings {
     fun setDownloadQuality(value: DownloadQuality) {
         downloadQuality.value = value
         prefs.edit().putString(KEY_QUALITY_DOWNLOAD, value.name).apply()
+    }
+
+    fun setDownloadStorageMode(value: DownloadStorageMode) {
+        downloadStorageMode.value = value
+        prefs.edit().putString(KEY_DOWNLOAD_STORAGE_MODE, value.name).apply()
+    }
+
+    fun setDownloadDestinationTreeUri(value: String?) {
+        val normalized = value?.takeIf(String::isNotBlank)
+        downloadDestinationTreeUri.value = normalized
+        prefs.edit().apply {
+            if (normalized == null) remove(KEY_DOWNLOAD_DESTINATION_TREE_URI)
+            else putString(KEY_DOWNLOAD_DESTINATION_TREE_URI, normalized)
+        }.apply()
     }
 
     fun setWifiOnlyDownloads(value: Boolean) {
@@ -5736,6 +5767,7 @@ object AppSettings {
         KEY_SCOPED_AUDIO_PERMISSION_MIGRATION_DONE,
         KEY_CD_RIPPING_OUTPUT_TREE_URI,
         KEY_HEADPHONE_BURN_IN_MUSIC_URI,
+        KEY_DOWNLOAD_DESTINATION_TREE_URI,
     )
 
     private val OBSOLETE_ONLINE_KEYS = setOf(
@@ -5780,6 +5812,8 @@ object AppSettings {
     private const val KEY_QUALITY_DOWNLOAD = "audio_quality_download"
     private const val KEY_WIFI_ONLY_DOWNLOADS = "wifi_only_downloads"
     private const val KEY_EXPORT_DOWNLOADS = "export_downloads"
+    private const val KEY_DOWNLOAD_STORAGE_MODE = "download_storage_mode"
+    private const val KEY_DOWNLOAD_DESTINATION_TREE_URI = "download_destination_tree_uri"
     private const val KEY_LOSSLESS = "lossless_audio"
     private const val KEY_SKIP_SILENCE = "skip_silence"
     private const val KEY_AUDIO_OFFLOAD_ENABLED = "audio_offload_enabled"

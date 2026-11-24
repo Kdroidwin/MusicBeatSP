@@ -221,6 +221,7 @@ import com.music.bitchord.data.model.UiState
 import com.music.bitchord.data.model.durationMillis
 import com.music.bitchord.data.scrobbling.LastFM
 import com.music.bitchord.data.settings.AppSettings
+import com.music.bitchord.data.settings.DownloadStorageMode
 import com.music.bitchord.data.settings.PlayerArtistPageMode
 import com.music.bitchord.data.settings.HomeTabTitleMode
 import com.music.bitchord.data.settings.SavedYoutubeCollection
@@ -2354,6 +2355,17 @@ private fun BitChordApp(
     // time.
     val startDownload: (List<Song>, DownloadTarget?) -> Unit = { requested, from ->
         val saved = Downloads.saved.value
+        val sourceBestFolderMode = AppSettings.downloadStorageMode.value == DownloadStorageMode.SOURCE_BEST_TO_FOLDER
+        val destinationTreeUri = if (sourceBestFolderMode) {
+            AppSettings.downloadDestinationTreeUri.value?.let(Uri::parse)
+        } else {
+            null
+        }
+        val hasDestinationPermission = destinationTreeUri?.let { selectedUri ->
+            context.contentResolver.persistedUriPermissions.any { permission ->
+                permission.uri == selectedUri && permission.isWritePermission
+            }
+        } == true
         // Already on disk, and already queued or running: neither needs asking
         // again. What's left is what a tap on "Download" actually means.
         //
@@ -2381,6 +2393,7 @@ private fun BitChordApp(
                     song
                 }
             }
+        val missingDownloadFolder = songs.isNotEmpty() && sourceBestFolderMode && !hasDestinationPermission
         // Asked here as well as inside [Downloads.enqueue] — not instead of it.
         // Enqueue is the invariant and has to refuse whoever calls it, including
         // the storage-permission continuation below, which resumes long enough
@@ -2388,8 +2401,8 @@ private fun BitChordApp(
         // the one place that knows the tap was for forty tracks and can say so
         // once, rather than leaving forty identical failed rows to be read.
         val blocked = songs.isNotEmpty() && !AppSettings.downloadsAllowedNow
-        if (songs.isNotEmpty() && !blocked) {
-            val needsStorage = AppSettings.exportDownloads.value && DownloadStore.needsLegacyPermission() &&
+        if (songs.isNotEmpty() && !blocked && !missingDownloadFolder) {
+            val needsStorage = destinationTreeUri == null && AppSettings.exportDownloads.value && DownloadStore.needsLegacyPermission() &&
                 ContextCompat.checkSelfPermission(
                     context,
                     Manifest.permission.WRITE_EXTERNAL_STORAGE,
@@ -2413,7 +2426,7 @@ private fun BitChordApp(
                 downloadPendingHighestYoutubeOpus = false
                 storagePermission.launch(Manifest.permission.WRITE_EXTERNAL_STORAGE)
             } else {
-                songs.forEach { Downloads.enqueue(context, it, from?.title) }
+                songs.forEach { Downloads.enqueue(context, it, from?.title, destinationTreeUri) }
                 if (from != null) Downloads.markRequested(from.id, songs.map { it.videoId })
             }
         }
@@ -2422,7 +2435,7 @@ private fun BitChordApp(
         // that release, and the point of the record is to group them. Skipped
         // only when the whole batch was refused, since then there will be
         // nothing on disk for it to group.
-        if (from != null && !blocked) {
+        if (from != null && !blocked && !missingDownloadFolder) {
             Downloads.rememberCollection(from, requested)
         }
         when {
@@ -2433,6 +2446,11 @@ private fun BitChordApp(
             blocked -> Toast.makeText(
                 context,
                 context.getString(R.string.wifi_only_download_refusal),
+                Toast.LENGTH_LONG,
+            ).show()
+            missingDownloadFolder -> Toast.makeText(
+                context,
+                context.getString(R.string.download_destination_folder_required),
                 Toast.LENGTH_LONG,
             ).show()
             requested.size > 1 -> {

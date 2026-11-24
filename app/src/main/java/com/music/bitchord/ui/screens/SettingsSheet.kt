@@ -192,6 +192,7 @@ import com.music.bitchord.data.LocalMediaRepository
 import com.music.bitchord.data.NerdStats
 import com.music.bitchord.data.scrobbling.LastFM
 import com.music.bitchord.data.settings.AppSettings
+import com.music.bitchord.data.settings.DownloadStorageMode
 import com.music.bitchord.data.settings.HeadphoneBurnInSource
 import com.music.bitchord.data.settings.BluetoothButtonAction
 import com.music.bitchord.ui.player.AudioVisualizationPanel
@@ -1798,6 +1799,14 @@ fun SettingsScreen(
     }
 
     val skipSilence by AppSettings.skipSilence.collectAsStateWithLifecycle()
+    val downloadStorageMode by AppSettings.downloadStorageMode.collectAsStateWithLifecycle()
+    val downloadDestinationTreeUri by AppSettings.downloadDestinationTreeUri.collectAsStateWithLifecycle()
+    val downloadDestinationFolderAvailable = remember(context, downloadDestinationTreeUri) {
+        val selected = downloadDestinationTreeUri?.let { runCatching { Uri.parse(it) }.getOrNull() }
+        selected?.let { uri ->
+            context.contentResolver.persistedUriPermissions.any { it.uri == uri && it.isWritePermission }
+        } == true
+    }
     val audioOffloadEnabled by AppSettings.audioOffloadEnabled.collectAsStateWithLifecycle()
     val crossfadeDurationMs by AppSettings.crossfadeDurationMs.collectAsStateWithLifecycle()
     val abRepeatEnabled by AppSettings.abRepeatEnabled.collectAsStateWithLifecycle()
@@ -2235,6 +2244,32 @@ fun SettingsScreen(
         } else {
             Toast.makeText(context, R.string.theme_image_permission_failed, Toast.LENGTH_LONG).show()
         }
+    }
+    val downloadDestinationFolderPicker = rememberLauncherForActivityResult(
+        ActivityResultContracts.OpenDocumentTree(),
+    ) { selected ->
+        if (selected == null) return@rememberLauncherForActivityResult
+        val retained = runCatching {
+            context.contentResolver.takePersistableUriPermission(
+                selected,
+                Intent.FLAG_GRANT_READ_URI_PERMISSION or Intent.FLAG_GRANT_WRITE_URI_PERMISSION,
+            )
+        }.isSuccess
+        if (!retained) {
+            Toast.makeText(context, R.string.download_destination_folder_permission_failed, Toast.LENGTH_LONG).show()
+            return@rememberLauncherForActivityResult
+        }
+        AppSettings.downloadDestinationTreeUri.value
+            ?.takeIf { it != selected.toString() }
+            ?.let { old ->
+                runCatching {
+                    context.contentResolver.releasePersistableUriPermission(
+                        Uri.parse(old),
+                        Intent.FLAG_GRANT_READ_URI_PERMISSION or Intent.FLAG_GRANT_WRITE_URI_PERMISSION,
+                    )
+                }
+            }
+        AppSettings.setDownloadDestinationTreeUri(selected.toString())
     }
     val chooseThemeImage: () -> Unit = { themeImagePicker.launch(arrayOf("image/*")) }
     val customFontPicker = rememberLauncherForActivityResult(ActivityResultContracts.OpenDocument()) { selected ->
@@ -3275,6 +3310,40 @@ fun SettingsScreen(
         )
     }
     val settingsSearchEntries = buildSettingsSearchEntries() + listOf(
+        SettingsSearchEntry(
+            title = stringResource(R.string.download_storage_mode),
+            subtitle = stringResource(R.string.download_storage_mode_subtitle),
+            keywords = listOf("download", "source", "quality", "folder", "ダウンロード", "保存先", "音質", "オンラインソース"),
+            valueLabel = stringResource(
+                if (downloadStorageMode == DownloadStorageMode.SOURCE_BEST_TO_FOLDER) {
+                    R.string.download_storage_source_best
+                } else {
+                    R.string.download_storage_app_managed
+                },
+            ),
+            activate = {
+                AppSettings.setDownloadStorageMode(
+                    if (downloadStorageMode == DownloadStorageMode.SOURCE_BEST_TO_FOLDER) {
+                        DownloadStorageMode.APP_MANAGED
+                    } else {
+                        DownloadStorageMode.SOURCE_BEST_TO_FOLDER
+                    },
+                )
+            },
+        ),
+        SettingsSearchEntry(
+            title = stringResource(R.string.download_destination_folder),
+            subtitle = stringResource(
+                if (!downloadDestinationFolderAvailable) R.string.download_destination_folder_not_set
+                else R.string.download_destination_folder_selected,
+            ),
+            keywords = listOf("download", "folder", "destination", "SAF", "ダウンロード", "保存先", "フォルダ"),
+            valueLabel = stringResource(
+                if (!downloadDestinationFolderAvailable) R.string.download_destination_folder_not_set
+                else R.string.download_destination_folder_selected,
+            ),
+            activate = { downloadDestinationFolderPicker.launch(null) },
+        ),
         SettingsSearchEntry(
             title = stringResource(R.string.ffmpeg_unsupported_audio_transcode),
             subtitle = stringResource(R.string.ffmpeg_unsupported_audio_transcode_subtitle),
@@ -8169,6 +8238,42 @@ fun SettingsScreen(
                 )
                 RowDivider()
             }
+            SettingsRow(
+                icon = Icons.Rounded.FileDownload,
+                title = stringResource(R.string.download_storage_mode),
+                subtitle = stringResource(R.string.download_storage_mode_subtitle),
+                value = stringResource(
+                    if (downloadStorageMode == DownloadStorageMode.SOURCE_BEST_TO_FOLDER) {
+                        R.string.download_storage_source_best
+                    } else {
+                        R.string.download_storage_app_managed
+                    },
+                ),
+                onClick = {
+                    AppSettings.setDownloadStorageMode(
+                        if (downloadStorageMode == DownloadStorageMode.SOURCE_BEST_TO_FOLDER) {
+                            DownloadStorageMode.APP_MANAGED
+                        } else {
+                            DownloadStorageMode.SOURCE_BEST_TO_FOLDER
+                        },
+                    )
+                },
+            )
+            RowDivider()
+            SettingsRow(
+                icon = Icons.Rounded.Folder,
+                title = stringResource(R.string.download_destination_folder),
+                subtitle = stringResource(
+                    if (!downloadDestinationFolderAvailable) R.string.download_destination_folder_not_set
+                    else R.string.download_destination_folder_selected,
+                ),
+                value = stringResource(
+                    if (!downloadDestinationFolderAvailable) R.string.download_destination_folder_not_set
+                    else R.string.download_destination_folder_selected,
+                ),
+                onClick = { downloadDestinationFolderPicker.launch(null) },
+            )
+            RowDivider()
             SettingsRow(
                 icon = Icons.Rounded.Album,
                 title = stringResource(R.string.cd_ripping_settings),

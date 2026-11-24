@@ -7,12 +7,16 @@ import android.net.Uri
 import com.music.bitchord.data.DebugLog as Log
 import com.music.bitchord.data.innertube.StreamResolver
 import androidx.core.content.ContextCompat
+import com.music.bitchord.R
 import com.music.bitchord.data.model.Song
 import com.music.bitchord.data.settings.AppSettings
 import com.music.bitchord.data.settings.DownloadQuality
+import com.music.bitchord.data.settings.DownloadStorageMode
 import com.music.bitchord.data.sources.SourceResolver
+import com.music.bitchord.data.sources.SourceRegistry
 import com.music.bitchord.data.sources.SourceStream
 import com.music.bitchord.data.sources.StreamFormat
+import com.music.bitchord.data.sources.StreamRequest
 import com.music.bitchord.data.sources.TrackMatcher
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.Deferred
@@ -181,16 +185,49 @@ object Downloads {
      *   one of many. Carried no further than [DownloadSession], which is the
      *   only thing that has to say *why* forty tracks are in the queue.
      */
-    fun enqueue(context: Context, song: Song, from: String? = null) {
-        enqueueInternal(context, song, from, forceHighestYoutubeOpus = false)
-    }
-
-    /** Queue an Onsen episode into the folder the listener selected with the system picker. */
-    fun enqueueToFolder(context: Context, song: Song, destinationTreeUri: Uri) {
+    fun enqueue(
+        context: Context,
+        song: Song,
+        from: String? = null,
+        destinationTreeUri: Uri? = null,
+    ) {
+        val sourceBestFolderMode = AppSettings.downloadStorageMode.value == DownloadStorageMode.SOURCE_BEST_TO_FOLDER
+        val effectiveDestination = destinationTreeUri ?: if (sourceBestFolderMode) {
+            AppSettings.downloadDestinationTreeUri.value?.let(Uri::parse)
+        } else {
+            null
+        }
+        if (sourceBestFolderMode) {
+            val hasWriteGrant = effectiveDestination?.let { uri ->
+                context.contentResolver.persistedUriPermissions.any { it.uri == uri && it.isWritePermission }
+            } == true
+            if (!hasWriteGrant) {
+                DownloadSession.queued(song, from)
+                fail(
+                    song.videoId,
+                    context.getString(
+                        if (effectiveDestination == null) R.string.download_destination_folder_required
+                        else R.string.download_destination_folder_permission_failed,
+                    ),
+                )
+                return
+            }
+        }
         enqueueInternal(
             context,
             song,
-            from = null,
+            from,
+            forceHighestYoutubeOpus = false,
+            destinationTreeUri = effectiveDestination,
+        )
+    }
+
+    /** Queue an Onsen episode into the folder the listener selected with the system picker. */
+    fun enqueueToFolder(context: Context, song: Song, destinationTreeUri: Uri, from: String? = null) {
+        enqueueInternal(
+            context,
+            song,
+            from = from,
             forceHighestYoutubeOpus = false,
             destinationTreeUri = destinationTreeUri,
         )
@@ -734,7 +771,7 @@ object Downloads {
         DownloadSession.running(id, 0f)
 
         try {
-            val plan = prepare(context, song, forceHighestYoutubeOpus)
+            val plan = prepare(context, song, forceHighestYoutubeOpus, destinationTreeUri)
             // The manager is showing the row that was tapped, which for a music
             // video is the wrong title and the wrong cover for the file actually
             // being written. Corrected here rather than left to disagree with
@@ -775,6 +812,7 @@ object Downloads {
         context: Context,
         song: Song,
         forceHighestYoutubeOpus: Boolean = false,
+        destinationTreeUri: Uri? = null,
     ): Prepared = withContext(Dispatchers.IO) {
         // Downloads preserve the exact item the listener picked. Catalogue
         // matching is a manual playback action and must not silently change a
@@ -823,7 +861,55 @@ object Downloads {
         // which rung they are fetching, and re-reading the setting per call
         // would let a change made mid-download splice two renditions into
         // one file.
-        val quality = AppSettings.downloadQuality.value
+        val quality = if (AppSettings.downloadStorageMode.value == DownloadStorageMode.SOURCE_BEST_TO_FOLDER) {
+            DownloadQuality.LOSSLESS
+        } else {
+            AppSettings.downloadQuality.value
+        }
+
+        // A search result from an addon/server carries its opaque source id in
+        // videoId. Resolve that id against the same enabled source and save its
+        // actual format. Sending it through the cross-catalogue matcher used to
+        // fall through to YouTube, where the opaque id is not a video id.
+        if (SourceRegistry.parseTrackKey(track.videoId) != null) {
+            val request = if (AppSettings.downloadStorageMode.value == DownloadStorageMode.SOURCE_BEST_TO_FOLDER) {
+                StreamRequest.Lossless
+            } else {
+                SourceResolver.requestForDownload(quality)
+            }
+            val sourceStream = withTimeoutOrNull(SOURCE_LOOKUP_MS) {
+                SourceResolver.resolvePinnedForDownload(
+                    track,
+                    request,
+                    bestIfLosslessUnavailable = destinationTreeUri != null,
+                )
+            } ?: error("The selected online source did not provide a download stream in time")
+            val dash = OfflineDash.handles(sourceStream.url)
+            val hls = sourceStream.url.substringBefore('?').endsWith(".m3u8", ignoreCase = true)
+            val packaged = dash || hls
+            if (packaged && destinationTreeUri != null) {
+                error("This source provides a streaming playlist, not a standalone audio file for the selected folder")
+            }
+            val storable = if (packaged) null else DownloadStore.storable(sourceStream.format.codec)
+                ?: error("This source returned an unsupported audio format")
+            if (destinationTreeUri == null && !packaged) {
+                DownloadStore.existing(context, DownloadStore.fileNameFor(track, requireNotNull(storable).extension))?.let { uri ->
+                    return@withContext Prepared(song.videoId, track, route = null, alreadyAt = uri)
+                }
+            }
+            val route = Route(
+                extension = if (packaged) "m3u8" else requireNotNull(storable).extension,
+                mimeType = if (packaged) "application/vnd.apple.mpegurl" else requireNotNull(storable).mimeType,
+                describe = sourceStream.format.summary,
+                downloadFormat = sourceStream.format.downloadBadge(),
+                taggable = true,
+                offlineHls = Manifest(sourceStream.url, sourceStream.headers, dash = dash).takeIf { packaged },
+                write = { sink, onProgress ->
+                    Downloader.fetchDirect(sourceStream.url, sourceStream.headers, sink, onProgress)
+                },
+            )
+            return@withContext Prepared(song.videoId, track, route = route, alreadyAt = null)
+        }
 
         // Asked before the lookup rather than after it, unlike the check on the
         // route's own filename below. A file already sitting in Music under a
@@ -834,7 +920,7 @@ object Downloads {
         // be lossless are worth guessing at: an `.m4a` may be this app's ALAC
         // or its AAC, and adopting the wrong one would quietly answer a request
         // for lossless with a transcode.
-        if (!forceHighestYoutubeOpus && quality.keepsLossless) {
+        if (destinationTreeUri == null && !forceHighestYoutubeOpus && quality.keepsLossless) {
             LOSSLESS_EXTENSIONS.firstNotNullOfOrNull { extension ->
                 DownloadStore.existing(context, DownloadStore.fileNameFor(track, extension))
             }?.let { uri ->
@@ -842,7 +928,7 @@ object Downloads {
             }
         }
 
-        val route = if (forceHighestYoutubeOpus) highestYoutubeOpusRoute(track) else routeFor(track, quality)
+        val route = if (forceHighestYoutubeOpus) highestYoutubeOpusRoute(track) else routeFor(track, quality, destinationTreeUri)
         Log.d(TAG, "downloading ${song.videoId} as .${route.extension} (${route.describe}, ${quality.label})")
         Prepared(song.videoId, track, route = route, alreadyAt = null)
     }
@@ -1138,7 +1224,7 @@ object Downloads {
      *   than to the middle of this one. [Downloader.fetch] resolves again after
      *   a mid-download refusal and has to ask for the same rung it started on.
      */
-    private suspend fun routeFor(track: Song, quality: DownloadQuality): Route {
+    private suspend fun routeFor(track: Song, quality: DownloadQuality, destinationTreeUri: Uri? = null): Route {
         fromSources(track, quality)?.let { (stream, storable) ->
             // A manifest is an index, not audio. Whichever kind it is, fetching
             // it as a file writes the index into something named `.flac` —
@@ -1152,7 +1238,7 @@ object Downloads {
             // A package is only useful inside BitChord. When the user
             // explicitly exports files for another player, decline it here and
             // let the ordinary portable-file fallback resolve instead.
-            if (packaged && AppSettings.exportDownloads.value) return@let
+            if (packaged && (AppSettings.exportDownloads.value || destinationTreeUri != null)) return@let
             return Route(
                 // DASH is saved *as* HLS — see [OfflineDash] for why — so both
                 // kinds land as the same package and are named for what was

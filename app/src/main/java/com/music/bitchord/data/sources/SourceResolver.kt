@@ -122,6 +122,31 @@ object SourceResolver {
     }
 
     /**
+     * Resolves a catalogue row from the source that supplied it, for a download.
+     * Source-backed ids must stay pinned: searching another catalogue by title
+     * can silently save a different recording under the selected row's name.
+     */
+    suspend fun resolvePinnedForDownload(
+        song: Song,
+        request: StreamRequest,
+        bestIfLosslessUnavailable: Boolean = false,
+    ): SourceStream {
+        val (configId, trackId) = SourceRegistry.parseTrackKey(song.videoId)
+            ?: error("This track is not from a configured online source")
+        require(trackId.length in 1..2048 && trackId.none { it.code in 0x00..0x1f || it.code in 0x7f..0x9f }) {
+            "This online track has an invalid source id"
+        }
+        val source = SourceRegistry.active().firstOrNull { it.configId == configId }
+            ?: error("The source for this track is disabled or unavailable")
+        val preferred = source.stream(trackId, request)
+        if (preferred != null) return preferred
+        if (bestIfLosslessUnavailable && request is StreamRequest.Lossless) {
+            source.stream(trackId, StreamRequest.Best)?.let { return it }
+        }
+        error("${source.displayName} no longer has this track at the requested quality")
+    }
+
+    /**
      * The recording a playback URI describes, for matching it elsewhere.
      *
      * Title, artist and runtime ride in the URI because they are what a

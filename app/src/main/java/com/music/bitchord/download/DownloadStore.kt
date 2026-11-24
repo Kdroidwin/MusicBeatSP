@@ -124,8 +124,8 @@ object DownloadStore {
      * will keep: the media store's audio collection accepts a closed list of
      * MIME types, and one it doesn't recognise is refused outright at [begin] —
      * which is a download that cannot start rather than one that sounds worse
-     * than hoped. Anything not answered for here falls the caller back to
-     * YouTube's AAC, so an unfamiliar codec costs quality and not the download.
+     * than hoped. Keep this table explicit so an unfamiliar codec fails
+     * clearly instead of being written under a guessed extension.
      *
      * Kept as a table rather than derived from the codec string because two of
      * these are not the identity mapping they look like. WAV's registered type
@@ -137,6 +137,12 @@ object DownloadStore {
     fun storable(codec: String?): Storable? = when (codec?.lowercase(Locale.ROOT)?.trim()) {
         "flac", "x-flac" -> Storable("flac", "audio/flac")
         "wav", "x-wav", "wave" -> Storable("wav", "audio/x-wav")
+        "aiff", "aif", "x-aiff" -> Storable("aiff", "audio/aiff")
+        "mp3", "mpeg", "mpeg audio", "audio/mpeg" -> Storable("mp3", "audio/mpeg")
+        "aac", "aac-lc", "he-aac", "mp4a-latm", "mp4a.40.2", "audio/aac" -> Storable("aac", "audio/aac")
+        "opus", "audio/opus" -> Storable("opus", "audio/ogg")
+        "ogg", "vorbis", "ogg vorbis", "audio/ogg", "application/ogg" -> Storable("ogg", "audio/ogg")
+        "webm" -> Storable("webm", "audio/webm")
         "alac", "m4a", "mp4", "eac3-joc", "ec3-joc", "dolby-atmos" -> Storable("m4a", "audio/mp4")
         else -> null
     }

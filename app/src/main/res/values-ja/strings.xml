@@ -2473,4 +2473,13 @@
     <string name="center_artist_detail_name_subtitle">全画面アーティスト画像上の名前を中央に配置します。初期設定はONです。</string>
     <string name="artist_detail_most_played_label_as_tracks">「よく聴いた曲」を「曲」と表示</string>
     <string name="artist_detail_most_played_label_as_tracks_subtitle">アーティスト詳細の再生回数セクション名を「曲」に変更します。初期設定はONです。</string>
+    <string name="download_storage_mode">オンライン音源の保存先</string>
+    <string name="download_storage_mode_subtitle">従来どおりアプリ内へ保存するか、オンラインソースが提供する最高音質を選択フォルダへ保存します。対応外の形式をYouTube音源などへ置き換えず、理由を表示します。</string>
+    <string name="download_storage_app_managed">アプリ内に保存</string>
+    <string name="download_storage_source_best">最高音質でフォルダに保存</string>
+    <string name="download_destination_folder">ダウンロード先フォルダ</string>
+    <string name="download_destination_folder_not_set">未選択</string>
+    <string name="download_destination_folder_selected">フォルダ選択済み</string>
+    <string name="download_destination_folder_required">このモードでダウンロードする前に、設定から保存先フォルダを選択してください。</string>
+    <string name="download_destination_folder_permission_failed">フォルダへのアクセスを保持できませんでした。別のフォルダを選択してください。</string>
 </resources>
