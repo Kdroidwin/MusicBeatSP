@@ -1891,6 +1891,7 @@ fun SettingsScreen(
     val playerMenusUsePlayerBackgroundColor by AppSettings.playerMenusUsePlayerBackgroundColor.collectAsStateWithLifecycle()
     val hidePlayerPopupHandles by AppSettings.hidePlayerPopupHandles.collectAsStateWithLifecycle()
     val detailsSheetArtworkBackdrop by AppSettings.detailsSheetArtworkBackdrop.collectAsStateWithLifecycle()
+    val tagEditorUsesArtworkColor by AppSettings.tagEditorUsesArtworkColor.collectAsStateWithLifecycle()
     val showEmbeddedComment by AppSettings.showEmbeddedComment.collectAsStateWithLifecycle()
     val queueManagerEqualsIcon by AppSettings.queueManagerEqualsIcon.collectAsStateWithLifecycle()
     val hideQueueLabel by AppSettings.hideQueueLabel.collectAsStateWithLifecycle()
@@ -1902,6 +1903,7 @@ fun SettingsScreen(
     val launcherIcon by AppSettings.launcherIcon.collectAsStateWithLifecycle()
     val artistsOpenAlbums by AppSettings.artistsOpenAlbums.collectAsStateWithLifecycle()
     val shuffleArtistAlbums by AppSettings.shuffleArtistAlbums.collectAsStateWithLifecycle()
+    val weightedShuffleEnabled by AppSettings.weightedShuffleEnabled.collectAsStateWithLifecycle()
     val onlineAlbumArtistArtwork by AppSettings.onlineAlbumArtistArtwork.collectAsStateWithLifecycle()
     val artistDeezerArtworkEnabled by AppSettings.artistDeezerArtworkEnabled.collectAsStateWithLifecycle()
     val playerArtistPageMode by AppSettings.playerArtistPageMode.collectAsStateWithLifecycle()
@@ -2027,6 +2029,7 @@ fun SettingsScreen(
     val preloadAlbumArtOnStartup by AppSettings.preloadAlbumArtOnStartup.collectAsStateWithLifecycle()
     val playerArtworkMode by AppSettings.playerArtworkMode.collectAsStateWithLifecycle()
     val fullBleedArtworkBottomBlurStrengthDp by AppSettings.fullBleedArtworkBottomBlurStrengthDp.collectAsStateWithLifecycle()
+    val fullBleedPanelsUseSquareBackdrop by AppSettings.fullBleedPanelsUseSquareBackdrop.collectAsStateWithLifecycle()
     val preserveArtworkShapeInCompactTransitions by AppSettings.preserveArtworkShapeInCompactTransitions.collectAsStateWithLifecycle()
     val keepArtworkFullSizeWhenPaused by AppSettings.keepArtworkFullSizeWhenPaused.collectAsStateWithLifecycle()
     val legacyMeshGradient by AppSettings.legacyMeshGradient.collectAsStateWithLifecycle()
@@ -2350,6 +2353,12 @@ fun SettingsScreen(
             listOf("metadata", "file information", "details", "artwork", "メタデータ", "ファイル情報", "詳細", "アートワーク"),
             detailsSheetArtworkBackdrop,
         ) { AppSettings.setDetailsSheetArtworkBackdrop(!detailsSheetArtworkBackdrop) },
+        SettingsSearchEntry(
+            stringResource(R.string.tag_editor_artwork_color),
+            stringResource(R.string.tag_editor_artwork_color_subtitle),
+            listOf("tag editor", "metadata", "artwork", "color", "タグ編集", "タグ", "アートワーク", "色"),
+            tagEditorUsesArtworkColor,
+        ) { AppSettings.setTagEditorUsesArtworkColor(!tagEditorUsesArtworkColor) },
         SettingsSearchEntry(
             stringResource(R.string.show_embedded_comment),
             stringResource(R.string.show_embedded_comment_subtitle),
@@ -2684,6 +2693,12 @@ fun SettingsScreen(
         ) { AppSettings.setLyricsExtensionsEnabled(!lyricsExtensionsEnabled) },
         *PlayerArtworkMode.entries.map { playerArtworkModeSearchEntry(it, playerArtworkMode) }.toTypedArray(),
         fullBleedArtworkBottomBlurSearchEntry(fullBleedArtworkBottomBlurStrengthDp),
+        SettingsSearchEntry(
+            stringResource(R.string.full_bleed_panels_square_backdrop),
+            stringResource(R.string.full_bleed_panels_square_backdrop_subtitle),
+            listOf("full screen artwork", "lyrics", "queue", "mesh gradient", "全画面アート", "歌詞", "再生キュー", "背景"),
+            fullBleedPanelsUseSquareBackdrop,
+        ) { AppSettings.setFullBleedPanelsUseSquareBackdrop(!fullBleedPanelsUseSquareBackdrop) },
         SettingsSearchEntry(stringResource(R.string.preserve_artwork_shape_in_compact_transitions), stringResource(R.string.preserve_artwork_shape_in_compact_transitions_subtitle), listOf("artwork", "cover", "aspect ratio", "mini player", "dock", "lyrics", "アート", "カバー", "縦横比", "ミニプレーヤー", "歌詞", "遷移"), preserveArtworkShapeInCompactTransitions) { AppSettings.setPreserveArtworkShapeInCompactTransitions(!preserveArtworkShapeInCompactTransitions) },
         SettingsSearchEntry(stringResource(R.string.keep_artwork_full_size_paused), stringResource(R.string.keep_artwork_full_size_paused_subtitle), listOf("artwork", "cover", "paused", "停止中", "アート"), keepArtworkFullSizeWhenPaused) { AppSettings.setKeepArtworkFullSizeWhenPaused(!keepArtworkFullSizeWhenPaused) },
         SettingsSearchEntry(stringResource(R.string.reduce_animation), stringResource(R.string.reduce_animation_subtitle), listOf("animation", "reduce", "アニメーション"), reduceAnimation) { AppSettings.setReduceAnimation(!reduceAnimation) },
@@ -2691,7 +2706,7 @@ fun SettingsScreen(
         SettingsSearchEntry(stringResource(R.string.walkman_player_style), stringResource(R.string.walkman_player_style_subtitle), listOf("player", "walkman", "sony", "controls", "ウォークマン", "ソニー", "プレイヤー", "再生ボタン"), walkmanPlayerStyle) { AppSettings.setWalkmanPlayerStyle(!walkmanPlayerStyle) },
         SettingsSearchEntry(stringResource(R.string.player_play_pause_animation), stringResource(R.string.player_play_pause_animation_subtitle), listOf("player", "play", "pause", "animation", "motion", "再生", "一時停止", "アニメーション"), playerPlayPauseAnimation) { AppSettings.setPlayerPlayPauseAnimation(!playerPlayPauseAnimation) },
         SettingsSearchEntry(stringResource(R.string.player_skip_animations), stringResource(R.string.player_skip_animations_subtitle), listOf("player", "next", "previous", "skip", "animation", "motion", "次へ", "前へ", "アニメーション"), playerSkipAnimations) { AppSettings.setPlayerSkipAnimations(!playerSkipAnimations) },
-        SettingsSearchEntry(stringResource(R.string.repeat_button_reference_icon), stringResource(R.string.repeat_button_reference_icon_subtitle), listOf("repeat", "icon", "design", "リピート", "アイコン", "デザイン"), repeatButtonUsesReferenceIcon) { AppSettings.setRepeatButtonUsesReferenceIcon(!repeatButtonUsesReferenceIcon) },
+        SettingsSearchEntry(stringResource(R.string.repeat_button_reference_icon), stringResource(R.string.repeat_button_reference_icon_subtitle), listOf("repeat", "icon", "design", "Tinque", "Apple Music", "リピート", "アイコン", "デザイン"), repeatButtonUsesReferenceIcon) { AppSettings.setRepeatButtonUsesReferenceIcon(!repeatButtonUsesReferenceIcon) },
         SettingsSearchEntry(stringResource(R.string.player_skip_buttons_match_mini_player), stringResource(R.string.player_skip_buttons_match_mini_player_subtitle), listOf("player", "mini player", "previous", "next", "skip", "icon", "プレイヤー", "ミニプレイヤー", "前の曲", "次の曲", "アイコン"), playerSkipButtonsMatchMiniPlayer) { AppSettings.setPlayerSkipButtonsMatchMiniPlayer(!playerSkipButtonsMatchMiniPlayer) },
         SettingsSearchEntry(stringResource(R.string.retro_player_mode), stringResource(R.string.retro_player_mode_subtitle), listOf("player", "retro", "classic", "remote", "レトロ", "プレーヤー", "リモコン"), retroPlayerMode) { AppSettings.setRetroPlayerMode(!retroPlayerMode) },
         SettingsSearchEntry(
@@ -2905,6 +2920,13 @@ fun SettingsScreen(
 
     @Composable
     fun buildPreviouslyUnindexedPlaybackSearchEntries(): List<SettingsSearchEntry> = listOf(
+        SettingsSearchEntry(
+            title = stringResource(R.string.weighted_shuffle),
+            subtitle = stringResource(R.string.weighted_shuffle_subtitle),
+            keywords = listOf("shuffle", "play history", "play count", "random", "シャッフル", "再生履歴", "再生回数", "加重"),
+            checked = weightedShuffleEnabled,
+            activate = { AppSettings.setWeightedShuffleEnabled(!weightedShuffleEnabled) },
+        ),
         SettingsSearchEntry(
             title = stringResource(R.string.external_media_control),
             subtitle = stringResource(R.string.external_media_control_subtitle),
@@ -4434,7 +4456,7 @@ fun SettingsScreen(
 
         SettingsGroup(header = stringResource(R.string.playback)) {
             SettingsRow(
-                icon = BitChordIcons.RepeatReference,
+                icon = BitChordIcons.RepeatTinque,
                 title = stringResource(R.string.ab_repeat),
                 subtitle = stringResource(R.string.ab_repeat_subtitle),
                 trailing = {
@@ -4996,6 +5018,19 @@ fun SettingsScreen(
                 steps = 58,
                 valueRange = 1f..60f,
                 modifier = Modifier.padding(start = ROW_INSET, end = ROW_INSET, bottom = 14.dp),
+            )
+            RowDivider()
+            SettingsRow(
+                icon = Icons.Rounded.Shuffle,
+                title = stringResource(R.string.weighted_shuffle),
+                subtitle = stringResource(R.string.weighted_shuffle_subtitle),
+                trailing = {
+                    Switch(
+                        checked = weightedShuffleEnabled,
+                        onCheckedChange = AppSettings::setWeightedShuffleEnabled,
+                    )
+                },
+                onClick = { AppSettings.setWeightedShuffleEnabled(!weightedShuffleEnabled) },
             )
             RowDivider()
             SettingsRow(
@@ -5760,7 +5795,7 @@ fun SettingsScreen(
             )
             RowDivider()
             SettingsRow(
-                icon = Icons.Rounded.Repeat,
+                icon = if (repeatButtonUsesReferenceIcon) BitChordIcons.RepeatTinque else BitChordIcons.Repeat,
                 title = stringResource(R.string.repeat_button_reference_icon),
                 subtitle = stringResource(R.string.repeat_button_reference_icon_subtitle),
                 trailing = { Switch(checked = repeatButtonUsesReferenceIcon, onCheckedChange = AppSettings::setRepeatButtonUsesReferenceIcon) },
@@ -5970,7 +6005,7 @@ fun SettingsScreen(
                         PlayerQuickAction.SHARE_FILE -> Icons.Rounded.Share
                         PlayerQuickAction.FAVORITE -> BitChordIcons.Heart
                         PlayerQuickAction.SHUFFLE -> BitChordIcons.Shuffle
-                        PlayerQuickAction.REPEAT -> if (repeatButtonUsesReferenceIcon) BitChordIcons.RepeatReference else BitChordIcons.Repeat
+                        PlayerQuickAction.REPEAT -> if (repeatButtonUsesReferenceIcon) BitChordIcons.RepeatTinque else BitChordIcons.Repeat
                     },
                     title = stringResource(titleRes),
                     subtitle = if (selectedIndex >= 0) stringResource(R.string.player_quick_action_order_subtitle) else null,
@@ -6271,6 +6306,19 @@ fun SettingsScreen(
                     )
                 },
                 onClick = { AppSettings.setDetailsSheetArtworkBackdrop(!detailsSheetArtworkBackdrop) },
+            )
+            RowDivider()
+            SettingsRow(
+                icon = Icons.Rounded.AutoAwesome,
+                title = stringResource(R.string.tag_editor_artwork_color),
+                subtitle = stringResource(R.string.tag_editor_artwork_color_subtitle),
+                trailing = {
+                    Switch(
+                        checked = tagEditorUsesArtworkColor,
+                        onCheckedChange = AppSettings::setTagEditorUsesArtworkColor,
+                    )
+                },
+                onClick = { AppSettings.setTagEditorUsesArtworkColor(!tagEditorUsesArtworkColor) },
             )
             RowDivider()
             SettingsRow(
@@ -7242,6 +7290,21 @@ fun SettingsScreen(
             RowDivider()
             if (playerArtworkMode.usesFullScreenArtwork) {
                 FullBleedArtworkBottomBlurSettingsRow(fullBleedArtworkBottomBlurStrengthDp)
+                RowDivider()
+                SettingsRow(
+                    icon = Icons.Rounded.Gradient,
+                    title = stringResource(R.string.full_bleed_panels_square_backdrop),
+                    subtitle = stringResource(R.string.full_bleed_panels_square_backdrop_subtitle),
+                    trailing = {
+                        Switch(
+                            checked = fullBleedPanelsUseSquareBackdrop,
+                            onCheckedChange = AppSettings::setFullBleedPanelsUseSquareBackdrop,
+                        )
+                    },
+                    onClick = {
+                        AppSettings.setFullBleedPanelsUseSquareBackdrop(!fullBleedPanelsUseSquareBackdrop)
+                    },
+                )
                 RowDivider()
             }
             SettingsRow(

@@ -78,16 +78,11 @@ import java.util.Locale
  */
 private val GLYPH_SLOT = 40.dp
 
-/**
- * The play and skip glyphs themselves.
- *
- * Deliberately grown inside [GLYPH_SLOT] rather than by growing the slot: the
- * slot is level with the 40dp artwork opposite it, and it is the taller of the
- * two that sets the row's height — so a bigger slot would make the whole bar
- * taller, which is not what a bigger glyph is being asked for. At 32 there is
- * still 4dp of clearance to the slot's edge on every side.
- */
+/** Play/pause glyph, grown inside the touch target without changing row height. */
 private val GLYPH_SIZE = 32.dp
+
+/** Skip arrows are slightly smaller than play/pause while keeping the same touch target. */
+private val SKIP_GLYPH_SIZE = 28.dp
 
 /** The spinner that stands in for the play glyph, kept in proportion to it. */
 private val SPINNER_SIZE = 22.dp
@@ -413,9 +408,10 @@ fun MiniPlayer(
                         previousButtonIcon,
                         contentDescription = stringResource(R.string.widget_previous),
                         tint = primaryContentColor,
-                        modifier = Modifier.size(GLYPH_SIZE),
+                        modifier = Modifier.size(SKIP_GLYPH_SIZE),
                     )
                 }
+                Spacer(Modifier.width(TRANSPORT_GAP))
             }
             if (isLoading) {
                 Box(Modifier.size(GLYPH_SLOT), contentAlignment = Alignment.Center) {
@@ -453,7 +449,7 @@ fun MiniPlayer(
                     nextButtonIcon,
                     contentDescription = stringResource(R.string.widget_next),
                     tint = primaryContentColor,
-                    modifier = Modifier.size(GLYPH_SIZE),
+                    modifier = Modifier.size(SKIP_GLYPH_SIZE),
                 )
             }
         }

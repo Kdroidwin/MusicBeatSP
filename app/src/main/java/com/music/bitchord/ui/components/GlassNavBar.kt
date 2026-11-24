@@ -69,6 +69,7 @@ import com.music.bitchord.data.model.Song
 import com.music.bitchord.data.model.artworkAt
 import com.music.bitchord.data.settings.AppSettings
 import com.music.bitchord.data.settings.ThemeMode
+import com.music.bitchord.ui.icons.BitChordIcons
 import com.music.bitchord.ui.player.LocalPlayerDock
 import com.music.bitchord.ui.player.AndroidMusicVideo
 import com.music.bitchord.ui.player.playerDockArt
@@ -421,7 +422,10 @@ private fun GlassNowPlaying(
     modifier: Modifier = Modifier,
 ) {
     val showPreviousButton by AppSettings.miniPlayerPreviousButton.collectAsStateWithLifecycle()
+    val useDoubleArrowSkipButtons by AppSettings.miniPlayerUseDoubleArrowSkipButtons.collectAsStateWithLifecycle()
     val swipeUpExpands by AppSettings.miniPlayerSwipeUpExpands.collectAsStateWithLifecycle()
+    val previousButtonIcon = if (useDoubleArrowSkipButtons) BitChordIcons.DoubleSkipPrevious else Icons.Rounded.SkipPrevious
+    val nextButtonIcon = if (useDoubleArrowSkipButtons) BitChordIcons.DoubleSkipNext else Icons.Rounded.SkipNext
     val haptics = rememberHaptics()
     val pressSource = remember { MutableInteractionSource() }
     val isPressed by pressSource.collectIsPressedAsState()
@@ -441,6 +445,7 @@ private fun GlassNowPlaying(
     val artSize = if (isInline) 32.dp else 40.dp
     val glyphSlot = if (isInline) 32.dp else 40.dp
     val glyphSize = if (isInline) 24.dp else 32.dp
+    val skipGlyphSize = if (isInline) 20.dp else 28.dp
 
     Box(
         // Inline, the accessory is stretched to the row's height by the tab bar
@@ -575,12 +580,13 @@ private fun GlassNowPlaying(
                     modifier = Modifier.size(glyphSlot),
                 ) {
                     Icon(
-                        imageVector = Icons.Rounded.SkipPrevious,
+                        imageVector = previousButtonIcon,
                         contentDescription = stringResource(R.string.widget_previous),
                         tint = contentColor,
-                        modifier = Modifier.size(glyphSize),
+                        modifier = Modifier.size(skipGlyphSize),
                     )
                 }
+                Spacer(Modifier.width(8.dp))
             }
             if (isLoading) {
                 Box(Modifier.size(glyphSlot), contentAlignment = Alignment.Center) {
@@ -619,10 +625,10 @@ private fun GlassNowPlaying(
                     modifier = Modifier.size(glyphSlot),
                 ) {
                     Icon(
-                        imageVector = Icons.Rounded.SkipNext,
+                        imageVector = nextButtonIcon,
                         contentDescription = stringResource(R.string.widget_next),
                         tint = contentColor,
-                        modifier = Modifier.size(glyphSize),
+                        modifier = Modifier.size(skipGlyphSize),
                     )
                 }
             }

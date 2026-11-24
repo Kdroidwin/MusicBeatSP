@@ -11,11 +11,15 @@ enum class ArtistSort {
     NAME_ASC,
 
     /** Sort alphabetically descending (Z to A). */
-    NAME_DESC;
+    NAME_DESC,
+
+    /** Keep the order chosen by dragging library entries. */
+    MANUAL;
 
     fun label(): String = when (this) {
         MOST_SONGS -> "Most Songs"
         NAME_ASC -> "A to Z"
         NAME_DESC -> "Z to A"
+        MANUAL -> "Custom order"
     }
 }

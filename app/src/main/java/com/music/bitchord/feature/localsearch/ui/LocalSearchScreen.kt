@@ -83,10 +83,17 @@ import com.music.bitchord.data.model.SearchResult
 import com.music.bitchord.data.model.UiState
 import com.music.bitchord.data.sources.SourceConfig
 import com.music.bitchord.data.model.isSameTrackAs
+import com.music.bitchord.feature.lyricseditor.data.LocalLyricsManager
 import com.music.bitchord.ui.components.SongRow
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.CancellationException
+import kotlinx.coroutines.async
+import kotlinx.coroutines.awaitAll
+import kotlinx.coroutines.coroutineScope
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.withContext
+import kotlinx.coroutines.sync.Semaphore
+import kotlinx.coroutines.sync.withPermit
 import kotlinx.coroutines.flow.distinctUntilChanged
 
 @Composable
@@ -257,20 +264,71 @@ fun LocalSearchScreen(
     // main thread just to compare Compose effect keys.
     val songsIdentity = System.identityHashCode(songs)
     var searchResults by remember { mutableStateOf<List<LocalSearchResult>>(emptyList()) }
+    var searchingLyrics by remember { mutableStateOf(false) }
     LaunchedEffect(query, selectedFilter, songsIdentity, folderHierarchy, useYoutubeMusic, useMusicServers, selectedConfiguredSource) {
         if (query.isBlank() || useYoutubeMusic || useMusicServers || selectedConfiguredSource != null) {
             searchResults = emptyList()
+            searchingLyrics = false
             listState.scrollToItem(0)
         } else {
-            delay(140)
+            delay(if (selectedFilter == LocalSearchFilter.LYRICS) 250 else 140)
             val currentQuery = query
             val currentSongs = songs
             val currentFilter = selectedFilter
             val currentHierarchy = folderHierarchy
-            val results = withContext(Dispatchers.Default) {
-                LocalSearchUseCase.search(currentQuery, currentFilter, currentSongs, currentHierarchy)
+            val results = if (currentFilter == LocalSearchFilter.LYRICS) {
+                searchingLyrics = true
+                searchResults = emptyList()
+                listState.scrollToItem(0)
+                try {
+                    coroutineScope {
+                        val needle = currentQuery.trim()
+                        val matches = mutableListOf<LocalSearchResult>()
+                        // TagLib metadata reads are native calls, so keep their
+                        // concurrency deliberately bounded. Publish each small
+                        // batch as it finishes so large libraries can show
+                        // useful matches before the complete scan is done.
+                        val readPermits = Semaphore(4)
+                        for (batch in currentSongs.chunked(24)) {
+                            val batchMatches = batch.map { song ->
+                                async(Dispatchers.IO) {
+                                    readPermits.withPermit {
+                                        try {
+                                            val lyrics = LocalLyricsManager.readSearchableLyrics(context, song)
+                                            if (lyrics.contains(needle, ignoreCase = true)) {
+                                                LocalSearchResult.Track(song)
+                                            } else {
+                                                null
+                                            }
+                                        } catch (cancelled: CancellationException) {
+                                            throw cancelled
+                                        } catch (_: Exception) {
+                                            // One damaged or inaccessible file
+                                            // must not leave the full search spinning.
+                                            null
+                                        }
+                                    }
+                                }
+                            }
+                            val batchResults = batchMatches.awaitAll().filterNotNull()
+                            if (batchResults.isNotEmpty()) {
+                                matches += batchResults
+                                searchResults = matches.toList()
+                            }
+                        }
+                        matches.toList()
+                    }
+                } finally {
+                    if (query == currentQuery && selectedFilter == currentFilter) {
+                        searchingLyrics = false
+                    }
+                }
+            } else {
+                searchingLyrics = false
+                withContext(Dispatchers.Default) {
+                    LocalSearchUseCase.search(currentQuery, currentFilter, currentSongs, currentHierarchy)
+                }
             }
-            listState.scrollToItem(0)
             searchResults = results
         }
     }
@@ -678,15 +736,23 @@ fun LocalSearchScreen(
                         contentAlignment = Alignment.Center,
                     ) {
                         Column(horizontalAlignment = Alignment.CenterHorizontally) {
-                            Icon(
-                                imageVector = Icons.Rounded.SearchOff,
-                                contentDescription = null,
-                                tint = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.4f),
-                                modifier = Modifier.size(56.dp),
-                            )
+                            if (searchingLyrics) {
+                                CircularProgressIndicator(modifier = Modifier.size(36.dp), strokeWidth = 3.dp)
+                            } else {
+                                Icon(
+                                    imageVector = Icons.Rounded.SearchOff,
+                                    contentDescription = null,
+                                    tint = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.4f),
+                                    modifier = Modifier.size(56.dp),
+                                )
+                            }
                             Spacer(modifier = Modifier.height(12.dp))
                             Text(
-                                text = stringResource(R.string.search_no_results, query),
+                                text = if (searchingLyrics) {
+                                    stringResource(R.string.searching_lyrics)
+                                } else {
+                                    stringResource(R.string.search_no_results, query)
+                                },
                                 style = MaterialTheme.typography.bodyLarge,
                                 color = MaterialTheme.colorScheme.onSurfaceVariant,
                             )
@@ -721,6 +787,22 @@ fun LocalSearchScreen(
                             color = MaterialTheme.colorScheme.onSurfaceVariant,
                             modifier = Modifier.padding(horizontal = PAGE_GUTTER, vertical = 8.dp),
                         )
+                    }
+                    if (searchingLyrics) {
+                        item(key = "lyrics-search-progress") {
+                            Row(
+                                modifier = Modifier.fillMaxWidth().padding(horizontal = PAGE_GUTTER, vertical = 6.dp),
+                                verticalAlignment = Alignment.CenterVertically,
+                                horizontalArrangement = Arrangement.spacedBy(8.dp),
+                            ) {
+                                CircularProgressIndicator(modifier = Modifier.size(16.dp), strokeWidth = 2.dp)
+                                Text(
+                                    text = stringResource(R.string.searching_lyrics),
+                                    style = MaterialTheme.typography.labelMedium,
+                                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                                )
+                            }
+                        }
                     }
 
                     if (selectedFilter == LocalSearchFilter.ALL) {

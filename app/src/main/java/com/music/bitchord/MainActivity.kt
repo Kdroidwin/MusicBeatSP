@@ -3306,6 +3306,18 @@ private fun BitChordApp(
                                 } else {
                                     null
                                 },
+                                isSavedToLibrary = savedYoutubeCollections.any { it.browseId == page.browseId },
+                                onToggleLibrary = {
+                                    AppSettings.toggleSavedYoutubeCollection(
+                                        SavedYoutubeCollection(
+                                            browseId = page.browseId,
+                                            title = page.title,
+                                            subtitle = page.subtitle,
+                                            thumbnailUrl = page.thumbnailUrl,
+                                            type = page.type.name,
+                                        ),
+                                    )
+                                },
                                 contentPadding = listPadding,
                                 onChangeArtistArtwork = { chooseArtistImage(page.title, page.artistIdentityId ?: page.browseId) },
                                 onResetArtistArtwork = { resetArtistImage(page.title, page.artistIdentityId ?: page.browseId) },

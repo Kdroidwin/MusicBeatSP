@@ -98,7 +98,12 @@ fun ArtistViewAndSortControls(
                 ) {
                     ArtistSort.entries.forEach { option ->
                         DropdownMenuItem(
-                            text = { Text(option.label()) },
+                            text = {
+                                Text(
+                                    if (option == ArtistSort.MANUAL) stringResource(R.string.sort_manual_order)
+                                    else option.label(),
+                                )
+                            },
                             trailingIcon = if (option == sortOrder) {
                                 {
                                     Icon(

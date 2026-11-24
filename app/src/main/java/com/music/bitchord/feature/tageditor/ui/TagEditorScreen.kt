@@ -46,6 +46,10 @@ import com.music.bitchord.feature.tageditor.domain.model.TagField
 import com.music.bitchord.feature.tageditor.data.TagLibWriter
 import androidx.compose.ui.graphics.luminance
 import com.music.bitchord.ui.theme.SystemBarIcons
+import com.music.bitchord.data.model.CARD_ART_PX
+import com.music.bitchord.data.model.artworkAt
+import com.music.bitchord.data.settings.AppSettings
+import com.music.bitchord.ui.theme.rememberArtworkPalette
 
 @Composable
 fun TagEditorScreen(
@@ -57,6 +61,57 @@ fun TagEditorScreen(
     batchSongs: List<Song>? = null,
     batchSongsWithSubfolders: List<Song>? = null,
     onBatchTagsSaved: ((List<Song>, com.music.bitchord.feature.tageditor.domain.model.SongTagData, Set<TagField>) -> Unit)? = null,
+) {
+    val useArtworkColor by AppSettings.tagEditorUsesArtworkColor.collectAsStateWithLifecycle()
+    val baseScheme = MaterialTheme.colorScheme
+    val palette = if (useArtworkColor) {
+        rememberArtworkPalette(song.artworkAt(CARD_ART_PX), dark = true, artPx = CARD_ART_PX)
+    } else {
+        null
+    }
+    val colorScheme = remember(baseScheme, palette) {
+        palette?.let {
+            baseScheme.copy(
+                primary = it.accent,
+                onPrimary = it.onBackground,
+                primaryContainer = it.elevated,
+                onPrimaryContainer = it.onBackground,
+                secondary = it.accent,
+                onSecondary = it.onBackground,
+                background = it.background,
+                onBackground = it.onBackground,
+                surface = it.background,
+                onSurface = it.onBackground,
+                surfaceVariant = it.elevated,
+                onSurfaceVariant = it.onBackgroundVariant,
+                outline = it.divider,
+            )
+        } ?: baseScheme
+    }
+    MaterialTheme(colorScheme = colorScheme) {
+        TagEditorScreenContent(
+            song = song,
+            onNavigateBack = onNavigateBack,
+            modifier = modifier,
+            viewModel = viewModel,
+            onTagsSaved = onTagsSaved,
+            batchSongs = batchSongs,
+            batchSongsWithSubfolders = batchSongsWithSubfolders,
+            onBatchTagsSaved = onBatchTagsSaved,
+        )
+    }
+}
+
+@Composable
+private fun TagEditorScreenContent(
+    song: Song,
+    onNavigateBack: () -> Unit,
+    modifier: Modifier,
+    viewModel: TagEditorViewModel,
+    onTagsSaved: ((com.music.bitchord.feature.tageditor.domain.model.SongTagData) -> Unit)?,
+    batchSongs: List<Song>?,
+    batchSongsWithSubfolders: List<Song>?,
+    onBatchTagsSaved: ((List<Song>, com.music.bitchord.feature.tageditor.domain.model.SongTagData, Set<TagField>) -> Unit)?,
 ) {
     val isDarkTheme = MaterialTheme.colorScheme.background.luminance() < 0.5f
     SystemBarIcons(dark = !isDarkTheme)

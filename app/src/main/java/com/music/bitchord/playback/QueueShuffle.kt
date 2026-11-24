@@ -8,9 +8,13 @@ import androidx.media3.session.MediaController
 import androidx.media3.session.SessionCommand
 import com.music.bitchord.data.model.Song
 import com.music.bitchord.data.settings.AppSettings
+import com.music.bitchord.feature.localsongactions.data.LocalPlayStatsStore
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
+import kotlin.math.ln
+import kotlin.math.min
+import kotlin.random.Random
 
 /**
  * Shuffle as an edit to the queue, not a playback mode.
@@ -77,8 +81,17 @@ object QueueShuffle {
             preserveNextQueueOrder = false
             return songs
         }
-        val rest = songs.filterIndexed { i, _ -> i != startIndex }.shuffled()
-        return listOf(songs[startIndex]) + rest
+        val remainingIndexes = songs.indices.filter { it != startIndex }
+        val shuffledIndexes = if (AppSettings.weightedShuffleEnabled.value) {
+            val context = AppSettings.applicationContextOrNull()
+            val stats = context?.let(LocalPlayStatsStore::snapshot).orEmpty()
+            weightedShuffle(remainingIndexes) { index ->
+                LocalPlayStatsStore.getStats(songs[index], stats).let { weightedScore(it.playedCount, it.lastPlayedTimestamp) }
+            }
+        } else {
+            remainingIndexes.shuffled()
+        }
+        return listOf(songs[startIndex]) + shuffledIndexes.map(songs::get)
     }
 
     /**
@@ -91,7 +104,17 @@ object QueueShuffle {
         val from = player.currentMediaItemIndex + 1
         val upcoming = items.drop(from)
         val (mix, own) = upcoming.indices.partition { upcoming[it].fromAutoplay }
-        applyOrder(player, from, shuffledSection(own) + shuffledSection(mix))
+        val stats = if (AppSettings.weightedShuffleEnabled.value) {
+            AppSettings.applicationContextOrNull()?.let(LocalPlayStatsStore::snapshot).orEmpty()
+        } else {
+            emptyMap()
+        }
+        val mediaIds = upcoming.map(MediaItem::mediaId)
+        applyOrder(
+            player,
+            from,
+            shuffledSection(own, mediaIds, stats) + shuffledSection(mix, mediaIds, stats),
+        )
         _enabled.value = true
     }
 
@@ -101,8 +124,36 @@ object QueueShuffle {
      * surprisingly common in short queues (one chance in two for two tracks),
      * and reads exactly like the first tap was ignored.
      */
-    private fun shuffledSection(indices: List<Int>): List<Int> =
-        avoidIdentityShuffle(indices, indices.shuffled())
+    private fun shuffledSection(
+        indices: List<Int>,
+        mediaIds: List<String>,
+        stats: Map<String, com.music.bitchord.feature.localsongactions.domain.model.LocalPlayStats>,
+    ): List<Int> {
+        if (indices.size <= 1) return indices
+        val shuffled = if (AppSettings.weightedShuffleEnabled.value) {
+            weightedShuffle(indices) { index ->
+                val stat = stats[mediaIds.getOrNull(index)]
+                weightedScore(stat?.playedCount ?: 0, stat?.lastPlayedTimestamp ?: 0L)
+            }
+        } else {
+            indices.shuffled()
+        }
+        return avoidIdentityShuffle(indices, shuffled)
+    }
+
+    /** Efraimidis-Spirakis weighted sampling without replacement. */
+    private fun weightedShuffle(indices: List<Int>, weight: (Int) -> Double): List<Int> =
+        indices.sortedBy { index ->
+            val unit = Random.nextDouble().coerceAtLeast(1e-12)
+            -ln(unit) / weight(index).coerceAtLeast(0.01)
+        }
+
+    private fun weightedScore(playCount: Int, lastPlayedTimestamp: Long): Double {
+        val frequency = min(1.4, ln(playCount.coerceAtLeast(0) + 1.0) * 0.35)
+        val ageMs = (System.currentTimeMillis() - lastPlayedTimestamp).coerceAtLeast(0L)
+        val recency = if (lastPlayedTimestamp > 0L) 0.75 * kotlin.math.exp(-ageMs / (30.0 * 24 * 60 * 60 * 1000)) else 0.0
+        return 1.0 + frequency + recency
+    }
 
     internal fun avoidIdentityShuffle(original: List<Int>, shuffled: List<Int>): List<Int> {
         if (original.size <= 1 || shuffled != original) return shuffled

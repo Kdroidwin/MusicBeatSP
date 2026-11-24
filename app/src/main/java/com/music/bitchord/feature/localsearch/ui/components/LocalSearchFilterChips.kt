@@ -37,6 +37,7 @@ fun LocalSearchFilterChips(
                 LocalSearchFilter.ALBUMS -> R.string.search_filter_albums
                 LocalSearchFilter.ARTISTS -> R.string.search_filter_artists
                 LocalSearchFilter.FOLDERS -> R.string.search_filter_folders
+                LocalSearchFilter.LYRICS -> R.string.search_filter_lyrics
             }
             FilterChip(
                 selected = selected,

@@ -146,20 +146,74 @@ object BitChordIcons {
 
     val Repeat: ImageVector by lazy { repeatLoop("bc_repeat") }
 
-    /** Angular paired-arrow repeat glyph matching the user's reference image. */
-    val RepeatReference: ImageVector by lazy {
+    /** Tabler repeat arrows, matching Tinque's Apple Music-style repeat control. */
+    val RepeatTinque: ImageVector by lazy {
         ImageVector.Builder(
-            name = "bc_repeat_reference",
+            name = "bc_repeat_tinque",
             defaultWidth = 24.dp, defaultHeight = 24.dp,
             viewportWidth = 24f, viewportHeight = 24f,
         ).apply {
+            path(
+                stroke = stroke,
+                strokeLineWidth = 2.1f,
+                strokeLineCap = StrokeCap.Round,
+                strokeLineJoin = StrokeJoin.Round,
+            ) {
+                moveTo(4f, 12f)
+                verticalLineTo(9f)
+                arcToRelative(3f, 3f, 0f, isMoreThanHalf = false, isPositiveArc = true, 3f, -3f)
+                horizontalLineTo(20f)
+                moveTo(17f, 3f); lineTo(20f, 6f); lineTo(17f, 9f)
+
+                moveTo(20f, 12f)
+                verticalLineTo(15f)
+                arcToRelative(3f, 3f, 0f, isMoreThanHalf = false, isPositiveArc = true, -3f, 3f)
+                horizontalLineTo(4f)
+                moveTo(7f, 21f); lineTo(4f, 18f); lineTo(7f, 15f)
+            }
+        }.build()
+    }
+
+    /** Rounded loop arrows matching the user's reference image. */
+    val RepeatReference: ImageVector by lazy {
+        ImageVector.Builder(
+            name = "bc_repeat_reference",
+            defaultWidth = 31.2.dp, defaultHeight = 24.dp,
+            viewportWidth = 78f, viewportHeight = 60f,
+        ).apply {
+            path(
+                stroke = stroke,
+                strokeLineWidth = 6.5f,
+                strokeLineCap = StrokeCap.Round,
+                strokeLineJoin = StrokeJoin.Round,
+            ) {
+                moveTo(8f, 38f)
+                lineTo(8f, 28f)
+                curveTo(8f, 22.5f, 12.5f, 18f, 18f, 18f)
+                lineTo(48f, 18f)
+            }
             path(fill = stroke) {
-                moveTo(7f, 7f); lineTo(17f, 7f); lineTo(17f, 10f)
-                lineTo(21f, 6f); lineTo(17f, 2f); lineTo(17f, 5f)
-                lineTo(5f, 5f); lineTo(5f, 13f); lineTo(7f, 13f); close()
-                moveTo(17f, 17f); lineTo(7f, 17f); lineTo(7f, 14f)
-                lineTo(3f, 18f); lineTo(7f, 22f); lineTo(7f, 19f)
-                lineTo(19f, 19f); lineTo(19f, 11f); lineTo(17f, 11f); close()
+                moveTo(45f, 3f)
+                lineTo(61f, 18f)
+                lineTo(45f, 33f)
+                close()
+            }
+            path(
+                stroke = stroke,
+                strokeLineWidth = 6.5f,
+                strokeLineCap = StrokeCap.Round,
+                strokeLineJoin = StrokeJoin.Round,
+            ) {
+                moveTo(70f, 28f)
+                lineTo(70f, 34f)
+                curveTo(70f, 39.5f, 65.5f, 44f, 60f, 44f)
+                lineTo(30f, 44f)
+            }
+            path(fill = stroke) {
+                moveTo(33f, 29f)
+                lineTo(17f, 44f)
+                lineTo(33f, 59f)
+                close()
             }
         }.build()
     }

@@ -32,6 +32,7 @@ import okhttp3.HttpUrl.Companion.toHttpUrl
 import okhttp3.Request
 import java.io.File
 import java.io.ByteArrayOutputStream
+import java.util.LinkedHashMap
 import kotlinx.coroutines.Deferred
 import kotlinx.coroutines.async
 import kotlinx.coroutines.coroutineScope
@@ -48,6 +49,11 @@ object LocalLyricsManager {
     private const val MAX_SEARCH_METADATA_CHARS = 512
     private val json = Json { ignoreUnknownKeys = true }
     private val downloadedCache = mutableMapOf<String, String>()
+    private const val MAX_SEARCH_CACHE_CHARS = 4 * 1024 * 1024
+    private const val MAX_SEARCH_CACHE_ENTRIES = 512
+    private val searchCacheLock = Any()
+    private val searchableLyricsCache = LinkedHashMap<String, String>(32, 0.75f, true)
+    private var searchableLyricsCacheChars = 0
 
     data class DownloadedLyricsResult(
         val plain: String? = null,
@@ -69,17 +75,58 @@ object LocalLyricsManager {
         }
     }
 
+    /**
+     * Reads the lyric sources that belong to this device track for the local
+     * search tab. Results are kept in a small process cache so each keystroke
+     * does not reopen every tag file; edits invalidate the matching entry.
+     */
+    suspend fun readSearchableLyrics(context: Context, song: Song): String = withContext(Dispatchers.IO) {
+        val cacheKey = searchableLyricsCacheKey(song)
+        synchronized(searchCacheLock) {
+            searchableLyricsCache[cacheKey]?.let { return@withContext it }
+        }
+        val sources = listOf(
+            LyricsEditorSource.Embedded,
+            LyricsEditorSource.File,
+            LyricsEditorSource.Downloaded,
+        )
+        val content = buildList {
+            for (source in sources) {
+                val lyrics = readLyrics(context, song, source).take(MAX_SEARCH_LYRICS_CHARS).trim()
+                if (lyrics.isNotBlank()) add(lyrics)
+            }
+        }.distinct().joinToString("\n")
+        if (content.length <= MAX_SEARCH_CACHE_CHARS) {
+            synchronized(searchCacheLock) {
+                searchableLyricsCache.put(cacheKey, content)?.let { searchableLyricsCacheChars -= it.length }
+                searchableLyricsCacheChars += content.length
+                val iterator = searchableLyricsCache.entries.iterator()
+                while (
+                    (searchableLyricsCacheChars > MAX_SEARCH_CACHE_CHARS ||
+                        searchableLyricsCache.size > MAX_SEARCH_CACHE_ENTRIES) &&
+                    iterator.hasNext()
+                ) {
+                    searchableLyricsCacheChars -= iterator.next().value.length
+                    iterator.remove()
+                }
+            }
+        }
+        content
+    }
+
     suspend fun saveLyrics(
         context: Context,
         song: Song,
         source: LyricsEditorSource,
         lyricsText: String,
     ): Boolean = withContext(Dispatchers.IO) {
-        when (source) {
+        val saved = when (source) {
             LyricsEditorSource.Embedded -> saveEmbeddedLyrics(context, song, lyricsText)
             LyricsEditorSource.File -> saveFileLyrics(context, song, lyricsText)
             LyricsEditorSource.Downloaded -> saveDownloadedLyrics(song, lyricsText)
         }
+        if (saved) invalidateSearchableLyrics(song)
+        saved
     }
 
     /**
@@ -94,9 +141,10 @@ object LocalLyricsManager {
         if (lyricsText.isBlank()) return@withContext false
         val embeddedOk = saveEmbeddedLyrics(context, song, lyricsText)
         if (embeddedOk) {
+            invalidateSearchableLyrics(song)
             return@withContext true
         }
-        saveFileLyrics(context, song, lyricsText)
+        saveFileLyrics(context, song, lyricsText).also { if (it) invalidateSearchableLyrics(song) }
     }
 
     suspend fun autoDownload(
@@ -735,6 +783,24 @@ object LocalLyricsManager {
             raw.startsWith("content://") || raw.startsWith("file://") -> Uri.parse(raw)
             !song.localPath.isNullOrBlank() -> Uri.fromFile(File(song.localPath))
             else -> null
+        }
+    }
+
+    private fun searchableLyricsCacheKey(song: Song): String = buildString {
+        append(song.localUri.orEmpty())
+        append('\u0000')
+        append(song.videoId)
+        append('\u0000')
+        append(song.localPath.orEmpty())
+        append('\u0000')
+        append(song.localDateModifiedSeconds ?: 0L)
+    }
+
+    private fun invalidateSearchableLyrics(song: Song) {
+        synchronized(searchCacheLock) {
+            searchableLyricsCache.remove(searchableLyricsCacheKey(song))?.let {
+                searchableLyricsCacheChars = (searchableLyricsCacheChars - it.length).coerceAtLeast(0)
+            }
         }
     }
 

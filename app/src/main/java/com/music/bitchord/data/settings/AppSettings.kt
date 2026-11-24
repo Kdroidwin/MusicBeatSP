@@ -339,6 +339,13 @@ enum class LocalMusicSort {
     DURATION_DESC,
 }
 
+/** Manual drag order or title sorting for album collections. */
+enum class CollectionSort {
+    TITLE_ASC,
+    TITLE_DESC,
+    MANUAL,
+}
+
 /** Secondary controls shown beneath the main play/pause controls. */
 enum class PlayerControl {
     SHUFFLE,
@@ -778,7 +785,7 @@ object AppSettings {
     val miniPlayerUseDoubleArrowSkipButtons = MutableStateFlow(true)
     /** Makes expanded-player previous/next controls use the mini-player's selected glyph style. */
     val playerSkipButtonsMatchMiniPlayer = MutableStateFlow(false)
-    /** Uses the squared double-arrow repeat glyph shown in the user's reference image. */
+    /** Uses the Tabler-style repeat glyph used by Tinque for Apple Music-like repeat states. */
     val repeatButtonUsesReferenceIcon = MutableStateFlow(true)
     /** Lets horizontal swipes on the mini-player move between tracks. */
     val miniPlayerSwipeChangesTrack = MutableStateFlow(false)
@@ -832,6 +839,8 @@ object AppSettings {
     val playerBottomActionsVerticalOffsetDp = MutableStateFlow(0)
     /** Strength of the artwork-matched lower blur in the full-screen player. */
     val fullBleedArtworkBottomBlurStrengthDp = MutableStateFlow(0)
+    /** Uses the square-art mesh backdrop while lyrics or queue panels cover full-bleed artwork. */
+    val fullBleedPanelsUseSquareBackdrop = MutableStateFlow(true)
     /** Hides only the word label on the play button in collection detail pages. */
     val hidePlaylistPlayButtonLabel = MutableStateFlow(false)
     /** Uses a white background and black play glyph for collection detail pages. */
@@ -871,6 +880,8 @@ object AppSettings {
     val hidePlayerPopupHandles = MutableStateFlow(true)
     /** Artwork-colored background for local track metadata and file details. */
     val detailsSheetArtworkBackdrop = MutableStateFlow(true)
+    /** Uses the current track's artwork palette for the tag editor and its overflow menu. */
+    val tagEditorUsesArtworkColor = MutableStateFlow(true)
     /** Shows a non-empty COMMENT tag in the local track details sheet. */
     val showEmbeddedComment = MutableStateFlow(true)
     /** Replaces the queue manager's text action with a compact equals glyph. */
@@ -908,6 +919,8 @@ object AppSettings {
 
     /** Whether the queue is held in shuffled order (Mix button). */
     val shuffleEnabled = MutableStateFlow(false)
+    /** Gives tracks with play history a higher chance when a queue is shuffled. */
+    val weightedShuffleEnabled = MutableStateFlow(false)
 
     /** Android audio-focus gain request: 0 disables focus and 1–4 select focus gain types. */
     val audioFocusLevel = MutableStateFlow(1)
@@ -1415,6 +1428,14 @@ object AppSettings {
     val downloadedMusicSort = MutableStateFlow(LocalMusicSort.TITLE_ASC)
     val localArtistSort = MutableStateFlow(ArtistSort.MOST_SONGS)
     val downloadedArtistSort = MutableStateFlow(ArtistSort.MOST_SONGS)
+    val localAlbumSort = MutableStateFlow(CollectionSort.TITLE_ASC)
+    val downloadedAlbumSort = MutableStateFlow(CollectionSort.TITLE_ASC)
+    val localArtistManualOrder = MutableStateFlow<List<String>>(emptyList())
+    val downloadedArtistManualOrder = MutableStateFlow<List<String>>(emptyList())
+    val localAlbumArtistManualOrder = MutableStateFlow<List<String>>(emptyList())
+    val downloadedAlbumArtistManualOrder = MutableStateFlow<List<String>>(emptyList())
+    val localAlbumManualOrder = MutableStateFlow<List<String>>(emptyList())
+    val downloadedAlbumManualOrder = MutableStateFlow<List<String>>(emptyList())
     val localSongsViewType = MutableStateFlow(LibraryViewType.LIST)
     val localAlbumsViewType = MutableStateFlow(LibraryViewType.GRID)
     val localArtistsViewType = MutableStateFlow(LibraryViewType.GRID)
@@ -2009,6 +2030,7 @@ object AppSettings {
         ).coerceIn(MIN_PLAYER_CONTROLS_VERTICAL_OFFSET_DP, MAX_PLAYER_CONTROLS_VERTICAL_OFFSET_DP)
         fullBleedArtworkBottomBlurStrengthDp.value =
             prefs.getInt(KEY_FULL_BLEED_ARTWORK_BOTTOM_BLUR_STRENGTH_DP, 0).coerceIn(0, 200)
+        fullBleedPanelsUseSquareBackdrop.value = prefs.getBoolean(KEY_FULL_BLEED_PANELS_SQUARE_BACKDROP, true)
         hidePlaylistPlayButtonLabel.value = prefs.getBoolean(KEY_HIDE_PLAYLIST_PLAY_BUTTON_LABEL, false)
         whiteCollectionPlayButton.value = prefs.getBoolean(KEY_WHITE_COLLECTION_PLAY_BUTTON, true)
         showPlayerTopGrabber.value = prefs.getBoolean(KEY_SHOW_PLAYER_TOP_GRABBER, true)
@@ -2035,6 +2057,7 @@ object AppSettings {
         playerMenusUsePlayerBackgroundColor.value = prefs.getBoolean(KEY_PLAYER_MENUS_PLAYER_BACKGROUND_COLOR, false)
         hidePlayerPopupHandles.value = prefs.getBoolean(KEY_PLAYER_POPUP_HANDLES_HIDDEN, true)
         detailsSheetArtworkBackdrop.value = prefs.getBoolean(KEY_DETAILS_SHEET_ARTWORK_BACKDROP, true)
+        tagEditorUsesArtworkColor.value = prefs.getBoolean(KEY_TAG_EDITOR_ARTWORK_COLOR, true)
         showEmbeddedComment.value = prefs.getBoolean(KEY_SHOW_EMBEDDED_COMMENT, true)
         queueManagerEqualsIcon.value = prefs.getBoolean(KEY_QUEUE_MANAGER_EQUALS_ICON, false)
         redesignedSavedQueueManager.value = prefs.getBoolean(KEY_REDESIGNED_SAVED_QUEUE_MANAGER, true)
@@ -2056,6 +2079,7 @@ object AppSettings {
         volumeHandoff.value = prefs.getBoolean(KEY_VOLUME_HANDOFF, false)
         lyricsAutoStrictness.value = prefs.getString(KEY_LYRICS_AUTO_STRICTNESS, "STANDARD") ?: "STANDARD"
         shuffleEnabled.value = prefs.getBoolean(KEY_SHUFFLE_ENABLED, false)
+        weightedShuffleEnabled.value = prefs.getBoolean(KEY_WEIGHTED_SHUFFLE_ENABLED, false)
         audioFocusLevel.value = prefs.getInt(KEY_AUDIO_FOCUS_LEVEL, 1).coerceIn(0, 4)
         repeatMode.value = prefs.getInt(KEY_REPEAT_MODE, Player.REPEAT_MODE_OFF)
         restartQueueWhenEnded.value = prefs.getBoolean(KEY_RESTART_QUEUE_WHEN_ENDED, false)
@@ -2357,6 +2381,14 @@ object AppSettings {
         downloadedMusicSort.value = readLocalMusicSort(KEY_DOWNLOADED_MUSIC_SORT)
         localArtistSort.value = readArtistSort(KEY_LOCAL_ARTIST_SORT)
         downloadedArtistSort.value = readArtistSort(KEY_DOWNLOADED_ARTIST_SORT)
+        localAlbumSort.value = readCollectionSort(KEY_LOCAL_ALBUM_SORT)
+        downloadedAlbumSort.value = readCollectionSort(KEY_DOWNLOADED_ALBUM_SORT)
+        localArtistManualOrder.value = readManualOrder(KEY_LOCAL_ARTIST_MANUAL_ORDER)
+        downloadedArtistManualOrder.value = readManualOrder(KEY_DOWNLOADED_ARTIST_MANUAL_ORDER)
+        localAlbumArtistManualOrder.value = readManualOrder(KEY_LOCAL_ALBUM_ARTIST_MANUAL_ORDER)
+        downloadedAlbumArtistManualOrder.value = readManualOrder(KEY_DOWNLOADED_ALBUM_ARTIST_MANUAL_ORDER)
+        localAlbumManualOrder.value = readManualOrder(KEY_LOCAL_ALBUM_MANUAL_ORDER)
+        downloadedAlbumManualOrder.value = readManualOrder(KEY_DOWNLOADED_ALBUM_MANUAL_ORDER)
         localMusicViewType.value = readLibraryViewType(KEY_LOCAL_MUSIC_VIEW_TYPE, LibraryViewType.LIST)
         localSongsViewType.value = readLibraryViewType(KEY_LOCAL_SONGS_VIEW_TYPE, localMusicViewType.value)
         localAlbumsViewType.value = readLibraryViewType(KEY_LOCAL_ALBUMS_VIEW_TYPE, LibraryViewType.GRID)
@@ -2656,6 +2688,11 @@ object AppSettings {
     fun setShuffleEnabled(value: Boolean) {
         shuffleEnabled.value = value
         prefs.edit().putBoolean(KEY_SHUFFLE_ENABLED, value).apply()
+    }
+
+    fun setWeightedShuffleEnabled(value: Boolean) {
+        weightedShuffleEnabled.value = value
+        prefs.edit().putBoolean(KEY_WEIGHTED_SHUFFLE_ENABLED, value).apply()
     }
 
     fun setRepeatMode(value: Int) {
@@ -3458,6 +3495,11 @@ object AppSettings {
     fun setDetailsSheetArtworkBackdrop(value: Boolean) {
         detailsSheetArtworkBackdrop.value = value
         prefs.edit().putBoolean(KEY_DETAILS_SHEET_ARTWORK_BACKDROP, value).apply()
+    }
+
+    fun setTagEditorUsesArtworkColor(value: Boolean) {
+        tagEditorUsesArtworkColor.value = value
+        prefs.edit().putBoolean(KEY_TAG_EDITOR_ARTWORK_COLOR, value).apply()
     }
 
     fun setShowEmbeddedComment(value: Boolean) {
@@ -4749,6 +4791,11 @@ object AppSettings {
         prefs.edit().putInt(KEY_FULL_BLEED_ARTWORK_BOTTOM_BLUR_STRENGTH_DP, safe).apply()
     }
 
+    fun setFullBleedPanelsUseSquareBackdrop(value: Boolean) {
+        fullBleedPanelsUseSquareBackdrop.value = value
+        prefs.edit().putBoolean(KEY_FULL_BLEED_PANELS_SQUARE_BACKDROP, value).apply()
+    }
+
     private fun clearRemovedPlayerColorPreferences() {
         val staleKeys = prefs.all.keys.filter { it.startsWith(LEGACY_PLAYER_COLOR_PREFERENCE_PREFIX) }
         if (staleKeys.isEmpty()) return
@@ -5140,6 +5187,49 @@ object AppSettings {
         downloadedArtistSort.value = value
         prefs.edit().putString(KEY_DOWNLOADED_ARTIST_SORT, value.name).apply()
     }
+
+    fun setLocalAlbumSort(value: CollectionSort) {
+        localAlbumSort.value = value
+        prefs.edit().putString(KEY_LOCAL_ALBUM_SORT, value.name).apply()
+    }
+
+    fun setDownloadedAlbumSort(value: CollectionSort) {
+        downloadedAlbumSort.value = value
+        prefs.edit().putString(KEY_DOWNLOADED_ALBUM_SORT, value.name).apply()
+    }
+
+    fun setLocalArtistManualOrder(value: List<String>) = saveManualOrder(
+        KEY_LOCAL_ARTIST_MANUAL_ORDER, localArtistManualOrder, value,
+    )
+
+    fun setDownloadedArtistManualOrder(value: List<String>) = saveManualOrder(
+        KEY_DOWNLOADED_ARTIST_MANUAL_ORDER, downloadedArtistManualOrder, value,
+    )
+
+    fun setLocalAlbumArtistManualOrder(value: List<String>) = saveManualOrder(
+        KEY_LOCAL_ALBUM_ARTIST_MANUAL_ORDER, localAlbumArtistManualOrder, value,
+    )
+
+    fun setDownloadedAlbumArtistManualOrder(value: List<String>) = saveManualOrder(
+        KEY_DOWNLOADED_ALBUM_ARTIST_MANUAL_ORDER, downloadedAlbumArtistManualOrder, value,
+    )
+
+    fun setLocalAlbumManualOrder(value: List<String>) = saveManualOrder(
+        KEY_LOCAL_ALBUM_MANUAL_ORDER, localAlbumManualOrder, value,
+    )
+
+    fun setDownloadedAlbumManualOrder(value: List<String>) = saveManualOrder(
+        KEY_DOWNLOADED_ALBUM_MANUAL_ORDER, downloadedAlbumManualOrder, value,
+    )
+
+    private fun saveManualOrder(key: String, flow: MutableStateFlow<List<String>>, value: List<String>) {
+        val safe = value.asSequence().filter(String::isNotBlank).distinct().take(MAX_MANUAL_ORDER_KEYS).toList()
+        flow.value = safe
+        prefs.edit().putString(key, JSONArray(safe).toString()).apply()
+    }
+
+    /** App context for playback helpers; callers run only after settings initialization. */
+    fun applicationContextOrNull(): Context? = if (::appContext.isInitialized) appContext else null
 
     fun setLibrarySort(value: LibrarySort) {
         librarySort.value = value
@@ -5639,6 +5729,23 @@ object AppSettings {
             ?.let { saved -> ArtistSort.entries.firstOrNull { it.name == saved } }
             ?: ArtistSort.MOST_SONGS
 
+    private fun readCollectionSort(key: String): CollectionSort =
+        prefs.getString(key, null)
+            ?.let { saved -> CollectionSort.entries.firstOrNull { it.name == saved } }
+            ?: CollectionSort.TITLE_ASC
+
+    private fun readManualOrder(key: String): List<String> = prefs.getString(key, null)
+        ?.let { raw ->
+            runCatching {
+                val json = JSONArray(raw)
+                (0 until json.length()).asSequence()
+                    .mapNotNull { json.optString(it).takeIf(String::isNotBlank) }
+                    .distinct()
+                    .take(MAX_MANUAL_ORDER_KEYS)
+                    .toList()
+            }.getOrNull()
+        }.orEmpty()
+
     private fun readLibraryViewType(key: String, default: LibraryViewType = LibraryViewType.LIST): LibraryViewType =
         prefs.getString(key, null)
             ?.let { saved -> LibraryViewType.entries.firstOrNull { it.name == saved } }
@@ -5956,6 +6063,7 @@ object AppSettings {
     // Keep the existing key so the option retains its value across the 2.9.8 correction.
     private const val KEY_PLAYER_POPUP_HANDLES_HIDDEN = "clip_player_popup_handles"
     private const val KEY_DETAILS_SHEET_ARTWORK_BACKDROP = "details_sheet_artwork_backdrop"
+    private const val KEY_TAG_EDITOR_ARTWORK_COLOR = "tag_editor_artwork_color"
     private const val KEY_SHOW_EMBEDDED_COMMENT = "show_embedded_comment"
     private const val KEY_QUEUE_MANAGER_EQUALS_ICON = "queue_manager_equals_icon"
     private const val KEY_HIDE_QUEUE_LABEL = "hide_queue_label"
@@ -5975,6 +6083,7 @@ object AppSettings {
     private const val KEY_LYRICS_AUTO_STRICTNESS = "lyrics_auto_strictness"
     private const val KEY_VOLUME_HANDOFF = "volume_handoff"
     private const val KEY_SHUFFLE_ENABLED = "shuffle_enabled"
+    private const val KEY_WEIGHTED_SHUFFLE_ENABLED = "weighted_shuffle_enabled"
     private const val KEY_AUDIO_FOCUS_LEVEL = "audio_focus_level"
     private const val KEY_REPEAT_MODE = "repeat_mode"
     private const val KEY_RESTART_QUEUE_WHEN_ENDED = "restart_queue_when_ended"
@@ -6122,6 +6231,7 @@ object AppSettings {
     private const val KEY_PLAYER_ARTWORK_MODE = "player_artwork_mode"
     private const val KEY_LARGER_FULL_BLEED_ARTWORK = "larger_full_bleed_artwork"
     private const val KEY_FULL_BLEED_ARTWORK_BOTTOM_BLUR_STRENGTH_DP = "full_bleed_artwork_bottom_blur_strength_dp"
+    private const val KEY_FULL_BLEED_PANELS_SQUARE_BACKDROP = "full_bleed_panels_square_backdrop"
     private const val LEGACY_PLAYER_COLOR_PREFERENCE_PREFIX = "player_color_"
     private val PLAYER_INK_COLOR_REGEX = Regex("#[0-9A-F]{6}")
     private const val KEY_KEEP_ORIGINAL_ARTWORK_ASPECT_RATIO = "keep_original_artwork_aspect_ratio"
@@ -6175,6 +6285,14 @@ object AppSettings {
     private const val KEY_DOWNLOADED_MUSIC_SORT = "downloaded_music_sort"
     private const val KEY_LOCAL_ARTIST_SORT = "local_artist_sort"
     private const val KEY_DOWNLOADED_ARTIST_SORT = "downloaded_artist_sort"
+    private const val KEY_LOCAL_ALBUM_SORT = "local_album_sort"
+    private const val KEY_DOWNLOADED_ALBUM_SORT = "downloaded_album_sort"
+    private const val KEY_LOCAL_ARTIST_MANUAL_ORDER = "local_artist_manual_order"
+    private const val KEY_DOWNLOADED_ARTIST_MANUAL_ORDER = "downloaded_artist_manual_order"
+    private const val KEY_LOCAL_ALBUM_ARTIST_MANUAL_ORDER = "local_album_artist_manual_order"
+    private const val KEY_DOWNLOADED_ALBUM_ARTIST_MANUAL_ORDER = "downloaded_album_artist_manual_order"
+    private const val KEY_LOCAL_ALBUM_MANUAL_ORDER = "local_album_manual_order"
+    private const val KEY_DOWNLOADED_ALBUM_MANUAL_ORDER = "downloaded_album_manual_order"
     private const val KEY_VISIBLE_LOCAL_LIBRARY_TABS = "visible_local_library_tabs"
     private const val KEY_ALBUM_ARTISTS_TAB_MIGRATED = "album_artists_tab_migrated"
     private const val KEY_LOCAL_LIBRARY_TAB_ORDER = "local_library_tab_order"
@@ -6205,6 +6323,7 @@ object AppSettings {
     private const val KEY_ONLINE_ALBUM_ARTIST_ARTWORK = "online_album_artist_artwork"
     private const val KEY_ARTIST_DEEZER_ARTWORK_ENABLED = "artist_deezer_artwork_enabled"
     private const val KEY_SONGS_SHUFFLE_FLOATING_BUTTON = "songs_shuffle_floating_button"
+    private const val MAX_MANUAL_ORDER_KEYS = 50_000
     private const val KEY_PLAYER_ARTIST_PAGE_MODE = "player_artist_page_mode"
     private const val KEY_SHOW_LOCAL_ARTIST_SECTIONS = "show_local_artist_sections"
     private const val KEY_SHOW_ARTIST_RECOMMENDATIONS = "show_artist_recommendations"

@@ -6,4 +6,5 @@ enum class LocalSearchFilter {
     ALBUMS,
     ARTISTS,
     FOLDERS,
+    LYRICS,
 }

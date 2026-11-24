@@ -436,6 +436,8 @@
     <string name="larger_full_screen_cover_art_subtitle">全画面カバーアートをさらに拡大して表示します。全画面カバーアートが有効な場合のみ使用できます。</string>
     <string name="full_screen_artwork_bottom_blur_strength">全画面アート下部のぼかし強度</string>
     <string name="full_screen_artwork_bottom_blur_strength_subtitle">通常、BitChord風、拡大、Auris風の全画面アート下部にかかるぼかしを0〜200dpで調整します。</string>
+    <string name="full_bleed_panels_square_backdrop">歌詞・キューを正方形アート背景にする</string>
+    <string name="full_bleed_panels_square_backdrop_subtitle">全画面アートのプレイヤー背景はそのままに、歌詞画面と再生キューでは正方形アートと同じメッシュグラデーションを使います。初期設定はONです。</string>
     <string name="artwork_blur_strength_value">%1$d dp</string>
     <string name="keep_original_artwork_aspect_ratio">カバーアートの縦横比を維持</string>
     <string name="keep_original_artwork_aspect_ratio_subtitle">全画面カバーアートがオフのとき、縦長・横長の画像を正方形に切り抜かず表示します</string>
@@ -617,6 +619,8 @@
     <string name="your_playlists">あなたのプレイリスト</string>
     <string name="who_can_see_it">公開範囲</string>
     <string name="about_artist">アーティストについて</string>
+    <string name="add_artist_to_library">アーティストをライブラリに追加</string>
+    <string name="remove_artist_from_library">アーティストをライブラリから削除</string>
     <string name="artist_overview_more">続き</string>
     <string name="artist_overview_less">折りたたむ</string>
     <string name="about_album">アルバムについて</string>
@@ -814,6 +818,9 @@
     <string name="sort_music">音楽を並べ替え</string>
     <string name="sort_title_ascending">アルファベット順（A→Z）</string>
     <string name="sort_title_descending">アルファベット順（Z→A）</string>
+    <string name="sort_manual_order">カスタム順（ドラッグして並べ替え）</string>
+    <string name="weighted_shuffle">加重シャッフル</string>
+    <string name="weighted_shuffle_subtitle">再生履歴の多い曲をシャッフル順に選ばれやすくします。OFFでは従来どおり均等にシャッフルします。</string>
     <string name="sort_date_added">追加日（新しい順）</string>
     <string name="sort_date_modified">更新日（新しい順）</string>
     <string name="album">アルバム</string>
@@ -2389,6 +2396,8 @@
     <string name="search_filter_albums">アルバム</string>
     <string name="search_filter_artists">アーティスト</string>
     <string name="search_filter_folders">フォルダー</string>
+    <string name="search_filter_lyrics">歌詞</string>
+    <string name="searching_lyrics">歌詞を検索しています…</string>
     <string name="search_clear_all">すべて消去</string>
     <string name="search_offline_music_title">端末内の音楽を検索</string>
     <string name="search_offline_music_hint">曲名、アーティスト名、アルバム名、フォルダー名を入力</string>
@@ -2482,8 +2491,10 @@
     <string name="download_destination_folder_selected">フォルダ選択済み</string>
     <string name="download_destination_folder_required">このモードでダウンロードする前に、設定から保存先フォルダを選択してください。</string>
     <string name="download_destination_folder_permission_failed">フォルダへのアクセスを保持できませんでした。別のフォルダを選択してください。</string>
-    <string name="repeat_button_reference_icon">リピートアイコンを添付画像のデザインにする</string>
-    <string name="repeat_button_reference_icon_subtitle">折り返す2本の矢印アイコンを使います。初期設定はONです。</string>
+    <string name="repeat_button_reference_icon">Apple Music風のリピートアイコン</string>
+    <string name="repeat_button_reference_icon_subtitle">Tinque風の矢印と、Apple Music風の「オフ・すべてをリピート・1曲をリピート」の状態表示を使います。初期設定はONです。</string>
+    <string name="tag_editor_artwork_color">タグ編集をアルバムアートの色に合わせる</string>
+    <string name="tag_editor_artwork_color_subtitle">タグ編集画面と︙メニューの色を、現在の曲のアルバムアートに合わせます。初期設定はONです。</string>
     <string name="mini_player_double_arrow_skip_buttons">ミニプレイヤーの前後ボタンを2つの三角にする</string>
     <string name="mini_player_double_arrow_skip_buttons_subtitle">前後ボタンをプレイヤー画面と同じ二重三角のアイコンで表示します。初期設定はONです。</string>
     <string name="player_skip_buttons_match_mini_player">プレイヤー画面の前後ボタンをミニプレイヤーと同じにする</string>

@@ -18,6 +18,7 @@ import androidx.compose.animation.slideInHorizontally
 import androidx.compose.animation.slideOutHorizontally
 import androidx.compose.animation.togetherWith
 import androidx.compose.foundation.ExperimentalFoundationApi
+import androidx.compose.foundation.gestures.detectDragGesturesAfterLongPress
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
@@ -60,6 +61,7 @@ import androidx.compose.material.icons.rounded.Check
 import androidx.compose.material.icons.rounded.CheckCircle
 import androidx.compose.material.icons.rounded.Close
 import androidx.compose.material.icons.rounded.Delete
+import androidx.compose.material.icons.rounded.DragHandle
 import androidx.compose.material.icons.rounded.Edit
 import androidx.compose.material.icons.rounded.GraphicEq
 import androidx.compose.material.icons.rounded.LibraryMusic
@@ -105,12 +107,12 @@ import androidx.compose.runtime.SideEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.setValue
 import androidx.compose.runtime.produceState
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberUpdatedState
 import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.saveable.rememberSaveable
-import androidx.compose.runtime.setValue
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
@@ -168,6 +170,9 @@ import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.graphics.graphicsLayer
+import androidx.compose.ui.geometry.Offset
+import androidx.compose.ui.geometry.Rect
+import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.platform.LocalDensity
 import coil3.compose.AsyncImage
 import com.music.bitchord.data.model.CARD_ART_PX
@@ -183,6 +188,7 @@ import com.music.bitchord.ui.theme.pageBackgroundColor
 import com.music.bitchord.data.settings.LibraryViewType
 import com.music.bitchord.ui.theme.ArtworkPalette
 import com.music.bitchord.data.settings.LocalMusicSort
+import com.music.bitchord.data.settings.CollectionSort
 import com.music.bitchord.data.settings.LocalLibraryTab
 import com.music.bitchord.data.settings.GridKind
 import com.music.bitchord.download.DownloadedCollection
@@ -425,6 +431,26 @@ fun LocalMusicScreen(
         AppSettings.downloadedArtistSort.collectAsStateWithLifecycle()
     } else {
         AppSettings.localArtistSort.collectAsStateWithLifecycle()
+    }
+    val artistManualOrder by if (isDownloads) {
+        AppSettings.downloadedArtistManualOrder.collectAsStateWithLifecycle()
+    } else {
+        AppSettings.localArtistManualOrder.collectAsStateWithLifecycle()
+    }
+    val albumArtistManualOrder by if (isDownloads) {
+        AppSettings.downloadedAlbumArtistManualOrder.collectAsStateWithLifecycle()
+    } else {
+        AppSettings.localAlbumArtistManualOrder.collectAsStateWithLifecycle()
+    }
+    val albumSort by if (isDownloads) {
+        AppSettings.downloadedAlbumSort.collectAsStateWithLifecycle()
+    } else {
+        AppSettings.localAlbumSort.collectAsStateWithLifecycle()
+    }
+    val albumManualOrder by if (isDownloads) {
+        AppSettings.downloadedAlbumManualOrder.collectAsStateWithLifecycle()
+    } else {
+        AppSettings.localAlbumManualOrder.collectAsStateWithLifecycle()
     }
     val songsViewType by if (isDownloads) {
         AppSettings.downloadedSongsViewType.collectAsStateWithLifecycle()
@@ -1109,6 +1135,17 @@ fun LocalMusicScreen(
                         val artistAlbums = drillDownAlbumEntries.orEmpty()
                         AlbumsTab(
                             albums = artistAlbums,
+                            allKeys = artistAlbums.map(AlbumEntry::key),
+                            albumSort = albumSort,
+                            onAlbumSortChange = {
+                                if (isDownloads) AppSettings.setDownloadedAlbumSort(it)
+                                else AppSettings.setLocalAlbumSort(it)
+                            },
+                            manualOrder = albumManualOrder,
+                            onManualOrderChange = {
+                                if (isDownloads) AppSettings.setDownloadedAlbumManualOrder(it)
+                                else AppSettings.setLocalAlbumManualOrder(it)
+                            },
                             viewType = albumsViewType,
                             keepArtworkAspectRatio = keepCollectionArtworkAspectRatio,
                             onViewTypeToggle = {
@@ -1245,6 +1282,7 @@ fun LocalMusicScreen(
                         sortedSongs,
                         unknownArtistStr,
                         artistSort,
+                        artistManualOrder,
                         artistSlashSeparators,
                         artistSlashSeparatorExceptions,
                     ) {
@@ -1254,14 +1292,7 @@ fun LocalMusicScreen(
                                 unknownArtistStr,
                                 artistSlashSeparators,
                             )
-                            when (artistSort) {
-                                ArtistSort.MOST_SONGS -> grouped.sortedWith(
-                                    compareByDescending<ArtistEntry> { it.songs.size }
-                                        .thenBy { it.name.lowercase(Locale.ROOT) }
-                                )
-                                ArtistSort.NAME_ASC -> grouped.sortedBy { it.name.lowercase(Locale.ROOT) }
-                                ArtistSort.NAME_DESC -> grouped.sortedByDescending { it.name.lowercase(Locale.ROOT) }
-                            }
+                            sortArtistEntries(grouped, artistSort, artistManualOrder)
                         }
                     }
                     val visibleArtists = remember(artists, quickSearchActive, quickSearchQuery, hideLocalQuickSearch) {
@@ -1282,6 +1313,12 @@ fun LocalMusicScreen(
                             else AppSettings.setLocalArtistsViewType(next)
                         },
                         artistSort = artistSort,
+                        manualOrder = artistManualOrder,
+                        allKeys = artists.map(ArtistEntry::key),
+                        onManualOrderChange = {
+                            if (isDownloads) AppSettings.setDownloadedArtistManualOrder(it)
+                            else AppSettings.setLocalArtistManualOrder(it)
+                        },
                         onArtistSortChange = {
                             if (isDownloads) AppSettings.setDownloadedArtistSort(it)
                             else AppSettings.setLocalArtistSort(it)
@@ -1309,7 +1346,7 @@ fun LocalMusicScreen(
                 }
 
                 key == "tab:$LOCAL_TAB_ALBUM_ARTISTS" -> {
-                    val albumArtists by produceState(emptyList<ArtistEntry>(), sortedSongs, artistSort) {
+                    val albumArtists by produceState(emptyList<ArtistEntry>(), sortedSongs, artistSort, albumArtistManualOrder) {
                         value = withContext(Dispatchers.Default) {
                             val grouped = sortedSongs
                                 .filter { !it.albumArtist.isNullOrBlank() }
@@ -1323,14 +1360,7 @@ fun LocalMusicScreen(
                                         key = "album-artist:${displayName.lowercase(Locale.ROOT)}",
                                     )
                                 }
-                            when (artistSort) {
-                                ArtistSort.MOST_SONGS -> grouped.sortedWith(
-                                    compareByDescending<ArtistEntry> { it.songs.size }
-                                        .thenBy { it.name.lowercase(Locale.ROOT) }
-                                )
-                                ArtistSort.NAME_ASC -> grouped.sortedBy { it.name.lowercase(Locale.ROOT) }
-                                ArtistSort.NAME_DESC -> grouped.sortedByDescending { it.name.lowercase(Locale.ROOT) }
-                            }
+                            sortArtistEntries(grouped, artistSort, albumArtistManualOrder)
                         }
                     }
                     val visibleAlbumArtists = remember(albumArtists, quickSearchActive, quickSearchQuery, hideLocalQuickSearch) {
@@ -1349,6 +1379,12 @@ fun LocalMusicScreen(
                             else AppSettings.setLocalArtistsViewType(next)
                         },
                         artistSort = artistSort,
+                        manualOrder = albumArtistManualOrder,
+                        allKeys = albumArtists.map(ArtistEntry::key),
+                        onManualOrderChange = {
+                            if (isDownloads) AppSettings.setDownloadedAlbumArtistManualOrder(it)
+                            else AppSettings.setLocalAlbumArtistManualOrder(it)
+                        },
                         onArtistSortChange = {
                             if (isDownloads) AppSettings.setDownloadedArtistSort(it)
                             else AppSettings.setLocalArtistSort(it)
@@ -1372,8 +1408,10 @@ fun LocalMusicScreen(
                 }
 
                 key == "tab:$LOCAL_TAB_ALBUMS" -> {
-                    val allAlbums by produceState(emptyList<AlbumEntry>(), sortedSongs, collections) {
-                        value = withContext(Dispatchers.Default) { albumEntries(sortedSongs, collections) }
+                    val allAlbums by produceState(emptyList<AlbumEntry>(), sortedSongs, collections, albumSort, albumManualOrder) {
+                        value = withContext(Dispatchers.Default) {
+                            sortAlbumEntries(albumEntries(sortedSongs, collections), albumSort, albumManualOrder)
+                        }
                     }
                     val albums = remember(allAlbums, quickSearchActive, quickSearchQuery, hideLocalQuickSearch) {
                         val query = quickSearchQuery.trim()
@@ -1382,6 +1420,17 @@ fun LocalMusicScreen(
                     }
                     AlbumsTab(
                         albums = albums,
+                        albumSort = albumSort,
+                        onAlbumSortChange = {
+                            if (isDownloads) AppSettings.setDownloadedAlbumSort(it)
+                            else AppSettings.setLocalAlbumSort(it)
+                        },
+                        manualOrder = albumManualOrder,
+                        allKeys = allAlbums.map(AlbumEntry::key),
+                        onManualOrderChange = {
+                            if (isDownloads) AppSettings.setDownloadedAlbumManualOrder(it)
+                            else AppSettings.setLocalAlbumManualOrder(it)
+                        },
                         viewType = albumsViewType,
                         keepArtworkAspectRatio = keepCollectionArtworkAspectRatio,
                         onViewTypeToggle = {
@@ -2194,12 +2243,15 @@ private fun isHttpArtworkUrl(value: String): Boolean =
 @Composable
 private fun ArtistsTab(
     artists: List<ArtistEntry>,
+    allKeys: List<String>,
     gridKind: GridKind = GridKind.ARTISTS,
     allowRemoteArtwork: Boolean = true,
     viewType: LibraryViewType,
     onViewTypeToggle: () -> Unit,
     artistSort: ArtistSort,
     onArtistSortChange: (ArtistSort) -> Unit,
+    manualOrder: List<String>,
+    onManualOrderChange: (List<String>) -> Unit,
     onArtistClick: (String, List<Song>) -> Unit,
     onArtistLongPress: ((String, List<Song>) -> Unit)?,
     contentPadding: PaddingValues,
@@ -2210,6 +2262,24 @@ private fun ArtistsTab(
     if (viewType == LibraryViewType.GRID) {
         val gridState = rememberLazyGridState()
         val gridColumns = rememberGridColumns(gridKind)
+        val dragState = remember { ManualDragState() }
+        val allKeySet = remember(allKeys) { allKeys.toHashSet() }
+        val manualReorder = artistSort == ArtistSort.MANUAL
+        fun boundsForKey(key: String): Rect? = gridState.layoutInfo.visibleItemsInfo
+            .firstOrNull { it.key == key }
+            ?.let { item ->
+                Rect(
+                    item.offset.x.toFloat(), item.offset.y.toFloat(),
+                    (item.offset.x + item.size.width).toFloat(),
+                    (item.offset.y + item.size.height).toFloat(),
+                )
+            }
+        fun keyAt(point: Offset): String? = gridState.layoutInfo.visibleItemsInfo
+            .firstOrNull { item ->
+                point.x >= item.offset.x && point.x < item.offset.x + item.size.width &&
+                    point.y >= item.offset.y && point.y < item.offset.y + item.size.height
+            }
+            ?.key as? String
         Box(modifier = Modifier.fillMaxSize()) {
             LazyVerticalGrid(
                 columns = ScaledGridCells(gridColumns),
@@ -2254,15 +2324,27 @@ private fun ArtistsTab(
                     } else {
                         null
                     }
-                    ArtistGridCard(
-                        name = entry.name,
-                        songCount = entry.songs.size,
-                        thumbnailUrl = if (isLocalOnlyArtist) localArtworkFallback else entry.thumbnailUrl,
-                        customArtworkUrl = ArtistArtworkStore.imageUriForLibraryArtist(entry.name, artistArtworkUris),
-                        allowRemoteArtwork = allowRemoteArtwork && !isLocalOnlyArtist,
-                        onClick = { onArtistClick(entry.name, entry.songs) },
-                        onLongPress = onArtistLongPress?.let { { it(entry.name, entry.songs) } },
-                    )
+                    ManualOrderItem(
+                        itemKey = entry.key,
+                        enabled = manualReorder,
+                        allKeys = allKeys,
+                        allKeySet = allKeySet,
+                        savedOrder = manualOrder,
+                        dragState = dragState,
+                        boundsForKey = ::boundsForKey,
+                        keyAt = ::keyAt,
+                        onManualOrderChange = onManualOrderChange,
+                    ) {
+                        ArtistGridCard(
+                            name = entry.name,
+                            songCount = entry.songs.size,
+                            thumbnailUrl = if (isLocalOnlyArtist) localArtworkFallback else entry.thumbnailUrl,
+                            customArtworkUrl = ArtistArtworkStore.imageUriForLibraryArtist(entry.name, artistArtworkUris),
+                            allowRemoteArtwork = allowRemoteArtwork && !isLocalOnlyArtist,
+                            onClick = { onArtistClick(entry.name, entry.songs) },
+                            onLongPress = if (manualReorder) null else onArtistLongPress?.let { { it(entry.name, entry.songs) } },
+                        )
+                    }
                 }
             }
             FastScroller(
@@ -2278,6 +2360,15 @@ private fun ArtistsTab(
         }
     } else {
         val listState = rememberLazyListState()
+        val dragState = remember { ManualDragState() }
+        val allKeySet = remember(allKeys) { allKeys.toHashSet() }
+        val manualReorder = artistSort == ArtistSort.MANUAL
+        fun boundsForKey(key: String): Rect? = listState.layoutInfo.visibleItemsInfo
+            .firstOrNull { it.key == key }
+            ?.let { item -> Rect(0f, item.offset.toFloat(), item.size.toFloat(), (item.offset + item.size).toFloat()) }
+        fun keyAt(point: Offset): String? = listState.layoutInfo.visibleItemsInfo
+            .firstOrNull { item -> point.y >= item.offset && point.y < item.offset + item.size }
+            ?.key as? String
         Box(modifier = Modifier.fillMaxSize()) {
             LazyColumn(
                 state = listState,
@@ -2313,20 +2404,34 @@ private fun ArtistsTab(
                     } else {
                         null
                     }
-                    ArtistRow(
-                        name = entry.name,
-                        songCount = entry.songs.size,
-                        thumbnailUrl = if (isLocalOnlyArtist) localArtworkFallback else entry.thumbnailUrl,
-                        customArtworkUrl = ArtistArtworkStore.imageUriForLibraryArtist(entry.name, artistArtworkUris),
-                        allowRemoteArtwork = allowRemoteArtwork && !isLocalOnlyArtist,
-                        onClick = { onArtistClick(entry.name, entry.songs) },
-                        onLongPress = onArtistLongPress?.let { { it(entry.name, entry.songs) } },
-                    )
-                    HorizontalDivider(
-                        modifier = Modifier.padding(start = ROW_DIVIDER_INSET),
-                        thickness = 0.5.dp,
-                        color = MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.5f),
-                    )
+                    ManualOrderItem(
+                        itemKey = entry.key,
+                        enabled = manualReorder,
+                        allKeys = allKeys,
+                        allKeySet = allKeySet,
+                        savedOrder = manualOrder,
+                        dragState = dragState,
+                        boundsForKey = ::boundsForKey,
+                        keyAt = ::keyAt,
+                        onManualOrderChange = onManualOrderChange,
+                    ) {
+                        Column {
+                            ArtistRow(
+                                name = entry.name,
+                                songCount = entry.songs.size,
+                                thumbnailUrl = if (isLocalOnlyArtist) localArtworkFallback else entry.thumbnailUrl,
+                                customArtworkUrl = ArtistArtworkStore.imageUriForLibraryArtist(entry.name, artistArtworkUris),
+                                allowRemoteArtwork = allowRemoteArtwork && !isLocalOnlyArtist,
+                                onClick = { onArtistClick(entry.name, entry.songs) },
+                                onLongPress = if (manualReorder) null else onArtistLongPress?.let { { it(entry.name, entry.songs) } },
+                            )
+                            HorizontalDivider(
+                                modifier = Modifier.padding(start = ROW_DIVIDER_INSET),
+                                thickness = 0.5.dp,
+                                color = MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.5f),
+                            )
+                        }
+                    }
                 }
             }
             FastScroller(
@@ -2533,6 +2638,153 @@ private class AlbumEntry(
     val key: String,
 )
 
+private fun sortArtistEntries(
+    entries: List<ArtistEntry>,
+    sort: ArtistSort,
+    manualOrder: List<String>,
+): List<ArtistEntry> {
+    val mostSongs = entries.sortedWith(
+        compareByDescending<ArtistEntry> { it.songs.size }.thenBy { it.name.lowercase(Locale.ROOT) },
+    )
+    return when (sort) {
+        ArtistSort.MOST_SONGS -> mostSongs
+        ArtistSort.NAME_ASC -> entries.sortedBy { it.name.lowercase(Locale.ROOT) }
+        ArtistSort.NAME_DESC -> entries.sortedByDescending { it.name.lowercase(Locale.ROOT) }
+        ArtistSort.MANUAL -> applyManualOrder(mostSongs, manualOrder, ArtistEntry::key)
+    }
+}
+
+private fun sortAlbumEntries(
+    entries: List<AlbumEntry>,
+    sort: CollectionSort,
+    manualOrder: List<String>,
+): List<AlbumEntry> {
+    val ascending = entries.sortedWith(
+        compareByDescending<AlbumEntry> { it.asked }.thenBy { it.title.lowercase(Locale.ROOT) },
+    )
+    return when (sort) {
+        CollectionSort.TITLE_ASC -> ascending
+        CollectionSort.TITLE_DESC -> entries.sortedWith(
+            compareByDescending<AlbumEntry> { it.asked }.thenByDescending { it.title.lowercase(Locale.ROOT) },
+        )
+        CollectionSort.MANUAL -> applyManualOrder(ascending, manualOrder, AlbumEntry::key)
+    }
+}
+
+private fun <T> applyManualOrder(items: List<T>, order: List<String>, key: (T) -> String): List<T> {
+    if (order.isEmpty()) return items
+    val rank = order.withIndex().associate { it.value to it.index }
+    return items.withIndex()
+        .sortedWith(compareBy<IndexedValue<T>> { rank[key(it.value)] ?: Int.MAX_VALUE }.thenBy { it.index })
+        .map(IndexedValue<T>::value)
+}
+
+private fun moveManualOrder(
+    savedOrder: List<String>,
+    allKeys: List<String>,
+    sourceKey: String,
+    targetKey: String,
+): List<String> {
+    if (sourceKey == targetKey) return savedOrder
+    val allowed = allKeys.toHashSet()
+    val order = (savedOrder.asSequence().filter { it in allowed } + allKeys.asSequence())
+        .distinct()
+        .toMutableList()
+    val from = order.indexOf(sourceKey)
+    val to = order.indexOf(targetKey)
+    if (from < 0 || to < 0) return savedOrder
+    order.add(to, order.removeAt(from))
+    return order
+}
+
+private class ManualDragState {
+    var draggedKey by mutableStateOf<String?>(null)
+    var targetKey by mutableStateOf<String?>(null)
+    var pointer by mutableStateOf(Offset.Zero)
+    var delta by mutableStateOf(Offset.Zero)
+}
+
+@Composable
+private fun ManualOrderItem(
+    itemKey: String,
+    enabled: Boolean,
+    allKeys: List<String>,
+    allKeySet: Set<String>,
+    savedOrder: List<String>,
+    dragState: ManualDragState,
+    boundsForKey: (String) -> Rect?,
+    keyAt: (Offset) -> String?,
+    onManualOrderChange: (List<String>) -> Unit,
+    content: @Composable () -> Unit,
+) {
+    val reorderGesture = if (enabled) {
+        Modifier.pointerInput(itemKey, allKeys, savedOrder) {
+            detectDragGesturesAfterLongPress(
+                onDragStart = { localPosition ->
+                    boundsForKey(itemKey)?.let { bounds ->
+                        dragState.draggedKey = itemKey
+                        dragState.targetKey = itemKey
+                        dragState.pointer = bounds.topLeft + localPosition
+                        dragState.delta = Offset.Zero
+                    }
+                },
+                onDrag = { change, amount ->
+                    if (dragState.draggedKey == itemKey) {
+                        change.consume()
+                        dragState.pointer += amount
+                        dragState.delta += amount
+                        keyAt(dragState.pointer)
+                            ?.takeIf(allKeySet::contains)
+                            ?.let { dragState.targetKey = it }
+                    }
+                },
+                onDragEnd = {
+                    val source = dragState.draggedKey
+                    val target = dragState.targetKey
+                    if (source == itemKey && target != null && target != source) {
+                        onManualOrderChange(moveManualOrder(savedOrder, allKeys, source, target))
+                    }
+                    dragState.draggedKey = null
+                    dragState.targetKey = null
+                    dragState.delta = Offset.Zero
+                },
+                onDragCancel = {
+                    dragState.draggedKey = null
+                    dragState.targetKey = null
+                    dragState.delta = Offset.Zero
+                },
+            )
+        }
+    } else {
+        Modifier
+    }
+    Box(
+        modifier = Modifier
+            .fillMaxWidth()
+            .then(reorderGesture)
+            .graphicsLayer {
+                val dragging = enabled && dragState.draggedKey == itemKey
+                translationX = if (dragging) dragState.delta.x else 0f
+                translationY = if (dragging) dragState.delta.y else 0f
+                shadowElevation = if (dragging) 8f else 0f
+                alpha = if (dragging) 0.88f else 1f
+            },
+    ) {
+        content()
+        if (enabled) {
+            Icon(
+                imageVector = Icons.Rounded.DragHandle,
+                contentDescription = stringResource(R.string.sort_manual_order),
+                tint = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.75f),
+                modifier = Modifier
+                    .align(Alignment.CenterEnd)
+                    .padding(end = 4.dp)
+                    .size(22.dp),
+            )
+        }
+    }
+}
+
 /**
  * The Albums tab's rows: the releases downloaded whole, then whatever else the
  * files' own album tags group up.
@@ -2590,6 +2842,11 @@ private fun albumEntries(
 @Composable
 private fun AlbumsTab(
     albums: List<AlbumEntry>,
+    allKeys: List<String>,
+    albumSort: CollectionSort,
+    onAlbumSortChange: (CollectionSort) -> Unit,
+    manualOrder: List<String>,
+    onManualOrderChange: (List<String>) -> Unit,
     viewType: LibraryViewType,
     onViewTypeToggle: () -> Unit,
     selectedKeys: Set<String> = emptySet(),
@@ -2602,6 +2859,24 @@ private fun AlbumsTab(
     if (viewType == LibraryViewType.GRID) {
         val gridState = rememberLazyGridState()
         val gridColumns = rememberGridColumns(GridKind.ALBUMS)
+        val dragState = remember { ManualDragState() }
+        val allKeySet = remember(allKeys) { allKeys.toHashSet() }
+        val manualReorder = albumSort == CollectionSort.MANUAL
+        fun boundsForKey(key: String): Rect? = gridState.layoutInfo.visibleItemsInfo
+            .firstOrNull { it.key == key }
+            ?.let { item ->
+                Rect(
+                    item.offset.x.toFloat(), item.offset.y.toFloat(),
+                    (item.offset.x + item.size.width).toFloat(),
+                    (item.offset.y + item.size.height).toFloat(),
+                )
+            }
+        fun keyAt(point: Offset): String? = gridState.layoutInfo.visibleItemsInfo
+            .firstOrNull { item ->
+                point.x >= item.offset.x && point.x < item.offset.x + item.size.width &&
+                    point.y >= item.offset.y && point.y < item.offset.y + item.size.height
+            }
+            ?.key as? String
         Box(modifier = Modifier.fillMaxSize()) {
             LazyVerticalGrid(
                 columns = ScaledGridCells(gridColumns),
@@ -2627,13 +2902,16 @@ private fun AlbumsTab(
                         title = pluralStringResource(R.plurals.album_count, albums.size, albums.size),
                         modifier = Modifier.padding(horizontal = 0.dp, vertical = 6.dp),
                         actions = {
-                            LocalViewAndSortControls(
-                                sortOrder = LocalMusicSort.TITLE_ASC,
-                                onSortOrderChange = {},
-                                viewType = viewType,
-                                onViewTypeToggle = onViewTypeToggle,
-                                showSort = false,
-                            )
+                            Row(verticalAlignment = Alignment.CenterVertically) {
+                                CollectionSortControl(albumSort, onAlbumSortChange)
+                                LocalViewAndSortControls(
+                                    sortOrder = LocalMusicSort.TITLE_ASC,
+                                    onSortOrderChange = {},
+                                    viewType = viewType,
+                                    onViewTypeToggle = onViewTypeToggle,
+                                    showSort = false,
+                                )
+                            }
                         },
                     )
                 }
@@ -2645,13 +2923,25 @@ private fun AlbumsTab(
                     }
                 }
                 items(albums, key = { it.key }) { entry ->
-                    AlbumGridCard(
-                        entry = entry,
-                        keepArtworkAspectRatio = keepArtworkAspectRatio,
-                        selected = entry.key in selectedKeys,
-                        onClick = { onAlbumClick(entry) },
-                        onLongPress = onAlbumLongPress?.let { { it(entry) } },
-                    )
+                    ManualOrderItem(
+                        itemKey = entry.key,
+                        enabled = manualReorder,
+                        allKeys = allKeys,
+                        allKeySet = allKeySet,
+                        savedOrder = manualOrder,
+                        dragState = dragState,
+                        boundsForKey = ::boundsForKey,
+                        keyAt = ::keyAt,
+                        onManualOrderChange = onManualOrderChange,
+                    ) {
+                        AlbumGridCard(
+                            entry = entry,
+                            keepArtworkAspectRatio = keepArtworkAspectRatio,
+                            selected = entry.key in selectedKeys,
+                            onClick = { onAlbumClick(entry) },
+                            onLongPress = if (manualReorder) null else onAlbumLongPress?.let { { it(entry) } },
+                        )
+                    }
                 }
             }
             FastScroller(
@@ -2667,6 +2957,15 @@ private fun AlbumsTab(
         }
     } else {
         val listState = rememberLazyListState()
+        val dragState = remember { ManualDragState() }
+        val allKeySet = remember(allKeys) { allKeys.toHashSet() }
+        val manualReorder = albumSort == CollectionSort.MANUAL
+        fun boundsForKey(key: String): Rect? = listState.layoutInfo.visibleItemsInfo
+            .firstOrNull { it.key == key }
+            ?.let { item -> Rect(0f, item.offset.toFloat(), item.size.toFloat(), (item.offset + item.size).toFloat()) }
+        fun keyAt(point: Offset): String? = listState.layoutInfo.visibleItemsInfo
+            .firstOrNull { item -> point.y >= item.offset && point.y < item.offset + item.size }
+            ?.key as? String
         Box(modifier = Modifier.fillMaxSize()) {
             LazyColumn(
                 state = listState,
@@ -2683,13 +2982,16 @@ private fun AlbumsTab(
                         icon = Icons.Rounded.Album,
                         title = pluralStringResource(R.plurals.album_count, albums.size, albums.size),
                         actions = {
-                            LocalViewAndSortControls(
-                                sortOrder = LocalMusicSort.TITLE_ASC,
-                                onSortOrderChange = {},
-                                viewType = viewType,
-                                onViewTypeToggle = onViewTypeToggle,
-                                showSort = false,
-                            )
+                            Row(verticalAlignment = Alignment.CenterVertically) {
+                                CollectionSortControl(albumSort, onAlbumSortChange)
+                                LocalViewAndSortControls(
+                                    sortOrder = LocalMusicSort.TITLE_ASC,
+                                    onSortOrderChange = {},
+                                    viewType = viewType,
+                                    onViewTypeToggle = onViewTypeToggle,
+                                    showSort = false,
+                                )
+                            }
                         },
                     )
                 }
@@ -2701,18 +3003,32 @@ private fun AlbumsTab(
                     }
                 }
                 items(albums, key = { it.key }) { entry ->
-                    AlbumRow(
-                        entry = entry,
-                        keepArtworkAspectRatio = keepArtworkAspectRatio,
-                        selected = entry.key in selectedKeys,
-                        onClick = { onAlbumClick(entry) },
-                        onLongPress = onAlbumLongPress?.let { { it(entry) } },
-                    )
-                    HorizontalDivider(
-                        modifier = Modifier.padding(start = ROW_DIVIDER_INSET),
-                        thickness = 0.5.dp,
-                        color = MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.5f),
-                    )
+                    ManualOrderItem(
+                        itemKey = entry.key,
+                        enabled = manualReorder,
+                        allKeys = allKeys,
+                        allKeySet = allKeySet,
+                        savedOrder = manualOrder,
+                        dragState = dragState,
+                        boundsForKey = ::boundsForKey,
+                        keyAt = ::keyAt,
+                        onManualOrderChange = onManualOrderChange,
+                    ) {
+                        Column {
+                            AlbumRow(
+                                entry = entry,
+                                keepArtworkAspectRatio = keepArtworkAspectRatio,
+                                selected = entry.key in selectedKeys,
+                                onClick = { onAlbumClick(entry) },
+                                onLongPress = if (manualReorder) null else onAlbumLongPress?.let { { it(entry) } },
+                            )
+                            HorizontalDivider(
+                                modifier = Modifier.padding(start = ROW_DIVIDER_INSET),
+                                thickness = 0.5.dp,
+                                color = MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.5f),
+                            )
+                        }
+                    }
                 }
             }
             FastScroller(
@@ -3058,6 +3374,57 @@ private fun LocalMusicSort.localizedLabel(): String = when (this) {
     LocalMusicSort.DATE_MODIFIED -> stringResource(R.string.sort_date_modified)
     LocalMusicSort.ARTIST_ASC -> "Artist"
     LocalMusicSort.DURATION_DESC -> "Duration"
+}
+
+@Composable
+private fun CollectionSortControl(
+    sortOrder: CollectionSort,
+    onSortOrderChange: (CollectionSort) -> Unit,
+) {
+    var menuOpen by remember { mutableStateOf(false) }
+    Box {
+        Box(
+            modifier = Modifier.size(32.dp).clip(CircleShape).clickable { menuOpen = true },
+            contentAlignment = Alignment.Center,
+        ) {
+            Icon(
+                Icons.AutoMirrored.Rounded.Sort,
+                contentDescription = stringResource(R.string.sort_music),
+                tint = MaterialTheme.colorScheme.onSurfaceVariant,
+                modifier = Modifier.size(18.dp),
+            )
+        }
+        DropdownMenu(expanded = menuOpen, onDismissRequest = { menuOpen = false }) {
+            CollectionSort.entries.forEach { option ->
+                DropdownMenuItem(
+                    text = {
+                        Text(
+                            stringResource(
+                                when (option) {
+                                    CollectionSort.TITLE_ASC -> R.string.sort_title_ascending
+                                    CollectionSort.TITLE_DESC -> R.string.sort_title_descending
+                                    CollectionSort.MANUAL -> R.string.sort_manual_order
+                                },
+                            ),
+                        )
+                    },
+                    trailingIcon = if (option == sortOrder) {
+                        {
+                            Icon(
+                                Icons.Rounded.Check,
+                                contentDescription = stringResource(R.string.selected),
+                                modifier = Modifier.size(18.dp),
+                            )
+                        }
+                    } else null,
+                    onClick = {
+                        onSortOrderChange(option)
+                        menuOpen = false
+                    },
+                )
+            }
+        }
+    }
 }
 
 /** Shared action bar for selected tracks and download selections. */

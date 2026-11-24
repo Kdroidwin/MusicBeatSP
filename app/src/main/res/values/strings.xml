@@ -491,6 +491,8 @@
     <string name="larger_full_screen_cover_art_subtitle">Zoom in on full-screen artwork. Available only while full-screen cover art is enabled.</string>
     <string name="full_screen_artwork_bottom_blur_strength">Full-screen artwork bottom blur</string>
     <string name="full_screen_artwork_bottom_blur_strength_subtitle">Adjust the gradient blur beneath standard, BitChord-style, enlarged, and Auris-style full-screen artwork (0–200 dp).</string>
+    <string name="full_bleed_panels_square_backdrop">Square-art background for lyrics and queue</string>
+    <string name="full_bleed_panels_square_backdrop_subtitle">Use the square-art mesh gradient behind lyrics and queue while keeping the full-screen player artwork background unchanged. On by default.</string>
     <string name="artwork_blur_strength_value">%1$d dp</string>
     <string name="keep_original_artwork_aspect_ratio">Keep cover art proportions</string>
     <string name="keep_original_artwork_aspect_ratio_subtitle">When full-screen cover art is off, show portrait and landscape covers without cropping them square</string>
@@ -684,6 +686,8 @@
     <string name="your_playlists">Your playlists</string>
     <string name="who_can_see_it">Who can see it</string>
     <string name="about_artist">About the artist</string>
+    <string name="add_artist_to_library">Add artist to Library</string>
+    <string name="remove_artist_from_library">Remove artist from Library</string>
     <string name="artist_overview_more">Continue reading</string>
     <string name="artist_overview_less">Show less</string>
     <string name="about_album">About the album</string>
@@ -906,6 +910,9 @@
     <string name="sort_date_added_toggle">Date added</string>
     <string name="sort_date_modified">Date modified (newest first)</string>
     <string name="sort_default">Default order</string>
+    <string name="sort_manual_order">Custom order (drag to reorder)</string>
+    <string name="weighted_shuffle">Weighted shuffle</string>
+    <string name="weighted_shuffle_subtitle">Give tracks with more play history a higher chance in the shuffle order. Off keeps shuffle fully random.</string>
     <string name="sort_library">Sort</string>
     <string name="sort_songs">Sort songs</string>
     <string name="album">album</string>
@@ -2416,6 +2423,8 @@
     <string name="search_filter_albums">Albums</string>
     <string name="search_filter_artists">Artists</string>
     <string name="search_filter_folders">Folders</string>
+    <string name="search_filter_lyrics">Lyrics</string>
+    <string name="searching_lyrics">Searching lyrics…</string>
     <string name="search_clear_all">Clear all</string>
     <string name="search_offline_music_title">Search offline music</string>
     <string name="search_offline_music_hint">Type a title, artist, album, or folder name</string>
@@ -2509,8 +2518,10 @@
     <string name="download_destination_folder_selected">Folder selected</string>
     <string name="download_destination_folder_required">Choose a download folder in Settings before downloading in this mode.</string>
     <string name="download_destination_folder_permission_failed">Could not keep access to that folder. Choose another folder.</string>
-    <string name="repeat_button_reference_icon">Use the reference repeat icon</string>
-    <string name="repeat_button_reference_icon_subtitle">Use the paired return arrows shown in the attached image. On by default.</string>
+    <string name="repeat_button_reference_icon">Apple Music-style repeat icon</string>
+    <string name="repeat_button_reference_icon_subtitle">Use Tinque’s repeat arrows and Apple Music-like Repeat Off, Repeat All, and Repeat One states. On by default.</string>
+    <string name="tag_editor_artwork_color">Match tag editor to album artwork</string>
+    <string name="tag_editor_artwork_color_subtitle">Tint the tag editor and its overflow menu from the current track’s artwork. On by default.</string>
     <string name="mini_player_double_arrow_skip_buttons">Use double-arrow skip buttons in the mini player</string>
     <string name="mini_player_double_arrow_skip_buttons_subtitle">Show the mini player’s previous and next controls as two solid triangles, like the main player. On by default.</string>
     <string name="player_skip_buttons_match_mini_player">Match the player’s skip buttons to the mini player</string>

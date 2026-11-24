@@ -95,6 +95,7 @@ object LocalSearchUseCase {
             LocalSearchFilter.ALBUMS -> results.addAll(matchedAlbums)
             LocalSearchFilter.ARTISTS -> results.addAll(matchedArtists)
             LocalSearchFilter.FOLDERS -> results.addAll(matchedFolders)
+            LocalSearchFilter.LYRICS -> Unit
         }
 
         return results

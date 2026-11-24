@@ -1409,7 +1409,7 @@ fun NowPlayingScreen(
     val favoriteUsesStar by AppSettings.favoriteUsesStar.collectAsStateWithLifecycle()
     val playerQuickActions by AppSettings.playerQuickActions.collectAsStateWithLifecycle()
     val repeatButtonUsesReferenceIcon by AppSettings.repeatButtonUsesReferenceIcon.collectAsStateWithLifecycle()
-    val repeatButtonIcon = if (repeatButtonUsesReferenceIcon) BitChordIcons.RepeatReference else BitChordIcons.Repeat
+    val repeatButtonIcon = if (repeatButtonUsesReferenceIcon) BitChordIcons.RepeatTinque else BitChordIcons.Repeat
     val miniPlayerUsesDoubleArrowSkipButtons by AppSettings.miniPlayerUseDoubleArrowSkipButtons.collectAsStateWithLifecycle()
     val playerSkipButtonsMatchMiniPlayer by AppSettings.playerSkipButtonsMatchMiniPlayer.collectAsStateWithLifecycle()
     val playerPreviousTrackIcon = if (playerSkipButtonsMatchMiniPlayer) {
@@ -1459,6 +1459,7 @@ fun NowPlayingScreen(
     val retroPlayerLayout = walkmanPlayerStyle || retroPlayerMode
     val artworkBackdropBlurDp by AppSettings.artworkBackdropBlurDp.collectAsStateWithLifecycle()
     val fullBleedArtworkBottomBlurStrengthDp by AppSettings.fullBleedArtworkBottomBlurStrengthDp.collectAsStateWithLifecycle()
+    val fullBleedPanelsUseSquareBackdrop by AppSettings.fullBleedPanelsUseSquareBackdrop.collectAsStateWithLifecycle()
     val useLibraryIconForPlaylistControl by AppSettings.useLibraryIconForPlaylistControl.collectAsStateWithLifecycle()
     val keepArtworkFullSizeWhenPaused by AppSettings.keepArtworkFullSizeWhenPaused.collectAsStateWithLifecycle()
     val hideVolumeBar by AppSettings.hideVolumeBar.collectAsStateWithLifecycle()
@@ -2250,8 +2251,23 @@ fun NowPlayingScreen(
     // position into the same space as the two edges above.
     var dismissBandSpace by remember { mutableStateOf<LayoutCoordinates?>(null) }
 
+    // Keep the full-bleed backdrop treatment while the normal player is open,
+    // then move the backdrop itself to the square-art treatment in step with
+    // the sleeve as lyrics or the queue takes over. `fullBleedArt` and
+    // `heroMode` still own artwork geometry; this fraction only controls the
+    // background seam and its blur, so the player artwork layout is unchanged.
+    val heroBackdropProgress = when {
+        !heroMode -> 0f
+        !fullBleedPanelsUseSquareBackdrop -> 1f
+        else -> (1f - p).coerceIn(0f, 1f)
+    }
+    val heroBackdropSeam = heroHeight * heroBackdropProgress
     val activeBackdropBlur = if (aurisHeroMode) {
-        fullBleedArtworkBottomBlurStrengthDp.dp
+        lerp(
+            artworkBackdropBlurDp.dp,
+            fullBleedArtworkBottomBlurStrengthDp.dp,
+            heroBackdropProgress,
+        )
     } else {
         artworkBackdropBlurDp.dp
     }
@@ -2283,11 +2299,11 @@ fun NowPlayingScreen(
         } else if (!sharedPlayerBackdrop) {
             ArtworkMeshBackdrop(
                 mesh = artMesh,
-                // BitChord anchors the mesh to the artwork's lower edge. Keep
-                // this seam there even when the optional blurred lower sleeve
-                // is enabled; moving it to the screen top makes the mesh jump
-                // in colour exactly where the image fades out.
-                seam = if (heroMode) heroHeight else 0.dp,
+                // At rest, BitChord anchors the mesh to the full-bleed artwork's
+                // lower edge. When enabled, the seam eases to the top as lyrics
+                // or the queue takes over, giving those panels the square-art
+                // mesh while leaving the player's artwork layout untouched.
+                seam = heroBackdropSeam,
                 fallback = artworkPalette.wash,
                 blurRadius = activeBackdropBlur,
             )
@@ -4614,16 +4630,6 @@ private fun SweptLyricLine(
     val showFurigana by AppSettings.showLyricsFurigana.collectAsStateWithLifecycle()
     val lyricInk = LocalPlayerLyricInk.current
     val textMeasurer = rememberTextMeasurer()
-    val richText = remember(line.text, style, showFurigana, lyricInk) {
-        makeLyricRichText(line.text, style, lyricInk, showFurigana)
-    }
-    // Inline ruby is drawn by its own child Text composables, so the parent
-    // Text's dim color does not automatically reach it. Build a matching dim
-    // copy; reusing [richText] here made only furigana bases stay bright before
-    // their timed character was sung.
-    val dimRichText = remember(line.text, style, showFurigana, lyricInk, dimAlpha) {
-        makeLyricRichText(line.text, style, lyricInk.copy(alpha = dimAlpha), showFurigana)
-    }
     val smoothCharacterLyrics by AppSettings.smoothCharacterLyrics.collectAsStateWithLifecycle()
 
     // Carried by every copy: identical insets keep them laying out identically,
@@ -4637,47 +4643,6 @@ private fun SweptLyricLine(
     // for and nothing paying the space back, it just left the line sitting in
     // a pocket of air with the chevron pushed off it.
     val room = if (glowRoom > 0.dp) Modifier.padding(glowRoom) else Modifier
-
-    val sweep = Modifier
-        .graphicsLayer {
-            val position = clock.doubleValue
-            val isSoftSweep = smoothCharacterLyrics && line.isWordSynced &&
-                position > line.timeMs && position < line.endMs
-            compositingStrategy = if (isSoftSweep) {
-                CompositingStrategy.Offscreen
-            } else {
-                CompositingStrategy.Auto
-            }
-        }
-        .drawWithContent {
-            val position = clock.doubleValue
-            when {
-                // Sung and done with: all of it is lit. Checked first so the lines
-                // above and below the playing one — which are in this same state
-                // for minutes at a time — cost a comparison per frame rather than
-                // a walk of their words.
-                position >= line.endMs.toDouble() -> drawContent()
-                // Not started: nothing lit, the dim copy is the whole of it.
-                position <= line.timeMs.toDouble() -> Unit
-                else -> layout?.let {
-                    // Word timings can come from remote karaoke sources with
-                    // offsets that are not safe to use directly as Compose text
-                    // offsets (notably after a one-line layout clips the visual
-                    // line). Keep the sweep inside the measured UTF-16 range.
-                    try {
-                        sweepTo(
-                            layout = it,
-                            revealedChars = richText.renderedOffset(line.revealedChars(position)),
-                            feather = smoothCharacterLyrics && line.isWordSynced,
-                        )
-                    } catch (_: RuntimeException) {
-                        // Bad third-party syllable offsets should degrade to a
-                        // static readable line, never crash the render thread.
-                        drawContent()
-                    }
-                }
-            }
-        }
 
     BoxWithConstraints(modifier) {
         val density = LocalDensity.current
@@ -4703,9 +4668,65 @@ private fun SweptLyricLine(
             (glowRoom * 2 + trailingGlyphGuard).roundToPx()
         }
         val availableTextWidth = (constraints.maxWidth - textInsetsPx).coerceAtLeast(0)
-        val fittedStyle = remember(line.text, style, availableTextWidth, autoFit) {
-            fitLyricTextStyle(line.text, style, availableTextWidth, autoFit, textMeasurer)
+        val fittedStyle = remember(line.text, style, availableTextWidth, autoFit, showFurigana) {
+            fitLyricTextStyle(line.text, style, availableTextWidth, autoFit, textMeasurer, showFurigana)
         }
+        // Build inline ruby from the fitted style. Creating it from [style]
+        // before fitting left only the ruby child at the original font size.
+        val richText = remember(line.text, fittedStyle, showFurigana, lyricInk) {
+            makeLyricRichText(
+                line.text,
+                fittedStyle,
+                lyricInk,
+                showFurigana,
+            )
+        }
+        // Inline ruby is drawn by its own child Text composables, so the parent
+        // Text's dim color does not automatically reach it. Keep its child style
+        // and placeholder dimensions equal to the bright copy's fitted size.
+        val dimRichText = remember(
+            line.text,
+            fittedStyle,
+            showFurigana,
+            lyricInk,
+            dimAlpha,
+        ) {
+            makeLyricRichText(
+                line.text,
+                fittedStyle,
+                lyricInk.copy(alpha = dimAlpha),
+                showFurigana,
+            )
+        }
+        val sweep = Modifier
+            .graphicsLayer {
+                val position = clock.doubleValue
+                val isSoftSweep = smoothCharacterLyrics && line.isWordSynced &&
+                    position > line.timeMs && position < line.endMs
+                compositingStrategy = if (isSoftSweep) {
+                    CompositingStrategy.Offscreen
+                } else {
+                    CompositingStrategy.Auto
+                }
+            }
+            .drawWithContent {
+                val position = clock.doubleValue
+                when {
+                    position >= line.endMs.toDouble() -> drawContent()
+                    position <= line.timeMs.toDouble() -> Unit
+                    else -> layout?.let {
+                        try {
+                            sweepTo(
+                                layout = it,
+                                revealedChars = richText.renderedOffset(line.revealedChars(position)),
+                                feather = smoothCharacterLyrics && line.isWordSynced,
+                            )
+                        } catch (_: RuntimeException) {
+                            drawContent()
+                        }
+                    }
+                }
+            }
         val displayedMaxLines = if (autoFit) 1 else maxLines
         val displayedOverflow = if (autoFit) TextOverflow.Clip else overflow
         val textInsets = Modifier
@@ -5962,6 +5983,7 @@ private data class LyricRichText(
     val annotated: AnnotatedString,
     val inlineContent: Map<String, InlineTextContent>,
     val rubyRanges: List<RubySourceRange> = emptyList(),
+    val placeholders: List<AnnotatedString.Range<Placeholder>> = emptyList(),
 )
 
 private data class RubySourceRange(
@@ -6005,12 +6027,14 @@ private fun makeLyricRichText(
     style: TextStyle,
     color: Color,
     enabled: Boolean,
+    annotations: List<LyricsFurigana.Annotation>? = null,
 ): LyricRichText {
     if (!enabled) return LyricRichText(AnnotatedString(source), emptyMap())
-    val matches = LyricsFurigana.annotations(source)
+    val matches = annotations ?: LyricsFurigana.annotations(source)
     if (matches.isEmpty()) return LyricRichText(AnnotatedString(source), emptyMap())
 
     val renderedRanges = mutableListOf<RubySourceRange>()
+    val placeholderRanges = mutableListOf<AnnotatedString.Range<Placeholder>>()
     val builder = androidx.compose.ui.text.buildAnnotatedString {
         var cursor = 0
         var renderedLength = 0
@@ -6041,15 +6065,26 @@ private fun makeLyricRichText(
             ?.sp ?: 22.sp
         val emWidth = maxOf(base.length.toFloat(), reading.length * 0.5f).coerceAtLeast(1f)
         val width = (baseSize.value * emWidth).sp
+        val parentLineHeightSp = style.lineHeight
+            .takeIf { it.isSp && it.value.isFinite() && it.value > 0f }
+            ?.value ?: baseSize.value * 1.2f
+        val readingLineHeight = baseSize * 0.48f
+        val placeholderHeight = maxOf(
+            baseSize.value * 1.8f,
+            parentLineHeightSp + baseSize.value * 0.48f + baseSize.value * 0.08f,
+        ).sp
+        val placeholder = Placeholder(
+            width = width,
+            height = placeholderHeight,
+            // Use the same line-height for the parent and ruby base Text, then
+            // align their text bottoms. This keeps both baselines identical;
+            // a shorter child line-height had made only ruby-backed kanji rise.
+            placeholderVerticalAlign = PlaceholderVerticalAlign.TextBottom,
+        )
+        val renderedStart = renderedRanges[index].renderedStart
+        placeholderRanges += AnnotatedString.Range(placeholder, renderedStart, renderedStart + 1)
         id to InlineTextContent(
-            placeholder = Placeholder(
-                width = width,
-                height = baseSize * 1.6f,
-                // Align to the surrounding text's bottom, not only its baseline.
-                // AboveBaseline leaves the glyph's descender region outside the
-                // placeholder and can make only ruby-backed base text look raised.
-                placeholderVerticalAlign = PlaceholderVerticalAlign.TextBottom,
-            ),
+            placeholder = placeholder,
             children = {
                 // Inline content is measured inside the placeholder's fixed
                 // box. Fill it explicitly so the base glyph remains present
@@ -6067,7 +6102,7 @@ private fun makeLyricRichText(
                         modifier = Modifier.fillMaxWidth(),
                         style = style.copy(
                             fontSize = baseSize * 0.42f,
-                            lineHeight = baseSize * 0.48f,
+                            lineHeight = readingLineHeight,
                             textAlign = TextAlign.Center,
                         ),
                     )
@@ -6077,13 +6112,14 @@ private fun makeLyricRichText(
                         maxLines = 1,
                         softWrap = false,
                         modifier = Modifier.fillMaxWidth(),
-                        style = style.copy(fontSize = baseSize, lineHeight = baseSize),
+                        // Keep the parent's lineHeight (and all its font metrics).
+                        style = style.copy(fontSize = baseSize),
                     )
                 }
             },
         )
     }.toMap()
-    return LyricRichText(builder, inline, renderedRanges)
+    return LyricRichText(builder, inline, renderedRanges, placeholderRanges)
 }
 
 @Composable
@@ -6099,14 +6135,19 @@ private fun LyricTextDisplay(
     val showFurigana by AppSettings.showLyricsFurigana.collectAsStateWithLifecycle()
     val autoFit by AppSettings.autoFitOneLineLyrics.collectAsStateWithLifecycle()
     val actualStyle = if (textAlign == null) style else style.copy(textAlign = textAlign)
-    val rich = remember(text, actualStyle, color, showFurigana) {
-        makeLyricRichText(text, actualStyle, color, showFurigana)
-    }
     val textMeasurer = rememberTextMeasurer()
     BoxWithConstraints(modifier) {
         val availableWidth = constraints.maxWidth
-        val fittedStyle = remember(text, actualStyle, availableWidth, autoFit) {
-            fitLyricTextStyle(text, actualStyle, availableWidth, autoFit, textMeasurer)
+        val fittedStyle = remember(text, actualStyle, availableWidth, autoFit, showFurigana) {
+            fitLyricTextStyle(text, actualStyle, availableWidth, autoFit, textMeasurer, showFurigana)
+        }
+        val rich = remember(text, fittedStyle, color, showFurigana) {
+            makeLyricRichText(
+                text,
+                fittedStyle,
+                color,
+                showFurigana,
+            )
         }
         Text(
             text = rich.annotated,
@@ -6126,22 +6167,40 @@ private fun fitLyricTextStyle(
     availableWidth: Int,
     enabled: Boolean,
     textMeasurer: androidx.compose.ui.text.TextMeasurer,
+    showFurigana: Boolean = false,
 ): TextStyle {
     val originalFontSize = style.fontSize.value
     if (!enabled || availableWidth <= 0 || !originalFontSize.isFinite() || originalFontSize <= MIN_AUTOFIT_LYRIC_SP) return style
-    val measured = runCatching {
-        textMeasurer.measure(text = text, style = style, maxLines = 1, softWrap = false)
-    }.getOrNull() ?: return style
-    if (measured.size.width <= availableWidth) return style
+    val rubyAnnotations = if (showFurigana) LyricsFurigana.annotations(text) else emptyList()
+    fun measuredWidth(candidateStyle: TextStyle): Int? = runCatching {
+        if (rubyAnnotations.isNotEmpty()) {
+            val rich = makeLyricRichText(
+                text,
+                candidateStyle,
+                Color.White,
+                enabled = true,
+                annotations = rubyAnnotations,
+            )
+            textMeasurer.measure(
+                text = rich.annotated,
+                style = candidateStyle,
+                maxLines = 1,
+                softWrap = false,
+                placeholders = rich.placeholders,
+            ).size.width
+        } else {
+            textMeasurer.measure(text = text, style = candidateStyle, maxLines = 1, softWrap = false).size.width
+        }
+    }.getOrNull()
+    val measured = measuredWidth(style) ?: return style
+    if (measured <= availableWidth) return style
     var low = MIN_AUTOFIT_LYRIC_SP
     var high = originalFontSize
     repeat(12) {
         val candidate = (low + high) / 2f
         val candidateStyle = style.copy(fontSize = candidate.sp)
-        val layout = runCatching {
-            textMeasurer.measure(text = text, style = candidateStyle, maxLines = 1, softWrap = false)
-        }.getOrNull() ?: return style
-        if (layout.size.width <= availableWidth) low = candidate else high = candidate
+        val candidateWidth = measuredWidth(candidateStyle) ?: return style
+        if (candidateWidth <= availableWidth) low = candidate else high = candidate
     }
     val lineHeight = style.lineHeight
     val fittedLineHeight = if (lineHeight.isSp && lineHeight.value.isFinite() && lineHeight.value > 0f) {
@@ -6816,7 +6875,7 @@ private fun TransportSideActionGlyph(
     onOpenSearch: () -> Unit,
 ) {
     val repeatButtonUsesReferenceIcon by AppSettings.repeatButtonUsesReferenceIcon.collectAsStateWithLifecycle()
-    val repeatButtonIcon = if (repeatButtonUsesReferenceIcon) BitChordIcons.RepeatReference else BitChordIcons.Repeat
+    val repeatButtonIcon = if (repeatButtonUsesReferenceIcon) BitChordIcons.RepeatTinque else BitChordIcons.Repeat
     val icon = when (action) {
         TransportSideAction.NONE -> return
         TransportSideAction.SHUFFLE -> BitChordIcons.Shuffle

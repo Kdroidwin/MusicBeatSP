@@ -34,6 +34,8 @@ import androidx.compose.material.icons.rounded.MoreVert
 import androidx.compose.material.icons.rounded.Notifications
 import androidx.compose.material.icons.rounded.PlayArrow
 import androidx.compose.material.icons.rounded.Shuffle
+import androidx.compose.material.icons.rounded.Star
+import androidx.compose.material.icons.rounded.StarBorder
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.DropdownMenu
 import androidx.compose.material3.DropdownMenuItem
@@ -108,6 +110,8 @@ fun DetailScreen(
     onLocalSectionItemLongPress: ((ShelfItem) -> Unit)? = null,
     selectionMode: Boolean = false,
     selectionToolbar: (@Composable (Color) -> Unit)? = null,
+    isSavedToLibrary: Boolean = false,
+    onToggleLibrary: (() -> Unit)? = null,
     modifier: Modifier = Modifier,
 ) {
     val songsState = page.songs
@@ -161,6 +165,8 @@ fun DetailScreen(
                     centerTitle = centerArtistDetailName,
                     onPlay = { if (songs.isNotEmpty()) onSongClick(songs, 0) },
                     onShuffle = { if (songs.isNotEmpty()) onShuffle(songs) },
+                    isSavedToLibrary = isSavedToLibrary,
+                    onToggleLibrary = onToggleLibrary,
                     subscriptionLabel = subscriptionLabel,
                     subscribed = subscribed,
                     onToggleSubscription = onToggleSubscription,
@@ -393,6 +399,8 @@ private fun ArtistHero(
     centerTitle: Boolean,
     onPlay: () -> Unit,
     onShuffle: () -> Unit,
+    isSavedToLibrary: Boolean,
+    onToggleLibrary: (() -> Unit)?,
     subscriptionLabel: String?,
     subscribed: Boolean,
     onToggleSubscription: (() -> Unit)?,
@@ -491,6 +499,8 @@ private fun ArtistHero(
         palette = palette,
         onPlay = onPlay,
         onShuffle = onShuffle,
+        isSavedToLibrary = isSavedToLibrary,
+        onToggleLibrary = onToggleLibrary,
         subscriptionLabel = subscriptionLabel,
         subscribed = subscribed,
         onToggleSubscription = onToggleSubscription,
@@ -502,6 +512,8 @@ private fun ArtistActions(
     palette: ArtworkPalette,
     onPlay: () -> Unit,
     onShuffle: () -> Unit,
+    isSavedToLibrary: Boolean,
+    onToggleLibrary: (() -> Unit)?,
     subscriptionLabel: String?,
     subscribed: Boolean,
     onToggleSubscription: (() -> Unit)?,
@@ -518,6 +530,18 @@ private fun ArtistActions(
             modifier = Modifier.size(68.dp).clip(CircleShape).background(palette.accent),
         ) {
             Icon(Icons.Rounded.PlayArrow, contentDescription = stringResource(R.string.play), tint = palette.onBackground, modifier = Modifier.size(40.dp))
+        }
+        if (onToggleLibrary != null) {
+            Spacer(Modifier.width(16.dp))
+            ArtistRoundAction(
+                icon = if (isSavedToLibrary) Icons.Rounded.Star else Icons.Rounded.StarBorder,
+                label = stringResource(
+                    if (isSavedToLibrary) R.string.remove_artist_from_library
+                    else R.string.add_artist_to_library,
+                ),
+                palette = palette,
+                onClick = onToggleLibrary,
+            )
         }
         if (subscriptionLabel != null && onToggleSubscription != null) {
             Spacer(Modifier.width(22.dp))
