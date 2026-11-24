@@ -371,7 +371,7 @@ dependencies {
     implementation("com.google.protobuf:protobuf-javalite:4.35.0")
 
     // ---- Auth/session storage ----
-    implementation("androidx.security:security-crypto:1.1.0-alpha06")
+    implementation("androidx.security:security-crypto:1.1.0")
     // Musicolet's legacy .mpl backup members use Blowfish, which is not
     // available from every Android JCA provider. Use its portable primitive.
     implementation("org.bouncycastle:bcprov-jdk18on:1.85")
