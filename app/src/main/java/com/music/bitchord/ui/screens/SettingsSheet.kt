@@ -2078,6 +2078,9 @@ fun SettingsScreen(
     val miniPlayerPlayerBackgroundColor by AppSettings.miniPlayerPlayerBackgroundColor.collectAsStateWithLifecycle()
     val miniPlayerArtworkOutline by AppSettings.miniPlayerArtworkOutline.collectAsStateWithLifecycle()
     val miniPlayerPreviousButton by AppSettings.miniPlayerPreviousButton.collectAsStateWithLifecycle()
+    val miniPlayerUseDoubleArrowSkipButtons by AppSettings.miniPlayerUseDoubleArrowSkipButtons.collectAsStateWithLifecycle()
+    val playerSkipButtonsMatchMiniPlayer by AppSettings.playerSkipButtonsMatchMiniPlayer.collectAsStateWithLifecycle()
+    val repeatButtonUsesReferenceIcon by AppSettings.repeatButtonUsesReferenceIcon.collectAsStateWithLifecycle()
     val miniPlayerSwipeChangesTrack by AppSettings.miniPlayerSwipeChangesTrack.collectAsStateWithLifecycle()
     val miniPlayerSwipeUpExpands by AppSettings.miniPlayerSwipeUpExpands.collectAsStateWithLifecycle()
     val miniPlayerSwipeDownDismisses by AppSettings.miniPlayerSwipeDownDismisses.collectAsStateWithLifecycle()
@@ -2688,6 +2691,8 @@ fun SettingsScreen(
         SettingsSearchEntry(stringResource(R.string.walkman_player_style), stringResource(R.string.walkman_player_style_subtitle), listOf("player", "walkman", "sony", "controls", "ウォークマン", "ソニー", "プレイヤー", "再生ボタン"), walkmanPlayerStyle) { AppSettings.setWalkmanPlayerStyle(!walkmanPlayerStyle) },
         SettingsSearchEntry(stringResource(R.string.player_play_pause_animation), stringResource(R.string.player_play_pause_animation_subtitle), listOf("player", "play", "pause", "animation", "motion", "再生", "一時停止", "アニメーション"), playerPlayPauseAnimation) { AppSettings.setPlayerPlayPauseAnimation(!playerPlayPauseAnimation) },
         SettingsSearchEntry(stringResource(R.string.player_skip_animations), stringResource(R.string.player_skip_animations_subtitle), listOf("player", "next", "previous", "skip", "animation", "motion", "次へ", "前へ", "アニメーション"), playerSkipAnimations) { AppSettings.setPlayerSkipAnimations(!playerSkipAnimations) },
+        SettingsSearchEntry(stringResource(R.string.repeat_button_reference_icon), stringResource(R.string.repeat_button_reference_icon_subtitle), listOf("repeat", "icon", "design", "リピート", "アイコン", "デザイン"), repeatButtonUsesReferenceIcon) { AppSettings.setRepeatButtonUsesReferenceIcon(!repeatButtonUsesReferenceIcon) },
+        SettingsSearchEntry(stringResource(R.string.player_skip_buttons_match_mini_player), stringResource(R.string.player_skip_buttons_match_mini_player_subtitle), listOf("player", "mini player", "previous", "next", "skip", "icon", "プレイヤー", "ミニプレイヤー", "前の曲", "次の曲", "アイコン"), playerSkipButtonsMatchMiniPlayer) { AppSettings.setPlayerSkipButtonsMatchMiniPlayer(!playerSkipButtonsMatchMiniPlayer) },
         SettingsSearchEntry(stringResource(R.string.retro_player_mode), stringResource(R.string.retro_player_mode_subtitle), listOf("player", "retro", "classic", "remote", "レトロ", "プレーヤー", "リモコン"), retroPlayerMode) { AppSettings.setRetroPlayerMode(!retroPlayerMode) },
         SettingsSearchEntry(
             title = stringResource(R.string.pill_motion_style),
@@ -2738,6 +2743,12 @@ fun SettingsScreen(
             listOf("mini player", "previous", "back", "skip previous", "ミニプレイヤー", "前の曲", "前へ"),
             miniPlayerPreviousButton,
         ) { AppSettings.setMiniPlayerPreviousButton(!miniPlayerPreviousButton) },
+        SettingsSearchEntry(
+            stringResource(R.string.mini_player_double_arrow_skip_buttons),
+            stringResource(R.string.mini_player_double_arrow_skip_buttons_subtitle),
+            listOf("mini player", "previous", "next", "skip", "double arrow", "ミニプレイヤー", "前の曲", "次の曲", "二重矢印", "アイコン"),
+            miniPlayerUseDoubleArrowSkipButtons,
+        ) { AppSettings.setMiniPlayerUseDoubleArrowSkipButtons(!miniPlayerUseDoubleArrowSkipButtons) },
         SettingsSearchEntry(
             stringResource(R.string.mini_player_swipe_changes_track),
             stringResource(R.string.mini_player_swipe_changes_track_subtitle),
@@ -4423,7 +4434,7 @@ fun SettingsScreen(
 
         SettingsGroup(header = stringResource(R.string.playback)) {
             SettingsRow(
-                icon = Icons.Rounded.Repeat,
+                icon = BitChordIcons.RepeatReference,
                 title = stringResource(R.string.ab_repeat),
                 subtitle = stringResource(R.string.ab_repeat_subtitle),
                 trailing = {
@@ -5749,6 +5760,22 @@ fun SettingsScreen(
             )
             RowDivider()
             SettingsRow(
+                icon = Icons.Rounded.Repeat,
+                title = stringResource(R.string.repeat_button_reference_icon),
+                subtitle = stringResource(R.string.repeat_button_reference_icon_subtitle),
+                trailing = { Switch(checked = repeatButtonUsesReferenceIcon, onCheckedChange = AppSettings::setRepeatButtonUsesReferenceIcon) },
+                onClick = { AppSettings.setRepeatButtonUsesReferenceIcon(!repeatButtonUsesReferenceIcon) },
+            )
+            RowDivider()
+            SettingsRow(
+                icon = Icons.Rounded.SkipPrevious,
+                title = stringResource(R.string.player_skip_buttons_match_mini_player),
+                subtitle = stringResource(R.string.player_skip_buttons_match_mini_player_subtitle),
+                trailing = { Switch(checked = playerSkipButtonsMatchMiniPlayer, onCheckedChange = AppSettings::setPlayerSkipButtonsMatchMiniPlayer) },
+                onClick = { AppSettings.setPlayerSkipButtonsMatchMiniPlayer(!playerSkipButtonsMatchMiniPlayer) },
+            )
+            RowDivider()
+            SettingsRow(
                 icon = Icons.Rounded.Tune,
                 title = stringResource(R.string.player_side_control_size),
                 subtitle = stringResource(R.string.player_side_control_size_subtitle),
@@ -5943,7 +5970,7 @@ fun SettingsScreen(
                         PlayerQuickAction.SHARE_FILE -> Icons.Rounded.Share
                         PlayerQuickAction.FAVORITE -> BitChordIcons.Heart
                         PlayerQuickAction.SHUFFLE -> BitChordIcons.Shuffle
-                        PlayerQuickAction.REPEAT -> BitChordIcons.Repeat
+                        PlayerQuickAction.REPEAT -> if (repeatButtonUsesReferenceIcon) BitChordIcons.RepeatReference else BitChordIcons.Repeat
                     },
                     title = stringResource(titleRes),
                     subtitle = if (selectedIndex >= 0) stringResource(R.string.player_quick_action_order_subtitle) else null,
@@ -6476,6 +6503,23 @@ fun SettingsScreen(
                     )
                 },
                 onClick = { AppSettings.setMiniPlayerPreviousButton(!miniPlayerPreviousButton) },
+            )
+            RowDivider()
+            SettingsRow(
+                icon = Icons.Rounded.FastForward,
+                title = stringResource(R.string.mini_player_double_arrow_skip_buttons),
+                subtitle = stringResource(R.string.mini_player_double_arrow_skip_buttons_subtitle),
+                trailing = {
+                    Switch(
+                        checked = miniPlayerUseDoubleArrowSkipButtons,
+                        onCheckedChange = AppSettings::setMiniPlayerUseDoubleArrowSkipButtons,
+                        colors = SwitchDefaults.colors(
+                            checkedTrackColor = MaterialTheme.colorScheme.primary,
+                            checkedBorderColor = MaterialTheme.colorScheme.primary,
+                        ),
+                    )
+                },
+                onClick = { AppSettings.setMiniPlayerUseDoubleArrowSkipButtons(!miniPlayerUseDoubleArrowSkipButtons) },
             )
             RowDivider()
             SettingsRow(

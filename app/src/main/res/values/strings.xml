@@ -2509,4 +2509,10 @@
     <string name="download_destination_folder_selected">Folder selected</string>
     <string name="download_destination_folder_required">Choose a download folder in Settings before downloading in this mode.</string>
     <string name="download_destination_folder_permission_failed">Could not keep access to that folder. Choose another folder.</string>
+    <string name="repeat_button_reference_icon">Use the reference repeat icon</string>
+    <string name="repeat_button_reference_icon_subtitle">Use the paired return arrows shown in the attached image. On by default.</string>
+    <string name="mini_player_double_arrow_skip_buttons">Use double-arrow skip buttons in the mini player</string>
+    <string name="mini_player_double_arrow_skip_buttons_subtitle">Show the mini player’s previous and next controls as two solid triangles, like the main player. On by default.</string>
+    <string name="player_skip_buttons_match_mini_player">Match the player’s skip buttons to the mini player</string>
+    <string name="player_skip_buttons_match_mini_player_subtitle">Use the mini player’s current previous and next icon style on the full player. Off by default.</string>
 </resources>

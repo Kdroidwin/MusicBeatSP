@@ -56,6 +56,7 @@ import com.music.bitchord.data.model.ROW_ART_PX
 import com.music.bitchord.data.model.Song
 import com.music.bitchord.data.model.artworkAt
 import com.music.bitchord.data.settings.AppSettings
+import com.music.bitchord.ui.icons.BitChordIcons
 import com.music.bitchord.ui.components.thumbnailBorder
 import com.music.bitchord.ui.player.LocalPlayerDock
 import com.music.bitchord.ui.player.AndroidMusicVideo
@@ -171,6 +172,9 @@ fun MiniPlayer(
     val showArtworkOutline by AppSettings.miniPlayerArtworkOutline.collectAsStateWithLifecycle()
     val hideUnknownArtist by AppSettings.hideUnknownMiniPlayerArtist.collectAsStateWithLifecycle()
     val showPreviousButton by AppSettings.miniPlayerPreviousButton.collectAsStateWithLifecycle()
+    val useDoubleArrowSkipButtons by AppSettings.miniPlayerUseDoubleArrowSkipButtons.collectAsStateWithLifecycle()
+    val previousButtonIcon = if (useDoubleArrowSkipButtons) BitChordIcons.DoubleSkipPrevious else Icons.Rounded.SkipPrevious
+    val nextButtonIcon = if (useDoubleArrowSkipButtons) BitChordIcons.DoubleSkipNext else Icons.Rounded.SkipNext
     val swipeChangesTrack by AppSettings.miniPlayerSwipeChangesTrack.collectAsStateWithLifecycle()
     val swipeUpExpands by AppSettings.miniPlayerSwipeUpExpands.collectAsStateWithLifecycle()
     val swipeDownDismisses by AppSettings.miniPlayerSwipeDownDismisses.collectAsStateWithLifecycle()
@@ -406,7 +410,7 @@ fun MiniPlayer(
                     modifier = Modifier.size(GLYPH_SLOT),
                 ) {
                     Icon(
-                        Icons.Rounded.SkipPrevious,
+                        previousButtonIcon,
                         contentDescription = stringResource(R.string.widget_previous),
                         tint = primaryContentColor,
                         modifier = Modifier.size(GLYPH_SIZE),
@@ -446,7 +450,7 @@ fun MiniPlayer(
                 modifier = Modifier.size(GLYPH_SLOT),
             ) {
                 Icon(
-                    Icons.Rounded.SkipNext,
+                    nextButtonIcon,
                     contentDescription = stringResource(R.string.widget_next),
                     tint = primaryContentColor,
                     modifier = Modifier.size(GLYPH_SIZE),

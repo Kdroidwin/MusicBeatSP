@@ -774,6 +774,12 @@ object AppSettings {
     val miniPlayerArtworkOutline = MutableStateFlow(false)
     /** Shows a previous-track control in expanded mini-player surfaces. */
     val miniPlayerPreviousButton = MutableStateFlow(true)
+    /** Uses the two-triangle transport glyphs in the mini-player instead of the barred skip glyphs. */
+    val miniPlayerUseDoubleArrowSkipButtons = MutableStateFlow(true)
+    /** Makes expanded-player previous/next controls use the mini-player's selected glyph style. */
+    val playerSkipButtonsMatchMiniPlayer = MutableStateFlow(false)
+    /** Uses the squared double-arrow repeat glyph shown in the user's reference image. */
+    val repeatButtonUsesReferenceIcon = MutableStateFlow(true)
     /** Lets horizontal swipes on the mini-player move between tracks. */
     val miniPlayerSwipeChangesTrack = MutableStateFlow(false)
     /** Lets an upward swipe on the mini-player open the expanded player. */
@@ -1950,6 +1956,9 @@ object AppSettings {
         playerInkColors.value = loadedInkColors
         miniPlayerArtworkOutline.value = prefs.getBoolean(KEY_MINI_PLAYER_ARTWORK_OUTLINE, false)
         miniPlayerPreviousButton.value = prefs.getBoolean(KEY_MINI_PLAYER_PREVIOUS_BUTTON, true)
+        miniPlayerUseDoubleArrowSkipButtons.value = prefs.getBoolean(KEY_MINI_PLAYER_DOUBLE_ARROW_SKIP_BUTTONS, true)
+        playerSkipButtonsMatchMiniPlayer.value = prefs.getBoolean(KEY_PLAYER_SKIP_BUTTONS_MATCH_MINI_PLAYER, false)
+        repeatButtonUsesReferenceIcon.value = prefs.getBoolean(KEY_REPEAT_BUTTON_REFERENCE_ICON, true)
         miniPlayerSwipeChangesTrack.value = prefs.getBoolean(KEY_MINI_PLAYER_SWIPE_CHANGES_TRACK, false)
         miniPlayerSwipeUpExpands.value = prefs.getBoolean(KEY_MINI_PLAYER_SWIPE_UP_EXPANDS, true)
         miniPlayerSwipeDownDismisses.value = prefs.getBoolean(KEY_MINI_PLAYER_SWIPE_DOWN_DISMISSES, true)
@@ -2952,6 +2961,21 @@ object AppSettings {
     fun setMiniPlayerPreviousButton(value: Boolean) {
         miniPlayerPreviousButton.value = value
         prefs.edit().putBoolean(KEY_MINI_PLAYER_PREVIOUS_BUTTON, value).apply()
+    }
+
+    fun setMiniPlayerUseDoubleArrowSkipButtons(value: Boolean) {
+        miniPlayerUseDoubleArrowSkipButtons.value = value
+        prefs.edit().putBoolean(KEY_MINI_PLAYER_DOUBLE_ARROW_SKIP_BUTTONS, value).apply()
+    }
+
+    fun setPlayerSkipButtonsMatchMiniPlayer(value: Boolean) {
+        playerSkipButtonsMatchMiniPlayer.value = value
+        prefs.edit().putBoolean(KEY_PLAYER_SKIP_BUTTONS_MATCH_MINI_PLAYER, value).apply()
+    }
+
+    fun setRepeatButtonUsesReferenceIcon(value: Boolean) {
+        repeatButtonUsesReferenceIcon.value = value
+        prefs.edit().putBoolean(KEY_REPEAT_BUTTON_REFERENCE_ICON, value).apply()
     }
 
     fun setMiniPlayerSwipeChangesTrack(value: Boolean) {
@@ -5861,6 +5885,9 @@ object AppSettings {
     private const val KEY_FORCE_WHITE_NAVIGATION_BAR = "force_white_navigation_bar"
     private const val KEY_MINI_PLAYER_ARTWORK_OUTLINE = "mini_player_artwork_outline"
     private const val KEY_MINI_PLAYER_PREVIOUS_BUTTON = "mini_player_previous_button"
+    private const val KEY_MINI_PLAYER_DOUBLE_ARROW_SKIP_BUTTONS = "mini_player_double_arrow_skip_buttons"
+    private const val KEY_PLAYER_SKIP_BUTTONS_MATCH_MINI_PLAYER = "player_skip_buttons_match_mini_player"
+    private const val KEY_REPEAT_BUTTON_REFERENCE_ICON = "repeat_button_reference_icon"
     private const val KEY_MINI_PLAYER_SWIPE_CHANGES_TRACK = "mini_player_swipe_changes_track"
     private const val KEY_MINI_PLAYER_SWIPE_UP_EXPANDS = "mini_player_swipe_up_expands"
     private const val KEY_MINI_PLAYER_SWIPE_DOWN_DISMISSES = "mini_player_swipe_down_dismisses"

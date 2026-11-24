@@ -127,6 +127,9 @@ import androidx.compose.material.icons.rounded.DeleteOutline
 import androidx.compose.material.icons.rounded.Edit
 import androidx.compose.material.icons.rounded.FastForward
 import androidx.compose.material.icons.rounded.FastRewind
+import androidx.compose.material.icons.rounded.Repeat
+import androidx.compose.material.icons.rounded.SkipNext
+import androidx.compose.material.icons.rounded.SkipPrevious
 import androidx.compose.material.icons.rounded.GraphicEq
 import androidx.compose.material.icons.rounded.Headphones
 import androidx.compose.material.icons.rounded.History
@@ -1405,6 +1408,20 @@ fun NowPlayingScreen(
     val lyricsTransportControlsCentered by AppSettings.lyricsTransportControlsCentered.collectAsStateWithLifecycle()
     val favoriteUsesStar by AppSettings.favoriteUsesStar.collectAsStateWithLifecycle()
     val playerQuickActions by AppSettings.playerQuickActions.collectAsStateWithLifecycle()
+    val repeatButtonUsesReferenceIcon by AppSettings.repeatButtonUsesReferenceIcon.collectAsStateWithLifecycle()
+    val repeatButtonIcon = if (repeatButtonUsesReferenceIcon) BitChordIcons.RepeatReference else BitChordIcons.Repeat
+    val miniPlayerUsesDoubleArrowSkipButtons by AppSettings.miniPlayerUseDoubleArrowSkipButtons.collectAsStateWithLifecycle()
+    val playerSkipButtonsMatchMiniPlayer by AppSettings.playerSkipButtonsMatchMiniPlayer.collectAsStateWithLifecycle()
+    val playerPreviousTrackIcon = if (playerSkipButtonsMatchMiniPlayer) {
+        if (miniPlayerUsesDoubleArrowSkipButtons) BitChordIcons.DoubleSkipPrevious else Icons.Rounded.SkipPrevious
+    } else {
+        Icons.Rounded.FastRewind
+    }
+    val playerNextTrackIcon = if (playerSkipButtonsMatchMiniPlayer) {
+        if (miniPlayerUsesDoubleArrowSkipButtons) BitChordIcons.DoubleSkipNext else Icons.Rounded.SkipNext
+    } else {
+        Icons.Rounded.FastForward
+    }
     val abRepeatEnabled by AppSettings.abRepeatEnabled.collectAsStateWithLifecycle()
     val abRepeatState by ABRepeatController.state.collectAsStateWithLifecycle()
     val hidePlayerQuickActionCircles by AppSettings.hidePlayerQuickActionCircles.collectAsStateWithLifecycle()
@@ -3481,7 +3498,7 @@ fun NowPlayingScreen(
                                     PlayerQuickAction.SHARE_FILE -> Icons.Rounded.Share
                                     PlayerQuickAction.FAVORITE -> likeIcon
                                     PlayerQuickAction.SHUFFLE -> BitChordIcons.Shuffle
-                                    PlayerQuickAction.REPEAT -> BitChordIcons.Repeat
+                                    PlayerQuickAction.REPEAT -> repeatButtonIcon
                                 }
                                 CircleGlyph(
                                     icon = actionIcon,
@@ -4089,7 +4106,7 @@ fun NowPlayingScreen(
                     onToggleShuffle = onToggleShuffle,
                 )
                 TransportGlyph(
-                    icon = Icons.Rounded.FastRewind,
+                    icon = playerPreviousTrackIcon,
                     contentDescription = stringResource(R.string.widget_previous),
                     size = 46.dp * playerSideControlScale,
                     onClick = onPrevious,
@@ -4163,7 +4180,7 @@ fun NowPlayingScreen(
                     )
                 }
                 TransportGlyph(
-                    icon = Icons.Rounded.FastForward,
+                    icon = playerNextTrackIcon,
                     contentDescription = stringResource(R.string.widget_next),
                     size = 46.dp * playerSideControlScale,
                     onClick = onNext,
@@ -4177,7 +4194,7 @@ fun NowPlayingScreen(
                     transportRightAction != TransportSideAction.REPEAT
                 ) {
                     BottomGlyph(
-                        icon = if (repeatMode == Player.REPEAT_MODE_ONE) null else BitChordIcons.Repeat,
+                        icon = if (repeatMode == Player.REPEAT_MODE_ONE) null else repeatButtonIcon,
                         label = if (repeatMode == Player.REPEAT_MODE_ONE) "1" else null,
                         contentDescription = when (repeatMode) {
                             Player.REPEAT_MODE_ONE -> stringResource(R.string.repeat_one)
@@ -4311,7 +4328,7 @@ fun NowPlayingScreen(
                                 onToggleShuffle = onToggleShuffle,
                             )
                             PlayerControl.REPEAT -> if (!walkmanControlsActive) BottomGlyph(
-                                icon = if (repeatMode == Player.REPEAT_MODE_ONE) null else BitChordIcons.Repeat,
+                                icon = if (repeatMode == Player.REPEAT_MODE_ONE) null else repeatButtonIcon,
                                 label = if (repeatMode == Player.REPEAT_MODE_ONE) "1" else null,
                                 contentDescription = when (repeatMode) {
                                     Player.REPEAT_MODE_ONE -> stringResource(R.string.repeat_one)
@@ -6028,7 +6045,10 @@ private fun makeLyricRichText(
             placeholder = Placeholder(
                 width = width,
                 height = baseSize * 1.6f,
-                placeholderVerticalAlign = PlaceholderVerticalAlign.AboveBaseline,
+                // Align to the surrounding text's bottom, not only its baseline.
+                // AboveBaseline leaves the glyph's descender region outside the
+                // placeholder and can make only ruby-backed base text look raised.
+                placeholderVerticalAlign = PlaceholderVerticalAlign.TextBottom,
             ),
             children = {
                 // Inline content is measured inside the placeholder's fixed
@@ -6532,8 +6552,10 @@ private fun TransportGlyph(
     val haptics = rememberHaptics()
     var skipAnimationFrame by remember { mutableIntStateOf(0) }
     val isPlayPause = icon == Icons.Rounded.PlayArrow || icon == Icons.Rounded.Pause
-    val isSkip = icon == Icons.Rounded.FastRewind || icon == Icons.Rounded.FastForward
-    val motionDirection = if (icon == Icons.Rounded.FastForward) 1 else -1
+    val isPreviousSkip = icon == BitChordIcons.DoubleSkipPrevious
+    val isNextSkip = icon == BitChordIcons.DoubleSkipNext
+    val isSkip = icon == Icons.Rounded.FastRewind || icon == Icons.Rounded.FastForward || isPreviousSkip || isNextSkip
+    val motionDirection = if (icon == Icons.Rounded.FastForward || isNextSkip) 1 else -1
     // Faded rather than hidden: the row keeps its shape at the ends of a queue.
     val alpha by animateFloatAsState(
         targetValue = if (enabled) 1f else 0.3f,
@@ -6793,10 +6815,12 @@ private fun TransportSideActionGlyph(
     onOpenPlaylists: () -> Unit,
     onOpenSearch: () -> Unit,
 ) {
+    val repeatButtonUsesReferenceIcon by AppSettings.repeatButtonUsesReferenceIcon.collectAsStateWithLifecycle()
+    val repeatButtonIcon = if (repeatButtonUsesReferenceIcon) BitChordIcons.RepeatReference else BitChordIcons.Repeat
     val icon = when (action) {
         TransportSideAction.NONE -> return
         TransportSideAction.SHUFFLE -> BitChordIcons.Shuffle
-        TransportSideAction.REPEAT -> if (repeatMode == Player.REPEAT_MODE_ONE) null else BitChordIcons.Repeat
+        TransportSideAction.REPEAT -> if (repeatMode == Player.REPEAT_MODE_ONE) null else repeatButtonIcon
         TransportSideAction.FAVORITE -> favoriteIcon
         TransportSideAction.LYRICS -> BitChordIcons.Lyrics
         TransportSideAction.QUEUE -> Icons.AutoMirrored.Rounded.QueueMusic

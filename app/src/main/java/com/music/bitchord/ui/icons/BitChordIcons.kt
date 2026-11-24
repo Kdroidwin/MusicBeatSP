@@ -146,6 +146,52 @@ object BitChordIcons {
 
     val Repeat: ImageVector by lazy { repeatLoop("bc_repeat") }
 
+    /** Angular paired-arrow repeat glyph matching the user's reference image. */
+    val RepeatReference: ImageVector by lazy {
+        ImageVector.Builder(
+            name = "bc_repeat_reference",
+            defaultWidth = 24.dp, defaultHeight = 24.dp,
+            viewportWidth = 24f, viewportHeight = 24f,
+        ).apply {
+            path(fill = stroke) {
+                moveTo(7f, 7f); lineTo(17f, 7f); lineTo(17f, 10f)
+                lineTo(21f, 6f); lineTo(17f, 2f); lineTo(17f, 5f)
+                lineTo(5f, 5f); lineTo(5f, 13f); lineTo(7f, 13f); close()
+                moveTo(17f, 17f); lineTo(7f, 17f); lineTo(7f, 14f)
+                lineTo(3f, 18f); lineTo(7f, 22f); lineTo(7f, 19f)
+                lineTo(19f, 19f); lineTo(19f, 11f); lineTo(17f, 11f); close()
+            }
+        }.build()
+    }
+
+    /** Paired triangular skip controls without the leading/trailing stop bar. */
+    val DoubleSkipPrevious: ImageVector by lazy {
+        ImageVector.Builder(
+            name = "bc_double_skip_previous",
+            defaultWidth = 24.dp, defaultHeight = 24.dp,
+            viewportWidth = 24f, viewportHeight = 24f,
+        ).apply {
+            path(fill = stroke) {
+                moveTo(10.8f, 5f); lineTo(2.2f, 12f); lineTo(10.8f, 19f); close()
+                moveTo(21.8f, 5f); lineTo(13.2f, 12f); lineTo(21.8f, 19f); close()
+            }
+        }.build()
+    }
+
+    /** Paired triangular skip controls without the leading/trailing stop bar. */
+    val DoubleSkipNext: ImageVector by lazy {
+        ImageVector.Builder(
+            name = "bc_double_skip_next",
+            defaultWidth = 24.dp, defaultHeight = 24.dp,
+            viewportWidth = 24f, viewportHeight = 24f,
+        ).apply {
+            path(fill = stroke) {
+                moveTo(2.2f, 5f); lineTo(10.8f, 12f); lineTo(2.2f, 19f); close()
+                moveTo(13.2f, 5f); lineTo(21.8f, 12f); lineTo(13.2f, 19f); close()
+            }
+        }.build()
+    }
+
     /**
      * Two straight runs joined by semicircles, with the arrow heads lying flat
      * at the ends of the straights. Putting them on the curves instead — as a

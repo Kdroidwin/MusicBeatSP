@@ -2482,4 +2482,10 @@
     <string name="download_destination_folder_selected">フォルダ選択済み</string>
     <string name="download_destination_folder_required">このモードでダウンロードする前に、設定から保存先フォルダを選択してください。</string>
     <string name="download_destination_folder_permission_failed">フォルダへのアクセスを保持できませんでした。別のフォルダを選択してください。</string>
+    <string name="repeat_button_reference_icon">リピートアイコンを添付画像のデザインにする</string>
+    <string name="repeat_button_reference_icon_subtitle">折り返す2本の矢印アイコンを使います。初期設定はONです。</string>
+    <string name="mini_player_double_arrow_skip_buttons">ミニプレイヤーの前後ボタンを2つの三角にする</string>
+    <string name="mini_player_double_arrow_skip_buttons_subtitle">前後ボタンをプレイヤー画面と同じ二重三角のアイコンで表示します。初期設定はONです。</string>
+    <string name="player_skip_buttons_match_mini_player">プレイヤー画面の前後ボタンをミニプレイヤーと同じにする</string>
+    <string name="player_skip_buttons_match_mini_player_subtitle">ミニプレイヤーで選択中の前後ボタンアイコンを全画面プレイヤーにも使います。初期設定はOFFです。</string>
 </resources>
