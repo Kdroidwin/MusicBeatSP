@@ -20,6 +20,7 @@ import io.ktor.http.contentType
 import io.ktor.serialization.kotlinx.json.json
 import com.music.bitchord.data.model.LikeStatus
 import com.music.bitchord.data.model.PlaylistPrivacy
+import androidx.appcompat.app.AppCompatDelegate
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.sync.Mutex
 import kotlinx.coroutines.sync.withLock
@@ -64,10 +65,20 @@ object Innertube {
 
     /** Locale used by the playback extractor; keep it in step with the device. */
     val currentRegion: String
-        get() = Locale.getDefault().country.takeIf(String::isNotBlank) ?: "US"
+        get() = selectedAppLocale().country.takeIf(String::isNotBlank)
+            ?: Locale.getDefault().country.takeIf(String::isNotBlank)
+            ?: "US"
 
     val currentLanguage: String
-        get() = Locale.getDefault().language.takeIf(String::isNotBlank) ?: "en"
+        get() = selectedAppLocale().language.takeIf(String::isNotBlank)
+            ?: Locale.getDefault().language.takeIf(String::isNotBlank)
+            ?: "en"
+
+    /** App language can differ from the device language on Android 13+. */
+    private fun selectedAppLocale(): Locale = runCatching {
+        AppCompatDelegate.getApplicationLocales().get(0)
+            ?.let { Locale.forLanguageTag(it.toLanguageTag()) }
+    }.getOrNull() ?: Locale.getDefault()
 
     private const val MUSIC_BASE = "https://music.youtube.com/youtubei/v1"
     private const val YT_BASE = "https://www.youtube.com/youtubei/v1"
@@ -517,8 +528,11 @@ object Innertube {
 
     // ---- Public API ---------------------------------------------------------
 
-    suspend fun browse(browseId: String, params: String? = null, language: String = "en"): JsonObject =
-        postMusic("browse", language = language) {
+    suspend fun browse(
+        browseId: String,
+        params: String? = null,
+        language: String = currentLanguage,
+    ): JsonObject = postMusic("browse", language = language, region = currentRegion) {
             put("browseId", browseId)
             params?.let { put("params", it) }
         }
@@ -1162,7 +1176,8 @@ object Innertube {
     private suspend fun postMusic(
         endpoint: String,
         query: Map<String, String> = emptyMap(),
-        language: String = "en",
+        language: String = currentLanguage,
+        region: String = currentRegion,
         bodyExtras: JsonObjectBuilder.() -> Unit,
     ): JsonObject {
         // This is the common authenticated request path: Home, Library,
@@ -1202,7 +1217,7 @@ object Innertube {
                                 put("clientName", "WEB_REMIX")
                                 put("clientVersion", clientVersion)
                                 put("hl", language.takeIf(String::isNotBlank) ?: "en")
-                                put("gl", "US")
+                                put("gl", region.takeIf(String::isNotBlank) ?: "US")
                                 visitorData?.let { put("visitorData", it) }
                             }
                             putJsonObject("user") {

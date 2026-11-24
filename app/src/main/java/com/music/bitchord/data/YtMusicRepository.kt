@@ -996,8 +996,9 @@ object YtMusicRepository {
             return Result.failure(IllegalArgumentException("Invalid artist browse id"))
         }
         return call("artist") {
-        // Ask YouTube Music for the overview in the device's language. Other
-        // browse operations keep their established English request context.
+        // Ask YouTube Music for the overview in the app-selected language. The
+        // Innertube locale follows AppCompat's per-app language, which may differ
+        // from the device language.
         val page = InnertubeParser.parseArtistPage(
             Innertube.browse(browseId, language = Innertube.currentLanguage),
         )
