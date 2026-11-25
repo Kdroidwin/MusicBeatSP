@@ -3308,7 +3308,7 @@ private fun BitChordApp(
                                 },
                                 isSavedToLibrary = savedYoutubeCollections.any { it.browseId == page.browseId },
                                 onToggleLibrary = {
-                                    AppSettings.toggleSavedYoutubeCollection(
+                                    val added = AppSettings.toggleSavedYoutubeCollection(
                                         SavedYoutubeCollection(
                                             browseId = page.browseId,
                                             title = page.title,
@@ -3317,6 +3317,11 @@ private fun BitChordApp(
                                             type = page.type.name,
                                         ),
                                     )
+                                    Toast.makeText(
+                                        context,
+                                        if (added) R.string.artist_added_to_library else R.string.artist_removed_from_library,
+                                        Toast.LENGTH_SHORT,
+                                    ).show()
                                 },
                                 contentPadding = listPadding,
                                 onChangeArtistArtwork = { chooseArtistImage(page.title, page.artistIdentityId ?: page.browseId) },

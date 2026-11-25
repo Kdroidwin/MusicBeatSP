@@ -50,6 +50,7 @@ enum class LibraryFilter {
     FAVORITES,
     PLAYLISTS,
     YOUTUBE_MUSIC,
+    ARTISTS,
     YOUTUBE_DOWNLOADS,
     RECENTLY_PLAYED,
     MOST_PLAYED,
@@ -60,6 +61,7 @@ private fun LibraryCategory.toLibraryFilter(): LibraryFilter = when (this) {
     LibraryCategory.FAVORITES -> LibraryFilter.FAVORITES
     LibraryCategory.PLAYLISTS -> LibraryFilter.PLAYLISTS
     LibraryCategory.YOUTUBE_MUSIC -> LibraryFilter.YOUTUBE_MUSIC
+    LibraryCategory.ARTISTS -> LibraryFilter.ARTISTS
     LibraryCategory.YOUTUBE_DOWNLOADS -> LibraryFilter.YOUTUBE_DOWNLOADS
     LibraryCategory.MOST_PLAYED -> LibraryFilter.MOST_PLAYED
     LibraryCategory.RECENTLY_PLAYED -> LibraryFilter.RECENTLY_PLAYED
@@ -125,6 +127,7 @@ fun LibraryHeaderBar(
                     LibraryCategory.FAVORITES -> stringResource(R.string.favorites)
                     LibraryCategory.PLAYLISTS -> stringResource(R.string.playlists)
                     LibraryCategory.YOUTUBE_MUSIC -> stringResource(R.string.youtube_music_saved)
+                    LibraryCategory.ARTISTS -> stringResource(R.string.artists)
                     LibraryCategory.YOUTUBE_DOWNLOADS -> stringResource(R.string.library_youtube_downloads)
                     LibraryCategory.MOST_PLAYED -> stringResource(R.string.most_played)
                     LibraryCategory.RECENTLY_PLAYED -> stringResource(R.string.recently_played)

@@ -742,7 +742,10 @@
     <string name="max_delay_subtitle">Maximum scrobble delay in seconds</string>
     <string name="min_song_duration">Minimum song duration</string>
     <string name="min_song_duration_subtitle">Shorter songs will not scrobble</string>
-    <string name="addon_url_description">Paste the addon’s URL — either its root or its manifest.json. MusicBeat reads what it can search and stream, then asks it for tracks over plain HTTP.</string>
+    <string name="addon_url_description">Paste the source URL — either its root or its manifest.json. ADDON sources use a JSON API and do not run downloaded JavaScript. Legacy CUSTOM_MODULE sources still run JavaScript in a restricted QuickJS sandbox and can send HTTPS requests to public servers. Their settings context is limited to playback quality, fallback mode, and Atmos availability; search terms and track IDs are also supplied for playback. They cannot access Android APIs or local files. Only add a module index you trust.</string>
+    <string name="artist_added_to_library">Artist added to Library · Artists</string>
+    <string name="artist_removed_from_library">Artist removed from Library · Artists</string>
+    <string name="saved_artists_empty">No artists saved to your Library yet</string>
     <string name="monthly_listeners">%1$s monthly listeners</string>
     <string name="name">Name</string>
     <string name="no_lyrics_for_track">No lyrics for this track</string>

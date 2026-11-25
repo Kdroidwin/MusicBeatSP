@@ -74,6 +74,7 @@ import androidx.compose.material.icons.rounded.Reorder
 import androidx.compose.material.icons.rounded.SelectAll
 import androidx.compose.material.icons.rounded.Share
 import androidx.compose.material.icons.rounded.Album
+import androidx.compose.material.icons.rounded.Person
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.LaunchedEffect
@@ -466,6 +467,7 @@ fun LibraryScreen(
             LibraryFilter.FAVORITES -> LibraryCategory.FAVORITES
             LibraryFilter.PLAYLISTS -> LibraryCategory.PLAYLISTS
             LibraryFilter.YOUTUBE_MUSIC -> LibraryCategory.YOUTUBE_MUSIC
+            LibraryFilter.ARTISTS -> LibraryCategory.ARTISTS
             LibraryFilter.YOUTUBE_DOWNLOADS -> LibraryCategory.YOUTUBE_DOWNLOADS
             LibraryFilter.MOST_PLAYED -> LibraryCategory.MOST_PLAYED
             LibraryFilter.RECENTLY_PLAYED -> LibraryCategory.RECENTLY_PLAYED
@@ -495,6 +497,7 @@ fun LibraryScreen(
                     LibraryCategory.FAVORITES -> LibraryFilter.FAVORITES
                     LibraryCategory.PLAYLISTS -> LibraryFilter.PLAYLISTS
                     LibraryCategory.YOUTUBE_MUSIC -> LibraryFilter.YOUTUBE_MUSIC
+                    LibraryCategory.ARTISTS -> LibraryFilter.ARTISTS
                     LibraryCategory.YOUTUBE_DOWNLOADS -> LibraryFilter.YOUTUBE_DOWNLOADS
                     LibraryCategory.MOST_PLAYED -> LibraryFilter.MOST_PLAYED
                     LibraryCategory.RECENTLY_PLAYED -> LibraryFilter.RECENTLY_PLAYED
@@ -785,7 +788,7 @@ fun LibraryScreen(
             return@LaunchedEffect
         }
         val rootListScrollFlow = when {
-            selectedFilter == LibraryFilter.YOUTUBE_MUSIC -> snapshotFlow {
+            selectedFilter == LibraryFilter.YOUTUBE_MUSIC || selectedFilter == LibraryFilter.ARTISTS -> snapshotFlow {
                 youtubeCollectionsListState.firstVisibleItemIndex > 0 ||
                     youtubeCollectionsListState.firstVisibleItemScrollOffset > rootListScrollThresholdPx
             }
@@ -806,7 +809,7 @@ fun LibraryScreen(
             return@LaunchedEffect
         }
         val rootScrollOffsetFlow = when {
-            selectedFilter == LibraryFilter.YOUTUBE_MUSIC -> snapshotFlow {
+            selectedFilter == LibraryFilter.YOUTUBE_MUSIC || selectedFilter == LibraryFilter.ARTISTS -> snapshotFlow {
                 if (youtubeCollectionsListState.firstVisibleItemIndex > 0) Float.POSITIVE_INFINITY
                 else youtubeCollectionsListState.firstVisibleItemScrollOffset.toFloat()
             }
@@ -1094,7 +1097,11 @@ fun LibraryScreen(
         }
     }
 
-    BackHandler(enabled = inDrillDown || inHistoryView || selectedFilter == LibraryFilter.YOUTUBE_MUSIC || selectedFilter == LibraryFilter.YOUTUBE_DOWNLOADS) {
+    BackHandler(enabled = inDrillDown || inHistoryView || selectedFilter in setOf(
+        LibraryFilter.YOUTUBE_MUSIC,
+        LibraryFilter.ARTISTS,
+        LibraryFilter.YOUTUBE_DOWNLOADS,
+    )) {
         if (inDrillDown) leaveDrillDown() else selectedFilter = LibraryFilter.ALL
     }
 
@@ -1263,6 +1270,7 @@ fun LibraryScreen(
                 LibraryFilter.RECENTLY_PLAYED -> "history:recent"
                 LibraryFilter.MOST_PLAYED -> "history:most"
                 LibraryFilter.YOUTUBE_MUSIC -> "library:youtube"
+                LibraryFilter.ARTISTS -> "library:artists"
                 LibraryFilter.YOUTUBE_DOWNLOADS -> "library:youtube_downloads"
                 else -> "library_main"
             },
@@ -1486,7 +1494,11 @@ fun LibraryScreen(
                 } else {
                     renderDrillDown()
                 }
-            } else if (key == "library:youtube") {
+            } else if (key == "library:youtube" || key == "library:artists") {
+                val showingSavedArtists = selectedFilter == LibraryFilter.ARTISTS
+                val collectionsForFilter = remember(savedYoutubeCollections, showingSavedArtists) {
+                    savedYoutubeCollections.filter { (it.type == "ARTIST") == showingSavedArtists }
+                }
                 Column(
                     modifier = Modifier
                         .fillMaxSize()
@@ -1519,10 +1531,13 @@ fun LibraryScreen(
                             categoryOrder = libraryCategoryOrder,
                         )
                     }
-                    if (savedYoutubeCollections.isEmpty()) {
+                    if (collectionsForFilter.isEmpty()) {
                         Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
                             Text(
-                                text = stringResource(R.string.youtube_music_library_empty),
+                                text = stringResource(
+                                    if (showingSavedArtists) R.string.saved_artists_empty
+                                    else R.string.youtube_music_library_empty,
+                                ),
                                 color = MaterialTheme.colorScheme.onSurfaceVariant,
                             )
                         }
@@ -1538,7 +1553,7 @@ fun LibraryScreen(
                             ),
                             verticalArrangement = Arrangement.spacedBy(8.dp),
                         ) {
-                            items(savedYoutubeCollections, key = { it.browseId }) { collection ->
+                            items(collectionsForFilter, key = { it.browseId }) { collection ->
                                 Surface(
                                     modifier = Modifier
                                         .fillMaxWidth()
@@ -1560,7 +1575,7 @@ fun LibraryScreen(
                                             )
                                         } else {
                                             Icon(
-                                                imageVector = Icons.Rounded.Album,
+                                                imageVector = if (collection.type == "ARTIST") Icons.Rounded.Person else Icons.Rounded.Album,
                                                 contentDescription = null,
                                                 tint = MaterialTheme.colorScheme.primary,
                                                 modifier = Modifier.size(52.dp).padding(12.dp),
@@ -1584,7 +1599,12 @@ fun LibraryScreen(
                                             Text(
                                                 text = collection.subtitle.ifBlank {
                                                     stringResource(
-                                                        if (collection.type == "PLAYLIST") R.string.playlist else R.string.album,
+                                                        when (collection.type) {
+                                                            "PLAYLIST" -> R.string.playlist
+                                                            "ARTIST" -> R.string.artist
+                                                            "ALBUM" -> R.string.album
+                                                            else -> R.string.album
+                                                        },
                                                     )
                                                 },
                                                 style = MaterialTheme.typography.bodySmall,

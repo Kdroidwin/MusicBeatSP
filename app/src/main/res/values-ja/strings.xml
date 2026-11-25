@@ -1828,7 +1828,10 @@
 
 <string name="add_addon">アドオンを追加</string>
 <string name="add_addon_detail">ホストしているかリンクを受け取ったアドオン サーバーを MusicBeatSP に指定します</string>
-<string name="addon_url_description">アドオンの URL（ルートまたは manifest.json）を貼り付けます。MusicBeatSP が検索および再生できる曲を読み取ります。</string>
+<string name="addon_url_description">ソースのURL（ルートまたは manifest.json）を貼り付けます。ADDON方式はJSON APIを使い、取得したJavaScriptを実行しません。旧CUSTOM_MODULE方式は互換性のため、制限付きQuickJSでJavaScriptを実行し、公開サーバーへHTTPS通信できます。設定コンテキストに渡すのは再生品質・フォールバック・Atmos可否だけで、検索語や曲IDも検索・再生のため渡ります。Android APIや端末内ファイルにはアクセスできません。信頼できるモジュールインデックスだけを登録してください。</string>
+<string name="artist_added_to_library">アーティストをライブラリの「Artists」に追加しました</string>
+<string name="artist_removed_from_library">アーティストをライブラリの「Artists」から削除しました</string>
+<string name="saved_artists_empty">ライブラリに追加したアーティストはまだありません</string>
 <string name="smb">SMB</string>
 <string name="smb_description">MusicBeatSPを共有の音楽フォルダーに接続します — SMB対応のNASやWindows共有を使えます。</string>
 <string name="smb_disconnect">接続を解除</string>

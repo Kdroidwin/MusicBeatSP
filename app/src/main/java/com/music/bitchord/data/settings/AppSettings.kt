@@ -242,7 +242,7 @@ enum class BluetoothButtonAction {
 enum class LocalLibraryTab { SONGS, ALBUMS, ARTISTS, FOLDERS, PLAYLISTS, ALBUM_ARTISTS, GENRES }
 
 /** Filter destinations shown in the Library header, independent of the always-visible All destination. */
-enum class LibraryCategory { FAVORITES, PLAYLISTS, YOUTUBE_MUSIC, YOUTUBE_DOWNLOADS, MOST_PLAYED, RECENTLY_PLAYED, REPLAY }
+enum class LibraryCategory { FAVORITES, PLAYLISTS, YOUTUBE_MUSIC, ARTISTS, YOUTUBE_DOWNLOADS, MOST_PLAYED, RECENTLY_PLAYED, REPLAY }
 
 /** Actions shown above a playlist's tracks. Their order is user configurable. */
 enum class PlaylistDetailActionButton {
@@ -3798,16 +3798,26 @@ object AppSettings {
     private fun readVisibleLibraryCategories(): Set<LibraryCategory> {
         val storedNames = prefs.getStringSet(KEY_VISIBLE_LIBRARY_CATEGORIES, null)
         if (storedNames == null) {
+            prefs.edit().putBoolean(KEY_LIBRARY_ARTISTS_CATEGORY_MIGRATED, true).apply()
             return LibraryCategory.entries.filterNot { it == LibraryCategory.REPLAY }.toSet()
         }
-        val stored = storedNames
+        var stored = storedNames
             .mapNotNull { name -> LibraryCategory.entries.firstOrNull { it.name == name } }
             .toSet()
-        if (LibraryCategory.YOUTUBE_DOWNLOADS.name !in storedNames) {
-            val migrated = stored + LibraryCategory.YOUTUBE_DOWNLOADS
-            prefs.edit().putStringSet(KEY_VISIBLE_LIBRARY_CATEGORIES, migrated.map { it.name }.toSet()).apply()
-            return migrated
+        var changed = false
+        if (!prefs.getBoolean(KEY_LIBRARY_ARTISTS_CATEGORY_MIGRATED, false)) {
+            // Saved artist pages used to be mixed into YouTube Music's saved
+            // collections. Give them their own Library destination on upgrade
+            // so a star action has an obvious, dedicated place to land.
+            stored = stored + LibraryCategory.ARTISTS
+            prefs.edit().putBoolean(KEY_LIBRARY_ARTISTS_CATEGORY_MIGRATED, true).apply()
+            changed = true
         }
+        if (LibraryCategory.YOUTUBE_DOWNLOADS.name !in storedNames) {
+            stored = stored + LibraryCategory.YOUTUBE_DOWNLOADS
+            changed = true
+        }
+        if (changed) prefs.edit().putStringSet(KEY_VISIBLE_LIBRARY_CATEGORIES, stored.map { it.name }.toSet()).apply()
         return stored
     }
 
@@ -6354,6 +6364,7 @@ object AppSettings {
     private const val KEY_LOCAL_SEARCH_FULL_SCREEN_ARTWORK = "local_search_full_screen_artwork"
     private const val KEY_SHOW_PLAY_HISTORY_SONG_ARTWORK = "show_play_history_song_artwork"
     private const val KEY_VISIBLE_LIBRARY_CATEGORIES = "visible_library_categories"
+    private const val KEY_LIBRARY_ARTISTS_CATEGORY_MIGRATED = "library_artists_category_migrated"
     private const val KEY_LIBRARY_CATEGORY_ORDER = "library_category_order"
     private const val KEY_LOCAL_DRILLDOWN_SONGS_VIEW_TYPE = "local_drilldown_songs_view_type"
     private const val KEY_DOWNLOADED_DRILLDOWN_SONGS_VIEW_TYPE = "downloaded_drilldown_songs_view_type"

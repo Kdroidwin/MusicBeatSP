@@ -386,19 +386,26 @@ class ModuleManager(private val sourceConfigId: String) {
      * module's own default. Silent, and worth exactly one misplaced brace.
      */
     private fun contextArg(settings: Map<String, String>): String {
-        // Settings can contain API keys. Construct valid JSON rather than
-        // interpolating them into JavaScript source, and keep module input bounded.
+        // Serialize safely rather than interpolating values into JavaScript,
+        // and keep even the allowlisted module input bounded.
         val values = JSONObject()
         var usedChars = 0
-        settings.entries.asSequence().take(MAX_CONTEXT_SETTINGS).forEach { (key, value) ->
-            if (key.isBlank() || key.length > MAX_CONTEXT_KEY_CHARS || value.length > MAX_CONTEXT_VALUE_CHARS) {
-                return@forEach
+        // Keep the legacy module contract deliberately small. These are the
+        // only runtime hints current modules need; never forward a new app
+        // preference or credential merely because a caller added it to this
+        // map later. Existing lossless/high/low modules keep the same values.
+        settings.entries.asSequence()
+            .filter { (key, _) -> key in ALLOWED_CONTEXT_SETTINGS }
+            .take(MAX_CONTEXT_SETTINGS)
+            .forEach { (key, value) ->
+                if (key.isBlank() || key.length > MAX_CONTEXT_KEY_CHARS || value.length > MAX_CONTEXT_VALUE_CHARS) {
+                    return@forEach
+                }
+                val nextSize = usedChars + key.length + value.length
+                if (nextSize > MAX_CONTEXT_TOTAL_CHARS) return@forEach
+                usedChars = nextSize
+                values.put(key, JSONObject().put("value", value))
             }
-            val nextSize = usedChars + key.length + value.length
-            if (nextSize > MAX_CONTEXT_TOTAL_CHARS) return@forEach
-            usedChars = nextSize
-            values.put(key, JSONObject().put("value", value))
-        }
         return JSONObject().put("settings", values).toString()
     }
 
@@ -463,6 +470,7 @@ class ModuleManager(private val sourceConfigId: String) {
         const val MAX_CONTEXT_KEY_CHARS = 128
         const val MAX_CONTEXT_VALUE_CHARS = 4_096
         const val MAX_CONTEXT_TOTAL_CHARS = 16_384
+        val ALLOWED_CONTEXT_SETTINGS = setOf("quality", "fallbackMode", "dolbyAtmos")
 
         /**
          * How long a fetched index is trusted. Long enough that a run of

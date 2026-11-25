@@ -911,6 +911,7 @@ private fun libraryCategorySettingsSearchEntries(
             LibraryCategory.FAVORITES -> R.string.favorites
             LibraryCategory.PLAYLISTS -> R.string.playlists
             LibraryCategory.YOUTUBE_MUSIC -> R.string.youtube_music_saved
+            LibraryCategory.ARTISTS -> R.string.artists
             LibraryCategory.YOUTUBE_DOWNLOADS -> R.string.library_youtube_downloads
             LibraryCategory.MOST_PLAYED -> R.string.most_played
             LibraryCategory.RECENTLY_PLAYED -> R.string.recently_played
@@ -10413,6 +10414,7 @@ SettingsGroup(header = stringResource(R.string.local_music)) {
             LibraryCategory.FAVORITES -> R.string.favorites
             LibraryCategory.PLAYLISTS -> R.string.playlists
             LibraryCategory.YOUTUBE_MUSIC -> R.string.youtube_music_saved
+            LibraryCategory.ARTISTS -> R.string.artists
             LibraryCategory.YOUTUBE_DOWNLOADS -> R.string.library_youtube_downloads
             LibraryCategory.MOST_PLAYED -> R.string.most_played
             LibraryCategory.RECENTLY_PLAYED -> R.string.recently_played
@@ -10424,6 +10426,7 @@ SettingsGroup(header = stringResource(R.string.local_music)) {
                 LibraryCategory.FAVORITES -> BitChordIcons.Heart
                 LibraryCategory.PLAYLISTS -> Icons.AutoMirrored.Rounded.QueueMusic
                 LibraryCategory.YOUTUBE_MUSIC -> Icons.Rounded.SmartDisplay
+                LibraryCategory.ARTISTS -> Icons.Rounded.Person
                 LibraryCategory.YOUTUBE_DOWNLOADS -> Icons.Rounded.FileDownload
                 LibraryCategory.MOST_PLAYED -> Icons.Rounded.BarChart
                 LibraryCategory.RECENTLY_PLAYED -> Icons.Rounded.History
