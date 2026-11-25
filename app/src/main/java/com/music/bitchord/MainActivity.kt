@@ -791,11 +791,21 @@ private fun BitChordApp(
         radioAvailable,
         homeAvailable,
     ) {
-        val tabs = if (com.music.bitchord.data.settings.LocalLibraryTab.ALBUM_ARTISTS in visibleLocalLibraryTabs) {
-            visibleMainNavigationTabs + MainNavigationTab.ALBUM_ARTISTS
-        } else {
-            visibleMainNavigationTabs - MainNavigationTab.ALBUM_ARTISTS
-        }
+        // These navigation destinations are backed by the local library-tab
+        // visibility setting. Read all linked tabs here so Composer, Year and
+        // Record Label become visible immediately when enabled in Settings.
+        val linkedLocalTabs = mapOf(
+            com.music.bitchord.data.settings.LocalLibraryTab.ALBUM_ARTISTS to MainNavigationTab.ALBUM_ARTISTS,
+            com.music.bitchord.data.settings.LocalLibraryTab.COMPOSERS to MainNavigationTab.COMPOSERS,
+            com.music.bitchord.data.settings.LocalLibraryTab.YEARS to MainNavigationTab.YEARS,
+            com.music.bitchord.data.settings.LocalLibraryTab.RECORD_LABELS to MainNavigationTab.RECORD_LABELS,
+        )
+        val linkedMainTabs = linkedLocalTabs.values.toSet()
+        val enabledLinkedTabs = linkedLocalTabs
+            .filterKeys { it in visibleLocalLibraryTabs }
+            .values
+            .toSet()
+        val tabs = (visibleMainNavigationTabs - linkedMainTabs) + enabledLinkedTabs
         val withRadio = if (radioAvailable) tabs else tabs - MainNavigationTab.RADIO
         // Home now also contains the on-device music view, so it remains
         // usable with YouTube Music disabled, in offline mode, and in the
@@ -3884,7 +3894,7 @@ private fun BitChordApp(
                             }
                         }
                         TAB_SEARCH -> searchSaveableStateHolder.SaveableStateProvider("main-search") {
-                            if (!hasStoragePermission) {
+                            if (!hasStoragePermission && catalogSongs.isEmpty()) {
                                 Box(modifier = Modifier.fillMaxSize().padding(listPadding), contentAlignment = Alignment.Center) {
                                     LocalPermissionCard(
                                         onRequestPermission = requestDefaultPermission,
@@ -3892,7 +3902,10 @@ private fun BitChordApp(
                                 }
                             } else {
                                 LocalSearchScreen(
-                                songs = localSongs,
+                                // The "This device" source includes WebDAV and
+                                // other opted-in remote libraries as well as
+                                // files read from Android's MediaStore.
+                                songs = catalogSongs,
                                 showLocalCollectionSongArtwork = localSearchCollectionSongArtwork,
                                 showLocalFullScreenArtwork = localSearchFullScreenArtwork,
                                 currentSong = player.song,

@@ -1059,7 +1059,7 @@
     <string name="music_folders_subtitle">Manage and exclude audio folders from library</string>
     <string name="manage_folders">Manage folders</string>
     <string name="include_remote_source_media_in_library">Show remote source media in library</string>
-    <string name="include_remote_source_media_in_library_subtitle">Include tracks from WebDAV, Jellyfin, Navidrome, and OpenSubsonic in Songs, Albums, Artists, and Album Artists. Off by default.</string>
+    <string name="include_remote_source_media_in_library_subtitle">Include pCloud/WebDAV, Jellyfin, Navidrome, and OpenSubsonic tracks in This device search and Songs, Albums, Artists, and Album Artists. Off by default.</string>
     <string name="hide_lyrics_status_text">Hide lyrics status text</string>
     <string name="hide_lyrics_status_text_subtitle">Show the song lyrics instead of generated playback messages</string>
     <string name="player_lyrics_strip">Show lyric above seek bar</string>
