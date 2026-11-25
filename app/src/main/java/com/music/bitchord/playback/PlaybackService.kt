@@ -66,6 +66,7 @@ import androidx.media3.session.MediaLibraryService.MediaLibrarySession
 import androidx.media3.session.MediaLibraryService.LibraryParams
 import androidx.media3.session.MediaSession
 import androidx.media3.session.MediaSessionService
+import androidx.media3.session.SessionCommands
 import androidx.media3.session.SessionCommand
 import androidx.media3.session.SessionError
 import androidx.media3.session.SessionResult
@@ -101,6 +102,7 @@ import com.music.bitchord.data.innertube.PlaybackTracker
 import com.music.bitchord.data.innertube.StreamResolver
 import com.music.bitchord.data.stats.ListeningRecorder
 import com.music.bitchord.feature.localsongactions.data.LocalPlayStatsStore
+import com.music.bitchord.feature.localmusic.data.LocalFavoritesStore
 import com.music.bitchord.data.model.LikeStatus
 import com.music.bitchord.data.model.Song
 import com.music.bitchord.data.model.durationMillis
@@ -122,6 +124,8 @@ import com.music.bitchord.data.sources.SourceResolver
 import com.music.bitchord.data.sources.SourceStream
 import com.music.bitchord.data.sources.StreamFormat
 import com.music.bitchord.data.sources.TrackMatcher
+import com.music.bitchord.data.webdav.WebDavConfig
+import com.music.bitchord.data.smb.SmbConfig
 import com.music.bitchord.widget.MediaWidget
 import com.music.bitchord.widget.MediaWidgetSnapshot
 import com.music.bitchord.playback.cast.CastController
@@ -1995,15 +1999,17 @@ class PlaybackService : MediaLibraryService() {
      */
     private fun notificationButtons(): List<CommandButton> {
         if (AppSettings.hideMediaControlCustomActions.value) return emptyList()
+        val currentSong = player?.currentMediaItem?.toSong()
+        val isFavorite = isFavoriteForMediaControls(currentSong)
         val favorite = CommandButton.Builder(
             if (AppSettings.mediaControlFavoriteUsesStar.value) {
-                if (LikeState.overrides.value[player?.currentMediaItem?.mediaId] == LikeStatus.LIKE) {
+                if (isFavorite) {
                     CommandButton.ICON_STAR_FILLED
                 } else {
                     CommandButton.ICON_STAR_UNFILLED
                 }
             } else {
-                if (LikeState.overrides.value[player?.currentMediaItem?.mediaId] == LikeStatus.LIKE) {
+                if (isFavorite) {
                     CommandButton.ICON_HEART_FILLED
                 } else {
                     CommandButton.ICON_HEART_UNFILLED
@@ -2035,6 +2041,33 @@ class PlaybackService : MediaLibraryService() {
                 .build()
         }
         return listOf(favorite, action)
+    }
+
+    /**
+     * Local and remote-file favorites are persisted locally; catalogue tracks
+     * keep using their YouTube Music like state. Remote controllers only get
+     * this one safe custom action, so the media-control favorite works without
+     * granting them queue or library access.
+     */
+    private fun localFavoriteKey(song: Song): String? {
+        val localUri = song.localUri?.takeIf { value ->
+            runCatching { Uri.parse(value).scheme in setOf("content", "file") }.getOrDefault(false)
+        }
+        if (localUri != null) return localUri
+        if (song.videoId.startsWith("content://") || song.videoId.startsWith("file://")) return song.videoId
+        return song.videoId.takeIf {
+            WebDavConfig.isWebDavId(it) || SmbConfig.isSmbId(it)
+        }
+    }
+
+    private fun isFavoriteForMediaControls(song: Song?): Boolean {
+        song ?: return false
+        val localKey = localFavoriteKey(song)
+        return if (localKey != null) {
+            LocalFavoritesStore.isFavorite(localKey) || LocalFavoritesStore.isFavorite(song.videoId)
+        } else {
+            LikeState.overrides.value[song.videoId] == LikeStatus.LIKE
+        }
     }
 
     private fun openMediaControlDestination(destination: MediaControlDestination) {
@@ -2183,6 +2216,15 @@ class PlaybackService : MediaLibraryService() {
     }
 
     private fun toggleFavoriteFromNotification(videoId: String) {
+        val currentSong = player?.currentMediaItem?.toSong()?.takeIf { it.videoId == videoId }
+        val localKey = currentSong?.let(::localFavoriteKey)
+        if (localKey != null) {
+            val nowFavorite = LocalFavoritesStore.toggleFavorite(localKey)
+            LikeState.set(videoId, if (nowFavorite) LikeStatus.LIKE else LikeStatus.INDIFFERENT)
+            mediaSession?.setCustomLayout(notificationButtons())
+            return
+        }
+
         favoriteActionJob?.cancel()
         val previous = LikeState.overrides.value[videoId] ?: LikeStatus.INDIFFERENT
         val target = if (previous == LikeStatus.LIKE) {
@@ -6802,12 +6844,15 @@ class PlaybackService : MediaLibraryService() {
             session: MediaSession,
             controller: MediaSession.ControllerInfo,
         ): MediaSession.ConnectionResult {
-            // PlaybackService must stay exported for Android Auto/System UI,
-            // but an arbitrary app must not browse the listener's library or
-            // issue transport commands through the media-browser endpoint.
-            if (!controller.isTrusted) return MediaSession.ConnectionResult.reject()
-            val sessionCommandsBuilder = MediaSession.ConnectionResult.DEFAULT_SESSION_AND_LIBRARY_COMMANDS
-                .buildUpon()
+            // Bluetooth accessories and Wear/media surfaces are often reported
+            // as untrusted controllers. Let them use transport and the single
+            // favorite action while keeping library browsing and every other
+            // app-specific command behind the trusted-controller boundary.
+            val sessionCommandsBuilder = if (controller.isTrusted) {
+                MediaSession.ConnectionResult.DEFAULT_SESSION_AND_LIBRARY_COMMANDS.buildUpon()
+            } else {
+                SessionCommands.Builder().add(favoriteCommand)
+            }
             // Standard transport/browser commands remain available to Android
             // media clients. App-specific commands can alter queue, favorites,
             // radio and external-preview state, so expose them only to trusted
@@ -6829,8 +6874,20 @@ class PlaybackService : MediaLibraryService() {
                     .add(stopHeadphoneBurnInCommand)
             }
             val sessionCommands = sessionCommandsBuilder.build()
+            val playerCommands = if (controller.isTrusted) {
+                MediaSession.ConnectionResult.DEFAULT_PLAYER_COMMANDS
+            } else {
+                Player.Commands.Builder()
+                    .add(Player.COMMAND_PLAY_PAUSE)
+                    .add(Player.COMMAND_SEEK_TO_NEXT_MEDIA_ITEM)
+                    .add(Player.COMMAND_SEEK_TO_PREVIOUS_MEDIA_ITEM)
+                    .add(Player.COMMAND_SEEK_TO_PREVIOUS)
+                    .add(Player.COMMAND_SEEK_IN_CURRENT_MEDIA_ITEM)
+                    .add(Player.COMMAND_GET_CURRENT_MEDIA_ITEM)
+                    .build()
+            }
             return MediaSession.ConnectionResult.AcceptedResultBuilder(session)
-                .setAvailablePlayerCommands(MediaSession.ConnectionResult.DEFAULT_PLAYER_COMMANDS)
+                .setAvailablePlayerCommands(playerCommands)
                 .setAvailableSessionCommands(sessionCommands)
                 .build()
         }
@@ -6841,7 +6898,7 @@ class PlaybackService : MediaLibraryService() {
             customCommand: SessionCommand,
             args: Bundle,
         ): ListenableFuture<SessionResult> {
-            if (!controller.isTrusted) {
+            if (!controller.isTrusted && customCommand.customAction != ACTION_TOGGLE_FAVORITE) {
                 return Futures.immediateFuture(SessionResult(SessionError.ERROR_PERMISSION_DENIED))
             }
             when (customCommand.customAction) {

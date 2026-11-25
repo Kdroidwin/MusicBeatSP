@@ -1357,8 +1357,17 @@ private fun BitChordApp(
         if (includeRemoteSourceMedia) (localSongs + remoteLibrarySongs).distinctBy { it.videoId }
         else localSongs
     }
-    val pCloudSongs = remember(remoteLibrarySongs) {
-        remoteLibrarySongs.filter(WebDavConfig::isPCloudSong)
+    val pCloudSongs = remember(remoteLibrarySongs, webdavUrl) {
+        // There is one configured WebDAV library. When its selected endpoint
+        // is pCloud, every WebDAV-id row in that response belongs to pCloud;
+        // classify it by the configured source rather than re-parsing each
+        // response URL (which can differ in path/encoding across pCloud DAV
+        // responses and was dropping valid tracks from search).
+        if (WebDavConfig.isPCloudEndpoint(webdavUrl)) {
+            remoteLibrarySongs.filter { WebDavConfig.isWebDavId(it.videoId) }
+        } else {
+            emptyList()
+        }
     }
     val showPCloudSearchSource = includeRemoteSourceMedia && !offlineMode &&
         !context.packageName.endsWith(".nointernet") && WebDavConfig.isPCloudEndpoint(webdavUrl)

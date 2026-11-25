@@ -184,9 +184,17 @@ private object NowPlayingWidgetRenderer {
         val views = RemoteViews(context.packageName, style.layoutId)
         cover?.let { views.setImageViewBitmap(R.id.widget_art, it) }
         body?.let {
-            views.setImageViewBitmap(R.id.widget_pill_bg, it)
+            views.setImageViewBitmap(
+                R.id.widget_pill_bg,
+                WidgetOpacity.backgroundBitmap(it, includeWholeWidgetOpacity = true),
+            )
             // The fallback panel would show through the body's transparent corners.
             views.setInt(R.id.widget_pill_bg, "setBackgroundResource", 0)
+        }
+        if (body == null) {
+            // Until cover art arrives, the layout's drawable is the capsule
+            // surface. Apply both opacity controls to that fallback too.
+            views.setInt(R.id.widget_pill_bg, "setImageAlpha", WidgetOpacity.combinedBackgroundAlpha())
         }
 
         views.setTextViewText(
@@ -241,8 +249,10 @@ private object NowPlayingWidgetRenderer {
                 views.setOnClickPendingIntent(button, open)
             }
         }
-        WidgetOpacity.applyBackground(views, R.id.widget_pill_bg)
-        WidgetOpacity.apply(views, R.id.widget_pill)
+        // Keep the background opacity independent from the foreground. The
+        // whole-widget setting is baked into the background bitmap above and
+        // applied to all buttons/text/art here.
+        WidgetOpacity.apply(views, R.id.widget_pill_content)
         return views
     }
 

@@ -95,7 +95,14 @@ object WebDavClient {
             var visitedCount = 0
             val audioLimit = maxFiles.coerceIn(1, MAX_FILES)
             while (dirs.isNotEmpty() && foundAudio.size < audioLimit && visitedCount < MAX_DIRECTORIES) {
-                val dir = dirs.removeFirst()
+                // Relative DAV hrefs are resolved against the requested
+                // collection. Keep a trailing slash even when a server omits
+                // it for collection hrefs; without it, `folder/track.flac`
+                // can resolve as a sibling of `folder` and the recursive
+                // pCloud listing silently misses nested albums.
+                val dir = dirs.removeFirst().let { value ->
+                    if (value.endsWith('/')) value else "$value/"
+                }
                 val parsed = dir.toHttpUrlOrNull() ?: continue
                 if (!WebDavAuth.isAllowedUrl(parsed)) continue
                 if (!visited.add(dir.lowercase())) continue
@@ -103,7 +110,12 @@ object WebDavClient {
                 val entries = propfind(dir, username, password).getOrThrow()
                 for (entry in entries) {
                     if (entry.isCollection) {
-                        if (dirs.size + visited.size < MAX_DIRECTORIES && !visited.contains(entry.url.lowercase())) dirs.add(entry.url)
+                        val childDirectory = if (entry.url.endsWith('/')) entry.url else "${entry.url}/"
+                        if (dirs.size + visited.size < MAX_DIRECTORIES &&
+                            !visited.contains(childDirectory.lowercase())
+                        ) {
+                            dirs.add(childDirectory)
+                        }
                     } else {
                         val name = entry.displayName.ifBlank { entry.url }
                         when {
