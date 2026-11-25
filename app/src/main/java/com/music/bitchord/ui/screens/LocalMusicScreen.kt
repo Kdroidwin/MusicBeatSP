@@ -6,6 +6,7 @@ import android.net.Uri
 import android.os.Build
 import android.os.Process
 import android.provider.MediaStore
+import android.util.LruCache
 import android.util.Log
 import androidx.activity.compose.BackHandler
 import androidx.activity.compose.rememberLauncherForActivityResult
@@ -237,8 +238,45 @@ const val LOCAL_TAB_COMPOSERS = 7
 const val LOCAL_TAB_YEARS = 8
 const val LOCAL_TAB_RECORD_LABELS = 9
 
-private fun localTagMetadataKey(song: Song): String? =
-    song.localUri?.takeIf(String::isNotBlank) ?: song.localPath?.takeIf(String::isNotBlank)
+private fun localTagMetadataKey(song: Song): String? {
+    val rawUri = song.localUri?.trim()?.takeIf(String::isNotEmpty)
+    if (rawUri != null) {
+        if (rawUri.startsWith("content://", ignoreCase = true) ||
+            rawUri.startsWith("file://", ignoreCase = true) || rawUri.startsWith('/')) return rawUri
+    }
+    return song.localPath?.trim()?.takeIf { it.startsWith('/') }
+}
+
+private fun localTagMetadataCacheKey(song: Song): String? =
+    localTagMetadataKey(song)?.let { "$it:${song.localDateModifiedSeconds ?: 0L}" }
+
+private data class LocalLibraryTagMetadata(
+    val composer: String?,
+    val year: Int?,
+    val label: String?,
+)
+
+/** Shares tag reads between metadata tabs and across top-level navigation changes. */
+private object LocalLibraryTagCache {
+    private val entries = LruCache<String, LocalLibraryTagMetadata>(12_000)
+
+    fun get(key: String): LocalLibraryTagMetadata? = entries.get(key)
+
+    fun put(key: String, metadata: LocalLibraryTagMetadata) {
+        entries.put(key, metadata)
+    }
+}
+
+/** Keeps the last two local genre indexes so returning to the tab is immediate. */
+private object LocalLibraryGenreCache {
+    private val entries = LruCache<List<String>, Map<String, List<String>>>(2)
+
+    fun get(sourceKey: List<String>): Map<String, List<String>>? = entries.get(sourceKey)
+
+    fun put(sourceKey: List<String>, groups: Map<String, List<Song>>) {
+        entries.put(sourceKey, groups.mapValues { (_, songs) -> songs.map(Song::videoId) })
+    }
+}
 
 private fun shuffleAlbumGroupsKeepTrackOrder(songs: List<Song>): List<Song> {
     val indexed = songs.withIndex()
@@ -371,16 +409,30 @@ fun LocalMusicScreen(
     var genresLoaded by remember { mutableStateOf(false) }
     var genresLoading by remember { mutableStateOf(false) }
     val genreCandidates = remember(songs) {
-        songs.filter { !it.localUri.isNullOrBlank() || !it.localPath.isNullOrBlank() }
+        songs.filter { mediaStoreGenreAudioKey(it) != null || localTagMetadataKey(it) != null }
     }
     val genreSourceKey = remember(genreCandidates) {
-        genreCandidates.map { it.localUri?.takeIf(String::isNotBlank) ?: it.localPath?.takeIf(String::isNotBlank) ?: it.videoId }
+        genreCandidates.map {
+            val identity = it.localUri?.takeIf(String::isNotBlank)
+                ?: it.localPath?.takeIf(String::isNotBlank)
+                ?: it.videoId
+            "$identity:${it.localDateModifiedSeconds ?: 0L}"
+        }
     }
     var loadedGenreSourceKey by remember { mutableStateOf<List<String>?>(null) }
     var activeGenreLoadToken by remember { mutableStateOf<Any?>(null) }
     LaunchedEffect(selectedTab, genreSourceKey) {
         if (selectedTab != LOCAL_TAB_GENRES || loadedGenreSourceKey == genreSourceKey) return@LaunchedEffect
         val requestedKey = genreSourceKey
+        val cachedGroups = LocalLibraryGenreCache.get(requestedKey)
+        if (cachedGroups != null) {
+            val songsById = genreCandidates.associateBy(Song::videoId)
+            genreGroups = cachedGroups.mapValues { (_, ids) -> ids.mapNotNull(songsById::get) }
+            loadedGenreSourceKey = requestedKey
+            genresLoaded = true
+            genresLoading = false
+            return@LaunchedEffect
+        }
         val requestToken = Any()
         genresLoaded = false
         genresLoading = true
@@ -398,6 +450,7 @@ fun LocalMusicScreen(
             val grouped = withContext(Dispatchers.IO) { readMediaStoreGenreGroups(context, genreCandidates) }
             if (activeGenreLoadToken === requestToken) {
                 genreGroups = grouped
+                LocalLibraryGenreCache.put(requestedKey, grouped)
                 loadedGenreSourceKey = requestedKey
                 genresLoaded = true
             }
@@ -421,60 +474,103 @@ fun LocalMusicScreen(
     // Composer and record-label tabs are optional and hidden for new installs,
     // so do not open every audio file on the normal library scan. Read tag data
     // once, off the UI thread, only when one of these metadata tabs is opened.
-    val tagMetadataSourceKey = remember(songs) {
-        songs.mapNotNull { song ->
-            localTagMetadataKey(song)?.let { key -> "$key:${song.localDateModifiedSeconds ?: 0}" }
-        }.distinct().sorted().joinToString("\n")
+    // The list object already changes when the repository publishes a refresh.
+    // A sorted URI signature walked and sorted the whole library on the main
+    // thread before the metadata screen could even start loading.
+    val tagMetadataSourceKey = remember(songs) { Any() }
+    var tagMetadataByKey by remember(tagMetadataSourceKey) {
+        mutableStateOf<Map<String, LocalLibraryTagMetadata>>(emptyMap())
     }
-    var tagMetadataByKey by remember(tagMetadataSourceKey) { mutableStateOf<Map<String, Song>>(emptyMap()) }
-    var tagMetadataLoaded by remember(tagMetadataSourceKey) { mutableStateOf(false) }
+    var tagMetadataLoadedForYears by remember(tagMetadataSourceKey) { mutableStateOf(false) }
+    var tagMetadataLoadedForAll by remember(tagMetadataSourceKey) { mutableStateOf(false) }
     var tagMetadataLoading by remember(tagMetadataSourceKey) { mutableStateOf(false) }
     var tagMetadataProgress by remember(tagMetadataSourceKey) { mutableIntStateOf(0) }
     LaunchedEffect(selectedTab, tagMetadataSourceKey) {
-        val needsTags = selectedTab == LOCAL_TAB_COMPOSERS ||
-            selectedTab == LOCAL_TAB_YEARS || selectedTab == LOCAL_TAB_RECORD_LABELS
-        if (!needsTags || tagMetadataLoaded) return@LaunchedEffect
+        val needsAllTags = selectedTab == LOCAL_TAB_COMPOSERS || selectedTab == LOCAL_TAB_RECORD_LABELS
+        val needsYearBackfill = selectedTab == LOCAL_TAB_YEARS &&
+            songs.any { song ->
+                song.releaseYear == null && localTagMetadataCacheKey(song)
+                    ?.let { LocalLibraryTagCache.get(it) == null } == true
+            }
+        if ((!needsAllTags && !needsYearBackfill) ||
+            (needsAllTags && tagMetadataLoadedForAll) ||
+            (!needsAllTags && tagMetadataLoadedForYears)
+        ) return@LaunchedEffect
         tagMetadataLoading = true
-        val candidates = songs.distinctBy(::localTagMetadataKey)
-            .filter { !it.localUri.isNullOrBlank() || !it.localPath.isNullOrBlank() }
+        val candidates = songs.distinctBy(::localTagMetadataCacheKey)
+            .filter { song ->
+                localTagMetadataCacheKey(song)?.let { LocalLibraryTagCache.get(it) == null } == true
+            }
+            .filter { needsAllTags || it.releaseYear == null }
         try {
             val loaded = withContext(Dispatchers.IO) {
                 buildMap {
-                    candidates.forEachIndexed { index, song ->
+                    val readPermits = Semaphore(4)
+                    candidates.chunked(24).forEachIndexed { batchIndex, batch ->
                         currentCoroutineContext().ensureActive()
-                        val key = localTagMetadataKey(song) ?: return@forEachIndexed
-                        val tags = TagLibWriter.readTags(context, song, readArtwork = false)
-                        val year = Regex("\\d{4}").find(tags.year)?.value?.toIntOrNull()
-                            ?.takeIf { it in 1000..9999 }
-                        put(
-                            key,
-                            song.copy(
-                                composer = tags.composer.trim().takeIf(String::isNotBlank),
-                                releaseYear = year ?: song.releaseYear,
-                                recordLabel = tags.publisher.trim().takeIf(String::isNotBlank),
-                            ),
-                        )
-                        if ((index + 1) % 24 == 0 || index == candidates.lastIndex) {
-                            withContext(Dispatchers.Main.immediate) { tagMetadataProgress = index + 1 }
+                        val batchResults = coroutineScope {
+                            batch.map { song ->
+                                async(Dispatchers.IO) {
+                                    val key = localTagMetadataCacheKey(song) ?: return@async null
+                                    readPermits.withPermit {
+                                        try {
+                                            val tags = TagLibWriter.readTags(context, song, readArtwork = false)
+                                            val year = Regex("\\d{4}").find(tags.year)?.value?.toIntOrNull()
+                                                ?.takeIf { it in 1000..9999 }
+                                            val metadata = LocalLibraryTagMetadata(
+                                                composer = tags.composer.trim().takeIf(String::isNotBlank),
+                                                year = year,
+                                                label = tags.publisher.trim().takeIf(String::isNotBlank),
+                                            )
+                                            LocalLibraryTagCache.put(key, metadata)
+                                            key to metadata
+                                        } catch (cancelled: CancellationException) {
+                                            throw cancelled
+                                        } catch (_: Exception) {
+                                            null
+                                        }
+                                    }
+                                }
+                            }.awaitAll()
+                        }
+                        batchResults.filterNotNull().forEach { (key, song) -> put(key, song) }
+                        val completed = minOf((batchIndex + 1) * 24, candidates.size)
+                        if (completed == candidates.size || completed % 24 == 0) {
+                            withContext(Dispatchers.Main.immediate) { tagMetadataProgress = completed }
                         }
                     }
                 }
             }
             tagMetadataByKey = loaded
-            tagMetadataLoaded = true
+            if (needsAllTags) {
+                tagMetadataLoadedForAll = true
+                tagMetadataLoadedForYears = true
+            } else {
+                tagMetadataLoadedForYears = true
+            }
         } catch (cancelled: CancellationException) {
             throw cancelled
         } catch (error: Exception) {
             Log.w("LocalMusicScreen", "Could not read local composer, year, and label tags", error)
-            tagMetadataLoaded = true
+            if (needsAllTags) {
+                tagMetadataLoadedForAll = true
+                tagMetadataLoadedForYears = true
+            } else {
+                tagMetadataLoadedForYears = true
+            }
         } finally {
             tagMetadataLoading = false
         }
     }
     val tagEnrichedSongs = remember(songs, tagMetadataByKey) {
         songs.map { song ->
-            val key = localTagMetadataKey(song)
-            if (key == null) song else tagMetadataByKey[key] ?: song
+            val key = localTagMetadataCacheKey(song)
+            val metadata = key?.let { tagMetadataByKey[it] } ?: key?.let { LocalLibraryTagCache.get(it) }
+            if (metadata == null) song else song.copy(
+                composer = metadata.composer,
+                releaseYear = metadata.year ?: song.releaseYear,
+                recordLabel = metadata.label,
+            )
         }
     }
     val metadataGroups by produceState(
@@ -1383,7 +1479,13 @@ fun LocalMusicScreen(
                     }
                     MetadataGroupsTab(
                         groups = visibleGroups,
-                        loading = tagMetadataLoading || !tagMetadataLoaded,
+                        loading = tagMetadataLoading || when (selectedTab) {
+                            LOCAL_TAB_YEARS -> songs.any { song ->
+                                song.releaseYear == null && localTagMetadataCacheKey(song)
+                                    ?.let { LocalLibraryTagCache.get(it) == null } == true
+                            } && !tagMetadataLoadedForYears
+                            else -> !tagMetadataLoadedForAll
+                        },
                         progress = tagMetadataProgress,
                         contentPadding = bodyContentPadding,
                         onGroupClick = { name, tracks ->
@@ -1951,26 +2053,38 @@ private suspend fun readMediaStoreGenreGroups(context: android.content.Context, 
             continue
         }
 
-        for ((genreId, rawName) in genreRows) {
-            val memberIds = mutableListOf<Long>()
-            try {
-                context.contentResolver.query(
-                    MediaStore.Audio.Genres.Members.getContentUri(volume, genreId),
-                    arrayOf(MediaStore.Audio.Genres.Members.AUDIO_ID),
-                    null,
-                    null,
-                    null,
-                )?.use { cursor ->
-                    val audioIdColumn = cursor.getColumnIndexOrThrow(MediaStore.Audio.Genres.Members.AUDIO_ID)
-                    while (cursor.moveToNext()) memberIds += cursor.getLong(audioIdColumn)
-                }
-            } catch (cancelled: CancellationException) {
-                throw cancelled
-            } catch (error: Exception) {
-                Log.w("LocalMusicScreen", "Could not list tracks for genre $rawName", error)
-                continue
+        val indexedMembership = coroutineScope {
+            val readPermits = Semaphore(4)
+            genreRows.chunked(16).flatMap { batch ->
+                batch.map { (genreId, rawName) ->
+                    async(Dispatchers.IO) {
+                        readPermits.withPermit {
+                            try {
+                                val memberIds = mutableListOf<Long>()
+                                context.contentResolver.query(
+                                    MediaStore.Audio.Genres.Members.getContentUri(volume, genreId),
+                                    arrayOf(MediaStore.Audio.Genres.Members.AUDIO_ID),
+                                    null,
+                                    null,
+                                    null,
+                                )?.use { cursor ->
+                                    val audioIdColumn = cursor.getColumnIndexOrThrow(MediaStore.Audio.Genres.Members.AUDIO_ID)
+                                    while (cursor.moveToNext()) memberIds += cursor.getLong(audioIdColumn)
+                                }
+                                rawName to memberIds
+                            } catch (cancelled: CancellationException) {
+                                throw cancelled
+                            } catch (error: Exception) {
+                                Log.w("LocalMusicScreen", "Could not list tracks for genre $rawName", error)
+                                null
+                            }
+                        }
+                    }
+                }.awaitAll().filterNotNull()
             }
+        }
 
+        for ((rawName, memberIds) in indexedMembership) {
             val names = splitLocalGenres(rawName)
             for (audioId in memberIds) {
                 val key = MediaStoreGenreAudioKey(volume, audioId)

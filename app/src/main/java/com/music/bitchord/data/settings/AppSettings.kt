@@ -445,6 +445,7 @@ enum class MainNavigationTab(val index: Int) {
 
 private fun MainNavigationTab.localLibraryTabOrNull(): LocalLibraryTab? = when (this) {
     MainNavigationTab.ALBUM_ARTISTS -> LocalLibraryTab.ALBUM_ARTISTS
+    MainNavigationTab.GENRES -> LocalLibraryTab.GENRES
     MainNavigationTab.COMPOSERS -> LocalLibraryTab.COMPOSERS
     MainNavigationTab.YEARS -> LocalLibraryTab.YEARS
     MainNavigationTab.RECORD_LABELS -> LocalLibraryTab.RECORD_LABELS
@@ -1214,6 +1215,8 @@ object AppSettings {
 
     /** Whole-widget opacity shared by every home-screen widget. */
     val widgetOpacity = MutableStateFlow(65f)
+    /** Opacity for widget background surfaces, without changing artwork or controls. */
+    val widgetBackgroundOpacity = MutableStateFlow(100f)
     @Deprecated("Use widgetOpacity")
     val pillWidgetOpacity: MutableStateFlow<Float> = widgetOpacity
 
@@ -2267,6 +2270,7 @@ object AppSettings {
             KEY_WIDGET_OPACITY,
             prefs.getFloat(KEY_PILL_WIDGET_OPACITY, 65f),
         ).coerceIn(0f, 100f)
+        widgetBackgroundOpacity.value = prefs.getFloat(KEY_WIDGET_BACKGROUND_OPACITY, 100f).coerceIn(0f, 100f)
         loudnessNormalization.value = prefs.getBoolean(KEY_LOUDNESS_NORMALIZATION, true)
         loudnessOffOnSpeaker.value = prefs.getBoolean(KEY_LOUDNESS_OFF_ON_SPEAKER, true)
         preventPlayAtZeroVolume.value = prefs.getBoolean(KEY_PREVENT_PLAY_AT_ZERO_VOLUME, false)
@@ -3799,6 +3803,23 @@ object AppSettings {
             }
             prefs.edit().putBoolean(KEY_ALBUM_ARTISTS_TAB_MIGRATED, true).apply()
         }
+        if (!prefs.getBoolean(KEY_GENRES_TAB_MIGRATED, false)) {
+            // Older releases kept Genres as a main-navigation preference while
+            // the other metadata destinations were controlled by local-tab
+            // visibility. Carry an existing opt-in across the new shared
+            // setting so enabling Genres does not make the destination vanish.
+            val genresWereEnabled = MainNavigationTab.GENRES.name in
+                prefs.getStringSet(KEY_VISIBLE_MAIN_NAVIGATION_TABS, emptySet()).orEmpty()
+            if (genresWereEnabled) {
+                val currentNames = storedNames ?: LocalLibraryTab.entries
+                    .filterNot { it in setOf(LocalLibraryTab.GENRES, LocalLibraryTab.COMPOSERS, LocalLibraryTab.YEARS, LocalLibraryTab.RECORD_LABELS) }
+                    .map { it.name }
+                    .toSet()
+                storedNames = currentNames + LocalLibraryTab.GENRES.name
+                prefs.edit().putStringSet(KEY_VISIBLE_LOCAL_LIBRARY_TABS, storedNames).apply()
+            }
+            prefs.edit().putBoolean(KEY_GENRES_TAB_MIGRATED, true).apply()
+        }
         val stored = storedNames
             ?.mapNotNull { name -> LocalLibraryTab.entries.firstOrNull { it.name == name } }
             ?.toSet()
@@ -4427,7 +4448,16 @@ object AppSettings {
             .putFloat(KEY_PILL_WIDGET_OPACITY, normalized)
             .apply()
         if (this::appContext.isInitialized) {
-            com.music.bitchord.widget.MediaWidget.refreshForOpacity(appContext)
+            com.music.bitchord.widget.WidgetOpacity.refreshAll(appContext)
+        }
+    }
+
+    fun setWidgetBackgroundOpacity(value: Float) {
+        val normalized = value.coerceIn(0f, 100f)
+        widgetBackgroundOpacity.value = normalized
+        prefs.edit().putFloat(KEY_WIDGET_BACKGROUND_OPACITY, normalized).apply()
+        if (this::appContext.isInitialized) {
+            com.music.bitchord.widget.WidgetOpacity.refreshAll(appContext)
         }
     }
 
@@ -6235,6 +6265,7 @@ object AppSettings {
     private const val KEY_VOLUME_BOOST_DB = "volume_boost_db"
     private const val KEY_PILL_WIDGET_OPACITY = "pill_widget_opacity"
     private const val KEY_WIDGET_OPACITY = "widget_opacity"
+    private const val KEY_WIDGET_BACKGROUND_OPACITY = "widget_background_opacity"
     private const val KEY_LOUDNESS_NORMALIZATION = "loudness_normalization"
     private const val KEY_LOUDNESS_OFF_ON_SPEAKER = "loudness_off_on_speaker"
     private const val KEY_FAVORITE_BESIDE_TRACK_MENU = "favorite_beside_track_menu"
@@ -6328,6 +6359,7 @@ object AppSettings {
     private const val KEY_DOWNLOADED_ALBUM_MANUAL_ORDER = "downloaded_album_manual_order"
     private const val KEY_VISIBLE_LOCAL_LIBRARY_TABS = "visible_local_library_tabs"
     private const val KEY_ALBUM_ARTISTS_TAB_MIGRATED = "album_artists_tab_migrated"
+    private const val KEY_GENRES_TAB_MIGRATED = "genres_tab_migrated"
     private const val KEY_LOCAL_LIBRARY_TAB_ORDER = "local_library_tab_order"
     private const val KEY_LOCAL_FOLDER_HIERARCHY = "local_folder_hierarchy"
     private const val KEY_REMEMBER_LAST_OPENED_FOLDER = "remember_last_opened_folder"

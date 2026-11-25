@@ -158,6 +158,7 @@ class MediaWidgetPill : AppWidgetProvider() {
                         views.setOnClickPendingIntent(it, openPlayer)
                     }
                 }
+                WidgetOpacity.applyBackground(views, R.id.widget_pill_surface)
                 WidgetOpacity.apply(views, R.id.widget_pill_root)
                 runCatching { manager.updateAppWidget(id, views) }
             }

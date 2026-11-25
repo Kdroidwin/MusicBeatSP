@@ -3,7 +3,7 @@
     android:id="@+id/widget_vinyl_root"
     android:layout_width="match_parent"
     android:layout_height="match_parent"
-    android:background="@drawable/widget_vinyl_surface_placeholder"
+    android:background="@android:color/transparent"
     android:clipToOutline="true">
 
     <ImageView
@@ -11,7 +11,8 @@
         android:layout_width="match_parent"
         android:layout_height="match_parent"
         android:contentDescription="@null"
-        android:scaleType="fitXY" />
+        android:scaleType="fitXY"
+        android:src="@drawable/widget_vinyl_surface_placeholder" />
 
     <FrameLayout
         android:layout_width="164dp"

@@ -7,7 +7,6 @@ import android.content.ComponentName
 import android.content.Context
 import android.content.Intent
 import android.content.res.Configuration
-import android.graphics.Bitmap
 import android.os.Bundle
 import android.os.SystemClock
 import android.view.View
@@ -39,8 +38,8 @@ import kotlin.math.roundToInt
  * them instead — rather than either being stuck with a layout its size doesn't
  * suit.
  *
- * Everything visual except the transport itself is one bitmap, drawn by
- * [MediaWidgetArt] — see there for why the blur has to work that way.
+ * The cover and its lower blurred surface are separate bitmap layers so the
+ * background-only opacity setting never fades the album art or controls.
  */
 abstract class MediaWidget : AppWidgetProvider() {
 
@@ -194,7 +193,7 @@ abstract class MediaWidget : AppWidgetProvider() {
             fallbackWidthDp: Int,
         ) {
             val size = measure(context, manager, id, fallbackWidthDp)
-            val cached = MediaWidgetArt.peek(key, size.widthPx, size.heightPx, size.bandPx)
+            val cached = MediaWidgetArt.peekLayers(key, size.widthPx, size.heightPx, size.bandPx)
             if (cached == null) {
                 // The picture still has to be drawn, and that can mean a network
                 // fetch. Push the transport now so a tap is answered in a frame;
@@ -212,7 +211,7 @@ abstract class MediaWidget : AppWidgetProvider() {
                 // durably no picture.
                 manager.push(id, views(context, snapshot, size, lastArt[id]))
             }
-            val art = cached ?: MediaWidgetArt.render(
+            val art = cached ?: MediaWidgetArt.renderLayers(
                 context = context,
                 artworkUrl = snapshot.artworkUrl,
                 widthPx = size.widthPx,
@@ -231,12 +230,16 @@ abstract class MediaWidget : AppWidgetProvider() {
             context: Context,
             snapshot: MediaWidgetSnapshot,
             size: WidgetSize,
-            art: Bitmap?,
+            art: WidgetArtworkLayers?,
         ): RemoteViews {
             val layout =
                 if (size.wide) R.layout.widget_media_wide else R.layout.widget_media_compact
             val views = RemoteViews(context.packageName, layout)
-            art?.let { views.setImageViewBitmap(R.id.widget_art, it) }
+            views.setImageViewResource(R.id.widget_fallback_background, R.drawable.widget_preview_art)
+            art?.let {
+                views.setImageViewBitmap(R.id.widget_art, it.artwork)
+                views.setImageViewBitmap(R.id.widget_background, it.background)
+            }
 
             // Both layouts carry the title; only the wide one has room for the
             // artist beneath it.
@@ -307,6 +310,8 @@ abstract class MediaWidget : AppWidgetProvider() {
                     views.setOnClickPendingIntent(button, open)
                 }
             }
+            WidgetOpacity.applyBackground(views, R.id.widget_fallback_background)
+            WidgetOpacity.applyBackground(views, R.id.widget_background)
             WidgetOpacity.apply(views, R.id.widget_root)
             return views
         }
@@ -469,7 +474,7 @@ abstract class MediaWidget : AppWidgetProvider() {
          * launcher is already doing with these bitmaps for as long as the widget
          * is on screen, and dropped when the widget is.
          */
-        private val lastArt = ConcurrentHashMap<Int, Bitmap>()
+        private val lastArt = ConcurrentHashMap<Int, WidgetArtworkLayers>()
 
         private const val MAX_BITMAP_PX = 1_200f
 

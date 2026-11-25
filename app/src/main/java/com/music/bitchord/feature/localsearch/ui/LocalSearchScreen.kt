@@ -131,6 +131,8 @@ fun LocalSearchScreen(
     configuredSourceResults: Pair<String, UiState<List<SearchResult>>>? = null,
     onConfiguredSourceSearch: ((String, String) -> Unit)? = null,
     onConfiguredSourceTrackClick: ((Song) -> Unit)? = null,
+    pCloudSongs: List<Song> = emptyList(),
+    showPCloudSource: Boolean = false,
     contentPadding: PaddingValues = PaddingValues(0.dp),
     onRootListScrollChanged: ((Boolean) -> Unit)? = null,
     onRootListScrollOffsetChanged: ((Float) -> Unit)? = null,
@@ -150,7 +152,9 @@ fun LocalSearchScreen(
     var submittedMusicServerQuery by rememberSaveable { mutableStateOf<String?>(null) }
     var selectedConfiguredSource by rememberSaveable { mutableStateOf<String?>(null) }
     var submittedConfiguredSourceQuery by rememberSaveable { mutableStateOf<String?>(null) }
+    var usePCloudLibrary by rememberSaveable { mutableStateOf(false) }
     var selectedFilter by rememberSaveable { mutableStateOf(LocalSearchFilter.ALL) }
+    val activeSearchSongs = if (usePCloudLibrary) pCloudSongs else songs
     val listState = rememberLazyListState()
     val rootListScrollCallback = rememberUpdatedState(onRootListScrollChanged)
     val rootListScrollOffsetCallback = rememberUpdatedState(onRootListScrollOffsetChanged)
@@ -163,10 +167,10 @@ fun LocalSearchScreen(
         }
     }
 
-    LaunchedEffect(canSearchYoutubeMusic, youtubeMusicSearchDefault) {
+    LaunchedEffect(canSearchYoutubeMusic, youtubeMusicSearchDefault, usePCloudLibrary) {
         if (
             query.isBlank() && submittedYoutubeQuery == null &&
-            submittedMusicServerQuery == null && submittedConfiguredSourceQuery == null
+            submittedMusicServerQuery == null && submittedConfiguredSourceQuery == null && !usePCloudLibrary
         ) {
             useYoutubeMusic = canSearchYoutubeMusic && youtubeMusicSearchDefault
         }
@@ -184,6 +188,10 @@ fun LocalSearchScreen(
             selectedConfiguredSource = null
             submittedConfiguredSourceQuery = null
         }
+    }
+
+    LaunchedEffect(showPCloudSource) {
+        if (!showPCloudSource) usePCloudLibrary = false
     }
 
     var drillDownLabel by rememberSaveable { mutableStateOf<String?>(null) }
@@ -248,6 +256,7 @@ fun LocalSearchScreen(
         useYoutubeMusic,
         useMusicServers,
         selectedConfiguredSource,
+        usePCloudLibrary,
         selectedFilter,
         submittedYoutubeQuery,
         submittedMusicServerQuery,
@@ -262,10 +271,10 @@ fun LocalSearchScreen(
     // IME and making the field appear frozen. Debounce edits and do the scan off
     // the UI thread; an identity key avoids walking a large Song list on the
     // main thread just to compare Compose effect keys.
-    val songsIdentity = System.identityHashCode(songs)
+    val songsIdentity = System.identityHashCode(activeSearchSongs)
     var searchResults by remember { mutableStateOf<List<LocalSearchResult>>(emptyList()) }
     var searchingLyrics by remember { mutableStateOf(false) }
-    LaunchedEffect(query, selectedFilter, songsIdentity, folderHierarchy, useYoutubeMusic, useMusicServers, selectedConfiguredSource) {
+    LaunchedEffect(query, selectedFilter, songsIdentity, folderHierarchy, useYoutubeMusic, useMusicServers, selectedConfiguredSource, usePCloudLibrary) {
         if (query.isBlank() || useYoutubeMusic || useMusicServers || selectedConfiguredSource != null) {
             searchResults = emptyList()
             searchingLyrics = false
@@ -273,7 +282,7 @@ fun LocalSearchScreen(
         } else {
             delay(if (selectedFilter == LocalSearchFilter.LYRICS) 250 else 140)
             val currentQuery = query
-            val currentSongs = songs
+            val currentSongs = activeSearchSongs
             val currentFilter = selectedFilter
             val currentHierarchy = folderHierarchy
             val results = if (currentFilter == LocalSearchFilter.LYRICS) {
@@ -449,7 +458,7 @@ fun LocalSearchScreen(
                             modifier = Modifier.padding(horizontal = PAGE_GUTTER, vertical = 6.dp),
                         )
 
-                        if (canSearchYoutubeMusic || canSearchMusicServers || configuredSearchSources.isNotEmpty()) {
+                        if (canSearchYoutubeMusic || canSearchMusicServers || configuredSearchSources.isNotEmpty() || showPCloudSource) {
                             Row(
                                 modifier = Modifier.fillMaxWidth()
                                     .horizontalScroll(rememberScrollState())
@@ -457,10 +466,11 @@ fun LocalSearchScreen(
                                 horizontalArrangement = Arrangement.spacedBy(8.dp),
                             ) {
                                 FilterChip(
-                                    selected = !useYoutubeMusic && !useMusicServers && selectedConfiguredSource == null,
+                                    selected = !useYoutubeMusic && !useMusicServers && !usePCloudLibrary && selectedConfiguredSource == null,
                                     onClick = {
                                         useYoutubeMusic = false
                                         useMusicServers = false
+                                        usePCloudLibrary = false
                                         selectedConfiguredSource = null
                                         submittedYoutubeQuery = null
                                         submittedMusicServerQuery = null
@@ -474,6 +484,7 @@ fun LocalSearchScreen(
                                         onClick = {
                                             useYoutubeMusic = true
                                             useMusicServers = false
+                                            usePCloudLibrary = false
                                             selectedConfiguredSource = null
                                             submittedYoutubeQuery = null
                                             submittedMusicServerQuery = null
@@ -488,12 +499,28 @@ fun LocalSearchScreen(
                                         onClick = {
                                             useMusicServers = true
                                             useYoutubeMusic = false
+                                            usePCloudLibrary = false
                                             selectedConfiguredSource = null
                                             submittedYoutubeQuery = null
                                             submittedMusicServerQuery = null
                                             submittedConfiguredSourceQuery = null
                                         },
                                         label = { Text(stringResource(R.string.search_music_servers)) },
+                                    )
+                                }
+                                if (showPCloudSource) {
+                                    FilterChip(
+                                        selected = usePCloudLibrary,
+                                        onClick = {
+                                            usePCloudLibrary = true
+                                            useYoutubeMusic = false
+                                            useMusicServers = false
+                                            selectedConfiguredSource = null
+                                            submittedYoutubeQuery = null
+                                            submittedMusicServerQuery = null
+                                            submittedConfiguredSourceQuery = null
+                                        },
+                                        label = { Text(stringResource(R.string.pcloud)) },
                                     )
                                 }
                                 configuredSearchSources.forEach { source ->
@@ -503,6 +530,7 @@ fun LocalSearchScreen(
                                             selectedConfiguredSource = source.id
                                             useYoutubeMusic = false
                                             useMusicServers = false
+                                            usePCloudLibrary = false
                                             submittedYoutubeQuery = null
                                             submittedMusicServerQuery = null
                                             submittedConfiguredSourceQuery = null
@@ -533,7 +561,7 @@ fun LocalSearchScreen(
                     SearchSelectionBar(
                         count = selectedSongIds.size,
                         onAdd = {
-                            songsForPlaylist = songs.filter { it.videoId in selectedSongIds }
+                            songsForPlaylist = activeSearchSongs.filter { it.videoId in selectedSongIds }
                             selectedSongIds = emptySet()
                         },
                         onCancel = { selectedSongIds = emptySet() },

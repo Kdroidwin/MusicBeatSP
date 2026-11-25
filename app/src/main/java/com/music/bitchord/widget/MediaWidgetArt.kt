@@ -30,6 +30,11 @@ import java.util.concurrent.ConcurrentHashMap
 import kotlin.math.roundToInt
 import kotlin.math.sqrt
 
+internal data class WidgetArtworkLayers(
+    val artwork: Bitmap,
+    val background: Bitmap,
+)
+
 /**
  * The single image a widget draws: the album cover, filling it edge to edge,
  * with its bottom dissolving into a blur for the transport to sit on.
@@ -75,7 +80,7 @@ import kotlin.math.sqrt
 internal object MediaWidgetArt {
 
     /**
-     * Draws the widget's artwork at exactly [widthPx] × [heightPx].
+     * Draws separate cover and lower blur/scrim layers at exactly [widthPx] × [heightPx].
      *
      * [bandPx] is the height of the transport strip the layout will lay over the
      * result — the blur is sized from it, so the two stay locked together. See
@@ -85,7 +90,7 @@ internal object MediaWidgetArt {
      * remembered under. Pass null only when there is nothing to remember (no
      * track at all), so the placeholder isn't cached under a shared name.
      */
-    suspend fun render(
+    suspend fun renderLayers(
         context: Context,
         artworkUrl: String?,
         widthPx: Int,
@@ -93,8 +98,8 @@ internal object MediaWidgetArt {
         bandPx: Int,
         key: String?,
         cornerRadiusPx: Float,
-    ): Bitmap {
-        peek(key, widthPx, heightPx, bandPx)?.let { return it }
+    ): WidgetArtworkLayers {
+        peekLayers(key, widthPx, heightPx, bandPx)?.let { return it }
         val cacheKey = key?.let { cacheKey(it, widthPx, heightPx, bandPx) }
 
         val cover = if (isCoolingOff(key)) null else loadArtwork(context, artworkUrl, maxOf(widthPx, heightPx))
@@ -106,9 +111,9 @@ internal object MediaWidgetArt {
         // `put` at the end.
         val failed = cover == null && !artworkUrl.isNullOrBlank()
         if (failed && key != null) failures[key] = SystemClock.elapsedRealtime()
-        val composed = Bitmap.createBitmap(widthPx, heightPx, Bitmap.Config.ARGB_8888)
-        val canvas = Canvas(composed)
-        if (cover != null) canvas.fillCentreCropped(cover) else canvas.fillPlaceholder()
+        val artwork = Bitmap.createBitmap(widthPx, heightPx, Bitmap.Config.ARGB_8888)
+        val artworkCanvas = Canvas(artwork)
+        if (cover != null) artworkCanvas.fillCentreCropped(cover)
 
         // Taller than the band, so the ramp has room to start invisibly above
         // it — but never taller than the widget. On two cells the band is more
@@ -116,17 +121,29 @@ internal object MediaWidgetArt {
         // first stop is a quarter of the way down and the artwork above it is
         // untouched.
         val blurRegion = (bandPx * BLUR_REGION_SCALE).coerceIn(1, heightPx)
-        canvas.blurBottom(composed, blurRegion, bandPx)
-        canvas.scrimBottom(bandPx)
+        val background = Bitmap.createBitmap(widthPx, heightPx, Bitmap.Config.ARGB_8888)
+        val backgroundCanvas = Canvas(background)
+        if (cover == null) {
+            // With no cover, the fallback gradient is a widget surface, so it
+            // belongs to the independently adjustable background layer.
+            backgroundCanvas.fillPlaceholder()
+            backgroundCanvas.blurBottom(background, blurRegion, bandPx)
+        } else {
+            backgroundCanvas.blurBottom(artwork, blurRegion, bandPx)
+        }
+        backgroundCanvas.scrimBottom(bandPx)
 
-        val rounded = composed.withRoundedCorners(cornerRadiusPx)
-        composed.recycle()
-        if (!failed) cacheKey?.let { composites.put(it, rounded) }
-        return rounded
+        val roundedArtwork = artwork.withRoundedCorners(cornerRadiusPx)
+        val roundedBackground = background.withRoundedCorners(cornerRadiusPx)
+        artwork.recycle()
+        background.recycle()
+        val layers = WidgetArtworkLayers(roundedArtwork, roundedBackground)
+        if (!failed) cacheKey?.let { composites.put(layerCacheKey(it), layers) }
+        return layers
     }
 
     /**
-     * The composite for these arguments if it has already been drawn, without
+     * The layers for these arguments if they have already been drawn, without
      * drawing it if it hasn't.
      *
      * Lets a provider find out, on the thread it was called on, whether it can
@@ -135,8 +152,9 @@ internal object MediaWidgetArt {
      * two shows: a play/pause tap — which changes one glyph and nothing else —
      * would blink the cover away and back again.
      */
-    fun peek(key: String?, widthPx: Int, heightPx: Int, bandPx: Int): Bitmap? =
-        key?.let { composites[cacheKey(it, widthPx, heightPx, bandPx)] }?.takeIf { !it.isRecycled }
+    fun peekLayers(key: String?, widthPx: Int, heightPx: Int, bandPx: Int): WidgetArtworkLayers? =
+        key?.let { composites[layerCacheKey(cacheKey(it, widthPx, heightPx, bandPx))] as? WidgetArtworkLayers }
+            ?.takeIf { !it.artwork.isRecycled && !it.background.isRecycled }
 
     /** Loads a crisp cover for the dedicated square-art widget, without the blurred transport composite. */
     suspend fun loadSquareCover(context: Context, artworkUrl: String?, sizePx: Int): Bitmap? =
@@ -160,7 +178,7 @@ internal object MediaWidgetArt {
     }
 
     fun peekCircle(key: String, sizePx: Int): Bitmap? =
-        composites[circleKey(key, sizePx)]?.takeIf { !it.isRecycled }
+        (composites[circleKey(key, sizePx)] as? Bitmap)?.takeIf { !it.isRecycled }
 
     /** The second BitChord 4×1 choice: the cover clipped to a rounded square. */
     suspend fun roundedSquare(context: Context, artworkUrl: String?, sizePx: Int, key: String): Bitmap? {
@@ -180,7 +198,7 @@ internal object MediaWidgetArt {
     }
 
     fun peekRoundedSquare(key: String, sizePx: Int): Bitmap? =
-        composites[roundedSquareKey(key, sizePx)]?.takeIf { !it.isRecycled }
+        (composites[roundedSquareKey(key, sizePx)] as? Bitmap)?.takeIf { !it.isRecycled }
 
     /** Draws the upstream BitChord 4×1 blurred album-art capsule. */
     suspend fun pill(
@@ -246,7 +264,7 @@ internal object MediaWidgetArt {
     }
 
     fun peekPill(key: String, widthPx: Int, heightPx: Int, cornerRadiusPx: Float = heightPx / 2f): Bitmap? =
-        composites[pillKey(key, widthPx, heightPx, cornerRadiusPx)]?.takeIf { !it.isRecycled }
+        (composites[pillKey(key, widthPx, heightPx, cornerRadiusPx)] as? Bitmap)?.takeIf { !it.isRecycled }
 
     private fun circleKey(key: String, sizePx: Int) = "circle|$key|$sizePx"
 
@@ -286,6 +304,8 @@ internal object MediaWidgetArt {
 
     private fun cacheKey(key: String, widthPx: Int, heightPx: Int, bandPx: Int) =
         "$key|$widthPx|$heightPx|$bandPx"
+
+    private fun layerCacheKey(key: String) = "full-bleed-layers|$key"
 
     // ---- artwork ----
 
@@ -724,8 +744,12 @@ internal object MediaWidgetArt {
      * would mean a cover decode and four scaling passes to draw the identical
      * bitmap again. Sized for a handful of widgets' worth at phone resolutions.
      */
-    private val composites = object : LruCache<String, Bitmap>(8 * 1024 * 1024) {
-        override fun sizeOf(key: String, value: Bitmap) = value.allocationByteCount
+    private val composites = object : LruCache<String, Any>(12 * 1024 * 1024) {
+        override fun sizeOf(key: String, value: Any): Int = when (value) {
+            is Bitmap -> value.allocationByteCount
+            is WidgetArtworkLayers -> value.artwork.allocationByteCount + value.background.allocationByteCount
+            else -> 1
+        }
     }
 
     /** When each cover last failed to load. @see isCoolingOff */

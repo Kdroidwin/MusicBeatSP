@@ -263,6 +263,8 @@
     <string name="pill_widget_opacity">Widget opacity</string>
     <string name="pill_widget_opacity_subtitle">Adjusts transparency for every MusicBeatSP home-screen widget.</string>
     <string name="pill_widget_opacity_value">%1$d%%</string>
+    <string name="widget_background_opacity">Widget background opacity</string>
+    <string name="widget_background_opacity_subtitle">Adjusts only widget backgrounds. Album art, text, and controls keep their opacity.</string>
     <string name="download_quality">Download quality</string>
     <string name="download_wifi_only">Download over Wi-Fi only</string>
     <string name="convert_to_audio">Convert to audio</string>

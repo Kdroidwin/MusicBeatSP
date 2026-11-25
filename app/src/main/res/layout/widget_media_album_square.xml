@@ -3,7 +3,15 @@
     android:id="@+id/widget_album_root"
     android:layout_width="match_parent"
     android:layout_height="match_parent"
-    android:background="@drawable/widget_preview_art">
+    android:background="@android:color/transparent">
+
+    <ImageView
+        android:id="@+id/widget_album_surface"
+        android:layout_width="match_parent"
+        android:layout_height="match_parent"
+        android:contentDescription="@null"
+        android:scaleType="fitXY"
+        android:src="@drawable/widget_preview_art" />
 
     <LinearLayout
         android:layout_width="match_parent"

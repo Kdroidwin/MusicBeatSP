@@ -113,6 +113,7 @@ class MediaWidgetVinyl : AppWidgetProvider() {
                 )
                 views.setTextViewText(R.id.widget_vinyl_artist, snapshot.artist)
                 views.setOnClickPendingIntent(R.id.widget_vinyl_root, openPlayer(context))
+                WidgetOpacity.applyBackground(views, R.id.widget_vinyl_surface)
                 WidgetOpacity.apply(views, R.id.widget_vinyl_root)
                 runCatching { manager.updateAppWidget(id, views) }
             }

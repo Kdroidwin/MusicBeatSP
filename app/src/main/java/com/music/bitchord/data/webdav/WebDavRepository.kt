@@ -2,6 +2,7 @@ package com.music.bitchord.data.webdav
 
 import com.music.bitchord.data.model.Song
 import com.music.bitchord.data.settings.AppSettings
+import android.util.Log
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
 import java.net.URLDecoder
@@ -15,6 +16,7 @@ import java.net.URLDecoder
  * remote layout back into releases without any tags.
  */
 object WebDavRepository {
+    private const val TAG = "WebDavRepository"
 
     fun isConfigured(): Boolean =
         WebDavConfig.isConfigured(AppSettings.webdavUrl.value)
@@ -22,11 +24,18 @@ object WebDavRepository {
     suspend fun getSongs(): List<Song> = withContext(Dispatchers.IO) {
         val url = AppSettings.webdavUrl.value
         if (!WebDavConfig.isConfigured(url)) return@withContext emptyList()
-        val listing = WebDavClient.listLibrary(
+        val listingResult = WebDavClient.listLibrary(
             baseUrl = url,
             username = AppSettings.webdavUsername.value,
             password = AppSettings.webdavPassword.value,
-        ).getOrNull() ?: return@withContext emptyList()
+        )
+        val listing = listingResult.getOrElse { error ->
+            // The error message can include a user-selected path or server
+            // details; log only the failure type so a blank pCloud library is
+            // diagnosable without leaking credentials or remote filenames.
+            Log.w(TAG, "Remote library listing failed (${error.javaClass.simpleName})")
+            return@withContext emptyList()
+        }
         val artByDir = listing.images.groupBy { dirKey(it.url) }
         listing.audio.map { entry ->
             entry.toSong(

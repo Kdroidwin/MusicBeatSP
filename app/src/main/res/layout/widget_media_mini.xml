@@ -3,14 +3,15 @@
     android:id="@+id/widget_mini_root"
     android:layout_width="match_parent"
     android:layout_height="match_parent"
-    android:background="@drawable/widget_mini_surface_placeholder">
+    android:background="@android:color/transparent">
 
     <ImageView
         android:id="@+id/widget_mini_surface"
         android:layout_width="match_parent"
         android:layout_height="match_parent"
         android:contentDescription="@null"
-        android:scaleType="fitXY" />
+        android:scaleType="fitXY"
+        android:src="@drawable/widget_mini_surface_placeholder" />
 
     <LinearLayout
         android:layout_width="match_parent"

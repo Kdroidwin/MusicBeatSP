@@ -241,6 +241,8 @@ private object NowPlayingWidgetRenderer {
                 views.setOnClickPendingIntent(button, open)
             }
         }
+        WidgetOpacity.applyBackground(views, R.id.widget_pill_bg)
+        WidgetOpacity.apply(views, R.id.widget_pill)
         return views
     }
 

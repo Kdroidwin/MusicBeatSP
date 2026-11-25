@@ -299,6 +299,7 @@ import com.music.bitchord.data.sources.SourceConfig
 import com.music.bitchord.data.sources.SourceRegistry
 import com.music.bitchord.data.sources.SourceKind
 import com.music.bitchord.data.webdav.WebDavRepository
+import com.music.bitchord.data.webdav.WebDavConfig
 import com.music.bitchord.data.webdav.PCloudRegion
 import com.music.bitchord.ui.components.FieldConfig
 import com.music.bitchord.ui.components.ServerEditorHost
@@ -792,10 +793,11 @@ private fun BitChordApp(
         homeAvailable,
     ) {
         // These navigation destinations are backed by the local library-tab
-        // visibility setting. Read all linked tabs here so Composer, Year and
-        // Record Label become visible immediately when enabled in Settings.
+        // visibility setting. Read all linked tabs here so Genre, Composer,
+        // Year and Record Label become visible immediately when enabled.
         val linkedLocalTabs = mapOf(
             com.music.bitchord.data.settings.LocalLibraryTab.ALBUM_ARTISTS to MainNavigationTab.ALBUM_ARTISTS,
+            com.music.bitchord.data.settings.LocalLibraryTab.GENRES to MainNavigationTab.GENRES,
             com.music.bitchord.data.settings.LocalLibraryTab.COMPOSERS to MainNavigationTab.COMPOSERS,
             com.music.bitchord.data.settings.LocalLibraryTab.YEARS to MainNavigationTab.YEARS,
             com.music.bitchord.data.settings.LocalLibraryTab.RECORD_LABELS to MainNavigationTab.RECORD_LABELS,
@@ -1325,9 +1327,11 @@ private fun BitChordApp(
             remoteLibrarySongs = emptyList()
             return@LaunchedEffect
         }
-        // A remote library can be temporarily empty while its first connection
-        // or credentials are still settling. Retry automatically so enabling
-        // this option never depends on the user pulling to refresh afterwards.
+        // Retry a configured WebDAV library independently of other remote
+        // servers. Previously any tracks from another provider stopped the
+        // retry loop, so a pCloud scan that was temporarily empty could be
+        // skipped for the whole session.
+        val webDavConfigured = WebDavConfig.isConfigured(webdavUrl)
         repeat(5) { attempt ->
             val loaded = withContext(Dispatchers.IO) {
                 val serverSongs = SourceRegistry.remoteLibraryTracks()
@@ -1340,8 +1344,10 @@ private fun BitChordApp(
                 }
                 (serverSongs + webdavSongs).distinctBy { it.videoId }
             }
-            if (loaded.isNotEmpty()) {
-                remoteLibrarySongs = loaded
+            remoteLibrarySongs = loaded
+            val webdavSongsLoaded = loaded.any { WebDavConfig.isWebDavId(it.videoId) }
+            val shouldRetry = if (webDavConfigured) !webdavSongsLoaded else loaded.isEmpty()
+            if (!shouldRetry) {
                 return@LaunchedEffect
             }
             if (attempt < 4) kotlinx.coroutines.delay(1_000L shl attempt)
@@ -1351,6 +1357,11 @@ private fun BitChordApp(
         if (includeRemoteSourceMedia) (localSongs + remoteLibrarySongs).distinctBy { it.videoId }
         else localSongs
     }
+    val pCloudSongs = remember(remoteLibrarySongs) {
+        remoteLibrarySongs.filter(WebDavConfig::isPCloudSong)
+    }
+    val showPCloudSearchSource = includeRemoteSourceMedia && !offlineMode &&
+        !context.packageName.endsWith(".nointernet") && WebDavConfig.isPCloudEndpoint(webdavUrl)
     val catalogEmptyMessage = localEmptyMessage.takeIf { catalogSongs.isEmpty() }
     val refreshCatalog: () -> Unit = {
         viewModel.loadLocalMusic(isPullToRefresh = true)
@@ -3934,6 +3945,8 @@ private fun BitChordApp(
                                 onMusicServerTrackClick = { song -> play(listOf(song), 0) },
                                 configuredSearchSources = individuallySearchableSources,
                                 configuredSourceResults = configuredSourceSearchResults,
+                                pCloudSongs = pCloudSongs,
+                                showPCloudSource = showPCloudSearchSource,
                                 onConfiguredSourceSearch = viewModel::searchConfiguredSource,
                                 onConfiguredSourceTrackClick = { song -> play(listOf(song), 0) },
                                 onArtistCreditClick = { artist -> openPlayerArtistPage(artist) },
@@ -4035,13 +4048,13 @@ private fun BitChordApp(
                             onSongLongPress = openSongMenu,
                             allowModelDownload = !offlineMode && !context.packageName.endsWith(".nointernet"),
                         )
-                        TAB_GENRES -> if (!hasStoragePermission && localSongs.isEmpty()) {
+                        TAB_GENRES -> if (!hasStoragePermission && catalogSongs.isEmpty()) {
                             Box(modifier = Modifier.fillMaxSize().padding(listPadding), contentAlignment = Alignment.Center) {
                                 LocalPermissionCard(onRequestPermission = requestDefaultPermission)
                             }
                         } else {
                             LocalMusicScreen(
-                                songs = localSongs,
+                                songs = catalogSongs,
                                 collections = emptyList(),
                                 isDownloads = false,
                                 currentSong = player.song,
@@ -4055,7 +4068,7 @@ private fun BitChordApp(
                                     QueueShuffle.enableForNextQueue()
                                     play(songs, songs.indices.random())
                                 },
-                                emptyMessage = localEmptyMessage,
+                                emptyMessage = catalogEmptyMessage,
                                 onCollectionLongPress = { label, grouped ->
                                     browseActions = BrowseTarget(
                                         browseId = null,
@@ -4082,13 +4095,13 @@ private fun BitChordApp(
                             )
                         }
                         TAB_SERVICES -> Box(modifier = Modifier.fillMaxSize())
-                        TAB_COMPOSERS, TAB_YEARS, TAB_RECORD_LABELS -> if (!hasStoragePermission && localSongs.isEmpty()) {
+                        TAB_COMPOSERS, TAB_YEARS, TAB_RECORD_LABELS -> if (!hasStoragePermission && catalogSongs.isEmpty()) {
                             Box(modifier = Modifier.fillMaxSize().padding(listPadding), contentAlignment = Alignment.Center) {
                                 LocalPermissionCard(onRequestPermission = requestDefaultPermission)
                             }
                         } else {
                             LocalMusicScreen(
-                                songs = localSongs,
+                                songs = catalogSongs,
                                 collections = emptyList(),
                                 isDownloads = false,
                                 currentSong = player.song,
@@ -4102,7 +4115,7 @@ private fun BitChordApp(
                                     QueueShuffle.enableForNextQueue()
                                     play(songs, songs.indices.random())
                                 },
-                                emptyMessage = localEmptyMessage,
+                                emptyMessage = catalogEmptyMessage,
                                 contentPadding = listPadding,
                                 initialTab = when (selectedTab) {
                                     TAB_COMPOSERS -> LOCAL_TAB_COMPOSERS

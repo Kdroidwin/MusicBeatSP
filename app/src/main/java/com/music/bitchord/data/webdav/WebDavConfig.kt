@@ -52,6 +52,21 @@ object WebDavConfig {
 
     fun hostOf(url: String): String? = normalizeUrl(url).toHttpUrlOrNull()?.host?.lowercase(Locale.ROOT)
 
+    /** True only for one of pCloud's published regional WebDAV hosts. */
+    fun isPCloudEndpoint(url: String): Boolean {
+        val parsed = normalizeUrl(url).toHttpUrlOrNull() ?: return false
+        return parsed.isHttps && parsed.port == 443 &&
+            PCloudRegion.entries.any { hostOf(it.webDavUrl) == parsed.host.lowercase(Locale.ROOT) }
+    }
+
+    /** Distinguishes pCloud rows from other WebDAV libraries in search and source filters. */
+    fun isPCloudSong(song: Song): Boolean {
+        if (!isWebDavId(song.videoId)) return false
+        val parsed = song.videoId.removePrefix("webdav:").toHttpUrlOrNull() ?: return false
+        return parsed.isHttps && parsed.username.isEmpty() && parsed.password.isEmpty() && parsed.port == 443 &&
+            PCloudRegion.entries.any { hostOf(it.webDavUrl) == parsed.host.lowercase(Locale.ROOT) }
+    }
+
     fun isAudioFile(name: String): Boolean {
         val ext = name.substringAfterLast('.', "").lowercase(Locale.ROOT)
         return ext in audioExtensions

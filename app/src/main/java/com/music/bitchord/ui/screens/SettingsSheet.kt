@@ -940,6 +940,7 @@ private fun libraryCategorySettingsSearchEntries(
 
 private fun MainNavigationTab.localLibraryTabForSettings(): LocalLibraryTab? = when (this) {
     MainNavigationTab.ALBUM_ARTISTS -> LocalLibraryTab.ALBUM_ARTISTS
+    MainNavigationTab.GENRES -> LocalLibraryTab.GENRES
     MainNavigationTab.COMPOSERS -> LocalLibraryTab.COMPOSERS
     MainNavigationTab.YEARS -> LocalLibraryTab.YEARS
     MainNavigationTab.RECORD_LABELS -> LocalLibraryTab.RECORD_LABELS
@@ -1645,6 +1646,18 @@ private fun widgetOpacitySearchEntry(opacity: Float): SettingsSearchEntry = Sett
 )
 
 @Composable
+private fun widgetBackgroundOpacitySearchEntry(opacity: Float): SettingsSearchEntry = SettingsSearchEntry(
+    title = stringResource(R.string.widget_background_opacity),
+    subtitle = stringResource(R.string.widget_background_opacity_subtitle),
+    keywords = listOf("widget", "background", "opacity", "transparency", "ウィジェット", "背景", "透明度"),
+    valueLabel = stringResource(R.string.pill_widget_opacity_value, opacity.roundToInt()),
+    sliderValue = opacity,
+    sliderValueRange = 0f..100f,
+    onSliderValueChange = AppSettings::setWidgetBackgroundOpacity,
+    activate = {},
+)
+
+@Composable
 private fun PlayerActionButtonStyleRow(
     icon: ImageVector,
     titleRes: Int,
@@ -1978,6 +1991,7 @@ fun SettingsScreen(
     val volumeBoostEnabled by AppSettings.volumeBoostEnabled.collectAsStateWithLifecycle()
     val volumeBoostDb by AppSettings.volumeBoostDb.collectAsStateWithLifecycle()
     val widgetOpacity by AppSettings.widgetOpacity.collectAsStateWithLifecycle()
+    val widgetBackgroundOpacity by AppSettings.widgetBackgroundOpacity.collectAsStateWithLifecycle()
     val liquidGlassSupported = isGlassSupported()
     val lyricsBlur by AppSettings.lyricsBlur.collectAsStateWithLifecycle()
     val lyricsFontScale by AppSettings.lyricsFontScale.collectAsStateWithLifecycle()
@@ -3446,6 +3460,7 @@ fun SettingsScreen(
             ),
         ) +
         widgetOpacitySearchEntry(widgetOpacity) +
+        widgetBackgroundOpacitySearchEntry(widgetBackgroundOpacity) +
         navigationTabSettingsSearchEntries(
             mainTabOrder = mainTabOrder,
             visibleMainTabs = visibleMainTabs,
@@ -6286,6 +6301,24 @@ fun SettingsScreen(
             Slider(
                 value = widgetOpacity,
                 onValueChange = AppSettings::setWidgetOpacity,
+                valueRange = 0f..100f,
+                modifier = Modifier.padding(start = ROW_INSET, end = ROW_INSET, bottom = 14.dp),
+            )
+            SettingsRow(
+                icon = Icons.Rounded.Gradient,
+                title = stringResource(R.string.widget_background_opacity),
+                subtitle = stringResource(R.string.widget_background_opacity_subtitle),
+                trailing = {
+                    Text(
+                        text = stringResource(R.string.pill_widget_opacity_value, widgetBackgroundOpacity.roundToInt()),
+                        color = MaterialTheme.colorScheme.primary,
+                        style = MaterialTheme.typography.labelLarge,
+                    )
+                },
+            )
+            Slider(
+                value = widgetBackgroundOpacity,
+                onValueChange = AppSettings::setWidgetBackgroundOpacity,
                 valueRange = 0f..100f,
                 modifier = Modifier.padding(start = ROW_INSET, end = ROW_INSET, bottom = 14.dp),
             )

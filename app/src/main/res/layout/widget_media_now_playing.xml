@@ -53,7 +53,7 @@
             android:id="@+id/widget_pill_bg"
             android:layout_width="match_parent"
             android:layout_height="match_parent"
-            android:background="@drawable/widget_pill_background"
+            android:src="@drawable/widget_pill_background"
             android:importantForAccessibility="no"
             android:scaleType="fitXY" />
 

@@ -12,13 +12,28 @@
     android:id="@+id/widget_root"
     android:layout_width="match_parent"
     android:layout_height="match_parent"
-    android:background="@drawable/widget_preview_art">
+    android:background="@android:color/transparent">
+
+    <ImageView
+        android:id="@+id/widget_fallback_background"
+        android:layout_width="match_parent"
+        android:layout_height="match_parent"
+        android:contentDescription="@null"
+        android:scaleType="fitXY"
+        android:src="@drawable/widget_preview_art" />
 
     <ImageView
         android:id="@+id/widget_art"
         android:layout_width="match_parent"
         android:layout_height="match_parent"
         android:contentDescription="@string/widget_artwork"
+        android:scaleType="fitXY" />
+
+    <ImageView
+        android:id="@+id/widget_background"
+        android:layout_width="match_parent"
+        android:layout_height="match_parent"
+        android:contentDescription="@null"
         android:scaleType="fitXY" />
 
     <LinearLayout

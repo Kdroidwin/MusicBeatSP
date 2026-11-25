@@ -236,6 +236,8 @@
     <string name="pill_widget_opacity">ウィジェットの透明度</string>
     <string name="pill_widget_opacity_subtitle">MusicBeatSPのすべてのホーム画面ウィジェットの透明度を調整します。</string>
     <string name="pill_widget_opacity_value">%1$d%%</string>
+    <string name="widget_background_opacity">ウィジェット背景の透明度</string>
+    <string name="widget_background_opacity_subtitle">背景だけの透明度を調整します。アルバムアート、文字、操作ボタンには影響しません。</string>
     <string name="download_quality">ダウンロード品質</string>
     <string name="download_wifi_only">Wi-Fi接続時のみダウンロード</string>
     <string name="spatial_audio">空間オーディオ</string>
