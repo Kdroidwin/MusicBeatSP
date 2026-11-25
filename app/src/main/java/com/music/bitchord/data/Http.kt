@@ -364,6 +364,22 @@ object Http {
         .build()
 
     /**
+     * Transport for a module's final audio URL. Keep module-controlled
+     * redirects on public DNS and out of the credential-bearing playback
+     * client; the network interceptor runs for each redirect exchange.
+     */
+    val moduleStreamClient: OkHttpClient by lazy(LazyThreadSafetyMode.SYNCHRONIZED) {
+        untrustedClient.newBuilder()
+            .addNetworkInterceptor { chain ->
+                if (!chain.request().url.isHttps) {
+                    throw IOException("Module streams must use HTTPS")
+                }
+                chain.proceed(chain.request())
+            }
+            .build()
+    }
+
+    /**
      * HTTP transport for lyrics providers and user-enabled lyrics extensions.
      *
      * This is deliberately a fresh client rather than `client.newBuilder()`.

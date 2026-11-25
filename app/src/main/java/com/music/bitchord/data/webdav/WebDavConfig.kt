@@ -89,6 +89,12 @@ object WebDavConfig {
     }
 }
 
+/** Official pCloud WebDAV endpoints; region is selected by the account's data center. */
+enum class PCloudRegion(val webDavUrl: String) {
+    US("https://webdav.pcloud.com"),
+    EU("https://ewebdav.pcloud.com"),
+}
+
 /** Publishes the saved server's credentials to the shared HTTP client. */
 fun WebDavAuth.update(url: String, username: String, password: String) =
     update(WebDavConfig.hostOf(url), WebDavConfig.basicAuthHeader(username, password))

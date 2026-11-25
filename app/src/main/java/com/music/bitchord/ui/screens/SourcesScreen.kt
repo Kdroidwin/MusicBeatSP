@@ -56,6 +56,7 @@ import com.music.bitchord.R
 import com.music.bitchord.data.settings.AppSettings
 import com.music.bitchord.data.smb.SmbRepository
 import com.music.bitchord.data.webdav.WebDavRepository
+import com.music.bitchord.data.webdav.PCloudRegion
 import com.music.bitchord.data.sources.AddonSource
 import com.music.bitchord.data.sources.SourceConfig
 import com.music.bitchord.data.sources.SourceHealth
@@ -99,6 +100,7 @@ fun SourcesScreen(
      * this subtree.
      */
     onEditWebDav: () -> Unit,
+    onEditPCloud: (PCloudRegion) -> Unit,
     /** As [onEditWebDav], for the SMB share editor. */
     onEditSmb: () -> Unit,
     modifier: Modifier = Modifier,
@@ -246,6 +248,25 @@ fun SourcesScreen(
             },
             onDisconnect = { AppSettings.clearWebDav() },
         )
+
+        SettingsGroup(
+            header = stringResource(R.string.pcloud),
+            footer = stringResource(R.string.pcloud_description),
+        ) {
+            SettingsRow(
+                icon = Icons.Rounded.Cloud,
+                title = stringResource(R.string.pcloud_us),
+                subtitle = PCloudRegion.US.webDavUrl,
+                onClick = { onEditPCloud(PCloudRegion.US) },
+            )
+            RowDivider()
+            SettingsRow(
+                icon = Icons.Rounded.Cloud,
+                title = stringResource(R.string.pcloud_eu),
+                subtitle = PCloudRegion.EU.webDavUrl,
+                onClick = { onEditPCloud(PCloudRegion.EU) },
+            )
+        }
 
         // A personal library on a file share, filed next to the WebDAV one
         // for the same reason: it holds the listener's own files instead of

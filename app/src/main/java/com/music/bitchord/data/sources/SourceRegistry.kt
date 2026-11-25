@@ -75,8 +75,10 @@ object SourceRegistry {
 
     private const val TAG = "BitChord"
     private const val KEY_MODULE_SCRIPT_PIN_PREFIX = "module_script_pin_"
+    private const val KEY_MODULE_SIGNER_PIN_PREFIX = "module_signer_pin_"
 
     private var prefs: SharedPreferences? = null
+    private val moduleScriptPinLock = Any()
 
     private val json = Json { ignoreUnknownKeys = true; encodeDefaults = true }
 
@@ -328,19 +330,36 @@ object SourceRegistry {
         moduleId: String,
         actualSha256: String,
         declaredSha256: String?,
+        signerFingerprint: String? = null,
     ): Boolean {
         if (!sourceId.matches(Regex("[A-Za-z0-9_-]{1,128}")) || moduleId.isBlank() || moduleId.length > 256) return false
         if (!actualSha256.matches(Regex("[0-9a-f]{64}"))) return false
         val declared = declaredSha256?.trim()?.lowercase(Locale.ROOT)
         if (declared != null && (!declared.matches(Regex("[0-9a-f]{64}")) || declared != actualSha256)) return false
-        val store = prefs ?: return false
-        val moduleKey = java.security.MessageDigest.getInstance("SHA-256")
-            .digest(moduleId.toByteArray(Charsets.UTF_8))
-            .joinToString("") { "%02x".format(Locale.ROOT, it) }
-        val key = "$KEY_MODULE_SCRIPT_PIN_PREFIX${sourceId}_$moduleKey"
-        val pinned = store.getString(key, null)
-        if (pinned != null) return pinned == actualSha256
-        return store.edit().putString(key, actualSha256).commit()
+        return synchronized(moduleScriptPinLock) {
+            val store = prefs ?: return@synchronized false
+            val moduleKey = java.security.MessageDigest.getInstance("SHA-256")
+                .digest(moduleId.toByteArray(Charsets.UTF_8))
+                .joinToString("") { "%02x".format(Locale.ROOT, it) }
+            val key = "$KEY_MODULE_SCRIPT_PIN_PREFIX${sourceId}_$moduleKey"
+            val pinned = store.getString(key, null)
+            if (pinned != null && pinned != actualSha256) return@synchronized false
+
+            val signerKey = "$KEY_MODULE_SIGNER_PIN_PREFIX${sourceId}_$moduleKey"
+            val pinnedSigner = store.getString(signerKey, null)
+            // A module that has established a signing key cannot silently fall
+            // back to an unsigned script or rotate to a different key.
+            if (pinnedSigner != null && pinnedSigner != signerFingerprint) return@synchronized false
+            if (signerFingerprint != null && !signerFingerprint.matches(Regex("[0-9a-f]{64}"))) {
+                return@synchronized false
+            }
+
+            if (pinned != null && (signerFingerprint == null || pinnedSigner == signerFingerprint)) return@synchronized true
+            val edit = store.edit()
+            if (pinned == null) edit.putString(key, actualSha256)
+            if (signerFingerprint != null && pinnedSigner == null) edit.putString(signerKey, signerFingerprint)
+            edit.commit()
+        }
     }
 
     /**
@@ -426,10 +445,15 @@ object SourceRegistry {
     }
 
     private fun clearModuleScriptPins(sourceId: String) {
-        val store = prefs ?: return
-        val prefix = "$KEY_MODULE_SCRIPT_PIN_PREFIX${sourceId}_"
-        val keys = store.all.keys.filter { it.startsWith(prefix) }
-        if (keys.isNotEmpty()) store.edit().apply { keys.forEach { remove(it) } }.commit()
+        synchronized(moduleScriptPinLock) {
+            val store = prefs ?: return
+            val prefixes = listOf(
+                "$KEY_MODULE_SCRIPT_PIN_PREFIX${sourceId}_",
+                "$KEY_MODULE_SIGNER_PIN_PREFIX${sourceId}_",
+            )
+            val keys = store.all.keys.filter { key -> prefixes.any(key::startsWith) }
+            if (keys.isNotEmpty()) store.edit().apply { keys.forEach { remove(it) } }.commit()
+        }
     }
 
     private fun migrateLegacyPlainSources(context: Context, encrypted: SharedPreferences) {

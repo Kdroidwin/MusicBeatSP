@@ -89,6 +89,8 @@ data class SourceStream(
      * against the runtime being played.
      */
     val durationSec: Int? = null,
+    /** Route module-provided streams through public-Internet-only DNS and a client without app credentials. */
+    val publicInternetOnly: Boolean = false,
 )
 
 /**

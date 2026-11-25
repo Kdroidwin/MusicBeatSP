@@ -1457,6 +1457,11 @@
     <string name="quick_search_artist_names">アーティスト名を検索</string>
     <string name="quick_search_album_artist_names">アルバムアーティスト名を検索</string>
     <string name="quick_search_playlist_names">プレイリスト名を検索</string>
+    <string name="quick_search_composer_names">作曲者名を検索</string>
+    <string name="quick_search_years">年を検索</string>
+    <string name="quick_search_record_labels">レコード・レーベル名を検索</string>
+    <string name="local_metadata_loading">音源のタグを読み込み中…（%1$d件）</string>
+    <string name="local_metadata_empty">音源ファイルに一致するタグがありません。</string>
     <string name="hide_seek_button_labels">シーク秒数ラベルを隠す</string>
     <string name="hide_seek_button_labels_subtitle">シークボタンの下に表示される秒数を隠します</string>
     <string name="seek_buttons_off">オフ</string>
@@ -1846,6 +1851,10 @@
 <string name="webdav_not_configured">「ソース」でサーバーを接続してください</string>
 <string name="webdav_subtitle">サーバー上の音楽</string>
 <string name="webdav_test_failed">接続できません: %1$s</string>
+<string name="pcloud">pCloud</string>
+<string name="pcloud_description">pCloud公式のHTTPS WebDAV接続を使います。アカウントを保存している地域を選んでください。pCloudのメールアドレスとパスワードで接続し、認証情報はこの接続先に限定して保管します。</string>
+<string name="pcloud_us">米国データセンター</string>
+<string name="pcloud_eu">欧州データセンター</string>
 
     <!-- Wear OS companion -->
     <string name="wear_os_section">Wear OS 向け MusicBeatSP</string>

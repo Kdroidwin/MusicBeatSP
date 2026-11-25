@@ -1574,6 +1574,11 @@
     <string name="quick_search_artist_names">Search artist names</string>
     <string name="quick_search_album_artist_names">Search album artist names</string>
     <string name="quick_search_playlist_names">Search playlist names</string>
+    <string name="quick_search_composer_names">Search composer names</string>
+    <string name="quick_search_years">Search years</string>
+    <string name="quick_search_record_labels">Search record labels</string>
+    <string name="local_metadata_loading">Reading local tags… (%1$d)</string>
+    <string name="local_metadata_empty">No matching tags were found in your music files.</string>
     <string name="hide_seek_button_labels">Hide seek time labels</string>
     <string name="hide_seek_button_labels_subtitle">Hide the seconds text beneath the optional seek buttons</string>
     <string name="seek_buttons_off">Off</string>
@@ -1948,6 +1953,10 @@
 <string name="webdav_not_configured">Connect a server under Sources</string>
 <string name="webdav_subtitle">Music on your server</string>
 <string name="webdav_test_failed">Couldn’t reach it: %1$s</string>
+<string name="pcloud">pCloud</string>
+<string name="pcloud_description">Connect through pCloud’s official HTTPS WebDAV endpoint. Choose the region where your account is hosted; sign-in uses your pCloud email and password and credentials stay scoped to this server.</string>
+<string name="pcloud_us">United States data center</string>
+<string name="pcloud_eu">European data center</string>
 
     <!-- Wear OS companion -->
     <string name="wear_os_section">MusicBeatSP for Wear OS</string>

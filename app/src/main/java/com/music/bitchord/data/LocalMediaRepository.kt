@@ -240,6 +240,7 @@ object LocalMediaRepository {
             // projection would otherwise make the whole local scan fail.
             if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) add("album_artist")
             add(MediaStore.Audio.Media.ALBUM)
+            add(MediaStore.Audio.Media.YEAR)
             add(MediaStore.Audio.Media.TRACK)
             add(MediaStore.Audio.Media.ALBUM_ID)
             add(MediaStore.Audio.Media.DURATION)
@@ -332,6 +333,7 @@ object LocalMediaRepository {
                     val artistCol = cursor.getColumnIndexOrThrow(MediaStore.Audio.Media.ARTIST)
                     val albumArtistCol = cursor.getColumnIndex("album_artist")
                     val albumCol = cursor.getColumnIndexOrThrow(MediaStore.Audio.Media.ALBUM)
+                    val yearCol = cursor.getColumnIndex(MediaStore.Audio.Media.YEAR)
                     val trackCol = cursor.getColumnIndexOrThrow(MediaStore.Audio.Media.TRACK)
                     val albumIdCol = cursor.getColumnIndexOrThrow(MediaStore.Audio.Media.ALBUM_ID)
                     val durationCol = cursor.getColumnIndexOrThrow(MediaStore.Audio.Media.DURATION)
@@ -417,6 +419,8 @@ object LocalMediaRepository {
                             durationText = durationText,
                             albumName = albumName,
                             albumArtist = albumArtist,
+                            releaseYear = yearCol.takeIf { it >= 0 }
+                                ?.let { cursor.getInt(it).takeIf { year -> year in 1000..9999 } },
                             trackNumber = cursor.getInt(trackCol).takeIf { it > 0 },
                             localUri = contentUri,
                             localPath = path,

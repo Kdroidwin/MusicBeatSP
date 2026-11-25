@@ -239,7 +239,7 @@ enum class BluetoothButtonAction {
 }
 
 /** Destinations within the device-local music library. */
-enum class LocalLibraryTab { SONGS, ALBUMS, ARTISTS, FOLDERS, PLAYLISTS, ALBUM_ARTISTS, GENRES }
+enum class LocalLibraryTab { SONGS, ALBUMS, ARTISTS, FOLDERS, PLAYLISTS, ALBUM_ARTISTS, GENRES, COMPOSERS, YEARS, RECORD_LABELS }
 
 /** Filter destinations shown in the Library header, independent of the always-visible All destination. */
 enum class LibraryCategory { FAVORITES, PLAYLISTS, YOUTUBE_MUSIC, ARTISTS, YOUTUBE_DOWNLOADS, MOST_PLAYED, RECENTLY_PLAYED, REPLAY }
@@ -438,6 +438,17 @@ enum class MainNavigationTab(val index: Int) {
     HOME(8),
     GENRES(9),
     SERVICES(10),
+    COMPOSERS(11),
+    YEARS(12),
+    RECORD_LABELS(13),
+}
+
+private fun MainNavigationTab.localLibraryTabOrNull(): LocalLibraryTab? = when (this) {
+    MainNavigationTab.ALBUM_ARTISTS -> LocalLibraryTab.ALBUM_ARTISTS
+    MainNavigationTab.COMPOSERS -> LocalLibraryTab.COMPOSERS
+    MainNavigationTab.YEARS -> LocalLibraryTab.YEARS
+    MainNavigationTab.RECORD_LABELS -> LocalLibraryTab.RECORD_LABELS
+    else -> null
 }
 
 enum class ScreenOrientationMode { SYSTEM, PORTRAIT, LANDSCAPE }
@@ -507,7 +518,14 @@ val DEFAULT_PLAYER_DETAILS_ACTION_ORDER = listOf(
 object MainNavigationTabs {
     /** Keep Home opt-in, matching its existing navigation setting. */
     fun defaultVisibleTabs(): Set<MainNavigationTab> =
-        MainNavigationTab.entries.toSet() - setOf(MainNavigationTab.HOME, MainNavigationTab.GENRES, MainNavigationTab.SERVICES)
+        MainNavigationTab.entries.toSet() - setOf(
+            MainNavigationTab.HOME,
+            MainNavigationTab.GENRES,
+            MainNavigationTab.SERVICES,
+            MainNavigationTab.COMPOSERS,
+            MainNavigationTab.YEARS,
+            MainNavigationTab.RECORD_LABELS,
+        )
 
     fun normalizeOrder(order: List<MainNavigationTab>): List<MainNavigationTab> {
         val saved = order.filterNot { it == MainNavigationTab.SERVICES }.distinct()
@@ -3716,8 +3734,8 @@ object AppSettings {
         // External-service setup is a contextual dialog, not a permanent
         // destination in the main navigation.
         if (tab == MainNavigationTab.SERVICES) return
-        if (tab == MainNavigationTab.ALBUM_ARTISTS) {
-            setLocalLibraryTabVisible(LocalLibraryTab.ALBUM_ARTISTS, visible)
+        tab.localLibraryTabOrNull()?.let { localTab ->
+            setLocalLibraryTabVisible(localTab, visible)
             return
         }
         val current = visibleMainNavigationTabs.value
@@ -3733,12 +3751,13 @@ object AppSettings {
         ))
     }
 
-    fun effectiveMainNavigationTabs(): Set<MainNavigationTab> =
-        if (LocalLibraryTab.ALBUM_ARTISTS in visibleLocalLibraryTabs.value) {
-            (visibleMainNavigationTabs.value - MainNavigationTab.SERVICES) + MainNavigationTab.ALBUM_ARTISTS
-        } else {
-            visibleMainNavigationTabs.value - MainNavigationTab.ALBUM_ARTISTS - MainNavigationTab.SERVICES
-        }
+    fun effectiveMainNavigationTabs(): Set<MainNavigationTab> {
+        val localLinkedTabs = MainNavigationTab.entries.mapNotNull { tab ->
+            tab.localLibraryTabOrNull()?.takeIf { it in visibleLocalLibraryTabs.value }?.let { tab }
+        }.toSet()
+        val localLinkedMainTabs = MainNavigationTab.entries.filter { it.localLibraryTabOrNull() != null }.toSet()
+        return (visibleMainNavigationTabs.value - MainNavigationTab.SERVICES - localLinkedMainTabs) + localLinkedTabs
+    }
 
     fun moveMainNavigationTab(tab: MainNavigationTab, offset: Int) {
         val updated = MainNavigationTabs.move(mainNavigationTabOrder.value, tab, offset)
@@ -3784,7 +3803,10 @@ object AppSettings {
             ?.mapNotNull { name -> LocalLibraryTab.entries.firstOrNull { it.name == name } }
             ?.toSet()
         return stored?.takeIf { it.isNotEmpty() }
-            ?: LocalLibraryTab.entries.filterNot { it == LocalLibraryTab.GENRES }.toSet()
+            ?: LocalLibraryTab.entries.filterNot {
+                it == LocalLibraryTab.GENRES || it == LocalLibraryTab.COMPOSERS ||
+                    it == LocalLibraryTab.YEARS || it == LocalLibraryTab.RECORD_LABELS
+            }.toSet()
     }
 
     private fun readLocalLibraryTabOrder(): List<LocalLibraryTab> {
@@ -5316,7 +5338,8 @@ object AppSettings {
         if (updated == current) return
         visibleLocalLibraryTabs.value = updated
         prefs.edit().putStringSet(KEY_VISIBLE_LOCAL_LIBRARY_TABS, updated.map { it.name }.toSet()).apply()
-        if (tab == LocalLibraryTab.ALBUM_ARTISTS && !visible && startupTab.value == MainNavigationTab.ALBUM_ARTISTS) {
+        val mainTab = MainNavigationTab.entries.firstOrNull { it.localLibraryTabOrNull() == tab }
+        if (!visible && mainTab != null && startupTab.value == mainTab) {
             setStartupTab(MainNavigationTabs.fallback(
                 startupTab.value.index,
                 effectiveMainNavigationTabs(),

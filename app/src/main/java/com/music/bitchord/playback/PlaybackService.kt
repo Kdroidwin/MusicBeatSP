@@ -1571,9 +1571,14 @@ class PlaybackService : MediaLibraryService() {
                     withTimeout(RESOLVE_TIMEOUT_MS) { SourceResolver.resolve(dataSpec.uri) }
                 } ?: throw java.io.IOException("No enabled source could serve ${dataSpec.uri.getQueryParameter("n")}")
                 NerdStats.onSourceStream(dataSpec.uri.getQueryParameter("t"), stream.format)
+                val streamHeaders = stream.headers.toMutableMap().apply {
+                    if (stream.publicInternetOnly) {
+                        put(MODULE_STREAM_POLICY_HEADER, "public-internet-only")
+                    }
+                }
                 return@Resolver dataSpec.buildUpon()
                     .setUri(Uri.parse(stream.url))
-                    .setHttpRequestHeaders(stream.headers)
+                    .setHttpRequestHeaders(streamHeaders)
                     .build()
             }
             val videoId = dataSpec.uri.getQueryParameter("v")
@@ -1732,7 +1737,13 @@ class PlaybackService : MediaLibraryService() {
             // Innermost, so it chunks the real googlevideo URL the resolver
             // above has already substituted in — see [ChunkedDataSource] for
             // why an open-ended read of one is worth avoiding.
-            ChunkedDataSource.Factory(OkHttpDataSource.Factory(Http.client), STREAM_CHUNK_BYTES),
+            ChunkedDataSource.Factory(
+                PolicyRoutingDataSource.Factory(
+                    normalFactory = OkHttpDataSource.Factory(Http.client),
+                    moduleFactory = OkHttpDataSource.Factory(Http.moduleStreamClient),
+                ),
+                STREAM_CHUNK_BYTES,
+            ),
         ) { dataSpec ->
             // Wrapped rather than folded into the resolver above so the record
             // is made in one place for every branch of it, and made from what

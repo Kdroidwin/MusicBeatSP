@@ -2655,6 +2655,7 @@ class MainViewModel(app: Application) : AndroidViewModel(app) {
         thumbnailUrl: String? = null,
         type: BrowseType = BrowseType.OTHER,
         artistIdentityId: String? = null,
+        fallbackArtistName: String? = null,
     ) {
         val resolved = browseTypeOf(browseId, type)
         val cachedLocal = (_localSongs.value as? UiState.Success)?.data
@@ -2812,7 +2813,10 @@ class MainViewModel(app: Application) : AndroidViewModel(app) {
                     val browseResult = if (resolved == BrowseType.PROFILE) {
                         YtMusicRepository.profileSongs(browseId, title)
                     } else {
-                        YtMusicRepository.browseSongs(browseId)
+                        YtMusicRepository.browseSongs(
+                            browseId = browseId,
+                            fallbackArtist = fallbackArtistName,
+                        )
                     }
                     browseResult.fold(
                         onSuccess = { page ->

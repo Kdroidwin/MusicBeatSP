@@ -51,6 +51,7 @@ import androidx.compose.material.icons.rounded.BlurOn
 import androidx.compose.material.icons.rounded.Brightness4
 import androidx.compose.material.icons.rounded.Bedtime
 import androidx.compose.material.icons.rounded.Cast
+import androidx.compose.material.icons.rounded.CalendarToday
 import androidx.compose.material.icons.rounded.Check
 import androidx.compose.material.icons.rounded.CheckCircle
 import androidx.compose.material.icons.rounded.Circle
@@ -937,6 +938,14 @@ private fun libraryCategorySettingsSearchEntries(
     return listOf(historyArtwork) + categoryVisibility
 }
 
+private fun MainNavigationTab.localLibraryTabForSettings(): LocalLibraryTab? = when (this) {
+    MainNavigationTab.ALBUM_ARTISTS -> LocalLibraryTab.ALBUM_ARTISTS
+    MainNavigationTab.COMPOSERS -> LocalLibraryTab.COMPOSERS
+    MainNavigationTab.YEARS -> LocalLibraryTab.YEARS
+    MainNavigationTab.RECORD_LABELS -> LocalLibraryTab.RECORD_LABELS
+    else -> null
+}
+
 @Composable
 private fun navigationTabSettingsSearchEntries(
     mainTabOrder: List<MainNavigationTab>,
@@ -957,18 +966,17 @@ private fun navigationTabSettingsSearchEntries(
             MainNavigationTab.HOME -> R.string.listen_now
             MainNavigationTab.GENRES -> R.string.genres
             MainNavigationTab.SERVICES -> R.string.services
+            MainNavigationTab.COMPOSERS -> R.string.details_composer
+            MainNavigationTab.YEARS -> R.string.details_year
+            MainNavigationTab.RECORD_LABELS -> R.string.details_publisher
         })
         SettingsSearchEntry(
             title = stringResource(R.string.show_tab_setting, tabTitle),
             subtitle = stringResource(R.string.show_tab_setting_subtitle, tabTitle),
             keywords = listOf("tab", "order", "sort", "move", "タブ", "順番", "並び替え", tabTitle),
-            checked = if (tab == MainNavigationTab.ALBUM_ARTISTS) {
-                LocalLibraryTab.ALBUM_ARTISTS in localTabs
-            } else tab in visibleMainTabs,
+            checked = tab.localLibraryTabForSettings()?.let { it in localTabs } ?: (tab in visibleMainTabs),
         ) {
-            val visible = if (tab == MainNavigationTab.ALBUM_ARTISTS) {
-                LocalLibraryTab.ALBUM_ARTISTS in localTabs
-            } else tab in visibleMainTabs
+            val visible = tab.localLibraryTabForSettings()?.let { it in localTabs } ?: (tab in visibleMainTabs)
             AppSettings.setMainNavigationTabVisible(tab, !visible)
         }.apply {
             reorder = SettingsSearchReorder(
@@ -988,6 +996,9 @@ private fun navigationTabSettingsSearchEntries(
             LocalLibraryTab.PLAYLISTS -> R.string.playlists
             LocalLibraryTab.ALBUM_ARTISTS -> R.string.album_artists
             LocalLibraryTab.GENRES -> R.string.genres
+            LocalLibraryTab.COMPOSERS -> R.string.details_composer
+            LocalLibraryTab.YEARS -> R.string.details_year
+            LocalLibraryTab.RECORD_LABELS -> R.string.details_publisher
         })
         SettingsSearchEntry(
             title = stringResource(R.string.show_tab_setting, tabTitle),
@@ -8108,6 +8119,9 @@ fun SettingsScreen(
                 MainNavigationTab.HOME -> R.string.listen_now
                 MainNavigationTab.GENRES -> R.string.genres
                 MainNavigationTab.SERVICES -> R.string.services
+                MainNavigationTab.COMPOSERS -> R.string.details_composer
+                MainNavigationTab.YEARS -> R.string.details_year
+                MainNavigationTab.RECORD_LABELS -> R.string.details_publisher
             })
             SettingsRow(
                 icon = Icons.Rounded.MusicNote,
@@ -8131,6 +8145,9 @@ fun SettingsScreen(
                     MainNavigationTab.HOME -> R.string.listen_now
                     MainNavigationTab.GENRES -> R.string.genres
                     MainNavigationTab.SERVICES -> R.string.services
+                    MainNavigationTab.COMPOSERS -> R.string.details_composer
+                    MainNavigationTab.YEARS -> R.string.details_year
+                    MainNavigationTab.RECORD_LABELS -> R.string.details_publisher
                 }
                 val icon = when (tab) {
                     MainNavigationTab.SONGS -> Icons.Rounded.MusicNote
@@ -8144,12 +8161,15 @@ fun SettingsScreen(
                     MainNavigationTab.HOME -> Icons.Rounded.Home
                     MainNavigationTab.GENRES -> Icons.Rounded.LocalOffer
                     MainNavigationTab.SERVICES -> Icons.Rounded.Headphones
+                    MainNavigationTab.COMPOSERS -> Icons.Rounded.MusicNote
+                    MainNavigationTab.YEARS -> Icons.Rounded.CalendarToday
+                    MainNavigationTab.RECORD_LABELS -> Icons.Rounded.LocalOffer
                 }
-                val checked = if (tab == MainNavigationTab.ALBUM_ARTISTS) {
-                    com.music.bitchord.data.settings.LocalLibraryTab.ALBUM_ARTISTS in localTabs
-                } else tab in visibleMainTabs
+                val checked = tab.localLibraryTabForSettings()?.let { it in localTabs } ?: (tab in visibleMainTabs)
                 val visibleMainCount = visibleMainTabs.size + if (
-                    com.music.bitchord.data.settings.LocalLibraryTab.ALBUM_ARTISTS in localTabs
+                    MainNavigationTab.entries.any { mainTab ->
+                        mainTab.localLibraryTabForSettings()?.let { it in localTabs } == true
+                    }
                 ) 1 else 0
                 SettingsRow(
                     icon = icon,
@@ -9404,10 +9424,7 @@ fun SettingsScreen(
                 text = {
                     Column {
                         mainTabOrder.filterNot { it == MainNavigationTab.SERVICES }.filter {
-                            it in visibleMainTabs || (
-                                it == MainNavigationTab.ALBUM_ARTISTS &&
-                                    com.music.bitchord.data.settings.LocalLibraryTab.ALBUM_ARTISTS in localTabs
-                            )
+                            it in visibleMainTabs || it.localLibraryTabForSettings()?.let { localTab -> localTab in localTabs } == true
                         }.forEach { tab ->
                             val label = when (tab) {
                                 MainNavigationTab.SONGS -> stringResource(R.string.songs)
@@ -9421,6 +9438,9 @@ fun SettingsScreen(
                                 MainNavigationTab.HOME -> stringResource(R.string.listen_now)
                                 MainNavigationTab.GENRES -> stringResource(R.string.genres)
                                 MainNavigationTab.SERVICES -> stringResource(R.string.services)
+                                MainNavigationTab.COMPOSERS -> stringResource(R.string.details_composer)
+                                MainNavigationTab.YEARS -> stringResource(R.string.details_year)
+                                MainNavigationTab.RECORD_LABELS -> stringResource(R.string.details_publisher)
                             }
                             Row(
                                 modifier = Modifier
@@ -10510,6 +10530,9 @@ SettingsGroup(header = stringResource(R.string.local_music)) {
             LocalLibraryTab.PLAYLISTS -> R.string.playlists
             LocalLibraryTab.ALBUM_ARTISTS -> R.string.album_artists
             LocalLibraryTab.GENRES -> R.string.genres
+            LocalLibraryTab.COMPOSERS -> R.string.details_composer
+            LocalLibraryTab.YEARS -> R.string.details_year
+            LocalLibraryTab.RECORD_LABELS -> R.string.details_publisher
         }
         val tabIcon = when (tab) {
             LocalLibraryTab.SONGS -> Icons.Rounded.MusicNote
@@ -10519,6 +10542,9 @@ SettingsGroup(header = stringResource(R.string.local_music)) {
             LocalLibraryTab.FOLDERS -> Icons.Rounded.Folder
             LocalLibraryTab.PLAYLISTS -> Icons.Rounded.PlaylistPlay
             LocalLibraryTab.GENRES -> Icons.Rounded.LocalOffer
+            LocalLibraryTab.COMPOSERS -> Icons.Rounded.MusicNote
+            LocalLibraryTab.YEARS -> Icons.Rounded.CalendarToday
+            LocalLibraryTab.RECORD_LABELS -> Icons.Rounded.LocalOffer
         }
         val visible = tab in localTabs
         SettingsRow(

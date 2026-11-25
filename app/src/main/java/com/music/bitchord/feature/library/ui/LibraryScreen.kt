@@ -40,11 +40,15 @@ import androidx.compose.foundation.lazy.items
 import androidx.compose.ui.draw.clip
 import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.foundation.lazy.grid.rememberLazyGridState
+import androidx.compose.foundation.lazy.grid.GridCells
+import androidx.compose.foundation.lazy.grid.LazyVerticalGrid
+import androidx.compose.foundation.lazy.grid.items as gridItems
 import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.foundation.gestures.detectHorizontalDragGestures
 import androidx.compose.foundation.layout.heightIn
+import androidx.compose.foundation.layout.aspectRatio
 import androidx.compose.material3.Text
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.AlertDialog
@@ -788,7 +792,8 @@ fun LibraryScreen(
             return@LaunchedEffect
         }
         val rootListScrollFlow = when {
-            selectedFilter == LibraryFilter.YOUTUBE_MUSIC || selectedFilter == LibraryFilter.ARTISTS -> snapshotFlow {
+            selectedFilter == LibraryFilter.YOUTUBE_MUSIC ||
+                (selectedFilter == LibraryFilter.ARTISTS && libraryViewType == LibraryViewType.LIST) -> snapshotFlow {
                 youtubeCollectionsListState.firstVisibleItemIndex > 0 ||
                     youtubeCollectionsListState.firstVisibleItemScrollOffset > rootListScrollThresholdPx
             }
@@ -809,7 +814,8 @@ fun LibraryScreen(
             return@LaunchedEffect
         }
         val rootScrollOffsetFlow = when {
-            selectedFilter == LibraryFilter.YOUTUBE_MUSIC || selectedFilter == LibraryFilter.ARTISTS -> snapshotFlow {
+            selectedFilter == LibraryFilter.YOUTUBE_MUSIC ||
+                (selectedFilter == LibraryFilter.ARTISTS && libraryViewType == LibraryViewType.LIST) -> snapshotFlow {
                 if (youtubeCollectionsListState.firstVisibleItemIndex > 0) Float.POSITIVE_INFINITY
                 else youtubeCollectionsListState.firstVisibleItemScrollOffset.toFloat()
             }
@@ -1277,9 +1283,17 @@ fun LibraryScreen(
             transitionSpec = {
                 val enteringOrLeavingHistory =
                     targetState.startsWith("history:") || initialState.startsWith("history:")
+                val enteringArtists = targetState == "library:artists" && initialState != "library:artists"
+                val leavingArtists = initialState == "library:artists" && targetState != "library:artists"
                 when {
                     directPlaylistOpen -> EnterTransition.None togetherWith ExitTransition.None
                     enteringOrLeavingHistory -> EnterTransition.None togetherWith ExitTransition.None
+                    enteringArtists ->
+                        (slideInHorizontally { it } + fadeIn()) togetherWith
+                            (slideOutHorizontally { -it / 3 } + fadeOut())
+                    leavingArtists ->
+                        (slideInHorizontally { -it / 3 } + fadeIn()) togetherWith
+                            (slideOutHorizontally { it } + fadeOut())
                     targetState.startsWith("drill:") ->
                         (slideInHorizontally { it } + fadeIn()) togetherWith
                             (slideOutHorizontally { -it / 3 } + fadeOut())
@@ -1541,6 +1555,29 @@ fun LibraryScreen(
                                 color = MaterialTheme.colorScheme.onSurfaceVariant,
                             )
                         }
+                    } else if (showingSavedArtists && libraryViewType == LibraryViewType.GRID) {
+                        LazyVerticalGrid(
+                            columns = GridCells.Adaptive(minSize = 144.dp),
+                            state = collectionGridState,
+                            modifier = Modifier.fillMaxSize(),
+                            contentPadding = PaddingValues(
+                                start = 16.dp,
+                                end = 16.dp,
+                                top = 8.dp,
+                                bottom = contentPadding.calculateBottomPadding() + 80.dp,
+                            ),
+                            verticalArrangement = Arrangement.spacedBy(10.dp),
+                            horizontalArrangement = Arrangement.spacedBy(10.dp),
+                        ) {
+                            gridItems(collectionsForFilter, key = { it.browseId }) { collection ->
+                                SavedArtistGridCard(
+                                    collection = collection,
+                                    onOpen = { onOpenYoutubeCollection(collection) },
+                                    onRename = { youtubeCollectionToRename = collection },
+                                    onRemove = { AppSettings.removeSavedYoutubeCollection(collection.browseId) },
+                                )
+                            }
+                        }
                     } else {
                         LazyColumn(
                             state = youtubeCollectionsListState,
@@ -1560,6 +1597,7 @@ fun LibraryScreen(
                                         .clip(RoundedCornerShape(14.dp))
                                         .clickable { onOpenYoutubeCollection(collection) },
                                     color = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.32f),
+                                    contentColor = MaterialTheme.colorScheme.onSurface,
                                     shape = RoundedCornerShape(14.dp),
                                 ) {
                                     Row(
@@ -1592,6 +1630,7 @@ fun LibraryScreen(
                                                 Text(
                                                     text = collection.title,
                                                     style = MaterialTheme.typography.titleMedium,
+                                                    color = MaterialTheme.colorScheme.onSurface,
                                                     maxLines = 1,
                                                     overflow = androidx.compose.ui.text.style.TextOverflow.Ellipsis,
                                                 )
@@ -2205,5 +2244,85 @@ fun LibraryScreen(
                 }
             },
         )
+    }
+}
+
+@Composable
+private fun SavedArtistGridCard(
+    collection: SavedYoutubeCollection,
+    onOpen: () -> Unit,
+    onRename: () -> Unit,
+    onRemove: () -> Unit,
+) {
+    val onSurface = MaterialTheme.colorScheme.onSurface
+    Surface(
+        modifier = Modifier
+            .fillMaxWidth()
+            .clip(RoundedCornerShape(14.dp))
+            .clickable(onClick = onOpen),
+        color = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.32f),
+        contentColor = onSurface,
+        shape = RoundedCornerShape(14.dp),
+    ) {
+        Column(modifier = Modifier.fillMaxWidth().padding(10.dp)) {
+            Box(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .aspectRatio(1f)
+                    .clip(RoundedCornerShape(10.dp)),
+                contentAlignment = Alignment.Center,
+            ) {
+                if (!collection.thumbnailUrl.isNullOrBlank()) {
+                    AsyncImage(
+                        model = collection.thumbnailUrl,
+                        contentDescription = null,
+                        contentScale = ContentScale.Crop,
+                        modifier = Modifier.fillMaxSize(),
+                    )
+                } else {
+                    Icon(
+                        imageVector = Icons.Rounded.Person,
+                        contentDescription = null,
+                        tint = MaterialTheme.colorScheme.primary,
+                        modifier = Modifier.size(56.dp),
+                    )
+                }
+            }
+            Text(
+                text = collection.title,
+                style = MaterialTheme.typography.titleSmall,
+                color = onSurface,
+                maxLines = 2,
+                overflow = androidx.compose.ui.text.style.TextOverflow.Ellipsis,
+                modifier = Modifier.padding(top = 8.dp),
+            )
+            Text(
+                text = collection.subtitle.ifBlank { stringResource(R.string.artist) },
+                style = MaterialTheme.typography.bodySmall,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                maxLines = 1,
+                overflow = androidx.compose.ui.text.style.TextOverflow.Ellipsis,
+            )
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.End,
+                verticalAlignment = Alignment.CenterVertically,
+            ) {
+                IconButton(onClick = onRename) {
+                    Icon(
+                        imageVector = Icons.Rounded.Edit,
+                        contentDescription = stringResource(R.string.rename_playlist),
+                        tint = MaterialTheme.colorScheme.onSurfaceVariant,
+                    )
+                }
+                IconButton(onClick = onRemove) {
+                    Icon(
+                        imageVector = Icons.Rounded.Close,
+                        contentDescription = stringResource(R.string.remove_saved_youtube_collection),
+                        tint = MaterialTheme.colorScheme.onSurfaceVariant,
+                    )
+                }
+            }
+        }
     }
 }

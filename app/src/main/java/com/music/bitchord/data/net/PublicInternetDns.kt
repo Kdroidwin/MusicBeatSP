@@ -32,6 +32,7 @@ object PublicInternetDns : Dns {
                     a == 192 && b == 168 -> true
                     a == 192 && b == 0 && bytes[2] == 0 -> true
                     a == 192 && b == 0 && bytes[2] == 2 -> true
+                    a == 192 && b == 88 && bytes[2] == 99 -> true // Deprecated 6to4 relay anycast.
                     a == 198 && b in 18..19 -> true
                     a == 198 && b == 51 && bytes[2] == 100 -> true
                     a == 203 && b == 0 && bytes[2] == 113 -> true
@@ -41,8 +42,20 @@ object PublicInternetDns : Dns {
             is Inet6Address -> {
                 val first = bytes[0]
                 val second = bytes[1]
-                (first and 0xfe) == 0xfc || first == 0xfe && (second and 0xc0) == 0x80 ||
-                    first == 0xff || bytes.take(4) == listOf(0x20, 0x01, 0x0d, 0xb8)
+                val ipv4Mapped = bytes.take(10).all { it == 0 } && bytes[10] == 0xff && bytes[11] == 0xff
+                val mappedIpv4IsNonPublic = ipv4Mapped && isNonPublic(
+                    InetAddress.getByAddress(bytes.takeLast(4).map { it.toByte() }.toByteArray()),
+                )
+                // Only global-unicast space is eligible. This also rejects
+                // IPv6 transition, documentation, and other special ranges
+                // that are not covered by Android's site-local helpers.
+                val globalUnicast = first in 0x20..0x3f
+                !globalUnicast || mappedIpv4IsNonPublic ||
+                    (first and 0xfe) == 0xfc || first == 0xfe && (second and 0xc0) == 0x80 ||
+                    first == 0xff || bytes.take(4) == listOf(0x20, 0x01, 0x0d, 0xb8) ||
+                    (first == 0x3f && second == 0xff && (bytes[2] and 0xf0) == 0x00) ||
+                    (first == 0x20 && second == 0x02) || // 6to4 embeds an IPv4 destination.
+                    (first == 0x20 && second == 0x01 && bytes[2] == 0 && bytes[3] == 0) // Teredo.
             }
             else -> true
         }

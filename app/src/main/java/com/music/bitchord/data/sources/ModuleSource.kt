@@ -13,6 +13,8 @@ import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.coroutineScope
 import kotlinx.coroutines.joinAll
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.sync.Semaphore
+import kotlinx.coroutines.sync.withPermit
 import kotlinx.coroutines.withContext
 import kotlinx.coroutines.withTimeoutOrNull
 import okhttp3.HttpUrl.Companion.toHttpUrlOrNull
@@ -109,11 +111,16 @@ class ModuleSource(
             val perModule = coroutineScope {
                 val answers = arrayOfNulls<List<Song>>(modules.size)
                 val first = CompletableDeferred<Unit>()
+                // The index is capped at parse time, but only a small working
+                // set may initialize interpreters or make HTTP calls at once.
+                val moduleSearchSlots = Semaphore(MODULE_SEARCH_PARALLELISM)
                 val jobs = modules.mapIndexed { at, module ->
                     launch {
-                        val songs = searchOne(module, query, limit, baseUrl)
-                        answers[at] = songs
-                        if (songs.isNotEmpty()) first.complete(Unit)
+                        moduleSearchSlots.withPermit {
+                            val songs = searchOne(module, query, limit, baseUrl)
+                            answers[at] = songs
+                            if (songs.isNotEmpty()) first.complete(Unit)
+                        }
                     }
                 }
                 // Everyone gets until someone useful answers, and a short
@@ -280,7 +287,7 @@ class ModuleSource(
                 )
                 return@withContext null
             }
-            SourceStream(url = url, format = format)
+            SourceStream(url = url, format = format, publicInternetOnly = true)
         }
 
     /**
@@ -451,11 +458,11 @@ class ModuleSource(
          * parser, which is already on the classpath and is what threw.
          */
         fun malformed(url: String): Boolean {
-            // The gate the player itself will apply, asked here where refusing
-            // is free. Restricting modules to http(s) as a side effect is not
-            // unwelcome: a module cannot hand the player `file:///data/data/…`
-            // and have it read local storage on the module's behalf.
-            if (url.toHttpUrlOrNull() == null) return true
+            // Module-controlled streams never need app-local schemes, cleartext,
+            // or embedded credentials. DNS and every redirect are separately
+            // constrained by Http.moduleStreamClient at the actual fetch.
+            val parsed = url.toHttpUrlOrNull() ?: return true
+            if (!parsed.isHttps || parsed.username.isNotEmpty() || parsed.password.isNotEmpty()) return true
             // Parseable, and dead anyway.
             val schemeEnd = url.indexOf("://")
             if (schemeEnd < 0) return false
@@ -549,6 +556,7 @@ class ModuleSource(
          */
         const val SEARCH_BUDGET_MS = 8_000L
         const val SEARCH_GRACE_MS = 2_500L
+        const val MODULE_SEARCH_PARALLELISM = 4
 
         /**
          * The budget for the background pass, which runs while a track is

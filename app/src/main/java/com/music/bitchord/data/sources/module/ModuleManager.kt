@@ -19,6 +19,11 @@ import okhttp3.Request
 import java.io.ByteArrayOutputStream
 import java.io.IOException
 import java.nio.charset.StandardCharsets
+import java.security.MessageDigest
+import java.util.LinkedHashMap
+import java.util.Base64
+import org.bouncycastle.crypto.params.Ed25519PublicKeyParameters
+import org.bouncycastle.crypto.signers.Ed25519Signer
 
 /**
  * A module/index URL with its host hidden, for logging.
@@ -58,11 +63,13 @@ class ModuleManager(private val sourceConfigId: String) {
     /**
      * JS engines, keyed by module id. Delegates to [QuickJsExecutor]'s LRU pool.
      *
-     * Concurrent because [ModuleSource.search][com.music.bitchord.data.sources.ModuleSource.search]
-     * loads every module in an index at the same time, and a plain HashMap
-     * resizing under two of those at once corrupts quietly rather than loudly.
+     * Protected because bounded parallel search/load calls can read and update
+     * this cache at the same time; its small LRU working set also bounds the
+     * script text retained by this manager.
      */
-    private val loadedModules = java.util.concurrent.ConcurrentHashMap<String, LoadedModule>()
+    /** Retains only a bounded script working set; evicted scripts can be fetched again if needed. */
+    private val loadedModules = LinkedHashMap<String, LoadedModule>(16, 0.75f, true)
+    private val loadedModulesLock = Any()
     /** QuickJS has process-wide module IDs; include the owning source in every engine key. */
     private val executorModuleIds = java.util.concurrent.ConcurrentHashMap.newKeySet<String>()
 
@@ -203,7 +210,7 @@ class ModuleManager(private val sourceConfigId: String) {
         resolveBaseUrl: suspend (String) -> String,
     ): Result<LoadedModule> = withContext(Dispatchers.IO) {
         val executorId = executorId(module.id)
-        val cached = loadedModules[module.id]
+        val cached = synchronized(loadedModulesLock) { loadedModules[module.id] }
         if (cached != null) {
             if (QuickJsExecutor.isLoaded(executorId)) {
                 TrackLog.d(TAG, "▶ loadModule(${module.id}) — CACHE HIT")
@@ -216,7 +223,7 @@ class ModuleManager(private val sourceConfigId: String) {
                 executorModuleIds += executorId
                 return@withContext revived
             }
-            loadedModules.remove(module.id)
+            synchronized(loadedModulesLock) { loadedModules.remove(module.id) }
         }
 
         TrackLog.d(TAG, "▶ loadModule(${module.id})")
@@ -240,6 +247,7 @@ class ModuleManager(private val sourceConfigId: String) {
             val actualSha256 = java.security.MessageDigest.getInstance("SHA-256")
                 .digest(jsCode.toByteArray(StandardCharsets.UTF_8))
                 .joinToString("") { "%02x".format(it) }
+            val signerFingerprint = verifyModuleSignature(module, jsCode.toByteArray(StandardCharsets.UTF_8))
             val declaredHashes = listOfNotNull(module.sha256, module.scriptSha256)
                 .map { it.trim().lowercase(java.util.Locale.ROOT) }
                 .distinct()
@@ -248,6 +256,7 @@ class ModuleManager(private val sourceConfigId: String) {
                     module.id,
                     actualSha256,
                     declaredHashes.singleOrNull(),
+                    signerFingerprint,
                 )
             ) {
                 throw IOException("Module script changed or failed its integrity check; remove and re-add the source to trust it again")
@@ -258,7 +267,15 @@ class ModuleManager(private val sourceConfigId: String) {
             executorModuleIds += executorId
 
             val loaded = LoadedModule(module = module, jsCode = jsCode, baseUrl = baseUrl)
-            loadedModules[module.id] = loaded
+            synchronized(loadedModulesLock) {
+                loadedModules[module.id] = loaded
+                while (loadedModules.size > MAX_CACHED_MODULE_SCRIPTS) {
+                    val eldest = loadedModules.entries.iterator()
+                    if (!eldest.hasNext()) break
+                    eldest.next()
+                    eldest.remove()
+                }
+            }
             TrackLog.d(TAG, "  ✓ Loaded module ${module.id}: ${jsCode.length} chars, baseUrl=${redactModuleUrl(baseUrl)}")
             loaded
         }.onFailure {
@@ -430,7 +447,7 @@ class ModuleManager(private val sourceConfigId: String) {
     // ── Lifecycle ─────────────────────────────────────────────────────────
 
     fun unloadModule(moduleId: String) {
-        loadedModules.remove(moduleId)
+        synchronized(loadedModulesLock) { loadedModules.remove(moduleId) }
         val executorId = executorId(moduleId)
         executorModuleIds.remove(executorId)
         QuickJsExecutor.unload(executorId)
@@ -446,7 +463,7 @@ class ModuleManager(private val sourceConfigId: String) {
      * question about the old server with the new one selected.
      */
     fun unloadAll() {
-        loadedModules.clear()
+        synchronized(loadedModulesLock) { loadedModules.clear() }
         loads.clear()
         searches.clear()
         streams.clear()
@@ -462,6 +479,48 @@ class ModuleManager(private val sourceConfigId: String) {
             .digest(ownerAndModule.toByteArray(StandardCharsets.UTF_8))
             .joinToString("") { "%02x".format(java.util.Locale.ROOT, it) }
         return "source-$digest"
+    }
+
+    /**
+     * Verifies an optional publisher signature before QuickJS sees the code.
+     * Existing unsigned indexes retain the established first-use SHA-256 pin;
+     * once a module has a signer pin, SourceRegistry rejects unsigned downgrades
+     * and signer-key changes.
+     */
+    private fun verifyModuleSignature(module: SpineModule, script: ByteArray): String? {
+        val hasEd25519Fields = module.ed25519PublicKey != null || module.ed25519Signature != null
+        val aliasKey = module.publicKey?.trim().orEmpty()
+        val aliasSignature = module.signature?.trim().orEmpty()
+        // Generic `signature` metadata exists in older indexes for unrelated
+        // purposes. Treat the aliases as Ed25519 metadata only when they form
+        // a complete pair; the explicit ed25519_* fields remain strict.
+        if (!hasEd25519Fields && (aliasKey.isEmpty() || aliasSignature.isEmpty())) return null
+        val encodedKey = (if (hasEd25519Fields) module.ed25519PublicKey else aliasKey).orEmpty().trim()
+        val encodedSignature = (if (hasEd25519Fields) module.ed25519Signature else aliasSignature).orEmpty().trim()
+        if (encodedKey.isEmpty() && encodedSignature.isEmpty()) return null
+        if (encodedKey.isEmpty() || encodedSignature.isEmpty()) {
+            throw IOException("Module signature metadata is incomplete")
+        }
+
+        val keyBytes = runCatching {
+            Base64.getDecoder().decode(encodedKey.filterNot(Char::isWhitespace))
+        }.getOrElse { throw IOException("Module public key is not valid Base64", it) }
+        val signatureBytes = runCatching {
+            Base64.getDecoder().decode(encodedSignature.filterNot(Char::isWhitespace))
+        }.getOrElse { throw IOException("Module signature is not valid Base64", it) }
+        if (keyBytes.size != Ed25519PublicKeyParameters.KEY_SIZE || signatureBytes.size != 64) {
+            throw IOException("Module Ed25519 key or signature has an invalid length")
+        }
+
+        val verifier = Ed25519Signer()
+        verifier.init(false, Ed25519PublicKeyParameters(keyBytes, 0))
+        verifier.update(script, 0, script.size)
+        if (!verifier.verifySignature(signatureBytes)) {
+            throw IOException("Module script signature verification failed")
+        }
+        return MessageDigest.getInstance("SHA-256")
+            .digest(keyBytes)
+            .joinToString("") { "%02x".format(java.util.Locale.ROOT, it) }
     }
 
     private companion object {
@@ -514,5 +573,6 @@ class ModuleManager(private val sourceConfigId: String) {
         const val MAX_SHARED = 128
         const val MAX_INDEX_BYTES = 2 * 1024 * 1024
         const val MAX_MODULE_SCRIPT_BYTES = 2 * 1024 * 1024
+        const val MAX_CACHED_MODULE_SCRIPTS = 12
     }
 }

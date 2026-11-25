@@ -56,6 +56,7 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.rounded.QueueMusic
 import androidx.compose.material.icons.automirrored.rounded.Sort
 import androidx.compose.material.icons.rounded.Album
+import androidx.compose.material.icons.rounded.CalendarToday
 import androidx.compose.material.icons.rounded.ArrowBack
 import androidx.compose.material.icons.rounded.Check
 import androidx.compose.material.icons.rounded.CheckCircle
@@ -121,6 +122,8 @@ import kotlinx.coroutines.delay
 import kotlinx.coroutines.async
 import kotlinx.coroutines.awaitAll
 import kotlinx.coroutines.coroutineScope
+import kotlinx.coroutines.currentCoroutineContext
+import kotlinx.coroutines.ensureActive
 import kotlinx.coroutines.sync.Semaphore
 import kotlinx.coroutines.sync.withPermit
 import kotlinx.coroutines.withTimeoutOrNull
@@ -230,6 +233,12 @@ const val LOCAL_TAB_FOLDERS = 3
 const val LOCAL_TAB_PLAYLISTS = 4
 const val LOCAL_TAB_ALBUM_ARTISTS = 5
 const val LOCAL_TAB_GENRES = 6
+const val LOCAL_TAB_COMPOSERS = 7
+const val LOCAL_TAB_YEARS = 8
+const val LOCAL_TAB_RECORD_LABELS = 9
+
+private fun localTagMetadataKey(song: Song): String? =
+    song.localUri?.takeIf(String::isNotBlank) ?: song.localPath?.takeIf(String::isNotBlank)
 
 private fun shuffleAlbumGroupsKeepTrackOrder(songs: List<Song>): List<Song> {
     val indexed = songs.withIndex()
@@ -406,6 +415,89 @@ fun LocalMusicScreen(
                 activeGenreLoadToken = null
                 genresLoading = false
             }
+        }
+    }
+
+    // Composer and record-label tabs are optional and hidden for new installs,
+    // so do not open every audio file on the normal library scan. Read tag data
+    // once, off the UI thread, only when one of these metadata tabs is opened.
+    val tagMetadataSourceKey = remember(songs) {
+        songs.mapNotNull { song ->
+            localTagMetadataKey(song)?.let { key -> "$key:${song.localDateModifiedSeconds ?: 0}" }
+        }.distinct().sorted().joinToString("\n")
+    }
+    var tagMetadataByKey by remember(tagMetadataSourceKey) { mutableStateOf<Map<String, Song>>(emptyMap()) }
+    var tagMetadataLoaded by remember(tagMetadataSourceKey) { mutableStateOf(false) }
+    var tagMetadataLoading by remember(tagMetadataSourceKey) { mutableStateOf(false) }
+    var tagMetadataProgress by remember(tagMetadataSourceKey) { mutableIntStateOf(0) }
+    LaunchedEffect(selectedTab, tagMetadataSourceKey) {
+        val needsTags = selectedTab == LOCAL_TAB_COMPOSERS ||
+            selectedTab == LOCAL_TAB_YEARS || selectedTab == LOCAL_TAB_RECORD_LABELS
+        if (!needsTags || tagMetadataLoaded) return@LaunchedEffect
+        tagMetadataLoading = true
+        val candidates = songs.distinctBy(::localTagMetadataKey)
+            .filter { !it.localUri.isNullOrBlank() || !it.localPath.isNullOrBlank() }
+        try {
+            val loaded = withContext(Dispatchers.IO) {
+                buildMap {
+                    candidates.forEachIndexed { index, song ->
+                        currentCoroutineContext().ensureActive()
+                        val key = localTagMetadataKey(song) ?: return@forEachIndexed
+                        val tags = TagLibWriter.readTags(context, song, readArtwork = false)
+                        val year = Regex("\\d{4}").find(tags.year)?.value?.toIntOrNull()
+                            ?.takeIf { it in 1000..9999 }
+                        put(
+                            key,
+                            song.copy(
+                                composer = tags.composer.trim().takeIf(String::isNotBlank),
+                                releaseYear = year ?: song.releaseYear,
+                                recordLabel = tags.publisher.trim().takeIf(String::isNotBlank),
+                            ),
+                        )
+                        if ((index + 1) % 24 == 0 || index == candidates.lastIndex) {
+                            withContext(Dispatchers.Main.immediate) { tagMetadataProgress = index + 1 }
+                        }
+                    }
+                }
+            }
+            tagMetadataByKey = loaded
+            tagMetadataLoaded = true
+        } catch (cancelled: CancellationException) {
+            throw cancelled
+        } catch (error: Exception) {
+            Log.w("LocalMusicScreen", "Could not read local composer, year, and label tags", error)
+            tagMetadataLoaded = true
+        } finally {
+            tagMetadataLoading = false
+        }
+    }
+    val tagEnrichedSongs = remember(songs, tagMetadataByKey) {
+        songs.map { song ->
+            val key = localTagMetadataKey(song)
+            if (key == null) song else tagMetadataByKey[key] ?: song
+        }
+    }
+    val metadataGroups by produceState(
+        initialValue = emptyMap(),
+        tagEnrichedSongs,
+        selectedTab,
+    ) {
+        if (selectedTab in setOf(LOCAL_TAB_COMPOSERS, LOCAL_TAB_YEARS, LOCAL_TAB_RECORD_LABELS)) {
+            value = withContext(Dispatchers.Default) {
+                val keyed = tagEnrichedSongs.mapNotNull { song ->
+                    val name = when (selectedTab) {
+                        LOCAL_TAB_COMPOSERS -> song.composer
+                        LOCAL_TAB_YEARS -> song.releaseYear?.toString()
+                        LOCAL_TAB_RECORD_LABELS -> song.recordLabel
+                        else -> null
+                    }?.trim()?.takeIf(String::isNotBlank) ?: return@mapNotNull null
+                    name to song
+                }
+                keyed.groupBy({ it.first }, { it.second })
+                    .toSortedMap(String.CASE_INSENSITIVE_ORDER)
+            }
+        } else {
+            value = emptyMap()
         }
     }
 
@@ -1017,6 +1109,9 @@ fun LocalMusicScreen(
                         LOCAL_TAB_PLAYLISTS -> Icons.AutoMirrored.Rounded.QueueMusic to stringResource(R.string.playlists)
                         LOCAL_TAB_ALBUM_ARTISTS -> BitChordIcons.AlbumArtist to stringResource(R.string.album_artists)
                         LOCAL_TAB_GENRES -> Icons.Rounded.LocalOffer to stringResource(R.string.genres)
+                        LOCAL_TAB_COMPOSERS -> Icons.Rounded.MusicNote to stringResource(R.string.details_composer)
+                        LOCAL_TAB_YEARS -> Icons.Rounded.CalendarToday to stringResource(R.string.details_year)
+                        LOCAL_TAB_RECORD_LABELS -> Icons.Rounded.LocalOffer to stringResource(R.string.details_publisher)
                         else -> Icons.Rounded.MusicNote to stringResource(R.string.songs)
                     }
                     LocalTab(
@@ -1038,6 +1133,9 @@ fun LocalMusicScreen(
             LOCAL_TAB_ARTISTS -> stringResource(R.string.quick_search_artist_names)
             LOCAL_TAB_ALBUM_ARTISTS -> stringResource(R.string.quick_search_album_artist_names)
             LOCAL_TAB_PLAYLISTS -> stringResource(R.string.quick_search_playlist_names)
+            LOCAL_TAB_COMPOSERS -> stringResource(R.string.quick_search_composer_names)
+            LOCAL_TAB_YEARS -> stringResource(R.string.quick_search_years)
+            LOCAL_TAB_RECORD_LABELS -> stringResource(R.string.quick_search_record_labels)
             else -> null
         }
         val quickSearchContent: (@Composable (Modifier) -> Unit)? =
@@ -1271,6 +1369,33 @@ fun LocalMusicScreen(
                             drillDownShowsAlbums = false
                             drillDownFullScreenArtwork = false
                             parentArtistAlbums = null
+                        },
+                    )
+                }
+
+                key == "tab:$LOCAL_TAB_COMPOSERS" ||
+                    key == "tab:$LOCAL_TAB_YEARS" ||
+                    key == "tab:$LOCAL_TAB_RECORD_LABELS" -> {
+                    val visibleGroups = remember(metadataGroups, quickSearchActive, quickSearchQuery, hideLocalQuickSearch) {
+                        val query = quickSearchQuery.trim()
+                        if (hideLocalQuickSearch || !quickSearchActive || query.isEmpty()) metadataGroups
+                        else metadataGroups.filterKeys { it.contains(query, ignoreCase = true) }
+                    }
+                    MetadataGroupsTab(
+                        groups = visibleGroups,
+                        loading = tagMetadataLoading || !tagMetadataLoaded,
+                        progress = tagMetadataProgress,
+                        contentPadding = bodyContentPadding,
+                        onGroupClick = { name, tracks ->
+                            drillDownPlaylistId = null
+                            drillDownLabel = name
+                            drillDownSongs = tracks.sortedByAlbumTrackOrder()
+                            drillDownArt = tracks.firstNotNullOfOrNull { it.thumbnailUrl?.takeIf(String::isNotBlank) }
+                            drillDownIsArtist = false
+                            drillDownShowsAlbums = false
+                            drillDownFullScreenArtwork = false
+                            parentArtistAlbums = null
+                            parentArtistLabel = null
                         },
                     )
                 }
@@ -1980,6 +2105,86 @@ private fun GenresTab(
                         Text(
                             text = pluralStringResource(R.plurals.replay_song_count, tracks.size, tracks.size.toString()),
                             style = MaterialTheme.typography.bodySmall,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant,
+                        )
+                    }
+                }
+            }
+        }
+    }
+}
+
+@Composable
+private fun MetadataGroupsTab(
+    groups: Map<String, List<Song>>,
+    loading: Boolean,
+    progress: Int,
+    contentPadding: PaddingValues,
+    onGroupClick: (String, List<Song>) -> Unit,
+) {
+    when {
+        loading -> Column(
+            modifier = Modifier.fillMaxSize().padding(contentPadding),
+            horizontalAlignment = Alignment.CenterHorizontally,
+            verticalArrangement = Arrangement.Center,
+        ) {
+            CircularProgressIndicator()
+            Text(
+                text = stringResource(R.string.local_metadata_loading, progress),
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                modifier = Modifier.padding(top = 16.dp),
+            )
+        }
+        groups.isEmpty() -> Box(
+            modifier = Modifier.fillMaxSize().padding(contentPadding),
+            contentAlignment = Alignment.Center,
+        ) {
+            MessageState(
+                message = stringResource(R.string.local_metadata_empty),
+                modifier = Modifier.fillMaxWidth(),
+            )
+        }
+        else -> LazyColumn(
+            contentPadding = contentPadding,
+            verticalArrangement = Arrangement.spacedBy(4.dp),
+        ) {
+            items(groups.entries.toList(), key = { it.key }) { (name, tracks) ->
+                val preview = tracks.firstOrNull()
+                Row(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .clip(RoundedCornerShape(18.dp))
+                        .clickable { onGroupClick(name, tracks) }
+                        .padding(horizontal = PAGE_GUTTER, vertical = 10.dp),
+                    verticalAlignment = Alignment.CenterVertically,
+                ) {
+                    if (preview?.thumbnailUrl != null) {
+                        AsyncImage(
+                            model = preview.artworkAt(ROW_ART_PX),
+                            contentDescription = null,
+                            contentScale = ContentScale.Crop,
+                            modifier = Modifier.size(54.dp).clip(RoundedCornerShape(12.dp)),
+                        )
+                    } else {
+                        Box(
+                            Modifier.size(54.dp).clip(RoundedCornerShape(12.dp))
+                                .background(MaterialTheme.colorScheme.surfaceVariant),
+                            contentAlignment = Alignment.Center,
+                        ) {
+                            Icon(Icons.Rounded.MusicNote, contentDescription = null)
+                        }
+                    }
+                    Column(Modifier.weight(1f).padding(start = 14.dp)) {
+                        Text(
+                            text = name,
+                            style = MaterialTheme.typography.titleMedium,
+                            color = MaterialTheme.colorScheme.onSurface,
+                            maxLines = 2,
+                            overflow = TextOverflow.Ellipsis,
+                        )
+                        Text(
+                            text = pluralStringResource(R.plurals.song_count_plural, tracks.size, tracks.size),
+                            style = MaterialTheme.typography.bodyMedium,
                             color = MaterialTheme.colorScheme.onSurfaceVariant,
                         )
                     }

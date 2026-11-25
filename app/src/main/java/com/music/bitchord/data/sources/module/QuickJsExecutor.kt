@@ -8,8 +8,10 @@ import com.dokar.quickjs.binding.AsyncFunctionBinding
 import com.dokar.quickjs.binding.FunctionBinding
 import com.dokar.quickjs.binding.define
 import com.music.bitchord.data.quickjs.QuickJsLifecycle
+import kotlinx.coroutines.CompletableDeferred
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.channels.Channel
+import kotlinx.coroutines.sync.Semaphore
 import kotlinx.coroutines.withContext
 import okhttp3.MediaType.Companion.toMediaType
 import okhttp3.Request
@@ -77,16 +79,12 @@ internal object QuickJsExecutor {
     /**
      * How many modules stay resident.
      *
-     * Has to cover a whole index, not a working set. A search fans out to
-     * *every* module at once, so a cap below the index size means each search
-     * evicts engines the same search is still using — and the eviction is
-     * invisible to [ModuleManager], which caches the load separately and goes
-     * on reporting a hit for an engine that is gone. What that produced was
-     * `Module … is not loaded` on the stream call for whichever modules lost
-     * the race, one wasted attempt per track, on every track. Four was the
-     * ported default and is below the size of a real index.
+     * Bounded working set. The index and initialization fan-out have their own
+     * limits; a module evicted here can be reloaded from the bounded script
+     * cache instead of retaining every interpreter for the lifetime of a source.
      */
     private const val MAX_MODULES = 12
+    private const val MAX_MODULE_LOADS = 4
 
     /**
      * How many callers one module can serve at once.
@@ -103,12 +101,12 @@ internal object QuickJsExecutor {
     /**
      * One module's interpreters, and the source to make more from.
      *
-     * [free] is the ones nobody is inside right now. It is unbounded and only
-     * ever holds engines this pool made, so a send to it cannot fail or block;
-     * a receive is a caller waiting its turn.
+     * [free] is the ones nobody is inside right now. Its capacity is the same
+     * as the per-module engine ceiling, so a lifecycle race cannot turn an
+     * engine-return channel into an unbounded queue.
      */
     private class Pool(val jsCode: String, val fetchBase: String) {
-        val free = Channel<QuickJs>(Channel.UNLIMITED)
+        val free = Channel<QuickJs>(ENGINES_PER_MODULE)
         val lock = Any()
         /** Engines made or being made — the claim that stops two callers both growing the pool. */
         var started = 0
@@ -118,6 +116,15 @@ internal object QuickJsExecutor {
         val inUse = mutableSetOf<QuickJs>()
         /** Retired pools cannot hand out or accept engines. Guarded by [lock]. */
         var retired = false
+    }
+
+    private sealed interface LoadClaim {
+        data object Cached : LoadClaim
+        data class Wait(val completion: CompletableDeferred<Result<Unit>>) : LoadClaim
+        data class Create(
+            val completion: CompletableDeferred<Result<Unit>>,
+            val evicted: List<Pool>,
+        ) : LoadClaim
     }
 
     /** Whether [moduleId] still has a live pool, i.e. hasn't been evicted. */
@@ -134,6 +141,10 @@ internal object QuickJsExecutor {
     }
 
     private val engineLock = Any()
+    /** Bound separate module initializations without serializing their work. */
+    private val moduleLoadSlots = Semaphore(MAX_MODULE_LOADS)
+    /** Reservations count against the same resident-pool ceiling. Guarded by [engineLock]. */
+    private val loadingPools = mutableMapOf<String, CompletableDeferred<Result<Unit>>>()
 
     /** LRU map: access-ordered so the oldest-used entry is first. */
     private val pools = LinkedHashMap<String, Pool>(16, 0.75f, true)
@@ -141,36 +152,87 @@ internal object QuickJsExecutor {
     // ── Load ─────────────────────────────────────────────────────────────
 
     suspend fun loadModule(moduleId: String, jsCode: String, fetchBase: String = ""): Result<Unit> {
-        val evicted = synchronized(engineLock) {
-            if (pools.containsKey(moduleId)) {
-                TrackLog.d(TAG, "QuickJsExecutor.loadModule($moduleId) — ENGINE CACHE HIT")
-                return Result.success(Unit)
+        val initial = synchronized(engineLock) {
+            when {
+                pools.containsKey(moduleId) -> LoadClaim.Cached
+                loadingPools[moduleId] != null -> LoadClaim.Wait(requireNotNull(loadingPools[moduleId]))
+                else -> null
             }
-            buildList<Pool> {
-                while (pools.size >= MAX_MODULES) {
-                    val lruId = pools.keys.firstOrNull() ?: break
-                    TrackLog.d(TAG, "  Evicting LRU module engine: $lruId")
-                    pools.remove(lruId)?.let(::add)
+        }
+        when (initial) {
+            LoadClaim.Cached -> return Result.success(Unit)
+            is LoadClaim.Wait -> return initial.completion.await()
+            null -> Unit
+            is LoadClaim.Create -> error("Unexpected module-load reservation")
+        }
+
+        moduleLoadSlots.acquire()
+        val completion = CompletableDeferred<Result<Unit>>()
+        val claim = synchronized(engineLock) {
+            when {
+                pools.containsKey(moduleId) -> LoadClaim.Cached
+                loadingPools[moduleId] != null -> LoadClaim.Wait(requireNotNull(loadingPools[moduleId]))
+                else -> {
+                    val evicted = buildList {
+                        while (pools.size + loadingPools.size >= MAX_MODULES) {
+                            val lruId = pools.keys.firstOrNull() ?: break
+                            TrackLog.d(TAG, "  Evicting LRU module engine: $lruId")
+                            pools.remove(lruId)?.let(::add)
+                        }
+                    }
+                    loadingPools[moduleId] = completion
+                    LoadClaim.Create(completion, evicted)
                 }
             }
         }
-        evicted.forEach(::retirePool)
+        when (claim) {
+            LoadClaim.Cached -> {
+                moduleLoadSlots.release()
+                TrackLog.d(TAG, "QuickJsExecutor.loadModule($moduleId) — ENGINE CACHE HIT")
+                return Result.success(Unit)
+            }
+            is LoadClaim.Wait -> {
+                moduleLoadSlots.release()
+                return claim.completion.await()
+            }
+            is LoadClaim.Create -> Unit
+        }
 
+        val reservation = claim as LoadClaim.Create
+        reservation.evicted.forEach(::retirePool)
         TrackLog.d(TAG, "QuickJsExecutor.loadModule($moduleId) fetchBase=${redactModuleUrl(fetchBase)} jsCodeLength=${jsCode.length}")
-        return withContext(Dispatchers.Default) {
-            runCatching { newEngine(jsCode, fetchBase) }
-                .onSuccess { qjs ->
-                    // The pool starts at one and grows only if two callers ever
-                    // want this module at the same moment. A module that is
-                    // never contended never pays for a second interpreter.
-                    val pool = Pool(jsCode, fetchBase)
-                    pool.started = 1
-                    pool.made += qjs
-                    pool.free.trySend(qjs)
-                    synchronized(engineLock) { pools[moduleId] = pool }
+        try {
+            val qjs = withContext(Dispatchers.Default) { newEngine(jsCode, fetchBase) }
+            val pool = Pool(jsCode, fetchBase).apply {
+                started = 1
+                made += qjs
+                free.trySend(qjs)
+            }
+            val inserted = synchronized(engineLock) {
+                if (loadingPools[moduleId] !== completion) false
+                else {
+                    pools[moduleId] = pool
+                    loadingPools.remove(moduleId)
+                    true
                 }
-                .onFailure { TrackLog.e(TAG, "  ✗ loadModule FAILED for $moduleId (${it::class.simpleName})") }
-                .map { }
+            }
+            if (!inserted) {
+                retirePool(pool)
+                throw IllegalStateException("Module $moduleId was unloaded while initializing")
+            }
+            completion.complete(Result.success(Unit))
+            TrackLog.d(TAG, "  ✓ Loaded module engine $moduleId")
+            return Result.success(Unit)
+        } catch (e: Throwable) {
+            synchronized(engineLock) {
+                if (loadingPools[moduleId] === completion) loadingPools.remove(moduleId)
+            }
+            completion.complete(Result.failure(e))
+            if (e is kotlinx.coroutines.CancellationException) throw e
+            TrackLog.e(TAG, "  ✗ loadModule FAILED for $moduleId (${e::class.simpleName})")
+            return Result.failure(e)
+        } finally {
+            moduleLoadSlots.release()
         }
     }
 
@@ -405,13 +467,22 @@ internal object QuickJsExecutor {
     // ── Unload ───────────────────────────────────────────────────────────
 
     fun unload(moduleId: String) {
-        val pool = synchronized(engineLock) { pools.remove(moduleId) }
+        val pool = synchronized(engineLock) {
+            loadingPools.remove(moduleId)?.complete(
+                Result.failure(IllegalStateException("Module $moduleId was unloaded")),
+            )
+            pools.remove(moduleId)
+        }
         pool?.let(::retirePool)
         TrackLog.d(TAG, "QuickJsExecutor.unload($moduleId)")
     }
 
     fun unloadAll() {
         val all = synchronized(engineLock) {
+            loadingPools.values.forEach { completion ->
+                completion.complete(Result.failure(IllegalStateException("Module engines were unloaded")))
+            }
+            loadingPools.clear()
             val values = pools.values.toList()
             pools.clear()
             values

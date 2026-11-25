@@ -561,10 +561,14 @@ object InnertubeParser {
      * that carries a videoId. Layout-agnostic, so it survives the differences
      * between playlist, album, library and history pages.
      */
-    fun collectSongsDeep(root: JsonElement, show: String? = null): List<Song> {
+    fun collectSongsDeep(
+        root: JsonElement,
+        show: String? = null,
+        fallbackArtist: String? = null,
+    ): List<Song> {
         val out = LinkedHashMap<String, Song>()
         // A release's own rows are credited by its header, not one by one.
-        val pageCredit = pageCredit(root)
+        val pageCredit = pageCredit(root, fallbackArtist)
         fun walk(node: JsonElement) {
             when (node) {
                 is JsonObject -> {
@@ -1004,7 +1008,7 @@ object InnertubeParser {
      * it together, which is not what its tracks are by. Playlist rows carry
      * their own credits anyway.
      */
-    private fun pageCredit(root: JsonElement): Credits {
+    private fun pageCredit(root: JsonElement, fallbackArtist: String? = null): Credits {
         val header = HEADER_RENDERERS.firstNotNullOfOrNull {
             collectRenderers(root, it).firstOrNull()
         } ?: return Credits()
@@ -1017,7 +1021,13 @@ object InnertubeParser {
         val parts = lines.flatMap { line ->
             line.joinToString("") { it.s("text").orEmpty() }.split(" • ").map(String::trim)
         }
-        if (parts.none { it.lowercase(Locale.ROOT) in RELEASE_WORDS }) return Credits()
+        if (parts.none { it.lowercase(Locale.ROOT) in RELEASE_WORDS }) {
+            // When this browse was opened from an artist's Albums/Singles/EPs
+            // shelf, the caller has already confirmed it is a release page.
+            // Use that context for locales whose release label is not covered
+            // by the local parser, while standalone playlist pages stay untagged.
+            return Credits(artistName = fallbackArtist?.trim()?.takeIf(String::isNotBlank))
+        }
 
         val credits = creditsOf(lines.flatten())
         if (credits.artistName?.isNotBlank() == true) return credits
@@ -1027,7 +1037,7 @@ object InnertubeParser {
             it.isNotBlank() && it.lowercase(Locale.ROOT) !in TYPE_WORDS && !it.matches(TALLY) &&
                 !it.matches(YEAR) && !it.matches(DURATION)
         }
-        return credits.copy(artistName = name)
+        return credits.copy(artistName = name ?: fallbackArtist?.trim()?.takeIf(String::isNotBlank))
     }
 
     /** How an album or playlist page bills itself, off its own header. */
@@ -1493,7 +1503,19 @@ object InnertubeParser {
         RegexOption.IGNORE_CASE,
     )
     /** Header words that mark a page as a release, whose rows share its credit. */
-    private val RELEASE_WORDS = setOf("album", "single", "ep")
+    // YouTube localizes the release type along with the page. The artist link
+    // is still present in the header, but the English-only gate used to reject
+    // the whole credit on Japanese/French/Chinese pages and leave every bare
+    // album row as "Unknown artist".
+    private val RELEASE_WORDS = setOf(
+        "album", "single", "ep", "albums", "singles", "eps",
+        "álbum", "álbumes", "álbuns", "sencillo", "sencillos",
+        "singolo", "singoli", "albüm", "albümler", "singiel",
+        "альбом", "альбома", "сингл", "мини-альбом",
+        "アルバム", "シングル", "ミニアルバム",
+        "专辑", "專輯", "单曲", "單曲", "迷你专辑", "迷你專輯",
+        "앨범", "싱글", "미니앨범",
+    )
     private val HEADER_RENDERERS = listOf(
         "musicResponsiveHeaderRenderer",
         "musicDetailHeaderRenderer",

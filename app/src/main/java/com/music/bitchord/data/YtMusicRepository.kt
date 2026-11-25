@@ -51,6 +51,8 @@ object YtMusicRepository {
     private val SAFE_BROWSE_ID = Regex("[A-Za-z0-9_-]{1,$MAX_BROWSE_ID_CHARS}")
     /** Podcast continuations omit the show header, so retain it by token. */
     private val podcastShowByToken = ConcurrentHashMap<String, String>()
+    /** Artist release continuations omit their header, so retain the artist fallback by token. */
+    private val releaseArtistByToken = ConcurrentHashMap<String, String>()
 
     class FeatureDisabledException : IllegalStateException("YouTube Music is disabled in settings")
 
@@ -674,9 +676,9 @@ object YtMusicRepository {
      * first response. The rest arrives behind a page that is by then already
      * being read — see [moreSongs].
      */
-    suspend fun browseSongs(browseId: String): Result<SongPage> = call("browse:$browseId") {
+    suspend fun browseSongs(browseId: String, fallbackArtist: String? = null): Result<SongPage> = call("browse:$browseId") {
         val response = Innertube.browse(browseId)
-        val page = pageOf(response)
+        val page = pageOf(response, fallbackArtist = fallbackArtist)
         // Only a playlist has an owner in the sense that matters — see
         // parsePlaylistOwned — and only its own first response can be asked.
         if (!browseId.startsWith("VL")) page
@@ -750,7 +752,11 @@ object YtMusicRepository {
 
     /** The page [SongPage.continuation] points at. */
     suspend fun moreSongs(token: String): Result<SongPage> = call("browse:more") {
-        pageOf(Innertube.browseContinuation(token), podcastShowByToken[token])
+        pageOf(
+            Innertube.browseContinuation(token),
+            previousPodcastShow = podcastShowByToken[token],
+            fallbackArtist = releaseArtistByToken[token],
+        )
     }
 
     /**
@@ -767,7 +773,11 @@ object YtMusicRepository {
         InnertubeParser.parsePlaylistOwned(Innertube.browse(browseId))
     }
 
-    private fun pageOf(response: JsonObject, previousPodcastShow: String? = null): SongPage {
+    private fun pageOf(
+        response: JsonObject,
+        previousPodcastShow: String? = null,
+        fallbackArtist: String? = null,
+    ): SongPage {
         val library = InnertubeParser.parseLibraryState(response)
         val header = InnertubeParser.parseBrowseHeader(response)
         // A playlist page is scoped to its own shelf so its "Suggested
@@ -779,12 +789,19 @@ object YtMusicRepository {
         }
         val podcastShow = InnertubeParser.podcastShow(response) ?: previousPodcastShow
         val continuation = InnertubeParser.continuationToken(response)
-        if (podcastShow != null && continuation != null) podcastShowByToken[continuation] = podcastShow
+        if (continuation != null) {
+            if (podcastShow != null) podcastShowByToken[continuation] = podcastShow
+            fallbackArtist?.trim()?.takeIf(String::isNotBlank)?.let { artist ->
+                // Keep only a bounded window of pending continuation metadata.
+                if (releaseArtistByToken.size >= 256) releaseArtistByToken.clear()
+                releaseArtistByToken[continuation] = artist
+            }
+        }
         return SongPage(
             // One response can name the same track twice — an album page that
             // also carries a "you might also like" shelf, say. Collecting into a
             // map used to take care of that; paging by hand means saying so.
-            songs = InnertubeParser.collectSongsDeep(response, podcastShow).distinctBy { it.videoId },
+            songs = InnertubeParser.collectSongsDeep(response, podcastShow, fallbackArtist).distinctBy { it.videoId },
             continuation = continuation,
             library = library,
             header = header,

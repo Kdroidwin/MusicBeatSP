@@ -131,10 +131,14 @@ import com.music.bitchord.feature.localmusic.data.ZipAudioEntry
 import com.music.bitchord.feature.localmusic.data.FolderNavigationRequests
 import androidx.compose.material.icons.rounded.LibraryMusic
 import androidx.compose.material.icons.rounded.LocalOffer
+import androidx.compose.material.icons.rounded.CalendarToday
 import com.music.bitchord.feature.library.ui.LibraryScreen
 import com.music.bitchord.feature.library.ui.components.LibraryFilter
 import com.music.bitchord.ui.screens.LOCAL_TAB_SONGS
 import com.music.bitchord.ui.screens.LOCAL_TAB_GENRES
+import com.music.bitchord.ui.screens.LOCAL_TAB_COMPOSERS
+import com.music.bitchord.ui.screens.LOCAL_TAB_YEARS
+import com.music.bitchord.ui.screens.LOCAL_TAB_RECORD_LABELS
 import com.music.bitchord.ui.screens.LOCAL_TAB_ALBUMS
 import com.music.bitchord.ui.screens.LOCAL_TAB_ALBUM_ARTISTS
 import com.music.bitchord.ui.screens.LOCAL_TAB_ARTISTS
@@ -295,6 +299,7 @@ import com.music.bitchord.data.sources.SourceConfig
 import com.music.bitchord.data.sources.SourceRegistry
 import com.music.bitchord.data.sources.SourceKind
 import com.music.bitchord.data.webdav.WebDavRepository
+import com.music.bitchord.data.webdav.PCloudRegion
 import com.music.bitchord.ui.components.FieldConfig
 import com.music.bitchord.ui.components.ServerEditorHost
 import com.music.bitchord.ui.components.ListenBrainzTokenAlert
@@ -754,6 +759,10 @@ private fun BitChordApp(
     val useCollapsibleNavBar = !classicNavBar
     val glassSamplesBackdrop = glassActive && !reduceDynamicBlur
     var selectedTab by rememberSaveable { mutableIntStateOf(AppSettings.startupTab.value.index) }
+    // Artist details opened from the Library were cross-faded over the library
+    // root, which looked like a short reverse/back animation on entry. Keep
+    // the route id so both entering and leaving that page use a stable cut.
+    var noAnimationArtistDetailId by rememberSaveable { mutableStateOf<String?>(null) }
     var libraryPlaylistDetailOpen by remember { mutableStateOf(false) }
     SideEffect {
         onLibraryPlaylistStatusBarChanged(selectedTab == TAB_LIBRARY && libraryPlaylistDetailOpen)
@@ -934,6 +943,7 @@ private fun BitChordApp(
     var showSources by rememberSaveable { mutableStateOf(false) }
     var editingSource by remember { mutableStateOf<SourceConfig?>(null) }
     var showWebDavEditor by remember { mutableStateOf(false) }
+    var webDavPresetUrl by remember { mutableStateOf<String?>(null) }
     var showSmbEditor by remember { mutableStateOf(false) }
     var showReplay by remember { mutableStateOf(false) }
     var replayStory by remember { mutableStateOf<ReplayStoryPage?>(null) }
@@ -2989,7 +2999,10 @@ private fun BitChordApp(
                     },
                     transitionSpec = {
                         val tabSwap = initialState.startsWith(TAB_KEY) && targetState.startsWith(TAB_KEY)
-                        if (tabSwap) {
+                        val artistDetailSwap = noAnimationArtistDetailId?.let {
+                            initialState == it || targetState == it
+                        } == true
+                        if (tabSwap || artistDetailSwap) {
                             EnterTransition.None togetherWith ExitTransition.None
                         } else {
                             fadeIn(tween(180)) togetherWith fadeOut(tween(180))
@@ -3095,7 +3108,8 @@ private fun BitChordApp(
                         SourcesScreen(
                             contentPadding = listPadding,
                             onEditSource = { editingSource = it },
-                            onEditWebDav = { showWebDavEditor = true },
+                            onEditWebDav = { webDavPresetUrl = null; showWebDavEditor = true },
+                            onEditPCloud = { region -> webDavPresetUrl = region.webDavUrl; showWebDavEditor = true },
                             onEditSmb = { showSmbEditor = true },
                         )
                     } else if (page != null && page.browseId.isDeviceFolder()) {
@@ -3289,6 +3303,7 @@ private fun BitChordApp(
                                 onSectionItemClick = { item ->
                                     handleArtistSectionItemClick(
                                         item = item,
+                                        fallbackArtistName = page.title,
                                         shelfSong = shelfSong,
                                         playRadio = playRadio,
                                         viewModel = viewModel,
@@ -3853,6 +3868,8 @@ private fun BitChordApp(
                                     onOpenYoutubeCollection = { collection ->
                                         val type = runCatching { BrowseType.valueOf(collection.type) }
                                             .getOrDefault(BrowseType.OTHER)
+                                        noAnimationArtistDetailId = collection.browseId
+                                            .takeIf { type == BrowseType.ARTIST }
                                         viewModel.openDetail(
                                             browseId = collection.browseId,
                                             title = collection.title,
@@ -4052,6 +4069,44 @@ private fun BitChordApp(
                             )
                         }
                         TAB_SERVICES -> Box(modifier = Modifier.fillMaxSize())
+                        TAB_COMPOSERS, TAB_YEARS, TAB_RECORD_LABELS -> if (!hasStoragePermission && localSongs.isEmpty()) {
+                            Box(modifier = Modifier.fillMaxSize().padding(listPadding), contentAlignment = Alignment.Center) {
+                                LocalPermissionCard(onRequestPermission = requestDefaultPermission)
+                            }
+                        } else {
+                            LocalMusicScreen(
+                                songs = localSongs,
+                                collections = emptyList(),
+                                isDownloads = false,
+                                currentSong = player.song,
+                                isPlaying = player.isPlaying,
+                                isRefreshing = isRefreshingLocalMusic,
+                                onRefresh = refreshCatalog,
+                                onSongClick = play,
+                                onSongLongPress = openSongMenu,
+                                onSongSwipe = onSongSwipe,
+                                onShuffle = { songs ->
+                                    QueueShuffle.enableForNextQueue()
+                                    play(songs, songs.indices.random())
+                                },
+                                emptyMessage = localEmptyMessage,
+                                contentPadding = listPadding,
+                                initialTab = when (selectedTab) {
+                                    TAB_COMPOSERS -> LOCAL_TAB_COMPOSERS
+                                    TAB_YEARS -> LOCAL_TAB_YEARS
+                                    else -> LOCAL_TAB_RECORD_LABELS
+                                },
+                                showTabRow = false,
+                                onArtworkPaletteChanged = onLocalArtworkPaletteChanged,
+                                onPlayNext = playNext,
+                                onAddToQueue = addToQueue,
+                                onDeleteSong = { viewModel.loadLocalMusic() },
+                                onSongTagsOrLyricsSaved = { viewModel.reloadLyrics(it) },
+                                onSongMetadataUpdated = viewModel::updateLocalSongMetadata,
+                                onCollectionNavigationChanged = onCollectionNavigationChanged,
+                                onOpenArtistPage = { artist, _ -> openPlayerArtistPage(artist) },
+                            )
+                        }
                         else -> Box(modifier = Modifier.fillMaxSize())
                     }
                 }
@@ -5576,15 +5631,15 @@ private fun BitChordApp(
         }
 
         if (showWebDavEditor) {
-            BackHandler { showWebDavEditor = false }
+            BackHandler { webDavPresetUrl = null; showWebDavEditor = false }
             ServerEditorHost(
                 hazeState = hazeState,
-                title = stringResource(R.string.webdav),
-                description = stringResource(R.string.webdav_description),
+                title = stringResource(if (webDavPresetUrl != null) R.string.pcloud else R.string.webdav),
+                description = stringResource(if (webDavPresetUrl != null) R.string.pcloud_description else R.string.webdav_description),
                 fields = listOf(
-                    FieldConfig(AppSettings.webdavUrl.value, stringResource(R.string.webdav_server_url_hint), KeyboardType.Uri),
-                    FieldConfig(AppSettings.webdavUsername.value, stringResource(R.string.username)),
-                    FieldConfig(AppSettings.webdavPassword.value, stringResource(R.string.password), KeyboardType.Password, true),
+                    FieldConfig(webDavPresetUrl ?: AppSettings.webdavUrl.value, stringResource(R.string.webdav_server_url_hint), KeyboardType.Uri),
+                    FieldConfig(if (webDavPresetUrl != null) "" else AppSettings.webdavUsername.value, stringResource(R.string.username)),
+                    FieldConfig(if (webDavPresetUrl != null) "" else AppSettings.webdavPassword.value, stringResource(R.string.password), KeyboardType.Password, true),
                 ),
                 canSubmit = { values -> values.firstOrNull()?.trim()?.startsWith("https://", ignoreCase = true) == true },
                 testFailedRes = R.string.webdav_test_failed,
@@ -5597,9 +5652,10 @@ private fun BitChordApp(
                     AppSettings.setWebDavUrl(values[0].trim())
                     AppSettings.setWebDavUsername(values[1].trim())
                     AppSettings.setWebDavPassword(values[2])
+                    webDavPresetUrl = null
                     showWebDavEditor = false
                 },
-                onDismiss = { showWebDavEditor = false },
+                onDismiss = { webDavPresetUrl = null; showWebDavEditor = false },
             )
         }
 
@@ -6393,7 +6449,7 @@ private fun rememberMainTabs(
         HomeTabTitleMode.APP_LANGUAGE -> stringResource(R.string.listen_now)
     }
     val labels = if (forceEnglish) {
-        listOf("Songs", "Albums", "Artists", "Library", "Search", "Album Artists", "Folders", "Radio", "Genres", "Services")
+        listOf("Songs", "Albums", "Artists", "Library", "Search", "Album Artists", "Folders", "Radio", "Genres", "Services", "Composers", "Year", "Record Label")
     } else {
         listOf(
             stringResource(R.string.songs),
@@ -6406,6 +6462,9 @@ private fun rememberMainTabs(
             stringResource(R.string.radio),
             stringResource(R.string.genres),
             stringResource(R.string.services),
+            stringResource(R.string.details_composer),
+            stringResource(R.string.details_year),
+            stringResource(R.string.details_publisher),
         )
     }
     return remember(forceEnglish, homeTitleMode, homeTitle, labels) {
@@ -6421,6 +6480,9 @@ private fun rememberMainTabs(
             BottomTab(homeTitle, Icons.Rounded.Home),
             BottomTab(labels[TAB_GENRES - 1], Icons.Rounded.LocalOffer),
             BottomTab(labels[TAB_SERVICES - 1], Icons.Rounded.Headphones),
+            BottomTab(labels[TAB_COMPOSERS - 1], Icons.Rounded.MusicNote),
+            BottomTab(labels[TAB_YEARS - 1], Icons.Rounded.CalendarToday),
+            BottomTab(labels[TAB_RECORD_LABELS - 1], Icons.Rounded.LocalOffer),
         )
     }
 }
@@ -6453,6 +6515,7 @@ private fun rootTabTopBarPresentation(
 
 private fun handleArtistSectionItemClick(
     item: ShelfItem,
+    fallbackArtistName: String,
     shelfSong: (ShelfItem) -> Song?,
     playRadio: (Song) -> Unit,
     viewModel: MainViewModel,
@@ -6479,6 +6542,7 @@ private fun handleArtistSectionItemClick(
             subtitle = item.subtitle,
             thumbnailUrl = item.thumbnailUrl,
             type = type,
+            fallbackArtistName = fallbackArtistName.takeIf { type == BrowseType.ALBUM },
         )
     }
 }
@@ -6514,6 +6578,9 @@ private const val TAB_RADIO = 7
 private const val TAB_HOME = 8
 private const val TAB_GENRES = 9
 private const val TAB_SERVICES = 10
+private const val TAB_COMPOSERS = 11
+private const val TAB_YEARS = 12
+private const val TAB_RECORD_LABELS = 13
 
 private data class RootTabTopBarState(
     val scrollEnabled: Boolean,

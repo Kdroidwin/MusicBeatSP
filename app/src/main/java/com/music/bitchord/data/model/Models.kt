@@ -100,6 +100,10 @@ data class Song(
     val playbackPlaylistId: String? = null,
     /** Temporary generated/user-selected headphone burn-in track; excluded from library history. */
     val isHeadphoneBurnIn: Boolean = false,
+    /** Optional local file tag values, loaded only when their library tab is opened. */
+    val composer: String? = null,
+    val releaseYear: Int? = null,
+    val recordLabel: String? = null,
 )
 
 /**

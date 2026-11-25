@@ -33,6 +33,13 @@ data class SpineModule(
     /** Optional publisher-provided script digest; the host also TOFU-pins the first accepted script. */
     @SerialName("sha256") val sha256: String? = null,
     @SerialName("script_sha256") val scriptSha256: String? = null,
+    /** Base64-encoded raw 32-byte Ed25519 public key, when the publisher signs its module script. */
+    @SerialName("ed25519_public_key") val ed25519PublicKey: String? = null,
+    /** Base64-encoded Ed25519 signature over the exact UTF-8 bytes of the downloaded script. */
+    @SerialName("ed25519_signature") val ed25519Signature: String? = null,
+    /** Common aliases used by module indexes for the same Ed25519 metadata. */
+    @SerialName("public_key") val publicKey: String? = null,
+    @SerialName("signature") val signature: String? = null,
     @SerialName("logo") val logo: String? = null,
     @SerialName("icon") val icon: String? = null,
     @SerialName("lastUpdated") val lastUpdated: String = "",
