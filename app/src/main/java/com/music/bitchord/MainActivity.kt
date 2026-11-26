@@ -4660,12 +4660,29 @@ private fun BitChordApp(
             val song = resolvedSong
             val songIdentityKey = song.localUri ?: song.videoId
             val localPlaylists by LocalPlaylistStore.playlists.collectAsStateWithLifecycle()
-            val playlistEntryId = song.localUri
-                ?.takeIf { it.startsWith("content://", ignoreCase = true) || it.startsWith("file://", ignoreCase = true) }
-                ?: song.videoId
-            val registeredPlaylists = remember(localPlaylists, playlistEntryId) {
+            val playlistEntryIds = remember(song.localUri, song.localPath, song.videoId) {
+                listOfNotNull(song.localUri?.trim(), song.localPath?.trim(), song.videoId.trim())
+                    .filter(String::isNotBlank)
+                    .toSet()
+            }
+            val normalizePlaylistPath: (String?) -> String? = { path ->
+                path?.replace('\\', '/')?.trim()?.trimEnd('/')?.takeIf(String::isNotEmpty)
+            }
+            val localSongPath = normalizePlaylistPath(song.localPath)
+            val sourcePlaylistId = song.playbackPlaylistId
+            val registeredPlaylists = remember(localPlaylists, playlistEntryIds, localSongPath, sourcePlaylistId) {
                 localPlaylists.filter { playlist ->
-                    playlist.smartDefinition == null && playlistEntryId in playlist.songIds
+                    playlist.id == sourcePlaylistId || (
+                        playlist.smartDefinition == null && (
+                            playlist.songIds.any(playlistEntryIds::contains) ||
+                                (localSongPath != null && playlist.songIds.any { entryId ->
+                                    listOfNotNull(
+                                        playlist.editedSongMetadata[entryId]?.localPath,
+                                        playlist.songMetadata[entryId]?.localPath,
+                                    ).any { normalizePlaylistPath(it) == localSongPath }
+                                })
+                            )
+                        )
                 }
             }
             var showTagEditor by remember(songIdentityKey, pendingPlayerQuickAction) {

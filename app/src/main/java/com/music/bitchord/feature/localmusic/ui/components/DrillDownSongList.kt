@@ -487,9 +487,7 @@ private fun FullScreenCollectionHeader(
     }
 }
 
-private fun explicitTitleLineCount(title: String): Int = (title.count { it == '\n' } + 1).coerceAtLeast(1)
-
-/** Fits long playlist detail titles without ellipsizing or inserting new line breaks. */
+/** Prevents automatic wrapping while preserving user-entered line breaks. */
 @Composable
 private fun PlaylistDetailTitle(
     title: String,
@@ -515,58 +513,75 @@ private fun PlaylistDetailTitle(
     BoxWithConstraints(modifier = modifier.fillMaxWidth()) {
         val textMeasurer = rememberTextMeasurer()
         val availableWidthPx = constraints.maxWidth.takeUnless { it == Constraints.Infinity } ?: 0
-        val fitted = remember(title, style, availableWidthPx, textMeasurer) {
-            fitPlaylistDetailTitle(title, style, availableWidthPx, textMeasurer)
+        val explicitLines = remember(title) { title.replace("\r\n", "\n").replace('\r', '\n').split('\n') }
+        val fitted = remember(explicitLines, style, availableWidthPx, textMeasurer) {
+            fitPlaylistDetailTitle(explicitLines, style, availableWidthPx, textMeasurer)
         }
-        val scrollState = rememberScrollState()
-        Text(
-            text = title,
-            modifier = Modifier
-                .fillMaxWidth()
-                .then(if (fitted.contentWidthPx > availableWidthPx) Modifier.horizontalScroll(scrollState) else Modifier),
-            style = fitted.style,
-            color = color,
-            textAlign = TextAlign.Center,
-            maxLines = explicitTitleLineCount(title),
-            softWrap = false,
-            overflow = TextOverflow.Clip,
-        )
+        Column(
+            modifier = Modifier.fillMaxWidth(),
+            horizontalAlignment = Alignment.CenterHorizontally,
+        ) {
+            explicitLines.forEachIndexed { index, line ->
+                key(index) {
+                    val scrollState = rememberScrollState()
+                    Text(
+                        text = line,
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .then(
+                                if (fitted.contentWidthsPx[index] > availableWidthPx) {
+                                    Modifier.horizontalScroll(scrollState)
+                                } else Modifier,
+                            ),
+                        style = fitted.style,
+                        color = color,
+                        textAlign = TextAlign.Center,
+                        maxLines = 1,
+                        softWrap = false,
+                        overflow = TextOverflow.Clip,
+                    )
+                }
+            }
+        }
     }
 }
 
-private data class FittedPlaylistTitle(val style: TextStyle, val contentWidthPx: Int)
+private data class FittedPlaylistTitle(val style: TextStyle, val contentWidthsPx: List<Int>)
 
 private fun fitPlaylistDetailTitle(
-    title: String,
+    lines: List<String>,
     style: TextStyle,
     availableWidthPx: Int,
     textMeasurer: androidx.compose.ui.text.TextMeasurer,
 ): FittedPlaylistTitle {
     val originalSp = style.fontSize.value
     if (availableWidthPx <= 0 || !originalSp.isFinite() || originalSp <= MIN_PLAYLIST_DETAIL_TITLE_SP) {
-        return FittedPlaylistTitle(style, Int.MAX_VALUE)
+        return FittedPlaylistTitle(style, lines.map { Int.MAX_VALUE })
     }
 
-    fun widthAt(sizeSp: Float): Int = runCatching {
-        textMeasurer.measure(
-            text = title,
-            style = style.copy(fontSize = sizeSp.sp),
-            constraints = Constraints(maxWidth = Constraints.Infinity),
-            maxLines = explicitTitleLineCount(title),
-            softWrap = false,
-        ).size.width
-    }.getOrDefault(Int.MAX_VALUE)
+    fun widthsAt(sizeSp: Float): List<Int> = lines.map { line ->
+        runCatching {
+            textMeasurer.measure(
+                text = line,
+                style = style.copy(fontSize = sizeSp.sp),
+                constraints = Constraints(maxWidth = Constraints.Infinity),
+                maxLines = 1,
+                softWrap = false,
+            ).size.width
+        }.getOrDefault(Int.MAX_VALUE)
+    }
 
-    if (widthAt(originalSp) <= availableWidthPx) return FittedPlaylistTitle(style, widthAt(originalSp))
+    val originalWidths = widthsAt(originalSp)
+    if (originalWidths.all { it <= availableWidthPx }) return FittedPlaylistTitle(style, originalWidths)
 
     var low = MIN_PLAYLIST_DETAIL_TITLE_SP
     var high = originalSp
     repeat(14) {
         val candidate = (low + high) / 2f
-        if (widthAt(candidate) <= availableWidthPx) low = candidate else high = candidate
+        if (widthsAt(candidate).all { it <= availableWidthPx }) low = candidate else high = candidate
     }
     val fittedStyle = style.copy(fontSize = low.sp)
-    return FittedPlaylistTitle(fittedStyle, widthAt(low))
+    return FittedPlaylistTitle(fittedStyle, widthsAt(low))
 }
 
 private const val MIN_PLAYLIST_DETAIL_TITLE_SP = 8f

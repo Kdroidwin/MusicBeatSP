@@ -309,12 +309,23 @@ fun LocalSongActionsSheet(
                                 label = stringResource(R.string.go_to_album),
                                 onClick = onGoToAlbum,
                             )
-                            PlayerDetailsAction.ARTIST -> LocalSongActionItem(
-                                icon = Icons.Rounded.Person,
-                                label = stringResource(R.string.go_to_artist),
-                                trailingIcon = if (artists.size > 1) Icons.AutoMirrored.Rounded.KeyboardArrowRight else null,
-                                onClick = onGoToArtist,
-                            )
+                            PlayerDetailsAction.ARTIST -> {
+                                LocalSongActionItem(
+                                    icon = Icons.Rounded.Person,
+                                    label = stringResource(R.string.go_to_artist),
+                                    trailingIcon = if (artists.size > 1) Icons.AutoMirrored.Rounded.KeyboardArrowRight else null,
+                                    onClick = onGoToArtist,
+                                )
+                                if (showPlayerActions) {
+                                    onGoToPlaylists?.let { openPlaylists ->
+                                        LocalSongActionItem(
+                                            icon = Icons.AutoMirrored.Rounded.PlaylistPlay,
+                                            label = stringResource(R.string.song_registered_playlists),
+                                            onClick = openPlaylists,
+                                        )
+                                    }
+                                }
+                            }
                             PlayerDetailsAction.OPEN_FOLDER -> if (showPlayerActions) {
                                 val folderPath = FolderNavigationRequests.folderPathFor(song)
                                 LocalSongActionItem(
@@ -393,16 +404,6 @@ fun LocalSongActionsSheet(
                             }
                         }
                     }
-                    if (showPlayerActions) {
-                        onGoToPlaylists?.let { openPlaylists ->
-                            LocalSongActionItem(
-                                icon = Icons.AutoMirrored.Rounded.PlaylistPlay,
-                                label = stringResource(R.string.song_registered_playlists),
-                                onClick = openPlaylists,
-                            )
-                        }
-                    }
-
                             Spacer(Modifier.height(8.dp))
                         }
                     }
