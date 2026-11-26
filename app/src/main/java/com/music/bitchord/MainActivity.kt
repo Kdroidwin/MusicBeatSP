@@ -4682,6 +4682,22 @@ private fun BitChordApp(
             }
             var showAddToPlaylist by remember { mutableStateOf(false) }
             var showRegisteredPlaylistPicker by remember(songIdentityKey) { mutableStateOf(false) }
+            val openRegisteredPlaylist: (String) -> Unit = { playlistId ->
+                showRegisteredPlaylistPicker = false
+                songActions = null
+                dismissNowPlaying()
+                libraryPlaylistOpenRequest = playlistId
+                libraryFilterRequest = LibraryFilter.PLAYLISTS
+                viewModel.clearDetail()
+                selectedTab = TAB_LIBRARY
+            }
+            val goToRegisteredPlaylists: () -> Unit = {
+                if (registeredPlaylists.size == 1) {
+                    openRegisteredPlaylist(registeredPlaylists.single().id)
+                } else if (registeredPlaylists.size > 1) {
+                    showRegisteredPlaylistPicker = true
+                }
+            }
             var showArtistPicker by remember { mutableStateOf(false) }
             var showArtistPickerForArtwork by remember(songIdentityKey) { mutableStateOf(false) }
             if (showTagEditor) {
@@ -4815,13 +4831,7 @@ private fun BitChordApp(
                             registeredPlaylists.forEach { playlist ->
                                 TextButton(
                                     onClick = {
-                                        showRegisteredPlaylistPicker = false
-                                        songActions = null
-                                        dismissNowPlaying()
-                                        libraryPlaylistOpenRequest = playlist.id
-                                        libraryFilterRequest = LibraryFilter.PLAYLISTS
-                                        viewModel.clearDetail()
-                                        selectedTab = TAB_LIBRARY
+                                        openRegisteredPlaylist(playlist.id)
                                     },
                                     modifier = Modifier.fillMaxWidth(),
                                 ) {
@@ -4931,7 +4941,7 @@ private fun BitChordApp(
                             }
                         },
                         onGoToPlaylists = if (menuFromPlayer && registeredPlaylists.isNotEmpty()) {
-                            { showRegisteredPlaylistPicker = true }
+                            goToRegisteredPlaylists
                         } else null,
                         onAddToPlaylist = {
                             val isDeviceSong = song.isExternalPreview ||
@@ -5118,7 +5128,7 @@ private fun BitChordApp(
                         }
                     } else null,
                     onGoToPlaylists = if (menuFromPlayer && registeredPlaylists.isNotEmpty()) {
-                        { showRegisteredPlaylistPicker = true }
+                        goToRegisteredPlaylists
                     } else null,
                 )
                 }

@@ -8,6 +8,7 @@ import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.combinedClickable
 import androidx.compose.foundation.gestures.detectDragGestures
+import androidx.compose.foundation.horizontalScroll
 import com.music.bitchord.ui.utils.debouncedCombinedClickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
@@ -34,6 +35,7 @@ import androidx.compose.foundation.lazy.grid.itemsIndexed
 import androidx.compose.foundation.lazy.grid.rememberLazyGridState
 import androidx.compose.foundation.lazy.itemsIndexed
 import androidx.compose.foundation.lazy.rememberLazyListState
+import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
@@ -92,6 +94,10 @@ import androidx.compose.ui.res.pluralStringResource
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
+import androidx.compose.ui.text.TextStyle
+import androidx.compose.ui.text.rememberTextMeasurer
+import androidx.compose.ui.unit.Constraints
+import androidx.compose.ui.unit.sp
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.IntOffset
@@ -373,17 +379,12 @@ private fun CompactDrillDownHeader(
             }
         }
         Spacer(Modifier.height(14.dp))
-        Text(
-            text = label,
+        PlaylistDetailTitle(
+            title = label,
+            noAutomaticWrap = isPlaylist && playlistTitleNoWrap,
             style = MaterialTheme.typography.headlineMedium,
             color = MaterialTheme.colorScheme.onBackground,
-            textAlign = TextAlign.Center,
-            maxLines = if (isPlaylist && playlistTitleNoWrap) explicitTitleLineCount(label) else Int.MAX_VALUE,
-            softWrap = !isPlaylist || !playlistTitleNoWrap,
-            overflow = TextOverflow.Ellipsis,
-            modifier = Modifier
-                .fillMaxWidth()
-                .padding(horizontal = PAGE_GUTTER),
+            modifier = Modifier.fillMaxWidth().padding(horizontal = PAGE_GUTTER),
         )
         if (!isArtist && onArtistClick != null && artists.isNotEmpty()) {
             Spacer(Modifier.height(4.dp))
@@ -457,14 +458,11 @@ private fun FullScreenCollectionHeader(
                 .padding(start = PAGE_GUTTER + 8.dp, end = PAGE_GUTTER + 8.dp, bottom = 14.dp),
             horizontalAlignment = Alignment.CenterHorizontally,
         ) {
-            Text(
-                text = label,
+            PlaylistDetailTitle(
+                title = label,
+                noAutomaticWrap = isPlaylist && playlistTitleNoWrap,
                 style = MaterialTheme.typography.headlineMedium,
                 color = palette.onBackground,
-                textAlign = TextAlign.Center,
-                maxLines = if (isPlaylist && playlistTitleNoWrap) explicitTitleLineCount(label) else Int.MAX_VALUE,
-                softWrap = !isPlaylist || !playlistTitleNoWrap,
-                overflow = TextOverflow.Ellipsis,
             )
             ArtistSignatureImage(artistSignature, Modifier.padding(top = 8.dp))
             if (artists.isNotEmpty()) {
@@ -490,6 +488,88 @@ private fun FullScreenCollectionHeader(
 }
 
 private fun explicitTitleLineCount(title: String): Int = (title.count { it == '\n' } + 1).coerceAtLeast(1)
+
+/** Fits long playlist detail titles without ellipsizing or inserting new line breaks. */
+@Composable
+private fun PlaylistDetailTitle(
+    title: String,
+    noAutomaticWrap: Boolean,
+    style: TextStyle,
+    color: Color,
+    modifier: Modifier = Modifier,
+) {
+    if (!noAutomaticWrap) {
+        Text(
+            text = title,
+            modifier = modifier.fillMaxWidth(),
+            style = style,
+            color = color,
+            textAlign = TextAlign.Center,
+            maxLines = Int.MAX_VALUE,
+            softWrap = true,
+            overflow = TextOverflow.Clip,
+        )
+        return
+    }
+
+    BoxWithConstraints(modifier = modifier.fillMaxWidth()) {
+        val textMeasurer = rememberTextMeasurer()
+        val availableWidthPx = constraints.maxWidth.takeUnless { it == Constraints.Infinity } ?: 0
+        val fitted = remember(title, style, availableWidthPx, textMeasurer) {
+            fitPlaylistDetailTitle(title, style, availableWidthPx, textMeasurer)
+        }
+        val scrollState = rememberScrollState()
+        Text(
+            text = title,
+            modifier = Modifier
+                .fillMaxWidth()
+                .then(if (fitted.contentWidthPx > availableWidthPx) Modifier.horizontalScroll(scrollState) else Modifier),
+            style = fitted.style,
+            color = color,
+            textAlign = TextAlign.Center,
+            maxLines = explicitTitleLineCount(title),
+            softWrap = false,
+            overflow = TextOverflow.Clip,
+        )
+    }
+}
+
+private data class FittedPlaylistTitle(val style: TextStyle, val contentWidthPx: Int)
+
+private fun fitPlaylistDetailTitle(
+    title: String,
+    style: TextStyle,
+    availableWidthPx: Int,
+    textMeasurer: androidx.compose.ui.text.TextMeasurer,
+): FittedPlaylistTitle {
+    val originalSp = style.fontSize.value
+    if (availableWidthPx <= 0 || !originalSp.isFinite() || originalSp <= MIN_PLAYLIST_DETAIL_TITLE_SP) {
+        return FittedPlaylistTitle(style, Int.MAX_VALUE)
+    }
+
+    fun widthAt(sizeSp: Float): Int = runCatching {
+        textMeasurer.measure(
+            text = title,
+            style = style.copy(fontSize = sizeSp.sp),
+            constraints = Constraints(maxWidth = Constraints.Infinity),
+            maxLines = explicitTitleLineCount(title),
+            softWrap = false,
+        ).size.width
+    }.getOrDefault(Int.MAX_VALUE)
+
+    if (widthAt(originalSp) <= availableWidthPx) return FittedPlaylistTitle(style, widthAt(originalSp))
+
+    var low = MIN_PLAYLIST_DETAIL_TITLE_SP
+    var high = originalSp
+    repeat(14) {
+        val candidate = (low + high) / 2f
+        if (widthAt(candidate) <= availableWidthPx) low = candidate else high = candidate
+    }
+    val fittedStyle = style.copy(fontSize = low.sp)
+    return FittedPlaylistTitle(fittedStyle, widthAt(low))
+}
+
+private const val MIN_PLAYLIST_DETAIL_TITLE_SP = 8f
 
 @OptIn(ExperimentalLayoutApi::class)
 @Composable
