@@ -53,7 +53,6 @@ import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
-import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.LaunchedEffect
@@ -386,7 +385,6 @@ private fun CompactDrillDownHeader(
                 .fillMaxWidth()
                 .padding(horizontal = PAGE_GUTTER),
         )
-        if (isPlaylist) PlaylistTitleNoWrapToggle(playlistTitleNoWrap)
         if (!isArtist && onArtistClick != null && artists.isNotEmpty()) {
             Spacer(Modifier.height(4.dp))
             ArtistCreditLinks(
@@ -468,7 +466,6 @@ private fun FullScreenCollectionHeader(
                 softWrap = !isPlaylist || !playlistTitleNoWrap,
                 overflow = TextOverflow.Ellipsis,
             )
-            if (isPlaylist) PlaylistTitleNoWrapToggle(playlistTitleNoWrap)
             ArtistSignatureImage(artistSignature, Modifier.padding(top = 8.dp))
             if (artists.isNotEmpty()) {
                 Spacer(Modifier.height(3.dp))
@@ -489,19 +486,6 @@ private fun FullScreenCollectionHeader(
                 overflow = TextOverflow.Ellipsis,
             )
         }
-    }
-}
-
-@Composable
-private fun PlaylistTitleNoWrapToggle(enabled: Boolean) {
-    TextButton(
-        onClick = { AppSettings.setPlaylistDetailTitleNoWrap(!enabled) },
-        contentPadding = PaddingValues(horizontal = 8.dp, vertical = 0.dp),
-    ) {
-        Text(
-            stringResource(if (enabled) R.string.playlist_title_no_wrap_enabled else R.string.playlist_title_no_wrap_disabled),
-            style = MaterialTheme.typography.labelMedium,
-        )
     }
 }
 

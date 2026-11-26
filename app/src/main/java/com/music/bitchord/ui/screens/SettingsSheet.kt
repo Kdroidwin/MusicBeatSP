@@ -2207,6 +2207,7 @@ fun SettingsScreen(
     val localMusicMinimumDurationSeconds by AppSettings.localMusicMinimumDurationSeconds.collectAsStateWithLifecycle()
     val keepWavWhenFilteringNonMusicAudio by AppSettings.keepWavWhenFilteringNonMusicAudio.collectAsStateWithLifecycle()
     val autoFitLibraryPlaylistNames by AppSettings.autoFitLibraryPlaylistNames.collectAsStateWithLifecycle()
+    val playlistDetailTitleNoWrap by AppSettings.playlistDetailTitleNoWrap.collectAsStateWithLifecycle()
     val showPlaylistSongArtwork by AppSettings.showPlaylistSongArtwork.collectAsStateWithLifecycle()
     val hidePlaylistPlayButtonLabel by AppSettings.hidePlaylistPlayButtonLabel.collectAsStateWithLifecycle()
     val hideLibraryNewPlaylistTapLabel by AppSettings.hideLibraryNewPlaylistTapLabel.collectAsStateWithLifecycle()
@@ -2885,6 +2886,12 @@ fun SettingsScreen(
             listOf("library", "playlist", "name", "text size", "ライブラリ", "プレイリスト", "名前", "文字", "縮小"),
             autoFitLibraryPlaylistNames,
         ) { AppSettings.setAutoFitLibraryPlaylistNames(!autoFitLibraryPlaylistNames) },
+        SettingsSearchEntry(
+            stringResource(R.string.playlist_detail_title_no_wrap),
+            stringResource(R.string.playlist_detail_title_no_wrap_subtitle),
+            listOf("playlist", "title", "wrap", "line break", "プレイリスト", "タイトル", "改行", "折り返し"),
+            playlistDetailTitleNoWrap,
+        ) { AppSettings.setPlaylistDetailTitleNoWrap(!playlistDetailTitleNoWrap) },
         SettingsSearchEntry(stringResource(R.string.filter_non_music_audio), stringResource(R.string.filter_non_music_audio_subtitle), listOf("filter", "audio", "music", "音楽", "フィルター"), filterNonMusicAudio) { AppSettings.setFilterNonMusicAudio(!filterNonMusicAudio) },
         SettingsSearchEntry(stringResource(R.string.playlist_song_artwork), stringResource(R.string.playlist_song_artwork_subtitle), listOf("playlist", "artwork", "プレイリスト", "アルバムアート"), showPlaylistSongArtwork) { AppSettings.setShowPlaylistSongArtwork(!showPlaylistSongArtwork) },
         SettingsSearchEntry(stringResource(R.string.refresh_playlist_tags_on_pull), stringResource(R.string.refresh_playlist_tags_on_pull_subtitle), listOf("playlist", "refresh", "metadata", "tags", "artist", "title", "プレイリスト", "更新", "タグ", "アーティスト", "曲名"), refreshPlaylistTagsOnPull) { AppSettings.setRefreshPlaylistTagsOnPull(!refreshPlaylistTagsOnPull) },
@@ -10453,6 +10460,7 @@ private fun LocalMusicSettingsGroup(
 ) {
     val context = LocalContext.current
     val persistentPlaylistArtwork by AppSettings.persistentPlaylistArtwork.collectAsStateWithLifecycle()
+    val playlistDetailTitleNoWrap by AppSettings.playlistDetailTitleNoWrap.collectAsStateWithLifecycle()
     val playlistDetailActionOrder by AppSettings.playlistDetailActionOrder.collectAsStateWithLifecycle()
     val artistDetailMostPlayedLabelAsTracks by AppSettings.artistDetailMostPlayedLabelAsTracks.collectAsStateWithLifecycle()
 SettingsGroup(header = stringResource(R.string.local_music)) {
@@ -11047,6 +11055,23 @@ SettingsGroup(header = stringResource(R.string.local_music)) {
             )
         },
         onClick = { AppSettings.setAutoFitLibraryPlaylistNames(!autoFitLibraryPlaylistNames) },
+    )
+    RowDivider()
+    SettingsRow(
+        icon = Icons.Rounded.AutoAwesome,
+        title = stringResource(R.string.playlist_detail_title_no_wrap),
+        subtitle = stringResource(R.string.playlist_detail_title_no_wrap_subtitle),
+        trailing = {
+            Switch(
+                checked = playlistDetailTitleNoWrap,
+                onCheckedChange = AppSettings::setPlaylistDetailTitleNoWrap,
+                colors = SwitchDefaults.colors(
+                    checkedTrackColor = MaterialTheme.colorScheme.primary,
+                    checkedBorderColor = MaterialTheme.colorScheme.primary,
+                ),
+            )
+        },
+        onClick = { AppSettings.setPlaylistDetailTitleNoWrap(!playlistDetailTitleNoWrap) },
     )
     RowDivider()
     SettingsRow(
