@@ -1442,6 +1442,8 @@ object AppSettings {
     val keepWavWhenFilteringNonMusicAudio = MutableStateFlow(false)
     /** Shrinks long playlist names and wraps only when they still cannot fit at the minimum size. */
     val autoFitLibraryPlaylistNames = MutableStateFlow(true)
+    /** Prevents automatic wrapping in playlist detail titles; explicit newlines remain visible. */
+    val playlistDetailTitleNoWrap = MutableStateFlow(true)
     /** Includes configured WebDAV/Jellyfin/OpenSubsonic libraries in local collection views. */
     val includeRemoteSourceMediaInLibrary = MutableStateFlow(false)
 
@@ -2398,6 +2400,7 @@ object AppSettings {
             .coerceIn(MIN_LOCAL_MUSIC_DURATION_SECONDS, MAX_LOCAL_MUSIC_DURATION_SECONDS)
         keepWavWhenFilteringNonMusicAudio.value = prefs.getBoolean(KEY_KEEP_WAV_WHEN_FILTERING_NON_MUSIC, false)
         autoFitLibraryPlaylistNames.value = prefs.getBoolean(KEY_AUTO_FIT_LIBRARY_PLAYLIST_NAMES, true)
+        playlistDetailTitleNoWrap.value = prefs.getBoolean(KEY_PLAYLIST_DETAIL_TITLE_NO_WRAP, true)
         includeRemoteSourceMediaInLibrary.value = prefs.getBoolean(KEY_INCLUDE_REMOTE_SOURCE_MEDIA_IN_LIBRARY, false)
         localMusicSort.value = readLocalMusicSort(KEY_LOCAL_MUSIC_SORT)
         downloadedMusicSort.value = readLocalMusicSort(KEY_DOWNLOADED_MUSIC_SORT)
@@ -5225,6 +5228,11 @@ object AppSettings {
         prefs.edit().putBoolean(KEY_AUTO_FIT_LIBRARY_PLAYLIST_NAMES, value).apply()
     }
 
+    fun setPlaylistDetailTitleNoWrap(value: Boolean) {
+        playlistDetailTitleNoWrap.value = value
+        prefs.edit().putBoolean(KEY_PLAYLIST_DETAIL_TITLE_NO_WRAP, value).apply()
+    }
+
     fun setAllFilesPermissionAsked(value: Boolean) {
         allFilesPermissionAsked.value = value
         prefs.edit().putBoolean(KEY_ALL_FILES_PERMISSION_ASKED, value).apply()
@@ -6345,6 +6353,7 @@ object AppSettings {
     private const val KEY_LOCAL_MUSIC_MINIMUM_DURATION_SECONDS = "local_music_minimum_duration_seconds"
     private const val KEY_KEEP_WAV_WHEN_FILTERING_NON_MUSIC = "keep_wav_when_filtering_non_music"
     private const val KEY_AUTO_FIT_LIBRARY_PLAYLIST_NAMES = "auto_fit_library_playlist_names"
+    private const val KEY_PLAYLIST_DETAIL_TITLE_NO_WRAP = "playlist_detail_title_no_wrap"
     private const val KEY_LOCAL_MUSIC_SORT = "local_music_sort"
     private const val KEY_DOWNLOADED_MUSIC_SORT = "downloaded_music_sort"
     private const val KEY_LOCAL_ARTIST_SORT = "local_artist_sort"

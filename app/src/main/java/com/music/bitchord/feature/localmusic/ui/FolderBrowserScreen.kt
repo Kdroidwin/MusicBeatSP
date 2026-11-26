@@ -166,6 +166,7 @@ fun FolderBrowserScreen(
     var isOpeningZipTrack by remember { mutableStateOf(false) }
     var showAppleUrlDialog by remember { mutableStateOf(false) }
     var albumUrl by remember { mutableStateOf("") }
+    var pastedTracklist by remember { mutableStateOf("") }
     var appleAlbumTitle by remember { mutableStateOf("") }
     var renameRows by remember { mutableStateOf<List<AutoRenameRow>?>(null) }
     var isPreparingRename by remember { mutableStateOf(false) }
@@ -500,6 +501,18 @@ fun FolderBrowserScreen(
                         singleLine = true,
                         label = { Text(stringResource(R.string.folder_auto_rename_apple_url)) },
                     )
+                    OutlinedTextField(
+                        value = pastedTracklist,
+                        onValueChange = { pastedTracklist = it },
+                        modifier = Modifier.fillMaxWidth(),
+                        minLines = 3,
+                        maxLines = 5,
+                        label = { Text(stringResource(R.string.folder_auto_rename_tracklist)) },
+                        supportingText = {
+                            val count = AppleMusicAutoRename.parseTracklistNames(pastedTracklist).size
+                            Text(stringResource(R.string.folder_auto_rename_tracklist_count, count))
+                        },
+                    )
                     if (undoAvailable) {
                         TextButton(
                             enabled = !isApplyingRename,
@@ -532,10 +545,16 @@ fun FolderBrowserScreen(
                                 runCatching {
                                     withContext(Dispatchers.IO) {
                                         val album = AppleMusicAutoRename.fetchAlbum(albumUrlToLoad)
+                                        val pastedTitles = AppleMusicAutoRename.parseTracklistNames(pastedTracklist)
+                                        val tracks = if (pastedTitles.isEmpty()) album.tracks else {
+                                            album.tracks.mapIndexed { index, track ->
+                                                pastedTitles.getOrNull(index)?.let { title -> track.copy(title = title) } ?: track
+                                            }
+                                        }
                                         album.title to AppleMusicAutoRename.preview(
                                             context.contentResolver,
                                             folderSongs,
-                                            album.tracks,
+                                            tracks,
                                             albumTitle = album.title,
                                         )
                                     }
@@ -618,6 +637,9 @@ fun FolderBrowserScreen(
                                         )
                                     }
                                     (row.issue ?: row.conflict)?.let { Text(it, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.error) }
+                                    row.warning?.let {
+                                        Text(it, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.tertiary)
+                                    }
                                 }
                             }
                         }
@@ -626,7 +648,7 @@ fun FolderBrowserScreen(
             },
             confirmButton = {
                 TextButton(
-                    enabled = !isApplyingRename && unmatched == 0 && selectableCount > 0 && rows.any { it.selected },
+                    enabled = !isApplyingRename && selectableCount > 0 && rows.any { it.selected },
                     onClick = {
                         val mediaStoreUris = rows.asSequence()
                             .filter { it.selected }

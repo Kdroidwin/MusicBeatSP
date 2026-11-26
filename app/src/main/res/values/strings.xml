@@ -97,6 +97,9 @@
     <string name="album_gain">Album gain</string>
     <string name="new_playlist">New playlist</string>
     <string name="playlist_name_prompt">Enter a name for this playlist</string>
+    <string name="playlist_name_line_break_hint">Insert a line break where you want the playlist name to wrap.</string>
+    <string name="playlist_title_no_wrap_enabled">Do not wrap: On</string>
+    <string name="playlist_title_no_wrap_disabled">Do not wrap: Off</string>
     <string name="tap_to_create">Tap to create</string>
     <string name="localize_library_collection_count">Localize the Library collection count</string>
     <string name="localize_library_collection_count_subtitle">Use the app language for the Collections label in the Library. On by default.</string>
@@ -1802,6 +1805,7 @@
     <string name="delete_from_device">Delete from device</string>
     <string name="go_to_album">Go to Album</string>
     <string name="go_to_artist">Go to Artist</string>
+    <string name="song_registered_playlists">Playlists containing this song</string>
     <string name="open_folder">Open folder</string>
     <string name="folder_open_unavailable">That folder is not available in the Folders tab.</string>
     <string name="audio_output">Audio output</string>
@@ -2324,6 +2328,8 @@
     <string name="folder_auto_rename">Auto rename</string>
     <string name="folder_auto_rename_instructions">Paste an Apple Music album URL. Audio files in the currently open folder and its subfolders will be used; number prefixes and separators are kept.</string>
     <string name="folder_auto_rename_apple_url">Apple Music album URL</string>
+    <string name="folder_auto_rename_tracklist">VGMdb Tracklist (optional)</string>
+    <string name="folder_auto_rename_tracklist_count">Track titles found: %1$d. Pasted names are used in track order.</string>
     <string name="folder_auto_rename_choose_folder">Preview this folder</string>
     <string name="folder_auto_rename_loading">Loading album details and scanning audio files…</string>
     <string name="folder_auto_rename_failed">Could not prepare the rename preview</string>

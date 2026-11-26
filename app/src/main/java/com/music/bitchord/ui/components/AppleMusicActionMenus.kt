@@ -89,6 +89,7 @@ fun AppleMusicTrackActionsMenu(
     onCloseMenu: () -> Unit,
     onOpenAlbum: () -> Unit,
     onOpenArtist: () -> Unit,
+    onGoToPlaylists: (() -> Unit)? = null,
     onAddToPlaylist: () -> Unit,
     onChangeArtistImage: (() -> Unit)?,
     onDownload: (() -> Unit)?,
@@ -133,6 +134,11 @@ fun AppleMusicTrackActionsMenu(
                 IosMenuSeparator()
                 MenuRow(R.string.go_to_album, Icons.Rounded.Album, onCloseMenu, onOpenAlbum)
                 MenuRow(R.string.go_to_artist, Icons.Rounded.Person, onCloseMenu, onOpenArtist)
+                if (showPlayerActions) {
+                    onGoToPlaylists?.let { openPlaylists ->
+                        MenuRow(R.string.song_registered_playlists, Icons.AutoMirrored.Rounded.PlaylistPlay, onCloseMenu, openPlaylists)
+                    }
+                }
                 val folderPath = FolderNavigationRequests.folderPathFor(selectedSong)
                 val showOpenFolder = showPlayerActions &&
                     PlayerDetailsAction.OPEN_FOLDER !in hiddenPlayerActions

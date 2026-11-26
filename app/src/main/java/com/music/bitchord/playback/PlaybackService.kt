@@ -6879,6 +6879,10 @@ class PlaybackService : MediaLibraryService() {
             } else {
                 Player.Commands.Builder()
                     .add(Player.COMMAND_PLAY_PAUSE)
+                    // Some controllers (including several Bluetooth and Wear
+                    // clients) invoke seekToNext(), while others invoke the
+                    // media-item variant. Expose both transport entry points.
+                    .add(Player.COMMAND_SEEK_TO_NEXT)
                     .add(Player.COMMAND_SEEK_TO_NEXT_MEDIA_ITEM)
                     .add(Player.COMMAND_SEEK_TO_PREVIOUS_MEDIA_ITEM)
                     .add(Player.COMMAND_SEEK_TO_PREVIOUS)

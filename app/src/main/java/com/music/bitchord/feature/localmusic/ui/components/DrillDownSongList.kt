@@ -53,6 +53,7 @@ import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
+import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.LaunchedEffect
@@ -274,6 +275,7 @@ private fun CompactDrillDownHeader(
     modifier: Modifier,
 ) {
     val artistDeezerArtworkEnabled by AppSettings.artistDeezerArtworkEnabled.collectAsStateWithLifecycle()
+    val playlistTitleNoWrap by AppSettings.playlistDetailTitleNoWrap.collectAsStateWithLifecycle()
     val artistArtworkUris by ArtistArtworkStore.imageUris.collectAsStateWithLifecycle()
     Column(
         modifier = modifier
@@ -377,12 +379,14 @@ private fun CompactDrillDownHeader(
             style = MaterialTheme.typography.headlineMedium,
             color = MaterialTheme.colorScheme.onBackground,
             textAlign = TextAlign.Center,
-            maxLines = 2,
+            maxLines = if (isPlaylist && playlistTitleNoWrap) explicitTitleLineCount(label) else Int.MAX_VALUE,
+            softWrap = !isPlaylist || !playlistTitleNoWrap,
             overflow = TextOverflow.Ellipsis,
             modifier = Modifier
                 .fillMaxWidth()
                 .padding(horizontal = PAGE_GUTTER),
         )
+        if (isPlaylist) PlaylistTitleNoWrapToggle(playlistTitleNoWrap)
         if (!isArtist && onArtistClick != null && artists.isNotEmpty()) {
             Spacer(Modifier.height(4.dp))
             ArtistCreditLinks(
@@ -426,6 +430,7 @@ private fun FullScreenCollectionHeader(
     onArtistClick: ((String) -> Unit)?,
     modifier: Modifier,
 ) {
+    val playlistTitleNoWrap by AppSettings.playlistDetailTitleNoWrap.collectAsStateWithLifecycle()
     val totalMinutes = remember(songs) {
         songs.sumOf { it.durationMillis().coerceAtLeast(0L) } / 60_000L
     }
@@ -459,9 +464,11 @@ private fun FullScreenCollectionHeader(
                 style = MaterialTheme.typography.headlineMedium,
                 color = palette.onBackground,
                 textAlign = TextAlign.Center,
-                maxLines = 2,
+                maxLines = if (isPlaylist && playlistTitleNoWrap) explicitTitleLineCount(label) else Int.MAX_VALUE,
+                softWrap = !isPlaylist || !playlistTitleNoWrap,
                 overflow = TextOverflow.Ellipsis,
             )
+            if (isPlaylist) PlaylistTitleNoWrapToggle(playlistTitleNoWrap)
             ArtistSignatureImage(artistSignature, Modifier.padding(top = 8.dp))
             if (artists.isNotEmpty()) {
                 Spacer(Modifier.height(3.dp))
@@ -484,6 +491,21 @@ private fun FullScreenCollectionHeader(
         }
     }
 }
+
+@Composable
+private fun PlaylistTitleNoWrapToggle(enabled: Boolean) {
+    TextButton(
+        onClick = { AppSettings.setPlaylistDetailTitleNoWrap(!enabled) },
+        contentPadding = PaddingValues(horizontal = 8.dp, vertical = 0.dp),
+    ) {
+        Text(
+            stringResource(if (enabled) R.string.playlist_title_no_wrap_enabled else R.string.playlist_title_no_wrap_disabled),
+            style = MaterialTheme.typography.labelMedium,
+        )
+    }
+}
+
+private fun explicitTitleLineCount(title: String): Int = (title.count { it == '\n' } + 1).coerceAtLeast(1)
 
 @OptIn(ExperimentalLayoutApi::class)
 @Composable

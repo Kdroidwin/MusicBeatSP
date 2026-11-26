@@ -42,6 +42,7 @@ data class AutoRenameRow(
     val sourceDiscNumber: Int? = null,
     val sourceTrackNumber: Int? = null,
     val issue: String? = null,
+    val warning: String? = null,
     val conflict: String? = null,
     val selected: Boolean = track != null && issue == null && conflict == null,
 )
@@ -58,7 +59,26 @@ object AppleMusicAutoRename {
     private val leadingNumbers = Regex("^(\\d+(?:\\s*[-_.]\\s*\\d+)*(?:\\s*[-_.]\\s*|\\s+)?)")
     private val numbers = Regex("^(\\d+)(?:\\s*[-_.]\\s*(\\d+))?")
     private val discDirectory = Regex("(?i)(?:^|[^A-Za-z])(?:disk|disc|cd|ディスク)[\\s._-]*0*(\\d+)(?:$|[^0-9])")
+    private val vgmdbTrackLine = Regex("^\\d{2,3}\\s+(.+?)\\s+\\d{1,2}:\\d{2}$")
     private val audioExtensions = setOf("flac", "mp3", "m4a", "m4b", "aac", "alac", "wav", "aif", "aiff", "ogg", "opus", "wma", "ape", "wv")
+
+    /** Extracts numbered titles from a VGMdb-style pasted Tracklist section. */
+    fun parseTracklistNames(text: String): List<String> {
+        val tracks = mutableListOf<String>()
+        var inTracklist = false
+        for (rawLine in text.lineSequence()) {
+            val line = rawLine.trim()
+            if (!inTracklist) {
+                if (line.equals("Tracklist", ignoreCase = true)) inTracklist = true
+                continue
+            }
+            if (line.startsWith("Disc length", ignoreCase = true)) break
+            if (line.matches(Regex("(?i)Disc\\s+\\d+.*"))) continue
+            val title = vgmdbTrackLine.matchEntire(line)?.groupValues?.getOrNull(1)?.trim()
+            if (!title.isNullOrBlank()) tracks += title
+        }
+        return tracks
+    }
 
     fun fetchAlbum(albumUrl: String): AppleCatalogAlbum {
         val uri = Uri.parse(albumUrl.trim())
@@ -263,6 +283,7 @@ object AppleMusicAutoRename {
         } else tracks
         val assigned = linkedMapOf<String, AppleCatalogTrack>()
         val issues = hashMapOf<String, String>()
+        val warnings = hashMapOf<String, String>()
         val albumMismatchIds = hashSetOf<String>()
         orderedFiles.forEach { file ->
             val directoryAlbum = file.path.substringBeforeLast('/', "")
@@ -284,19 +305,49 @@ object AppleMusicAutoRename {
         // files. For those rows require a unique title match (artist and local
         // disc/track values break ties); never fall back to position-only
         // matching when the album identity is uncertain.
-        orderedFiles.filter { it.id in albumMismatchIds && issues[it.id] == null }.forEach { file ->
+        orderedFiles.forEachIndexed { fileIndex, file ->
+            if (file.id !in albumMismatchIds || issues[file.id] != null) return@forEachIndexed
             val titleCandidates = metadataTrackMatches(file, orderedTracks)
             val numberMatched = if (titleCandidates.size > 1 && file.number != null) {
                 titleCandidates.filter { candidate ->
                     candidate.track == file.number && (file.disc == null || candidate.disc == file.disc)
                 }.ifEmpty { titleCandidates }
             } else titleCandidates
+            val numberedCandidates = file.number?.let { number ->
+                orderedTracks.filter { candidate ->
+                    candidate.track == number && (file.disc == null || candidate.disc == file.disc)
+                }
+            }.orEmpty()
+            val positionCandidate = if (
+                file.number == null && orderedFiles.size == orderedTracks.size
+            ) orderedTracks.getOrNull(fileIndex) else null
             when {
                 numberMatched.size > 1 -> issues[file.id] = "アルバム名が異なるため、曲名・アーティスト名と曲番号で一意に照合できません"
+                numberMatched.isEmpty() && numberedCandidates.size == 1 &&
+                    assigned.values.none { it.id == numberedCandidates.single().id } -> {
+                    // Preserve a visible warning, but let the user explicitly
+                    // approve the unique track-number match instead of making
+                    // a translated or differently tagged release impossible
+                    // to rename.
+                    assigned[file.id] = numberedCandidates.single()
+                    warnings[file.id] = "アルバム名と音源タグの曲名・アーティスト名が一致しません。曲番号で照合しています。変更前に確認してください。"
+                }
+                numberMatched.isEmpty() && positionCandidate != null &&
+                    assigned.values.none { it.id == positionCandidate.id } -> {
+                    // If the complete folder has no track-number metadata at
+                    // all, expose the natural file-order pairing as a warned,
+                    // user-approved option. Partial folders never use this
+                    // positional fallback.
+                    assigned[file.id] = positionCandidate
+                    warnings[file.id] = "アルバム名と音源タグの曲名・アーティスト名が一致しません。フォルダ内の曲順で照合しています。変更前に確認してください。"
+                }
                 numberMatched.isEmpty() -> issues[file.id] = "アルバム名が異なり、音源タグの曲名・アーティスト名もApple Musicの曲に一致しません"
                 assigned.values.any { it.id == numberMatched.single().id } ->
                     issues[file.id] = "同じApple Music曲が複数ファイルに一致しています"
-                else -> assigned[file.id] = numberMatched.single()
+                else -> {
+                    assigned[file.id] = numberMatched.single()
+                    warnings[file.id] = "音源のアルバム名がApple Musicと異なります。変更前に内容を確認してください。"
+                }
             }
         }
         if (flattenedCatalog && multipleFileDiscs) {
@@ -397,6 +448,7 @@ object AppleMusicAutoRename {
                 sourceDiscNumber = file.disc,
                 sourceTrackNumber = file.number,
                 issue = issues[file.id],
+                warning = warnings[file.id],
                 selected = track != null && issues[file.id] == null,
             )
         }
@@ -416,8 +468,10 @@ object AppleMusicAutoRename {
     }
 
     suspend fun apply(context: Context, rows: List<AutoRenameRow>): AutoRenameResult = withContext(Dispatchers.IO) {
-        if (rows.any { it.track == null || it.issue != null }) return@withContext AutoRenameResult(0, 0, "曲番号・アルバムを照合できないファイルがあります。プレビューを確認してください。")
-        val selected = rows.filter { it.selected && it.track != null && it.newName != null && it.issue == null && it.conflict == null }
+        val selected = rows.filter { it.selected }
+        if (selected.any { it.track == null || it.issue != null || it.newName == null || it.conflict != null }) {
+            return@withContext AutoRenameResult(0, 0, "選択したファイルを照合または更新できません。プレビューを確認してください。")
+        }
         if (selected.isEmpty()) return@withContext AutoRenameResult(0, 0, "更新できるファイルがありません。")
         val pending = runCatching {
             selected.map { row ->

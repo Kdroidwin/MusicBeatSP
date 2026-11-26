@@ -26,13 +26,15 @@ fun AutoFitPlaylistName(
     color: Color = MaterialTheme.colorScheme.onSurface,
 ) {
     val autoFit by AppSettings.autoFitLibraryPlaylistNames.collectAsStateWithLifecycle()
+    val explicitLines = remember(name) { (name.count { it == '\n' } + 1).coerceAtLeast(1) }
     if (!autoFit) {
         Text(
             text = name,
             modifier = modifier,
             style = style,
             color = color,
-            maxLines = 1,
+            maxLines = explicitLines,
+            softWrap = false,
             overflow = TextOverflow.Ellipsis,
         )
         return
@@ -49,8 +51,8 @@ fun AutoFitPlaylistName(
             modifier = Modifier.fillMaxWidth(),
             style = fittedStyle,
             color = color,
-            maxLines = Int.MAX_VALUE,
-            softWrap = true,
+            maxLines = explicitLines,
+            softWrap = false,
             overflow = TextOverflow.Clip,
         )
     }
@@ -72,7 +74,7 @@ private fun fitPlaylistTitleStyle(
             text = text,
             style = style.copy(fontSize = sizeSp.sp),
             constraints = Constraints(maxWidth = Constraints.Infinity),
-            maxLines = 1,
+            maxLines = (text.count { it == '\n' } + 1).coerceAtLeast(1),
             softWrap = false,
         ).size.width <= availableWidthPx
     }.getOrDefault(false)

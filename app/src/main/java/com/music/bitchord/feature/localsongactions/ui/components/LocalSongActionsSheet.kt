@@ -22,6 +22,7 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.rounded.KeyboardArrowRight
 import androidx.compose.material.icons.automirrored.rounded.Notes
 import androidx.compose.material.icons.automirrored.rounded.PlaylistAdd
+import androidx.compose.material.icons.automirrored.rounded.PlaylistPlay
 import androidx.compose.material.icons.rounded.Album
 import androidx.compose.material.icons.rounded.Bedtime
 import androidx.compose.material.icons.rounded.Edit
@@ -105,6 +106,7 @@ fun LocalSongActionsSheet(
     onDeleteYoutubeDownload: (() -> Unit)? = null,
     onChangeArtistImage: (() -> Unit)? = null,
     onShareNowPlaying: (() -> Unit)? = null,
+    onGoToPlaylists: (() -> Unit)? = null,
 ) {
     val sheetState = rememberModalBottomSheetState(skipPartiallyExpanded = true)
     val sheetShape = RoundedCornerShape(topStart = 24.dp, topEnd = 24.dp)
@@ -389,6 +391,15 @@ fun LocalSongActionsSheet(
                                     onClick = share,
                                 )
                             }
+                        }
+                    }
+                    if (showPlayerActions) {
+                        onGoToPlaylists?.let { openPlaylists ->
+                            LocalSongActionItem(
+                                icon = Icons.AutoMirrored.Rounded.PlaylistPlay,
+                                label = stringResource(R.string.song_registered_playlists),
+                                onClick = openPlaylists,
+                            )
                         }
                     }
 

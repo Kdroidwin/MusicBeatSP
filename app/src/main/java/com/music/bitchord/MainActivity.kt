@@ -4659,6 +4659,15 @@ private fun BitChordApp(
                 ?: originalSong
             val song = resolvedSong
             val songIdentityKey = song.localUri ?: song.videoId
+            val localPlaylists by LocalPlaylistStore.playlists.collectAsStateWithLifecycle()
+            val playlistEntryId = song.localUri
+                ?.takeIf { it.startsWith("content://", ignoreCase = true) || it.startsWith("file://", ignoreCase = true) }
+                ?: song.videoId
+            val registeredPlaylists = remember(localPlaylists, playlistEntryId) {
+                localPlaylists.filter { playlist ->
+                    playlist.smartDefinition == null && playlistEntryId in playlist.songIds
+                }
+            }
             var showTagEditor by remember(songIdentityKey, pendingPlayerQuickAction) {
                 mutableStateOf(pendingPlayerQuickAction == PlayerQuickAction.TAG_EDITOR)
             }
@@ -4672,6 +4681,7 @@ private fun BitChordApp(
                 mutableStateOf(false)
             }
             var showAddToPlaylist by remember { mutableStateOf(false) }
+            var showRegisteredPlaylistPicker by remember(songIdentityKey) { mutableStateOf(false) }
             var showArtistPicker by remember { mutableStateOf(false) }
             var showArtistPickerForArtwork by remember(songIdentityKey) { mutableStateOf(false) }
             if (showTagEditor) {
@@ -4796,6 +4806,41 @@ private fun BitChordApp(
                         songActions = null
                     },
                 )
+            } else if (showRegisteredPlaylistPicker) {
+                AlertDialog(
+                    onDismissRequest = { showRegisteredPlaylistPicker = false },
+                    title = { Text(stringResource(R.string.song_registered_playlists)) },
+                    text = {
+                        Column {
+                            registeredPlaylists.forEach { playlist ->
+                                TextButton(
+                                    onClick = {
+                                        showRegisteredPlaylistPicker = false
+                                        songActions = null
+                                        dismissNowPlaying()
+                                        libraryPlaylistOpenRequest = playlist.id
+                                        libraryFilterRequest = LibraryFilter.PLAYLISTS
+                                        viewModel.clearDetail()
+                                        selectedTab = TAB_LIBRARY
+                                    },
+                                    modifier = Modifier.fillMaxWidth(),
+                                ) {
+                                    Text(
+                                        playlist.name,
+                                        modifier = Modifier.fillMaxWidth(),
+                                        maxLines = 2,
+                                        overflow = TextOverflow.Ellipsis,
+                                    )
+                                }
+                            }
+                        }
+                    },
+                    confirmButton = {
+                        TextButton(onClick = { showRegisteredPlaylistPicker = false; songActions = null }) {
+                            Text(stringResource(R.string.cancel))
+                        }
+                    },
+                )
             } else if (showArtistPicker) {
                 val artists = remember(song.artist) {
                     val split = com.music.bitchord.feature.artistimage.util.ArtistSplitter.split(song.artist)
@@ -4885,6 +4930,9 @@ private fun BitChordApp(
                                 }
                             }
                         },
+                        onGoToPlaylists = if (menuFromPlayer && registeredPlaylists.isNotEmpty()) {
+                            { showRegisteredPlaylistPicker = true }
+                        } else null,
                         onAddToPlaylist = {
                             val isDeviceSong = song.isExternalPreview ||
                                 !song.localUri.isNullOrBlank() || !song.localPath.isNullOrBlank()
@@ -5068,6 +5116,9 @@ private fun BitChordApp(
                                 }
                             }
                         }
+                    } else null,
+                    onGoToPlaylists = if (menuFromPlayer && registeredPlaylists.isNotEmpty()) {
+                        { showRegisteredPlaylistPicker = true }
                     } else null,
                 )
                 }
