@@ -231,6 +231,7 @@ private data class PlaybackAudioChain(
     val transition: TransitionFilterProcessor = TransitionFilterProcessor(),
     val replayGain: ReplayGainAudioProcessor = ReplayGainAudioProcessor(),
     val resampler: ResamplerCutoffAudioProcessor = ResamplerCutoffAudioProcessor(),
+    val pioneerMsr: PioneerMsrAudioProcessor = PioneerMsrAudioProcessor(),
     val darUpsampler: DarPcmUpsamplingAudioProcessor = DarPcmUpsamplingAudioProcessor(),
 )
 
@@ -2266,6 +2267,7 @@ class PlaybackService : MediaLibraryService() {
                 chain.transition,
                 chain.replayGain,
                 chain.resampler,
+                chain.pioneerMsr,
                 chain.darUpsampler,
             ),
         )
@@ -5114,6 +5116,7 @@ class PlaybackService : MediaLibraryService() {
         transition: TransitionFilterProcessor,
         replayGain: ReplayGainAudioProcessor,
         resamplerCutoff: ResamplerCutoffAudioProcessor,
+        pioneerMsr: PioneerMsrAudioProcessor,
         darUpsampler: DarPcmUpsamplingAudioProcessor,
     ) = object : DefaultRenderersFactory(this) {
         init {
@@ -5169,7 +5172,7 @@ class PlaybackService : MediaLibraryService() {
             )
             .setAudioProcessorChain(
                 DefaultAudioSink.DefaultAudioProcessorChain(
-                    arrayOf(resamplerCutoff, parametricEq, spatial, transition, replayGain, darUpsampler),
+                    arrayOf(pioneerMsr, resamplerCutoff, parametricEq, spatial, transition, replayGain, darUpsampler),
                     SilenceSkippingAudioProcessor(
                         MIN_SILENCE_US,
                         SilenceSkippingAudioProcessor.DEFAULT_SILENCE_RETENTION_RATIO,
@@ -5197,7 +5200,9 @@ class PlaybackService : MediaLibraryService() {
         val bitPerfect = BitPerfectOutput.ready.value
         chain.replayGain.normalizationGainDbFor = ::loudnessNormalizationGainDbFor
         chain.replayGain.normalizationBypassed = bitPerfect
-        chain.darUpsampler.enabled = AppSettings.darPcmUpsamplingEnabled.value && !bitPerfect
+        chain.pioneerMsr.outputSupports96k = 96_000 in darOutputSampleRates()
+        chain.pioneerMsr.enabled = AppSettings.pioneerMsrEnabled.value && PioneerMsrNative.isAvailable && !bitPerfect
+        chain.darUpsampler.enabled = AppSettings.darPcmUpsamplingEnabled.value && !chain.pioneerMsr.enabled && !bitPerfect
         configureDarOutputCapabilities(chain.darUpsampler)
         applyVolumeBoost(chain)
         applyAudioOffloadPreference(player)
@@ -5458,8 +5463,8 @@ class PlaybackService : MediaLibraryService() {
         outputReconfigureJob?.cancel()
         outputReconfigureJob = scope.launch {
             val requestedFloat = shouldEnableFloatOutput()
-            val darNeedsRouteRebuild = AppSettings.darPcmUpsamplingEnabled.value
-            if (!forceRebuild && !darNeedsRouteRebuild && requestedFloat == configuredFloatOutput) {
+            val pcmProcessingNeedsRebuild = AppSettings.darPcmUpsamplingEnabled.value || AppSettings.pioneerMsrEnabled.value
+            if (!forceRebuild && !pcmProcessingNeedsRebuild && requestedFloat == configuredFloatOutput) {
                 applyOutputRoute()
             } else {
                 rebuildPlayersForOutput(requestedFloat)
@@ -5646,6 +5651,11 @@ class PlaybackService : MediaLibraryService() {
             }
         }
         scope.launch {
+            AppSettings.pioneerMsrEnabled.drop(1).collect {
+                requestOutputReconfiguration(forceRebuild = true)
+            }
+        }
+        scope.launch {
             AppSettings.dsdPlaybackEnabled.drop(1).collect {
                 requestOutputReconfiguration(forceRebuild = true)
             }
@@ -5660,8 +5670,10 @@ class PlaybackService : MediaLibraryService() {
                 crossfade?.cancelTransition()
                 activeAudioChain.replayGain.normalizationBypassed = enabled
                 spareAudioChain.replayGain.normalizationBypassed = enabled
-                activeAudioChain.darUpsampler.enabled = AppSettings.darPcmUpsamplingEnabled.value && !enabled
-                spareAudioChain.darUpsampler.enabled = AppSettings.darPcmUpsamplingEnabled.value && !enabled
+                activeAudioChain.pioneerMsr.enabled = AppSettings.pioneerMsrEnabled.value && PioneerMsrNative.isAvailable && !enabled
+                spareAudioChain.pioneerMsr.enabled = AppSettings.pioneerMsrEnabled.value && PioneerMsrNative.isAvailable && !enabled
+                activeAudioChain.darUpsampler.enabled = AppSettings.darPcmUpsamplingEnabled.value && !activeAudioChain.pioneerMsr.enabled && !enabled
+                spareAudioChain.darUpsampler.enabled = AppSettings.darPcmUpsamplingEnabled.value && !spareAudioChain.pioneerMsr.enabled && !enabled
                 applyVolumeBoost(activeAudioChain)
                 applyVolumeBoost(spareAudioChain)
                 eachPlayer { current ->
@@ -5894,6 +5906,7 @@ class PlaybackService : MediaLibraryService() {
             !TrackPlaybackSettings.hasEnabledTrackCrossfades() &&
             !PlaylistPlaybackSettings.hasEnabledCrossfades() &&
             !AppSettings.darPcmUpsamplingEnabled.value &&
+            !(AppSettings.pioneerMsrEnabled.value && PioneerMsrNative.isAvailable) &&
             !AppSettings.showAnalogDigitalPeakMeter.value &&
             !AppSettings.showSpectrumAnalyzer.value
         val preferences = TrackSelectionParameters.AudioOffloadPreferences.Builder()

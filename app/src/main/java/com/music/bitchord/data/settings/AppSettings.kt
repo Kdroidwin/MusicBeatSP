@@ -1058,6 +1058,8 @@ object AppSettings {
     val spotifyIntegrationEnabled = MutableStateFlow(false)
     /** UCRT-inspired DAR PCM upsampling; excluded from bit-perfect output. */
     val darPcmUpsamplingEnabled = MutableStateFlow(false)
+    /** Optional Pioneer MSR PCM restoration; requires 96 kHz output and a supported ARM ABI. */
+    val pioneerMsrEnabled = MutableStateFlow(false)
     /** DSD-to-PCM playback path; disabled until explicitly selected. */
     val dsdPlaybackEnabled = MutableStateFlow(false)
     /** Converts selected local formats that Media3 cannot decode into disposable PCM WAV files. */
@@ -2188,6 +2190,11 @@ object AppSettings {
         externalMediaControlEnabled.value = prefs.getBoolean(KEY_EXTERNAL_MEDIA_CONTROL_ENABLED, false)
         spotifyIntegrationEnabled.value = prefs.getBoolean(KEY_SPOTIFY_INTEGRATION_ENABLED, false)
         darPcmUpsamplingEnabled.value = prefs.getBoolean(KEY_DAR_PCM_UPSAMPLING_ENABLED, false)
+        val requestedPioneerMsr = prefs.getBoolean(KEY_PIONEER_MSR_ENABLED, false)
+        pioneerMsrEnabled.value = requestedPioneerMsr && !darPcmUpsamplingEnabled.value
+        if (requestedPioneerMsr && darPcmUpsamplingEnabled.value) {
+            prefs.edit().putBoolean(KEY_PIONEER_MSR_ENABLED, false).apply()
+        }
         dsdPlaybackEnabled.value = prefs.getBoolean(KEY_DSD_PLAYBACK_ENABLED, false)
         ffmpegUnsupportedAudioTranscodeEnabled.value = prefs.getBoolean(KEY_FFMPEG_UNSUPPORTED_AUDIO_TRANSCODE_ENABLED, true)
         inAppVideoPlaybackEnabled.value = prefs.getBoolean(KEY_IN_APP_VIDEO_PLAYBACK_ENABLED, false)
@@ -3996,7 +4003,20 @@ object AppSettings {
 
     fun setDarPcmUpsamplingEnabled(value: Boolean) {
         darPcmUpsamplingEnabled.value = value
-        prefs.edit().putBoolean(KEY_DAR_PCM_UPSAMPLING_ENABLED, value).apply()
+        if (value) pioneerMsrEnabled.value = false
+        prefs.edit()
+            .putBoolean(KEY_DAR_PCM_UPSAMPLING_ENABLED, value)
+            .putBoolean(KEY_PIONEER_MSR_ENABLED, if (value) false else pioneerMsrEnabled.value)
+            .apply()
+    }
+
+    fun setPioneerMsrEnabled(value: Boolean) {
+        pioneerMsrEnabled.value = value
+        if (value) darPcmUpsamplingEnabled.value = false
+        prefs.edit()
+            .putBoolean(KEY_PIONEER_MSR_ENABLED, value)
+            .putBoolean(KEY_DAR_PCM_UPSAMPLING_ENABLED, if (value) false else darPcmUpsamplingEnabled.value)
+            .apply()
     }
 
     fun setDsdPlaybackEnabled(value: Boolean) {
@@ -6212,6 +6232,7 @@ object AppSettings {
     private const val KEY_EXTERNAL_MEDIA_CONTROL_ENABLED = "external_media_control_enabled"
     private const val KEY_SPOTIFY_INTEGRATION_ENABLED = "spotify_integration_enabled"
     private const val KEY_DAR_PCM_UPSAMPLING_ENABLED = "dar_pcm_upsampling_enabled"
+    private const val KEY_PIONEER_MSR_ENABLED = "pioneer_msr_enabled"
     private const val KEY_DSD_PLAYBACK_ENABLED = "dsd_playback_enabled"
     private const val KEY_FFMPEG_UNSUPPORTED_AUDIO_TRANSCODE_ENABLED = "ffmpeg_unsupported_audio_transcode_enabled"
     private const val KEY_IN_APP_VIDEO_PLAYBACK_ENABLED = "in_app_video_playback_enabled"

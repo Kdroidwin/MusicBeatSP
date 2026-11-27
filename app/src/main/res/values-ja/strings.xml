@@ -2236,7 +2236,7 @@
     <string name="lyrics_format_cancel">キャンセル</string>
     <string name="lyrics_format_lrc_timed">同期歌詞</string>
     <string name="lyrics_sync_per_character">1文字ごと</string>
-    <string name="lyrics_sync_line_or_word">行・単語単位</string>
+    <string name="lyrics_sync_line_or_word">行単位</string>
     <string name="lyrics_format_plain_badge">通常の歌詞</string>
     <string name="lyrics_line_count">%1$d行</string>
     <string name="lyrics_editor_title_label">曲名</string>
@@ -2399,6 +2399,10 @@
     <string name="hide_player_control_highlight_circles_subtitle">プレイヤー下部の選択中アイコンを囲む円を消します。初期設定はオフです。</string>
     <string name="dar_pcm_upsampling">DAR PCMアップサンプリング</string>
     <string name="dar_pcm_upsampling_subtitle">UCRTのFIRアップサンプラーでPCM再生を最大4倍・192 kHzまで変換します。ビットパーフェクト出力では迂回します。初期設定はオフです。</string>
+    <string name="pioneer_msr">Pioneer MSR音質復元</string>
+    <string name="pioneer_msr_subtitle">32～48 kHzのステレオPCMをMSR DSPで処理し、24-bit/96 kHzで出力します。ARM端末と出力先の96 kHz対応が必要です。ビットパーフェクト再生では無効です。初期設定はオフです。</string>
+    <string name="pioneer_msr_unavailable">MSRには4 KBページサイズのARM32/ARM64端末が必要です。</string>
+    <string name="audio_offload_disabled_by_msr">Pioneer MSRの使用中はオーディオオフロードを無効にします。</string>
     <string name="audio_offload_disabled_by_dsp">DAR PCMアップサンプリング中はオーディオオフロードを無効にします。</string>
     <string name="dsd_playback_pcm">DSF・DFFをPCM再生</string>
     <string name="dsd_playback_pcm_subtitle">DSFと非圧縮DSDIFFをMedia3経由で24bit PCMにデコードします。Native DSD、DoP、DST圧縮DFFは含みません。初期設定はオフです。</string>

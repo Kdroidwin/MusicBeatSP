@@ -235,6 +235,7 @@ import com.music.bitchord.data.settings.LyricsTextAlignment
 import com.music.bitchord.data.lyrics.CtcModelStore
 import com.music.bitchord.feature.lyrics.PlamoLyricsTranslation
 import com.music.bitchord.playback.AudioOutputStatus
+import com.music.bitchord.playback.PioneerMsrNative
 import com.music.bitchord.R
 import com.music.bitchord.data.settings.ThemeMode
 import com.music.bitchord.playback.audio.bitperfect.BitPerfectOutput
@@ -296,6 +297,16 @@ private fun darPcmUpsamplingSearchEntry(enabled: Boolean): SettingsSearchEntry =
     keywords = listOf("DAR", "DSRE", "PCM", "upsampling", "アップサンプリング", "高音質", "DAC"),
     checked = enabled,
     activate = { AppSettings.setDarPcmUpsamplingEnabled(!enabled) },
+)
+
+@Composable
+private fun pioneerMsrSearchEntry(enabled: Boolean, available: Boolean): SettingsSearchEntry = SettingsSearchEntry(
+    title = stringResource(R.string.pioneer_msr),
+    subtitle = stringResource(if (available) R.string.pioneer_msr_subtitle else R.string.pioneer_msr_unavailable),
+    keywords = listOf("Pioneer", "MSR", "Master Sound Revive", "PCM", "96 kHz", "音質復元", "ハイレゾ"),
+    checked = enabled && available,
+    enabled = available,
+    activate = { if (available) AppSettings.setPioneerMsrEnabled(!enabled) },
 )
 
 @Composable
@@ -1599,6 +1610,7 @@ private fun crossfadeSettingsSearchEntries(
     smartFade: Boolean,
     audioOffloadEnabled: Boolean,
     darPcmUpsamplingEnabled: Boolean,
+    pioneerMsrEnabled: Boolean,
 ): List<SettingsSearchEntry> = listOf(
     SettingsSearchEntry(
         title = stringResource(R.string.crossfade),
@@ -1618,15 +1630,16 @@ private fun crossfadeSettingsSearchEntries(
         subtitle = stringResource(
             when {
                 durationMs > 0 || smartFade -> R.string.audio_offload_disabled_by_transition
+                pioneerMsrEnabled -> R.string.audio_offload_disabled_by_msr
                 darPcmUpsamplingEnabled -> R.string.audio_offload_disabled_by_dsp
                 else -> R.string.audio_offload_subtitle
             },
         ),
         keywords = listOf("audio offload", "offload", "hardware playback", "省電力", "オフロード再生"),
-        checked = audioOffloadEnabled && durationMs == 0 && !smartFade && !darPcmUpsamplingEnabled,
-        enabled = durationMs == 0 && !smartFade && !darPcmUpsamplingEnabled,
+        checked = audioOffloadEnabled && durationMs == 0 && !smartFade && !darPcmUpsamplingEnabled && !pioneerMsrEnabled,
+        enabled = durationMs == 0 && !smartFade && !darPcmUpsamplingEnabled && !pioneerMsrEnabled,
         activate = {
-            if (durationMs == 0 && !smartFade && !darPcmUpsamplingEnabled) {
+            if (durationMs == 0 && !smartFade && !darPcmUpsamplingEnabled && !pioneerMsrEnabled) {
                 AppSettings.setAudioOffloadEnabled(!audioOffloadEnabled)
             }
         },
@@ -1983,6 +1996,8 @@ fun SettingsScreen(
     var showHomeTabTitleModeDialog by remember { mutableStateOf(false) }
     val resamplerCutoffHz by AppSettings.resamplerCutoffHz.collectAsStateWithLifecycle()
     val darPcmUpsamplingEnabled by AppSettings.darPcmUpsamplingEnabled.collectAsStateWithLifecycle()
+    val pioneerMsrEnabled by AppSettings.pioneerMsrEnabled.collectAsStateWithLifecycle()
+    val pioneerMsrAvailable = PioneerMsrNative.isAvailable
     val dsdPlaybackEnabled by AppSettings.dsdPlaybackEnabled.collectAsStateWithLifecycle()
     val ffmpegUnsupportedAudioTranscodeEnabled by AppSettings.ffmpegUnsupportedAudioTranscodeEnabled.collectAsStateWithLifecycle()
     val inAppVideoPlaybackEnabled by AppSettings.inAppVideoPlaybackEnabled.collectAsStateWithLifecycle()
@@ -3442,7 +3457,9 @@ fun SettingsScreen(
             smartFade = smartFade,
             audioOffloadEnabled = audioOffloadEnabled,
             darPcmUpsamplingEnabled = darPcmUpsamplingEnabled,
+            pioneerMsrEnabled = pioneerMsrEnabled && pioneerMsrAvailable,
         ) +
+        pioneerMsrSearchEntry(pioneerMsrEnabled, pioneerMsrAvailable) +
         listOf(
             SettingsSearchEntry(
                 title = stringResource(R.string.ab_repeat),
@@ -4863,18 +4880,19 @@ fun SettingsScreen(
                 subtitle = stringResource(
                     when {
                         crossfadeDurationMs > 0 || smartFade -> R.string.audio_offload_disabled_by_transition
+                        pioneerMsrEnabled && pioneerMsrAvailable -> R.string.audio_offload_disabled_by_msr
                         darPcmUpsamplingEnabled -> R.string.audio_offload_disabled_by_dsp
                         else -> R.string.audio_offload_subtitle
                     },
                 ),
-                enabled = crossfadeDurationMs == 0 && !smartFade && !darPcmUpsamplingEnabled,
+                enabled = crossfadeDurationMs == 0 && !smartFade && !darPcmUpsamplingEnabled && !(pioneerMsrEnabled && pioneerMsrAvailable),
                 trailing = {
                     Switch(
-                        checked = audioOffloadEnabled && crossfadeDurationMs == 0 && !smartFade && !darPcmUpsamplingEnabled,
+                        checked = audioOffloadEnabled && crossfadeDurationMs == 0 && !smartFade && !darPcmUpsamplingEnabled && !(pioneerMsrEnabled && pioneerMsrAvailable),
                         onCheckedChange = { enabled ->
-                            if (crossfadeDurationMs == 0 && !smartFade && !darPcmUpsamplingEnabled) AppSettings.setAudioOffloadEnabled(enabled)
+                            if (crossfadeDurationMs == 0 && !smartFade && !darPcmUpsamplingEnabled && !(pioneerMsrEnabled && pioneerMsrAvailable)) AppSettings.setAudioOffloadEnabled(enabled)
                         },
-                        enabled = crossfadeDurationMs == 0 && !smartFade && !darPcmUpsamplingEnabled,
+                        enabled = crossfadeDurationMs == 0 && !smartFade && !darPcmUpsamplingEnabled && !(pioneerMsrEnabled && pioneerMsrAvailable),
                         colors = SwitchDefaults.colors(
                             checkedTrackColor = MaterialTheme.colorScheme.primary,
                             checkedBorderColor = MaterialTheme.colorScheme.primary,
@@ -4882,7 +4900,7 @@ fun SettingsScreen(
                     )
                 },
                 onClick = {
-                    if (crossfadeDurationMs == 0 && !smartFade && !darPcmUpsamplingEnabled) AppSettings.setAudioOffloadEnabled(!audioOffloadEnabled)
+                    if (crossfadeDurationMs == 0 && !smartFade && !darPcmUpsamplingEnabled && !(pioneerMsrEnabled && pioneerMsrAvailable)) AppSettings.setAudioOffloadEnabled(!audioOffloadEnabled)
                 },
             )
             RowDivider()
@@ -4901,6 +4919,25 @@ fun SettingsScreen(
                     )
                 },
                 onClick = { AppSettings.setDarPcmUpsamplingEnabled(!darPcmUpsamplingEnabled) },
+            )
+            RowDivider()
+            SettingsRow(
+                icon = Icons.Rounded.GraphicEq,
+                title = stringResource(R.string.pioneer_msr),
+                subtitle = stringResource(if (pioneerMsrAvailable) R.string.pioneer_msr_subtitle else R.string.pioneer_msr_unavailable),
+                enabled = pioneerMsrAvailable,
+                trailing = {
+                    Switch(
+                        checked = pioneerMsrEnabled && pioneerMsrAvailable,
+                        onCheckedChange = { checked -> if (pioneerMsrAvailable) AppSettings.setPioneerMsrEnabled(checked) },
+                        enabled = pioneerMsrAvailable,
+                        colors = SwitchDefaults.colors(
+                            checkedTrackColor = MaterialTheme.colorScheme.primary,
+                            checkedBorderColor = MaterialTheme.colorScheme.primary,
+                        ),
+                    )
+                },
+                onClick = { if (pioneerMsrAvailable) AppSettings.setPioneerMsrEnabled(!pioneerMsrEnabled) },
             )
             RowDivider()
             SettingsRow(

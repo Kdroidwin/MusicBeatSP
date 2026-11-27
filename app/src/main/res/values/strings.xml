@@ -2263,7 +2263,7 @@
     <string name="lyrics_format_cancel">Cancel</string>
     <string name="lyrics_format_lrc_timed">Synced lyrics</string>
     <string name="lyrics_sync_per_character">Per character</string>
-    <string name="lyrics_sync_line_or_word">Line/word timing</string>
+    <string name="lyrics_sync_line_or_word">Line-synced</string>
     <string name="lyrics_format_plain_badge">Plain text</string>
     <string name="lyrics_line_count">%1$d lines</string>
     <string name="lyrics_editor_title_label">Title</string>
@@ -2426,6 +2426,10 @@
     <string name="hide_player_control_highlight_circles_subtitle">Remove the circular highlight behind selected controls at the bottom of the player. Off by default.</string>
     <string name="dar_pcm_upsampling">DAR PCM upsampling</string>
     <string name="dar_pcm_upsampling_subtitle">Apply the UCRT FIR upsampler to PCM playback at up to 4x and 192 kHz. Bit-perfect output bypasses it. Off by default.</string>
+    <string name="pioneer_msr">Pioneer MSR restoration</string>
+    <string name="pioneer_msr_subtitle">Process stereo PCM at 32–48 kHz with the MSR DSP and output 24-bit/96 kHz. Requires an ARM device and a 96 kHz capable output. Bit-perfect playback bypasses it. Off by default.</string>
+    <string name="pioneer_msr_unavailable">MSR requires an ARM32/ARM64 device using 4 KB memory pages.</string>
+    <string name="audio_offload_disabled_by_msr">Audio offload is disabled while Pioneer MSR is active.</string>
     <string name="audio_offload_disabled_by_dsp">Audio offload is disabled while DAR PCM upsampling is active.</string>
     <string name="dsd_playback_pcm">Play DSF/DFF as PCM</string>
     <string name="dsd_playback_pcm_subtitle">Decode DSF and uncompressed DSDIFF to 24-bit PCM through Media3. Native DSD, DoP and DST-compressed DFF are not included. Off by default.</string>
