@@ -5200,8 +5200,9 @@ class PlaybackService : MediaLibraryService() {
         val bitPerfect = BitPerfectOutput.ready.value
         chain.replayGain.normalizationGainDbFor = ::loudnessNormalizationGainDbFor
         chain.replayGain.normalizationBypassed = bitPerfect
-        chain.pioneerMsr.outputSupports96k = 96_000 in darOutputSampleRates()
-        chain.pioneerMsr.enabled = AppSettings.pioneerMsrEnabled.value && PioneerMsrNative.isAvailable && !bitPerfect
+        chain.pioneerMsr.outputSupports96kPcm24 = currentOutputSupportsPioneerMsr()
+        chain.pioneerMsr.enabled = AppSettings.pioneerMsrEnabled.value && PioneerMsrNative.isAvailable &&
+            chain.pioneerMsr.outputSupports96kPcm24 && !bitPerfect
         chain.darUpsampler.enabled = AppSettings.darPcmUpsamplingEnabled.value && !chain.pioneerMsr.enabled && !bitPerfect
         configureDarOutputCapabilities(chain.darUpsampler)
         applyVolumeBoost(chain)
@@ -5463,7 +5464,11 @@ class PlaybackService : MediaLibraryService() {
         outputReconfigureJob?.cancel()
         outputReconfigureJob = scope.launch {
             val requestedFloat = shouldEnableFloatOutput()
-            val pcmProcessingNeedsRebuild = AppSettings.darPcmUpsamplingEnabled.value || AppSettings.pioneerMsrEnabled.value
+            val targetMsrEnabled = AppSettings.pioneerMsrEnabled.value && PioneerMsrNative.isAvailable &&
+                currentOutputSupportsPioneerMsr() && !BitPerfectOutput.ready.value
+            val msrPipelineNeedsRebuild = targetMsrEnabled || activeAudioChain.pioneerMsr.enabled ||
+                spareAudioChain.pioneerMsr.enabled
+            val pcmProcessingNeedsRebuild = AppSettings.darPcmUpsamplingEnabled.value || msrPipelineNeedsRebuild
             if (!forceRebuild && !pcmProcessingNeedsRebuild && requestedFloat == configuredFloatOutput) {
                 applyOutputRoute()
             } else {
@@ -5581,6 +5586,23 @@ class PlaybackService : MediaLibraryService() {
         return rates.filter { it > 0 }.toSet()
     }
 
+    /** MSR emits packed PCM24 at 96 kHz; a route advertising only float/96 kHz cannot accept that format. */
+    private fun currentOutputSupportsPioneerMsr(): Boolean {
+        val manager = audioManager ?: return false
+        val device = currentOutputDevice(manager, preferredUsbDevice()) ?: return false
+        return if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) {
+            runCatching {
+                device.audioProfiles.any { profile ->
+                    profile.format == AudioFormat.ENCODING_PCM_24BIT_PACKED &&
+                        96_000 in profile.sampleRates
+                }
+            }.getOrDefault(false)
+        } else {
+            device.encodings?.contains(AudioFormat.ENCODING_PCM_24BIT_PACKED) == true &&
+                96_000 in device.sampleRates
+        }
+    }
+
     private fun shouldEnableFloatOutput(): Boolean {
         val usb = preferredUsbDevice()
         return AudioOutputPolicy.shouldUseFloatOutput(
@@ -5655,8 +5677,19 @@ class PlaybackService : MediaLibraryService() {
             }
         }
         scope.launch {
-            AppSettings.pioneerMsrEnabled.drop(1).collect {
-                requestOutputReconfiguration(forceRebuild = true)
+            AppSettings.pioneerMsrEnabled.drop(1).collect { enabled ->
+                // Bluetooth routes such as WH-1000XM6 expose float/96 kHz but
+                // not packed PCM24/96 kHz. Rebuilding for MSR on those routes
+                // would negotiate an unsupported AudioTrack format and stop
+                // playback. The current player can stay untouched because
+                // applySettings will keep its MSR processor bypassed there.
+                val targetMsrEnabled = enabled && PioneerMsrNative.isAvailable &&
+                    currentOutputSupportsPioneerMsr() && !BitPerfectOutput.ready.value
+                if (activeAudioChain.pioneerMsr.enabled != targetMsrEnabled ||
+                    spareAudioChain.pioneerMsr.enabled != targetMsrEnabled
+                ) {
+                    requestOutputReconfiguration(forceRebuild = true)
+                }
             }
         }
         scope.launch {
@@ -5674,8 +5707,10 @@ class PlaybackService : MediaLibraryService() {
                 crossfade?.cancelTransition()
                 activeAudioChain.replayGain.normalizationBypassed = enabled
                 spareAudioChain.replayGain.normalizationBypassed = enabled
-                activeAudioChain.pioneerMsr.enabled = AppSettings.pioneerMsrEnabled.value && PioneerMsrNative.isAvailable && !enabled
-                spareAudioChain.pioneerMsr.enabled = AppSettings.pioneerMsrEnabled.value && PioneerMsrNative.isAvailable && !enabled
+                activeAudioChain.pioneerMsr.enabled = AppSettings.pioneerMsrEnabled.value &&
+                    PioneerMsrNative.isAvailable && activeAudioChain.pioneerMsr.outputSupports96kPcm24 && !enabled
+                spareAudioChain.pioneerMsr.enabled = AppSettings.pioneerMsrEnabled.value &&
+                    PioneerMsrNative.isAvailable && spareAudioChain.pioneerMsr.outputSupports96kPcm24 && !enabled
                 activeAudioChain.darUpsampler.enabled = AppSettings.darPcmUpsamplingEnabled.value && !activeAudioChain.pioneerMsr.enabled && !enabled
                 spareAudioChain.darUpsampler.enabled = AppSettings.darPcmUpsamplingEnabled.value && !spareAudioChain.pioneerMsr.enabled && !enabled
                 applyVolumeBoost(activeAudioChain)
@@ -5910,7 +5945,8 @@ class PlaybackService : MediaLibraryService() {
             !TrackPlaybackSettings.hasEnabledTrackCrossfades() &&
             !PlaylistPlaybackSettings.hasEnabledCrossfades() &&
             !AppSettings.darPcmUpsamplingEnabled.value &&
-            !(AppSettings.pioneerMsrEnabled.value && PioneerMsrNative.isAvailable) &&
+            !(AppSettings.pioneerMsrEnabled.value && PioneerMsrNative.isAvailable &&
+                currentOutputSupportsPioneerMsr() && !BitPerfectOutput.ready.value) &&
             !AppSettings.showAnalogDigitalPeakMeter.value &&
             !AppSettings.showSpectrumAnalyzer.value
         val preferences = TrackSelectionParameters.AudioOffloadPreferences.Builder()

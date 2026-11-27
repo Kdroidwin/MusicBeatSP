@@ -2400,7 +2400,7 @@
     <string name="dar_pcm_upsampling">DAR PCMアップサンプリング</string>
     <string name="dar_pcm_upsampling_subtitle">UCRTのFIRアップサンプラーでPCM再生を最大4倍・192 kHzまで変換します。ビットパーフェクト出力では迂回します。初期設定はオフです。</string>
     <string name="pioneer_msr">Pioneer MSR音質復元</string>
-    <string name="pioneer_msr_subtitle">32～48 kHzのステレオPCMをMSR DSPで処理し、24-bit/96 kHzで出力します。ARM端末と出力先の96 kHz対応が必要です。ビットパーフェクト再生では無効です。初期設定はオフです。</string>
+    <string name="pioneer_msr_subtitle">32～48 kHzのステレオPCMをMSR DSPで処理し、24-bit/96 kHzで出力します。ARM端末と出力先のPCM 24-bit/96 kHz対応が必要です。非対応の出力先では通常再生に自動で切り替えます。ビットパーフェクト再生では無効です。初期設定はオフです。</string>
     <string name="pioneer_msr_unavailable">MSRには4 KBページサイズのARM32/ARM64端末が必要です。</string>
     <string name="audio_offload_disabled_by_msr">Pioneer MSRの使用中はオーディオオフロードを無効にします。</string>
     <string name="audio_offload_disabled_by_dsp">DAR PCMアップサンプリング中はオーディオオフロードを無効にします。</string>

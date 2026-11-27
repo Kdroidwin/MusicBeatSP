@@ -2427,7 +2427,7 @@
     <string name="dar_pcm_upsampling">DAR PCM upsampling</string>
     <string name="dar_pcm_upsampling_subtitle">Apply the UCRT FIR upsampler to PCM playback at up to 4x and 192 kHz. Bit-perfect output bypasses it. Off by default.</string>
     <string name="pioneer_msr">Pioneer MSR restoration</string>
-    <string name="pioneer_msr_subtitle">Process stereo PCM at 32–48 kHz with the MSR DSP and output 24-bit/96 kHz. Requires an ARM device and a 96 kHz capable output. Bit-perfect playback bypasses it. Off by default.</string>
+    <string name="pioneer_msr_subtitle">Process stereo PCM at 32–48 kHz with the MSR DSP and output 24-bit/96 kHz. Requires an ARM device and an output that supports packed PCM 24-bit/96 kHz. Unsupported outputs automatically use normal playback. Bit-perfect playback bypasses it. Off by default.</string>
     <string name="pioneer_msr_unavailable">MSR requires an ARM32/ARM64 device using 4 KB memory pages.</string>
     <string name="audio_offload_disabled_by_msr">Audio offload is disabled while Pioneer MSR is active.</string>
     <string name="audio_offload_disabled_by_dsp">Audio offload is disabled while DAR PCM upsampling is active.</string>

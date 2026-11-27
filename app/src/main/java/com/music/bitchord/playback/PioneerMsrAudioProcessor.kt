@@ -51,7 +51,7 @@ class PioneerMsrAudioProcessor : BaseAudioProcessor() {
     var enabled: Boolean = false
 
     @Volatile
-    var outputSupports96k: Boolean = false
+    var outputSupports96kPcm24: Boolean = false
 
     private var inputRateHz = 0
     private var inputChannels = 0
@@ -66,7 +66,7 @@ class PioneerMsrAudioProcessor : BaseAudioProcessor() {
 
     override fun onConfigure(inputAudioFormat: AudioProcessor.AudioFormat): AudioProcessor.AudioFormat {
         clearNativeState()
-        if (!enabled || !outputSupports96k || inputAudioFormat.sampleRate !in 32_000..48_000 ||
+        if (!enabled || !outputSupports96kPcm24 || inputAudioFormat.sampleRate !in 32_000..48_000 ||
             inputAudioFormat.channelCount != 2 || !isPcmEncoding(inputAudioFormat.encoding)
         ) return AudioProcessor.AudioFormat.NOT_SET
 
