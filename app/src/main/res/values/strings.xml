@@ -2431,6 +2431,9 @@
     <string name="pioneer_msr_unavailable">MSR requires an ARM32/ARM64 device using 4 KB memory pages.</string>
     <string name="audio_offload_disabled_by_msr">Audio offload is disabled while Pioneer MSR is active.</string>
     <string name="audio_offload_disabled_by_dsp">Audio offload is disabled while DAR PCM upsampling is active.</string>
+    <string name="sony_dsee_hx">Sony DSEE HX</string>
+    <string name="sony_dsee_hx_subtitle">Run the Music Center-aligned HEQ/DSX kernel on supported local stereo WAV, FLAC, MP3 and AAC. Unsupported formats and bit-perfect playback bypass it. Off by default.</string>
+    <string name="audio_offload_disabled_by_dsee">Audio offload is disabled while Sony DSEE HX processing is enabled.</string>
     <string name="dsd_playback_pcm">Play DSF/DFF as PCM</string>
     <string name="dsd_playback_pcm_subtitle">Decode DSF and uncompressed DSDIFF to 24-bit PCM through Media3. Native DSD, DoP and DST-compressed DFF are not included. Off by default.</string>
     <string name="ffmpeg_unsupported_audio_transcode">Temporarily decode unsupported audio</string>

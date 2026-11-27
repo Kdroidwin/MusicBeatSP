@@ -232,6 +232,7 @@ private data class PlaybackAudioChain(
     val replayGain: ReplayGainAudioProcessor = ReplayGainAudioProcessor(),
     val resampler: ResamplerCutoffAudioProcessor = ResamplerCutoffAudioProcessor(),
     val pioneerMsr: PioneerMsrAudioProcessor = PioneerMsrAudioProcessor(),
+    val dseeHx: DseeHxAudioProcessor = DseeHxAudioProcessor(),
     val darUpsampler: DarPcmUpsamplingAudioProcessor = DarPcmUpsamplingAudioProcessor(),
 )
 
@@ -1028,6 +1029,7 @@ class PlaybackService : MediaLibraryService() {
             // The player this fired on, which is by definition the one the
             // session is currently pointed at.
             val exoPlayer = player ?: return
+            activeAudioChain.dseeHx.sourceCodec = dseeHxCodecFor(mediaItem)
             applySkipSilenceFor(exoPlayer, mediaItem)
             if (suppressRestoredTrackTransition != null) {
                 if (mediaItem?.mediaId == suppressRestoredTrackTransition) {
@@ -2268,6 +2270,7 @@ class PlaybackService : MediaLibraryService() {
                 chain.replayGain,
                 chain.resampler,
                 chain.pioneerMsr,
+                chain.dseeHx,
                 chain.darUpsampler,
             ),
         )
@@ -2304,6 +2307,10 @@ class PlaybackService : MediaLibraryService() {
         spareReplayGainPendingMediaId = item.mediaId
         val chain = spareAudioChain
         val bitPerfect = BitPerfectOutput.ready.value
+        chain.dseeHx.sourceCodec = dseeHxCodecFor(item)
+        chain.dseeHx.enabled = AppSettings.dseeHxEnabled.value && !bitPerfect &&
+            !chain.pioneerMsr.enabled && !AppSettings.darPcmUpsamplingEnabled.value
+        configureDseeOutputCapabilities(chain.dseeHx)
         applyParametricEqToChain(chain, item, bitPerfect)
         chain.replayGain.normalizationMediaId = item.mediaId
         chain.replayGain.normalizationBypassed = bitPerfect
@@ -5117,6 +5124,7 @@ class PlaybackService : MediaLibraryService() {
         replayGain: ReplayGainAudioProcessor,
         resamplerCutoff: ResamplerCutoffAudioProcessor,
         pioneerMsr: PioneerMsrAudioProcessor,
+        dseeHx: DseeHxAudioProcessor,
         darUpsampler: DarPcmUpsamplingAudioProcessor,
     ) = object : DefaultRenderersFactory(this) {
         init {
@@ -5172,7 +5180,7 @@ class PlaybackService : MediaLibraryService() {
             )
             .setAudioProcessorChain(
                 DefaultAudioSink.DefaultAudioProcessorChain(
-                    arrayOf(pioneerMsr, resamplerCutoff, parametricEq, spatial, transition, replayGain, darUpsampler),
+                    arrayOf(pioneerMsr, dseeHx, resamplerCutoff, parametricEq, spatial, transition, replayGain, darUpsampler),
                     SilenceSkippingAudioProcessor(
                         MIN_SILENCE_US,
                         SilenceSkippingAudioProcessor.DEFAULT_SILENCE_RETENTION_RATIO,
@@ -5203,7 +5211,12 @@ class PlaybackService : MediaLibraryService() {
         chain.pioneerMsr.outputSupports96kPcm24 = currentOutputSupportsPioneerMsr()
         chain.pioneerMsr.enabled = AppSettings.pioneerMsrEnabled.value && PioneerMsrNative.isAvailable &&
             chain.pioneerMsr.outputSupports96kPcm24 && !bitPerfect
-        chain.darUpsampler.enabled = AppSettings.darPcmUpsamplingEnabled.value && !chain.pioneerMsr.enabled && !bitPerfect
+        chain.dseeHx.sourceCodec = dseeHxCodecFor(player.currentMediaItem)
+        chain.dseeHx.enabled = AppSettings.dseeHxEnabled.value && !chain.pioneerMsr.enabled &&
+            !AppSettings.darPcmUpsamplingEnabled.value && !bitPerfect
+        configureDseeOutputCapabilities(chain.dseeHx)
+        chain.darUpsampler.enabled = AppSettings.darPcmUpsamplingEnabled.value && !chain.pioneerMsr.enabled &&
+            !chain.dseeHx.enabled && !bitPerfect
         configureDarOutputCapabilities(chain.darUpsampler)
         applyVolumeBoost(chain)
         applyAudioOffloadPreference(player)
@@ -5468,7 +5481,10 @@ class PlaybackService : MediaLibraryService() {
                 currentOutputSupportsPioneerMsr() && !BitPerfectOutput.ready.value
             val msrPipelineNeedsRebuild = targetMsrEnabled || activeAudioChain.pioneerMsr.enabled ||
                 spareAudioChain.pioneerMsr.enabled
-            val pcmProcessingNeedsRebuild = AppSettings.darPcmUpsamplingEnabled.value || msrPipelineNeedsRebuild
+            val dseePipelineNeedsRebuild = AppSettings.dseeHxEnabled.value || activeAudioChain.dseeHx.enabled ||
+                spareAudioChain.dseeHx.enabled
+            val pcmProcessingNeedsRebuild = AppSettings.darPcmUpsamplingEnabled.value ||
+                msrPipelineNeedsRebuild || dseePipelineNeedsRebuild
             if (!forceRebuild && !pcmProcessingNeedsRebuild && requestedFloat == configuredFloatOutput) {
                 applyOutputRoute()
             } else {
@@ -5518,6 +5534,7 @@ class PlaybackService : MediaLibraryService() {
         applySettings(newSpare, spareAudioChain)
         newActive.repeatMode = repeatMode
         newActive.shuffleModeEnabled = shuffleMode
+        activeAudioChain.dseeHx.sourceCodec = dseeHxCodecFor(items.getOrNull(index))
         if (items.isNotEmpty()) {
             newActive.setMediaItems(items, index.coerceIn(items.indices), oldActive.currentPosition.coerceAtLeast(position))
         }
@@ -5564,6 +5581,37 @@ class PlaybackService : MediaLibraryService() {
         processor.maxOutputSampleRateHz = rates.maxOrNull()
             ?: AudioTrack.getNativeOutputSampleRate(AudioManager.STREAM_MUSIC).takeIf { it > 0 }
             ?: 48_000
+    }
+
+    private fun configureDseeOutputCapabilities(processor: DseeHxAudioProcessor) {
+        val rates = darOutputSampleRates()
+        processor.supportedOutputSampleRates = rates
+        processor.maxOutputSampleRateHz = rates.maxOrNull()
+            ?: AudioTrack.getNativeOutputSampleRate(AudioManager.STREAM_MUSIC).takeIf { it > 0 }
+            ?: 48_000
+    }
+
+    /** Return only source formats mapped by the Music Center-aligned kernel. */
+    private fun dseeHxCodecFor(item: MediaItem?): String? {
+        item ?: return null
+        if (!item.isLocalPlaybackSource()) return null
+        val song = item.toSong()
+        val paths = listOfNotNull(
+            song.localPath,
+            song.localUri,
+            item.localConfiguration?.uri?.lastPathSegment,
+        )
+        val extension = paths.asSequence()
+            .map { it.substringBefore('?').substringAfterLast('/').substringAfterLast('.', "").lowercase() }
+            .firstOrNull(String::isNotBlank)
+            ?: return null
+        return when (extension) {
+            "flac" -> "flac"
+            "mp3" -> "mp3"
+            "aac" -> "aac"
+            "wav" -> "pcm_s16le"
+            else -> null
+        }
     }
 
     private fun darOutputSampleRates(): Set<Int> {
@@ -5677,6 +5725,11 @@ class PlaybackService : MediaLibraryService() {
             }
         }
         scope.launch {
+            AppSettings.dseeHxEnabled.drop(1).collect {
+                requestOutputReconfiguration(forceRebuild = true)
+            }
+        }
+        scope.launch {
             AppSettings.pioneerMsrEnabled.drop(1).collect { enabled ->
                 // Bluetooth routes such as WH-1000XM6 expose float/96 kHz but
                 // not packed PCM24/96 kHz. Rebuilding for MSR on those routes
@@ -5713,6 +5766,10 @@ class PlaybackService : MediaLibraryService() {
                     PioneerMsrNative.isAvailable && spareAudioChain.pioneerMsr.outputSupports96kPcm24 && !enabled
                 activeAudioChain.darUpsampler.enabled = AppSettings.darPcmUpsamplingEnabled.value && !activeAudioChain.pioneerMsr.enabled && !enabled
                 spareAudioChain.darUpsampler.enabled = AppSettings.darPcmUpsamplingEnabled.value && !spareAudioChain.pioneerMsr.enabled && !enabled
+                activeAudioChain.dseeHx.enabled = AppSettings.dseeHxEnabled.value && !enabled &&
+                    !activeAudioChain.pioneerMsr.enabled && !AppSettings.darPcmUpsamplingEnabled.value
+                spareAudioChain.dseeHx.enabled = AppSettings.dseeHxEnabled.value && !enabled &&
+                    !spareAudioChain.pioneerMsr.enabled && !AppSettings.darPcmUpsamplingEnabled.value
                 applyVolumeBoost(activeAudioChain)
                 applyVolumeBoost(spareAudioChain)
                 eachPlayer { current ->
@@ -5729,6 +5786,7 @@ class PlaybackService : MediaLibraryService() {
                 updateAudioEffectsEnabled()
                 updateReplayGainForCurrentTrack(force = true)
                 spare?.currentMediaItem?.let(::prepareCrossfadeIncoming)
+                if (AppSettings.dseeHxEnabled.value) requestOutputReconfiguration(forceRebuild = true)
 
             }
         }
@@ -5945,6 +6003,7 @@ class PlaybackService : MediaLibraryService() {
             !TrackPlaybackSettings.hasEnabledTrackCrossfades() &&
             !PlaylistPlaybackSettings.hasEnabledCrossfades() &&
             !AppSettings.darPcmUpsamplingEnabled.value &&
+            (!AppSettings.dseeHxEnabled.value || BitPerfectOutput.ready.value) &&
             !(AppSettings.pioneerMsrEnabled.value && PioneerMsrNative.isAvailable &&
                 currentOutputSupportsPioneerMsr() && !BitPerfectOutput.ready.value) &&
             !AppSettings.showAnalogDigitalPeakMeter.value &&

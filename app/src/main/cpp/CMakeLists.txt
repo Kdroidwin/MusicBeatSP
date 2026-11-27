@@ -113,3 +113,35 @@ target_link_options(bitchord_usb PRIVATE
     "-Wl,--version-script,${CMAKE_CURRENT_SOURCE_DIR}/bitperfect/exports.map")
 set_property(TARGET bitchord_usb APPEND PROPERTY LINK_DEPENDS
     "${CMAKE_CURRENT_SOURCE_DIR}/bitperfect/exports.map")
+
+# DSEE HX's HEQ/DSX C kernel is isolated from the existing audio targets. It is
+# called only by its opt-in Media3 processor; the vendor path contains the
+# pinned, Android-portable source snapshot and local interoperability wrapper.
+set(DSEE_VENDOR_DIR "${CMAKE_CURRENT_SOURCE_DIR}/dsee/vendor")
+if(ANDROID_ABI STREQUAL "arm64-v8a" OR ANDROID_ABI STREQUAL "x86_64")
+    file(GLOB_RECURSE DSEE_C_SOURCES CONFIGURE_DEPENDS
+        "${DSEE_VENDOR_DIR}/kern/*.c"
+        "${DSEE_VENDOR_DIR}/config/*.c")
+    add_library(bitchord_dsee SHARED jni/dsee_jni.cpp ${DSEE_C_SOURCES})
+    target_include_directories(bitchord_dsee PRIVATE
+        "${DSEE_VENDOR_DIR}/kern/include"
+        "${DSEE_VENDOR_DIR}/kern/common"
+        "${DSEE_VENDOR_DIR}/kern/common/ext80"
+        "${DSEE_VENDOR_DIR}/kern/open/codebook"
+        "${DSEE_VENDOR_DIR}/kern/dsx"
+        "${DSEE_VENDOR_DIR}/kern/dsx/band"
+        "${DSEE_VENDOR_DIR}/kern/dsx/upsample"
+        "${DSEE_VENDOR_DIR}/config/include"
+        "${DSEE_VENDOR_DIR}/config/probe")
+    set_source_files_properties(${DSEE_C_SOURCES} PROPERTIES COMPILE_OPTIONS "-w;-ffp-contract=off")
+    target_compile_options(bitchord_dsee PRIVATE -O3 -fvisibility=hidden -ffp-contract=off)
+    target_compile_definitions(bitchord_dsee PRIVATE DSEE_BUILDING=1)
+    target_link_options(bitchord_dsee PRIVATE "-Wl,-z,max-page-size=16384" "-Wl,--gc-sections")
+    find_library(m-lib m)
+    target_link_libraries(bitchord_dsee PRIVATE ${m-lib})
+else()
+    # The reverse-engineered Ext80 emulation relies on compiler __int128,
+    # unsupported by 32-bit Android targets. Omit only the optional DSEE
+    # library there; Java's lazy load keeps all ordinary playback unaffected.
+    message(STATUS "DSEE HX native kernel omitted for ${ANDROID_ABI} (no __int128 support)")
+endif()

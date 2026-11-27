@@ -22,3 +22,7 @@
 
 # The PLaMo JNI bridge uses name-based JNI exports instead of RegisterNatives.
 -keep class com.music.bitchord.feature.lyrics.PlamoNativeBridge { *; }
+
+# DSEE HX uses name-based JNI exports; its class and external method names must
+# remain stable in minified release builds.
+-keep class com.music.bitchord.playback.DseeHxNative { *; }

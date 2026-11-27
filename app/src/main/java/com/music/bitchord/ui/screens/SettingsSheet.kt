@@ -310,6 +310,15 @@ private fun pioneerMsrSearchEntry(enabled: Boolean, available: Boolean): Setting
 )
 
 @Composable
+private fun dseeHxSearchEntry(enabled: Boolean): SettingsSearchEntry = SettingsSearchEntry(
+    title = stringResource(R.string.sony_dsee_hx),
+    subtitle = stringResource(R.string.sony_dsee_hx_subtitle),
+    keywords = listOf("Sony", "DSEE HX", "HEQ", "DSX", "bandwidth extension", "高音質", "帯域拡張", "アップサンプリング"),
+    checked = enabled,
+    activate = { AppSettings.setDseeHxEnabled(!enabled) },
+)
+
+@Composable
 private fun dsdPlaybackSearchEntry(enabled: Boolean): SettingsSearchEntry = SettingsSearchEntry(
     title = stringResource(R.string.dsd_playback_pcm),
     subtitle = stringResource(R.string.dsd_playback_pcm_subtitle),
@@ -1611,6 +1620,7 @@ private fun crossfadeSettingsSearchEntries(
     audioOffloadEnabled: Boolean,
     darPcmUpsamplingEnabled: Boolean,
     pioneerMsrEnabled: Boolean,
+    dseeHxEnabled: Boolean,
 ): List<SettingsSearchEntry> = listOf(
     SettingsSearchEntry(
         title = stringResource(R.string.crossfade),
@@ -1631,15 +1641,16 @@ private fun crossfadeSettingsSearchEntries(
             when {
                 durationMs > 0 || smartFade -> R.string.audio_offload_disabled_by_transition
                 pioneerMsrEnabled -> R.string.audio_offload_disabled_by_msr
+                dseeHxEnabled -> R.string.audio_offload_disabled_by_dsee
                 darPcmUpsamplingEnabled -> R.string.audio_offload_disabled_by_dsp
                 else -> R.string.audio_offload_subtitle
             },
         ),
         keywords = listOf("audio offload", "offload", "hardware playback", "省電力", "オフロード再生"),
-        checked = audioOffloadEnabled && durationMs == 0 && !smartFade && !darPcmUpsamplingEnabled && !pioneerMsrEnabled,
-        enabled = durationMs == 0 && !smartFade && !darPcmUpsamplingEnabled && !pioneerMsrEnabled,
+        checked = audioOffloadEnabled && durationMs == 0 && !smartFade && !darPcmUpsamplingEnabled && !pioneerMsrEnabled && !dseeHxEnabled,
+        enabled = durationMs == 0 && !smartFade && !darPcmUpsamplingEnabled && !pioneerMsrEnabled && !dseeHxEnabled,
         activate = {
-            if (durationMs == 0 && !smartFade && !darPcmUpsamplingEnabled && !pioneerMsrEnabled) {
+            if (durationMs == 0 && !smartFade && !darPcmUpsamplingEnabled && !pioneerMsrEnabled && !dseeHxEnabled) {
                 AppSettings.setAudioOffloadEnabled(!audioOffloadEnabled)
             }
         },
@@ -1997,6 +2008,7 @@ fun SettingsScreen(
     val resamplerCutoffHz by AppSettings.resamplerCutoffHz.collectAsStateWithLifecycle()
     val darPcmUpsamplingEnabled by AppSettings.darPcmUpsamplingEnabled.collectAsStateWithLifecycle()
     val pioneerMsrEnabled by AppSettings.pioneerMsrEnabled.collectAsStateWithLifecycle()
+    val dseeHxEnabled by AppSettings.dseeHxEnabled.collectAsStateWithLifecycle()
     val pioneerMsrAvailable = PioneerMsrNative.isAvailable
     val dsdPlaybackEnabled by AppSettings.dsdPlaybackEnabled.collectAsStateWithLifecycle()
     val ffmpegUnsupportedAudioTranscodeEnabled by AppSettings.ffmpegUnsupportedAudioTranscodeEnabled.collectAsStateWithLifecycle()
@@ -3458,8 +3470,10 @@ fun SettingsScreen(
             audioOffloadEnabled = audioOffloadEnabled,
             darPcmUpsamplingEnabled = darPcmUpsamplingEnabled,
             pioneerMsrEnabled = pioneerMsrEnabled && pioneerMsrAvailable,
+            dseeHxEnabled = dseeHxEnabled,
         ) +
         pioneerMsrSearchEntry(pioneerMsrEnabled, pioneerMsrAvailable) +
+        dseeHxSearchEntry(dseeHxEnabled) +
         listOf(
             SettingsSearchEntry(
                 title = stringResource(R.string.ab_repeat),
@@ -4881,18 +4895,19 @@ fun SettingsScreen(
                     when {
                         crossfadeDurationMs > 0 || smartFade -> R.string.audio_offload_disabled_by_transition
                         pioneerMsrEnabled && pioneerMsrAvailable -> R.string.audio_offload_disabled_by_msr
+                        dseeHxEnabled -> R.string.audio_offload_disabled_by_dsee
                         darPcmUpsamplingEnabled -> R.string.audio_offload_disabled_by_dsp
                         else -> R.string.audio_offload_subtitle
                     },
                 ),
-                enabled = crossfadeDurationMs == 0 && !smartFade && !darPcmUpsamplingEnabled && !(pioneerMsrEnabled && pioneerMsrAvailable),
+                enabled = crossfadeDurationMs == 0 && !smartFade && !darPcmUpsamplingEnabled && !dseeHxEnabled && !(pioneerMsrEnabled && pioneerMsrAvailable),
                 trailing = {
                     Switch(
-                        checked = audioOffloadEnabled && crossfadeDurationMs == 0 && !smartFade && !darPcmUpsamplingEnabled && !(pioneerMsrEnabled && pioneerMsrAvailable),
+                        checked = audioOffloadEnabled && crossfadeDurationMs == 0 && !smartFade && !darPcmUpsamplingEnabled && !dseeHxEnabled && !(pioneerMsrEnabled && pioneerMsrAvailable),
                         onCheckedChange = { enabled ->
-                            if (crossfadeDurationMs == 0 && !smartFade && !darPcmUpsamplingEnabled && !(pioneerMsrEnabled && pioneerMsrAvailable)) AppSettings.setAudioOffloadEnabled(enabled)
+                            if (crossfadeDurationMs == 0 && !smartFade && !darPcmUpsamplingEnabled && !dseeHxEnabled && !(pioneerMsrEnabled && pioneerMsrAvailable)) AppSettings.setAudioOffloadEnabled(enabled)
                         },
-                        enabled = crossfadeDurationMs == 0 && !smartFade && !darPcmUpsamplingEnabled && !(pioneerMsrEnabled && pioneerMsrAvailable),
+                        enabled = crossfadeDurationMs == 0 && !smartFade && !darPcmUpsamplingEnabled && !dseeHxEnabled && !(pioneerMsrEnabled && pioneerMsrAvailable),
                         colors = SwitchDefaults.colors(
                             checkedTrackColor = MaterialTheme.colorScheme.primary,
                             checkedBorderColor = MaterialTheme.colorScheme.primary,
@@ -4900,7 +4915,7 @@ fun SettingsScreen(
                     )
                 },
                 onClick = {
-                    if (crossfadeDurationMs == 0 && !smartFade && !darPcmUpsamplingEnabled && !(pioneerMsrEnabled && pioneerMsrAvailable)) AppSettings.setAudioOffloadEnabled(!audioOffloadEnabled)
+                    if (crossfadeDurationMs == 0 && !smartFade && !darPcmUpsamplingEnabled && !dseeHxEnabled && !(pioneerMsrEnabled && pioneerMsrAvailable)) AppSettings.setAudioOffloadEnabled(!audioOffloadEnabled)
                 },
             )
             RowDivider()
@@ -4938,6 +4953,23 @@ fun SettingsScreen(
                     )
                 },
                 onClick = { if (pioneerMsrAvailable) AppSettings.setPioneerMsrEnabled(!pioneerMsrEnabled) },
+            )
+            RowDivider()
+            SettingsRow(
+                icon = Icons.Rounded.GraphicEq,
+                title = stringResource(R.string.sony_dsee_hx),
+                subtitle = stringResource(R.string.sony_dsee_hx_subtitle),
+                trailing = {
+                    Switch(
+                        checked = dseeHxEnabled,
+                        onCheckedChange = AppSettings::setDseeHxEnabled,
+                        colors = SwitchDefaults.colors(
+                            checkedTrackColor = MaterialTheme.colorScheme.primary,
+                            checkedBorderColor = MaterialTheme.colorScheme.primary,
+                        ),
+                    )
+                },
+                onClick = { AppSettings.setDseeHxEnabled(!dseeHxEnabled) },
             )
             RowDivider()
             SettingsRow(

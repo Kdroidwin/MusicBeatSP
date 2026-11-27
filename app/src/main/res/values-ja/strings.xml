@@ -2404,6 +2404,9 @@
     <string name="pioneer_msr_unavailable">MSRには4 KBページサイズのARM32/ARM64端末が必要です。</string>
     <string name="audio_offload_disabled_by_msr">Pioneer MSRの使用中はオーディオオフロードを無効にします。</string>
     <string name="audio_offload_disabled_by_dsp">DAR PCMアップサンプリング中はオーディオオフロードを無効にします。</string>
+    <string name="sony_dsee_hx">Sony DSEE HX</string>
+    <string name="sony_dsee_hx_subtitle">Music Centerに合わせたHEQ/DSX処理を、対応する端末内のステレオWAV・FLAC・MP3・AACに適用します。非対応形式とビットパーフェクト再生では迂回します。初期設定はオフです。</string>
+    <string name="audio_offload_disabled_by_dsee">Sony DSEE HX処理を有効にしている間はオーディオオフロードを無効にします。</string>
     <string name="dsd_playback_pcm">DSF・DFFをPCM再生</string>
     <string name="dsd_playback_pcm_subtitle">DSFと非圧縮DSDIFFをMedia3経由で24bit PCMにデコードします。Native DSD、DoP、DST圧縮DFFは含みません。初期設定はオフです。</string>
     <string name="ffmpeg_unsupported_audio_transcode">未対応音源を一時PCM変換</string>
