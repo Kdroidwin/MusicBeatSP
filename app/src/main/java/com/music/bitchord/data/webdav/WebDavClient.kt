@@ -119,7 +119,7 @@ object WebDavClient {
                     } else {
                         val name = entry.displayName.ifBlank { entry.url }
                         when {
-                            WebDavConfig.isAudioFile(name) -> foundAudio.putIfAbsent(entry.url, entry)
+                            WebDavConfig.isAudioFile(name, entry.contentType) -> foundAudio.putIfAbsent(entry.url, entry)
                             isImageFile(name) -> foundImages.putIfAbsent(entry.url, entry)
                         }
                     }

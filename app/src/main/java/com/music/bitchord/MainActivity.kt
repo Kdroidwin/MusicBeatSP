@@ -3999,7 +3999,7 @@ private fun BitChordApp(
                                 onLastOpenedFolderPathChange = AppSettings::setLastOpenedFolderPath,
                                 onArtworkPaletteChanged = onLocalArtworkPaletteChanged,
                                 onNavigationChanged = onCollectionNavigationChanged,
-                                onLocalFilesChanged = { viewModel.loadLocalMusic() },
+                                onLocalFilesChanged = { viewModel.loadLocalMusic(isPullToRefresh = true) },
                                 onSongMetadataUpdated = viewModel::updateLocalSongMetadata,
                                 onBatchTagEditor = { directSongs, songsWithSubfolders ->
                                     folderTagEditorSongs = directSongs to songsWithSubfolders
@@ -4656,30 +4656,50 @@ private fun BitChordApp(
             // not fall back to title/artist matching, which can open another
             // copy of a track from a different folder.
             val resolvedSong = FolderNavigationRequests.resolveLocalSong(originalSong, localSongs)
-                ?: originalSong
-            val song = resolvedSong
+            // Resolving a stale MediaStore row can replace the queued copy
+            // with the current library row. Keep the originating playlist id
+            // across that resolution so its playlist-specific actions remain
+            // available from the player menu.
+            val song = resolvedSong?.copy(
+                playbackPlaylistId = originalSong.playbackPlaylistId ?: resolvedSong.playbackPlaylistId,
+            ) ?: originalSong
             val songIdentityKey = song.localUri ?: song.videoId
             val localPlaylists by LocalPlaylistStore.playlists.collectAsStateWithLifecycle()
+            val normalizePlaylistEntry: (String?) -> String? = { raw ->
+                val value = raw?.trim()?.takeIf(String::isNotEmpty)
+                if (value == null) null else {
+                    val uri = runCatching { Uri.parse(value) }.getOrNull()
+                    when (uri?.scheme?.lowercase()) {
+                        // MediaStore URIs include transient query parameters
+                        // such as the row's modified-time cache key. The
+                        // audio row path is the durable identity across a tag
+                        // edit or rename.
+                        "content" -> uri.buildUpon().clearQuery().fragment(null).build().toString()
+                        "file" -> uri.path?.let(Uri::decode)?.replace('\\', '/')?.trimEnd('/')
+                            ?: value.replace('\\', '/').trimEnd('/')
+                        else -> value.replace('\\', '/').trimEnd('/')
+                    }
+                }
+            }
             val playlistEntryIds = remember(song.localUri, song.localPath, song.videoId) {
-                listOfNotNull(song.localUri?.trim(), song.localPath?.trim(), song.videoId.trim())
-                    .filter(String::isNotBlank)
-                    .toSet()
+                listOfNotNull(
+                    normalizePlaylistEntry(song.localUri),
+                    normalizePlaylistEntry(song.localPath),
+                    normalizePlaylistEntry(song.videoId),
+                ).toSet()
             }
-            val normalizePlaylistPath: (String?) -> String? = { path ->
-                path?.replace('\\', '/')?.trim()?.trimEnd('/')?.takeIf(String::isNotEmpty)
-            }
-            val localSongPath = normalizePlaylistPath(song.localPath)
+            val localSongPath = normalizePlaylistEntry(song.localPath)
             val sourcePlaylistId = song.playbackPlaylistId
             val registeredPlaylists = remember(localPlaylists, playlistEntryIds, localSongPath, sourcePlaylistId) {
                 localPlaylists.filter { playlist ->
                     playlist.id == sourcePlaylistId || (
                         playlist.smartDefinition == null && (
-                            playlist.songIds.any(playlistEntryIds::contains) ||
+                            playlist.songIds.any { normalizePlaylistEntry(it) in playlistEntryIds } ||
                                 (localSongPath != null && playlist.songIds.any { entryId ->
                                     listOfNotNull(
                                         playlist.editedSongMetadata[entryId]?.localPath,
                                         playlist.songMetadata[entryId]?.localPath,
-                                    ).any { normalizePlaylistPath(it) == localSongPath }
+                                    ).any { normalizePlaylistEntry(it) == localSongPath }
                                 })
                             )
                         )
@@ -4709,10 +4729,10 @@ private fun BitChordApp(
                 selectedTab = TAB_LIBRARY
             }
             val goToRegisteredPlaylists: () -> Unit = {
-                if (registeredPlaylists.size == 1) {
-                    openRegisteredPlaylist(registeredPlaylists.single().id)
-                } else if (registeredPlaylists.size > 1) {
-                    showRegisteredPlaylistPicker = true
+                when (registeredPlaylists.size) {
+                    0 -> Toast.makeText(context, R.string.song_no_registered_playlists, Toast.LENGTH_SHORT).show()
+                    1 -> openRegisteredPlaylist(registeredPlaylists.single().id)
+                    else -> showRegisteredPlaylistPicker = true
                 }
             }
             var showArtistPicker by remember { mutableStateOf(false) }
@@ -4957,9 +4977,7 @@ private fun BitChordApp(
                                 }
                             }
                         },
-                        onGoToPlaylists = if (menuFromPlayer && registeredPlaylists.isNotEmpty()) {
-                            goToRegisteredPlaylists
-                        } else null,
+                        onGoToPlaylists = goToRegisteredPlaylists.takeIf { menuFromPlayer },
                         onAddToPlaylist = {
                             val isDeviceSong = song.isExternalPreview ||
                                 !song.localUri.isNullOrBlank() || !song.localPath.isNullOrBlank()
@@ -5144,9 +5162,7 @@ private fun BitChordApp(
                             }
                         }
                     } else null,
-                    onGoToPlaylists = if (menuFromPlayer && registeredPlaylists.isNotEmpty()) {
-                        goToRegisteredPlaylists
-                    } else null,
+                    onGoToPlaylists = goToRegisteredPlaylists.takeIf { menuFromPlayer },
                 )
                 }
             }

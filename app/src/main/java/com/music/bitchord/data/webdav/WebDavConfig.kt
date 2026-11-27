@@ -1,6 +1,8 @@
 package com.music.bitchord.data.webdav
 
 import com.music.bitchord.data.model.Song
+import com.music.bitchord.data.settings.AppSettings
+import com.music.bitchord.playback.FFMPEG_ONLY_AUDIO_EXTENSIONS
 import okhttp3.HttpUrl.Companion.toHttpUrlOrNull
 import java.util.Locale
 
@@ -15,8 +17,11 @@ object WebDavConfig {
 
     const val BROWSE_ID = "local:webdav"
 
-    val audioExtensions = setOf(
-        "mp3", "m4a", "flac", "ogg", "opus", "aac", "wav", "wma", "aif", "aiff", "webm",
+    // Keep remote-library discovery aligned with LocalMediaRepository. The
+    // previous narrower list silently omitted formats the player already
+    // supports (MIDI, DSD, and the optional FFmpeg-only formats) from pCloud.
+    private val baseAudioExtensions = setOf(
+        "mp3", "m4a", "flac", "wav", "wma", "ogg", "opus", "aac", "webm", "aif", "aiff", "mid", "midi",
     )
 
     fun normalizeUrl(raw: String): String {
@@ -67,10 +72,23 @@ object WebDavConfig {
             PCloudRegion.entries.any { hostOf(it.webDavUrl) == parsed.host.lowercase(Locale.ROOT) }
     }
 
-    fun isAudioFile(name: String): Boolean {
+    fun isAudioFile(name: String, contentType: String? = null): Boolean {
         val ext = name.substringAfterLast('.', "").lowercase(Locale.ROOT)
-        return ext in audioExtensions
+        if (ext in baseAudioExtensions) return true
+        if (AppSettings.dsdPlaybackEnabled.value && ext in DSD_EXTENSIONS) return true
+        if (AppSettings.ffmpegUnsupportedAudioTranscodeEnabled.value && ext in FFMPEG_ONLY_AUDIO_EXTENSIONS) return true
+
+        // Some WebDAV servers give audio files no useful extension in
+        // displayname. PROPFIND already asks for getcontenttype, so use its
+        // audio media type as a fallback instead of dropping the track.
+        return contentType
+            ?.substringBefore(';')
+            ?.trim()
+            ?.lowercase(Locale.ROOT)
+            ?.startsWith("audio/") == true
     }
+
+    private val DSD_EXTENSIONS = setOf("dsf", "dff")
 
     /**
      * Stable track id for a remote file. Prefixed so it never collides with a

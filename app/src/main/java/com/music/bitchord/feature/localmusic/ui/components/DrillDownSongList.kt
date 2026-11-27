@@ -487,7 +487,7 @@ private fun FullScreenCollectionHeader(
     }
 }
 
-/** Prevents automatic wrapping while preserving user-entered line breaks. */
+/** Keeps playlist names on one line when the no-wrap preference is enabled. */
 @Composable
 private fun PlaylistDetailTitle(
     title: String,
@@ -513,15 +513,23 @@ private fun PlaylistDetailTitle(
     BoxWithConstraints(modifier = modifier.fillMaxWidth()) {
         val textMeasurer = rememberTextMeasurer()
         val availableWidthPx = constraints.maxWidth.takeUnless { it == Constraints.Infinity } ?: 0
-        val explicitLines = remember(title) { title.replace("\r\n", "\n").replace('\r', '\n').split('\n') }
-        val fitted = remember(explicitLines, style, availableWidthPx, textMeasurer) {
-            fitPlaylistDetailTitle(explicitLines, style, availableWidthPx, textMeasurer)
+        // Imported playlist names may carry real paragraph breaks. In this
+        // mode the user asked for a single line, so turn every supported break
+        // sequence into a space before fitting and drawing the title.
+        val singleLineTitle = remember(title) {
+            title.split(Regex("\\r\\n|[\\r\\n\\u0085\\u2028\\u2029]"))
+                .joinToString(" ") { it.trim() }
+                .trim()
+        }
+        val singleLine = remember(singleLineTitle) { listOf(singleLineTitle) }
+        val fitted = remember(singleLine, style, availableWidthPx, textMeasurer) {
+            fitPlaylistDetailTitle(singleLine, style, availableWidthPx, textMeasurer)
         }
         Column(
             modifier = Modifier.fillMaxWidth(),
             horizontalAlignment = Alignment.CenterHorizontally,
         ) {
-            explicitLines.forEachIndexed { index, line ->
+            singleLine.forEachIndexed { index, line ->
                 key(index) {
                     val scrollState = rememberScrollState()
                     Text(

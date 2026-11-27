@@ -11,7 +11,10 @@ import android.util.AtomicFile
 import com.kyant.taglib.TagLib
 import com.music.bitchord.data.Http
 import com.music.bitchord.data.model.Song
+import kotlinx.coroutines.CancellationException
+import kotlinx.coroutines.CompletableDeferred
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.withTimeoutOrNull
 import kotlinx.coroutines.withContext
 import okhttp3.Request
 import org.json.JSONArray
@@ -540,7 +543,18 @@ object AppleMusicAutoRename {
             File(row.path).parentFile?.let { File(it, targetName).absolutePath }
         }.distinct()
         if (renamedPaths.isNotEmpty()) {
-            runCatching { MediaScannerConnection.scanFile(context, renamedPaths.toTypedArray(), null, null) }
+            // Do not reload MediaStore while it still points at the old
+            // filename. The previous fire-and-forget scan raced the immediate
+            // library refresh, so the renamed row temporarily vanished from
+            // Songs/Folders and could remain missing until another rescan.
+            try {
+                scanAndAwaitMediaStore(context, renamedPaths)
+            } catch (cancelled: CancellationException) {
+                throw cancelled
+            } catch (_: Exception) {
+                // Renaming and tag writes already succeeded. A scan failure
+                // must not report the completed metadata update as failed.
+            }
         }
         AutoRenameResult(changed, failed, firstFailure, updatedRows)
     }
@@ -605,6 +619,24 @@ object AppleMusicAutoRename {
             }
             else -> DocumentsContract.renameDocument(context.contentResolver, uri, name)
         }
+    }
+
+    private suspend fun scanAndAwaitMediaStore(context: Context, paths: List<String>) {
+        val expected = paths.toSet()
+        if (expected.isEmpty()) return
+        val completion = CompletableDeferred<Unit>()
+        val scanned = mutableSetOf<String>()
+        val lock = Any()
+        MediaScannerConnection.scanFile(context, expected.toTypedArray(), null) { path, _ ->
+            synchronized(lock) {
+                scanned += path
+                if (scanned.containsAll(expected)) completion.complete(Unit)
+            }
+        }
+        // MediaScanner may be unavailable for virtual SAF documents. Bound
+        // the wait and let the caller continue in that case; ordinary
+        // MediaStore-backed files complete as soon as each new row is indexed.
+        withTimeoutOrNull(20_000L) { completion.await() }
     }
 
     private fun tagValue(tags: Map<String, List<String>>, key: String): String? =

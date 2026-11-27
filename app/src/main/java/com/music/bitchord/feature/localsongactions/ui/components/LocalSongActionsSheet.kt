@@ -316,15 +316,6 @@ fun LocalSongActionsSheet(
                                     trailingIcon = if (artists.size > 1) Icons.AutoMirrored.Rounded.KeyboardArrowRight else null,
                                     onClick = onGoToArtist,
                                 )
-                                if (showPlayerActions) {
-                                    onGoToPlaylists?.let { openPlaylists ->
-                                        LocalSongActionItem(
-                                            icon = Icons.AutoMirrored.Rounded.PlaylistPlay,
-                                            label = stringResource(R.string.song_registered_playlists),
-                                            onClick = openPlaylists,
-                                        )
-                                    }
-                                }
                             }
                             PlayerDetailsAction.OPEN_FOLDER -> if (showPlayerActions) {
                                 val folderPath = FolderNavigationRequests.folderPathFor(song)
@@ -402,6 +393,19 @@ fun LocalSongActionsSheet(
                                     onClick = share,
                                 )
                             }
+                        }
+                    }
+                    // This action is a player-menu affordance, not a child of
+                    // the configurable Artist row. Keeping it outside the
+                    // ordered/hidden action list means hiding or moving Artist
+                    // cannot make playlist navigation disappear.
+                    if (showPlayerActions) {
+                        onGoToPlaylists?.let { openPlaylists ->
+                            LocalSongActionItem(
+                                icon = Icons.AutoMirrored.Rounded.PlaylistPlay,
+                                label = stringResource(R.string.song_registered_playlists),
+                                onClick = openPlaylists,
+                            )
                         }
                     }
                             Spacer(Modifier.height(8.dp))
