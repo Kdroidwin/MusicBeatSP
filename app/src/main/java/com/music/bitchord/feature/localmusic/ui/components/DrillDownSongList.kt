@@ -514,11 +514,11 @@ private fun PlaylistDetailTitle(
         val textMeasurer = rememberTextMeasurer()
         val availableWidthPx = constraints.maxWidth.takeUnless { it == Constraints.Infinity } ?: 0
         // Imported playlist names may carry real paragraph breaks. In this
-        // mode the user asked for a single line, so turn every supported break
-        // sequence into a space before fitting and drawing the title.
+        // mode the user asked for one uninterrupted line, so remove the break
+        // characters without inserting whitespace between the surrounding text.
         val singleLineTitle = remember(title) {
             title.split(Regex("\\r\\n|[\\r\\n\\u0085\\u2028\\u2029]"))
-                .joinToString(" ") { it.trim() }
+                .joinToString("") { it.trim() }
                 .trim()
         }
         val singleLine = remember(singleLineTitle) { listOf(singleLineTitle) }

@@ -86,7 +86,7 @@
     <string name="playlist_name_prompt">プレイリスト名を入力してください</string>
     <string name="playlist_name_line_break_hint">改行を入れた位置でプレイリスト名を折り返します。</string>
     <string name="playlist_detail_title_no_wrap">プレイリスト名を自動改行しない</string>
-    <string name="playlist_detail_title_no_wrap_subtitle">プレイリスト詳細の名前を一行で表示します。保存済みの改行は空白に置き換えます。初期設定はオンです。</string>
+    <string name="playlist_detail_title_no_wrap_subtitle">プレイリスト詳細の名前を一行で表示し、保存済みの改行は取り除きます。初期設定はオンです。</string>
     <string name="tap_to_create">タップして作成</string>
     <string name="localize_library_collection_count">ライブラリのコレクション数を日本語表示</string>
     <string name="localize_library_collection_count_subtitle">ライブラリの「Collections」をアプリの言語に合わせて表示します。初期設定はオンです。</string>
