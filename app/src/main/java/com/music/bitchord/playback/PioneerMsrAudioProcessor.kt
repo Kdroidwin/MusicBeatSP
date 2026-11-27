@@ -8,7 +8,6 @@ import androidx.media3.common.audio.AudioProcessor
 import androidx.media3.common.audio.BaseAudioProcessor
 import androidx.media3.common.util.UnstableApi
 import jp.pioneer.itp.android.stellanovaplayer.common.MSRUtility
-import java.io.ByteArrayOutputStream
 import java.nio.ByteBuffer
 import java.nio.ByteOrder
 import kotlin.math.floor
@@ -40,10 +39,11 @@ internal object PioneerMsrNative {
 }
 
 /**
- * Optional Pioneer MSR PCM stage. It only negotiates stereo PCM up to 48 kHz
- * to 24-bit/96 kHz when the current route advertises 96 kHz. It stays outside
- * the bit-perfect path and does not touch compressed, multichannel, or high-rate
- * source formats.
+ * Optional Pioneer MSR PCM stage. The native API consumes interleaved float
+ * samples in half-second batches and has a 2,000-frame look-ahead. Smaller
+ * Media3 buffers are accumulated to that contract. Every consumed frame is
+ * emitted: if the DSP is not ready, fails, or produces an invalid batch, the
+ * same audio is resampled to the negotiated 24-bit/96 kHz output instead.
  */
 @UnstableApi
 class PioneerMsrAudioProcessor : BaseAudioProcessor() {
@@ -58,7 +58,10 @@ class PioneerMsrAudioProcessor : BaseAudioProcessor() {
     private var inputEncoding = C.ENCODING_INVALID
     private var native: MSRUtility? = null
     private var nativeFailed = false
-    private var pendingOutputFrames = 0L
+    private var batchFrames = 0
+    private var batchSamples = FloatArray(0)
+    private var batchSamplesFilled = 0
+    private var nativeOutput = DoubleArray(0)
     private var frameRemainder = 0L
 
     override fun onConfigure(inputAudioFormat: AudioProcessor.AudioFormat): AudioProcessor.AudioFormat {
@@ -78,12 +81,14 @@ class PioneerMsrAudioProcessor : BaseAudioProcessor() {
         inputRateHz = inputAudioFormat.sampleRate
         inputChannels = inputAudioFormat.channelCount
         inputEncoding = inputAudioFormat.encoding
+        batchFrames = inputRateHz / 2
+        batchSamples = FloatArray(batchFrames * inputChannels)
         native = engine
         return AudioProcessor.AudioFormat(OUTPUT_RATE_HZ, inputChannels, C.ENCODING_PCM_24BIT)
     }
 
     override fun onFlush() {
-        pendingOutputFrames = 0L
+        batchSamplesFilled = 0
         frameRemainder = 0L
         nativeFailed = false
         runCatching {
@@ -93,6 +98,14 @@ class PioneerMsrAudioProcessor : BaseAudioProcessor() {
         }.onFailure { nativeFailed = true }
     }
 
+    override fun onQueueEndOfStream() {
+        if (batchSamplesFilled <= 0 || inputRateHz <= 0 || inputChannels <= 0) return
+        val frames = batchSamplesFilled / inputChannels
+        val outputFrames = outputFramesFor(frames)
+        emitFallback(batchSamples, frames, outputFrames)
+        batchSamplesFilled = 0
+    }
+
     override fun onReset() {
         clearNativeState()
     }
@@ -100,7 +113,10 @@ class PioneerMsrAudioProcessor : BaseAudioProcessor() {
     private fun clearNativeState() {
         native = null
         nativeFailed = false
-        pendingOutputFrames = 0L
+        batchFrames = 0
+        batchSamples = FloatArray(0)
+        batchSamplesFilled = 0
+        nativeOutput = DoubleArray(0)
         frameRemainder = 0L
         inputRateHz = 0
         inputChannels = 0
@@ -108,57 +124,105 @@ class PioneerMsrAudioProcessor : BaseAudioProcessor() {
     }
 
     override fun queueInput(inputBuffer: ByteBuffer) {
-        val engine = native ?: return
+        if (inputRateHz <= 0 || inputChannels <= 0) return
         val bytesPerSample = bytesPerSample(inputEncoding)
         val frameBytes = bytesPerSample * inputChannels
-        val inputFrames = inputBuffer.remaining() / frameBytes
-        if (inputFrames <= 0) return
+        if (frameBytes <= 0) return
 
-        val samples = decodeInput(inputBuffer, inputFrames)
-        val requestedOutputFrames = ((inputFrames.toLong() * OUTPUT_RATE_HZ) + frameRemainder) / inputRateHz
-        frameRemainder = ((inputFrames.toLong() * OUTPUT_RATE_HZ) + frameRemainder) % inputRateHz
-
+        inputBuffer.order(ByteOrder.LITTLE_ENDIAN)
         if (nativeFailed) {
-            emitFallback(samples, inputFrames, requestedOutputFrames.toInt())
+            val frames = inputBuffer.remaining() / frameBytes
+            if (frames <= 0) return
+            val samples = FloatArray(frames * inputChannels)
+            decodeInput(inputBuffer, samples, frames)
+            emitFallback(samples, frames, outputFramesFor(frames))
+            return
+        }
+
+        while (inputBuffer.remaining() >= frameBytes) {
+            val framesToCopy = minOf(
+                inputBuffer.remaining() / frameBytes,
+                (batchSamples.size - batchSamplesFilled) / inputChannels,
+            )
+            if (framesToCopy <= 0) break
+            decodeInputInto(inputBuffer, batchSamples, batchSamplesFilled, framesToCopy)
+            batchSamplesFilled += framesToCopy * inputChannels
+            if (batchSamplesFilled == batchSamples.size) {
+                processBatch(batchFrames)
+                batchSamplesFilled = 0
+                // BaseAudioProcessor has a single output buffer. Let Media3
+                // drain this batch before accepting another full batch.
+                return
+            }
+        }
+    }
+
+    private fun processBatch(frames: Int) {
+        if (frames <= 0) return
+        val outputFrames = outputFramesFor(frames)
+        val engine = native
+        if (engine == null || nativeFailed || frames <= LOOKAHEAD_FRAMES) {
+            emitFallback(batchSamples, frames, outputFrames)
+            return
+        }
+
+        val nativeInputFrames = frames - LOOKAHEAD_FRAMES
+        val nativeOutputFrames = ((nativeInputFrames.toLong() * OUTPUT_RATE_HZ) / inputRateHz)
+            .coerceIn(0L, outputFrames.toLong()).toInt()
+        if (nativeOutputFrames <= 0) {
+            emitFallback(batchSamples, frames, outputFrames)
             return
         }
 
         try {
-            engine.setBuffer(samples, inputFrames)
-            pendingOutputFrames = (pendingOutputFrames + requestedOutputFrames).coerceAtMost(MAX_PENDING_OUTPUT_FRAMES)
-            val encoded = ByteArrayOutputStream()
-            while (pendingOutputFrames > 0L && engine.isWriteBuffer(inputRateHz)) {
-                val frames = minOf(pendingOutputFrames, MAX_NATIVE_CHUNK_FRAMES.toLong()).toInt()
-                val processed = DoubleArray(frames * inputChannels)
-                if (!engine.execute0(processed, frames)) break
-                writePcm24(encoded, processed, applyMsrGain = true)
-                pendingOutputFrames -= frames
+            // The upstream decoder passes the interleaved float sample count
+            // here (for stereo, twice the number of frames).
+            if (!engine.isWriteBuffer(inputRateHz)) {
+                emitFallback(batchSamples, frames, outputFrames)
+                return
             }
-            val bytes = encoded.toByteArray()
-            if (bytes.isNotEmpty()) {
-                val output = replaceOutputBuffer(bytes.size).order(ByteOrder.LITTLE_ENDIAN)
-                output.put(bytes)
-                output.flip()
+            engine.setBuffer(batchSamples, batchSamples.size)
+            val requiredNativeSamples = nativeOutputFrames * inputChannels
+            if (nativeOutput.size < requiredNativeSamples) {
+                nativeOutput = DoubleArray(requiredNativeSamples)
             }
-            if (pendingOutputFrames >= MAX_PENDING_OUTPUT_FRAMES) {
-                throw IllegalStateException("MSR output buffer did not become ready")
+            if (!engine.execute0(nativeOutput, nativeOutputFrames)) {
+                nativeFailed = true
+                emitFallback(batchSamples, frames, outputFrames)
+                return
             }
+
+            val output = replaceOutputBuffer(outputFrames * inputChannels * BYTES_PER_OUTPUT_SAMPLE)
+                .order(ByteOrder.LITTLE_ENDIAN)
+            for (index in 0 until requiredNativeSamples) {
+                writeSample24(output, (nativeOutput[index] * MSR_OUTPUT_GAIN).toFloat())
+            }
+            emitFallbackTail(
+                output = output,
+                samples = batchSamples,
+                frames = frames,
+                inputStartFrame = nativeInputFrames,
+                outputFrames = outputFrames - nativeOutputFrames,
+            )
+            output.flip()
         } catch (_: Exception) {
             nativeFailed = true
-            pendingOutputFrames = 0L
-            emitFallback(samples, inputFrames, requestedOutputFrames.toInt())
+            emitFallback(batchSamples, frames, outputFrames)
         } catch (_: LinkageError) {
             nativeFailed = true
-            pendingOutputFrames = 0L
-            emitFallback(samples, inputFrames, requestedOutputFrames.toInt())
+            emitFallback(batchSamples, frames, outputFrames)
         }
     }
 
-    private fun decodeInput(buffer: ByteBuffer, frames: Int): FloatArray {
-        buffer.order(ByteOrder.LITTLE_ENDIAN)
-        val samples = FloatArray(frames * inputChannels)
-        for (index in samples.indices) {
-            samples[index] = when (inputEncoding) {
+    private fun decodeInput(buffer: ByteBuffer, destination: FloatArray, frames: Int) {
+        decodeInputInto(buffer, destination, 0, frames)
+    }
+
+    private fun decodeInputInto(buffer: ByteBuffer, destination: FloatArray, destinationSampleOffset: Int, frames: Int) {
+        val end = destinationSampleOffset + frames * inputChannels
+        var index = destinationSampleOffset
+        while (index < end) {
+            destination[index++] = when (inputEncoding) {
                 C.ENCODING_PCM_16BIT -> buffer.short / 32768f
                 C.ENCODING_PCM_24BIT -> {
                     val b0 = buffer.get().toInt() and 0xff
@@ -173,34 +237,57 @@ class PioneerMsrAudioProcessor : BaseAudioProcessor() {
                 else -> 0f
             }
         }
-        return samples
+    }
+
+    private fun outputFramesFor(inputFrames: Int): Int {
+        if (inputRateHz <= 0 || inputFrames <= 0) return 0
+        val scaledFrames = inputFrames.toLong() * OUTPUT_RATE_HZ + frameRemainder
+        frameRemainder = scaledFrames % inputRateHz
+        return (scaledFrames / inputRateHz).coerceAtMost(Int.MAX_VALUE.toLong()).toInt()
     }
 
     private fun emitFallback(samples: FloatArray, inputFrames: Int, outputFrames: Int) {
         if (inputFrames <= 0 || outputFrames <= 0) return
-        val output = replaceOutputBuffer(outputFrames * inputChannels * 3).order(ByteOrder.LITTLE_ENDIAN)
+        val output = replaceOutputBuffer(outputFrames * inputChannels * BYTES_PER_OUTPUT_SAMPLE)
+            .order(ByteOrder.LITTLE_ENDIAN)
+        emitFallbackRange(output, samples, inputFrames, 0, inputFrames, outputFrames)
+        output.flip()
+    }
+
+    private fun emitFallbackTail(
+        output: ByteBuffer,
+        samples: FloatArray,
+        frames: Int,
+        inputStartFrame: Int,
+        outputFrames: Int,
+    ) {
+        val tailFrames = (frames - inputStartFrame).coerceAtLeast(0)
+        if (tailFrames <= 0 || outputFrames <= 0) return
+        emitFallbackRange(output, samples, frames, inputStartFrame, tailFrames, outputFrames)
+    }
+
+    private fun emitFallbackRange(
+        output: ByteBuffer,
+        samples: FloatArray,
+        totalInputFrames: Int,
+        inputStartFrame: Int,
+        inputFrames: Int,
+        outputFrames: Int,
+    ) {
+        if (inputFrames <= 0 || outputFrames <= 0) return
         for (frame in 0 until outputFrames) {
-            val position = frame.toDouble() * inputRateHz / OUTPUT_RATE_HZ
-            val left = floor(position).toInt().coerceIn(0, inputFrames - 1)
-            val right = (left + 1).coerceAtMost(inputFrames - 1)
-            val fraction = (position - left).toFloat().coerceIn(0f, 1f)
+            val position = frame.toDouble() * inputFrames / outputFrames
+            val leftInRange = floor(position).toInt().coerceIn(0, inputFrames - 1)
+            val rightInRange = (leftInRange + 1).coerceAtMost(inputFrames - 1)
+            val fraction = (position - leftInRange).toFloat().coerceIn(0f, 1f)
+            val left = inputStartFrame + leftInRange
+            val right = inputStartFrame + rightInRange
+            if (left !in 0 until totalInputFrames || right !in 0 until totalInputFrames) continue
             for (channel in 0 until inputChannels) {
                 val a = samples[left * inputChannels + channel]
                 val b = samples[right * inputChannels + channel]
                 writeSample24(output, a + (b - a) * fraction)
             }
-        }
-        output.flip()
-    }
-
-    private fun writePcm24(output: ByteArrayOutputStream, samples: DoubleArray, applyMsrGain: Boolean) {
-        for (sample in samples) {
-            val gain = if (applyMsrGain) MSR_OUTPUT_GAIN else 1.0
-            val normalized = (sample.takeIf(Double::isFinite) ?: 0.0) * gain
-            val value = (normalized.coerceIn(-1.0, MAX_24BIT_NORMALIZED) * MAX_24BIT_INT).roundToInt()
-            output.write(value and 0xff)
-            output.write((value ushr 8) and 0xff)
-            output.write((value ushr 16) and 0xff)
         }
     }
 
@@ -224,8 +311,8 @@ class PioneerMsrAudioProcessor : BaseAudioProcessor() {
     private companion object {
         const val MODE_PCM = 2
         const val OUTPUT_RATE_HZ = 96_000
-        const val MAX_NATIVE_CHUNK_FRAMES = 8_192
-        const val MAX_PENDING_OUTPUT_FRAMES = 96_000L
+        const val LOOKAHEAD_FRAMES = 2_000
+        const val BYTES_PER_OUTPUT_SAMPLE = 3
         const val MSR_OUTPUT_GAIN = 1.26
         const val MAX_24BIT_INT = 8_388_607.0
         const val MAX_24BIT_NORMALIZED = 0.9999998807907104

@@ -5483,13 +5483,9 @@ class PlaybackService : MediaLibraryService() {
         val items = List(oldActive.mediaItemCount) { oldActive.getMediaItemAt(it) }
         val index = oldActive.currentMediaItemIndex.takeIf { it != C.INDEX_UNSET } ?: 0
         val position = oldActive.currentPosition.coerceAtLeast(0L)
-        val playWhenReady = oldActive.playWhenReady
+        val playWhenReady = oldActive.playWhenReady || oldActive.isPlaying
         val repeatMode = oldActive.repeatMode
         val shuffleMode = oldActive.shuffleModeEnabled
-
-        oldActive.playWhenReady = false
-        oldActive.removeListener(playbackListener)
-        oldActive.removeAnalyticsListener(formatListener)
 
         val oldSpare = spare
         crossfade?.cancelTransition()
@@ -5498,8 +5494,6 @@ class PlaybackService : MediaLibraryService() {
         spareAudioChain = PlaybackAudioChain()
         val newActive = buildPlayer(activeAudioChain, ownsSession = true)
         val newSpare = buildPlayer(spareAudioChain, ownsSession = false)
-        player = newActive
-        spare = newSpare
         AppSettings.audioSessionId.value = newActive.audioSessionId
         audioEffectManager?.setAudioSessionId(
             sessionId = newActive.audioSessionId,
@@ -5515,20 +5509,30 @@ class PlaybackService : MediaLibraryService() {
             bassBoostStrength = com.music.bitchord.data.settings.EqualizerSettings.bassBoostStrength.value,
             virtualizerStrength = com.music.bitchord.data.settings.EqualizerSettings.virtualizerStrength.value,
         )
-        updateAudioEffectsEnabled()
         applySettings(newActive, activeAudioChain)
         applySettings(newSpare, spareAudioChain)
         newActive.repeatMode = repeatMode
         newActive.shuffleModeEnabled = shuffleMode
         if (items.isNotEmpty()) {
-            newActive.setMediaItems(items, index.coerceIn(items.indices), position)
+            newActive.setMediaItems(items, index.coerceIn(items.indices), oldActive.currentPosition.coerceAtLeast(position))
         }
+
+        // Prepare the replacement while the current player continues running.
+        // It has playWhenReady=false, so this does not start a second audio
+        // stream. Swapping the session before parking the old player prevents
+        // the intentional handoff from being published as a user pause.
+        if (items.isNotEmpty()) newActive.prepare()
+        oldActive.removeListener(playbackListener)
+        oldActive.removeAnalyticsListener(formatListener)
+        player = newActive
+        spare = newSpare
+        updateAudioEffectsEnabled()
         newActive.addListener(playbackListener)
         newActive.addAnalyticsListener(formatListener)
 
         mediaSession?.player = newSessionPlayer(newActive)
         applyOutputRoute()
-        if (items.isNotEmpty()) newActive.prepare()
+        oldActive.playWhenReady = false
         newActive.playWhenReady = playWhenReady
 
         oldActive.release()
