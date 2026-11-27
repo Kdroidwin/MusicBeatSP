@@ -299,6 +299,25 @@ object LocalLyricsManager {
                                 val bestRaw = candidate.bestRaw
                                 if (bestRaw.isNullOrBlank()) return@mapNotNull null
                                 if (bestRaw.length > MAX_SEARCH_LYRICS_CHARS) return@mapNotNull null
+                                fun displayLyrics(raw: String?): String? = raw
+                                    ?.takeIf { it.length <= MAX_SEARCH_LYRICS_CHARS }
+                                    ?.let { lyrics ->
+                                        if (source.id == "kugou") {
+                                            LyricsRepository.applySourceDisplayOptionsToText(
+                                                source = source,
+                                                lyrics = lyrics,
+                                                title = safeTitle,
+                                                artist = safeArtist,
+                                            )
+                                        } else {
+                                            lyrics
+                                        }
+                                    }
+                                val syncedLyrics = displayLyrics(candidate.syncedLyrics)
+                                val plainLyrics = displayLyrics(candidate.plainLyrics)
+                                if (syncedLyrics.isNullOrBlank() && plainLyrics.isNullOrBlank()) {
+                                    return@mapNotNull null
+                                }
                                 val rawResult = LyricsSearchResultItem(
                                     id = candidate.id.take(MAX_SEARCH_METADATA_CHARS),
                                     title = candidate.title.take(MAX_SEARCH_METADATA_CHARS),
@@ -306,20 +325,8 @@ object LocalLyricsManager {
                                     album = candidate.album?.take(MAX_SEARCH_METADATA_CHARS),
                                     durationSeconds = candidate.durationSeconds,
                                     provider = candidate.provider.ifBlank { source.label }.take(MAX_SEARCH_METADATA_CHARS),
-                                    syncedLyrics = candidate.syncedLyrics
-                                        ?.takeIf { it.length <= MAX_SEARCH_LYRICS_CHARS }
-                                        ?.let { lyrics ->
-                                            if (source.id == "kugou" && AppSettings.convertKugouToJapaneseKanji.value) {
-                                                com.music.bitchord.data.lyrics.JapaneseKanji.convertSimplifiedToJapanese(lyrics)
-                                            } else lyrics
-                                        },
-                                    plainLyrics = candidate.plainLyrics
-                                        ?.takeIf { it.length <= MAX_SEARCH_LYRICS_CHARS }
-                                        ?.let { lyrics ->
-                                            if (source.id == "kugou" && AppSettings.convertKugouToJapaneseKanji.value) {
-                                                com.music.bitchord.data.lyrics.JapaneseKanji.convertSimplifiedToJapanese(lyrics)
-                                            } else lyrics
-                                        },
+                                    syncedLyrics = syncedLyrics,
+                                    plainLyrics = plainLyrics,
                                 )
                                 rawResult.copy(
                                     title = rawResult.title.ifBlank { safeTitle }.take(MAX_SEARCH_METADATA_CHARS),

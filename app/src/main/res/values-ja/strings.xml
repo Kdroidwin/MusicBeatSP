@@ -1530,7 +1530,7 @@
     <string name="kugou_japanese_kanji">KuGouの歌詞を日本語の漢字に変換</string>
     <string name="kugou_japanese_kanji_subtitle">簡体字を日本語の漢字表記に変換します。初期設定はオンです。</string>
     <string name="remove_kugou_lyric_metadata">KuGouの曲名・クレジット行を削除</string>
-    <string name="remove_kugou_lyric_metadata_subtitle">先頭の曲名とアーティストの行、および「詞：」「曲：」などの作詞・作曲者行を削除します。初期設定はオンです。</string>
+    <string name="remove_kugou_lyric_metadata_subtitle">先頭の曲名・歌手名や、「作詞」「作曲」「歌」などの情報行を削除します。一文字ずつ時刻が付いた行にも対応します。初期設定はオンです。</string>
     <string name="lyrics_sync_seek_back_5">5秒戻る</string>
     <string name="lyrics_sync_seek_forward_5">5秒進む</string>
     <string name="lyrics_sync_five_second_seek">歌詞同期編集で5秒スキップを使う</string>
@@ -2235,6 +2235,8 @@
     <string name="lyrics_format_select">選択</string>
     <string name="lyrics_format_cancel">キャンセル</string>
     <string name="lyrics_format_lrc_timed">同期歌詞</string>
+    <string name="lyrics_sync_per_character">1文字ごと</string>
+    <string name="lyrics_sync_line_or_word">行・単語単位</string>
     <string name="lyrics_format_plain_badge">通常の歌詞</string>
     <string name="lyrics_line_count">%1$d行</string>
     <string name="lyrics_editor_title_label">曲名</string>

@@ -556,6 +556,8 @@ private fun ModernSearchResultCard(
                     }
                 }
 
+                LyricsSyncGranularityBadge(item)
+
                 // Duration badge if available
                 if (item.formattedDuration.isNotBlank()) {
                     Surface(
@@ -583,6 +585,34 @@ private fun ModernSearchResultCard(
                 }
             }
         }
+    }
+}
+
+@Composable
+internal fun LyricsSyncGranularityBadge(item: LyricsSearchResultItem) {
+    if (!item.hasSynced) return
+    val isCharacterSynced = remember(item.syncedLyrics) { item.isCharacterSynced }
+    Surface(
+        shape = RoundedCornerShape(8.dp),
+        color = if (isCharacterSynced) {
+            MaterialTheme.colorScheme.tertiaryContainer
+        } else {
+            MaterialTheme.colorScheme.surfaceContainerHighest
+        },
+    ) {
+        Text(
+            text = stringResource(
+                if (isCharacterSynced) R.string.lyrics_sync_per_character
+                else R.string.lyrics_sync_line_or_word,
+            ),
+            style = MaterialTheme.typography.labelSmall.copy(fontWeight = FontWeight.SemiBold),
+            color = if (isCharacterSynced) {
+                MaterialTheme.colorScheme.onTertiaryContainer
+            } else {
+                MaterialTheme.colorScheme.onSurfaceVariant
+            },
+            modifier = Modifier.padding(horizontal = 7.dp, vertical = 3.dp),
+        )
     }
 }
 

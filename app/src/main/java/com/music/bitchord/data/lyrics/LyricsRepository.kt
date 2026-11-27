@@ -142,34 +142,82 @@ object LyricsRepository {
         else -> lines
     }
 
+    /** Applies KuGou display options to search-result text without rewriting its timestamps. */
+    internal fun applySourceDisplayOptionsToText(
+        source: LyricsSource,
+        lyrics: String,
+        title: String,
+        artist: String,
+    ): String {
+        if (source.id != "kugou" || lyrics.isBlank()) return lyrics
+        val settings = com.music.bitchord.data.settings.AppSettings
+        var rows = lyrics.split(Regex("\r\n|\r|\n"))
+        if (settings.removeKugouLyricMetadata.value) {
+            val removed = kugouMetadataRowsToRemove(rows, title, artist)
+            rows = rows.filterIndexed { index, _ -> index !in removed }
+        }
+        if (settings.convertKugouToJapaneseKanji.value) {
+            rows = rows.map(JapaneseKanji::convertSimplifiedToJapanese)
+        }
+        return rows.joinToString("\n")
+    }
+
     private fun removeKugouMetadataLines(lines: List<LyricLine>, title: String, artist: String): List<LyricLine> {
-        val creditLine = Regex(
-            """^\s*(?:作词|作詞|詞|词|作曲|作曲者|編曲|編曲者|编曲|编曲者|詞曲|词曲)\s*[:：]\s*\S.*$""",
-            RegexOption.IGNORE_CASE,
-        )
-        fun normalize(value: String): String = Normalizer.normalize(value, Normalizer.Form.NFKC)
+        val removed = kugouMetadataRowsToRemove(lines.map(LyricLine::text), title, artist)
+        return lines.filterIndexed { index, _ -> index !in removed }
+    }
+
+    /**
+     * KuGou can timestamp its opening title and credit block one glyph at a
+     * time. Judge reconstructed row text rather than timed tokens, and stop at
+     * the first actual lyric so matching words in verses are preserved.
+     */
+    private fun kugouMetadataRowsToRemove(rows: List<String>, title: String, artist: String): Set<Int> {
+        val normalizedTitle = normalizeKugouMetadata(title)
+        val normalizedArtists = artist.split(Regex("[,，、/&＆;；|]+"))
+            .map(::normalizeKugouMetadata)
+            .filter { it.length >= 2 }
+        var openingRows = 0
+        var lyricsStarted = false
+        val removed = mutableSetOf<Int>()
+
+        rows.forEachIndexed { index, rawText ->
+            val text = stripKugouTimestamps(rawText).trim()
+            if (text.isBlank()) return@forEachIndexed
+
+            val inMetadataHeader = !lyricsStarted && openingRows < MAX_KUGOU_METADATA_HEADER_ROWS
+            openingRows++
+            val normalizedText = normalizeKugouMetadata(text)
+            val labelText = KUGOU_WHITESPACE.replace(text, "")
+            val labeledMetadata = KUGOU_METADATA_LABEL.matches(labelText)
+            val titleRow = normalizedTitle.length >= 2 && normalizedText == normalizedTitle
+            val artistRow = normalizedText.length >= 2 && normalizedArtists.any { normalizedText == it }
+            if (inMetadataHeader && (labeledMetadata || titleRow || artistRow)) {
+                removed += index
+            } else {
+                lyricsStarted = true
+            }
+        }
+        return removed
+    }
+
+    private fun stripKugouTimestamps(text: String): String =
+        KUGOU_LINE_TIMESTAMP.replaceFirst(KUGOU_WORD_TIMESTAMP.replace(text, ""), "")
+
+    private fun normalizeKugouMetadata(value: String): String =
+        Normalizer.normalize(value, Normalizer.Form.NFKC)
             .lowercase(Locale.ROOT)
             .filter(Char::isLetterOrDigit)
 
-        val normalizedTitle = normalize(title)
-        val artists = artist.split(Regex("[,，、/&＆]+"))
-            .map(::normalize)
-            .filter { it.length >= 2 }
-        var openingRows = 0
-        var lyricStarted = false
-        return lines.filter { line ->
-            val text = line.text.trim()
-            if (text.isBlank()) return@filter true
-            openingRows++
-            val isCredit = creditLine.matches(text)
-            val normalizedText = normalize(text)
-            val isOpeningTitle = !lyricStarted && openingRows <= 8 && normalizedTitle.length >= 2 &&
-                normalizedText.contains(normalizedTitle) && artists.any(normalizedText::contains)
-            if (isCredit || isOpeningTitle) return@filter false
-            lyricStarted = true
-            true
-        }
-    }
+    private val KUGOU_METADATA_LABEL = Regex(
+        """^\s*(?:歌曲名|曲名|歌名|標題|标题|title|artist|アーティスト|歌手|演唱(?:者)?|歌唱(?:者)?|主唱|vocal(?:ist)?|作詞\s*[/&＆・+]\s*作曲|作词\s*[/&＆・+]\s*作曲|作詞(?:者)?|作词(?:者|人)?|填詞|填词|詞曲|词曲|詞|词|作曲(?:者|人)?|曲|編曲(?:者)?|编曲(?:者)?|lyricist|composer|arranger|lyrics?)\s*[:：=＝]\s*\S.*$""",
+        RegexOption.IGNORE_CASE,
+    )
+    private val KUGOU_WHITESPACE = Regex("""\s+""")
+    private val KUGOU_LINE_TIMESTAMP = Regex("""^\s*\[\d{1,3}:\d{2}[.:]\d{1,3}]""")
+    private val KUGOU_WORD_TIMESTAMP = Regex("""<\d{1,3}:\d{2}[.:]\d{1,3}>""")
+
+    private const val MAX_KUGOU_METADATA_HEADER_ROWS = 24
 
     /** Reapply source-specific display options to entries cached by older releases. */
     private fun convertFollowLyricsLine(line: LyricLine): LyricLine {
