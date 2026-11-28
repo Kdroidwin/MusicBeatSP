@@ -2562,33 +2562,4 @@
     <string name="mini_player_double_arrow_skip_buttons_subtitle">Show the mini player’s previous and next controls as two solid triangles, like the main player. On by default.</string>
     <string name="player_skip_buttons_match_mini_player">Match the player’s skip buttons to the mini player</string>
     <string name="player_skip_buttons_match_mini_player_subtitle">Use the mini player’s current previous and next icon style on the full player. Off by default.</string>
-    <string name="downmix_settings_title">Downmix</string>
-    <string name="downmix_settings_subtitle">4.1ch–9.1.6ch → 2ch custom matrix, live meters, Mute/Solo &amp; preamp</string>
-    <string name="downmix_enable_title">Custom multichannel → 2ch downmix</string>
-    <string name="downmix_enable_subtitle">Converts 4.1 / 5.1 / 7.1 / 7.1.4ch PCM to stereo inside the app before Android Spatializer/downmix</string>
-    <string name="downmix_bit_perfect_bypass">Bypassed while Bit-perfect playback is enabled</string>
-    <string name="downmix_dsp_spec_bw">LFE: Butterworth 4th LPF 125 Hz (24 dB/oct, Q=0.541/1.307) · Non-LFE delay: %1$d samples (3.58 ms @ 48 kHz)</string>
-    <string name="downmix_dsp_spec_lr4">LFE: LR4 4th LPF 125 Hz (Q=0.7071) · Main L/R: 2nd-order All-Pass (zero pre-ringing, exact phase match)</string>
-    <string name="downmix_lfe_filter_section">LFE filter &amp; phase alignment</string>
-    <string name="downmix_lfe_mode_bw4_title">Butterworth 4th + 172-sample delay</string>
-    <string name="downmix_lfe_mode_bw4_subtitle">125 Hz 24 dB/oct LPF on LFE · 3.583 ms dry delay on non-LFE channels</string>
-    <string name="downmix_lfe_mode_lr4_title">Linkwitz-Riley 4th (LR4) + 2nd All-Pass</string>
-    <string name="downmix_lfe_mode_lr4_subtitle">Zero pre-ringing with exact main/LFE phase match (Q=0.7071)</string>
-    <string name="downmix_status_active">Active: %1$s → 2ch (%2$.1f kHz)</string>
-    <string name="downmix_status_stereo">Stereo input (%1$s) — passed through untouched</string>
-    <string name="downmix_status_inactive">Waiting for multichannel audio (4.1 / 5.1 / 7.1 / 7.1.4ch)</string>
-    <string name="downmix_output_section">Final summed gain &amp; preamp</string>
-    <string name="downmix_preamp_title">Downmix preamp (anti-clipping)</string>
-    <string name="downmix_preamp_subtitle">Attenuate summed multichannel mix before stereo output</string>
-    <string name="downmix_auto_headroom_title">Auto-headroom</string>
-    <string name="downmix_auto_headroom_subtitle">Automatically steps down preamp if summed output approaches 0 dBFS (never compresses dynamics)</string>
-    <string name="downmix_pre_sum_label">Pre-preamp sum (64-bit Float)</string>
-    <string name="downmix_post_out_label">Final output (post-preamp)</string>
-    <string name="downmix_no_clips">No clips</string>
-    <string name="downmix_clips_count">Clips: %1$d (tap to reset)</string>
-    <string name="downmix_clip_badge">CLIP</string>
-    <string name="downmix_channels_section">Channel gain &amp; Mute / Solo</string>
-    <string name="downmix_channel_in_contrib">In %1$s  ·  Mix %2$s</string>
-    <string name="downmix_reset_ms">Reset M/S</string>
-    <string name="downmix_inactive_channel">Not in current stream</string>
 </resources>
