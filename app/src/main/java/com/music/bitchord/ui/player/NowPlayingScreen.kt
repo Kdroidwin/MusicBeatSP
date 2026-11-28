@@ -24,7 +24,9 @@ import androidx.appcompat.app.AppCompatDelegate
 import androidx.annotation.RequiresApi
 import androidx.compose.animation.animateColorAsState
 import androidx.compose.animation.AnimatedContent
+import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.animation.Crossfade
+import androidx.compose.animation.ExitTransition
 import androidx.compose.animation.fadeIn
 import androidx.compose.animation.fadeOut
 import androidx.compose.animation.scaleIn
@@ -6336,50 +6338,50 @@ private fun CurrentLyricLine(
             )
             Spacer(Modifier.width(6.dp))
         }
-        AnimatedContent(
-            targetState = Triple(displayIndex, renderedDisplayLine, text),
-            transitionSpec = {
-                if (!animateLyricTransitions) {
-                    (fadeIn(animationSpec = snap()) togetherWith fadeOut(animationSpec = snap())).using(
-                        SizeTransform(clip = false, sizeAnimationSpec = { _, _ -> snap() }),
-                    )
-                } else {
-                    // Let the outgoing line finish fading before the next one
-                    // becomes visible. A concurrent cross-fade kept both lyric
-                    // rows legible for most of 340 ms, which looked like the old
-                    // line briefly reappearing at every timestamp boundary.
-                    val duration = 180
-                    (fadeIn(animationSpec = tween(duration, delayMillis = 55, easing = FastOutSlowInEasing)) +
-                        slideInVertically(animationSpec = tween(duration, delayMillis = 55, easing = FastOutSlowInEasing)) { height -> (height * 0.16f).toInt() })
-                        .togetherWith(
-                            fadeOut(animationSpec = tween(55, easing = FastOutSlowInEasing)) +
-                                slideOutVertically(animationSpec = tween(55, easing = FastOutSlowInEasing)) { height -> -(height * 0.12f).toInt() },
-                        )
-                        .using(SizeTransform(clip = false, sizeAnimationSpec = { _, _ -> tween(duration + 55, easing = FastOutSlowInEasing) }))
-                }
-            },
-            label = "currentLyricTransition",
-            modifier = Modifier.weight(1f, fill = false),
-        ) { (_, lineItem, lineText) ->
+        // Do not use AnimatedContent here: it retains and draws the outgoing
+        // lyric while the incoming one enters. Even a short fade leaves the
+        // previous line visible for a frame at timestamp boundaries. Keying
+        // the entering-only visibility removes the old row immediately, then
+        // animates just the new line.
+        key(displayIndex, renderedDisplayLine, text) {
+            val lineItem = renderedDisplayLine
+            val lineText = text
             val itemInstrumental = lineItem == null || lineItem.isGap
             val swept = lineItem?.takeIf { !showingFirstLineEarly && !itemInstrumental && it.isWordSynced }
-            if (swept != null) {
-                SweptLyricLine(
-                    line = swept,
-                    clock = clock,
-                    style = MaterialTheme.typography.titleMedium,
-                    dimAlpha = UNSUNG_ALPHA_STRIP,
-                    maxLines = 1,
-                    overflow = TextOverflow.Ellipsis,
-                )
+            val lyricContent: @Composable () -> Unit = {
+                if (swept != null) {
+                    SweptLyricLine(
+                        line = swept,
+                        clock = clock,
+                        style = MaterialTheme.typography.titleMedium,
+                        dimAlpha = UNSUNG_ALPHA_STRIP,
+                        maxLines = 1,
+                        overflow = TextOverflow.Ellipsis,
+                    )
+                } else {
+                    LyricTextDisplay(
+                        text = lineText,
+                        style = MaterialTheme.typography.titleMedium,
+                        color = if (itemInstrumental) LocalPlayerLyricInk.current.copy(alpha = 0.5f) else LocalPlayerLyricInk.current,
+                        maxLines = 1,
+                        overflow = TextOverflow.Ellipsis,
+                    )
+                }
+            }
+            if (animateLyricTransitions) {
+                AnimatedVisibility(
+                    visible = true,
+                    enter = fadeIn(tween(140, easing = FastOutSlowInEasing)) +
+                        slideInVertically(tween(140, easing = FastOutSlowInEasing)) { height -> (height * 0.12f).toInt() },
+                    exit = ExitTransition.None,
+                    modifier = Modifier.weight(1f, fill = false),
+                ) {
+                    lyricContent()
+                }
             } else {
-                LyricTextDisplay(
-                    text = lineText,
-                    style = MaterialTheme.typography.titleMedium,
-                    color = if (itemInstrumental) LocalPlayerLyricInk.current.copy(alpha = 0.5f) else LocalPlayerLyricInk.current,
-                    maxLines = 1,
-                    overflow = TextOverflow.Ellipsis,
-                )
+                Box(modifier = Modifier.weight(1f, fill = false)) {
+                    lyricContent()
+                }
             }
         }
         Spacer(Modifier.width(6.dp))
