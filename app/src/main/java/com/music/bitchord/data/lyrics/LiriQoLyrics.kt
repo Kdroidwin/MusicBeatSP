@@ -79,7 +79,17 @@ internal object LiriQoLyrics {
         // those fields or use different album editions. Local metadata is
         // still attached to incomplete candidates below and used by the UI's
         // match-score ranking.
-        response("", title, artist, 0L, null, full = true)
+        val artistMatch = response("", title, artist, 0L, null, full = true)
+            ?.let { candidatesForProvider(it, providerId, title, artist, album, durationMs) }
+            .orEmpty()
+        if (artistMatch.isNotEmpty() || artist.isBlank()) return@withContext artistMatch
+
+        // Provider catalogues don't always agree with local artist credits
+        // (multi-artist separators, aliases, or featured artists). If that
+        // exact query yields no candidate for this provider, retry by title
+        // alone; the search sheet still shows its title/artist match score so
+        // the user can distinguish alternate recordings.
+        response("", title, "", 0L, null, full = true)
             ?.let { candidatesForProvider(it, providerId, title, artist, album, durationMs) }
             .orEmpty()
     }
