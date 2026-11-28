@@ -49,6 +49,7 @@ object LocalLyricsManager {
     private const val MAX_SEARCH_METADATA_CHARS = 512
     private val json = Json { ignoreUnknownKeys = true }
     private val downloadedCache = mutableMapOf<String, String>()
+    private val LIRIQO_SOURCE_IDS = setOf("liriqo_apple_music", "liriqo_kuwo", "liriqo_migu")
     private const val MAX_SEARCH_CACHE_CHARS = 4 * 1024 * 1024
     private const val MAX_SEARCH_CACHE_ENTRIES = 512
     private val searchCacheLock = Any()
@@ -281,6 +282,45 @@ object LocalLyricsManager {
                     }
                 } else {
                     jobs += async {
+                        if (source.id in LIRIQO_SOURCE_IDS) {
+                            val candidates = runCatching {
+                                com.music.bitchord.data.lyrics.LiriQoLyrics.search(
+                                    sourceId = source.id,
+                                    title = safeTitle,
+                                    artist = primaryArtist.ifBlank { normalizedArtist },
+                                    durationMs = durationMs,
+                                    album = safeAlbum,
+                                )
+                            }.getOrDefault(emptyList())
+                            val parsedCandidates = candidates.take(MAX_SEARCH_RESULTS_PER_PROVIDER).mapNotNull { candidate ->
+                                val synced = candidate.syncedLyrics?.takeIf { it.length <= MAX_SEARCH_LYRICS_CHARS }
+                                val plain = candidate.plainLyrics?.takeIf { it.length <= MAX_SEARCH_LYRICS_CHARS }
+                                if (synced.isNullOrBlank() && plain.isNullOrBlank()) return@mapNotNull null
+                                val item = LyricsSearchResultItem(
+                                    id = candidate.id.take(MAX_SEARCH_METADATA_CHARS),
+                                    title = candidate.title.take(MAX_SEARCH_METADATA_CHARS),
+                                    artist = candidate.artist.take(MAX_SEARCH_METADATA_CHARS),
+                                    album = candidate.album?.take(MAX_SEARCH_METADATA_CHARS),
+                                    durationSeconds = candidate.durationSeconds,
+                                    provider = candidate.provider.take(MAX_SEARCH_METADATA_CHARS).ifBlank { source.label },
+                                    syncedLyrics = synced,
+                                    plainLyrics = plain,
+                                )
+                                item.copy(
+                                    title = item.title.ifBlank { safeTitle },
+                                    artist = item.artist.ifBlank { safeArtist },
+                                    album = item.album ?: safeAlbum,
+                                    matchScorePercent = LyricsMatchScorer.percent(
+                                        queryTitle = safeTitle,
+                                        queryArtist = safeArtist,
+                                        queryAlbum = safeAlbum,
+                                        queryDurationMs = durationMs,
+                                        result = item,
+                                    ),
+                                )
+                            }
+                            if (parsedCandidates.isNotEmpty()) return@async parsedCandidates
+                        }
                         // Tinque exposes native, multi-candidate searches for these providers.
                         // MusicBeatSP previously fell straight back to LyricsRepository.fetch,
                         // which only returns the first usable lyric and hides alternate matches.

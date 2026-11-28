@@ -25,6 +25,18 @@ internal object LiriQoLyrics {
     private const val MAX_CACHE_ENTRIES = 24
 
     private data class Cached(val response: JsonObject?, val atMs: Long)
+
+    data class SearchCandidate(
+        val id: String,
+        val title: String,
+        val artist: String,
+        val album: String?,
+        val durationSeconds: Int,
+        val provider: String,
+        val syncedLyrics: String?,
+        val plainLyrics: String?,
+    )
+
     private val mutex = Mutex()
     private val cache = LinkedHashMap<String, Cached>()
 
@@ -37,7 +49,7 @@ internal object LiriQoLyrics {
         album: String?,
     ): List<LyricLine>? = withContext(Dispatchers.IO) {
         if (title.isBlank() || sourceId !in SOURCE_PROVIDER_IDS) return@withContext null
-        val response = response(videoId, title, artist, durationMs, album) ?: return@withContext null
+        val response = response(videoId, title, artist, durationMs, album, full = false) ?: return@withContext null
         val provider = SOURCE_PROVIDER_IDS[sourceId] ?: return@withContext null
         val track = tracks(response)
             .asSequence()
@@ -47,15 +59,84 @@ internal object LiriQoLyrics {
         parseTrack(track, durationMs)
     }
 
+    /**
+     * Returns every usable result from one LiriQo provider for the manual
+     * lyrics search screen. The normal playback lookup deliberately favors a
+     * quick primary result; manual search asks the API to wait for all sources
+     * so provider-specific candidates are not hidden by that fast path.
+     */
+    suspend fun search(
+        sourceId: String,
+        title: String,
+        artist: String,
+        durationMs: Long,
+        album: String?,
+    ): List<SearchCandidate> = withContext(Dispatchers.IO) {
+        val providerId = SOURCE_PROVIDER_IDS[sourceId] ?: return@withContext emptyList()
+        if (title.isBlank()) return@withContext emptyList()
+        val response = response("", title, artist, durationMs, album, full = true)
+            ?: return@withContext emptyList()
+        val metadata = response["metadata"] as? JsonObject
+        tracks(response)
+            .asSequence()
+            .filter { it.string("provider") == providerId }
+            .take(80)
+            .mapIndexedNotNull { index, track ->
+                val lines = parseTrack(track, durationMs) ?: return@mapIndexedNotNull null
+                if (lines.isEmpty()) return@mapIndexedNotNull null
+
+                val ttml = track.string("ttml")?.takeIf(String::isNotBlank)
+                val lrc = track.string("lrc")?.takeIf(String::isNotBlank)
+                val timed = (track["timed"] as? JsonArray)?.isNotEmpty() == true
+                val syncedLyrics = if (ttml != null || lrc != null || timed) {
+                    (if (lines.any { it.isWordSynced || it.background?.isWordSynced == true }) {
+                        lines.toEnhancedLrc()
+                    } else {
+                        lines.toLrc()
+                    }).takeIf(String::isNotBlank)
+                } else null
+                val plainLyrics = track.string("plain")?.takeIf(String::isNotBlank)
+                    ?: lines.joinToString("\n") { it.text }.takeIf(String::isNotBlank)
+                if (syncedLyrics.isNullOrBlank() && plainLyrics.isNullOrBlank()) return@mapIndexedNotNull null
+
+                val resultTitle = track.string("title")
+                    ?: metadata?.string("title")
+                    ?: title
+                val resultArtist = track.string("artist")
+                    ?: metadata?.string("artist")
+                    ?: artist
+                val resultAlbum = track.string("album") ?: metadata?.string("album") ?: album
+                val resultDuration = track.long("duration")
+                    ?: metadata?.long("duration")
+                    ?: durationMs.takeIf { it > 0L }?.div(1000L)
+                    ?: 0L
+                val resultId = track.string("id")
+                    ?: track.string("isrc")
+                    ?: "$providerId:${resultTitle.take(100)}:${resultArtist.take(100)}:$resultDuration:$index"
+                SearchCandidate(
+                    id = resultId.take(512),
+                    title = resultTitle.take(512),
+                    artist = resultArtist.take(512),
+                    album = resultAlbum?.take(512),
+                    durationSeconds = resultDuration.coerceIn(0L, Int.MAX_VALUE.toLong()).toInt(),
+                    provider = track.string("upstreamProvider") ?: providerId,
+                    syncedLyrics = syncedLyrics,
+                    plainLyrics = plainLyrics,
+                )
+            }
+            .toList()
+    }
+
     private suspend fun response(
         videoId: String,
         title: String,
         artist: String,
         durationMs: Long,
         album: String?,
+        full: Boolean,
     ): JsonObject? = mutex.withLock {
         val key = listOf(title.trim(), artist.trim(), album.orEmpty().trim(), durationMs.coerceAtLeast(0L),
-            videoId.takeIf { VIDEO_ID.matches(it) }.orEmpty()).joinToString("\u001f")
+            videoId.takeIf { VIDEO_ID.matches(it) }.orEmpty(), full).joinToString("\u001f")
         val now = SystemClock.elapsedRealtime()
         cache[key]?.takeIf { now - it.atMs < CACHE_TTL_MS }?.let { return@withLock it.response }
 
@@ -66,10 +147,11 @@ internal object LiriQoLyrics {
             if (artist.isNotBlank()) addQueryParameter("artist", artist.take(512))
             if (durationMs > 0) addQueryParameter("duration", (durationMs / 1000L).coerceAtLeast(1L).toString())
             if (!album.isNullOrBlank()) addQueryParameter("album", album.take(512))
+            if (full) addQueryParameter("full", "1")
         }.build().toString()
-        val parsed = lyricsGet(url, timeoutSeconds = 10L)
+        val parsed = lyricsGet(url, timeoutSeconds = if (full) 20L else 10L)
             ?.let { runCatching { lyricsJson.parseToJsonElement(it) as? JsonObject }.getOrNull() }
-            ?.takeUnless { it?.get("error")?.let { error -> error !is JsonNull && error.toString() !in setOf("false", "\"\"") } == true }
+            ?.takeUnless { it["error"]?.let { error -> error !is JsonNull && error.toString() !in setOf("false", "\"\"") } == true }
         cache[key] = Cached(parsed, now)
         while (cache.size > MAX_CACHE_ENTRIES) cache.remove(cache.entries.first().key)
         parsed
