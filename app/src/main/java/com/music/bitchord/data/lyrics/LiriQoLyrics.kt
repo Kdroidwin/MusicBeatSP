@@ -79,24 +79,27 @@ internal object LiriQoLyrics {
         val metadata = response["metadata"] as? JsonObject
         tracks(response)
             .asSequence()
-            .filter { it.string("provider") == providerId }
+            .filter { it.string("provider")?.equals(providerId, ignoreCase = true) == true }
             .take(80)
             .mapIndexedNotNull { index, track ->
-                val lines = parseTrack(track, durationMs) ?: return@mapIndexedNotNull null
-                if (lines.isEmpty()) return@mapIndexedNotNull null
+                val lines = parseTrack(track, durationMs)
+                val rawPlain = track.string("plain")?.takeIf(String::isNotBlank)
+                if (lines.isNullOrEmpty() && rawPlain.isNullOrBlank()) return@mapIndexedNotNull null
 
                 val ttml = track.string("ttml")?.takeIf(String::isNotBlank)
                 val lrc = track.string("lrc")?.takeIf(String::isNotBlank)
                 val timed = (track["timed"] as? JsonArray)?.isNotEmpty() == true
                 val syncedLyrics = if (ttml != null || lrc != null || timed) {
-                    (if (lines.any { it.isWordSynced || it.background?.isWordSynced == true }) {
-                        lines.toEnhancedLrc()
-                    } else {
-                        lines.toLrc()
-                    }).takeIf(String::isNotBlank)
+                    lines?.let { parsedLines ->
+                        (if (parsedLines.any { it.isWordSynced || it.background?.isWordSynced == true }) {
+                            parsedLines.toEnhancedLrc()
+                        } else {
+                            parsedLines.toLrc()
+                        }).takeIf(String::isNotBlank)
+                    }
                 } else null
-                val plainLyrics = track.string("plain")?.takeIf(String::isNotBlank)
-                    ?: lines.joinToString("\n") { it.text }.takeIf(String::isNotBlank)
+                val plainLyrics = rawPlain
+                    ?: lines?.joinToString("\n") { it.text }?.takeIf(String::isNotBlank)
                 if (syncedLyrics.isNullOrBlank() && plainLyrics.isNullOrBlank()) return@mapIndexedNotNull null
 
                 val resultTitle = track.string("title")
@@ -196,9 +199,12 @@ internal object LiriQoLyrics {
         val indexedWords = track["words"] as? JsonArray
         val lines = rows.mapIndexedNotNull { rowIndex, element ->
             val row = element as? JsonObject ?: return@mapIndexedNotNull null
-            if (row.boolean("isCue") == true || row.boolean("isInstrumental") == true ||
-                row.boolean("isBackground") == true
-            ) return@mapIndexedNotNull null
+            // LiriQo marks Apple Music's lead-vocal rows as isBackground=true
+            // in some TTML conversions. Keep these timed lyric rows; dropping
+            // that flag erased the entire provider result for affected tracks.
+            if (row.boolean("isCue") == true || row.boolean("isInstrumental") == true) {
+                return@mapIndexedNotNull null
+            }
             val text = row.string("text")?.takeIf(String::isNotBlank) ?: return@mapIndexedNotNull null
             val start = row.long("start")?.takeIf { it >= 0L } ?: return@mapIndexedNotNull null
             val end = row.long("end")?.takeIf { it > start } ?: return@mapIndexedNotNull null

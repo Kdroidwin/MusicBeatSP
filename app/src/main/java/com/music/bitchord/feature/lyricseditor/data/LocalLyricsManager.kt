@@ -287,7 +287,7 @@ object LocalLyricsManager {
                                 com.music.bitchord.data.lyrics.LiriQoLyrics.search(
                                     sourceId = source.id,
                                     title = safeTitle,
-                                    artist = primaryArtist.ifBlank { normalizedArtist },
+                                    artist = safeArtist,
                                     durationMs = durationMs,
                                     album = safeAlbum,
                                 )
