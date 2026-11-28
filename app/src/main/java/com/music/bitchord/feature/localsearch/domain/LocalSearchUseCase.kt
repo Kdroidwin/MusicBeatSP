@@ -5,6 +5,7 @@ import com.music.bitchord.data.model.sortedByAlbumTrackOrder
 import com.music.bitchord.feature.artistimage.util.ArtistSplitter
 import com.music.bitchord.feature.localsearch.domain.model.LocalSearchFilter
 import com.music.bitchord.feature.localsearch.domain.model.LocalSearchResult
+import java.net.URI
 import java.util.Locale
 
 object LocalSearchUseCase {
@@ -26,6 +27,7 @@ object LocalSearchUseCase {
             allSongs.filter { song ->
                 song.title.lowercase(Locale.ROOT).contains(q) ||
                     song.artist.lowercase(Locale.ROOT).contains(q) ||
+                    song.albumArtist?.lowercase(Locale.ROOT)?.contains(q) == true ||
                     song.albumName?.lowercase(Locale.ROOT)?.contains(q) == true
             }
         } else {
@@ -39,7 +41,10 @@ object LocalSearchUseCase {
                 .groupBy { it.albumName.orEmpty() }
                 .filter { (albumName, songs) ->
                     albumName.lowercase(Locale.ROOT).contains(q) ||
-                        songs.any { it.artist.lowercase(Locale.ROOT).contains(q) }
+                        songs.any { song ->
+                            song.artist.lowercase(Locale.ROOT).contains(q) ||
+                                song.albumArtist?.lowercase(Locale.ROOT)?.contains(q) == true
+                        }
                 }
                 .map { (albumName, songs) ->
                     LocalSearchResult.Album(
@@ -55,7 +60,19 @@ object LocalSearchUseCase {
 
         // Find matching artists
         val matchedArtists = if (filter == LocalSearchFilter.ALL || filter == LocalSearchFilter.ARTISTS) {
-            ArtistSplitter.groupSongsByArtist(allSongs)
+            // Remote libraries such as pCloud may only be able to infer an
+            // album artist from the directory tree. Their track artist stays
+            // "Unknown Artist", so use that album-artist credit for search
+            // grouping when there is no real track-artist value.
+            val artistSearchSongs = allSongs.map { song ->
+                val albumArtist = song.albumArtist?.trim().orEmpty()
+                if (song.isUnknownArtist() && albumArtist.isNotBlank()) {
+                    song.copy(artist = albumArtist)
+                } else {
+                    song
+                }
+            }
+            ArtistSplitter.groupSongsByArtist(artistSearchSongs)
                 .filter { it.name.lowercase(Locale.ROOT).contains(q) }
                 .sortedWith(
                     compareByDescending<com.music.bitchord.feature.artistimage.model.ArtistEntry> {
@@ -107,7 +124,7 @@ object LocalSearchUseCase {
         hierarchy: Boolean,
     ): List<LocalSearchResult.Folder> {
         val songsByDirectory = allSongs.mapNotNull { song ->
-            val filePath = song.localPath?.takeIf(String::isNotBlank)?.replace('\\', '/') ?: return@mapNotNull null
+            val filePath = searchableFilePath(song)?.replace('\\', '/') ?: return@mapNotNull null
             val directory = normalizePath(filePath.substringBeforeLast('/', ""))
             directory.takeIf(String::isNotBlank)?.let { it to song }
         }.groupBy({ it.first }, { it.second })
@@ -180,6 +197,18 @@ object LocalSearchUseCase {
             }
         }
         return if (normalized.length > 1) normalized.trimEnd('/') else normalized
+    }
+
+    private fun Song.isUnknownArtist(): Boolean =
+        artist.isBlank() || artist.trim().equals("Unknown Artist", ignoreCase = true)
+
+    /** Local paths and WebDAV URL paths both contribute searchable folder names. */
+    private fun searchableFilePath(song: Song): String? {
+        song.localPath?.takeIf(String::isNotBlank)?.let { return it }
+        if (!song.videoId.startsWith("webdav:")) return null
+        val remoteUri = song.localUri?.takeIf(String::isNotBlank)
+            ?: song.videoId.removePrefix("webdav:")
+        return runCatching { URI(remoteUri).path?.takeIf(String::isNotBlank) }.getOrNull()
     }
 
     private fun parentPath(path: String): String? {
