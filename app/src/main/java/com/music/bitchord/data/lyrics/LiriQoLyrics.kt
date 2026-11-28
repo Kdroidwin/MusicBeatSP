@@ -74,58 +74,79 @@ internal object LiriQoLyrics {
     ): List<SearchCandidate> = withContext(Dispatchers.IO) {
         val providerId = SOURCE_PROVIDER_IDS[sourceId] ?: return@withContext emptyList()
         if (title.isBlank()) return@withContext emptyList()
-        val response = response("", title, artist, durationMs, album, full = true)
-            ?: return@withContext emptyList()
+        // This is a candidate search, so don't let local album/duration tags
+        // filter out a valid provider match. Apple Music and Migu often omit
+        // those fields or use different album editions. Local metadata is
+        // still attached to incomplete candidates below and used by the UI's
+        // match-score ranking.
+        response("", title, artist, 0L, null, full = true)
+            ?.let { candidatesForProvider(it, providerId, title, artist, album, durationMs) }
+            .orEmpty()
+    }
+
+    private fun candidatesForProvider(
+        response: JsonObject,
+        providerId: String,
+        title: String,
+        artist: String,
+        album: String?,
+        durationMs: Long,
+    ): List<SearchCandidate> {
         val metadata = response["metadata"] as? JsonObject
-        tracks(response)
+        return tracks(response)
             .asSequence()
             .filter { it.string("provider")?.equals(providerId, ignoreCase = true) == true }
             .take(80)
+            // One malformed track must not discard other valid candidates
+            // from the same provider response.
             .mapIndexedNotNull { index, track ->
-                val lines = parseTrack(track, durationMs)
-                val rawPlain = track.string("plain")?.takeIf(String::isNotBlank)
-                if (lines.isNullOrEmpty() && rawPlain.isNullOrBlank()) return@mapIndexedNotNull null
+                runCatching {
+                    val lines = parseTrack(track, durationMs)
+                    val rawPlain = track.string("plain")?.takeIf(String::isNotBlank)
+                    if (lines.isNullOrEmpty() && rawPlain.isNullOrBlank()) return@runCatching null
 
-                val ttml = track.string("ttml")?.takeIf(String::isNotBlank)
-                val lrc = track.string("lrc")?.takeIf(String::isNotBlank)
-                val timed = (track["timed"] as? JsonArray)?.isNotEmpty() == true
-                val syncedLyrics = if (ttml != null || lrc != null || timed) {
-                    lines?.let { parsedLines ->
-                        (if (parsedLines.any { it.isWordSynced || it.background?.isWordSynced == true }) {
-                            parsedLines.toEnhancedLrc()
-                        } else {
-                            parsedLines.toLrc()
-                        }).takeIf(String::isNotBlank)
-                    }
-                } else null
-                val plainLyrics = rawPlain
-                    ?: lines?.joinToString("\n") { it.text }?.takeIf(String::isNotBlank)
-                if (syncedLyrics.isNullOrBlank() && plainLyrics.isNullOrBlank()) return@mapIndexedNotNull null
+                    val ttml = track.string("ttml")?.takeIf(String::isNotBlank)
+                    val lrc = track.string("lrc")?.takeIf(String::isNotBlank)
+                    val mrc = track.string("mrc")?.takeIf(String::isNotBlank)
+                    val timed = (track["timed"] as? JsonArray)?.isNotEmpty() == true
+                    val syncedLyrics = if (ttml != null || lrc != null || mrc != null || timed) {
+                        lines?.let { parsedLines ->
+                            (if (parsedLines.any { it.isWordSynced || it.background?.isWordSynced == true }) {
+                                parsedLines.toEnhancedLrc()
+                            } else {
+                                parsedLines.toLrc()
+                            }).takeIf(String::isNotBlank)
+                        }
+                    } else null
+                    val plainLyrics = rawPlain
+                        ?: lines?.joinToString("\n") { it.text }?.takeIf(String::isNotBlank)
+                    if (syncedLyrics.isNullOrBlank() && plainLyrics.isNullOrBlank()) return@runCatching null
 
-                val resultTitle = track.string("title")
-                    ?: metadata?.string("title")
-                    ?: title
-                val resultArtist = track.string("artist")
-                    ?: metadata?.string("artist")
-                    ?: artist
-                val resultAlbum = track.string("album") ?: metadata?.string("album") ?: album
-                val resultDuration = track.long("duration")
-                    ?: metadata?.long("duration")
-                    ?: durationMs.takeIf { it > 0L }?.div(1000L)
-                    ?: 0L
-                val resultId = track.string("id")
-                    ?: track.string("isrc")
-                    ?: "$providerId:${resultTitle.take(100)}:${resultArtist.take(100)}:$resultDuration:$index"
-                SearchCandidate(
-                    id = resultId.take(512),
-                    title = resultTitle.take(512),
-                    artist = resultArtist.take(512),
-                    album = resultAlbum?.take(512),
-                    durationSeconds = resultDuration.coerceIn(0L, Int.MAX_VALUE.toLong()).toInt(),
-                    provider = track.string("upstreamProvider") ?: providerId,
-                    syncedLyrics = syncedLyrics,
-                    plainLyrics = plainLyrics,
-                )
+                    val resultTitle = track.string("title")
+                        ?: metadata?.string("title")
+                        ?: title
+                    val resultArtist = track.string("artist")
+                        ?: metadata?.string("artist")
+                        ?: artist
+                    val resultAlbum = track.string("album") ?: metadata?.string("album") ?: album
+                    val resultDuration = track.long("duration")
+                        ?: metadata?.long("duration")
+                        ?: durationMs.takeIf { it > 0L }?.div(1000L)
+                        ?: 0L
+                    val resultId = track.string("id")
+                        ?: track.string("isrc")
+                        ?: "$providerId:${resultTitle.take(100)}:${resultArtist.take(100)}:$resultDuration:$index"
+                    SearchCandidate(
+                        id = resultId.take(512),
+                        title = resultTitle.take(512),
+                        artist = resultArtist.take(512),
+                        album = resultAlbum?.take(512),
+                        durationSeconds = resultDuration.coerceIn(0L, Int.MAX_VALUE.toLong()).toInt(),
+                        provider = track.string("upstreamProvider") ?: providerId,
+                        syncedLyrics = syncedLyrics,
+                        plainLyrics = plainLyrics,
+                    )
+                }.getOrNull()
             }
             .toList()
     }
@@ -186,7 +207,7 @@ internal object LiriQoLyrics {
             TtmlLyrics.parse(ttml).takeIf { it.isNotEmpty() }?.let { return it }
         }
         parseTimed(track, durationMs)?.let { return it }
-        for (field in listOf("lrc", "plain")) {
+        for (field in listOf("lrc", "mrc", "plain")) {
             track.string(field)?.let { raw ->
                 ProviderLyrics.parse(raw)?.takeIf { it.isNotEmpty() }?.let { return it }
             }
