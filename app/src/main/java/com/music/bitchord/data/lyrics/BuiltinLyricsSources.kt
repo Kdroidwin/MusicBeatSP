@@ -14,6 +14,9 @@ internal object BuiltinLyricsSources {
         LyricsSource("bini_lyrics", "BiniLyrics", "Apple timings matched by recording", wordSynced = true),
         LyricsSource("better_lyrics", "BetterLyrics", "Apple Music word timings", wordSynced = true),
         LyricsSource("better_lyrics_portato", "BetterLyrics Portato", "QQ Music karaoke timings", wordSynced = true),
+        LyricsSource("liriqo_apple_music", "Apple Music TTML", "Apple Music syllable timings through LiriQo", wordSynced = true),
+        LyricsSource("liriqo_kuwo", "Kuwo (LiriQo)", "Kuwo native character and word timings", wordSynced = true),
+        LyricsSource("liriqo_migu", "Migu (LiriQo)", "Migu native character and word timings", wordSynced = true),
         LyricsSource("qq_music", "QQ Music", "Line- and word-synced QQ Music lyrics", wordSynced = true),
         LyricsSource("paxsenix", "PaxSenix", "Apple Music timings through PaxSenix", wordSynced = true),
         LyricsSource("paxsenix_spotify", "PaxSenix: Spotify", "Spotify lyrics; API key required"),
@@ -56,6 +59,14 @@ internal object BuiltinLyricsSources {
         "bini_lyrics" -> BiniLyrics.lyrics(title, artist, durationMs, album)?.lines
         "better_lyrics" -> BetterLyrics.lyrics(title, artist, durationMs, album)
         "better_lyrics_portato" -> BetterLyrics.portato(title, artist, durationMs, album)
+        "liriqo_apple_music", "liriqo_kuwo", "liriqo_migu" -> LiriQoLyrics.lyrics(
+            sourceId = id,
+            videoId = videoId,
+            title = title,
+            artist = artist,
+            durationMs = durationMs,
+            album = album,
+        )
         "qq_music" -> QQMusicLyrics.lyrics(title, artist, durationMs, album)
         "paxsenix" -> PaxSenix.lyrics(title, artist, durationMs, album)
         "paxsenix_spotify" -> PaxSenix.spotifyLyrics(title, artist, durationMs)

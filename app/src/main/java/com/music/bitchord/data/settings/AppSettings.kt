@@ -19,6 +19,8 @@ import com.music.bitchord.data.Http
 import com.music.bitchord.data.innertube.YoutubeStreamBootstrap
 import com.music.bitchord.data.sources.SourceKind
 import com.music.bitchord.feature.artistimage.model.ArtistSort
+import com.music.bitchord.playback.DownmixConfig
+import com.music.bitchord.playback.DownmixLfeFilterMode
 import com.music.bitchord.playback.equalizer.EelEqParser
 import com.music.bitchord.radio.model.RadioService
 import kotlinx.coroutines.flow.MutableStateFlow
@@ -763,6 +765,14 @@ object AppSettings {
      * us a stereo stream, so there's no Atmos-style source to render.
      */
     val spatialAudio = MutableStateFlow(false)
+
+    /** App-owned multichannel PCM downmix; bit-perfect playback bypasses it. */
+    val multichannelDownmixEnabled = MutableStateFlow(true)
+    val multichannelDownmixPreampDb = MutableStateFlow(DownmixConfig.DEFAULT_PREAMP_DB)
+    val multichannelDownmixMutedChannels = MutableStateFlow<Set<String>>(emptySet())
+    val multichannelDownmixSoloChannels = MutableStateFlow<Set<String>>(emptySet())
+    val multichannelDownmixLfeFilterMode = MutableStateFlow(DownmixLfeFilterMode.BUTTERWORTH_4_DELAY)
+    val multichannelDownmixAutoHeadroom = MutableStateFlow(false)
     /** Optional software PEQ; legacy flows remain for existing settings and callers. */
     val parametricEqEnabled = MutableStateFlow(false)
     /** Applies optional TPDF dither only when the software PEQ quantizes processed integer PCM. */
@@ -1937,6 +1947,19 @@ object AppSettings {
         diracAudioEnabled.value = prefs.getBoolean(KEY_DIRAC_AUDIO_ENABLED, false)
         diracAudioPreset.value = prefs.getInt(KEY_DIRAC_AUDIO_PRESET, 0).coerceIn(0, 2)
         spatialAudio.value = prefs.getBoolean(KEY_SPATIAL_AUDIO, false)
+        multichannelDownmixEnabled.value = prefs.getBoolean(KEY_MULTICHANNEL_DOWNMIX_ENABLED, true)
+        multichannelDownmixPreampDb.value = prefs.getFloat(
+            KEY_MULTICHANNEL_DOWNMIX_PREAMP_DB,
+            DownmixConfig.DEFAULT_PREAMP_DB,
+        ).coerceIn(DownmixConfig.MIN_PREAMP_DB, DownmixConfig.MAX_PREAMP_DB)
+        multichannelDownmixMutedChannels.value =
+            prefs.getStringSet(KEY_MULTICHANNEL_DOWNMIX_MUTED, emptySet())?.toSet() ?: emptySet()
+        multichannelDownmixSoloChannels.value =
+            prefs.getStringSet(KEY_MULTICHANNEL_DOWNMIX_SOLO, emptySet())?.toSet() ?: emptySet()
+        multichannelDownmixLfeFilterMode.value = DownmixLfeFilterMode.fromKey(
+            prefs.getString(KEY_MULTICHANNEL_DOWNMIX_LFE_FILTER_MODE, null),
+        )
+        multichannelDownmixAutoHeadroom.value = prefs.getBoolean(KEY_MULTICHANNEL_DOWNMIX_AUTO_HEADROOM, false)
         val legacyPeqEnabled = prefs.getBoolean(KEY_PARAMETRIC_EQ_ENABLED, false)
         tpdfDitherEnabled.value = prefs.getBoolean(KEY_TPDF_DITHER_ENABLED, false)
         val legacyPeqBands = ParametricEqBand.decode(prefs.getString(KEY_PARAMETRIC_EQ_BANDS, null))
@@ -2955,6 +2978,61 @@ object AppSettings {
         spatialAudio.value = value
         prefs.edit().putBoolean(KEY_SPATIAL_AUDIO, value).apply()
     }
+
+    fun setMultichannelDownmixEnabled(value: Boolean) {
+        multichannelDownmixEnabled.value = value
+        prefs.edit().putBoolean(KEY_MULTICHANNEL_DOWNMIX_ENABLED, value).apply()
+    }
+
+    fun setMultichannelDownmixPreampDb(value: Float) {
+        val normalized = value.coerceIn(DownmixConfig.MIN_PREAMP_DB, DownmixConfig.MAX_PREAMP_DB)
+        multichannelDownmixPreampDb.value = normalized
+        prefs.edit().putFloat(KEY_MULTICHANNEL_DOWNMIX_PREAMP_DB, normalized).apply()
+    }
+
+    fun toggleMultichannelDownmixMute(channelId: String) {
+        val next = multichannelDownmixMutedChannels.value.toMutableSet()
+        if (!next.add(channelId)) next.remove(channelId)
+        val immutable = next.toSet()
+        multichannelDownmixMutedChannels.value = immutable
+        prefs.edit().putStringSet(KEY_MULTICHANNEL_DOWNMIX_MUTED, immutable).apply()
+    }
+
+    fun toggleMultichannelDownmixSolo(channelId: String) {
+        val next = multichannelDownmixSoloChannels.value.toMutableSet()
+        if (!next.add(channelId)) next.remove(channelId)
+        val immutable = next.toSet()
+        multichannelDownmixSoloChannels.value = immutable
+        prefs.edit().putStringSet(KEY_MULTICHANNEL_DOWNMIX_SOLO, immutable).apply()
+    }
+
+    fun clearMultichannelDownmixMuteSolo() {
+        multichannelDownmixMutedChannels.value = emptySet()
+        multichannelDownmixSoloChannels.value = emptySet()
+        prefs.edit()
+            .remove(KEY_MULTICHANNEL_DOWNMIX_MUTED)
+            .remove(KEY_MULTICHANNEL_DOWNMIX_SOLO)
+            .apply()
+    }
+
+    fun setMultichannelDownmixLfeFilterMode(mode: DownmixLfeFilterMode) {
+        multichannelDownmixLfeFilterMode.value = mode
+        prefs.edit().putString(KEY_MULTICHANNEL_DOWNMIX_LFE_FILTER_MODE, mode.key).apply()
+    }
+
+    fun setMultichannelDownmixAutoHeadroom(enabled: Boolean) {
+        multichannelDownmixAutoHeadroom.value = enabled
+        prefs.edit().putBoolean(KEY_MULTICHANNEL_DOWNMIX_AUTO_HEADROOM, enabled).apply()
+    }
+
+    fun currentDownmixConfig(): DownmixConfig = DownmixConfig(
+        enabled = multichannelDownmixEnabled.value,
+        preampDb = multichannelDownmixPreampDb.value,
+        mutedChannels = multichannelDownmixMutedChannels.value,
+        soloChannels = multichannelDownmixSoloChannels.value,
+        lfeFilterMode = multichannelDownmixLfeFilterMode.value,
+        autoHeadroom = multichannelDownmixAutoHeadroom.value,
+    )
 
     fun setPlaybackSpeed(value: Float) {
         val normalized = value.coerceIn(0.1f, 10.0f)
@@ -4741,6 +4819,7 @@ object AppSettings {
                 .putBoolean(KEY_KUGECI_FOLLOWLYRICS_SOURCE_MIGRATED, true)
                 .putBoolean(KEY_JOYSOUND_LYRICS_SOURCE_MIGRATED, true)
                 .putBoolean(KEY_HEURISTIC_CHARACTER_SYNC_SOURCE_MIGRATED, true)
+                .putBoolean(KEY_LIRIQO_LYRICS_SOURCES_MIGRATED, true)
                 .apply()
             return allSources.toSet()
         }
@@ -4784,12 +4863,23 @@ object AppSettings {
             if ("ctc_align" in ids) changed = ids.add("ctc_align_character") || changed
             edit.putBoolean(KEY_HEURISTIC_CHARACTER_SYNC_SOURCE_MIGRATED, true)
         }
+        if (!prefs.getBoolean(KEY_LIRIQO_LYRICS_SOURCES_MIGRATED, false) &&
+            allSources.any { it.id == "liriqo_apple_music" } &&
+            allSources.any { it.id == "liriqo_kuwo" } &&
+            allSources.any { it.id == "liriqo_migu" }
+        ) {
+            changed = ids.add("liriqo_apple_music") || changed
+            changed = ids.add("liriqo_kuwo") || changed
+            changed = ids.add("liriqo_migu") || changed
+            edit.putBoolean(KEY_LIRIQO_LYRICS_SOURCES_MIGRATED, true)
+        }
         if (changed || !prefs.getBoolean(KEY_NETEASE_LYRICS_SOURCE_MIGRATED, false) ||
             !prefs.getBoolean(KEY_PETIT_LYRICS_SOURCE_MIGRATED, false) ||
             !prefs.getBoolean(KEY_QQ_MUSIC_LYRICS_SOURCE_MIGRATED, false) ||
             !prefs.getBoolean(KEY_KUGECI_FOLLOWLYRICS_SOURCE_MIGRATED, false) ||
             !prefs.getBoolean(KEY_JOYSOUND_LYRICS_SOURCE_MIGRATED, false) ||
             !prefs.getBoolean(KEY_HEURISTIC_CHARACTER_SYNC_SOURCE_MIGRATED, false)
+            || !prefs.getBoolean(KEY_LIRIQO_LYRICS_SOURCES_MIGRATED, false)
         ) {
             if (changed) edit.putString(KEY_LYRICS_SOURCES, ids.joinToString(","))
             edit.apply()
@@ -6127,6 +6217,12 @@ object AppSettings {
     private const val KEY_DIRAC_AUDIO_ENABLED = "dirac_audio_enabled"
     private const val KEY_DIRAC_AUDIO_PRESET = "dirac_audio_preset"
     private const val KEY_SPATIAL_AUDIO = "spatial_audio"
+    private const val KEY_MULTICHANNEL_DOWNMIX_ENABLED = "multichannel_downmix_enabled"
+    private const val KEY_MULTICHANNEL_DOWNMIX_PREAMP_DB = "multichannel_downmix_preamp_db"
+    private const val KEY_MULTICHANNEL_DOWNMIX_MUTED = "multichannel_downmix_muted"
+    private const val KEY_MULTICHANNEL_DOWNMIX_SOLO = "multichannel_downmix_solo"
+    private const val KEY_MULTICHANNEL_DOWNMIX_LFE_FILTER_MODE = "multichannel_downmix_lfe_filter_mode"
+    private const val KEY_MULTICHANNEL_DOWNMIX_AUTO_HEADROOM = "multichannel_downmix_auto_headroom"
     private const val KEY_SPEED = "playback_speed"
     private const val KEY_PITCH = "playback_pitch"
     private const val KEY_THEME = "theme_mode"
@@ -6415,6 +6511,7 @@ object AppSettings {
     private const val KEY_KUGECI_FOLLOWLYRICS_SOURCE_MIGRATED = "kugeci_followlyrics_source_migrated"
     private const val KEY_JOYSOUND_LYRICS_SOURCE_MIGRATED = "joysound_lyrics_source_migrated"
     private const val KEY_HEURISTIC_CHARACTER_SYNC_SOURCE_MIGRATED = "heuristic_character_sync_source_migrated"
+    private const val KEY_LIRIQO_LYRICS_SOURCES_MIGRATED = "liriqo_lyrics_sources_migrated"
     private const val KEY_PRIORITIZE_SYLLABLE_SYNC = "prioritize_syllable_sync"
     private const val KEY_SHOW_LYRICS_LOGS = "show_lyrics_logs"
     private const val KEY_AUTO_EMBED_LYRICS = "auto_embed_lyrics"

@@ -47,11 +47,14 @@ import androidx.media3.exoplayer.DecoderReuseEvaluation
 import androidx.media3.exoplayer.DefaultLoadControl
 import androidx.media3.exoplayer.DefaultRenderersFactory
 import androidx.media3.exoplayer.ExoPlayer
+import androidx.media3.exoplayer.Renderer
 import androidx.media3.exoplayer.analytics.AnalyticsListener
+import androidx.media3.exoplayer.audio.AudioRendererEventListener
 import androidx.media3.exoplayer.audio.AudioSink
 import androidx.media3.exoplayer.audio.AudioTrackAudioOutputProvider
 import androidx.media3.exoplayer.audio.DefaultAudioTrackBufferSizeProvider
 import androidx.media3.exoplayer.audio.DefaultAudioSink
+import androidx.media3.exoplayer.audio.MediaCodecAudioRenderer
 import androidx.media3.exoplayer.audio.SilenceSkippingAudioProcessor
 import androidx.media3.exoplayer.mediacodec.MediaCodecSelector
 import androidx.media3.exoplayer.mediacodec.MediaCodecUtil
@@ -226,6 +229,7 @@ const val EXTRA_REORDER_ORDER = "bitchord.reorder.order"
 
 /** Each decoder owns its own mutable PCM processor state while two tracks overlap. */
 private data class PlaybackAudioChain(
+    val downmix: MultichannelDownmixAudioProcessor = MultichannelDownmixAudioProcessor(),
     val spatial: SpatialAudioProcessor = SpatialAudioProcessor(),
     val parametricEq: ParametricEqAudioProcessor = ParametricEqAudioProcessor(),
     val transition: TransitionFilterProcessor = TransitionFilterProcessor(),
@@ -626,6 +630,7 @@ class PlaybackService : MediaLibraryService() {
 
     private var activeAudioChain = PlaybackAudioChain()
     private var spareAudioChain = PlaybackAudioChain()
+    private val pendingAutoHeadroomPreampBits = ConcurrentHashMap.newKeySet<Int>()
     private var replayGainLookupJob: Job? = null
     private var spareReplayGainJob: Job? = null
     private var replayGainConfigToken: String? = null
@@ -1787,6 +1792,10 @@ class PlaybackService : MediaLibraryService() {
             .setLoadErrorHandlingPolicy(PermanentAwareLoadErrorPolicy())
 
         configuredFloatOutput = shouldEnableFloatOutput()
+        activeAudioChain.downmix.isPrimaryChain = true
+        spareAudioChain.downmix.isPrimaryChain = false
+        wireDownmixCallbacks(activeAudioChain)
+        wireDownmixCallbacks(spareAudioChain)
         val exoPlayer = buildPlayer(activeAudioChain, ownsSession = true)
         val sparePlayer = buildPlayer(spareAudioChain, ownsSession = false)
         player = exoPlayer
@@ -2269,6 +2278,7 @@ class PlaybackService : MediaLibraryService() {
     ): ExoPlayer = ExoPlayer.Builder(this)
         .setRenderersFactory(
             silenceSkippingRenderers(
+                chain.downmix,
                 chain.spatial,
                 chain.parametricEq,
                 chain.transition,
@@ -2314,6 +2324,9 @@ class PlaybackService : MediaLibraryService() {
         val bitPerfect = BitPerfectOutput.ready.value
         chain.dseeHx.sourceMediaId = item.mediaId
         chain.dseeHx.sourceCodec = dseeHxCodecFor(item)
+        chain.downmix.isPrimaryChain = false
+        chain.downmix.bypassForBitPerfect = bitPerfect
+        chain.downmix.config = AppSettings.currentDownmixConfig()
         chain.dseeHx.enabled = AppSettings.dseeHxEnabled.value && !bitPerfect &&
             !chain.pioneerMsr.enabled && !AppSettings.darPcmUpsamplingEnabled.value
         configureDseeOutputCapabilities(chain.dseeHx)
@@ -2438,6 +2451,11 @@ class PlaybackService : MediaLibraryService() {
         val previousChain = activeAudioChain
         activeAudioChain = spareAudioChain
         spareAudioChain = previousChain
+        activeAudioChain.downmix.isPrimaryChain = true
+        spareAudioChain.downmix.isPrimaryChain = false
+        activeAudioChain.downmix.resetClipCounter()
+        wireDownmixCallbacks(activeAudioChain)
+        wireDownmixCallbacks(spareAudioChain)
         val previousEffects = audioEffectManager
         audioEffectManager = spareAudioEffectManager
         spareAudioEffectManager = previousEffects
@@ -5191,6 +5209,7 @@ class PlaybackService : MediaLibraryService() {
      * `skipSilenceEnabled` keeps driving it as before.
      */
     private fun silenceSkippingRenderers(
+        downmix: MultichannelDownmixAudioProcessor,
         spatial: SpatialAudioProcessor,
         parametricEq: ParametricEqAudioProcessor,
         transition: TransitionFilterProcessor,
@@ -5234,6 +5253,81 @@ class PlaybackService : MediaLibraryService() {
             }
         }
 
+        override fun buildAudioRenderers(
+            context: Context,
+            extensionRendererMode: Int,
+            mediaCodecSelector: MediaCodecSelector,
+            enableDecoderFallback: Boolean,
+            audioSink: AudioSink,
+            eventHandler: Handler,
+            eventListener: AudioRendererEventListener,
+            out: ArrayList<Renderer>,
+        ) {
+            // Keep Media3's extension renderers (including the optional MIDI
+            // renderer) intact. Replace only the platform codec renderer so
+            // its decoded channel mask can be handed to the PCM downmixer.
+            val defaults = ArrayList<Renderer>()
+            super.buildAudioRenderers(
+                context,
+                extensionRendererMode,
+                mediaCodecSelector,
+                enableDecoderFallback,
+                audioSink,
+                eventHandler,
+                eventListener,
+                defaults,
+            )
+            defaults.forEach { renderer ->
+                if (renderer.javaClass == MediaCodecAudioRenderer::class.java) {
+                    out.add(
+                        object : MediaCodecAudioRenderer(
+                            context,
+                            codecAdapterFactory,
+                            mediaCodecSelector,
+                            enableDecoderFallback,
+                            eventHandler,
+                            eventListener,
+                            audioSink,
+                        ) {
+                            override fun onOutputFormatChanged(
+                                format: Format,
+                                outputMediaFormat: android.media.MediaFormat?,
+                            ) {
+                                val channelMask = if (
+                                    outputMediaFormat != null &&
+                                    outputMediaFormat.containsKey(android.media.MediaFormat.KEY_CHANNEL_MASK)
+                                ) {
+                                    outputMediaFormat.getInteger(android.media.MediaFormat.KEY_CHANNEL_MASK)
+                                } else {
+                                    Format.NO_VALUE
+                                }
+                                val outputChannelCount = outputMediaFormat
+                                    ?.let { mediaFormat ->
+                                        runCatching {
+                                            if (mediaFormat.containsKey(android.media.MediaFormat.KEY_CHANNEL_COUNT)) {
+                                                mediaFormat.getInteger(android.media.MediaFormat.KEY_CHANNEL_COUNT)
+                                            } else {
+                                                format.channelCount
+                                            }
+                                        }.getOrDefault(format.channelCount)
+                                    }
+                                    ?: format.channelCount
+                                this@PlaybackService.applySpatialAudioForOutputFormat(
+                                    downmix = downmix,
+                                    spatial = spatial,
+                                    outputChannelCount = outputChannelCount,
+                                )
+                                downmix.setPendingChannelMask(channelMask)
+                                super.onOutputFormatChanged(format, outputMediaFormat)
+                            }
+                        },
+                    )
+                } else {
+                    out.add(renderer)
+                }
+            }
+        }
+
         override fun buildAudioSink(
             context: Context,
             enableFloatOutput: Boolean,
@@ -5253,7 +5347,7 @@ class PlaybackService : MediaLibraryService() {
             )
             .setAudioProcessorChain(
                 FormatAwareAudioProcessorChain(
-                    arrayOf(pioneerMsr, dseeHx, resamplerCutoff, parametricEq, spatial, transition, replayGain, darUpsampler),
+                    arrayOf(downmix, pioneerMsr, dseeHx, resamplerCutoff, parametricEq, spatial, transition, replayGain, darUpsampler),
                     FormatAwareSilenceSkippingAudioProcessor(
                         MIN_SILENCE_US,
                         SilenceSkippingAudioProcessor.DEFAULT_SILENCE_RETENTION_RATIO,
@@ -5279,6 +5373,10 @@ class PlaybackService : MediaLibraryService() {
      */
     private fun applySettings(player: ExoPlayer, chain: PlaybackAudioChain) {
         val bitPerfect = BitPerfectOutput.ready.value
+        chain.downmix.bypassForBitPerfect = bitPerfect
+        chain.downmix.config = AppSettings.currentDownmixConfig()
+        chain.downmix.isPrimaryChain = chain === activeAudioChain
+        wireDownmixCallbacks(chain)
         chain.replayGain.normalizationGainDbFor = ::loudnessNormalizationGainDbFor
         chain.replayGain.normalizationBypassed = bitPerfect
         chain.pioneerMsr.outputSupports96kPcm24 = currentOutputSupportsPioneerMsr()
@@ -5588,8 +5686,10 @@ class PlaybackService : MediaLibraryService() {
         val oldSpare = spare
         crossfade?.cancelTransition()
         configuredFloatOutput = enableFloat
-        activeAudioChain = PlaybackAudioChain()
-        spareAudioChain = PlaybackAudioChain()
+        activeAudioChain = PlaybackAudioChain().apply { downmix.isPrimaryChain = true }
+        spareAudioChain = PlaybackAudioChain().apply { downmix.isPrimaryChain = false }
+        wireDownmixCallbacks(activeAudioChain)
+        wireDownmixCallbacks(spareAudioChain)
         val newActive = buildPlayer(activeAudioChain, ownsSession = true)
         val newSpare = buildPlayer(spareAudioChain, ownsSession = false)
         AppSettings.audioSessionId.value = newActive.audioSessionId
@@ -5837,6 +5937,9 @@ class PlaybackService : MediaLibraryService() {
         scope.launch {
             BitPerfectOutput.ready.drop(1).collect { enabled ->
                 crossfade?.cancelTransition()
+                val hadMultichannelDownmix = activeAudioChain.downmix.isActivelyDownmixing ||
+                    MultichannelDownmixMonitor.snapshot.value.inputChannelCount > 2
+                applyDownmixConfig()
                 activeAudioChain.replayGain.normalizationBypassed = enabled
                 spareAudioChain.replayGain.normalizationBypassed = enabled
                 activeAudioChain.pioneerMsr.enabled = AppSettings.pioneerMsrEnabled.value &&
@@ -5865,7 +5968,9 @@ class PlaybackService : MediaLibraryService() {
                 updateAudioEffectsEnabled()
                 updateReplayGainForCurrentTrack(force = true)
                 spare?.currentMediaItem?.let(::prepareCrossfadeIncoming)
-                if (AppSettings.dseeHxEnabled.value) requestOutputReconfiguration(forceRebuild = true)
+                if (AppSettings.dseeHxEnabled.value || hadMultichannelDownmix) {
+                    requestOutputReconfiguration(forceRebuild = true)
+                }
 
             }
         }
@@ -5959,6 +6064,35 @@ class PlaybackService : MediaLibraryService() {
             AppSettings.spatialAudio.collect { applySpatialAudioEnabled() }
         }
         scope.launch {
+            AppSettings.multichannelDownmixEnabled.drop(1).collect {
+                applyDownmixConfig(resetClips = true)
+                requestOutputReconfiguration(forceRebuild = true)
+            }
+        }
+        scope.launch {
+            combine(
+                AppSettings.multichannelDownmixPreampDb,
+                AppSettings.multichannelDownmixMutedChannels,
+                AppSettings.multichannelDownmixSoloChannels,
+                AppSettings.multichannelDownmixLfeFilterMode,
+                AppSettings.multichannelDownmixAutoHeadroom,
+            ) { preamp, muted, solo, filterMode, autoHeadroom ->
+                DownmixConfig(
+                    enabled = AppSettings.multichannelDownmixEnabled.value,
+                    preampDb = preamp,
+                    mutedChannels = muted,
+                    soloChannels = solo,
+                    lfeFilterMode = filterMode,
+                    autoHeadroom = autoHeadroom,
+                )
+            }.distinctUntilChanged().collect { updated ->
+                val autoHeadroomUpdate = pendingAutoHeadroomPreampBits.remove(
+                    java.lang.Float.floatToRawIntBits(updated.preampDb),
+                )
+                applyDownmixConfig(resetClips = !autoHeadroomUpdate)
+            }
+        }
+        scope.launch {
             AppSettings.parametricEqConfig.collect { updateAdvancedAudioEffects() }
         }
         scope.launch {
@@ -6021,22 +6155,68 @@ class PlaybackService : MediaLibraryService() {
         }
     }
 
+    private fun wireDownmixCallbacks(chain: PlaybackAudioChain) {
+        chain.downmix.onAutoHeadroomAdjusted = { newPreampDb ->
+            if (chain === activeAudioChain) {
+                pendingAutoHeadroomPreampBits.add(java.lang.Float.floatToRawIntBits(newPreampDb))
+                scope.launch { AppSettings.setMultichannelDownmixPreampDb(newPreampDb) }
+            }
+        }
+    }
+
+    private fun applyDownmixConfig(resetClips: Boolean = false) {
+        val config = AppSettings.currentDownmixConfig()
+        val bitPerfect = BitPerfectOutput.ready.value
+        activeAudioChain.downmix.bypassForBitPerfect = bitPerfect
+        activeAudioChain.downmix.config = config
+        spareAudioChain.downmix.bypassForBitPerfect = bitPerfect
+        spareAudioChain.downmix.config = config
+        if (resetClips) {
+            activeAudioChain.downmix.resetClipCounter()
+            spareAudioChain.downmix.resetClipCounter()
+        }
+    }
+
     /**
      * The effective spatial-audio state: the user's toggle, unless the
      * active player's decoder is currently on a Dolby Atmos (E-AC-3 JOC)
-     * stream, in which case it's forced off. [activeTrackIsDolbyAtmos] only
-     * ever describes the active player — see [formatListener] — so both
-     * processors are kept in lockstep rather than tracking a role swap.
+     * stream or app downmix is already producing stereo. [activeTrackIsDolbyAtmos]
+     * only ever describes the active player — see [formatListener].
      */
     private fun applySpatialAudioEnabled() {
         val enabled = AppSettings.spatialAudio.value &&
             !BitPerfectOutput.ready.value &&
-            !activeTrackIsDolbyAtmos
+            !activeTrackIsDolbyAtmos &&
+            !activeAudioChain.downmix.isActivelyDownmixing
         activeAudioChain.spatial.enabled = enabled
         val standbyItem = spare?.currentMediaItem
         spareAudioChain.spatial.enabled = AppSettings.spatialAudio.value &&
             !BitPerfectOutput.ready.value &&
+            !spareAudioChain.downmix.isActivelyDownmixing &&
             NerdStats.declaredFormat(standbyItem?.mediaId)?.isDolbyAtmos != true
+    }
+
+    /** Set the effect state before Media3 configures its processors for this decoder output. */
+    private fun applySpatialAudioForOutputFormat(
+        downmix: MultichannelDownmixAudioProcessor,
+        spatial: SpatialAudioProcessor,
+        outputChannelCount: Int,
+    ) {
+        val isPrimary = downmix === activeAudioChain.downmix
+        val mediaId = if (isPrimary) {
+            player?.currentMediaItem?.mediaId
+        } else {
+            spare?.currentMediaItem?.mediaId
+        }
+        val isAtmos = (isPrimary && activeTrackIsDolbyAtmos) ||
+            NerdStats.declaredFormat(mediaId)?.isDolbyAtmos == true
+        val willDownmix = AppSettings.currentDownmixConfig().enabled &&
+            !BitPerfectOutput.ready.value &&
+            outputChannelCount > 2
+        spatial.enabled = AppSettings.spatialAudio.value &&
+            !BitPerfectOutput.ready.value &&
+            !isAtmos &&
+            !willDownmix
     }
 
     private fun updateAudioEffectsEnabled() {

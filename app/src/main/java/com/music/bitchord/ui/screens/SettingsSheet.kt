@@ -2279,6 +2279,7 @@ fun SettingsScreen(
     var playerInkHexDraft by rememberSaveable { mutableStateOf("#FFFFFF") }
     var showPerformanceWarning by remember { mutableStateOf(false) }
     var showEqualizerSheet by remember { mutableStateOf(false) }
+    var showDownmixSheet by remember { mutableStateOf(false) }
     var showScheduledPlaylistDialog by rememberSaveable { mutableStateOf(false) }
     var showAutomixPerformanceSheet by rememberSaveable { mutableStateOf(false) }
     var showCdRippingSheet by rememberSaveable { mutableStateOf(false) }
@@ -5338,6 +5339,8 @@ fun SettingsScreen(
                 subtitle = stringResource(R.string.equalizer_subtitle),
                 onClick = { showEqualizerSheet = true },
             )
+            RowDivider()
+            DownmixSettingsRow(onOpen = { showDownmixSheet = true })
             RowDivider()
             SettingsRow(
                 icon = Icons.Rounded.SurroundSound,
@@ -10178,6 +10181,10 @@ fun SettingsScreen(
         com.music.bitchord.ui.screens.equalizer.EqualizerSheet(
             onDismiss = { showEqualizerSheet = false },
         )
+    }
+
+    if (showDownmixSheet) {
+        DownmixSettingsSheet(onDismiss = { showDownmixSheet = false })
     }
 
     if (showAutomixPerformanceSheet) {

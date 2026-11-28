@@ -2535,4 +2535,33 @@
     <string name="mini_player_double_arrow_skip_buttons_subtitle">前後ボタンをプレイヤー画面と同じ二重三角のアイコンで表示します。初期設定はONです。</string>
     <string name="player_skip_buttons_match_mini_player">プレイヤー画面の前後ボタンをミニプレイヤーと同じにする</string>
     <string name="player_skip_buttons_match_mini_player_subtitle">ミニプレイヤーで選択中の前後ボタンアイコンを全画面プレイヤーにも使います。初期設定はOFFです。</string>
+    <string name="downmix_settings_title">ダウンミックス</string>
+    <string name="downmix_settings_subtitle">4.1ch〜9.1.6ch → 2ch 自前マトリクス、リアルタイム音量メーター、ミュート/ソロ、プリアンプ</string>
+    <string name="downmix_enable_title">マルチチャンネル → 2ch カスタムダウンミックス</string>
+    <string name="downmix_enable_subtitle">4.1 / 5.1 / 7.1 / 7.1.4ch 生PCMをアプリ内で2ch化し、OSの空間化より手前で出力します</string>
+    <string name="downmix_bit_perfect_bypass">ビットパーフェクト再生がオンのためバイパス中</string>
+    <string name="downmix_dsp_spec_bw">LFE: Butterworth 4次 LPF 125 Hz (24 dB/oct, Q=0.541/1.307) · 非LFE遅延: %1$d サンプル (3.583 ms @ 48 kHz)</string>
+    <string name="downmix_dsp_spec_lr4">LFE: LR4 4次 LPF 125 Hz (Q=0.7071) · メイン L/R: 2次 All-Pass（プリリンギングゼロ・位相完全一致）</string>
+    <string name="downmix_lfe_filter_section">LFE フィルター &amp; 位相整合方式</string>
+    <string name="downmix_lfe_mode_bw4_title">Butterworth 4次 ＋ 172サンプル遅延</string>
+    <string name="downmix_lfe_mode_bw4_subtitle">LFE: 125 Hz 24 dB/oct LPF · 非LFE: 3.583 ms 固定遅延</string>
+    <string name="downmix_lfe_mode_lr4_title">Linkwitz-Riley 4次 (LR4) ＋ 2次 All-Pass</string>
+    <string name="downmix_lfe_mode_lr4_subtitle">プリリンギングゼロ＆メインと LFE の位相を完全一致（Q=0.7071）</string>
+    <string name="downmix_status_active">動作中: %1$s → 2ch (%2$.1f kHz)</string>
+    <string name="downmix_status_stereo">ステレオ入力（%1$s）— ダウンミックスせず通過</string>
+    <string name="downmix_status_inactive">マルチチャンネル音源（4.1 / 5.1 / 7.1 / 7.1.4ch）待機中</string>
+    <string name="downmix_output_section">最終加算ゲイン &amp; プリアンプ</string>
+    <string name="downmix_preamp_title">ダウンミックス用プリアンプ（クリップ防止）</string>
+    <string name="downmix_preamp_subtitle">全チャンネル加算後のクリップを防ぐため出力レベルを調整します</string>
+    <string name="downmix_auto_headroom_title">オートヘッドルーム</string>
+    <string name="downmix_auto_headroom_subtitle">最終出力が 0 dBFS を超えそうになると自動でプリアンプを下げてクリップを防ぎます（音質圧縮なし）</string>
+    <string name="downmix_pre_sum_label">加算直後（プリアンプ前 · 64-bit Float）</string>
+    <string name="downmix_post_out_label">最終出力（プリアンプ後）</string>
+    <string name="downmix_no_clips">クリップなし</string>
+    <string name="downmix_clips_count">クリップ %1$d 回（タップでリセット）</string>
+    <string name="downmix_clip_badge">CLIP</string>
+    <string name="downmix_channels_section">各チャンネル入力・寄与ゲイン &amp; ミュート / ソロ</string>
+    <string name="downmix_channel_in_contrib">入力 %1$s  ·  寄与 %2$s</string>
+    <string name="downmix_reset_ms">M/S 解除</string>
+    <string name="downmix_inactive_channel">現在のストリームに無し</string>
 </resources>
