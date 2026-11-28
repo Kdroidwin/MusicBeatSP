@@ -1130,6 +1130,7 @@ fun NowPlayingScreen(
     onExternalPanelRequestHandled: () -> Unit = {},
 ) {
     val context = LocalContext.current
+    val showVideoAudioVersionButton by AppSettings.showVideoAudioVersionButton.collectAsStateWithLifecycle()
     val density = LocalDensity.current
     val haptics = rememberHaptics()
     val folderArtworkFallbackMode by AppSettings.folderArtworkFallbackMode.collectAsStateWithLifecycle()
@@ -3306,7 +3307,7 @@ fun NowPlayingScreen(
                 // frosted, pill-shaped control is the one explicit opt-in to a
                 // catalogue match; after a successful swap it becomes Revert
                 // so a bad match is one tap away from the original upload.
-                if ((song.isVideo || isAudioVersion) && !lyricsOpen && p < 0.5f) {
+                if (showVideoAudioVersionButton && (song.isVideo || isAudioVersion) && !lyricsOpen && p < 0.5f) {
                     VideoAudioVersionButton(
                         audioVersion = isAudioVersion,
                         loading = audioVersionSwitching,
@@ -6343,14 +6344,18 @@ private fun CurrentLyricLine(
                         SizeTransform(clip = false, sizeAnimationSpec = { _, _ -> snap() }),
                     )
                 } else {
-                    val duration = 340
-                    (fadeIn(animationSpec = tween(duration, easing = FastOutSlowInEasing)) +
-                        slideInVertically(animationSpec = tween(duration, easing = FastOutSlowInEasing)) { height -> (height * 0.35f).toInt() })
+                    // Let the outgoing line finish fading before the next one
+                    // becomes visible. A concurrent cross-fade kept both lyric
+                    // rows legible for most of 340 ms, which looked like the old
+                    // line briefly reappearing at every timestamp boundary.
+                    val duration = 180
+                    (fadeIn(animationSpec = tween(duration, delayMillis = 55, easing = FastOutSlowInEasing)) +
+                        slideInVertically(animationSpec = tween(duration, delayMillis = 55, easing = FastOutSlowInEasing)) { height -> (height * 0.16f).toInt() })
                         .togetherWith(
-                            fadeOut(animationSpec = tween(duration, easing = FastOutSlowInEasing)) +
-                                slideOutVertically(animationSpec = tween(duration, easing = FastOutSlowInEasing)) { height -> -(height * 0.35f).toInt() },
+                            fadeOut(animationSpec = tween(55, easing = FastOutSlowInEasing)) +
+                                slideOutVertically(animationSpec = tween(55, easing = FastOutSlowInEasing)) { height -> -(height * 0.12f).toInt() },
                         )
-                        .using(SizeTransform(clip = false, sizeAnimationSpec = { _, _ -> tween(duration, easing = FastOutSlowInEasing) }))
+                        .using(SizeTransform(clip = false, sizeAnimationSpec = { _, _ -> tween(duration + 55, easing = FastOutSlowInEasing) }))
                 }
             },
             label = "currentLyricTransition",

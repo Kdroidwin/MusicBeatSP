@@ -81,6 +81,8 @@ import com.music.bitchord.data.settings.AppSettings
 import com.music.bitchord.ui.components.PAGE_GUTTER
 import com.music.bitchord.ui.components.SHELF_CARD_WIDTH
 import com.music.bitchord.ui.components.SongRow
+import com.music.bitchord.ui.components.isGlassSupported
+import com.music.bitchord.ui.components.liquidGlass
 import com.music.bitchord.ui.theme.ArtworkPalette
 import com.music.bitchord.ui.theme.rememberArtworkPalette
 
@@ -121,6 +123,7 @@ fun DetailScreen(
     val showArtistOverview by AppSettings.showArtistOverview.collectAsStateWithLifecycle()
     val centerArtistDetailName by AppSettings.centerArtistDetailName.collectAsStateWithLifecycle()
     val artistDetailMostPlayedLabelAsTracks by AppSettings.artistDetailMostPlayedLabelAsTracks.collectAsStateWithLifecycle()
+    val artistDetailActionsLiquidGlass by AppSettings.artistDetailActionsLiquidGlass.collectAsStateWithLifecycle()
     val hideArtistAudienceStats by AppSettings.hideArtistAudienceStats.collectAsStateWithLifecycle()
     val showLocalArtistSections by AppSettings.showLocalArtistSections.collectAsStateWithLifecycle()
     val showArtistRecommendations by AppSettings.showArtistRecommendations.collectAsStateWithLifecycle()
@@ -165,6 +168,7 @@ fun DetailScreen(
                     centerTitle = centerArtistDetailName,
                     onPlay = { if (songs.isNotEmpty()) onSongClick(songs, 0) },
                     onShuffle = { if (songs.isNotEmpty()) onShuffle(songs) },
+                    glassActions = artistDetailActionsLiquidGlass,
                     isSavedToLibrary = isSavedToLibrary,
                     onToggleLibrary = onToggleLibrary,
                     subscriptionLabel = subscriptionLabel,
@@ -399,6 +403,7 @@ private fun ArtistHero(
     centerTitle: Boolean,
     onPlay: () -> Unit,
     onShuffle: () -> Unit,
+    glassActions: Boolean,
     isSavedToLibrary: Boolean,
     onToggleLibrary: (() -> Unit)?,
     subscriptionLabel: String?,
@@ -499,6 +504,7 @@ private fun ArtistHero(
         palette = palette,
         onPlay = onPlay,
         onShuffle = onShuffle,
+        glassActions = glassActions,
         isSavedToLibrary = isSavedToLibrary,
         onToggleLibrary = onToggleLibrary,
         subscriptionLabel = subscriptionLabel,
@@ -512,6 +518,7 @@ private fun ArtistActions(
     palette: ArtworkPalette,
     onPlay: () -> Unit,
     onShuffle: () -> Unit,
+    glassActions: Boolean,
     isSavedToLibrary: Boolean,
     onToggleLibrary: (() -> Unit)?,
     subscriptionLabel: String?,
@@ -523,7 +530,7 @@ private fun ArtistActions(
         horizontalArrangement = Arrangement.Center,
         verticalAlignment = Alignment.CenterVertically,
     ) {
-        ArtistRoundAction(Icons.Rounded.Shuffle, stringResource(R.string.shuffle), palette, onShuffle)
+        ArtistRoundAction(Icons.Rounded.Shuffle, stringResource(R.string.shuffle), palette, onShuffle, glassEnabled = glassActions)
         Spacer(Modifier.width(22.dp))
         IconButton(
             onClick = onPlay,
@@ -541,6 +548,7 @@ private fun ArtistActions(
                 ),
                 palette = palette,
                 onClick = onToggleLibrary,
+                glassEnabled = glassActions,
             )
         }
         if (subscriptionLabel != null && onToggleSubscription != null) {
@@ -561,8 +569,14 @@ private fun ArtistRoundAction(
     label: String,
     palette: ArtworkPalette,
     onClick: () -> Unit,
+    glassEnabled: Boolean = false,
 ) {
-    IconButton(onClick = onClick, modifier = Modifier.size(54.dp).clip(CircleShape).background(palette.elevated.copy(alpha = 0.72f))) {
+    val surfaceModifier = if (glassEnabled && isGlassSupported()) {
+        Modifier.liquidGlass(CircleShape)
+    } else {
+        Modifier.background(palette.elevated.copy(alpha = if (glassEnabled) 0.44f else 0.72f), CircleShape)
+    }
+    IconButton(onClick = onClick, modifier = Modifier.size(54.dp).clip(CircleShape).then(surfaceModifier)) {
         Icon(icon, contentDescription = label, tint = palette.onBackground, modifier = Modifier.size(23.dp))
     }
 }

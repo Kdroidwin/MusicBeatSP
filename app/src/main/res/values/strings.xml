@@ -2012,6 +2012,8 @@
     <string name="youtube_music_include_videos_subtitle">Show ordinary YouTube videos alongside music results. On by default.</string>
     <string name="in_app_video_playback">Play videos in the app</string>
     <string name="in_app_video_playback_subtitle">Show YouTube video frames and local videos opened from another app in the player. YouTube video playback uses extra network data. Off by default.</string>
+    <string name="show_video_audio_version_button">Show the YouTube video/audio switch</string>
+    <string name="show_video_audio_version_button_subtitle">Show the control for switching a YouTube video upload to its matching audio release. Off by default.</string>
     <string name="redesigned_saved_queue_manager">New saved-queue manager</string>
     <string name="redesigned_saved_queue_manager_subtitle">Use a compact list layout for saving, loading, replacing, and deleting saved queues. On by default.</string>
     <string name="collection_song_artwork">Show album art in artist and album song lists</string>
@@ -2496,6 +2498,8 @@
     <string name="track_playback_settings_subtitle">Override crossfade and equalizer for this song. Both overrides start off.</string>
     <string name="track_crossfade_override">Use a crossfade override</string>
     <string name="track_crossfade_override_subtitle">When off, the global crossfade setting applies.</string>
+    <string name="track_skip_silence_override">Use a silence-skip override</string>
+    <string name="track_skip_silence_override_subtitle">Set silence skipping for this song only. When off, playlist or app settings apply.</string>
     <string name="track_eq_override">Use an equalizer override</string>
     <string name="track_eq_override_subtitle">When off, the global equalizer setting applies.</string>
     <string name="track_eq_enabled">Equalizer enabled for this song</string>
@@ -2539,6 +2543,8 @@
     <string name="center_artist_detail_name_subtitle">Center the artist name over the full-screen artist artwork. On by default.</string>
     <string name="artist_detail_most_played_label_as_tracks">Show “Tracks” instead of “Top songs”</string>
     <string name="artist_detail_most_played_label_as_tracks_subtitle">Rename the artist detail page’s frequently played section to the general tracks label. On by default.</string>
+    <string name="artist_detail_actions_liquid_glass">Use Liquid Glass on artist shuffle and favorite buttons</string>
+    <string name="artist_detail_actions_liquid_glass_subtitle">Use transparent Liquid Glass surfaces for these two artist page actions. On by default.</string>
     <string name="download_storage_mode">Online download destination</string>
     <string name="download_storage_mode_subtitle">Keep the existing in-app download flow, or save the online source’s best available audio to a chosen folder. Unsupported formats are reported instead of silently replaced.</string>
     <string name="download_storage_app_managed">In-app downloads</string>

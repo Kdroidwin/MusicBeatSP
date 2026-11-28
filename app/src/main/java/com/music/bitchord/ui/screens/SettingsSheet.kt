@@ -793,6 +793,7 @@ private fun additionalArtworkSettingsSearchEntries(
     showArtistOverview: Boolean,
     centerArtistDetailName: Boolean,
     artistDetailMostPlayedLabelAsTracks: Boolean,
+    artistDetailActionsLiquidGlass: Boolean,
     hideArtistAudienceStats: Boolean,
     onChoosePlayerArtistPageMode: () -> Unit,
     folderArtworkFallbackLabel: String,
@@ -884,6 +885,12 @@ private fun additionalArtworkSettingsSearchEntries(
         listOf("artist", "tracks", "top songs", "label", "アーティスト", "よく聴いた曲", "曲", "見出し"),
         artistDetailMostPlayedLabelAsTracks,
     ) { AppSettings.setArtistDetailMostPlayedLabelAsTracks(!artistDetailMostPlayedLabelAsTracks) },
+    SettingsSearchEntry(
+        stringResource(R.string.artist_detail_actions_liquid_glass),
+        stringResource(R.string.artist_detail_actions_liquid_glass_subtitle),
+        listOf("artist", "shuffle", "favorite", "glass", "liquid glass", "アーティスト", "シャッフル", "お気に入り", "ガラス"),
+        artistDetailActionsLiquidGlass,
+    ) { AppSettings.setArtistDetailActionsLiquidGlass(!artistDetailActionsLiquidGlass) },
     SettingsSearchEntry(
         stringResource(R.string.hide_artist_audience_stats),
         stringResource(R.string.hide_artist_audience_stats_subtitle),
@@ -1961,6 +1968,7 @@ fun SettingsScreen(
     val showArtistOverview by AppSettings.showArtistOverview.collectAsStateWithLifecycle()
     val centerArtistDetailName by AppSettings.centerArtistDetailName.collectAsStateWithLifecycle()
     val artistDetailMostPlayedLabelAsTracks by AppSettings.artistDetailMostPlayedLabelAsTracks.collectAsStateWithLifecycle()
+    val artistDetailActionsLiquidGlass by AppSettings.artistDetailActionsLiquidGlass.collectAsStateWithLifecycle()
     val hideArtistAudienceStats by AppSettings.hideArtistAudienceStats.collectAsStateWithLifecycle()
     val playerArtistPageModeLabel = stringResource(
         when (playerArtistPageMode) {
@@ -2013,6 +2021,7 @@ fun SettingsScreen(
     val dsdPlaybackEnabled by AppSettings.dsdPlaybackEnabled.collectAsStateWithLifecycle()
     val ffmpegUnsupportedAudioTranscodeEnabled by AppSettings.ffmpegUnsupportedAudioTranscodeEnabled.collectAsStateWithLifecycle()
     val inAppVideoPlaybackEnabled by AppSettings.inAppVideoPlaybackEnabled.collectAsStateWithLifecycle()
+    val showVideoAudioVersionButton by AppSettings.showVideoAudioVersionButton.collectAsStateWithLifecycle()
     val loudnessNormalization by AppSettings.loudnessNormalization.collectAsStateWithLifecycle()
     val loudnessOffOnSpeaker by AppSettings.loudnessOffOnSpeaker.collectAsStateWithLifecycle()
     val volumeBoostEnabled by AppSettings.volumeBoostEnabled.collectAsStateWithLifecycle()
@@ -3451,6 +3460,13 @@ fun SettingsScreen(
             checked = inAppVideoPlaybackEnabled,
             activate = { AppSettings.setInAppVideoPlaybackEnabled(!inAppVideoPlaybackEnabled) },
         ),
+        SettingsSearchEntry(
+            title = stringResource(R.string.show_video_audio_version_button),
+            subtitle = stringResource(R.string.show_video_audio_version_button_subtitle),
+            keywords = listOf("YouTube", "video", "audio version", "switch", "動画", "音声", "切り替え", "ボタン"),
+            checked = showVideoAudioVersionButton,
+            activate = { AppSettings.setShowVideoAudioVersionButton(!showVideoAudioVersionButton) },
+        ),
     ) +
         songsShuffleFloatingButtonSearchEntry(songsShuffleFloatingButton) +
         playerBackdropColorSearchEntries(
@@ -3556,6 +3572,7 @@ fun SettingsScreen(
             showArtistOverview = showArtistOverview,
             centerArtistDetailName = centerArtistDetailName,
             artistDetailMostPlayedLabelAsTracks = artistDetailMostPlayedLabelAsTracks,
+            artistDetailActionsLiquidGlass = artistDetailActionsLiquidGlass,
             hideArtistAudienceStats = hideArtistAudienceStats,
             onChoosePlayerArtistPageMode = { showPlayerArtistPageModeDialog = true },
             folderArtworkFallbackLabel = stringResource(
@@ -8851,6 +8868,23 @@ fun SettingsScreen(
             )
             RowDivider()
             SettingsRow(
+                icon = Icons.Rounded.MusicNote,
+                title = stringResource(R.string.show_video_audio_version_button),
+                subtitle = stringResource(R.string.show_video_audio_version_button_subtitle),
+                trailing = {
+                    Switch(
+                        checked = showVideoAudioVersionButton,
+                        onCheckedChange = AppSettings::setShowVideoAudioVersionButton,
+                        colors = SwitchDefaults.colors(
+                            checkedTrackColor = MaterialTheme.colorScheme.primary,
+                            checkedBorderColor = MaterialTheme.colorScheme.primary,
+                        ),
+                    )
+                },
+                onClick = { AppSettings.setShowVideoAudioVersionButton(!showVideoAudioVersionButton) },
+            )
+            RowDivider()
+            SettingsRow(
                 icon = Icons.Rounded.Cloud,
                 title = stringResource(R.string.offline_mode),
                 subtitle = stringResource(R.string.offline_mode_subtitle),
@@ -10532,6 +10566,7 @@ private fun LocalMusicSettingsGroup(
     val playlistDetailTitleNoWrap by AppSettings.playlistDetailTitleNoWrap.collectAsStateWithLifecycle()
     val playlistDetailActionOrder by AppSettings.playlistDetailActionOrder.collectAsStateWithLifecycle()
     val artistDetailMostPlayedLabelAsTracks by AppSettings.artistDetailMostPlayedLabelAsTracks.collectAsStateWithLifecycle()
+    val artistDetailActionsLiquidGlass by AppSettings.artistDetailActionsLiquidGlass.collectAsStateWithLifecycle()
 SettingsGroup(header = stringResource(R.string.local_music)) {
     SettingsRow(
         icon = Icons.Rounded.Tune,
@@ -10819,6 +10854,19 @@ SettingsGroup(header = stringResource(R.string.local_music)) {
             )
         },
         onClick = { AppSettings.setCenterArtistDetailName(!centerArtistDetailName) },
+    )
+    RowDivider()
+    SettingsRow(
+        icon = Icons.Rounded.Person,
+        title = stringResource(R.string.artist_detail_actions_liquid_glass),
+        subtitle = stringResource(R.string.artist_detail_actions_liquid_glass_subtitle),
+        trailing = {
+            Switch(
+                checked = artistDetailActionsLiquidGlass,
+                onCheckedChange = AppSettings::setArtistDetailActionsLiquidGlass,
+            )
+        },
+        onClick = { AppSettings.setArtistDetailActionsLiquidGlass(!artistDetailActionsLiquidGlass) },
     )
     RowDivider()
     SettingsRow(
@@ -11706,6 +11754,7 @@ private fun PlayerDetailsAction.localizedLabel(): String = stringResource(
         PlayerDetailsAction.ARTIST -> R.string.go_to_artist
         PlayerDetailsAction.OPEN_FOLDER -> R.string.open_folder
         PlayerDetailsAction.ADD_TO_PLAYLIST -> R.string.add_to_playlist
+        PlayerDetailsAction.REGISTERED_PLAYLISTS -> R.string.song_registered_playlists
         PlayerDetailsAction.CHANGE_ARTIST_IMAGE -> R.string.change_artist_image
         PlayerDetailsAction.EQUALIZER -> R.string.equalizer
         PlayerDetailsAction.CHROMECAST -> R.string.chromecast

@@ -18,6 +18,8 @@ import java.security.MessageDigest
 data class TrackPlaybackProfile(
     val crossfadeOverride: Boolean = false,
     val crossfadeDurationMs: Int = 0,
+    val skipSilenceOverride: Boolean = false,
+    val skipSilenceEnabled: Boolean = false,
     val eqOverride: Boolean = false,
     val eqEnabled: Boolean = true,
     val eqBandLevels: List<Int> = List(5) { 0 },
@@ -96,6 +98,8 @@ object TrackPlaybackSettings {
             put(key, JSONObject().apply {
                 put("crossfadeOverride", profile.crossfadeOverride)
                 put("crossfadeMs", profile.crossfadeDurationMs)
+                put("skipSilenceOverride", profile.skipSilenceOverride)
+                put("skipSilenceEnabled", profile.skipSilenceEnabled)
                 put("eqOverride", profile.eqOverride)
                 put("eqEnabled", profile.eqEnabled)
                 put("eqBands", JSONArray(profile.eqBandLevels.take(5)))
@@ -116,6 +120,8 @@ object TrackPlaybackSettings {
                 crossfadeOverride = row.optBoolean("crossfadeOverride", false),
                 crossfadeDurationMs = row.optInt("crossfadeMs", 0)
                     .coerceIn(0, MAX_CROSSFADE_DURATION_MS),
+                skipSilenceOverride = row.optBoolean("skipSilenceOverride", false),
+                skipSilenceEnabled = row.optBoolean("skipSilenceEnabled", false),
                 eqOverride = row.optBoolean("eqOverride", false),
                 eqEnabled = row.optBoolean("eqEnabled", true),
                 eqBandLevels = (0 until 5).map { index ->

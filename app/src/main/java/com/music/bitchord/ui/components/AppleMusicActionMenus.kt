@@ -132,68 +132,66 @@ fun AppleMusicTrackActionsMenu(
                     artwork = selectedSong.thumbnailUrl,
                 )
                 IosMenuSeparator()
-                MenuRow(R.string.go_to_album, Icons.Rounded.Album, onCloseMenu, onOpenAlbum)
-                MenuRow(R.string.go_to_artist, Icons.Rounded.Person, onCloseMenu, onOpenArtist)
-                if (showPlayerActions) {
-                    onGoToPlaylists?.let { openPlaylists ->
-                        MenuRow(R.string.song_registered_playlists, Icons.AutoMirrored.Rounded.PlaylistPlay, onCloseMenu, openPlaylists)
+                val folderPath = FolderNavigationRequests.folderPathFor(selectedSong)
+                playerActionOrder.forEach { action ->
+                    if (action in hiddenPlayerActions) return@forEach
+                    when (action) {
+                        PlayerDetailsAction.ALBUM -> MenuRow(R.string.go_to_album, Icons.Rounded.Album, onCloseMenu, onOpenAlbum)
+                        PlayerDetailsAction.ARTIST -> MenuRow(R.string.go_to_artist, Icons.Rounded.Person, onCloseMenu, onOpenArtist)
+                        PlayerDetailsAction.OPEN_FOLDER -> if (showPlayerActions) {
+                            IosMenuRow(
+                                label = stringResource(R.string.open_folder),
+                                icon = Icons.Rounded.FolderOpen,
+                                onClick = folderPath?.let { path ->
+                                    { onCloseMenu(); FolderNavigationRequests.request(path) }
+                                },
+                                enabled = folderPath != null,
+                            )
+                        }
+                        PlayerDetailsAction.ADD_TO_PLAYLIST -> MenuRow(
+                            R.string.add_to_playlist,
+                            Icons.AutoMirrored.Rounded.PlaylistAdd,
+                            onCloseMenu,
+                            onAddToPlaylist,
+                        )
+                        PlayerDetailsAction.REGISTERED_PLAYLISTS -> if (showPlayerActions) {
+                            onGoToPlaylists?.let { openPlaylists ->
+                                MenuRow(R.string.song_registered_playlists, Icons.AutoMirrored.Rounded.PlaylistPlay, onCloseMenu, openPlaylists)
+                            }
+                        }
+                        PlayerDetailsAction.CHANGE_ARTIST_IMAGE -> onChangeArtistImage?.let {
+                            MenuRow(R.string.change_artist_image, Icons.Rounded.Image, onCloseMenu, it)
+                        }
+                        PlayerDetailsAction.DOWNLOAD -> onDownload?.let {
+                            MenuRow(R.string.download, Icons.Rounded.FileDownload, onCloseMenu, it)
+                        }
+                        PlayerDetailsAction.DELETE_DOWNLOAD -> onDeleteDownload?.let {
+                            MenuRow(R.string.delete_download, Icons.Rounded.Delete, onCloseMenu, it)
+                        }
+                        PlayerDetailsAction.EQUALIZER -> {
+                            MenuRow(R.string.equalizer, Icons.Rounded.GraphicEq, onCloseMenu, onEqualizer)
+                            MenuRow(R.string.track_playback_settings, Icons.Rounded.GraphicEq, onCloseMenu) {
+                                showTrackPlaybackSettings = true
+                            }
+                        }
+                        PlayerDetailsAction.PLAYBACK_TUNING -> MenuRow(R.string.playback_tuning, Icons.Rounded.Speed, onCloseMenu, onPlaybackTuning)
+                        PlayerDetailsAction.SLEEP_TIMER -> if (showPlayerActions) {
+                            IosMenuRow(
+                                label = stringResource(R.string.sleep_timer),
+                                icon = Icons.Rounded.Bedtime,
+                                onClick = { showingSleepTimer = true },
+                            )
+                        }
+                        PlayerDetailsAction.TAG_EDITOR -> MenuRow(R.string.tag_editor, Icons.Rounded.Edit, onCloseMenu, onTagEditor)
+                        PlayerDetailsAction.EDIT_LYRICS -> MenuRow(R.string.edit_lyrics, Icons.AutoMirrored.Rounded.Notes, onCloseMenu, onEditLyrics)
+                        PlayerDetailsAction.DETAILS -> MenuRow(R.string.details, Icons.Rounded.Info, onCloseMenu, onDetails)
+                        PlayerDetailsAction.SHARE_FILE -> MenuRow(R.string.share, Icons.Rounded.Share, onCloseMenu, onShare)
+                        PlayerDetailsAction.SHARE_NOW_PLAYING -> onShareNowPlaying?.let {
+                            MenuRow(R.string.share_now_playing, Icons.Rounded.IosShare, onCloseMenu, it)
+                        }
+                        PlayerDetailsAction.CHROMECAST -> Unit
                     }
                 }
-                val folderPath = FolderNavigationRequests.folderPathFor(selectedSong)
-                val showOpenFolder = showPlayerActions &&
-                    PlayerDetailsAction.OPEN_FOLDER !in hiddenPlayerActions
-                val folderIndex = playerActionOrder.indexOf(PlayerDetailsAction.OPEN_FOLDER)
-                val addIndex = playerActionOrder.indexOf(PlayerDetailsAction.ADD_TO_PLAYLIST)
-                val folderBeforePlaylist = folderIndex <= addIndex
-                if (showOpenFolder && folderBeforePlaylist) {
-                    IosMenuRow(
-                        label = stringResource(R.string.open_folder),
-                        icon = Icons.Rounded.FolderOpen,
-                        onClick = folderPath?.let { path ->
-                            {
-                                onCloseMenu()
-                                FolderNavigationRequests.request(path)
-                            }
-                        },
-                        enabled = folderPath != null,
-                    )
-                }
-                MenuRow(R.string.add_to_playlist, Icons.AutoMirrored.Rounded.PlaylistAdd, onCloseMenu, onAddToPlaylist)
-                if (showOpenFolder && !folderBeforePlaylist) {
-                    IosMenuRow(
-                        label = stringResource(R.string.open_folder),
-                        icon = Icons.Rounded.FolderOpen,
-                        onClick = folderPath?.let { path ->
-                            {
-                                onCloseMenu()
-                                FolderNavigationRequests.request(path)
-                            }
-                        },
-                        enabled = folderPath != null,
-                    )
-                }
-                onChangeArtistImage?.let { MenuRow(R.string.change_artist_image, Icons.Rounded.Image, onCloseMenu, it) }
-                if (onDownload != null) MenuRow(R.string.download, Icons.Rounded.FileDownload, onCloseMenu, onDownload)
-                if (onDeleteDownload != null) MenuRow(R.string.delete_download, Icons.Rounded.Delete, onCloseMenu, onDeleteDownload)
-                IosMenuSeparator()
-                MenuRow(R.string.equalizer, Icons.Rounded.GraphicEq, onCloseMenu, onEqualizer)
-                MenuRow(R.string.track_playback_settings, Icons.Rounded.GraphicEq, onCloseMenu) {
-                    showTrackPlaybackSettings = true
-                }
-                MenuRow(R.string.playback_tuning, Icons.Rounded.Speed, onCloseMenu, onPlaybackTuning)
-                if (showPlayerActions) {
-                    IosMenuRow(
-                        label = stringResource(R.string.sleep_timer),
-                        icon = Icons.Rounded.Bedtime,
-                        onClick = { showingSleepTimer = true },
-                    )
-                }
-                IosMenuSeparator()
-                MenuRow(R.string.tag_editor, Icons.Rounded.Edit, onCloseMenu, onTagEditor)
-                MenuRow(R.string.edit_lyrics, Icons.AutoMirrored.Rounded.Notes, onCloseMenu, onEditLyrics)
-                MenuRow(R.string.details, Icons.Rounded.Info, onCloseMenu, onDetails)
-                MenuRow(R.string.share, Icons.Rounded.Share, onCloseMenu, onShare)
-                onShareNowPlaying?.let { MenuRow(R.string.share_now_playing, Icons.Rounded.IosShare, onCloseMenu, it) }
                 IosMenuSeparator()
                 MenuRow(R.string.more, Icons.Rounded.MoreHoriz, onCloseMenu, onMore)
             }

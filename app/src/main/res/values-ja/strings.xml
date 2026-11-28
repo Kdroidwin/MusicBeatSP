@@ -1910,6 +1910,8 @@
     <string name="youtube_music_include_videos_subtitle">音楽の検索結果に通常のYouTube動画も表示します。初期設定はオンです。</string>
     <string name="in_app_video_playback">アプリ内で動画を再生</string>
     <string name="in_app_video_playback_subtitle">YouTube動画と、外部アプリから開いたローカル動画の映像をプレイヤーに表示します。YouTube動画は追加の通信を使います。初期設定はオフです。</string>
+    <string name="show_video_audio_version_button">YouTubeの動画／音声切り替えを表示</string>
+    <string name="show_video_audio_version_button_subtitle">YouTube動画投稿から対応する音源版へ切り替えるボタンを表示します。初期設定はOFFです。</string>
     <string name="redesigned_saved_queue_manager">新しい再生キュー管理画面を使う</string>
     <string name="redesigned_saved_queue_manager_subtitle">保存済みキューを、保存・読み込み・置き換え・削除できるシンプルな一覧で表示します。初期設定はオンです。</string>
     <string name="collection_song_artwork">アルバムなどの曲一覧にアートを表示</string>
@@ -2469,6 +2471,8 @@
     <string name="track_playback_settings_subtitle">この曲だけクロスフェードとイコライザーを上書きします。初期状態はどちらもOFFです。</string>
     <string name="track_crossfade_override">曲別クロスフェードを使う</string>
     <string name="track_crossfade_override_subtitle">OFFの場合は全体のクロスフェード設定を使います。</string>
+    <string name="track_skip_silence_override">曲ごとの無音スキップを設定</string>
+    <string name="track_skip_silence_override_subtitle">この曲だけ無音スキップを設定します。OFFではプレイリストまたはアプリ全体の設定を使います。</string>
     <string name="track_eq_override">曲別イコライザーを使う</string>
     <string name="track_eq_override_subtitle">OFFの場合は全体のイコライザー設定を使います。</string>
     <string name="track_eq_enabled">この曲のイコライザーを有効にする</string>
@@ -2512,6 +2516,8 @@
     <string name="center_artist_detail_name_subtitle">全画面アーティスト画像上の名前を中央に配置します。初期設定はONです。</string>
     <string name="artist_detail_most_played_label_as_tracks">「よく聴いた曲」を「曲」と表示</string>
     <string name="artist_detail_most_played_label_as_tracks_subtitle">アーティスト詳細の再生回数セクション名を「曲」に変更します。初期設定はONです。</string>
+    <string name="artist_detail_actions_liquid_glass">アーティストのシャッフル・お気に入りにLiquid Glassを使う</string>
+    <string name="artist_detail_actions_liquid_glass_subtitle">アーティスト画面の2つの操作ボタンを透明なLiquid Glass風にします。初期設定はONです。</string>
     <string name="download_storage_mode">オンライン音源の保存先</string>
     <string name="download_storage_mode_subtitle">従来どおりアプリ内へ保存するか、オンラインソースが提供する最高音質を選択フォルダへ保存します。対応外の形式をYouTube音源などへ置き換えず、理由を表示します。</string>
     <string name="download_storage_app_managed">アプリ内に保存</string>

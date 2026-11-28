@@ -484,6 +484,7 @@ enum class PlayerDetailsAction {
     ARTIST,
     OPEN_FOLDER,
     ADD_TO_PLAYLIST,
+    REGISTERED_PLAYLISTS,
     CHANGE_ARTIST_IMAGE,
     EQUALIZER,
     CHROMECAST,
@@ -504,6 +505,7 @@ val DEFAULT_PLAYER_DETAILS_ACTION_ORDER = listOf(
     PlayerDetailsAction.ARTIST,
     PlayerDetailsAction.OPEN_FOLDER,
     PlayerDetailsAction.ADD_TO_PLAYLIST,
+    PlayerDetailsAction.REGISTERED_PLAYLISTS,
     PlayerDetailsAction.CHANGE_ARTIST_IMAGE,
     PlayerDetailsAction.EQUALIZER,
     PlayerDetailsAction.CHROMECAST,
@@ -1068,6 +1070,8 @@ object AppSettings {
     val ffmpegUnsupportedAudioTranscodeEnabled = MutableStateFlow(true)
     /** Renders local and YouTube video frames in the app alongside the audio player. */
     val inAppVideoPlaybackEnabled = MutableStateFlow(false)
+    /** Shows the explicit YouTube video/audio version switch; hidden unless requested. */
+    val showVideoAudioVersionButton = MutableStateFlow(false)
     val hiddenPlayerDetailsActions = MutableStateFlow<Set<PlayerDetailsAction>>(emptySet())
     val playerDetailsActionOrder = MutableStateFlow(DEFAULT_PLAYER_DETAILS_ACTION_ORDER)
     /** The cutter is opt-in because it exports a re-encoded, edited copy of a track. */
@@ -1507,6 +1511,8 @@ object AppSettings {
     val centerArtistDetailName = MutableStateFlow(true)
     /** Labels the artist-page top-song shelf as the general track list by default. */
     val artistDetailMostPlayedLabelAsTracks = MutableStateFlow(true)
+    /** Uses the transparent Liquid Glass material on artist shuffle/favorite actions. */
+    val artistDetailActionsLiquidGlass = MutableStateFlow(true)
     /** Hides subscriber and monthly-listener counts without hiding the artist description. */
     val hideArtistAudienceStats = MutableStateFlow(false)
     val localMusicViewType = MutableStateFlow(LibraryViewType.LIST)
@@ -2206,6 +2212,7 @@ object AppSettings {
         dsdPlaybackEnabled.value = prefs.getBoolean(KEY_DSD_PLAYBACK_ENABLED, false)
         ffmpegUnsupportedAudioTranscodeEnabled.value = prefs.getBoolean(KEY_FFMPEG_UNSUPPORTED_AUDIO_TRANSCODE_ENABLED, true)
         inAppVideoPlaybackEnabled.value = prefs.getBoolean(KEY_IN_APP_VIDEO_PLAYBACK_ENABLED, false)
+        showVideoAudioVersionButton.value = prefs.getBoolean(KEY_SHOW_VIDEO_AUDIO_VERSION_BUTTON, false)
         hiddenPlayerDetailsActions.value = readHiddenPlayerDetailsActions()
         playerDetailsActionOrder.value = readPlayerDetailsActionOrder()
         audioCutterEnabled.value = prefs.getBoolean(KEY_AUDIO_CUTTER_ENABLED, false)
@@ -2488,6 +2495,7 @@ object AppSettings {
         showArtistOverview.value = prefs.getBoolean(KEY_SHOW_ARTIST_OVERVIEW, true)
         centerArtistDetailName.value = prefs.getBoolean(KEY_CENTER_ARTIST_DETAIL_NAME, true)
         artistDetailMostPlayedLabelAsTracks.value = prefs.getBoolean(KEY_ARTIST_DETAIL_MOST_PLAYED_LABEL_AS_TRACKS, true)
+        artistDetailActionsLiquidGlass.value = prefs.getBoolean(KEY_ARTIST_DETAIL_ACTIONS_LIQUID_GLASS, true)
         hideArtistAudienceStats.value = prefs.getBoolean(KEY_HIDE_ARTIST_AUDIENCE_STATS, false)
         downloadedMusicViewType.value = readLibraryViewType(KEY_DOWNLOADED_MUSIC_VIEW_TYPE, LibraryViewType.LIST)
         downloadedSongsViewType.value = readLibraryViewType(KEY_DOWNLOADED_SONGS_VIEW_TYPE, downloadedMusicViewType.value)
@@ -4063,6 +4071,11 @@ object AppSettings {
         prefs.edit().putBoolean(KEY_IN_APP_VIDEO_PLAYBACK_ENABLED, value).apply()
     }
 
+    fun setShowVideoAudioVersionButton(value: Boolean) {
+        showVideoAudioVersionButton.value = value
+        prefs.edit().putBoolean(KEY_SHOW_VIDEO_AUDIO_VERSION_BUTTON, value).apply()
+    }
+
     fun setPlayerDetailsActionVisible(action: PlayerDetailsAction, visible: Boolean) {
         val hidden = hiddenPlayerDetailsActions.value.toMutableSet().apply {
             if (visible) remove(action) else add(action)
@@ -4114,6 +4127,16 @@ object AppSettings {
             completed.add(
                 if (addToPlaylistIndex >= 0) addToPlaylistIndex else completed.size,
                 PlayerDetailsAction.OPEN_FOLDER,
+            )
+        }
+        // Older saved orders did not contain this action. Keep it directly
+        // below Add to playlist, matching the default menu layout.
+        if (PlayerDetailsAction.REGISTERED_PLAYLISTS !in saved) {
+            completed.remove(PlayerDetailsAction.REGISTERED_PLAYLISTS)
+            val addToPlaylistIndex = completed.indexOf(PlayerDetailsAction.ADD_TO_PLAYLIST)
+            completed.add(
+                if (addToPlaylistIndex >= 0) addToPlaylistIndex + 1 else completed.size,
+                PlayerDetailsAction.REGISTERED_PLAYLISTS,
             )
         }
         return completed
@@ -5609,6 +5632,11 @@ object AppSettings {
         prefs.edit().putBoolean(KEY_ARTIST_DETAIL_MOST_PLAYED_LABEL_AS_TRACKS, value).apply()
     }
 
+    fun setArtistDetailActionsLiquidGlass(value: Boolean) {
+        artistDetailActionsLiquidGlass.value = value
+        prefs.edit().putBoolean(KEY_ARTIST_DETAIL_ACTIONS_LIQUID_GLASS, value).apply()
+    }
+
     fun setSmartPlaylistsEnabled(value: Boolean) {
         smartPlaylistsEnabled.value = value
         prefs.edit().putBoolean(KEY_SMART_PLAYLISTS_ENABLED, value).apply()
@@ -6266,6 +6294,7 @@ object AppSettings {
     private const val KEY_DSD_PLAYBACK_ENABLED = "dsd_playback_enabled"
     private const val KEY_FFMPEG_UNSUPPORTED_AUDIO_TRANSCODE_ENABLED = "ffmpeg_unsupported_audio_transcode_enabled"
     private const val KEY_IN_APP_VIDEO_PLAYBACK_ENABLED = "in_app_video_playback_enabled"
+    private const val KEY_SHOW_VIDEO_AUDIO_VERSION_BUTTON = "show_video_audio_version_button"
     private const val KEY_HIDDEN_PLAYER_DETAILS_ACTIONS = "hidden_player_details_actions"
     private const val KEY_PLAYER_DETAILS_ACTION_ORDER = "player_details_action_order"
     private const val KEY_AUDIO_CUTTER_ENABLED = "audio_cutter_enabled"
@@ -6455,6 +6484,7 @@ object AppSettings {
     private const val KEY_SHOW_ARTIST_OVERVIEW = "show_artist_overview"
     private const val KEY_CENTER_ARTIST_DETAIL_NAME = "center_artist_detail_name"
     private const val KEY_ARTIST_DETAIL_MOST_PLAYED_LABEL_AS_TRACKS = "artist_detail_most_played_label_as_tracks"
+    private const val KEY_ARTIST_DETAIL_ACTIONS_LIQUID_GLASS = "artist_detail_actions_liquid_glass"
     private const val KEY_HIDE_ARTIST_AUDIENCE_STATS = "hide_artist_audience_stats"
     private const val KEY_LIBRARY_SORT = "library_sort"
     private const val KEY_ARTIST_SLASH_SEPARATORS = "artist_slash_separators"

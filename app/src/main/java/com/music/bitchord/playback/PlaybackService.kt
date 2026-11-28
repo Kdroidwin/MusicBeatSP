@@ -550,6 +550,10 @@ class PlaybackService : MediaLibraryService() {
     private val warmedLocalAudioHeaders = ConcurrentHashMap.newKeySet<String>()
     private var localAudioPrefetchJob: Job? = null
 
+    private data class PrefetchedReplayGain(val configToken: String, val gainDb: Float)
+    private val prefetchedReplayGain = ConcurrentHashMap<String, PrefetchedReplayGain>()
+    private val replayGainPrefetchTokens = ConcurrentHashMap<String, String>()
+
     private var crossfade: CrossfadeController? = null
     private val trackAnalyzer = com.music.bitchord.playback.smart.TrackAnalyzer(this, AudioCache)
 
@@ -2576,7 +2580,10 @@ class PlaybackService : MediaLibraryService() {
     ).joinToString("|")
 
     private fun pauseForReplayGainLookup(target: ExoPlayer) {
-        if (target.playWhenReady) target.playWhenReady = false
+        if (target.playWhenReady) {
+            TrackLog.d("ReplayGain", "holding playback until local gain lookup completes", about = target.currentMediaItem?.mediaId)
+            target.playWhenReady = false
+        }
     }
 
     private fun releaseReplayGainGate(target: ExoPlayer, mediaId: String?) {
@@ -2587,6 +2594,7 @@ class PlaybackService : MediaLibraryService() {
         if (shouldResume && !speakers.active && target.currentMediaItem?.mediaId == mediaId &&
             canStartPlaybackAtCurrentVolume()
         ) {
+            TrackLog.d("ReplayGain", "local gain lookup complete; resuming playback", about = mediaId)
             target.playWhenReady = true
         }
     }
@@ -2670,6 +2678,14 @@ class PlaybackService : MediaLibraryService() {
         }
         replayGainLookupJob?.cancel()
         activeAudioChain.replayGain.preventClipping = preventClipping
+        val preparedGain = mediaId?.let { prefetchedReplayGain.remove(it) }
+        if (preparedGain?.configToken == token) {
+            activeAudioChain.replayGain.gainDb = preparedGain.gainDb
+            replayGainPendingMediaId = null
+            if (target != null && replayGainGatePlayer === target) releaseReplayGainGate(target, mediaId)
+            TrackLog.d("ReplayGain", "applied prefetched gain without pausing at track boundary", about = mediaId)
+            return
+        }
         if (!enabled || bitPerfect || song == null ||
             (song.localUri.isNullOrBlank() && song.localPath.isNullOrBlank())
         ) {
@@ -4881,11 +4897,15 @@ class PlaybackService : MediaLibraryService() {
     private fun prefetchAround(player: ExoPlayer) {
         val nextIndex = player.nextMediaItemIndex
         var nextArtwork: Song? = null
+        var nextItem: MediaItem? = null
         val upcoming = if (nextIndex != C.INDEX_UNSET) {
             val end = (nextIndex + AudioCache.QUEUE_DEPTH - 1).coerceAtMost(player.mediaItemCount - 1)
             (nextIndex..end).map { index ->
                 val item = player.getMediaItemAt(index)
-                if (index == nextIndex) nextArtwork = item.toSong()
+                if (index == nextIndex) {
+                    nextItem = item
+                    nextArtwork = item.toSong()
+                }
                 // The title, artist and runtime the item was built with — see
                 // [Song.toMediaItem]. Read here, on the player's own thread,
                 // because read-ahead runs off the queue rather than off the
@@ -4900,12 +4920,63 @@ class PlaybackService : MediaLibraryService() {
         } else {
             emptyList()
         }
-        nextArtwork?.takeIf { player.isPlaying }?.let(::prefetchLocalAudioHeader)
+        if (player.isPlaying) {
+            nextArtwork?.let(::prefetchLocalAudioHeader)
+            nextItem?.let { item -> nextArtwork?.let { song -> prefetchReplayGain(item, song) } }
+        }
         PlaybackArtworkPrefetcher.prefetch(
             context = this,
             nextSong = nextArtwork?.takeIf { player.isPlaying },
         )
         AudioCache.prefetchQueue(upcoming)
+    }
+
+    /**
+     * Reads ReplayGain for the next local item while the current one is still
+     * audible. The normal boundary callback can then apply the cached gain
+     * synchronously instead of briefly clearing playWhenReady while TagLib
+     * opens the next file.
+     */
+    private fun prefetchReplayGain(item: MediaItem, song: Song) {
+        if (!AppSettings.replayGainEnabled.value || BitPerfectOutput.ready.value ||
+            (song.localUri.isNullOrBlank() && song.localPath.isNullOrBlank())
+        ) return
+
+        val mediaId = item.mediaId
+        val albumMode = AppSettings.replayGainAlbumMode.value
+        val preampDb = AppSettings.replayGainPreampDb.value
+        val preventClipping = AppSettings.replayGainPreventClipping.value
+        val bitPerfect = BitPerfectOutput.ready.value
+        val token = replayGainConfigToken(
+            mediaId, song, true, bitPerfect, albumMode, preampDb, preventClipping,
+        )
+        if (prefetchedReplayGain[mediaId]?.configToken == token) return
+        if (replayGainPrefetchTokens.put(mediaId, token) == token) return
+
+        scope.launch {
+            try {
+                val gain = ReplayGainReader.readGainDb(
+                    context = applicationContext,
+                    song = song,
+                    useAlbumGain = albumMode,
+                    preampDb = preampDb,
+                    preventClipping = preventClipping,
+                )
+                if (isActive && replayGainPrefetchTokens[mediaId] == token) {
+                    prefetchedReplayGain[mediaId] = PrefetchedReplayGain(token, gain)
+                    if (prefetchedReplayGain.size > 128) {
+                        prefetchedReplayGain.keys.take(prefetchedReplayGain.size - 96)
+                            .forEach { key -> prefetchedReplayGain.remove(key) }
+                    }
+                }
+            } catch (cancelled: CancellationException) {
+                throw cancelled
+            } catch (error: Exception) {
+                TrackLog.w("ReplayGain", "next-track metadata prefetch failed", error, about = mediaId)
+            } finally {
+                replayGainPrefetchTokens.remove(mediaId, token)
+            }
+        }
     }
 
     /**
@@ -5257,6 +5328,9 @@ class PlaybackService : MediaLibraryService() {
 
     private fun effectiveSkipSilence(item: MediaItem?): Boolean {
         if (BitPerfectOutput.ready.value) return false
+        val trackProfile = TrackPlaybackSettings.profileFor(item?.mediaId)
+            ?.takeIf { it.skipSilenceOverride }
+        if (trackProfile != null) return trackProfile.skipSilenceEnabled
         val playlistId = item?.mediaMetadata?.extras?.getString(EXTRA_PLAYLIST_PROFILE_ID)
         val profile = PlaylistPlaybackSettings.profileFor(playlistId)
             ?.takeIf { it.skipSilenceOverride }
@@ -5695,8 +5769,9 @@ class PlaybackService : MediaLibraryService() {
             combine(
                 AppSettings.skipSilence,
                 PlaylistPlaybackSettings.revision,
+                TrackPlaybackSettings.revision,
                 BitPerfectOutput.ready,
-            ) { _, _, _ -> Unit }
+            ) { _, _, _, _ -> Unit }
                 .collect { eachPlayer(::applySkipSilenceFor) }
         }
         scope.launch {

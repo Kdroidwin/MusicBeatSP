@@ -77,6 +77,20 @@ fun TrackPlaybackSettingsDialog(
                     )
                 }
                 SettingToggle(
+                    title = stringResource(R.string.track_skip_silence_override),
+                    subtitle = stringResource(R.string.track_skip_silence_override_subtitle),
+                    checked = profile.skipSilenceOverride,
+                    onCheckedChange = { profile = profile.copy(skipSilenceOverride = it) },
+                )
+                if (profile.skipSilenceOverride) {
+                    SettingToggle(
+                        title = stringResource(R.string.skip_silence),
+                        subtitle = stringResource(R.string.skip_silence_subtitle),
+                        checked = profile.skipSilenceEnabled,
+                        onCheckedChange = { profile = profile.copy(skipSilenceEnabled = it) },
+                    )
+                }
+                SettingToggle(
                     title = stringResource(R.string.track_eq_override),
                     subtitle = stringResource(R.string.track_eq_override_subtitle),
                     checked = profile.eqOverride,
