@@ -1,7 +1,7 @@
 # MusicBeatSP
 
 ### A local-first music player for Android
-**Lossless audio · Synchronized lyrics · Customizable library and player · ReplayGain ·AI-powered lyric synchronization·Multiple saved queues·Audio-guided lyric editor · Advanced parametric EQ ·Automix ·  radiko·音泉 · Podcast ·Music2Emo · Deep player customization · Google Cast**
+**Lossless audio · Synchronized lyrics · Customizable library and player · ReplayGain · AI-powered lyric synchronization · Multiple saved queues · Audio-guided lyric editor · Advanced parametric EQ · Automix · radiko · 音泉 · Podcasts · Music2Emo · Deep player customization · Google Cast**
 
 <br/>
 
@@ -40,6 +40,7 @@ The standard Android package is `io.pockets.musicbestsp`. Because this differs f
 
 - Play local high-resolution audio including FLAC, ALAC, WAV, AAC, MP3, OPUS, and OGG Vorbis.
 - Use gapless playback and configurable crossfade, playback speed, and pitch controls.
+- Override silence skipping per track or playlist without changing the app-wide setting.
 - Adjust audio focus from level 0 to 4, control whether playback can start at zero volume, and apply ReplayGain metadata.
 - Optionally pause playback when the volume reaches zero.
 - Play CUE sheets as separate tracks when their referenced local audio is available.
@@ -48,6 +49,11 @@ The standard Android package is `io.pockets.musicbestsp`. Because this differs f
 - Use high-precision parametric EQ with up to 64 filters per channel, shared Global filters and independent Left/Right filters, per-channel preamp, and peak, shelf, low-pass, high-pass, band-pass, notch, and all-pass filter types.
 - Save and select EQ presets, import or export supported EEL2 and Equalizer APO filter data, and retain EQ settings in app backup. Imported EEL files are parsed as data; scripts are not executed.
 - Enable Automix for analyzed, beat-aware transitions, or use regular crossfade. Automix and crossfade are mutually exclusive; choose an Efficient, Balanced, or Performance analysis mode.
+- Automix analyzes beats/downbeats and vocal activity on-device with the bundled `beat_this_int8.onnx` and `vocals_umxhq_int8.onnx` models. These models are included in the APK; analysis runs locally.
+- Optionally enable the app's native DSEE HX software DSP for supported stereo WAV, FLAC, MP3, and AAC sources, including positively identified AAC streams. The native kernel is built for `arm64-v8a` and `x86_64`; unsupported codecs and bit-perfect playback bypass it, and output rates follow the selected route's reported capabilities. It is off by default and does not turn on a phone maker's system DSEE effect.
+- Optionally enable Pioneer Stellanova Master Sound Revive (MSR) for stereo PCM input at 32–48 kHz. It processes audio through the MSR DSP and targets packed 24-bit/96 kHz output. MSR requires an ARM32/ARM64 device with 4 KB memory pages and an output route that advertises packed PCM 24-bit/96 kHz. Unsupported routes and bit-perfect playback use the ordinary path. It is off by default.
+- Play DSF and uncompressed DSDIFF as 24-bit PCM through Media3. Native DSD, DoP, and DST-compressed DFF are not supported by this path; DSD playback is off by default.
+- Choose to decode otherwise unsupported local audio formats temporarily with FFmpeg. Already-supported formats are left on their normal playback path.
 - Save and restore the position of tracks that are at least 15 minutes long, including when switching tracks or stopping playback.
 - Open the playback queue with both upcoming tracks and recently played tracks.
 - Optionally restart from the first queue item when playback reaches the end.
@@ -55,7 +61,6 @@ The standard Android package is `io.pockets.musicbestsp`. Because this differs f
 - Save named queue snapshots, switch between them, replace or remove them, and load their saved current track and position after a restart.
 - Cast supported local tracks to Google Cast receivers on the local network.
 - View audio codec, sample rate, bit depth, bitrate, channels, and buffer information in Stats for Nerds.
-- Music2Emo
 
 ### Player customization
 
@@ -77,14 +82,16 @@ The standard Android package is `io.pockets.musicbestsp`. Because this differs f
 - Replace only the artwork area with lyrics while keeping playback controls, progress, volume, and player shortcuts visible.
 - Choose whether the favorite button appears beside the More menu, keep artwork full-size while paused, and open lyrics by tapping the cover.
 - Switch the player favorite glyph between a heart and a star.
+- Optionally show the artist detail page's Shuffle and library favorite actions in a translucent Liquid Glass style; enabled by default.
 - Show or hide the artist name, automatically hide “Unknown Artist,” and center the track information.
+- Show or hide the YouTube audio/video version switch; it is hidden by default.
 - Keep the screen awake, independently show or hide the Android status and navigation bars, choose portrait, landscape, or system orientation, and select the tab opened at startup.
 - Select a pink, black, or green launcher icon.
 - Use Japanese translations for the Settings screen and player More menu; additional app languages fall back to English where translations are not available.
 
 ### Library and playlists
 
-- Browse Songs, Albums, Artists, Genres, Playlists, Folders, and other available library sections. Reorder tabs and hide individual tabs from navigation.
+- Browse Songs, Albums, Artists, Genres, Playlists, Folders, Composers, Years, Record Labels, and other available library sections. Reorder tabs and hide individual tabs; Composer, Year, and Record Label tabs are hidden by default.
 - Save YouTube Music albums and playlists as library shortcuts and reopen them from the Library tab. When signed out, the player’s heart/star remains usable as a device-local favorite; signed-in YouTube Music ratings continue to use the account.
 - Add an Album Artists tab alongside Artists, choose to browse an artist's albums before its tracks, and reorder or hide available library tabs.
 - Choose whether artist pages open to albums, use a folder hierarchy in search results, and hide the collection top bar on detail pages.
@@ -92,8 +99,8 @@ The standard Android package is `io.pockets.musicbestsp`. Because this differs f
 - Sort folder search results by filename, including numbered names such as `1-01. example.flac`, while displaying the track title and artist from metadata.
 - Import `.m3u` and `.m3u8` playlists through Android's file picker. Import playlists from Musicolet backup ZIP files; unavailable tracks are skipped so the rest can still be imported.
 - Display folder names from the resolved local directory path, including folders on removable storage, with provider labels as a fallback.
-- Connect self-hosted Jellyfin and Navidrome/OpenSubsonic libraries, or configure WebDAV and SMB locations for remote music files.
-- Add compatible HTTP music-source endpoints and select them alongside built-in sources when searching. The app queries the configured endpoint and does not download or run add-on code; available catalogs, streams, and account access depend on that endpoint.
+- Connect self-hosted Jellyfin, Navidrome/OpenSubsonic, pCloud, WebDAV, and SMB libraries. pCloud uses its regional official HTTPS WebDAV endpoint; when remote-library display is enabled, compatible remote tracks can appear in This device search and the Songs, Albums, Artists, and Album Artists views.
+- Add compatible HTTP music-source endpoints and select them alongside built-in sources when searching. The newer ADDON type queries a configured API and does not download or execute add-on JavaScript. Previously configured legacy JavaScript modules remain supported for compatibility and run in a resource-limited QuickJS sandbox; only configure modules you trust.
 - Export playlists as M3U from the playlist menu.
 - Open audio files from file managers such as MiXplorer. Optionally show a floating player over other apps for files opened this way.
 - Choose a persistent app-private storage location for extracted local album artwork so it survives cache cleanup and app restarts, without requesting additional storage access.
@@ -101,7 +108,10 @@ The standard Android package is `io.pockets.musicbestsp`. Because this differs f
 - Reorder tracks in a playlist by dragging, select tracks in bulk, and adapt selection action contrast to the current surface.
 - Choose a custom image for a playlist cover, and use list or grid layouts with optional small album artwork in list view.
 - Browse listening history and most-played tracks. Search settings by name and include settings, playlist data, and saved queue snapshots in app backup and restore.
-- Rip CDs
+- Keep long playlist titles on one line by default, with user-entered line breaks preserved; playlist detail rows remain independently laid out.
+- Rip audio CDs with a compatible USB optical drive. Configure the available output format, destination, naming, and quality options; the CD source itself is 16-bit/44.1 kHz stereo.
+- Search MusicBrainz for track and release metadata from the tag editor.
+- Music2Emo can optionally analyze local music for Home recommendations. Its roughly 91 MB models are downloaded separately; audio stays on-device. The mobile port omits chord-progression estimation.
 
 ### Lyrics and artwork
 
@@ -112,25 +122,28 @@ The standard Android package is `io.pockets.musicbestsp`. Because this differs f
 - Cache and prefetch local album artwork to speed up track changes; optionally load the local artwork library at startup.
 - Use high-resolution local artwork in the player and customize playlist cover images.
 - Use the optional audio cutter from local track details to export a trimmed AAC copy; the original file remains unchanged.
-- CTC Forced Alignment
+- Optionally translate lyrics into the device language on-device with the PLaMo 3 Translate 0.8B Q4_K_M GGUF model. The model is downloaded separately (about 573 MB), is not included in the APK, and requires the Standard build with network access for its initial download. Original lyrics and timestamps are preserved; translations are cached locally.
+- Use the downloaded PLaMo model to preview Japanese lyric orthography corrections before applying them.
+- Align plain lyrics to audio with optional CTC forced alignment. First use downloads a separate model of about 1.26 GB; the audio is processed on-device.
+- Search full local lyrics from the Search tab and identify word-synchronized results in the result list.
 - Lyrics are supported from Apple Music, KuGou, LyricsPlus, LRCLIB, Irc.red, PaxSenix, BiniLyrics, BetterLyrics, BetterLyrics Portato, PaxSenix: Spotify, PaxSenix: Musixmatch, Unison, YouTube captions, YouTube Music, Musixmatch, Genius, PetitLyrics, QQ Music, Followlyrics, NetEase Cloud Music, JoySound, 歌ネット, UtaTen and　J-Lyric.
-- Heuristic Sync
 
 ### Widgets and appearance
 
 - Keep the two existing playback widgets and add a third square album-art widget with track title and playback controls.
+- Adjust widget-wide transparency or widget-background transparency separately, where the selected widget layout supports that setting.
 - Expose playback state, track metadata, and artwork through Android's standard media session for external music widgets such as KWGT.
 - Use the album-art color theme throughout the app, in addition to the System, Light, Dark, and AMOLED Black themes.
 - Enable Offline Mode to block the app's network requests; local files and saved caches remain available. Online catalog, lyrics, casting, and connected services need their respective network or device connections.
 
 ### Supported Sources
+
 - YouTube Music search and playback are opt-in and disabled by default; the app does not make YouTube Music requests while the feature is disabled or Offline Mode is active.
-- radiko
-- 音泉（onsen.ag）
-- BitChord addon(Navidrome)
-- webDAB
-- SMB
-- Podcast
+- YouTube Music video browsing, selectable YouTube Podcasts in the Radio tab, local audio, and optional in-app video playback. In-app video playback is off by default.
+- radiko and 音泉（onsen.ag） radio services and podcast streams.
+- Khinsider soundtrack listings, compatible user-configured ADDON APIs, and retained legacy modules.
+- Jellyfin, Navidrome/OpenSubsonic, pCloud through regional WebDAV, generic WebDAV, and SMB remote libraries.
+- Imported local playlists, audio CDs on compatible USB drives, and supported podcast feeds.
 
 ### Lyrics and metadata tools
 
@@ -157,6 +170,7 @@ Check the [GitHub Releases page](https://github.com/Kdroidwin/MusicBeatSP/releas
 | `arm64-v8a` | Most modern Android phones |
 | `universal` | Devices when the CPU architecture is unknown |
 | `armeabi-v7a` | Legacy 32-bit devices |
+| `x86` | 32-bit x86 devices and emulators |
 | `x86_64` | Emulators and x86 devices |
 
 ## Build from source
@@ -205,6 +219,9 @@ The Linux edition is a dedicated offline fork of BitChord's Compose Desktop app,
 - **[TagLib](https://github.com/kyant0/taglib)** — Audio metadata parsing and writing.
 - **[Haze](https://github.com/chrisbanes/haze)** — Compose backdrop blur effects.
 - **[AndroidX Media3](https://github.com/androidx/media)** — Android playback and media-session APIs.
+- **[DSEE HX HEQ/DSX kernel](https://github.com/x1aoqv/DSEE_HX_RE)** — MIT-licensed C kernel adapted for the optional application-side native DSP; see [`THIRD_PARTY_NOTICES.md`](app/src/main/cpp/dsee/THIRD_PARTY_NOTICES.md).
+- **[PLaMo 3 Translate](https://huggingface.co/pfnet/plamo-3-translate-0.8b-GGUF)** — Optional separately downloaded on-device lyric translation model from Preferred Networks; the GGUF model weights are not bundled in the APK.
+- **[llama.cpp](https://github.com/ggml-org/llama.cpp)** — CPU inference runtime used by the optional PLaMo model.
 - **Google Cast SDK** — Cast sender integration.
 - **[Uyatame-CD-Ripping-Tool-UCRT](https://github.com/uyatame/Uyatame-CD-Ripping-Tool-UCRT)** — Android app to rip and play audio CDs with a USB optical drive (FLAC, AAC, MP3, MusicBrainz).
 - **[Radikall](https://github.com/baudmusic/radikall)** — Android radio client for Japanese stations — listen to every Radiko station from anywhere in the world.
