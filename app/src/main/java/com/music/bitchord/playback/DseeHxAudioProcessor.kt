@@ -4,6 +4,8 @@ import androidx.media3.common.C
 import androidx.media3.common.audio.AudioProcessor
 import androidx.media3.common.audio.BaseAudioProcessor
 import androidx.media3.common.util.UnstableApi
+import com.music.bitchord.data.NerdStats
+import com.music.bitchord.data.TrackLog
 import com.music.bitchord.playback.dsp.Upsampler
 import java.nio.ByteBuffer
 import java.nio.ByteOrder
@@ -44,11 +46,13 @@ internal object DseeHxNative {
 /**
  * Opt-in stereo PCM bridge to the Music Center-aligned HEQ/DSX kernel.
  *
- * Only known local PCM/WAV, FLAC, MP3 and AAC inputs are sent through DSEE.
- * Unknown codecs remain audible through a PCM-float pass-through. Unsupported
- * rates or a native error also fall back to the existing high-quality FIR
- * upsampler, never to silence. Bit-perfect routing disables this processor in
- * PlaybackService.
+ * Only codecs accepted by the native kernel and identified from a local file
+ * or the selected stream's declared format are sent through DSEE. In
+ * particular, YouTube AAC can use the kernel while YouTube Opus remains a
+ * normal PCM-float pass-through because the kernel has no Opus profile.
+ * Unsupported rates or native errors fall back to the existing high-quality
+ * FIR upsampler, never to silence. Bit-perfect routing disables this processor
+ * in PlaybackService.
  */
 @UnstableApi
 class DseeHxAudioProcessor : BaseAudioProcessor() {
@@ -59,8 +63,26 @@ class DseeHxAudioProcessor : BaseAudioProcessor() {
     @Volatile
     var sourceCodec: String? = null
         set(value) {
-            field = value
-            sourceGeneration.incrementAndGet()
+            if (field != value) {
+                field = value
+                nativeFailed = false
+                nativeSuccessLogged = false
+                lastBypassCodec = null
+                sourceGeneration.incrementAndGet()
+            }
+        }
+
+    /** Media id used to read the resolver's format for a remote stream. */
+    @Volatile
+    var sourceMediaId: String? = null
+        set(value) {
+            if (field != value) {
+                field = value
+                nativeFailed = false
+                nativeSuccessLogged = false
+                lastBypassCodec = null
+                sourceGeneration.incrementAndGet()
+            }
         }
 
     private val sourceGeneration = AtomicInteger(0)
@@ -83,8 +105,11 @@ class DseeHxAudioProcessor : BaseAudioProcessor() {
     private var outputFactor = 1
     private var nativeHandle = 0L
     private var nativeCodec: String? = null
+    private var nativeBitRateBps = 0
     private var nativeSourceGeneration = -1
     private var nativeFailed = false
+    private var nativeSuccessLogged = false
+    private var lastBypassCodec: String? = null
     private var pendingBytes = ByteArray(0)
     private var pendingByteCount = 0
     private var intInput = IntArray(0)
@@ -113,10 +138,10 @@ class DseeHxAudioProcessor : BaseAudioProcessor() {
         }
         inputFrameBytes = bytesPerSample * channels
 
-        // Do not renegotiate an unknown online codec to a higher rate. Local
-        // supported formats can select the highest route-advertised rate in
-        // their 44.1/48 kHz family.
-        val codec = normalizedCodec(sourceCodec)
+        // Unknown online codecs remain at their input rate. A recognized
+        // stream format can select the highest route-advertised rate in its
+        // 44.1/48 kHz family.
+        val (codec, _) = resolvedSourceFormat()
         outputRate = if (codec == null) inputRate else chooseOutputRate(inputRate)
         outputFactor = (outputRate / inputRate).takeIf { outputRate % inputRate == 0 } ?: 1
         if (outputFactor !in setOf(1, 2, 4)) {
@@ -247,18 +272,35 @@ class DseeHxAudioProcessor : BaseAudioProcessor() {
     }
 
     private fun prepareNativeForCurrentSource(reset: Boolean) {
-        val codec = normalizedCodec(sourceCodec)
+        val (codec, bitRateBps) = resolvedSourceFormat()
         val generation = sourceGeneration.get()
-        if (!enabled || codec == null || inputRate <= 0 || channels != 2 ||
-            !DseeHxNative.isAvailable()
-        ) {
+        if (!enabled || inputRate <= 0 || channels != 2 || !DseeHxNative.isAvailable()) {
             releaseNative()
             return
         }
-        if (nativeHandle != 0L && nativeCodec == codec) {
+        if (codec == null) {
+            releaseNative()
+            val declaredCodec = sourceMediaId
+                ?.let { NerdStats.declaredFormat(it) }
+                ?.codec
+                ?.lowercase()
+            if (!declaredCodec.isNullOrBlank() && lastBypassCodec != declaredCodec) {
+                lastBypassCodec = declaredCodec
+                TrackLog.i(
+                    "DSEE",
+                    "bypassing unsupported stream codec=$declaredCodec; ordinary playback retained",
+                    about = sourceMediaId,
+                )
+            }
+            return
+        }
+        lastBypassCodec = null
+        if (nativeFailed) return
+        if (nativeHandle != 0L && nativeCodec == codec && nativeBitRateBps == bitRateBps) {
             if (reset || nativeSourceGeneration != generation) {
                 if (runCatching { DseeHxNative.nativeReset(nativeHandle) }.getOrDefault(false)) {
                     nativeSourceGeneration = generation
+                    nativeSuccessLogged = false
                 } else {
                     releaseNative()
                     nativeFailed = true
@@ -269,7 +311,7 @@ class DseeHxAudioProcessor : BaseAudioProcessor() {
         releaseNative()
         nativeFailed = false
         val handle = runCatching {
-            DseeHxNative.nativeCreate(codec, inputRate, inputBits, outputRate, 0)
+            DseeHxNative.nativeCreate(codec, inputRate, inputBits, outputRate, bitRateBps)
         }.getOrDefault(0L)
         if (handle != 0L) {
             val inputHop = runCatching { DseeHxNative.nativeInputHopFrames(handle) }.getOrDefault(0)
@@ -277,12 +319,21 @@ class DseeHxAudioProcessor : BaseAudioProcessor() {
             if (inputHop > 0 && outputHop > 0 && outputHop == inputHop * outputFactor) {
                 nativeHandle = handle
                 nativeCodec = codec
+                nativeBitRateBps = bitRateBps
                 nativeSourceGeneration = generation
                 framesPerHopIn = inputHop
                 framesPerHopOut = outputHop
             } else {
                 runCatching { DseeHxNative.nativeRelease(handle) }
+                nativeFailed = true
             }
+        } else {
+            nativeFailed = true
+            TrackLog.w(
+                "DSEE",
+                "native engine initialization failed for codec=$codec; ordinary playback retained",
+                about = sourceMediaId,
+            )
         }
     }
 
@@ -292,11 +343,41 @@ class DseeHxAudioProcessor : BaseAudioProcessor() {
         val succeeded = runCatching {
             DseeHxNative.nativeProcess(handle, intInput, hops, nativeOutput)
         }.getOrDefault(false)
-        if (!succeeded) {
+        if (succeeded && !nativeSuccessLogged) {
+            nativeSuccessLogged = true
+            TrackLog.i(
+                "DSEE",
+                "native processing active codec=$nativeCodec input=${inputRate}Hz output=${outputRate}Hz",
+                about = sourceMediaId,
+            )
+        } else if (!succeeded) {
             nativeFailed = true
+            TrackLog.w(
+                "DSEE",
+                "native processing failed for codec=$nativeCodec; ordinary playback retained",
+                about = sourceMediaId,
+            )
             releaseNative()
         }
         return succeeded
+    }
+
+    /** Only formats present in the resolver's selected-stream facts are trusted for remote input. */
+    private fun resolvedSourceFormat(): Pair<String?, Int> {
+        val declared = sourceMediaId?.let { NerdStats.declaredFormat(it) }
+        val explicitCodec = normalizedCodec(sourceCodec)
+        val declaredCodec = normalizedCodec(declared?.codec)
+        val codec = explicitCodec ?: declaredCodec
+        val bitRateBps = if (codec != null && codec == declaredCodec) {
+            declared?.kbps
+                ?.takeIf { it > 0 }
+                ?.coerceAtMost(1_020)
+                ?.times(1_000)
+                ?: 0
+        } else {
+            0
+        }
+        return codec to bitRateBps
     }
 
     private fun emitFallback(input: FloatArray, frames: Int, emittedFrames: Int) {
@@ -409,7 +490,9 @@ class DseeHxAudioProcessor : BaseAudioProcessor() {
         val handle = nativeHandle
         nativeHandle = 0L
         nativeCodec = null
+        nativeBitRateBps = 0
         nativeSourceGeneration = -1
+        nativeSuccessLogged = false
         framesPerHopIn = 0
         framesPerHopOut = 0
         if (handle != 0L) runCatching { DseeHxNative.nativeRelease(handle) }

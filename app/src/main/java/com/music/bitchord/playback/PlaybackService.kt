@@ -1029,6 +1029,7 @@ class PlaybackService : MediaLibraryService() {
             // The player this fired on, which is by definition the one the
             // session is currently pointed at.
             val exoPlayer = player ?: return
+            activeAudioChain.dseeHx.sourceMediaId = mediaItem?.mediaId
             activeAudioChain.dseeHx.sourceCodec = dseeHxCodecFor(mediaItem)
             applySkipSilenceFor(exoPlayer, mediaItem)
             if (suppressRestoredTrackTransition != null) {
@@ -2307,6 +2308,7 @@ class PlaybackService : MediaLibraryService() {
         spareReplayGainPendingMediaId = item.mediaId
         val chain = spareAudioChain
         val bitPerfect = BitPerfectOutput.ready.value
+        chain.dseeHx.sourceMediaId = item.mediaId
         chain.dseeHx.sourceCodec = dseeHxCodecFor(item)
         chain.dseeHx.enabled = AppSettings.dseeHxEnabled.value && !bitPerfect &&
             !chain.pioneerMsr.enabled && !AppSettings.darPcmUpsamplingEnabled.value
@@ -5179,9 +5181,9 @@ class PlaybackService : MediaLibraryService() {
                     .build(),
             )
             .setAudioProcessorChain(
-                DefaultAudioSink.DefaultAudioProcessorChain(
+                FormatAwareAudioProcessorChain(
                     arrayOf(pioneerMsr, dseeHx, resamplerCutoff, parametricEq, spatial, transition, replayGain, darUpsampler),
-                    SilenceSkippingAudioProcessor(
+                    FormatAwareSilenceSkippingAudioProcessor(
                         MIN_SILENCE_US,
                         SilenceSkippingAudioProcessor.DEFAULT_SILENCE_RETENTION_RATIO,
                         SilenceSkippingAudioProcessor.DEFAULT_MAX_SILENCE_TO_KEEP_DURATION_US,
@@ -5211,6 +5213,7 @@ class PlaybackService : MediaLibraryService() {
         chain.pioneerMsr.outputSupports96kPcm24 = currentOutputSupportsPioneerMsr()
         chain.pioneerMsr.enabled = AppSettings.pioneerMsrEnabled.value && PioneerMsrNative.isAvailable &&
             chain.pioneerMsr.outputSupports96kPcm24 && !bitPerfect
+        chain.dseeHx.sourceMediaId = player.currentMediaItem?.mediaId
         chain.dseeHx.sourceCodec = dseeHxCodecFor(player.currentMediaItem)
         chain.dseeHx.enabled = AppSettings.dseeHxEnabled.value && !chain.pioneerMsr.enabled &&
             !AppSettings.darPcmUpsamplingEnabled.value && !bitPerfect
@@ -5534,6 +5537,7 @@ class PlaybackService : MediaLibraryService() {
         applySettings(newSpare, spareAudioChain)
         newActive.repeatMode = repeatMode
         newActive.shuffleModeEnabled = shuffleMode
+        activeAudioChain.dseeHx.sourceMediaId = items.getOrNull(index)?.mediaId
         activeAudioChain.dseeHx.sourceCodec = dseeHxCodecFor(items.getOrNull(index))
         if (items.isNotEmpty()) {
             newActive.setMediaItems(items, index.coerceIn(items.indices), oldActive.currentPosition.coerceAtLeast(position))
