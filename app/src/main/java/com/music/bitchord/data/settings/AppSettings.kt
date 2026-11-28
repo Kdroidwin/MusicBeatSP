@@ -767,7 +767,7 @@ object AppSettings {
     val spatialAudio = MutableStateFlow(false)
 
     /** App-owned multichannel PCM downmix; bit-perfect playback bypasses it. */
-    val multichannelDownmixEnabled = MutableStateFlow(true)
+    val multichannelDownmixEnabled = MutableStateFlow(false)
     val multichannelDownmixPreampDb = MutableStateFlow(DownmixConfig.DEFAULT_PREAMP_DB)
     val multichannelDownmixMutedChannels = MutableStateFlow<Set<String>>(emptySet())
     val multichannelDownmixSoloChannels = MutableStateFlow<Set<String>>(emptySet())
@@ -1947,7 +1947,7 @@ object AppSettings {
         diracAudioEnabled.value = prefs.getBoolean(KEY_DIRAC_AUDIO_ENABLED, false)
         diracAudioPreset.value = prefs.getInt(KEY_DIRAC_AUDIO_PRESET, 0).coerceIn(0, 2)
         spatialAudio.value = prefs.getBoolean(KEY_SPATIAL_AUDIO, false)
-        multichannelDownmixEnabled.value = prefs.getBoolean(KEY_MULTICHANNEL_DOWNMIX_ENABLED, true)
+        multichannelDownmixEnabled.value = prefs.getBoolean(KEY_MULTICHANNEL_DOWNMIX_ENABLED, false)
         multichannelDownmixPreampDb.value = prefs.getFloat(
             KEY_MULTICHANNEL_DOWNMIX_PREAMP_DB,
             DownmixConfig.DEFAULT_PREAMP_DB,

@@ -75,6 +75,10 @@ class MultichannelDownmixAudioProcessor : BaseAudioProcessor() {
     @Volatile
     var onAutoHeadroomAdjusted: ((Float) -> Unit)? = null
 
+    /** Called on the audio thread before downstream processors are configured. */
+    @Volatile
+    var onFormatConfigured: ((inputChannelCount: Int, isDownmixing: Boolean) -> Unit)? = null
+
     @Volatile
     var isActivelyDownmixing: Boolean = false
         private set
@@ -160,6 +164,7 @@ class MultichannelDownmixAudioProcessor : BaseAudioProcessor() {
             inputAudioFormat.encoding == C.ENCODING_PCM_FLOAT
         if (!supportedEncoding || inputAudioFormat.sampleRate <= 0 || inputAudioFormat.channelCount <= 0) {
             isActivelyDownmixing = false
+            onFormatConfigured?.invoke(inputAudioFormat.channelCount, false)
             return AudioProcessor.AudioFormat.NOT_SET
         }
 
@@ -173,6 +178,7 @@ class MultichannelDownmixAudioProcessor : BaseAudioProcessor() {
 
         if (!effectiveEnabled || chCount <= 2) {
             isActivelyDownmixing = false
+            onFormatConfigured?.invoke(chCount, false)
             activeChannels = emptyList()
             totalClippedSamples = 0L
             seenLocalClipResetGen = localClipResetGen.get()
@@ -208,6 +214,7 @@ class MultichannelDownmixAudioProcessor : BaseAudioProcessor() {
         val resolved = DownmixChannel.resolveChannelLayout(chCount, mask)
         activeChannels = resolved
         isActivelyDownmixing = true
+        onFormatConfigured?.invoke(chCount, true)
         appliedLfeFilterMode = current.lfeFilterMode
 
         // 4th-order Butterworth LPF at 125 Hz (two cascaded 2nd-order sections)

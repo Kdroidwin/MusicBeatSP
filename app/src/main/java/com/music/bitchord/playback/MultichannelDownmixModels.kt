@@ -144,7 +144,7 @@ enum class DownmixLfeFilterMode(val key: String) {
 }
 
 data class DownmixConfig(
-    val enabled: Boolean = true,
+    val enabled: Boolean = false,
     val preampDb: Float = DEFAULT_PREAMP_DB,
     val mutedChannels: Set<String> = emptySet(),
     val soloChannels: Set<String> = emptySet(),

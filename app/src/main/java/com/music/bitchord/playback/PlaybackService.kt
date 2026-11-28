@@ -47,14 +47,11 @@ import androidx.media3.exoplayer.DecoderReuseEvaluation
 import androidx.media3.exoplayer.DefaultLoadControl
 import androidx.media3.exoplayer.DefaultRenderersFactory
 import androidx.media3.exoplayer.ExoPlayer
-import androidx.media3.exoplayer.Renderer
 import androidx.media3.exoplayer.analytics.AnalyticsListener
-import androidx.media3.exoplayer.audio.AudioRendererEventListener
 import androidx.media3.exoplayer.audio.AudioSink
 import androidx.media3.exoplayer.audio.AudioTrackAudioOutputProvider
 import androidx.media3.exoplayer.audio.DefaultAudioTrackBufferSizeProvider
 import androidx.media3.exoplayer.audio.DefaultAudioSink
-import androidx.media3.exoplayer.audio.MediaCodecAudioRenderer
 import androidx.media3.exoplayer.audio.SilenceSkippingAudioProcessor
 import androidx.media3.exoplayer.mediacodec.MediaCodecSelector
 import androidx.media3.exoplayer.mediacodec.MediaCodecUtil
@@ -5253,81 +5250,6 @@ class PlaybackService : MediaLibraryService() {
             }
         }
 
-        override fun buildAudioRenderers(
-            context: Context,
-            extensionRendererMode: Int,
-            mediaCodecSelector: MediaCodecSelector,
-            enableDecoderFallback: Boolean,
-            audioSink: AudioSink,
-            eventHandler: Handler,
-            eventListener: AudioRendererEventListener,
-            out: ArrayList<Renderer>,
-        ) {
-            // Keep Media3's extension renderers (including the optional MIDI
-            // renderer) intact. Replace only the platform codec renderer so
-            // its decoded channel mask can be handed to the PCM downmixer.
-            val defaults = ArrayList<Renderer>()
-            super.buildAudioRenderers(
-                context,
-                extensionRendererMode,
-                mediaCodecSelector,
-                enableDecoderFallback,
-                audioSink,
-                eventHandler,
-                eventListener,
-                defaults,
-            )
-            defaults.forEach { renderer ->
-                if (renderer.javaClass == MediaCodecAudioRenderer::class.java) {
-                    out.add(
-                        object : MediaCodecAudioRenderer(
-                            context,
-                            codecAdapterFactory,
-                            mediaCodecSelector,
-                            enableDecoderFallback,
-                            eventHandler,
-                            eventListener,
-                            audioSink,
-                        ) {
-                            override fun onOutputFormatChanged(
-                                format: Format,
-                                outputMediaFormat: android.media.MediaFormat?,
-                            ) {
-                                val channelMask = if (
-                                    outputMediaFormat != null &&
-                                    outputMediaFormat.containsKey(android.media.MediaFormat.KEY_CHANNEL_MASK)
-                                ) {
-                                    outputMediaFormat.getInteger(android.media.MediaFormat.KEY_CHANNEL_MASK)
-                                } else {
-                                    Format.NO_VALUE
-                                }
-                                val outputChannelCount = outputMediaFormat
-                                    ?.let { mediaFormat ->
-                                        runCatching {
-                                            if (mediaFormat.containsKey(android.media.MediaFormat.KEY_CHANNEL_COUNT)) {
-                                                mediaFormat.getInteger(android.media.MediaFormat.KEY_CHANNEL_COUNT)
-                                            } else {
-                                                format.channelCount
-                                            }
-                                        }.getOrDefault(format.channelCount)
-                                    }
-                                    ?: format.channelCount
-                                this@PlaybackService.applySpatialAudioForOutputFormat(
-                                    downmix = downmix,
-                                    spatial = spatial,
-                                    outputChannelCount = outputChannelCount,
-                                )
-                                downmix.setPendingChannelMask(channelMask)
-                                super.onOutputFormatChanged(format, outputMediaFormat)
-                            }
-                        },
-                    )
-                } else {
-                    out.add(renderer)
-                }
-            }
-        }
-
         override fun buildAudioSink(
             context: Context,
             enableFloatOutput: Boolean,
@@ -6162,6 +6084,21 @@ class PlaybackService : MediaLibraryService() {
                 scope.launch { AppSettings.setMultichannelDownmixPreampDb(newPreampDb) }
             }
         }
+        chain.downmix.onFormatConfigured = { inputChannelCount, isDownmixing ->
+            val isPrimary = chain === activeAudioChain
+            val mediaId = if (isPrimary) {
+                player?.currentMediaItem?.mediaId
+            } else {
+                spare?.currentMediaItem?.mediaId
+            }
+            val isAtmos = (isPrimary && activeTrackIsDolbyAtmos) ||
+                NerdStats.declaredFormat(mediaId)?.isDolbyAtmos == true
+            chain.spatial.enabled = AppSettings.spatialAudio.value &&
+                !BitPerfectOutput.ready.value &&
+                !isAtmos &&
+                !isDownmixing &&
+                inputChannelCount == 2
+        }
     }
 
     private fun applyDownmixConfig(resetClips: Boolean = false) {
@@ -6194,29 +6131,6 @@ class PlaybackService : MediaLibraryService() {
             !BitPerfectOutput.ready.value &&
             !spareAudioChain.downmix.isActivelyDownmixing &&
             NerdStats.declaredFormat(standbyItem?.mediaId)?.isDolbyAtmos != true
-    }
-
-    /** Set the effect state before Media3 configures its processors for this decoder output. */
-    private fun applySpatialAudioForOutputFormat(
-        downmix: MultichannelDownmixAudioProcessor,
-        spatial: SpatialAudioProcessor,
-        outputChannelCount: Int,
-    ) {
-        val isPrimary = downmix === activeAudioChain.downmix
-        val mediaId = if (isPrimary) {
-            player?.currentMediaItem?.mediaId
-        } else {
-            spare?.currentMediaItem?.mediaId
-        }
-        val isAtmos = (isPrimary && activeTrackIsDolbyAtmos) ||
-            NerdStats.declaredFormat(mediaId)?.isDolbyAtmos == true
-        val willDownmix = AppSettings.currentDownmixConfig().enabled &&
-            !BitPerfectOutput.ready.value &&
-            outputChannelCount > 2
-        spatial.enabled = AppSettings.spatialAudio.value &&
-            !BitPerfectOutput.ready.value &&
-            !isAtmos &&
-            !willDownmix
     }
 
     private fun updateAudioEffectsEnabled() {
